@@ -3,7 +3,8 @@
 // navigate without a reload.
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
-import { bootApp } from "@/boot";
+import { mountWindow, startApp } from "@/boot";
+import { pageRoot } from "@/lib/themeRoot";
 import type { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { poseToday } from "@shigomori/ui/hooks/useToday.ts";
 
@@ -18,10 +19,10 @@ if (today) {
 }
 
 export function bootFakeHost(links: ClientLinks["Service"]): void {
-  const router = bootApp({
+  const router = mountWindow(startApp({ links }), {
+    element: pageRoot(),
     ClerkProvider,
     history: createMemoryHistory({ initialEntries: ["/"] }),
-    links,
   });
 
   if (window.fakeHost === undefined) {

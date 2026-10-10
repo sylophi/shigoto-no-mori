@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useClientConfig } from "../config/useClientConfig";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 // Whether this browser can tell battery from AC. Gates both the pause
 // itself and the Settings toggle for it, so the two cannot disagree.
@@ -18,12 +18,12 @@ export function usePauseAnimationsOnBattery(): void {
   const { data: config } = useClientConfig();
   const enabled = config?.pauseAnimationsOnBattery ?? true;
   const onBattery = useOnBattery();
+  const root = useWindowRoot();
 
   useEffect(() => {
-    const root = themeRoot();
     root.classList.toggle("battery-pause", enabled && onBattery);
     return () => root.classList.remove("battery-pause");
-  }, [enabled, onBattery]);
+  }, [root, enabled, onBattery]);
 }
 
 // `charging` means plugged in (also when the battery is full), and a

@@ -9,6 +9,7 @@
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { disposeWithPage, startClient } from "./lib/runtime/client";
+import { pageRoot } from "./lib/themeRoot";
 import * as Desktop from "./lib/runtime/desktop";
 
 async function installApi() {
@@ -24,11 +25,11 @@ async function installApi() {
 }
 
 void installApi().then(async ({ links, route }) => {
-  const { bootApp } = await import("./boot");
-  const router = bootApp({
+  const { mountWindow, startApp } = await import("./boot");
+  const router = mountWindow(startApp({ links }), {
+    element: pageRoot(),
     ClerkProvider,
     history: createMemoryHistory({ initialEntries: [route] }),
-    links,
   });
   // The page it shows, which a quit remembers it on.
   router.subscribe("onResolved", ({ toLocation }) => {

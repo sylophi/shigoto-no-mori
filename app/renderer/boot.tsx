@@ -1,11 +1,14 @@
-// The renderer's boot, one for both shells. Each entry hands over the
-// two things that differ between a desktop window and a browser tab:
-// the Clerk provider flavor (@clerk/electron/react rides the preload
-// bridge for token storage and the system-browser OAuth transport,
-// plain @clerk/react is the browser's) and the router history (memory
-// in a window, real browser history in a tab). Everything else -- the
-// query client, the device registry sync and each peer's push watch,
-// the provider tree -- is the same boot. The wiring that only exists
+// The renderer's boot, one for both shells, in two parts: startApp once
+// a page, for what its windows share (the atoms, the query client, the
+// device registry sync and each peer's push watch), and mountWindow for
+// each window drawn into it (its router and its provider tree): the one
+// at the page's #root in the desktop app and the web client, several on
+// the marketing site. Each entry hands over the two things that differ
+// between a desktop window and a browser tab: the Clerk provider flavor
+// (@clerk/electron/react rides the preload bridge for token storage and
+// the system-browser OAuth transport, plain @clerk/react is the
+// browser's) and the router history (memory in a window, real browser
+// history in a tab). The wiring that only exists
 // on a machine with projects of its own (this machine's push watch,
 // the script run stream, the orphan sweep report, the worktree
 // lifecycle, the port forwards) starts only where there is a local
@@ -63,24 +66,25 @@ import {
   isOwnDeletePending,
 } from "./hooks/worktrees/useWorktreeMutations";
 import "./app.css";
-import { themeRoot } from "./lib/themeRoot";
 
 // Not render blocking, unlike app.css (see fonts.css). A failed fetch
 // leaves the fallback face, which is what text paints in meanwhile.
 import("@shigomori/ui/styles/fonts.css").catch(() => {});
 
-export function bootApp({
-  ClerkProvider,
-  history,
+// What the page's windows share.
+export interface AppClient {
+  registry: AtomRegistry.AtomRegistry;
+  queryClient: QueryClient;
+}
+
+export function startApp({
   links,
 }: {
-  ClerkProvider: ClerkProviderComponent;
-  history: RouterHistory;
   // The client's links (lib/runtime/client.ts), which the atoms' host
   // views ride.
   links: ClientLinks["Service"];
-}): AppRouter {
-  // The window's atoms, over its client's links, for as long as the
+}): AppClient {
+  // The page's atoms, over its client's links, for as long as the
   // page lives.
   const registry = AtomRegistry.make({
     initialValues: [[clientLinksAtom, links]],
@@ -91,7 +95,6 @@ export function bootApp({
   // The shared config (defaults, global error toasts, the meta
   // opt-outs) lives in lib/queryClientOptions.ts.
   const queryClient = createAppQueryClient();
-  const router = createAppRouter(history);
 
   // A removal announced by any device (this machine or a peer) gets
   // the treatment this window's own delete gives its worktree: its
@@ -120,35 +123,6 @@ export function bootApp({
 
   if (hasLocalHost) startLocalHost(queryClient);
 
-  // Leaving a worktree's pages (the ones with a $worktreeId param) tells
-  // its run store, so a failure the sidebar marked while nobody was
-  // there stops being news once they have been.
-  const worktreeShown = () => {
-    const params = router.state.matches.at(-1)?.params as
-      | { deviceId?: string; worktreeId?: string }
-      | undefined;
-    return params?.worktreeId && params.deviceId
-      ? { deviceId: params.deviceId, worktreeId: params.worktreeId }
-      : null;
-  };
-  let shown = worktreeShown();
-  router.subscribe("onResolved", () => {
-    const next = worktreeShown();
-    if (shown && shown.worktreeId !== next?.worktreeId) {
-      scriptRunsFor(shown.deviceId).markSeen(shown.worktreeId);
-    }
-    shown = next;
-  });
-
-  // Mirror focus onto <html> so CSS can pause the infinite animations
-  // (the doubutsu wallpaper drift, the spinners) while nobody is
-  // looking: a running animation asks the compositor for a frame every
-  // vsync, which was ~88% of the app's idle energy. Rides React Query's
-  // focus signal (window focus/blur, visibilitychange, plus the
-  // desktop's IPC channel wired in startLocalHost).
-  syncFocusClass(documentFocused());
-  focusManager.subscribe(syncFocusClass);
-
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
   startSharedSettingsSync(queryClient);
@@ -175,15 +149,68 @@ export function bootApp({
   // and on the desktop the notifications.
   startAgentWatch(queryClient);
 
-  const rootElement = themeRoot();
-  createRoot(rootElement).render(
+  return { registry, queryClient };
+}
+
+// A window over the page's client, drawn into `element`, its theme
+// root. With `themeFromRoot` the root's theme is the page's around it
+// (a frame on the marketing site); otherwise the window wears its
+// settings'.
+export function mountWindow(
+  { registry, queryClient }: AppClient,
+  {
+    element,
+    ClerkProvider,
+    history,
+    themeFromRoot = false,
+  }: {
+    element: HTMLElement;
+    ClerkProvider: ClerkProviderComponent;
+    history: RouterHistory;
+    themeFromRoot?: boolean;
+  },
+): AppRouter {
+  const router = createAppRouter(history, element);
+
+  // Leaving a worktree's pages (the ones with a $worktreeId param) tells
+  // its run store, so a failure the sidebar marked while nobody was
+  // there stops being news once they have been.
+  const worktreeShown = () => {
+    const params = router.state.matches.at(-1)?.params as
+      | { deviceId?: string; worktreeId?: string }
+      | undefined;
+    return params?.worktreeId && params.deviceId
+      ? { deviceId: params.deviceId, worktreeId: params.worktreeId }
+      : null;
+  };
+  let shown = worktreeShown();
+  router.subscribe("onResolved", () => {
+    const next = worktreeShown();
+    if (shown && shown.worktreeId !== next?.worktreeId) {
+      scriptRunsFor(shown.deviceId).markSeen(shown.worktreeId);
+    }
+    shown = next;
+  });
+
+  // Mirror focus onto the root so CSS can pause the infinite animations
+  // (the doubutsu wallpaper drift, the spinners) while nobody is
+  // looking: a running animation asks the compositor for a frame every
+  // vsync, which was ~88% of the app's idle energy. Rides React Query's
+  // focus signal (window focus/blur, visibilitychange, plus the
+  // desktop's IPC channel wired in startLocalHost).
+  const syncFocusClass = (focused: boolean) =>
+    element.classList.toggle("unfocused", !focused);
+  syncFocusClass(documentFocused());
+  focusManager.subscribe(syncFocusClass);
+
+  createRoot(element).render(
     <StrictMode>
       <RegistryContext value={registry}>
         <QueryClientProvider client={queryClient}>
-          <ThemeRootProvider value={rootElement}>
+          <ThemeRootProvider value={element}>
             <OutsideProvider value={outside}>
               <ClerkGate Provider={ClerkProvider}>
-                <App router={router} />
+                <App router={router} themeFromRoot={themeFromRoot} />
               </ClerkGate>
               <AppToaster />
               <UpdateNews />
@@ -196,10 +223,6 @@ export function bootApp({
   );
 
   return router;
-}
-
-function syncFocusClass(focused: boolean): void {
-  themeRoot().classList.toggle("unfocused", !focused);
 }
 
 // The boot-scope subscriptions about THIS machine's projects. Single

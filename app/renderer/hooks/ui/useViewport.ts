@@ -11,28 +11,27 @@ import {
   type ExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
 import { hasLocalHost } from "@/lib/localHost";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 const PHONE_BELOW_PX = 768;
 
-// One observer for the page, as the root lives as long as it does,
-// made on first use so importing this module needs no window. Readers
-// get the last answer rather than a fresh layout read each render.
-let phoneStore: ExternalStore<boolean> | undefined;
-function rootIsNarrow(): ExternalStore<boolean> {
-  if (phoneStore) return phoneStore;
-  const root = themeRoot();
+// One observer per window's root, as a root lives as long as its
+// window, made on first use so importing this module needs no window.
+// Readers get the last answer rather than a fresh layout read each
+// render.
+const phoneStores = new WeakMap<HTMLElement, ExternalStore<boolean>>();
+function rootIsNarrow(root: HTMLElement): ExternalStore<boolean> {
+  const known = phoneStores.get(root);
+  if (known) return known;
   const narrow = () => root.getBoundingClientRect().width < PHONE_BELOW_PX;
   const store = createExternalStore(narrow());
   new ResizeObserver(() => {
     const next = narrow();
     if (next !== store.get()) store.publish(next);
   }).observe(root);
-  return (phoneStore = store);
+  phoneStores.set(root, store);
+  return store;
 }
-
-const subscribeToRootWidth = (onChange: () => void) =>
-  rootIsNarrow().subscribe(onChange);
 
 // The desktop window never takes the phone layout: its minimum width
 // sits below the breakpoint, and a folded sidebar would put its toggle
@@ -42,13 +41,16 @@ const subscribeToNothing = () => () => {};
 
 // The phone layout: a bottom tab bar, the forest as a page of its own,
 // and the worktree pages stacked over it. Only ever the browser tab's.
-export function isPhoneLayout(): boolean {
-  return !hasLocalHost && rootIsNarrow().get();
+export function isPhoneLayout(root: HTMLElement): boolean {
+  return !hasLocalHost && rootIsNarrow(root).get();
 }
 
 export function usePhoneLayout(): boolean {
+  const root = useWindowRoot();
   return useSyncExternalStore(
-    hasLocalHost ? subscribeToNothing : subscribeToRootWidth,
-    isPhoneLayout,
+    hasLocalHost
+      ? subscribeToNothing
+      : (onChange) => rootIsNarrow(root).subscribe(onChange),
+    () => isPhoneLayout(root),
   );
 }

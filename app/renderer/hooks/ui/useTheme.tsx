@@ -1,14 +1,22 @@
-import { createContext, use, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  use,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import type { Theme } from "@shigomori/contracts/schemas";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useClientConfig } from "../config/useClientConfig";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 interface ThemeState {
   // Persisted value from clientConfig.json: what the settings UI
   // considers "saved".
   saved: Theme;
-  // Live value driving <html class="dark"> and the BrowserWindow background.
+  // Live value driving the root's `dark` class and the BrowserWindow
+  // background.
   // Equals `override ?? saved`.
   applied: Theme;
   resolved: "light" | "dark";
@@ -34,7 +42,32 @@ function readBootHint(): Theme {
   return "system";
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+// Whether the root wears `dark`, kept in step as whoever owns it
+// switches it.
+function useRootIsDark(root: HTMLElement): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange);
+      observer.observe(root, { attributeFilter: ["class"] });
+      return () => observer.disconnect();
+    },
+    () => root.classList.contains("dark"),
+  );
+}
+
+export function ThemeProvider({
+  fromRoot,
+  children,
+}: {
+  // The window's appearance is its root's, set by the page around it
+  // (a frame on the marketing site), rather than the settings'. The
+  // settings still read and save as usual; they just don't reach the
+  // root.
+  fromRoot: boolean;
+  children: ReactNode;
+}) {
+  const root = useWindowRoot();
+  const rootIsDark = useRootIsDark(root);
   const { data: config, isLoading } = useClientConfig();
   // Avoid a one-frame light-mode flash while clientConfig fetches by
   // trusting the localStorage mirror. Read live at evaluation time, not
@@ -63,25 +96,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => media.removeEventListener("change", handler);
   }, []);
 
-  const resolved = applied === "system" ? systemTheme : applied;
+  const settingsResolved = applied === "system" ? systemTheme : applied;
+  const resolved = fromRoot
+    ? rootIsDark
+      ? "dark"
+      : "light"
+    : settingsResolved;
 
   useEffect(() => {
-    themeRoot().classList.toggle("dark", resolved === "dark");
-  }, [resolved]);
+    if (!fromRoot) root.classList.toggle("dark", resolved === "dark");
+  }, [fromRoot, root, resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks
   // the applied theme (including unsaved previews). Non-persisting: the
   // saved value lands through the clientConfig write instead.
   useEffect(() => {
-    void window.api.window.previewTheme({ theme: applied });
-  }, [applied]);
+    if (!fromRoot) void window.api.window.previewTheme({ theme: applied });
+  }, [fromRoot, applied]);
 
   // Mirror the saved value into localStorage so the next launch can paint
   // without waiting for clientConfig to load.
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || fromRoot) return;
     writeStored(THEME_STORAGE_KEY, saved);
-  }, [isLoading, saved]);
+  }, [isLoading, fromRoot, saved]);
 
   return (
     <ThemeContext value={{ saved, applied, resolved, setOverride }}>
