@@ -129,7 +129,7 @@ const channel = <M extends Parameters<typeof callOf>[0]>(
   key: string,
 ) => channelOf(callOf(module, key));
 
-const refused = () => Promise.reject(new Error("not in this check"));
+const refused = () => Effect.die(new Error("not in this check"));
 
 let project: Project;
 let projectId: string;
@@ -307,10 +307,10 @@ it("script runs: a run started shows, on scripts:changed", async () => {
 });
 
 it("mirrors: the daemon coming up, on mirror:changed", async () => {
-  let status: ReturnType<MirrorImpl["status"]> = "starting";
+  let status: Effect.Success<MirrorImpl["status"]> = "starting";
   setMirrorImpl({
-    status: () => status,
-    sessions: () => [],
+    status: Effect.sync(() => status),
+    sessions: Effect.succeed([]),
     create: refused,
     recreate: refused,
     terminate: refused,

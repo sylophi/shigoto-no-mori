@@ -6,9 +6,8 @@ import { sessionContract } from "@shigomori/contracts/modules/session";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
-import { setWindowFocused } from "@host/lib/git/backgroundFetch";
 import { getBusyOperations } from "@host/lib/scripts";
-import { busyTerminals } from "./captures";
+import { busyTerminals, setWindowFocused } from "./captures";
 import { type HostFacts, setHostFacts } from "./facts";
 import {
   applyAccount,

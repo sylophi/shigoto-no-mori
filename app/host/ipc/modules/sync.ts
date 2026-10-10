@@ -16,19 +16,16 @@ import {
 } from "@host/lib/worktrees/carryOver";
 import { hasCommit } from "@host/lib/git/refs";
 import * as Effect from "effect/Effect";
-import * as Engine from "@host/lib/engine";
 import {
   findProject,
   findProjectAndWorktree,
   findWorktreePath,
 } from "@host/lib/projects";
-import { fromPromise } from "@host/lib/util/fromPromise";
-import { withParentSpan } from "@host/lib/util/trace";
 import { cancelMove } from "@host/lib/sync/moves";
 import {
   attachLinkFarEnd,
   serveSource,
-  withLinkSource,
+  linkSource,
 } from "@host/lib/sync/sourceLink";
 import { worktreesHandlers } from "./worktrees";
 import type { HostServices } from "@host/process/services";
@@ -78,12 +75,11 @@ export const syncHandlers = {
         projectId,
         worktreeId,
       ).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
-      const engine = yield* Engine.handle;
-      // Its answers continue the trace of the peer's call.
-      const span = yield* Effect.option(Effect.currentSpan);
-      void withParentSpan(span, () =>
-        serveSource(link, project, worktreeId, engine),
-      ).catch(() => {});
+      // Served past this call's answer, its answers continuing the
+      // trace of the peer's call.
+      yield* Effect.forkDetach(
+        Effect.ignore(serveSource(link, project, worktreeId)),
+      );
     }),
 
   // A send's landing, run here for the sender (host/lib/sync/landing.ts).
@@ -104,12 +100,9 @@ export const syncHandlers = {
       const into = yield* findProject(projectId).pipe(
         Effect.tapError(() => Effect.sync(() => link.reset())),
       );
-      const engine = yield* Engine.handle;
-      return yield* fromPromise(() =>
-        withLinkSource(
-          link,
-          (source) => source.fetch({ refs, haves, into }),
-          engine,
+      return yield* Effect.scoped(
+        Effect.flatMap(linkSource(link), (source) =>
+          source.fetch({ refs, haves, into }),
         ),
       );
     }),

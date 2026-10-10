@@ -18,8 +18,7 @@ import {
   isHaltedStatus,
   MIRROR_LABEL_MODE,
 } from "@shigomori/contracts/modules/mirror";
-import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
-import { abortable, throwIfCancelled } from "@host/lib/sync/moves";
+import * as Effect from "effect/Effect";
 import {
   beginTransfer,
   endTransfer,
@@ -56,7 +55,10 @@ function failed(error: string): TransferFilesResult {
   return { crossed: false, conflicts: 0, error };
 }
 
-export async function transferFilesOnce(
+// An interrupt (the move's cancel) ends the session where it stands, a
+// create the cancel outran included (main's sweep is the backstop, by
+// the token). The caller decides what becomes of the worktree.
+export const transferFilesOnce = (
   input: {
     localRoot: string;
     // The local worktree's id, the one label a session must carry:
@@ -75,59 +77,55 @@ export async function transferFilesOnce(
     direction?: "pull" | "push" | "replica";
   },
   onProgress: (bytes: number, totalBytes: number) => void,
-  // The move's cancel: the session is ended where it stands, and the
-  // result says the files did not cross. The caller decides what
-  // becomes of the worktree.
-  signal?: AbortSignal,
-): Promise<TransferFilesResult> {
-  const token = beginTransfer();
-  let ended: Promise<unknown> = Promise.resolve();
-  try {
-    const daemon = requireRunningEngine();
-    throwIfCancelled(signal);
-    const creating = daemon.create({
-      localRoot: input.localRoot,
-      deviceId: input.sourceDeviceId,
-      projectId: input.sourceProjectId,
-      worktreeId: input.sourceWorktreeId,
-      remoteRoot: input.remoteRoot,
-      name: input.name,
-      localWorktreeId: input.localWorktreeId,
-      labels: {
-        [MIRROR_LABEL_LOCAL_WORKTREE]: input.localWorktreeId,
-        [MIRROR_LABEL_MODE]: transferModeFor(token),
-      },
-      ignores: input.ignores,
-      ...(input.direction === "push"
-        ? { push: true }
-        : input.direction === "replica"
-          ? { replica: true }
-          : { pull: true }),
-    });
-    // A create the cancel outran still makes its session: ended once
-    // it is there (main's sweep is the backstop, by the token).
-    const session = await abortable(signal, creating, (made) =>
-      daemon.terminate(made),
-    );
-    try {
-      return await waitSettled(daemon, session, onProgress, signal);
-    } finally {
-      ended = daemon.terminate(session).catch((error: unknown) => {
-        log.warn(
-          `[sync] could not end the file transfer session: ${errorMessageOf(error)}`,
+): Effect.Effect<TransferFilesResult> =>
+  Effect.acquireUseRelease(
+    Effect.sync(beginTransfer),
+    (token) =>
+      Effect.gen(function* () {
+        const daemon = yield* requireRunningEngine;
+        // Ended whatever happens: after the terminate, so main's sweep
+        // only picks the session up when that failed.
+        return yield* Effect.acquireUseRelease(
+          Effect.uninterruptible(
+            daemon.create({
+              localRoot: input.localRoot,
+              deviceId: input.sourceDeviceId,
+              projectId: input.sourceProjectId,
+              worktreeId: input.sourceWorktreeId,
+              remoteRoot: input.remoteRoot,
+              name: input.name,
+              localWorktreeId: input.localWorktreeId,
+              labels: {
+                [MIRROR_LABEL_LOCAL_WORKTREE]: input.localWorktreeId,
+                [MIRROR_LABEL_MODE]: transferModeFor(token),
+              },
+              ignores: input.ignores,
+              ...(input.direction === "push"
+                ? { push: true }
+                : input.direction === "replica"
+                  ? { replica: true }
+                  : { pull: true }),
+            }),
+          ),
+          (session) => waitSettled(daemon, session, onProgress),
+          (session) =>
+            daemon
+              .terminate(session)
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.sync(() =>
+                    log.warn(
+                      `[sync] could not end the file transfer session: ${errorMessageOf(error)}`,
+                    ),
+                  ),
+                ),
+              ),
         );
-      });
-    }
-  } catch (error) {
-    return failed(errorMessageOf(error));
-  } finally {
-    // After the terminate, so main's sweep only picks the session up
-    // when that failed, or when the create was rejected with the
-    // session already made and there was no id to terminate.
-    await ended;
-    endTransfer(token);
-  }
-}
+      }).pipe(
+        Effect.catch((error) => Effect.succeed(failed(errorMessageOf(error)))),
+      ),
+    (token) => Effect.sync(() => endTransfer(token)),
+  );
 
 // One full cycle with both sides scanned and nothing left staging is
 // the files across. Staging figures feed the progress bar.
@@ -142,69 +140,70 @@ function settled(raw: MirrorSessionRaw): boolean {
   );
 }
 
-async function waitSettled(
+const waitSettled = (
   daemon: MirrorImpl,
   session: string,
   onProgress: (bytes: number, totalBytes: number) => void,
-  signal: AbortSignal | undefined,
-): Promise<TransferFilesResult> {
-  const startedAt = Date.now();
-  let missingSince: number | null = null;
-  let reportedBytes = -1;
-  // When a side that had connected stopped being connected, so a
-  // peer lost mid-transfer (its session closed under a sign-out or
-  // a revoke, on either end) fails at the connect ceiling like a
-  // peer never reached, instead of polling out the settle ceiling.
-  let disconnectedSince: number | null = null;
-  let everConnected = false;
-  while (Date.now() - startedAt < SETTLE_CEILING_MS) {
-    if (signal?.aborted) return failed(MOVE_CANCELLED);
-    const raw = findSession(daemon, session);
-    if (raw === undefined) {
-      missingSince ??= Date.now();
-      if (Date.now() - missingSince > MISSING_CEILING_MS) {
-        return failed("the transfer session was lost with the engine");
-      }
-    } else {
-      missingSince = null;
-      const staging = raw.local.staging ?? raw.remote.staging;
-      // A frame only when the figure moved: a stalled stage is not
-      // news four times a second.
-      if (staging !== undefined && staging.receivedSize !== reportedBytes) {
-        reportedBytes = staging.receivedSize;
-        onProgress(staging.receivedSize, staging.expectedSize);
-      }
-      if (isHaltedStatus(raw.status)) {
-        return failed(raw.lastError ?? raw.statusText);
-      }
-      // No cycle yet after the connect ceiling, and either an error
-      // or a side still not connected (a source that went away, which
-      // reports no error at all): the session is not going to.
-      const connected = raw.local.connected && raw.remote.connected;
-      if (
-        raw.successfulCycles === 0 &&
-        Date.now() - startedAt > CONNECT_CEILING_MS &&
-        (raw.lastError !== undefined || !connected)
-      ) {
-        return failed(raw.lastError ?? "the other device could not be reached");
-      }
-      if (connected) {
-        everConnected = true;
-        disconnectedSince = null;
-      } else if (everConnected) {
-        disconnectedSince ??= Date.now();
-        if (Date.now() - disconnectedSince > CONNECT_CEILING_MS) {
+) =>
+  Effect.gen(function* () {
+    const startedAt = Date.now();
+    let missingSince: number | null = null;
+    let reportedBytes = -1;
+    // When a side that had connected stopped being connected, so a
+    // peer lost mid-transfer (its session closed under a sign-out or
+    // a revoke, on either end) fails at the connect ceiling like a
+    // peer never reached, instead of polling out the settle ceiling.
+    let disconnectedSince: number | null = null;
+    let everConnected = false;
+    while (Date.now() - startedAt < SETTLE_CEILING_MS) {
+      const raw = yield* findSession(daemon, session);
+      if (raw === undefined) {
+        missingSince ??= Date.now();
+        if (Date.now() - missingSince > MISSING_CEILING_MS) {
+          return failed("the transfer session was lost with the engine");
+        }
+      } else {
+        missingSince = null;
+        const staging = raw.local.staging ?? raw.remote.staging;
+        // A frame only when the figure moved: a stalled stage is not
+        // news four times a second.
+        if (staging !== undefined && staging.receivedSize !== reportedBytes) {
+          reportedBytes = staging.receivedSize;
+          onProgress(staging.receivedSize, staging.expectedSize);
+        }
+        if (isHaltedStatus(raw.status)) {
+          return failed(raw.lastError ?? raw.statusText);
+        }
+        // No cycle yet after the connect ceiling, and either an error
+        // or a side still not connected (a source that went away, which
+        // reports no error at all): the session is not going to.
+        const connected = raw.local.connected && raw.remote.connected;
+        if (
+          raw.successfulCycles === 0 &&
+          Date.now() - startedAt > CONNECT_CEILING_MS &&
+          (raw.lastError !== undefined || !connected)
+        ) {
           return failed(
-            raw.lastError ?? "the other device went away mid-transfer",
+            raw.lastError ?? "the other device could not be reached",
           );
         }
+        if (connected) {
+          everConnected = true;
+          disconnectedSince = null;
+        } else if (everConnected) {
+          disconnectedSince ??= Date.now();
+          if (Date.now() - disconnectedSince > CONNECT_CEILING_MS) {
+            return failed(
+              raw.lastError ?? "the other device went away mid-transfer",
+            );
+          }
+        }
+        if (settled(raw)) {
+          return { crossed: true, conflicts: raw.conflicts.length };
+        }
       }
-      if (settled(raw)) {
-        return { crossed: true, conflicts: raw.conflicts.length };
-      }
+      // A poll, by design.
+      yield* Effect.sleep(POLL_MS);
     }
-    // oxlint-disable-next-line no-await-in-loop -- a poll, by design
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-  }
-  return failed("the transfer did not settle in time");
-}
+    return failed("the transfer did not settle in time");
+  });
