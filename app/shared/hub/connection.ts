@@ -19,6 +19,7 @@ import {
   createHubLink,
   type HubLink,
   HubLinkDownError,
+  type SeenAsks,
   type ServeConnectInfo,
 } from "@shared/hub/link";
 import type {
@@ -181,6 +182,8 @@ export function createHubConnectionCore(
   deps: HubConnectionCoreDeps,
 ): HubConnectionCore {
   let link: HubLink | null = null;
+  // Kept across the links a redial replaces (link.ts, SeenAsks).
+  const seenAsks: SeenAsks = new Map();
   // The established connection as the supervisor reports it (null the
   // moment it is lost or torn down), so probe() reaches exactly the
   // live socket.
@@ -327,6 +330,7 @@ export function createHubConnectionCore(
         const nextLink = createHubLink({
           localDeviceId: opts.deviceId,
           localKey: deviceKeyPair(opts.deviceKey),
+          seenAsks,
           send: (text) => socket.send(text),
           serveConnectInfo: deps.serveConnectInfo,
           onPresence: () => {

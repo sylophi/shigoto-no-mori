@@ -205,6 +205,7 @@ import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
 import { CLOSE_HANDSHAKE_FAILED } from "@shared/remote/sealedSocket";
 import {
   decodeRelayFrame,
+  encodeRelayFrame,
   MAX_DEVICE_CONNECTIONS,
 } from "@shigomori/contracts/hubProtocol";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
@@ -502,7 +503,7 @@ it("brokering: connectInfo over the device hub carries fully dialable candidates
   assert.deepEqual(await ask(), { available: false });
 });
 
-it("brokering serves the roster only: an ask forged from outside the host's live roster and an ask with a malformed input mint nothing, and a real ask mints for the hub-stamped caller", async () => {
+it("brokering serves the roster only: an ask forged from outside the host's live roster, an ask with a malformed input and a replayed ask mint nothing, and a real ask mints for the hub-stamped caller", async () => {
   const stub = await startStubHub(trackTest);
   const listener = await startDirectListener(trackTest);
   const minted: string[] = [];
@@ -516,6 +517,7 @@ it("brokering serves the roster only: an ask forged from outside the host's live
     from: "ghost",
     frame: sealAsk("ghost", "B", 1, {
       ask: CONNECT_INFO_ASK,
+      expiresAt: Date.now() + 60_000,
       input: { dialableKinds: ["lan"], connectionId: ONE_CONNECTION },
     }).frame,
   });
@@ -537,6 +539,20 @@ it("brokering serves the roster only: an ask forged from outside the host's live
   );
   assert.equal(info.available, true);
   assert.equal(minted.length, 1);
+  // The same sealed ask, replayed by a hub under another id, mints
+  // nothing, so the asker's tickets stand.
+  const sent = stub.received.findLast(
+    (entry) => entry.from === "A" && entry.to === "B",
+  );
+  const replayed = sent === undefined ? null : decodeRelayFrame(sent.frame);
+  assert.ok(replayed !== null && replayed.kind === "ask");
+  stub.injectTo("B", {
+    t: "relay",
+    from: "A",
+    frame: encodeRelayFrame({ ...replayed, id: replayed.id + 1 }),
+  });
+  await delay(100);
+  assert.equal(minted.length, 1, "a replayed ask minted again");
   // Bound to the caller the hub stamped, not to anything the ask
   // could claim.
   assert.equal(
