@@ -14,19 +14,14 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
-import { dirtyApply } from "@host/lib/engineCalls";
-import {
-  createWorktree,
-  forceRemoveWorktree,
-  worktreeDestination,
-} from "@host/lib/engineCalls";
+import * as Ops from "@host/lib/engineOps";
 import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
-import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   deleteRef,
   hasCommit,
@@ -35,12 +30,14 @@ import {
   updateRef,
 } from "@host/lib/git/refs";
 import {
+  addProject,
+  findProject,
   findProjectByIdentity,
-  findProjectByIdentityOrThrow,
-  findProjectOrThrow,
+  findProjectByIdentityOrFail,
 } from "@host/lib/projects";
-import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
-import { runCancellable, step } from "@host/lib/sync/moves";
+import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
+import { cancellable, step } from "@host/lib/sync/moves";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import {
   attachLinkFarEnd,
   incomingRefFor,
@@ -49,9 +46,10 @@ import {
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { notifierFor } from "@host/ipc/modules/worktrees";
-import { logFailure } from "@shared/log";
 import type { Handlers } from "@shigomori/contracts/types";
+import type { HostServices } from "@host/process/services";
 import { landInvitedMirror } from "@host/mirror/invites";
+import { onAbort } from "@host/lib/util/abort";
 
 // The branch the landing asked for is gone from the source.
 class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
@@ -63,6 +61,16 @@ class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
   }
 }
 
+// The clone landed, but could not be added as a project.
+class CloneUnregisteredError extends Schema.TaggedError<CloneUnregisteredError>()(
+  "CloneUnregisteredError",
+  { path: Schema.String, reason: Schema.String },
+) {
+  override get message(): string {
+    return `Cloned into ${this.path}, but couldn't add it as a project: ${this.reason}`;
+  }
+}
+
 // The ref the engine's dirty capture lands a worktree's uncommitted
 // state under (Dirty.ts owns the name on that side).
 const dirtyRefFor = (worktreeId: string) =>
@@ -70,20 +78,34 @@ const dirtyRefFor = (worktreeId: string) =>
 
 // Where a landing would refuse. Updating an existing branch is out of
 // scope, so a held one refuses with the state the user can act on.
-async function refuseLandingCollision(
+class LandingCollisionError extends Schema.TaggedError<LandingCollisionError>()(
+  "LandingCollisionError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+const refuseLandingCollision = Effect.fnUntraced(function* (
   project: Project,
   branch: string,
   worktreeName: string | undefined,
-): Promise<void> {
-  const [{ local }, existing] = await Promise.all([
-    listBranches(project.path),
-    listWorktreeIdentities(project.id),
-  ]);
+) {
+  const [{ local }, existing] = yield* Effect.all(
+    [
+      fromPromise(() => listBranches(project.path)),
+      Ops.listWorktreeIdentities({ projectId: project.id }),
+    ],
+    { concurrency: 2 },
+  );
   if (local.includes(branch)) {
     // Name the worktree holding it when one does: that is the thing
     // the user has to stop or delete.
     const holder = existing.find((w) => w.branch === branch);
-    throw new Error(pullBranchCollision(branch, holder?.path));
+    return yield* new LandingCollisionError({
+      reason: pullBranchCollision(branch, holder?.path),
+    });
   }
   // Git keeps refs in a directory tree, so a branch can sit neither
   // under an existing one nor above it: mirror/main is refused by a
@@ -93,20 +115,27 @@ async function refuseLandingCollision(
     (name) => name.startsWith(`${branch}/`) || branch.startsWith(`${name}/`),
   );
   if (inTheWay !== undefined) {
-    throw new Error(
-      `${branch} cannot be created here: a branch named ${inTheWay} is in the way (git allows one of the two). Rename that branch first.`,
-    );
+    return yield* new LandingCollisionError({
+      reason: `${branch} cannot be created here: a branch named ${inTheWay} is in the way (git allows one of the two). Rename that branch first.`,
+    });
   }
-  // The copy keeps the source's folder name, and the CLI create
+  // The copy keeps the source's folder name, and the engine's create
   // refuses a taken one (a worktree of this project by that name,
   // case-insensitively, or anything at the path). That refusal lands at
-  // the create, after the bundle crossed. The CLI's destination read
+  // the create, after the bundle crossed. The engine's destination read
   // makes the same two checks here, before a byte moves.
   if (worktreeName !== undefined) {
-    const { path, taken } = await worktreeDestination(project.id, worktreeName);
-    if (taken) throw new Error(pullFolderCollision(worktreeName, path));
+    const { path, taken } = yield* Ops.worktreeDestination(
+      project.id,
+      worktreeName,
+    );
+    if (taken) {
+      return yield* new LandingCollisionError({
+        reason: pullFolderCollision(worktreeName, path),
+      });
+    }
   }
-}
+});
 
 // A move's span attributes. The peer's half of a move continues the
 // same trace over the device link, so nothing else ties the two.
@@ -177,16 +206,14 @@ export const landWorktree = (
     let project: Project;
     const { cloneInto } = landing;
     if (cloneInto === undefined) {
-      project = yield* step(() =>
-        findProjectByIdentityOrThrow(landing.identity),
-      );
+      project = yield* findProjectByIdentityOrFail(landing.identity);
     } else {
-      const held = yield* step(() => findProjectByIdentity(landing.identity));
+      const held = yield* findProjectByIdentity(landing.identity);
       if (held === undefined) progress({ step: "clone" });
       project =
         held ??
         (cloned = yield* step((stepSignal) =>
-          cloneProjectFromPeer(
+          cloneCheckoutFromPeer(
             source,
             cloneInto,
             landBranch,
@@ -194,13 +221,32 @@ export const landWorktree = (
               progress({ step: "clone", bytes, totalBytes }),
             stepSignal,
           ),
-        ).pipe(Effect.withSpan("Landing.clone")));
+        ).pipe(
+          // A clone that got as far as its register stays: it is a
+          // checkout of the repo at the place the user named, and a
+          // retry lands in it. So a failed register says where it is: a
+          // retry would only find the folder taken.
+          Effect.flatMap((dest) =>
+            addProject(dest).pipe(
+              Effect.mapError(
+                (error) =>
+                  new CloneUnregisteredError({
+                    path: dest,
+                    reason: errorMessageOf(error),
+                  }),
+              ),
+            ),
+          ),
+          Effect.withSpan("Landing.clone"),
+        ));
     }
 
     // 2. Refuse up front what the create would refuse after the bundle
     // crossed.
-    yield* step(() =>
-      refuseLandingCollision(project, landBranch, landing.worktreeName),
+    yield* refuseLandingCollision(
+      project,
+      landBranch,
+      landing.worktreeName,
     ).pipe(Effect.withSpan("Landing.refusals"));
 
     // 3. The tip, then the capture. The tip decides whether the branch
@@ -322,11 +368,12 @@ export const landWorktree = (
 // script and the copy goes.
 export const landForSender: Handlers<
   typeof syncContract,
-  HandlerContext
+  HandlerContext,
+  HostServices
 >["receiveWorktree"] = ({ channelId, landBranch, ...landing }, ctx) => {
   const link = attachLinkFarEnd(ctx, channelId);
   const signal = AbortSignal.any([ctx.signal, link.closed]);
-  return runCancellable(
+  return cancellable(
     signal,
     Effect.gen(function* () {
       const move = yield* Effect.scope;
@@ -388,34 +435,30 @@ const landIncoming = (
     const notify = notifierFor(ctx);
     // Acquired whole even under a cancel: the move's signal interrupts the
     // create (its setup script with it), and a create cut short still
-    // answers with its worktree (engineCalls.ts, runStreamingCreate), which the release then removes. Released
+    // answers with its worktree (engineOps.ts, runStreamingCreate), which the release then removes. Released
     // with the move, and only when it was interrupted.
     const { worktree } = yield* Effect.acquireRelease(
-      step(() =>
-        createWorktree(
-          project,
-          {
-            branchName: input.branch,
-            base: input.incomingRef,
-            worktreeName: input.worktreeName,
-            skipSetup: input.runSetup === false,
+      Ops.createWorktree(
+        project,
+        {
+          branchName: input.branch,
+          base: input.incomingRef,
+          worktreeName: input.worktreeName,
+          skipSetup: input.runSetup === false,
+        },
+        {
+          ...notify,
+          notifyPhase: (payload) => {
+            notify.notifyPhase(payload);
+            if (payload.phase !== "idle") {
+              progress({ step: "create", createPhase: payload.phase });
+            }
           },
-          {
-            ...notify,
-            notifyPhase: (payload) => {
-              notify.notifyPhase(payload);
-              if (payload.phase !== "idle") {
-                progress({ step: "create", createPhase: payload.phase });
-              }
-            },
-          },
-          { resolveOn: "exit", signal },
-        ),
+        },
+        { resolveOn: "exit", cancelled: abortedBy(signal) },
       ).pipe(Effect.withSpan("Landing.create")),
       ({ worktree: landed }, exit) =>
-        Exit.hasInterrupts(exit)
-          ? Effect.promise(() => rollBackLanded(landed))
-          : Effect.void,
+        Exit.hasInterrupts(exit) ? rollBackLanded(landed) : Effect.void,
     ).pipe(Scope.provide(move));
 
     // Capture refs are keyed by worktree id, and ids are derived
@@ -443,16 +486,15 @@ const landIncoming = (
       if (localDirtyRef !== sourceDirtyRef) {
         yield* step(() => deleteRef(project.path, sourceDirtyRef));
       }
-      dirtyApplied = yield* step(() => dirtyApply(project, worktree.id)).pipe(
+      dirtyApplied = yield* Ops.dirtyApply(project, worktree.id).pipe(
         Effect.withSpan("Landing.apply"),
         Effect.as(true),
-        Effect.catchTags({
-          MoveStepError: (error) =>
-            Effect.logWarning(
-              "[sync] dirty apply failed after create:",
-              error.cause,
-            ).pipe(Effect.as(false)),
-        }),
+        Effect.catch((error) =>
+          Effect.logWarning(
+            "[sync] dirty apply failed after create:",
+            error,
+          ).pipe(Effect.as(false)),
+        ),
       );
     }
     return { worktree, dirtyApplied };
@@ -466,19 +508,29 @@ const landIncoming = (
 // the cancel is still the answer.
 const ROLLBACK_CLEANUP_MS = 60_000;
 
-function rollBackLanded(
+const rollBackLanded = (
   worktree: Pick<Worktree, "projectId" | "id" | "branch">,
-): Promise<void> {
-  return logFailure(
-    "[sync] could not remove the worktree of a cancelled move",
-    async () => {
-      const project = await findProjectOrThrow(worktree.projectId);
-      await forceRemoveWorktree(project, worktree.id, {
-        timeoutMs: ROLLBACK_CLEANUP_MS,
-      });
-      await deleteAnyLocalBranch(project.path, worktree.branch, true).catch(
-        () => {},
-      );
-    },
+) =>
+  Effect.gen(function* () {
+    const project = yield* findProject(worktree.projectId);
+    yield* Ops.forceRemoveWorktree(project, worktree.id, {
+      timeoutMs: ROLLBACK_CLEANUP_MS,
+    });
+    yield* Effect.promise(() =>
+      deleteAnyLocalBranch(project.path, worktree.branch, true).catch(() => {}),
+    );
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.logWarning(
+        "[sync] could not remove the worktree of a cancelled move:",
+        error,
+      ),
+    ),
   );
-}
+
+// A move's cancel, as the effect the create waits on.
+const abortedBy = (signal: AbortSignal): Effect.Effect<void> =>
+  Effect.callback<void>((resume) => {
+    const off = onAbort(signal, () => resume(Effect.void));
+    return Effect.sync(off);
+  });

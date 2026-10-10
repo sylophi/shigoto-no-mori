@@ -130,14 +130,18 @@ export class Terminals extends Context.Service<
   }
 >()("sm/host/Terminals") {}
 
-const make = (options: {
+const make = <R>(options: {
   // The folder and environment a terminal starts with: a worktree's
   // scripts', or the app's own for the device's.
   readonly start: (
     owner: TerminalOwner,
-  ) => Effect.Effect<Start, UnknownProjectError | UnknownWorktreeError>;
+  ) => Effect.Effect<Start, UnknownProjectError | UnknownWorktreeError, R>;
 }) =>
   Effect.gen(function* () {
+    // What the start reads, as the layer finds it.
+    const startContext = yield* Effect.context<R>();
+    const startOf = (owner: TerminalOwner) =>
+      options.start(owner).pipe(Effect.provide(startContext));
     const layerScope = yield* Effect.scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
@@ -361,7 +365,7 @@ const make = (options: {
       readonly owner: TerminalOwner;
       readonly size?: Size | undefined;
     }) {
-      const start = yield* options.start(input.owner);
+      const start = yield* startOf(input.owner);
       const terminal: Terminal = {
         terminalId: yield* mintId,
         owner: input.owner,
@@ -392,7 +396,7 @@ const make = (options: {
     const restore = Effect.gen(function* () {
       for (const terminal of yield* saved.list) {
         yield* saved.forget(terminal.terminalId);
-        const start = yield* Effect.option(options.start(terminal.owner));
+        const start = yield* Effect.option(startOf(terminal.owner));
         if (Option.isNone(start)) continue;
         const cwd = (yield* exists(terminal.cwd))
           ? terminal.cwd
@@ -507,7 +511,7 @@ const make = (options: {
         for (const session of sessions.values()) {
           const owner = ownedBy(session);
           if (owner === undefined) continue;
-          const start = yield* Effect.option(options.start(owner));
+          const start = yield* Effect.option(startOf(owner));
           if (
             Option.isNone(start) ||
             (start.value.cwd !== undefined && !(yield* exists(start.value.cwd)))
@@ -522,5 +526,5 @@ const make = (options: {
     });
   });
 
-export const layer = (options: Parameters<typeof make>[0]) =>
+export const layer = <R>(options: Parameters<typeof make<R>>[0]) =>
   Layer.effect(Terminals, make(options));

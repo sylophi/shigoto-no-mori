@@ -14,7 +14,6 @@ import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { face } from "@host/lib/engineCalls";
 import * as Ops from "@host/lib/engineOps";
 import { findWorktreeIdentity } from "../git/worktrees";
 import { dataDir, toAbsolute } from "../util/paths";
@@ -134,24 +133,29 @@ export const primaryRef = Effect.fnUntraced(function* (project: Project) {
 // ambiguity is benign. Read fresh from disk through the CLI rather than
 // trusted from the caller, so a pull can never be aimed at a
 // non-matching repo.
-export async function findProjectByIdentity(
-  identity: string,
-): Promise<Project | undefined> {
-  const rows = await refreshProjects();
-  const match = rows.find((row) => row.pathExists && row.identity === identity);
-  return match === undefined ? undefined : toProject(match);
+export const findProjectByIdentity = (identity: string) =>
+  Effect.map(refresh, (rows) => {
+    const match = rows.find(
+      (row) => row.pathExists && row.identity === identity,
+    );
+    return match === undefined ? undefined : toProject(match);
+  });
+
+class NoProjectOfIdentityError extends Schema.TaggedError<NoProjectOfIdentityError>()(
+  "NoProjectOfIdentityError",
+  {},
+) {
+  override get message(): string {
+    return "No local project matches this repository. Add a clone of it to this device first.";
+  }
 }
 
-const NO_PROJECT_OF_IDENTITY =
-  "No local project matches this repository. Add a clone of it to this device first.";
-
-export async function findProjectByIdentityOrThrow(
-  identity: string,
-): Promise<Project> {
-  const project = await findProjectByIdentity(identity);
-  if (project === undefined) throw new Error(NO_PROJECT_OF_IDENTITY);
-  return project;
-}
+export const findProjectByIdentityOrFail = (identity: string) =>
+  Effect.flatMap(findProjectByIdentity(identity), (project) =>
+    project === undefined
+      ? Effect.fail(new NoProjectOfIdentityError())
+      : Effect.succeed(project),
+  );
 
 // A project repo registered from inside the data dir (nothing stops
 // projects.add from accepting one) would be wiped or dragged along by
@@ -195,13 +199,3 @@ export const findWorktreePath = (scope: {
     findProjectAndWorktree(scope.projectId, scope.worktreeId),
     ({ worktree }) => worktree.path,
   );
-
-// The Promise forms, for the host code not converted yet: removed with
-// the narrowed engine face (engineCalls.ts) in step 7's B4c PR.
-export const refreshProjects = face(() => refresh);
-export const registerProject = face(addProject);
-export const listProjects = face(() => freshProjects);
-export const primaryRefOf = face(primaryRef);
-export const findProjectOrThrow = face(findProject);
-export const findProjectAndWorktreeOrThrow = face(findProjectAndWorktree);
-export const findWorktreePathOrThrow = face(findWorktreePath);

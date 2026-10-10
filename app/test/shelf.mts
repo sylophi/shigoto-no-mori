@@ -40,9 +40,17 @@ beforeAll(async () => {
 afterAll(() => fixture.remove());
 const { dataDir, git, gitOut, commitFile, sandbox, sm } = fixture;
 
-const { listWorktreeIdentities, listWorktrees, setAutoPull, setShelved } =
-  await import("../host/lib/engineCalls.ts");
-const Engine = await import("../host/lib/engine.ts");
+const Ops = await import("../host/lib/engineOps.ts");
+const { onSandboxEngine } = await import("./lib/sandboxEngine.mts");
+const listWorktrees = (projectId: string) =>
+  onSandboxEngine(Ops.listWorktrees(projectId));
+const listWorktreeIdentities = (
+  ...args: Parameters<typeof Ops.listWorktreeIdentities>
+) => onSandboxEngine(Ops.listWorktreeIdentities(...args));
+const setAutoPull = (...args: Parameters<typeof Ops.setAutoPull>) =>
+  onSandboxEngine(Ops.setAutoPull(...args));
+const setShelved = (...args: Parameters<typeof Ops.setShelved>) =>
+  onSandboxEngine(Ops.setShelved(...args));
 const { autoPullWorktree } =
   await import("../host/lib/worktrees/autoPullSweep.ts");
 
@@ -50,7 +58,7 @@ const { autoPullWorktree } =
 // connection.
 type Snapshot = { at: number; head: string | null; changed: number };
 const snapshotOf = (id: string): Promise<Snapshot | undefined> =>
-  Engine.run(
+  onSandboxEngine(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const [row] = yield* sql<Snapshot>`SELECT at, head, changed
@@ -59,7 +67,7 @@ const snapshotOf = (id: string): Promise<Snapshot | undefined> =>
     }),
   );
 const markedShelved = (id: string): Promise<boolean> =>
-  Engine.run(
+  onSandboxEngine(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`SELECT 1 FROM worktree_marks
@@ -301,7 +309,7 @@ it("with autoShelveDays set, an untouched worktree goes on the shelf, and an uns
   // to a new branch on the same old commit: the move of HEAD is the
   // touch.
   await git(box.worktree, ["checkout", "-q", "--", "a.txt"]);
-  await Engine.run(
+  await onSandboxEngine(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`DELETE FROM unshelved_at WHERE worktree_id = ${box.id}`;

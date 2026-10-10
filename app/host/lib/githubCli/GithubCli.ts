@@ -16,7 +16,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { readGlobalConfig } from "../config/global";
+import * as EngineConfig from "@shigomori/engine/Config";
+import * as Ops from "../engineOps";
 import { listRemoteEntries } from "../git/remotes";
 import { answersFor } from "../util/cacheTtl";
 import * as Processes from "../util/processes";
@@ -108,6 +109,8 @@ const decodeRepoMergeConfig = Schema.decodeUnknownEffect(
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  // The device settings, for the integration's switch.
+  const engineConfig = yield* EngineConfig.Config;
   const withSpawner = Effect.provideService(
     ChildProcessSpawner.ChildProcessSpawner,
     spawner,
@@ -209,7 +212,10 @@ const make = Effect.gen(function* () {
   );
 
   const unavailableReason = Effect.gen(function* () {
-    const config = yield* Effect.promise(readGlobalConfig);
+    const config = yield* Ops.readGlobalConfig().pipe(
+      Effect.provideService(EngineConfig.Config, engineConfig),
+      Effect.orDie,
+    );
     if (config.githubCli === false) return "integration-off" as const;
     const { installed, authed } = yield* probe;
     if (!installed) return "gh-missing" as const;

@@ -17,15 +17,9 @@ import type {
   ShigomoriConfig,
   TerminalOwner,
 } from "@shigomori/contracts/schemas";
-import { findProjectOrThrow } from "@host/lib/projects";
-import {
-  readShigomoriConfig,
-  readWorktreeData,
-} from "@host/lib/config/project";
-import {
-  listWorktreeIdentities,
-  type WorktreeIdentity,
-} from "@host/lib/git/worktrees";
+import * as Ops from "@host/lib/engineOps";
+import type { WorktreeIdentity } from "@host/lib/git/worktrees";
+import { findProject } from "@host/lib/projects";
 import {
   type NotifyScriptEvent,
   type ScriptEnvValues,
@@ -33,28 +27,36 @@ import {
 } from "@host/lib/scripts";
 import type { Start } from "@host/lib/terminals/Terminals";
 
-export interface ScriptRunContext {
+interface ScriptRunContext {
   config: ShigomoriConfig | null;
   worktree: WorktreeIdentity;
   scriptEnv: ScriptEnvValues;
 }
 
-export async function prepareScriptRun(
+export const prepareScriptRun = Effect.fnUntraced(function* (
   project: Pick<Project, "id" | "path">,
   worktreeId: string,
-): Promise<ScriptRunContext> {
-  // One CLI read answers the worktree, the primary's branch and the
-  // project's primary ref alike. The data file is read alongside it and
+) {
+  // One engine read answers the worktree, the primary's branch and the
+  // project's primary ref alike. The data is read alongside it and
   // dropped below for an external worktree, which keeps none (the
-  // CLI's describedOf). A broken one costs the run its title, not the
-  // run.
-  const [config, identities, data] = await Promise.all([
-    readShigomoriConfig(project.id),
-    listWorktreeIdentities(project.id, { primaryRef: true }),
-    readWorktreeData(project.id, worktreeId).catch(() => null),
-  ]);
+  // engine's describedOf). A broken one costs the run its title, not
+  // the run.
+  const [config, identities, data] = yield* Effect.all(
+    [
+      Ops.readProjectConfig(project.id),
+      Ops.listWorktreeIdentities(
+        { projectId: project.id },
+        { primaryRef: true },
+      ),
+      Ops.readWorktreeData(project.id, worktreeId).pipe(
+        Effect.orElseSucceed(() => null),
+      ),
+    ],
+    { concurrency: 3 },
+  );
   const worktree = identities.find((i) => i.id === worktreeId);
-  if (!worktree) throw new UnknownWorktreeError({ worktreeId });
+  if (!worktree) return yield* new UnknownWorktreeError({ worktreeId });
   const described = hasWorktreeData(worktree) ? data : null;
   return {
     config,
@@ -65,8 +67,8 @@ export async function prepareScriptRun(
       title: withoutNul(described?.title),
       description: withoutNul(described?.description),
     },
-  };
-}
+  } satisfies ScriptRunContext;
+});
 
 // Free text, and a spawn refuses an env value that holds a NUL, so one
 // stray byte would keep the script from starting (the CLI's scriptEnv
@@ -91,19 +93,17 @@ export const terminalStart = (owner: TerminalOwner) => {
     COLORTERM: "truecolor",
   };
   if (owner.kind === "device") return Effect.succeed<Start>({ env });
-  return Effect.tryPromise({
-    try: async (): Promise<Start> => {
-      const project = await findProjectOrThrow(owner.projectId);
-      const ctx = await prepareScriptRun(project, owner.worktreeId);
-      return {
-        cwd: ctx.worktree.path,
-        env: { ...env, ...worktreeEnv(ctx.worktree, project, ctx.scriptEnv) },
-      };
-    },
+  return Effect.gen(function* () {
+    const project = yield* findProject(owner.projectId);
+    const ctx = yield* prepareScriptRun(project, owner.worktreeId);
+    return {
+      cwd: ctx.worktree.path,
+      env: { ...env, ...worktreeEnv(ctx.worktree, project, ctx.scriptEnv) },
+    } satisfies Start;
+  }).pipe(
     // Anything but the worktree or project being gone is a defect.
-    catch: (cause) => {
-      if (isEntityGoneError(cause)) return cause;
-      throw cause;
-    },
-  });
+    Effect.catch((cause) =>
+      isEntityGoneError(cause) ? Effect.fail(cause) : Effect.die(cause),
+    ),
+  );
 };

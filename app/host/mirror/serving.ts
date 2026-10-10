@@ -19,10 +19,7 @@ import * as Exit from "effect/Exit";
 import { FileSync } from "@host/fileSync/FileSync";
 import { fromPromise } from "@host/lib/util/fromPromise";
 import { dataDir } from "@host/lib/util/paths";
-import {
-  findProjectAndWorktreeOrThrow,
-  findWorktreePathOrThrow,
-} from "@host/lib/projects";
+import { findProjectAndWorktree, findWorktreePath } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
@@ -99,9 +96,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   ctx: HandlerContext,
 ) {
   requireChannels(ctx, channelId);
-  const worktreePath = yield* fromPromise(() =>
-    findWorktreePathOrThrow({ projectId, worktreeId }),
-  );
+  const worktreePath = yield* findWorktreePath({ projectId, worktreeId });
   // The child ends when its channel does.
   const closed = yield* Deferred.make<void>();
   // Its own data directory under this host's: unset, the engine's
@@ -161,34 +156,38 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
 });
 
 // The git half, read or applied in place.
-export async function servedGitState({
+export const servedGitState = ({
   projectId,
   worktreeId,
-}: MirrorWorktreePayload) {
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
+}: MirrorWorktreePayload) =>
+  Effect.flatMap(
+    findProjectAndWorktree(projectId, worktreeId),
+    ({ project, worktree }) =>
+      fromPromise(() => readGitState(project.path, worktree.path, worktreeId)),
   );
-  return readGitState(project.path, worktree.path, worktreeId);
-}
 
-export async function applyServedGitState({
+export const applyServedGitState = ({
   projectId,
   worktreeId,
   expect,
   state,
   sweep,
-}: MirrorApplyGitStatePayload) {
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
-  );
-  const result = await applyGitState(
-    project,
-    { id: worktreeId, path: worktree.path },
-    { expect, state, sweep },
-  );
-  if (!result.applied) return { applied: false, reason: result.reason };
-  onGitApplied?.(project.id);
-  return { applied: true };
-}
+}: MirrorApplyGitStatePayload) =>
+  Effect.gen(function* () {
+    const { project, worktree } = yield* findProjectAndWorktree(
+      projectId,
+      worktreeId,
+    );
+    const result = yield* fromPromise(() =>
+      applyGitState(
+        project,
+        { id: worktreeId, path: worktree.path },
+        { expect, state, sweep },
+      ),
+    );
+    if (!result.applied) {
+      return { applied: false as const, reason: result.reason };
+    }
+    onGitApplied?.(project.id);
+    return { applied: true as const };
+  });

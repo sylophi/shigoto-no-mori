@@ -18,18 +18,28 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mergeArrangedOrder } from "@shigomori/engine/Scripts";
-import {
-  readLaunchRow,
-  readScriptOrder,
-  writeLaunchRowScript,
-  writeScriptOrder,
-} from "@host/lib/scripts/packageScriptStats";
+import * as Stats from "@host/lib/scripts/packageScriptStats";
 import {
   pinnedEntries,
   type SortableEntry,
 } from "@shigomori/ui/views/worktreeDetail/scripts/sortPackageScripts.ts";
 import { afterAll, beforeAll, it } from "vitest";
+import { onSandboxEngine } from "./lib/sandboxEngine.mts";
 import { hostEngine } from "./lib/smBinary.mts";
+
+// The arrangement as the host reads and writes it, on this file's
+// engine.
+const readScriptOrder = (projectId: string) =>
+  onSandboxEngine(Stats.readScriptOrder(projectId));
+const writeScriptOrder = (projectId: string, arranged: readonly string[]) =>
+  onSandboxEngine(Stats.writeScriptOrder(projectId, arranged));
+const readLaunchRow = (projectId: string) =>
+  onSandboxEngine(Stats.readLaunchRow(projectId));
+const writeLaunchRowScript = (
+  projectId: string,
+  scriptName: string,
+  onRow: boolean,
+) => onSandboxEngine(Stats.writeLaunchRowScript(projectId, scriptName, onRow));
 
 const names = (entries: SortableEntry[] | null) =>
   entries?.map((entry) => entry.name) ?? null;

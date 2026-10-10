@@ -5,7 +5,6 @@
 // services, logger and tracer included, and closing it turns every
 // later call away. A call made before the graph is up waits for it,
 // since the IPC handlers and a few module-level probes come first.
-import { AsyncLocalStorage } from "node:async_hooks";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -41,21 +40,11 @@ export const make = <I>(name: string) => {
       current = ctx;
     }),
   );
-  // Runs `body` with the calls made in it going to `runPromise` instead:
-  // a proof's second device, on a data dir of its own, in this process.
-  const aside = new AsyncLocalStorage<RunPromise<I>>();
   // `signal` interrupts the run, as a caller's cancel.
   const run = <A, E>(
     effect: Effect.Effect<A, E, I>,
     options?: { readonly signal?: AbortSignal | undefined },
-  ): Promise<A> => {
-    const elsewhere = aside.getStore();
-    return elsewhere === undefined
-      ? runner.then((runPromise) => runPromise(effect, options))
-      : elsewhere(effect, options);
-  };
-  const runAside = <A>(runPromise: RunPromise<I>, body: () => A): A =>
-    aside.run(runPromise, body);
+  ): Promise<A> => runner.then((runPromise) => runPromise(effect, options));
   // A synchronous read for a caller that cannot wait, `orElse` while
   // the layer is not up.
   const runSyncOr = <A>(
@@ -69,7 +58,7 @@ export const make = <I>(name: string) => {
     current === undefined
       ? Promise.resolve()
       : Effect.runPromiseWith(current)(effect).catch(() => {});
-  return { layer, run, runSyncOr, runIfOpen, runAside };
+  return { layer, run, runSyncOr, runIfOpen };
 };
 
 // The adapter of one service, with `call` running a method of it:

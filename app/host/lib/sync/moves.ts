@@ -13,7 +13,7 @@
 // reloads or a peer whose socket dies (HandlerContext.signal) aborts
 // the move the same way a cancel does, so nothing keeps landing for a
 // caller that is gone. A pull or a send runs as one effect the signal
-// interrupts (runCancellable): what a step made is undone by its
+// interrupts (cancellable): what a step made is undone by its
 // finalizer (the created worktree removed, the link reset), and the
 // call fails with MOVE_CANCELLED, whatever the step was waiting on
 // said when it was cut short. Per-key rather than per-call because the
@@ -24,14 +24,25 @@ import * as Schema from "effect/Schema";
 import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
 import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
-import { runTraced, withParentSpan } from "@host/lib/util/trace";
+import { withParentSpan } from "@host/lib/util/trace";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { onAbort } from "@host/lib/util/abort";
 
-class MoveCancelledError extends Error {
-  constructor() {
-    super(MOVE_CANCELLED);
-    this.name = "MoveCancelledError";
+class MoveCancelledError extends Schema.TaggedError<MoveCancelledError>()(
+  "MoveCancelledError",
+  {},
+) {
+  override get message(): string {
+    return MOVE_CANCELLED;
+  }
+}
+
+class MoveBusyError extends Schema.TaggedError<MoveBusyError>()(
+  "MoveBusyError",
+  {},
+) {
+  override get message(): string {
+    return "That worktree is already being moved. Wait for it.";
   }
 }
 
@@ -44,45 +55,25 @@ function moveKey(
   return `${ctx.callerDeviceId ?? ""}:${sourceWorktreeId}`;
 }
 
-// Runs a move under its own signal, registered for its length. One
-// move per key at a time: the dialogs run one mutation per worktree,
-// and a second by the same key while one runs is a bug worth refusing
-// over, not a cancel of the first.
-export async function runMove<T>(
+// Runs a move under its own signal, registered for its length (see
+// cancellable). One move per key at a time: the dialogs run one
+// mutation per worktree, and a second by the same key while one runs
+// is a bug worth refusing over, not a cancel of the first.
+export const runMove = <A, E, R>(
   ctx: Pick<HandlerContext, "callerDeviceId" | "signal">,
   sourceWorktreeId: string,
-  run: (signal: AbortSignal) => Promise<T>,
-): Promise<T> {
-  const key = moveKey(ctx, sourceWorktreeId);
-  if (inFlight.has(key)) {
-    throw new Error("That worktree is already being moved. Wait for it.");
-  }
-  const controller = new AbortController();
-  inFlight.set(key, controller);
-  try {
-    return await underSignal(
-      AbortSignal.any([ctx.signal, controller.signal]),
-      run,
+  run: (signal: AbortSignal) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, unknown, R> =>
+  Effect.suspend(() => {
+    const key = moveKey(ctx, sourceWorktreeId);
+    if (inFlight.has(key)) return Effect.fail(new MoveBusyError());
+    const controller = new AbortController();
+    inFlight.set(key, controller);
+    const signal = AbortSignal.any([ctx.signal, controller.signal]);
+    return cancellable(signal, run(signal)).pipe(
+      Effect.ensuring(Effect.sync(() => inFlight.delete(key))),
     );
-  } finally {
-    inFlight.delete(key);
-  }
-}
-
-// Whatever `run` threw once the signal fired is reported as the
-// cancel: a reset link, a killed CLI child and a poll cut short all
-// say something else, and the caller asked for exactly this.
-async function underSignal<T>(
-  signal: AbortSignal,
-  run: (signal: AbortSignal) => Promise<T>,
-): Promise<T> {
-  try {
-    return await run(signal);
-  } catch (error) {
-    if (signal.aborted) throw new MoveCancelledError();
-    throw error;
-  }
-}
+  });
 
 // Cancels the move the caller has in flight by that key. False when
 // there is none: it finished, or never reached this host.
@@ -96,22 +87,30 @@ export function cancelMove(
   return true;
 }
 
-// A move run as one effect, for a Promise caller: the signal firing
-// interrupts it, each step that made something undoes it in its
-// finalizer, and the call fails with the cancel.
-export function runCancellable<A, E>(
+// A move run as one effect: the signal firing interrupts it, each step
+// that made something undoes it in its finalizer, and the move fails
+// with the cancel, whatever the step it was waiting on said when it
+// was cut short (a reset link, a killed child, a poll cut short). A
+// step's failure reaches the caller as it was thrown: the surfaces
+// branch on its class.
+export const cancellable = <A, E, R>(
   signal: AbortSignal,
-  move: Effect.Effect<A, E>,
-): Promise<A> {
-  return underSignal(signal, () =>
-    runTraced(
-      // A step's failure reaches the caller as it was thrown: the
-      // surfaces branch on its class.
-      move.pipe(Effect.mapError(unwrapStep)),
-      { signal },
+  move: Effect.Effect<A, E, R>,
+): Effect.Effect<A, unknown, R> =>
+  move.pipe(
+    Effect.mapError(unwrapStep),
+    Effect.raceFirst(
+      Effect.callback<never, MoveCancelledError>((resume) => {
+        const off = onAbort(signal, () =>
+          resume(Effect.fail(new MoveCancelledError())),
+        );
+        return Effect.sync(off);
+      }),
+    ),
+    Effect.mapError((error) =>
+      signal.aborted ? new MoveCancelledError() : error,
     ),
   );
-}
 
 // A step of a move that rejected. `cause` is what it threw.
 export class MoveStepError extends Schema.TaggedError<MoveStepError>()(

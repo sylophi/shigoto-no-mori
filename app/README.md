@@ -32,7 +32,7 @@ git of the machine it runs on. It is not the engine for them: the data
 model (the project list, worktree rows and identities, their marks,
 config, the launcher row, package scripts) belongs to the engine
 (`../packages/engine`), which the host runs in-process
-(`host/lib/engine.ts`, `host/lib/engineCalls.ts`) on the same store
+(`host/lib/engine.ts`, `host/lib/engineOps.ts`) on the same store
 as the terminal `sm`, so the app and a terminal never disagree. What
 `host/lib` keeps is what lives in the host's process (running scripts,
 mirror sessions, the device link) and the plain git the engine has no

@@ -6,12 +6,10 @@
 // all-git and fast enough to block the list render; `measureWorktreeDisk`
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
-import { diskUsage } from "@host/lib/engineCalls";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import {
   isRealBranch,
-  type WorktreeDiskUsage,
   type WorktreeHygiene,
 } from "@shigomori/contracts/schemas";
 import { run, runLenient } from "../git/core";
@@ -21,12 +19,13 @@ import {
   localBranchExists,
   splitRemoteRefSync,
 } from "../git/remotes";
-import {
-  listWorktreeIdentities,
-  type WorktreeIdentity,
-} from "../git/worktrees";
+import type { WorktreeIdentity } from "../git/worktrees";
 import { createLimiter } from "@shared/util/limit";
-import { ttlMapCache } from "../util/ttlCache";
+import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
+import * as Ops from "../engineOps";
+import { fromPromise } from "../util/fromPromise";
+import { ttlEffectCache } from "../util/ttlCache";
 
 interface HeadCommit {
   // Epoch ms of the worktree's HEAD commit.
@@ -273,73 +272,69 @@ async function hygieneFor(
 // forty independent git chains, `merge-tree` included, in one burst.
 const gitProbes = createLimiter(6);
 
-export async function collectProjectHygiene(
+export const collectProjectHygiene = Effect.fnUntraced(function* (
   projectId: string,
   projectPath: string,
-): Promise<WorktreeHygiene[]> {
+) {
   // A repo with no resolvable default branch has nothing to compare
   // against. Reported as no candidates rather than as a failed call, so
   // the rows read "can't tell" instead of loading forever. The local
   // branch name behind the primary ref ("main" for "origin/main") is so
   // a linked worktree that has it checked out can be recognised and kept
   // off the tick list.
-  const [identities, remotes] = await Promise.all([
-    projectIdentities(projectId),
-    listRemotes(projectPath),
-  ]);
-  // Resolved once per project by the CLI and carried on every identity.
+  const [identities, remotes] = yield* Effect.all(
+    [identityCache.get(projectId), fromPromise(() => listRemotes(projectPath))],
+    { concurrency: 2 },
+  );
+  // Resolved once per project by the engine and carried on every
+  // identity.
   const primaryRef = identities[0]?.primaryRef ?? null;
   const primaryBranch = identities[0]?.primaryBranch ?? null;
-  const candidates = await primaryRefCandidates(
-    projectPath,
-    primaryRef,
-    remotes,
-  );
-  return Promise.all(
-    identities.map((identity) =>
-      gitProbes(() =>
-        hygieneFor(identity, projectPath, candidates, primaryBranch),
+  return yield* fromPromise(async () => {
+    const candidates = await primaryRefCandidates(
+      projectPath,
+      primaryRef,
+      remotes,
+    );
+    return Promise.all(
+      identities.map((identity) =>
+        gitProbes(() =>
+          hygieneFor(identity, projectPath, candidates, primaryBranch),
+        ),
       ),
-    ),
-  );
-}
+    );
+  });
+});
 
 // The worktree identities (with the project's primary ref), cached for
 // long enough to serve one page load.
 //
 // The renderer asks for disk usage one worktree at a time, and each of
 // those calls needs the same id-to-path lookup. Without this, opening
-// the page re-runs the CLI's identity list once per row on top of the
-// once per project the facts already paid for.
-const identityCache = ttlMapCache(10_000, (projectId: string) =>
-  listWorktreeIdentities(projectId, { primaryRef: true }),
+// the page re-runs the engine's identity list once per row on top of
+// the once per project the facts already paid for. The renderer asks
+// for every worktree's disk usage at once, so the whole burst arrives
+// before the first lookup has resolved: the cache coalescing those
+// misses is what makes it one identity list per project rather than
+// one per row.
+const identityCache = ttlEffectCache(10_000, (projectId: string) =>
+  Ops.listWorktreeIdentities({ projectId }, { primaryRef: true }),
 );
 
-// The renderer asks for every worktree's disk usage at once, so the
-// whole burst arrives before the first lookup has resolved and a
-// value-only cache would miss on all of them. identityCache holding the
-// in-flight promise (ttlMapCache coalesces concurrent misses) is what
-// makes it one identity list per project rather than one per row.
-function projectIdentities(
-  projectId: string,
-): Promise<readonly WorktreeIdentity[]> {
-  return identityCache.get(projectId);
-}
-
-export async function findWorktreeForDisk(
+export const findWorktreeForDisk = Effect.fnUntraced(function* (
   projectId: string,
   worktreeId: string,
-): Promise<WorktreeIdentity> {
-  const identities = await projectIdentities(projectId);
+) {
+  const identities = yield* identityCache.get(projectId);
   const found = identities.find((identity) => identity.id === worktreeId);
-  if (!found) throw new UnknownWorktreeError({ worktreeId });
+  if (!found) return yield* new UnknownWorktreeError({ worktreeId });
   return found;
-}
+});
 
 // Three walks at a time. Each one is an `sm disk-usage` child running
 // its own pool of directory readers, so a wider window mostly makes the
 // first size land later. Any narrower and a fleet of forty crawls.
-const diskWalks = createLimiter(3);
+const diskWalks = Semaphore.makeUnsafe(3);
 
 // Disk measurements are cached because a full walk of a big checkout
 // costs real IO, and the tidy page refetches on mount and on window
@@ -353,29 +348,29 @@ const diskWalks = createLimiter(3);
 // went away. Cache lookups sit inside the slot so a queued worktree
 // whose walk landed in the meantime returns from cache instead of
 // re-walking.
-const diskCache = ttlMapCache(60_000, (key: string) => {
+const diskCache = ttlEffectCache(60_000, (key: string) => {
   // split always answers at least one part, so the default never applies.
   const [root = key, ...excluded] = key.split("\u0000");
-  return diskUsage(root, excluded);
+  return Ops.diskUsage(root, excluded);
 });
 
-export async function measureWorktreeDisk(
+export const measureWorktreeDisk = Effect.fnUntraced(function* (
   projectId: string,
   worktree: WorktreeIdentity,
-): Promise<WorktreeDiskUsage> {
+) {
   const worktreePath = worktree.path;
   // Under the in-project layout a project's worktrees live inside its
   // primary checkout. Each one is measured as its own row, so the
   // enclosing walk steps over them rather than counting them twice.
-  const identities = await projectIdentities(projectId);
+  const identities = yield* identityCache.get(projectId);
   const nested = identities
     .map((identity) => identity.path)
     .filter(
       (path) => path !== worktreePath && isSameOrInside(path, worktreePath),
     )
     .toSorted();
-  const usage = await diskWalks(() =>
-    diskCache.get([worktreePath, ...nested].join("\u0000")),
-  );
+  const usage = yield* diskCache
+    .get([worktreePath, ...nested].join("\u0000"))
+    .pipe(diskWalks.withPermits(1));
   return { worktreeId: worktree.id, ...usage };
-}
+});
