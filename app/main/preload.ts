@@ -11,6 +11,7 @@ import {
   DEV_BUILD_FLAG,
   optionalArgFlag,
   requireArgFlag,
+  ROUTE_FLAG,
 } from "./argFlags";
 import { requestShellPort } from "./preloadPort";
 
@@ -31,6 +32,9 @@ const bridge = {
   // (baked, .env.local or process env). Empty on an unconfigured
   // build, which the renderer reads as "mount no ClerkProvider".
   clerkPublishableKey: optionalArgFlag(CLERK_PK_FLAG),
+  // The page this window opens on: home, a remembered one, or the one
+  // it was opened for.
+  route: requireArgFlag(ROUTE_FLAG, "--sm-route"),
   // Client fact delivered the same way as the version: dev-only
   // affordances key off the build showing the window, never the host
   // (a packaged client on a dev host must not grow dev hotkeys).
