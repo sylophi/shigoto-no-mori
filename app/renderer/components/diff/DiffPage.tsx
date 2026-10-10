@@ -24,7 +24,11 @@ import {
   DiffPaneView,
   type DiffStyle,
 } from "@shigomori/ui/views/diff/DiffPageView.tsx";
-import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
+import {
+  changeEntries,
+  fileKey,
+  patchEntries,
+} from "@shigomori/ui/lib/patchFiles.ts";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";

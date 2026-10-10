@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { terrierMarksHere } from "@/hooks/config/useSidebarMarks";
 import { SidebarSectionView } from "@shigomori/ui/views/settings/SidebarSectionView.tsx";
 

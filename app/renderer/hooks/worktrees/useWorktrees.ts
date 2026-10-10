@@ -112,8 +112,3 @@ export function useAllProjectWorktrees(
     combine: combineFanOut,
   });
 }
-
-// The shape useAllProjectWorktrees hands back, positionally aligned with
-// the `projects` it was given. Named so the sidebar's row builders can
-// take it as a plain argument instead of each calling the hook again.
-export type ProjectWorktreeQueries = ReturnType<typeof useAllProjectWorktrees>;

@@ -90,7 +90,7 @@ export function ScriptLaunchButtonView({
 // Presentational half, shared by the visible row and the measurer so the two
 // can't drift apart. Both icons render at the same size, so a running script
 // occupies exactly the width it was measured at.
-export function ScriptPillView({
+function ScriptPillView({
   name,
   busy,
   ...props

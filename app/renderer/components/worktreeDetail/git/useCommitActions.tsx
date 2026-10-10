@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CommitActions } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
+import type { CommitActions } from "@shigomori/ui/lib/commitRewrite.ts";
 import { useQuery } from "@tanstack/react-query";
 import {
   RewordDialogView,
