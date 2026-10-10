@@ -90,6 +90,8 @@ import {
 } from "@shared/pullRequestStack";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
+import { openTerminals } from "@host/lib/terminals/Terminals";
+import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
   moveMirrorsOfWorktree,
   stopMirrorsForWorktree,
@@ -103,6 +105,7 @@ import {
   finishWorktree,
   idleAgents,
   moveWorktree,
+  renameWorktree,
   resumeAgent,
   setAutoPull,
   setShelved,
@@ -143,6 +146,35 @@ const gitMoved = (projectId: string) =>
       return fetched.projectId === projectId;
     }),
   );
+
+const counted = (n: number, noun: string) =>
+  n === 0 ? [] : [`${n} ${noun}${n === 1 ? "" : "s"}`];
+
+// The scripts and terminals running in a worktree hold its folder, so a
+// move or a rename waits until they are stopped.
+async function refuseRunningWork(
+  worktree: { id: string; name: string; path: string },
+  verb: "move" | "rename",
+): Promise<void> {
+  const scripts =
+    getRunningScriptWorktrees().find(
+      (entry) => entry.worktreeId === worktree.id,
+    )?.scriptCount ?? 0;
+  const terminals = (await openTerminals()).filter(({ owner, cwd }) =>
+    owner.kind === "worktree"
+      ? owner.worktreeId === worktree.id
+      : isSameOrInside(cwd, worktree.path),
+  ).length;
+  const running = [
+    ...counted(scripts, "script"),
+    ...counted(terminals, "terminal"),
+  ];
+  if (running.length === 0) return;
+  const one = scripts + terminals === 1;
+  throw new Error(
+    `Can't ${verb} ${worktree.name} while ${running.join(" and ")} ${one ? "is" : "are"} running there. Stop ${one ? "it" : "them"} first.`,
+  );
+}
 
 export const worktreesViews: ViewHandlers<
   typeof worktreesContract,
@@ -210,10 +242,10 @@ export const worktreesHandlers: Handlers<
   },
 
   // `sm worktrees move` moves the checkout and carries what is keyed by
-  // its path-derived id (marks, its data file, a pending dirty capture) to the
-  // new id. What lives in this process stays here: the tombstone that
-  // refuses a concurrent delete or move, the reaping of the scripts
-  // running there, and the stop of mirrors rooted in it.
+  // its path-derived id to the new id. What lives in this process stays
+  // here: the running work it refuses, the tombstone that refuses a
+  // concurrent delete or move, and the mirrors rooted in it, re-opened
+  // on the new path.
   relocate: async ({ projectId, worktreeId, destinationPath }) => {
     const { project, worktree } = await findProjectAndWorktreeOrThrow(
       projectId,
@@ -222,18 +254,32 @@ export const worktreesHandlers: Handlers<
     if (worktree.isPrimary) {
       throw new Error("The primary checkout can't be relocated");
     }
-    // Already where it should be: refresh the row, and leave its
-    // scripts running.
+    // Already where it should be: refresh the row.
     if (worktree.path === destinationPath) {
       return describeWorktree(project.id, worktreeId);
     }
+    await refuseRunningWork(worktree, "move");
     return withDeleteInflight(
       worktreeId,
       "This worktree is already being removed or moved.",
       () => moveWorktree(project, worktreeId, destinationPath),
-      // The id is path derived, so the moved worktree is a new one to
-      // the engine: its mirror re-opens on the new path.
       (moved) => moveMirrorsOfWorktree(worktreeId, moved),
+    );
+  },
+
+  // A move to the same parent under a new name, with a move's guards.
+  rename: async ({ projectId, worktreeId, name }) => {
+    const { project, worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    if (worktree.name === name) return describeWorktree(project.id, worktreeId);
+    await refuseRunningWork(worktree, "rename");
+    return withDeleteInflight(
+      worktreeId,
+      "This worktree is already being removed or moved.",
+      () => renameWorktree(project, worktreeId, name),
+      (renamed) => moveMirrorsOfWorktree(worktreeId, renamed),
     );
   },
 

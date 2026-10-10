@@ -8,13 +8,11 @@
 //
 // The name is TEXT until asked for: it is the thing every other device
 // shows in its sidebar, so it reads as an identity, not as a form field
-// standing permanently open. Clicking Rename swaps the same line for an
-// input, and the two-key contract (Enter saves, Esc reverts) is spelled
-// out beside it because an inline editor has no obvious edges.
-import { useEffect, useState } from "react";
+// standing permanently open. Clicking Rename swaps the same line for the
+// inline editor (InlineNameEditorView).
 import { Pencil } from "lucide-react";
+import { InlineNameEditorView } from "@/components/shared/InlineNameEditorView";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 // The trigger is a separate export because it sits apart from the
@@ -65,33 +63,6 @@ export function DeviceNameFieldView({
   // so opening Rename does not make the name jump.
   className?: string;
 }) {
-  const [draft, setDraft] = useState(deviceName);
-
-  // Keep the draft in step when the stored name changes underneath us (a
-  // broadcast from another window or tab, or the mutation settling).
-  useEffect(() => setDraft(deviceName), [deviceName]);
-
-  const trimmed = draft.trim();
-  const canSave = trimmed.length > 0 && trimmed !== deviceName && !pending;
-
-  // Leaving the editor always restores the stored name, so an abandoned
-  // draft can never be mistaken for the device's identity next time the
-  // editor opens.
-  function cancel(): void {
-    setDraft(deviceName);
-    onEditingChange(false);
-  }
-
-  // Enter on an unchanged (or blank) draft is a no-op save, which reads
-  // as "close this", not as an error to explain.
-  function save(): void {
-    if (!canSave) {
-      cancel();
-      return;
-    }
-    onRename(trimmed);
-  }
-
   if (!editing) {
     return (
       <span className={cn("truncate text-sm font-medium", className)}>
@@ -99,37 +70,14 @@ export function DeviceNameFieldView({
       </span>
     );
   }
-
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <Input
-        // oxlint-disable-next-line jsx-a11y/no-autofocus -- the editor only exists because the user just asked for it, so moving the caret here is the whole point of the click
-        autoFocus
-        type="text"
-        value={draft}
-        disabled={pending}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            save();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            cancel();
-          }
-        }}
-        aria-label={`${label} name`}
-        className={cn("h-7 w-48 min-w-0 px-2 py-1 text-sm", className)}
-      />
-      <Button variant="outline" size="xs" disabled={!canSave} onClick={save}>
-        {pending ? "Saving…" : "Save"}
-      </Button>
-      <Button variant="ghost" size="xs" onClick={cancel}>
-        Cancel
-      </Button>
-      <span className="text-3xs text-muted-foreground">
-        Enter to save, Esc to cancel
-      </span>
-    </span>
+    <InlineNameEditorView
+      name={deviceName}
+      label={label}
+      pending={pending}
+      onSave={onRename}
+      onCancel={() => onEditingChange(false)}
+      className={className}
+    />
   );
 }

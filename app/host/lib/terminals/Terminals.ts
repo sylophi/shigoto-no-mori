@@ -556,3 +556,13 @@ export const stream = <A, E>(
 
 // One of the service's calls, for the handlers the link serves.
 export const call = promiseAdapter.call;
+
+// The terminals open now, none while the service is not up.
+export const openTerminals = (): Promise<ReadonlyArray<Terminal>> =>
+  promiseAdapter.runSyncOr(Effect.succeed(true), () => false)
+    ? promiseAdapter.call((terminals) =>
+        Stream.runHead(terminals.list).pipe(
+          Effect.map(Option.getOrElse((): ReadonlyArray<Terminal> => [])),
+        ),
+      )
+    : Promise.resolve([]);

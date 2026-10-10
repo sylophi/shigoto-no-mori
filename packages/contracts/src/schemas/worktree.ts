@@ -427,6 +427,18 @@ export const RelocateWorktreePayloadSchema = Schema.Struct({
   destinationPath: Schema.NonEmptyString,
 });
 
+// A move to the same parent under a new folder name, checked as a
+// custom name is at create.
+export const RenameWorktreePayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  name: Schema.NonEmptyString.check(
+    Schema.makeFilter(
+      (name: string) =>
+        isValidWorktreeDirName(name) || "Not a valid folder name",
+    ),
+  ),
+});
+
 // force false: run `sm adopt` unforced, so it refuses a worktree with
 // uncommitted changes or untracked files (convertRefusedError), which
 // the row's count can miss (it honors `status.showUntrackedFiles no`).

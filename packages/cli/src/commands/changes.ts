@@ -5,6 +5,8 @@ import { envVar } from "@shigomori/engine/environment";
 import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
 import * as Agents from "@shigomori/engine/Agents";
+import * as Control from "@shigomori/engine/Control";
+import type * as Git from "@shigomori/engine/Git";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -295,12 +297,66 @@ export const rm = Command.make(
     }),
 ).pipe(Command.withDescription("Remove a worktree, its teardown first"));
 
+type Moved = {
+  readonly worktree: { readonly path: string };
+  readonly previousId: string;
+};
+
+// A move or a rename goes through the running app, which refuses it
+// while scripts or terminals it runs are open in the worktree, and
+// re-opens the mirrors rooted there. With no app running, nothing runs
+// there, and the engine makes it here.
+const throughApp = (
+  located: Worktrees.Located,
+  channel: string,
+  input: Record<string, string>,
+  inEngine: Effect.Effect<
+    Moved,
+    Worktrees.WorktreeRefused | Worktrees.UnknownWorktree | Git.GitError
+  >,
+) =>
+  Effect.gen(function* () {
+    const control = yield* Control.Control;
+    return yield* control
+      .call(channel, {
+        projectId: located.project.id,
+        worktreeId: located.worktree.id,
+        ...input,
+      })
+      .pipe(
+        Effect.map(
+          (worktree): Moved => ({
+            worktree: worktree as Moved["worktree"],
+            previousId: located.worktree.id,
+          }),
+        ),
+        Effect.catchTag("AppNotRunning", () => inEngine),
+      );
+  });
+
+// A move or a rename made, printed, with a note for a shell that stood
+// in the old folder (looked at before the move).
+const reportMoved = <E, R>(
+  located: Worktrees.Located,
+  move: Effect.Effect<Moved, E, R>,
+) =>
+  Effect.gen(function* () {
+    const { json } = yield* Effect.service(Output);
+    const wasInside = cwdInside(located.worktree.path);
+    const moved = yield* move;
+    if (json) return yield* emit({ ok: true, ...moved });
+    yield* out(moved.worktree.path);
+    if (wasInside && moved.worktree.path !== located.worktree.path) {
+      yield* cdNote("the old location", moved.worktree.path);
+    }
+  });
+
 export const move = Command.make(
   "move",
   { ...worktreeFlags, args: Argument.String("args").pipe(Argument.variadic()) },
   (input) =>
     Effect.gen(function* () {
-      const { json, binaryName } = yield* Effect.service(Output);
+      const { binaryName } = yield* Effect.service(Output);
       // The last positional is where it goes, a name before it.
       const most = Option.isSome(given(input.worktreeId)) ? 0 : 1;
       const count = input.args.length;
@@ -317,24 +373,53 @@ export const move = Command.make(
         },
         false,
       );
-      const wasInside = cwdInside(located.worktree.path);
-      const moved = yield* (yield* Worktrees.Worktrees).move(
+      const worktrees = yield* Worktrees.Worktrees;
+      yield* reportMoved(
         located,
-        destination,
+        throughApp(
+          located,
+          "worktrees:relocate",
+          { destinationPath: destination },
+          worktrees.move(located, destination),
+        ),
       );
-      if (json) {
-        return yield* emit({
-          ok: true,
-          worktree: moved.worktree,
-          previousId: moved.previousId,
-        });
-      }
-      yield* out(moved.worktree.path);
-      if (wasInside && moved.worktree.path !== located.worktree.path) {
-        yield* cdNote("the old location", moved.worktree.path);
-      }
     }),
 ).pipe(Command.withDescription("Move a worktree's folder"));
+
+export const rename = Command.make(
+  "rename",
+  { ...worktreeFlags, args: Argument.String("args").pipe(Argument.variadic()) },
+  (input) =>
+    Effect.gen(function* () {
+      const { binaryName } = yield* Effect.service(Output);
+      // The last positional is the new name, the worktree's before it.
+      const most = Option.isSome(given(input.worktreeId)) ? 0 : 1;
+      const count = input.args.length;
+      if (count === 0 || count - 1 > most) {
+        return yield* new UsageError({
+          problem: `Usage: ${binaryName} worktrees rename [<name>] <new-name>`,
+        });
+      }
+      const name = input.args[count - 1] ?? "";
+      const { located } = yield* resolveWorktree(
+        {
+          ...input,
+          ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
+        },
+        false,
+      );
+      const worktrees = yield* Worktrees.Worktrees;
+      yield* reportMoved(
+        located,
+        throughApp(
+          located,
+          "worktrees:rename",
+          { name },
+          worktrees.rename(located.project, located.worktree.id, name),
+        ),
+      );
+    }),
+).pipe(Command.withDescription("Rename a worktree's folder"));
 
 // The app's plumbing for a folder about to move: what is kept under one
 // id carried to the id the new path will have.

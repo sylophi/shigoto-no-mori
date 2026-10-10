@@ -130,6 +130,8 @@ function useReplaceWorktree<
 >(
   call: (api: HostApi, input: Input) => Promise<Result>,
   rowOf: (result: Result) => Worktree,
+  // The page surfaces per-row errors inline; a toast on top would be noise.
+  meta: Record<string, unknown> = { silentError: true },
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
@@ -140,8 +142,7 @@ function useReplaceWorktree<
       spliceWorktree(queryClient, keys, rowOf(result), vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
     },
-    // The page surfaces per-row errors inline; a toast on top would be noise.
-    meta: { silentError: true },
+    meta,
   });
 }
 
@@ -166,6 +167,22 @@ export function useRelocateWorktree() {
   return useReplaceWorktree<RelocateWorktreeInput, Worktree>(
     (api, input) => api.worktrees.relocate(input),
     (worktree) => worktree,
+  );
+}
+
+interface RenameWorktreeInput {
+  projectId: string;
+  worktreeId: string;
+  name: string;
+}
+
+// A rename is a move to a new folder name, so the id changes as a
+// relocate's does.
+export function useRenameWorktree() {
+  return useReplaceWorktree<RenameWorktreeInput, Worktree>(
+    (api, input) => api.worktrees.rename(input),
+    (worktree) => worktree,
+    { errorTitle: "Couldn't rename worktree" },
   );
 }
 

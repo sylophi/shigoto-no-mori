@@ -172,7 +172,12 @@ const catalog = (names: Names) => {
       [
         "worktrees move [<name>] <new-path>",
         "Move a worktree's checkout",
-        "git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, bound agent sessions, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first.",
+        "git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, bound agent sessions, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination, and while the running app has scripts or terminals open there. Prints the new path; --json prints {ok, worktree: <row>, previousId}.",
+      ],
+      [
+        "worktrees rename [<name>] <new-name>",
+        "Rename a worktree's folder",
+        "A move to the same parent under <new-name>, which is checked as create checks a custom name: a valid folder name, not a reserved one, not one another worktree of the project has. Everything a move carries comes along, and as with any move the worktree gets a new id and new port-pool ports, and a bound agent session's transcript stays with the old folder. Refuses the primary, and while the running app has scripts or terminals open there. Prints the new path; --json prints {ok, worktree: <row>, previousId}.",
       ],
       [
         "worktrees rekey --project-id <id> --from-id <id> --to-path <path>",

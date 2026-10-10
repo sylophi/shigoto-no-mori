@@ -517,6 +517,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "invalid-branch",
       "invalid-base",
       "move-primary",
+      "rename-primary",
       "move-destination-exists",
       "move-not-listed",
       "move-copy-failed",
@@ -565,6 +566,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return `Invalid --base: ${quoted} is not a valid git ref name.`;
       case "move-primary":
         return "The primary checkout can't be moved";
+      case "rename-primary":
+        return "The primary checkout keeps its folder's name";
       case "move-destination-exists":
         return `Destination already exists: ${this.subject}`;
       case "move-not-listed":
@@ -807,6 +810,24 @@ export class Worktrees extends Context.Service<
       { readonly worktree: WorktreeRow; readonly previousId: string },
       WorktreeRefused | Git.GitError
     >;
+    // A move to the same parent under `name`, which is checked as a
+    // custom name is at create.
+    readonly rename: (
+      project: RegisteredProject,
+      worktreeId: string,
+      name: string,
+    ) => Effect.Effect<
+      { readonly worktree: WorktreeRow; readonly previousId: string },
+      WorktreeRefused | UnknownWorktree | Git.GitError
+    >;
+    // What a move carries once git lists the checkout at `toPath`: what
+    // is kept under the old id, port-pool's lease, and a record of the
+    // move, which the app follows to re-open a mirror rooted there.
+    readonly carryMoved: (
+      project: RegisteredProject,
+      fromPath: string,
+      toPath: string,
+    ) => Effect.Effect<WorktreeRow, WorktreeRefused | Git.GitError>;
     // The project's primary ref (the default-branch setting honored),
     // its remote and local branch when it is a remote-tracking ref, and
     // the remotes that resolved it. An empty ref when none resolves.
@@ -2720,14 +2741,102 @@ const make = Effect.gen(function* () {
       }
       yield* pruneEmptyParents(worktree.path, project.path);
     }
-    const moved = yield* findMoved(project, to);
-    if (moved.id !== worktree.id) {
-      yield* rekeyWorktree(project, worktree.id, moved.id);
-    }
     return {
-      worktree: yield* row({ project, worktree: moved }),
+      worktree: yield* carryMoved(project, worktree.path, to),
       previousId: worktree.id,
     };
+  });
+
+  // port-pool keys a lease by its folder: the old folder's goes, and a
+  // managed checkout gets its own on the new one, where the ports may
+  // differ. A failure is only logged.
+  const carryLease = (fromPath: string, moved: WorktreeIdentity) =>
+    Effect.gen(function* () {
+      if (!(yield* deviceFlag("portPool"))) return;
+      const installed = yield* findExecutable("port-pool").pipe(
+        Effect.provideContext(platform),
+      );
+      if (Option.isNone(installed)) return;
+      const steps = [["release", fromPath]];
+      if (yield* portPoolActive(moved)) steps.push(["ensure", moved.path]);
+      for (const args of steps) {
+        const code = yield* spawner.exitCode(
+          ChildProcess.make("port-pool", args),
+        );
+        if (code !== 0) {
+          yield* Effect.logWarning("port-pool failed after a move").pipe(
+            Effect.annotateLogs({ args: args.join(" "), code }),
+          );
+        }
+      }
+    }).pipe(Effect.ignore);
+
+  const carryMoved = Effect.fn("Worktrees.carryMoved")(function* (
+    project: RegisteredProject,
+    fromPath: string,
+    toPath: string,
+  ) {
+    const moved = yield* findMoved(project, toPath);
+    const from = worktreeIdFromPath(fromPath);
+    if (moved.id !== from) {
+      yield* rekeyWorktree(project, from, moved.id);
+      yield* carryLease(fromPath, moved);
+      yield* sql`INSERT INTO wt_moves ${sql.insert({
+        from_path: fromPath,
+        to_path: moved.path,
+        project_id: project.id,
+        moved: 1,
+      })} ON CONFLICT (from_path) DO UPDATE SET
+        to_path = excluded.to_path, moved = 1, error = NULL`.pipe(Effect.orDie);
+    }
+    return yield* row({ project, worktree: moved });
+  });
+
+  const rename = Effect.fn("Worktrees.rename")(function* (
+    project: RegisteredProject,
+    worktreeId: string,
+    requested: string,
+  ) {
+    const found = yield* identities(project);
+    const worktree = found.find(({ id }) => id === worktreeId);
+    if (worktree === undefined)
+      return yield* new UnknownWorktree({ worktreeId });
+    if (worktree.isPrimary) {
+      return yield* new WorktreeRefused({
+        reason: "rename-primary",
+        subject: "",
+      });
+    }
+    const name = requested.trim();
+    if (name === "") {
+      return yield* new WorktreeRefused({
+        reason: "invalid-name",
+        subject: name,
+      });
+    }
+    yield* checkName(name);
+    if (name === path.basename(worktree.path)) {
+      return {
+        worktree: yield* row({ project, worktree }),
+        previousId: worktree.id,
+      };
+    }
+    if (
+      found.some(
+        (other) =>
+          other.id !== worktree.id &&
+          path.basename(other.path).toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      return yield* new WorktreeRefused({
+        reason: "name-taken",
+        subject: name,
+      });
+    }
+    return yield* move(
+      { project, worktree },
+      path.join(path.dirname(worktree.path), name),
+    );
   });
 
   const rekey = Effect.fn("Worktrees.rekey")(function* (
@@ -3000,6 +3109,8 @@ const make = Effect.gen(function* () {
     setup,
     remove,
     move,
+    rename,
+    carryMoved,
     rekey,
     relocateProject,
     snapshotted: sql<{ worktree_id: string }>`

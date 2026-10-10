@@ -3451,6 +3451,44 @@
       "state": "removing"
     }
   },
+  "worktrees:rename": {
+    "payload": {
+      "projectId": "U",
+      "worktreeId": "?",
+      "name": "L"
+    },
+    "success": {
+      "id": "\u0000",
+      "projectId": "-1",
+      "name": "\ud800",
+      "branch": "\n",
+      "path": "2~",
+      "ahead": 3,
+      "behind": 0,
+      "hasUpstream": true,
+      "hasRemote": false,
+      "divergedClean": false,
+      "behindPrimary": 2,
+      "unpushedCount": 2,
+      "mergedIntoPrimary": true,
+      "changedCount": 3,
+      "recentCommits": [
+        {
+          "hash": "b9f3",
+          "subject": "Ry",
+          "author": "mL",
+          "date": "\n",
+          "additions": 3,
+          "deletions": 0
+        }
+      ],
+      "isPrimary": true,
+      "isExternal": false,
+      "detached": false,
+      "shelved": false,
+      "autoPull": false
+    }
+  },
   "worktrees:renameBranch": {
     "payload": {
       "projectId": "j,",

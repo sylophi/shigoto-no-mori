@@ -43,6 +43,7 @@ const WORKTREE_VERBS = new Set([
   "create",
   "rm",
   "move",
+  "rename",
   "adopt",
   "setup",
   "rekey",

@@ -37,6 +37,7 @@ import {
   WorktreeUnavailableView,
 } from "@/components/worktreeDetail/WorktreeDetailView";
 import { WorktreeHeaderView } from "@/components/worktreeDetail/WorktreeHeaderView";
+import { WorktreeLocationView } from "@/components/worktreeDetail/WorktreeLocationView";
 import {
   OptionActionView,
   WorktreeOptionsView,
@@ -167,8 +168,18 @@ export function WorktreePageScene() {
       <WorktreeDetailView
         projectName={SM.name}
         onConfigure={noop}
-        path={HUMMINGBIRD.path}
-        home="/Users/rin"
+        location={
+          <WorktreeLocationView
+            path={HUMMINGBIRD.path}
+            home="/Users/rin"
+            rename={{
+              editing: false,
+              onEditingChange: noop,
+              pending: false,
+              onRename: noop,
+            }}
+          />
+        }
         marks={
           <>
             <WorktreeActivityIndicatorView
@@ -296,6 +307,20 @@ export function WorktreePagePartsScene() {
             menu={null}
           />
         </Part>
+        <Part label="Renaming the folder">
+          <div className="flex text-xs text-muted-foreground">
+            <WorktreeLocationView
+              path={QUAIL.path}
+              home="/Users/rin"
+              rename={{
+                editing: true,
+                onEditingChange: noop,
+                pending: false,
+                onRename: noop,
+              }}
+            />
+          </div>
+        </Part>
         <Part label="Footer">
           {footer({ kind: "cleanupRunning", cancelling: false })}
           {footer({
@@ -388,8 +413,9 @@ export function WorktreePagePartsScene() {
             <WorktreeDetailView
               projectName={SM.name}
               onConfigure={noop}
-              path={QUAIL.path}
-              home="/Users/rin"
+              location={
+                <WorktreeLocationView path={QUAIL.path} home="/Users/rin" />
+              }
               marks={null}
               face={null}
               header={branchTitle(QUAIL, false)}

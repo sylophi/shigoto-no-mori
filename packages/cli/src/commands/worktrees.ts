@@ -30,7 +30,7 @@ import {
   type Styles,
 } from "../output.ts";
 import { changesCell, flagsCell, syncCell, titleCell } from "./cells.ts";
-import { adopt, create, move, rekey, rm, setup } from "./changes.ts";
+import { adopt, create, move, rekey, rename, rm, setup } from "./changes.ts";
 import { describe } from "./describe.ts";
 import { done, land, merge, pr } from "./landing.ts";
 import { open } from "./open.ts";
@@ -356,6 +356,7 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     create,
     rm,
     move,
+    rename,
     adopt,
     setup,
     rekey,

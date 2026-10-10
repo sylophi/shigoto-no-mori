@@ -817,8 +817,8 @@ export async function setAgentHooks(
 
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data, a pending dirty capture).
-// The caller keeps the app-side guards around it (the tombstone, script
-// reaping, mirror stop).
+// The caller keeps the app-side guards around it (the running work it
+// refuses, the tombstone, the mirrors re-opened).
 export async function moveWorktree(
   project: Project,
   worktreeId: string,
@@ -832,6 +832,23 @@ export async function moveWorktree(
     { projectId: project.id, worktreeId },
   );
   return decodeWorktree(moved.worktree);
+}
+
+// A move to the same parent under a new folder name, checked as
+// create checks a custom name. The caller keeps the same guards as a
+// move's.
+export async function renameWorktree(
+  project: Project,
+  worktreeId: string,
+  name: string,
+): Promise<Worktree> {
+  const renamed = await change(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.rename(project, worktreeId, name),
+    ),
+    { projectId: project.id, worktreeId },
+  );
+  return decodeWorktree(renamed.worktree);
 }
 
 // The re-key half of a move, for the data folder move, which relocates

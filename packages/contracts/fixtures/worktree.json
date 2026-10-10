@@ -748,6 +748,51 @@
       }
     ]
   },
+  "RenameWorktreePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "name": "brave-badger"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "name": "brave-badger",
+          "destinationPath": "/Users/alex/work/brave-badger"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "name": "brave-badger"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "name": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "name": "a/b"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "name": ".."
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
   "ConvertExternalPayloadSchema": {
     "accepts": [
       {

@@ -9,7 +9,6 @@ import {
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
-import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { PARTY_HOST } from "@/components/villagers/BirthdayPartyView";
@@ -21,8 +20,7 @@ export function WorktreeDetailView({
   copyTabs,
   projectName,
   onConfigure,
-  path,
-  home,
+  location,
   marks,
   face,
   header,
@@ -46,9 +44,8 @@ export function WorktreeDetailView({
   projectName: string;
   // The breadcrumb's project, linked to its Configure page.
   onConfigure: () => void;
-  path: string;
-  // This device's home, which the path shortens to ~.
-  home: string | null;
+  // Where the worktree lives (WorktreeLocation).
+  location: ReactNode;
   // The marks at the breadcrumb's end: the page's refresh, the kind
   // icon, and the device chip.
   marks: ReactNode;
@@ -103,12 +100,7 @@ export function WorktreeDetailView({
           <span aria-hidden className="text-muted-foreground/40 phone:hidden">
             /
           </span>
-          <PathSpan
-            path={path}
-            home={home}
-            className="min-w-0 flex-1 font-mono phone:hidden"
-            copyable
-          />
+          {location}
           {/* Held at the text line's height: the device chip overhangs
               it, so a peer's header is as tall as a local one. */}
           <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">

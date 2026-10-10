@@ -337,7 +337,7 @@ const GlobalConfigSchema = Schema.Struct({
   codexWorktreeNames: Schema.optional(Schema.Boolean),
   // When true, a project on an external drive keeps its managed-layout
   // worktrees on that drive
-  // (<volume>/<dataDirName>/worktrees/<projectName>/<worktreeName>)
+  // (<volume>/<dataDirName>/wt/<projectName>/<worktreeName>)
   // instead of under the data dir. Nothing changes for a project on the
   // internal drive, one whose drive already holds the data dir, or one
   // on another layout. Decided by the engine wherever it places a
