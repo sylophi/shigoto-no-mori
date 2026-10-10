@@ -6,7 +6,7 @@ Durable Object, which tells each device which others are online and
 the key each enrolled with, and forwards the small opaque envelopes
 they use to broker direct connections (a device asks a peer how to
 dial it, the peer answers with its addresses and one-time tickets).
-Data never passes through here: it flows over the direct sockets
+Data never passes through here: it flows over the device links
 those answers set up. No sm logic runs here either: the Worker
 verifies Clerk tokens, keeps a device registry in D1, mints
 short-lived connection tickets and forwards envelopes it never
@@ -310,7 +310,7 @@ commit real values.
   from exactly this origin so the web client can dial wss tunnel URLs;
   without it those dials die at the desktop's Origin gate (the host
   logs the refused origin, throttled). Unset, only Origin-less and
-  app-local clients are admitted, as before. Unlike the device hub, this
+  app-local clients are admitted. Unlike the device hub, this
   gate stays strict on purpose: it guards a loopback listener on the
   user's own machine, which any page they visit can reach.
 
