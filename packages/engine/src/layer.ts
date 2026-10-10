@@ -38,6 +38,7 @@ import * as Updater from "./Updater.ts";
 import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import * as Worktrees from "./Worktrees.ts";
+import * as WtFolder from "./WtFolder.ts";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
@@ -60,9 +61,11 @@ const services = (options: EngineOptions) =>
         Dirty.layer,
         Bundle.layer,
         Open.layer,
+        WtFolder.drained,
       ),
     ),
     Layer.provideMerge(Hygiene.layer),
+    Layer.provideMerge(WtFolder.layer),
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(Control.layer(options.flavor)),
     Layer.provideMerge(
@@ -103,7 +106,8 @@ export const engineLayer = (options: EngineOptions) =>
 
 // The store-backed services the doctor's checks read, over `store`.
 const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
-  Worktrees.layer.pipe(
+  WtFolder.layer.pipe(
+    Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(
       Layer.mergeAll(
         Layout.layer,

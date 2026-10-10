@@ -41,6 +41,7 @@ import * as Usage from "../../src/Usage.ts";
 import { doctorLayer, engineLayer } from "../../src/layer.ts";
 import { nodeStore, openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
+import * as WtFolder from "../../src/WtFolder.ts";
 
 // The services a harness case calls.
 export type Engine =
@@ -59,7 +60,8 @@ export type Engine =
   | Hygiene.Hygiene
   | Doctor.Doctor
   | Control.Control
-  | Transfer.Transfer;
+  | Transfer.Transfer
+  | WtFolder.WtFolder;
 
 // What the agent hooks run, as the installed binary names itself.
 export const HOOK_BINARY =

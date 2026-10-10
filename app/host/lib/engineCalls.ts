@@ -32,6 +32,7 @@ import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
 import * as Scripts from "@shigomori/engine/Scripts";
 import * as Worktrees from "@shigomori/engine/Worktrees";
+import * as WtFolder from "@shigomori/engine/WtFolder";
 import {
   type AgentHarnessStatus,
   AgentHarnessStatusListSchema,
@@ -860,6 +861,17 @@ export async function storeProjectOrder(ids: string[]): Promise<void> {
 }
 
 // ---- Reads ----
+
+// Where the v3 migration moved a v2 worktree folder, null when it
+// didn't.
+export async function wtFolderMovedTo(
+  fromPath: string,
+): Promise<string | null> {
+  const moved = await call(
+    Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedTo(fromPath)),
+  );
+  return Option.getOrNull(moved);
+}
 
 const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
 const decodeWorktreeIdentities = Schema.decodeUnknownSync(
