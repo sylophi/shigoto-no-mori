@@ -209,10 +209,7 @@ import {
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
 import { newHandshakeNonce } from "@shigomori/contracts/proof";
-import {
-  AnswerFrameSchema,
-  AskFrameSchema,
-} from "@shigomori/contracts/hubProtocol";
+import { decodeRelayFrame } from "@shigomori/contracts/hubProtocol";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
@@ -237,7 +234,7 @@ import {
 import { bootDevice } from "./lib/hubBoot.mts";
 import { delay } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
-import { startStubHub } from "./lib/hubStub.mts";
+import { sealAsk, startStubHub } from "./lib/hubStub.mts";
 
 // A blackholed candidate (TEST-NET-3, never routed): a dial to it
 // hangs or dies on its own, never reaching any listener.
@@ -575,11 +572,10 @@ it("brokering serves the roster only: an ask forged from outside the host's live
   stub.injectTo("B", {
     t: "relay",
     from: "ghost",
-    frame: {
+    frame: sealAsk("ghost", "B", 1, {
       ask: CONNECT_INFO_ASK,
-      id: 1,
       input: { dialableKinds: ["lan"] },
-    },
+    }).frame,
   });
   await delay(100);
   assert.equal(stub.sentTo("B", "ghost"), false);
@@ -1304,14 +1300,8 @@ it("one round trip: a winning dial costs the device hub exactly one ask and one 
     ask !== undefined && answer !== undefined,
     "the ask and its answer were not both received",
   );
-  assert.equal(
-    Schema.decodeUnknownSync(AskFrameSchema)(ask.frame).ask,
-    CONNECT_INFO_ASK,
-  );
-  assert.equal(
-    Schema.decodeUnknownSync(AnswerFrameSchema)(answer.frame).ok,
-    true,
-  );
+  assert.equal(decodeRelayFrame(ask.frame)?.kind, "ask");
+  assert.equal(decodeRelayFrame(answer.frame)?.kind, "answer");
   const baseline = stub.forwardedCount();
   assert.equal(await invokeB(bridge, ECHO, echoOf("direct")), "direct");
   await delay(150);

@@ -51,6 +51,7 @@ import {
   isHubUnreachable,
 } from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
+import { deviceKeyPair, toBase64Url } from "../shared/crypto/deviceKey.ts";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
@@ -195,6 +196,7 @@ it("service: enroll hits the enroll route with the session-token bearer and an E
     name: "Test Mac",
     platform: "darwin",
     icon: "laptop",
+    publicKey: "k".repeat(43),
   });
   assert.equal(result.credential, "device-credential");
   assert.deepEqual(result.device, DEVICE);
@@ -208,6 +210,7 @@ it("service: enroll hits the enroll route with the session-token bearer and an E
     name: "Test Mac",
     platform: "darwin",
     icon: "laptop",
+    publicKey: "k".repeat(43),
   });
 });
 
@@ -292,6 +295,7 @@ it("service: the auth tier differs, enroll under the session token and the rest 
     name: "Test Mac",
     platform: "darwin",
     icon: "laptop",
+    publicKey: "k".repeat(43),
   });
   await service.listDevices("device-credential");
   const enrollAuth = entryAt(calls, 0).init.headers.authorization;
@@ -387,8 +391,16 @@ it("enroll flow: enrollDevice stores the credential with the derived accountId u
     },
     fakeSessionJwt("user_abc"),
   );
+  // A fresh key pair: the hub got its public half, the store its
+  // private one.
+  const enrolledKey = readRecord(store).deviceKey;
+  assert.equal(
+    sentJson(entryAt(calls, 0)).publicKey,
+    toBase64Url(deviceKeyPair(enrolledKey).publicKey),
+  );
   assert.deepEqual(store.read(), {
     credential: "cred-1",
+    deviceKey: enrolledKey,
     accountId: "user_abc",
     deviceName: "Fallback Mac",
     // What it enrolled under is where the hub starts.
@@ -425,6 +437,7 @@ it("enroll flow: enrollDevice stores the credential with the derived accountId u
   // old account), after which the enroll is tried once more.
   store.park({
     credential: "cred-1",
+    deviceKey: "device-key",
     accountId: "user_abc",
     deviceName: "Renamed",
     deviceIcon: "server",
@@ -466,6 +479,7 @@ it("enroll flow: enrollDevice stores the credential with the derived accountId u
   );
   assert.deepEqual(store.read(), {
     credential: "cred-2",
+    deviceKey: readRecord(store).deviceKey,
     accountId: "user_other",
     deviceName: "Renamed",
     deviceIcon: "server",
@@ -507,7 +521,12 @@ it("device sync: syncHubDevice adopts a name or icon changed on another device, 
   };
   const sync = (listing: DeviceInfo[], listedUnder = readRecord(store)) =>
     syncHubDevice(deps, listedUnder, listing);
-  store.write({ credential: "c", accountId: "a", deviceName: "d" });
+  store.write({
+    deviceKey: "device-key",
+    credential: "c",
+    accountId: "a",
+    deviceName: "d",
+  });
   // A record from before the hub fields takes the listing as its
   // baseline.
   assert.equal(sync(ownRowListing("laptop")), false);
@@ -554,6 +573,7 @@ it("device sync: a hub copy that did not move but went stale (a default name mig
   // records the name it left as the hub's).
   store.write({
     credential: "c",
+    deviceKey: "device-key",
     accountId: "a",
     deviceName: "Mini",
     hubName: "mini.local",
@@ -594,7 +614,12 @@ it("device sync: a hub copy that did not move but went stale (a default name mig
   // hub name that differs is a peer's rename (a name only ever
   // changed on this device before), so it is adopted, not pushed
   // over.
-  store.write({ credential: "c", accountId: "a", deviceName: "Mini" });
+  store.write({
+    deviceKey: "device-key",
+    credential: "c",
+    accountId: "a",
+    deviceName: "Mini",
+  });
   assert.equal(
     syncHubDevice(deps, readRecord(store), ownRowListing("mini", "Office")),
     true,
@@ -619,6 +644,7 @@ it("device sync: a change made here while a stale push is out waits for it to la
   };
   store.write({
     credential: "c",
+    deviceKey: "device-key",
     accountId: "a",
     deviceName: "Mac",
     hubName: "Mac.local",
@@ -655,7 +681,12 @@ it("device update: updateDevice writes the hub first and keeps the change for th
   };
   const pick = (deviceId: string, icon: DeviceIcon) =>
     updateDevice(deps, readRecord(store), deviceId, { icon });
-  store.write({ credential: "c", accountId: "a", deviceName: "d" });
+  store.write({
+    deviceKey: "device-key",
+    credential: "c",
+    accountId: "a",
+    deviceName: "d",
+  });
   assert.equal(effectiveDeviceIcon(store.read(), store, "laptop"), "laptop");
   await pick("device-uuid", "mini");
   assert.equal(readRecord(store).deviceIcon, "mini");
@@ -665,6 +696,7 @@ it("device update: updateDevice writes the hub first and keeps the change for th
   await pick("device-uuid", "laptop");
   assert.deepEqual(store.read(), {
     credential: "c",
+    deviceKey: "device-key",
     accountId: "a",
     deviceName: "d",
     hubIcon: "laptop",
@@ -709,6 +741,7 @@ it("device update: updateDevice writes the hub first and keeps the change for th
           v: 1,
           enc: false,
           credential: "c",
+          deviceKey: "device-key",
           accountId: "a",
           deviceName: "d",
           deviceIcon: "hologram",
@@ -727,6 +760,7 @@ it("device update: updateDevice writes the hub first and keeps the change for th
       v: 1,
       enc: false,
       credential: "c",
+      deviceKey: "device-key",
       accountId: "a",
       deviceName: "d",
       deviceKind: "cat",
@@ -738,6 +772,54 @@ it("device update: updateDevice writes the hub first and keeps the change for th
     [legacy.raw().deviceIcon, legacy.raw().deviceKind],
     ["cat", undefined],
   );
+});
+
+it("store: a record enrolled before device keys reads as signed out, keeping its name for the next enrollment", () => {
+  const keyless = memoryStore(
+    JSON.stringify({
+      v: 1,
+      enc: false,
+      credential: "c",
+      accountId: "a",
+      deviceName: "Kept",
+    }),
+  );
+  assert.equal(keyless.read(), null);
+  assert.equal(keyless.rememberedDeviceName(), "Kept");
+});
+
+it("enroll flow: a device enrolled before keys enrolls again with a key and keeps its command-access switch", async () => {
+  const store = memoryStore(
+    JSON.stringify({
+      v: 1,
+      enc: false,
+      credential: "old",
+      accountId: "user_abc",
+      deviceName: "Kept",
+      acceptsCommands: true,
+    }),
+  );
+  assert.equal(store.readWithoutKey()?.acceptsCommands, true);
+  const { service } = stubService(() =>
+    json({ credential: "cred-1", device: DEVICE }),
+  );
+  await enrollDevice(
+    {
+      config: CONFIG,
+      service,
+      store,
+      deviceId: "device-uuid",
+      fallbackDeviceName: "Fallback Mac",
+      platform: "darwin",
+      detectedIcon: "laptop",
+    },
+    fakeSessionJwt("user_abc"),
+  );
+  const record = readRecord(store);
+  assert.equal(record.credential, "cred-1");
+  assert.equal(record.deviceName, "Kept");
+  assert.equal(record.acceptsCommands, true);
+  assert.equal(store.readWithoutKey(), null);
 });
 
 it("device icon detection: Apple product names and model identifiers, DMI chassis codes, virtual machines", () => {
@@ -772,7 +854,12 @@ it("sign-out flow: signOutDevice revokes THIS device then clears, and still clea
     CONFIG.hubUrl,
   );
   const store = memoryStore();
-  store.write({ credential: "cred-1", accountId: "a", deviceName: "d" });
+  store.write({
+    deviceKey: "device-key",
+    credential: "cred-1",
+    accountId: "a",
+    deviceName: "d",
+  });
   await signOutDevice({
     config: CONFIG,
     service,
@@ -790,7 +877,12 @@ it("sign-out flow: signOutDevice revokes THIS device then clears, and still clea
     baseUrl: CONFIG.hubUrl,
     fetchImpl: () => Promise.reject(new TypeError("offline")),
   });
-  store.write({ credential: "cred-2", accountId: "a", deviceName: "d" });
+  store.write({
+    credential: "cred-2",
+    deviceKey: "device-key",
+    accountId: "a",
+    deviceName: "d",
+  });
   let reported: unknown = null;
   await signOutDevice({
     config: CONFIG,
@@ -842,7 +934,12 @@ it("sign-out flow: signOutDevice revokes THIS device then clears, and still clea
     fetchImpl: () =>
       Promise.resolve(json({ _tag: "HubCredentialRejectedError" }, 401)),
   });
-  store.write({ credential: "cred-3", accountId: "a", deviceName: "d" });
+  store.write({
+    deviceKey: "device-key",
+    credential: "cred-3",
+    accountId: "a",
+    deviceName: "d",
+  });
   await signOutDevice({
     config: CONFIG,
     service: refusing,
@@ -873,6 +970,7 @@ it("store: an encrypting cipher round trips and writes ciphertext with enc:true"
   const store = createAccountStore({ filePath, cipher: encCipher });
   store.write({
     credential: "secret-credential",
+    deviceKey: "device-key",
     accountId: "acct-1",
     deviceName: "Mac",
   });
@@ -883,6 +981,7 @@ it("store: an encrypting cipher round trips and writes ciphertext with enc:true"
   const read = store.read();
   assert.deepEqual(read, {
     credential: "secret-credential",
+    deviceKey: "device-key",
     accountId: "acct-1",
     deviceName: "Mac",
   });
@@ -896,6 +995,7 @@ it("store: an unavailable cipher stores plaintext with enc:false and still round
   });
   store.write({
     credential: "plain-credential",
+    deviceKey: "device-key",
     accountId: "acct-2",
     deviceName: "Linux box",
   });
@@ -920,7 +1020,12 @@ it("store: a missing file and corrupt JSON both read as null, and clear removes 
 
   const clearPath = join(tmp, "clear.json");
   const store = createAccountStore({ filePath: clearPath, cipher });
-  store.write({ credential: "c", accountId: "a", deviceName: "d" });
+  store.write({
+    deviceKey: "device-key",
+    credential: "c",
+    accountId: "a",
+    deviceName: "d",
+  });
   assert.notEqual(store.read(), null);
   store.clear();
   assert.equal(store.read(), null, "clear should remove the file");
@@ -949,6 +1054,7 @@ it("store core: an in-memory backing round trips under both an encrypting and a 
     const store = createCoreAccountStore({ storage, cipher });
     store.write({
       credential: "secret",
+      deviceKey: "device-key",
       accountId: "acct-core",
       deviceName: "Web",
     });
@@ -963,13 +1069,19 @@ it("store core: an in-memory backing round trips under both an encrypting and a 
     );
     assert.deepEqual(store.read(), {
       credential: "secret",
+      deviceKey: "device-key",
       accountId: "acct-core",
       deviceName: "Web",
     });
     // Corrupt bytes read as signed out, and clear empties the backing.
     stored = "{ not valid json";
     assert.equal(store.read(), null, "corrupt backing should read null");
-    store.write({ credential: "c", accountId: "a", deviceName: "d" });
+    store.write({
+      deviceKey: "device-key",
+      credential: "c",
+      accountId: "a",
+      deviceName: "d",
+    });
     store.clear();
     // Clear signs out but keeps the name, so the next enrollment
     // keeps calling the device what it was called.
@@ -983,7 +1095,12 @@ it("store core: an in-memory backing round trips under both an encrypting and a 
     );
     // A parked credential is signed out too, readable only as
     // parked, and encrypted the same way as a live one.
-    store.park({ credential: "dead", accountId: "a", deviceName: "d" });
+    store.park({
+      deviceKey: "device-key",
+      credential: "dead",
+      accountId: "a",
+      deviceName: "d",
+    });
     assert.equal(store.read(), null, "a parked credential read as live");
     assert.deepEqual(store.readParked(), {
       credential: "dead",
@@ -1004,7 +1121,12 @@ it("store core: an in-memory backing round trips under both an encrypting and a 
     store.clearParked();
     assert.equal(store.readParked(), null);
     assert.equal(store.rememberedDeviceName(), "d");
-    store.write({ credential: "c2", accountId: "a", deviceName: "d2" });
+    store.write({
+      deviceKey: "device-key",
+      credential: "c2",
+      accountId: "a",
+      deviceName: "d2",
+    });
     assert.equal(store.readParked(), null, "a sign-in kept the parking");
     store.clear();
     assert.equal(store.read(), null, "a cleared store reads null");
@@ -1019,6 +1141,7 @@ it("command access: the switch rides the account record (absent is off), survive
   });
   const record = {
     credential: "c",
+    deviceKey: "device-key",
     accountId: "acct-1",
     deviceName: "d",
   };
@@ -1127,6 +1250,7 @@ it("shape: the device credential never appears in a renderer-visible object", ()
     deviceIcon: "laptop",
     detectedDeviceIcon: "laptop",
     sharedSignIn: false,
+    needsDeviceKey: false,
   });
   assert.ok(!("credential" in status), "an AccountStatus carries a credential");
   // DeviceInfo is the per-device shape the device hub reports and

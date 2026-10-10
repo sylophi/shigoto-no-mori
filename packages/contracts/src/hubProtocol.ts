@@ -5,25 +5,29 @@
 // on. Imported by the app and by hub/, so it runs in the Worker too:
 // Effect Schema only, no node builtins, no electron.
 //
-// The device hub never parses what devices say to each other. The
-// `frame` field of a hub envelope is opaque to the Worker. It carries
-// only the connectInfo ask and its answer (below, and
-// shared/hub/link.ts), but nothing the hub does may depend on that
-// shape. Contract data never rides this wire: the device hub is
-// orchestration only, and data flows over the device links it
-// brokers.
+// The device hub never reads what devices say to each other. The
+// `frame` of a relay envelope is a string the Worker forwards without
+// parsing: the connectInfo ask or its answer, sealed as a Noise
+// handshake message to the device it is addressed to
+// (app/shared/hub/link.ts), so the hub sees only the addressing.
+// Contract data never rides this wire: the device hub is orchestration
+// only, and data flows over the direct sockets it brokers.
 //
-// TRUST MODEL: the device hub is our own managed service, not an
-// adversary. Enrollment requires a Clerk-verified login, each device
-// holds a long-lived credential it exchanges for short-lived single-use
-// connect tickets, and the DO authenticates the account when it burns
-// the ticket, so every deliverable peer is by construction a device of
-// the same account. That is why an ask carries no credential.
-// Authorization stays host-local: mutating calls ride the device
-// links only, where CommandGate holds them to the host's command-access
-// switch, and the hub wire itself answers nothing but connectInfo. The
-// size and count bounds in this file are sanity bounds that keep a bug
-// or a runaway client from ballooning allocations.
+// TRUST MODEL: the device hub is our own managed service, and the
+// roster of which devices exist and what key each holds. Enrollment
+// requires a Clerk-verified login, each device holds a long-lived
+// credential it exchanges for short-lived single-use connect tickets,
+// and the DO authenticates the account when it burns the ticket, so
+// every deliverable peer is by construction a device of the same
+// account. Each device enrolls with a static public key, which the
+// presence roster hands every other device of the account; a peer
+// proves it holds the matching private key in the Noise handshake
+// itself, so the relay and the direct sockets carry nothing a party
+// in the middle can read. Authorization stays host-local: mutating
+// calls ride the direct sockets only, where dispatch gates them on the
+// host's command-access switch. The size and count bounds in this file
+// are sanity bounds that keep a bug or a runaway client from
+// ballooning allocations.
 //
 // Ticket and credential string mechanics live in hub/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the
@@ -39,8 +43,8 @@ import {
 import { PortNumberSchema } from "./schemas/ports.ts";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
-// JSON. The device hub carries orchestration only: the connectInfo ask
-// and answer, and presence, all small control frames, so this is a
+// JSON. The device hub carries orchestration only: the sealed
+// connectInfo ask and answer, and presence, all small control frames, so this is a
 // control-frame budget rather than a data budget. Contract data rides
 // the device links and never this wire. An oversize forward is
 
@@ -83,7 +87,7 @@ export function utf8ByteLength(text: string): number {
 // device count is a handful in practice, so this still sits far above
 // any real roster while bounding what a hostile DO can force a client
 // to allocate from one presence envelope. It also keeps the worst-case
-// roster envelope (64 ids of 200 chars each) well under
+// roster envelope (64 ids of 200 chars each, each with its key) well under
 // MAX_HUB_MESSAGE_BYTES, so a full roster can never kill the socket
 // that carries it (asserted in hub/test/hub.spec.ts).
 export const MAX_ONLINE_DEVICES = 64;
@@ -128,6 +132,13 @@ export const DeviceIdSchema = Schema.NonEmptyString.check(
   Schema.isMaxLength(200),
 );
 
+// A device's static X25519 public key: 32 bytes as unpadded base64url.
+// Sent with every enrollment, stored on the device's row and handed to
+// the account's other devices in the presence roster.
+const DevicePublicKeySchema = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9_-]{43}$/),
+);
+
 // The hub socket's liveness pair: the device sends the bare text
 // HUB_PING on the hub connection's heartbeat (shared/hub/heartbeat.ts)
 // and the Durable Object answers HUB_PONG through the
@@ -170,6 +181,9 @@ export const EnrollRequestSchema = Schema.Struct({
   // sign in, so the Worker stores what it is sent and each reader
   // sanitizes to the catalog it knows.
   icon: DeviceIconWireSchema,
+  // The public half of the key pair the device made for this
+  // enrollment. Enrolling again replaces it.
+  publicKey: DevicePublicKeySchema,
 });
 
 // PATCH /devices/:id: the fields a device may change after enrolling,
@@ -279,11 +293,12 @@ export type TunnelProvisionResponse = typeof TunnelProvisionResponseSchema.Type;
 // another device of the same account. There is no hello on this socket,
 // the consumed ticket already binds the connection to a deviceId. `to`
 // is bounded to match a deviceId, since it is fed straight to
-// getWebSockets on the device hub hot path.
+// getWebSockets on the device hub hot path. The frame is a string the
+// hub copies and never reads (RelayFrame below).
 const HubSendEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("relay"),
   to: DeviceIdSchema,
-  frame: Schema.Unknown,
+  frame: Schema.String,
 });
 
 // The union of everything a device may send. A one-armed union today,
@@ -300,21 +315,29 @@ const HubDeliverEnvelopeSchema = Schema.Struct({
   // and it is fed straight into per-peer routing and log lines, so it is
   // never left unbounded.
   from: DeviceIdSchema,
-  frame: Schema.Unknown,
+  frame: Schema.String,
 });
 
-// DO to device: the full list of the account's online deviceIds
+// One online device in the roster: its id and the public key it
+// enrolled with, which is how its peers know who they are talking to.
+const OnlineDeviceSchema = Schema.Struct({
+  deviceId: DeviceIdSchema,
+  publicKey: DevicePublicKeySchema,
+});
+export type OnlineDevice = typeof OnlineDeviceSchema.Type;
+
+// DO to device: the full list of the account's online devices
 // (including the receiver). Sent to a socket right after it is
 // accepted and rebroadcast to everyone on every join and leave, so a
 // client only ever replaces its copy, never merges deltas.
 const PresenceEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("presence"),
-  // Each entry is a deviceId, bounded like HubSendEnvelopeSchema.to,
-  // and the roster length is capped so a hostile DO cannot force an
-  // unbounded allocation from one presence envelope. The DO always names
-  // real account devices, so both bounds are additive tightenings it
+  // Each id is bounded like HubSendEnvelopeSchema.to, and the roster
+  // length is capped so a hostile DO cannot force an unbounded
+  // allocation from one presence envelope. The DO always names real
+  // account devices, so both bounds are additive tightenings it
   // already satisfies.
-  online: Schema.Array(DeviceIdSchema).check(
+  online: Schema.Array(OnlineDeviceSchema).check(
     Schema.isMaxLength(MAX_ONLINE_DEVICES),
   ),
 });
@@ -363,38 +386,59 @@ export function decodeEnvelope<S extends Schema.Decoder<unknown>>(
 
 // ---- The connectInfo ask and answer ----
 
-// What one device asks another through the relay, as the envelope's
-// opaque `frame`: the direct dialer's "how do I dial you?"
-// (shared/hub/link.ts), keyed by an id so the answer finds its ask.
-// An undefined input or result rides as an absent field.
+// What one device relays to another as the envelope's frame: the
+// direct dialer's "how do I dial you?" (app/shared/hub/link.ts) or its
+// answer, keyed by an id so the answer finds its ask. `sealed` is a
+// Noise IK handshake message in unpadded base64url: the ask is the
+// first message, sealed to the addressed device's key, and the answer
+// the second, readable only by the asker. In text, `<kind>:<id>:<sealed>`.
+export type RelayFrame = {
+  readonly kind: "ask" | "answer";
+  readonly id: number;
+  readonly sealed: string;
+};
+
+const RELAY_FRAME = /^(ask|answer):(\d{1,16}):([A-Za-z0-9_-]+)$/;
+
+export function encodeRelayFrame(frame: RelayFrame): string {
+  return `${frame.kind}:${frame.id}:${frame.sealed}`;
+}
+
+// Null for anything else, which the reader drops.
+export function decodeRelayFrame(text: string): RelayFrame | null {
+  const match = RELAY_FRAME.exec(text);
+  if (match === null) return null;
+  return {
+    kind: match[1] === "ask" ? "ask" : "answer",
+    id: Number(match[2]),
+    sealed: match[3] ?? "",
+  };
+}
+
+// What the sealed messages carry, as JSON. An undefined input or result
+// rides as an absent field.
 //
-//   ask:    { ask, id, input? }
-//   answer: { answer, id, ok: true, result? }
-//         | { answer, id, ok: false, message, code? }
+//   ask:    { ask, input? }
+//   answer: { ok: true, result? } | { ok: false, message, code? }
 //
-// Bounded like every string a hostile hub could inflate.
+// Bounded like every string a hostile peer could inflate.
 const AskNameSchema = Schema.String.check(Schema.isMaxLength(64));
 
-export const AskFrameSchema = Schema.Struct({
+export const AskPayloadSchema = Schema.Struct({
   ask: AskNameSchema,
-  id: Schema.Int,
   input: Schema.optional(Schema.Unknown),
 });
-export type AskFrame = typeof AskFrameSchema.Type;
+export type AskPayload = typeof AskPayloadSchema.Type;
 
-export const AnswerFrameSchema = Schema.Union([
+export const AnswerPayloadSchema = Schema.Union([
   Schema.Struct({
-    answer: AskNameSchema,
-    id: Schema.Int,
     ok: Schema.Literal(true),
     result: Schema.optional(Schema.Unknown),
   }),
   Schema.Struct({
-    answer: AskNameSchema,
-    id: Schema.Int,
     ok: Schema.Literal(false),
     message: Schema.String,
     code: Schema.optional(Schema.String.check(Schema.isMaxLength(64))),
   }),
 ]);
-export type AnswerFrame = typeof AnswerFrameSchema.Type;
+export type AnswerPayload = typeof AnswerPayloadSchema.Type;

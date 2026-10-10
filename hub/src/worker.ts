@@ -175,7 +175,10 @@ const protocolFloor = Layer.succeed(ProtocolFloor, (effect) =>
 // One row as the API reports it, for the list and the enroll response
 // alike, so the two cannot disagree about a device.
 function toDeviceInfo(
-  row: Omit<Registry.DeviceRow, "account_id" | "credential_hash">,
+  row: Omit<
+    Registry.DeviceRow,
+    "account_id" | "credential_hash" | "public_key"
+  >,
   online: ReadonlySet<string>,
 ): DeviceInfoWire {
   return {
@@ -243,10 +246,11 @@ const handlers = Effect.gen(function* () {
     handle.handle("enroll", ({ payload }) =>
       Effect.gen(function* () {
         const { accountId } = yield* HubLogin;
-        const { deviceId, name, platform, icon } = payload;
-        // Enrolling again rotates the credential: exactly one credential
-        // per device is valid at any time, because only one hash is
-        // stored. The account's object admits the device against the
+        const { deviceId, name, platform, icon, publicKey } = payload;
+        // Enrolling again rotates the credential and the key: exactly
+        // one credential per device is valid at any time, because only
+        // one hash is stored, and the roster hands peers the key the
+        // device enrolled with last. The account's object admits the device against the
         // cap and writes it in one step (DeviceHub.enroll).
         const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
         const credentialHash = yield* Effect.promise(() =>
@@ -260,6 +264,7 @@ const handlers = Effect.gen(function* () {
               name,
               platform,
               icon,
+              publicKey,
               credentialHash,
             }),
         );
