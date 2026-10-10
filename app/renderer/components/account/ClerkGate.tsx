@@ -10,7 +10,7 @@
 import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import type { ClerkProviderProps } from "@clerk/react";
 import { clerkAppearance } from "@/lib/clerkAppearance";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 import { ClerkAccountSync } from "./ClerkAccountSync";
 
 export type ClerkProviderComponent = ComponentType<{
@@ -42,17 +42,15 @@ export function ClerkGate({
 // resolved against the root and handed over as values, again whenever
 // the root's theme changes.
 function useThemedAppearance(): ClerkProviderProps["appearance"] {
-  const [appearance, setAppearance] = useState(() =>
-    resolvedAppearance(themeRoot()),
-  );
+  const root = useWindowRoot();
+  const [appearance, setAppearance] = useState(() => resolvedAppearance(root));
   useEffect(() => {
-    const root = themeRoot();
     const observer = new MutationObserver(() =>
       setAppearance(resolvedAppearance(root)),
     );
     observer.observe(root, { attributeFilter: ["class", "data-palette"] });
     return () => observer.disconnect();
-  }, []);
+  }, [root]);
   return appearance;
 }
 
