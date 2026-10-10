@@ -263,7 +263,10 @@ try {
   await lab.ensureSignedIn(tab);
   await showProject(lab, tab).catch(() => {});
   lab.note("waiting for the web client to reach the host");
-  await recovered(lab, Date.now(), 180_000);
+  await recovered(lab, Date.now(), 180_000).catch(async (error: unknown) => {
+    await tab.page.screenshot({ path: join(out, "setup-tab1.png") });
+    throw error;
+  });
   if (soakMs === null) {
     for (const scenario of chosen) await runOne(scenario);
   } else {
