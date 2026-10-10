@@ -97,7 +97,6 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "dotenv": "^17.4.2",
     "electron": "43.1.0",
-    "license-checker": "^25.0.1",
     "react-grab": "^0.1.48",
     "typescript": "catalog:",
     "vite": "catalog:",
