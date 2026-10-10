@@ -22,3 +22,17 @@ export function devDialKinds(): DirectCandidateKind[] | undefined {
   log.info(`[direct] dev: dialing ${kinds.join(", ")} candidates only`);
   return kinds;
 }
+
+// Dev-only testing hook: SHIGOMORI_DIRECT_FRONT_PORT=<port> advertises
+// that port in place of the direct listener's, in the LAN candidates
+// and the tunnel's ingress, so a proxy there (the reliability lab's)
+// carries every connection a peer makes to this device and can drop
+// them. Unset, not a port, or a packaged build: the listener's own.
+export function devFrontPort(listenerPort: number): number {
+  const raw = envSetting("SHIGOMORI_DIRECT_FRONT_PORT");
+  if (hostFacts().packaged || raw === undefined) return listenerPort;
+  const port = Number(raw);
+  return Number.isInteger(port) && port > 0 && port < 65_536
+    ? port
+    : listenerPort;
+}
