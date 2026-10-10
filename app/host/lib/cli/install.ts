@@ -25,6 +25,8 @@ import {
 } from "@shared/packaging/cliDist.mts";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
 import { cliBinaryPath } from "./binary";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { uninstallShellIntegration } from "./shell";
 import { hostFacts } from "@host/process/facts";
 import { log } from "@shared/log";
@@ -215,21 +217,17 @@ async function uninstallCliLinks(): Promise<void> {
 // rather than being swallowed: a hook left behind is inert (its guard
 // line no-ops once the command is gone), yet the user should hear it
 // stayed.
-export async function uninstallCliEverything(): Promise<void> {
-  let hookFailure: unknown;
+export const uninstallCliEverything = Effect.gen(function* () {
   // No binary means the hook-removal spawn can't run. The guarded hook
   // line is inert without the command anyway, so skipping is not a
   // failure worth reporting.
-  if (cliBinaryPath() !== null) {
-    try {
-      await uninstallShellIntegration();
-    } catch (err) {
-      hookFailure = err;
-    }
-  }
-  await uninstallCliLinks();
-  if (hookFailure !== undefined) throw hookFailure;
-}
+  const hooks =
+    cliBinaryPath() === null
+      ? Exit.void
+      : yield* Effect.exit(uninstallShellIntegration);
+  yield* Effect.promise(uninstallCliLinks);
+  return yield* hooks;
+});
 
 // Launch-time maintenance, never an install: when a link the user
 // installed points at a copy of the app that is no longer the one

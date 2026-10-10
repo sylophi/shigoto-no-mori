@@ -11,7 +11,8 @@ import {
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
-import { findProjectOrThrow } from "@host/lib/projects";
+import * as Engine from "@host/lib/engine";
+import { findProject } from "@host/lib/projects";
 import {
   localSource,
   type SourceFacts,
@@ -78,16 +79,18 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     projectId: move.projectId,
     worktreeId: move.worktreeId,
   };
-  const changed = yield* fromPromise(async () =>
-    pulled
-      ? withPeerSource(peerSyncApiFor(move.deviceId), target, (source) =>
-          sourceChangedSince(source, receipt, PULLED),
+  const engine = yield* Engine.handle;
+  const here = pulled ? undefined : yield* findProject(move.projectId);
+  const changed = yield* fromPromise(() =>
+    here === undefined
+      ? withPeerSource(
+          peerSyncApiFor(move.deviceId),
+          target,
+          (source) => sourceChangedSince(source, receipt, PULLED),
+          engine,
         )
       : sourceChangedSince(
-          localSource(
-            await findProjectOrThrow(move.projectId),
-            move.worktreeId,
-          ),
+          localSource(here, move.worktreeId, engine),
           receipt,
           SENT,
         ),

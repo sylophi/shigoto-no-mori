@@ -19,7 +19,6 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { registerInflightContributor } from "./scripts";
-import * as PromiseAdapter from "./util/promiseAdapter";
 
 // The scope an engine run outlives its caller in: a create the app
 // navigates away from at "created" goes on to its setup here, and ends
@@ -58,14 +57,16 @@ export const layer = (options: {
 
 export type Services = Layer.Success<ReturnType<typeof layer>>;
 
-// The Promise face, for the host code that is not Effect yet: the
-// narrowed engine face (engineCalls.ts) and the config modules. Goes
-// with them in step 7's B4c PR (V3.md, the host's Promise adapters).
-export const {
-  layer: adapter,
-  run,
-  runAside,
-} = PromiseAdapter.make<Services>("The engine");
+// The engine as an effect found it, for the Promise code the effect
+// hands it (the source link's protocol, the mirror's git follower):
+// what that code asks of the engine runs on the effect's own engine.
+export type Handle = Context.Context<Services>;
+export const handle: Effect.Effect<Handle, never, Services> =
+  Effect.context<Services>();
+export const runWith =
+  (engine: Handle) =>
+  <A, E>(effect: Effect.Effect<A, E, Services>): Promise<A> =>
+    Effect.runPromiseWith(engine)(effect);
 
 type Ids = { readonly projectId?: string; readonly worktreeId?: string };
 

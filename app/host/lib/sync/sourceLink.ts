@@ -58,16 +58,13 @@ import {
   type Project,
 } from "@shigomori/contracts/schemas";
 import { strict } from "@shigomori/contracts/schemas/strict";
-import {
-  bundleCreate,
-  bundleUnpack,
-  dirtyCapture,
-} from "@host/lib/engineCalls";
+import * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 import type { PeerSyncApi } from "@host/ipc/peerSync";
 import { refTip, treeOf } from "@host/lib/git/refs";
 import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
-import { primaryRefOf } from "@host/lib/projects";
+import { primaryRef } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
 import { MoveStepError, step, unwrapStep } from "./moves";
 
@@ -392,11 +389,17 @@ export type SourceFacts = {
   capture(signal?: AbortSignal): Promise<SyncCapture>;
 };
 
-export function localSource(project: Project, worktreeId: string): SourceFacts {
+export function localSource(
+  project: Project,
+  worktreeId: string,
+  engine: Engine.Handle,
+): SourceFacts {
   return {
     tip: (branch) => refTip(project.path, `refs/heads/${branch}`),
     capture: async () => {
-      const capture = await dirtyCapture(project, worktreeId);
+      const capture = await Engine.runWith(engine)(
+        Ops.dirtyCapture(project, worktreeId),
+      );
       if (!capture.captured || capture.commit === undefined) {
         return { captured: false };
       }
@@ -418,6 +421,7 @@ async function sendBundle(
   project: Project,
   refs: readonly string[],
   haves: readonly string[],
+  engine: Engine.Handle,
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "sm-sync-"));
   try {
@@ -426,7 +430,9 @@ async function sendBundle(
     // it resolved, but that list is computed against the repo AFTER
     // `git bundle create` silently dropped any have-covered ref, so it
     // can name refs the bundle lacks.
-    const { bytes } = await bundleCreate(project, path, [...refs], [...haves]);
+    const { bytes } = await Engine.runWith(engine)(
+      Ops.bundleCreate(project, path, [...refs], [...haves]),
+    );
     const file = await openFile(path, "r");
     try {
       await link.write({ bundle: { bytes } });
@@ -459,6 +465,7 @@ async function answerAsk(
   project: Project,
   facts: SourceFacts,
   ask: typeof AskSchema.Type,
+  engine: Engine.Handle,
 ): Promise<void> {
   switch (ask.ask) {
     case "tip":
@@ -468,10 +475,10 @@ async function answerAsk(
       await link.write({ ok: await facts.capture() });
       return;
     case "clone":
-      await link.write({ ok: await cloneFactsOf(project) });
+      await link.write({ ok: await cloneFactsOf(project, engine) });
       return;
     case "bundle":
-      await sendBundle(link, project, ask.refs, ask.haves);
+      await sendBundle(link, project, ask.refs, ask.haves, engine);
       return;
   }
 }
@@ -486,12 +493,13 @@ export async function serveSource(
   link: Link,
   project: Project,
   worktreeId: string,
+  engine: Engine.Handle,
   opts: {
     onProgress?: (frame: ProgressFrame) => void;
     failure?: { error?: unknown };
   } = {},
 ): Promise<void> {
-  const facts = localSource(project, worktreeId);
+  const facts = localSource(project, worktreeId, engine);
   try {
     for (;;) {
       // oxlint-disable-next-line no-await-in-loop -- one question at a time
@@ -508,7 +516,7 @@ export async function serveSource(
       try {
         // oxlint-disable-next-line no-await-in-loop -- one question at a time
         await traced("SourceLink.answer", { ask: request.ask }, () =>
-          answerAsk(link, project, facts, request),
+          answerAsk(link, project, facts, request, engine),
         );
       } catch (error) {
         if (error instanceof BrokenLink) throw error;
@@ -527,9 +535,12 @@ export async function serveSource(
 // measured against (what a clone is made of) and where it was cloned
 // from (the remote the clone gets, by the clone payload's own rule,
 // shared/cloneUrl.ts).
-async function cloneFactsOf(project: Project): Promise<CloneFacts> {
+async function cloneFactsOf(
+  project: Project,
+  engine: Engine.Handle,
+): Promise<CloneFacts> {
   const [branch, remotes] = await Promise.all([
-    primaryRefOf(project),
+    Engine.runWith(engine)(primaryRef(project)),
     listRemoteEntries(project.path),
   ]);
   return { branch, remoteUrl: pickCloneUrl(remotes) };
@@ -558,6 +569,7 @@ export const offer = <T>(
 ) =>
   Effect.gen(function* () {
     const channelId = mintHexId();
+    const engine = yield* Engine.handle;
     const mux = yield* step(() => peer.channels());
     const link = yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -575,9 +587,10 @@ export const offer = <T>(
     // peer tore down as its run failed is that run's news, which the
     // call brings.
     const failure: { error?: unknown } = {};
-    void serveSource(link, project, worktreeId, { onProgress, failure }).catch(
-      () => {},
-    );
+    void serveSource(link, project, worktreeId, engine, {
+      onProgress,
+      failure,
+    }).catch(() => {});
     // The peer's call continues the move's trace.
     const span = yield* Effect.option(Effect.currentSpan);
     const answering = withParentSpan(span, () => openOnPeer(channelId));
@@ -606,7 +619,11 @@ export const offerSource = <T>(
   project: Project,
   worktreeId: string,
   openOnPeer: (channelId: string) => Promise<T>,
-): Promise<T> => runStep(offer(peer, project, worktreeId, openOnPeer));
+  engine: Engine.Handle,
+): Promise<T> =>
+  runStep(
+    offer(peer, project, worktreeId, openOnPeer).pipe(Effect.provide(engine)),
+  );
 
 // ---- The destination's side.
 
@@ -634,7 +651,10 @@ export type WorktreeSource = SourceFacts & {
 // The destination's questions over a link: one a peer opened here (a
 // send's, a push's), or a pull's, opened on first use (its refusals are
 // this device's own and come before any question).
-function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
+function askSource(
+  linkOrOpen: Link | (() => Promise<Link>),
+  engine: Engine.Handle,
+): WorktreeSource {
   const opened =
     typeof linkOrOpen === "function" ? linkOrOpen : async () => linkOrOpen;
   const linkOf = async (signal: AbortSignal | undefined) => {
@@ -692,7 +712,9 @@ function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
         } finally {
           await file.close();
         }
-        return await bundleUnpack(into, path, refs.map(landingRefspec));
+        return await Engine.runWith(engine)(
+          Ops.bundleUnpack(into, path, refs.map(landingRefspec)),
+        );
       } finally {
         await rm(dir, { recursive: true, force: true }).catch(() => {});
       }
@@ -716,7 +738,7 @@ export const peerSource = (
   worktree: { projectId: string; worktreeId: string },
 ) =>
   Effect.acquireRelease(
-    Effect.sync(() => {
+    Effect.map(Engine.handle, (engine) => {
       let opened: Promise<Link> | undefined;
       let attached: Link | undefined;
       const source = askSource(
@@ -728,6 +750,7 @@ export const peerSource = (
               attached = link;
             },
           )),
+        engine,
       );
       return { source, attached: () => attached };
     }),
@@ -743,13 +766,15 @@ export const peerSource = (
 
 // A source for the length of a Promise caller's `run`.
 const withSource = <T>(
-  acquire: Effect.Effect<WorktreeSource, never, Scope.Scope>,
+  acquire: Effect.Effect<WorktreeSource, never, Scope.Scope | Engine.Services>,
   run: (source: WorktreeSource) => Promise<T>,
+  engine: Engine.Handle,
 ): Promise<T> =>
   runStep(
     acquire.pipe(
       Effect.flatMap((source) => step(() => run(source))),
       Effect.scoped,
+      Effect.provide(engine),
     ),
   );
 
@@ -758,14 +783,15 @@ export const withPeerSource = <T>(
   peer: Pick<PeerSyncApi, "channels" | "openSource">,
   worktree: { projectId: string; worktreeId: string },
   run: (source: WorktreeSource) => Promise<T>,
-): Promise<T> => withSource(peerSource(peer, worktree), run);
+  engine: Engine.Handle,
+): Promise<T> => withSource(peerSource(peer, worktree), run, engine);
 
 // A host handler's source over a link a peer opened, for the length of
 // the scope: it ends with the scope, and is torn down when the scope
 // fails or is interrupted.
 export const linkSource = (link: Link) =>
   Effect.acquireRelease(
-    Effect.sync(() => askSource(link)),
+    Effect.map(Engine.handle, (engine) => askSource(link, engine)),
     (_, exit) =>
       Effect.sync(() => {
         if (Exit.isSuccess(exit)) link.end();
@@ -777,4 +803,5 @@ export const linkSource = (link: Link) =>
 export const withLinkSource = <T>(
   link: Link,
   run: (source: WorktreeSource) => Promise<T>,
-): Promise<T> => withSource(linkSource(link), run);
+  engine: Engine.Handle,
+): Promise<T> => withSource(linkSource(link), run, engine);

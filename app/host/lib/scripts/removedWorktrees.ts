@@ -17,9 +17,8 @@
 // held per project.
 import { existsSync } from "node:fs";
 import * as Effect from "effect/Effect";
-import { fromPromise } from "../util/fromPromise";
 import type { Project } from "@shigomori/contracts/schemas";
-import { listWorktreeIdentities } from "../git/worktrees";
+import * as Ops from "../engineOps";
 import { loadProjects } from "../projects";
 import {
   getInflightDeleteIds,
@@ -45,28 +44,27 @@ const reaping = new Set<string>();
 // nothing either way and is dropped whole (see below), and a listing
 // that succeeds while the checkout's volume is offline still reports
 // the worktree, so an unplugged drive reads as "still there".
-async function findRemovedWorktrees(
+const findRemovedWorktrees = (
   project: Project,
   candidates: RunningScriptWorktree[],
-): Promise<RunningScriptWorktree[]> {
-  let liveIds: Set<string>;
-  try {
-    const identities = await listWorktreeIdentities(project.id);
-    liveIds = new Set(identities.map((identity) => identity.id));
-  } catch {
+) =>
+  Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
+    Effect.map((identities) => {
+      const liveIds = new Set(identities.map((identity) => identity.id));
+      // A repo git can read always lists at least its primary checkout.
+      // An empty result means the read went missing, not the worktrees.
+      if (liveIds.size === 0) return [];
+      return candidates.filter(
+        (candidate) =>
+          !liveIds.has(candidate.worktreeId) &&
+          !existsSync(candidate.worktreePath),
+      );
+    }),
     // Unreachable repo, mid-rebase index lock, a transient read error.
     // The enumeration failing is a fact about the enumeration, not
     // about the worktrees, so nothing in this project is a candidate.
-    return [];
-  }
-  // A repo git can read always lists at least its primary checkout. An
-  // empty result means the read went missing, not the worktrees.
-  if (liveIds.size === 0) return [];
-  return candidates.filter(
-    (candidate) =>
-      !liveIds.has(candidate.worktreeId) && !existsSync(candidate.worktreePath),
+    Effect.orElseSucceed((): RunningScriptWorktree[] => []),
   );
-}
 
 function groupByProject(
   worktrees: RunningScriptWorktree[],
@@ -102,16 +100,18 @@ export const reapScriptsForRemovedWorktrees = Effect.fn("Scripts.reapRemoved")(
     for (const worktree of candidates) reaping.add(worktree.worktreeId);
     const reap = Effect.gen(function* () {
       const projects = loadProjects();
-      const perProject = yield* fromPromise(() =>
-        Promise.all(
-          Array.from(groupByProject(candidates), ([projectId, group]) => {
-            const project = projects.find((p) => p.id === projectId);
-            // The project itself was unregistered. projects.remove reaps
-            // its scripts on that path, and with no repo to ask there is
-            // nothing to conclude here.
-            return project ? findRemovedWorktrees(project, group) : [];
-          }),
-        ),
+      const perProject = yield* Effect.forEach(
+        groupByProject(candidates),
+        ([projectId, group]) => {
+          const project = projects.find((p) => p.id === projectId);
+          // The project itself was unregistered. projects.remove reaps
+          // its scripts on that path, and with no repo to ask there is
+          // nothing to conclude here.
+          return project
+            ? findRemovedWorktrees(project, group)
+            : Effect.succeed([]);
+        },
+        { concurrency: "unbounded" },
       );
       const removed = perProject.flat();
       const removedIds = new Set(

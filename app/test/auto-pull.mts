@@ -43,8 +43,16 @@ afterAll(async () => {
 
 const { autoPullWorktree, sweepAutoPull } =
   await import("../host/lib/worktrees/autoPullSweep.ts");
-const { listWorktreeIdentities, setAutoPull } =
-  await import("../host/lib/engineCalls.ts");
+const Ops = await import("../host/lib/engineOps.ts");
+const { onSandboxEngine } = await import("./lib/sandboxEngine.mts");
+const listWorktreeIdentities = (
+  ...args: Parameters<typeof Ops.listWorktreeIdentities>
+) => onSandboxEngine(Ops.listWorktreeIdentities(...args));
+const setAutoPull = (...args: Parameters<typeof Ops.setAutoPull>) =>
+  onSandboxEngine(Ops.setAutoPull(...args));
+// The sweep over the project's checkouts as the fetch reads them.
+const sweepProject = async (projectId: string, busy: ReadonlySet<string>) =>
+  sweepAutoPull(await listWorktreeIdentities({ projectId }), busy);
 
 const git = sandboxGit(gitEnv);
 
@@ -234,7 +242,7 @@ it("the sweep pulls only the marked worktree of a project and reports the rest u
   const linkedBefore = head(linked);
   const registered = await addProject(sm, project);
   // Nothing marked: nothing happens.
-  let result = await sweepAutoPull(registered.id, new Set());
+  let result = await sweepProject(registered.id, new Set());
   assert.deepEqual(result, { pulled: [], failed: [] });
   const [primary] = await listWorktreeIdentities({
     projectId: registered.id,
@@ -242,7 +250,7 @@ it("the sweep pulls only the marked worktree of a project and reports the rest u
   assert.ok(primary !== undefined, "the project lists its primary worktree");
   assert.equal(primary.path, project);
   await setAutoPull(registered, primary.id, true);
-  result = await sweepAutoPull(registered.id, new Set());
+  result = await sweepProject(registered.id, new Set());
   assert.equal(result.failed.length, 0);
   assert.deepEqual(
     result.pulled.map((entry) => [entry.worktree.path, entry.commits]),
@@ -255,6 +263,6 @@ it("the sweep pulls only the marked worktree of a project and reports the rest u
   git(seed, "checkout", "-q", "main");
   pushCommit(seed, "main-two.txt");
   git(project, "fetch", "-q");
-  result = await sweepAutoPull(registered.id, new Set([primary.id]));
+  result = await sweepProject(registered.id, new Set([primary.id]));
   assert.deepEqual(result, { pulled: [], failed: [] });
 });

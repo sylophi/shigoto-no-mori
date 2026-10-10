@@ -31,7 +31,8 @@ import {
 } from "@host/mirror/invites";
 import { log } from "@shared/log";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { wtFolderMovedTo } from "@host/lib/engineCalls";
+import * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 
 // The label keys the start orchestration writes on a session, lifted
 // back out for the renderer by annotate below. Labels are the one
@@ -406,7 +407,10 @@ export const rootExists = (path: string) =>
     (error: NodeJS.ErrnoException) => error.code !== "ENOENT",
   );
 
-export async function settleMirrorBookkeeping(): Promise<void> {
+// `engine` is where a moved original is looked up.
+export async function settleMirrorBookkeeping(
+  engineHandle: Engine.Handle,
+): Promise<void> {
   const daemon = engineOrNull();
   if (daemon === null || daemon.status() !== "running") return;
   const ids = [...pendingStops];
@@ -440,7 +444,9 @@ export async function settleMirrorBookkeeping(): Promise<void> {
       }
       // The v3 migration moved the original into wt/: the mirror
       // re-opens there, as after a move.
-      const movedTo = await wtFolderMovedTo(raw.localRoot).catch(() => null);
+      const movedTo = await Engine.runWith(engineHandle)(
+        Ops.wtFolderMovedTo(raw.localRoot),
+      ).catch(() => null);
       if (movedTo !== null && (await rootExists(movedTo))) {
         // One re-open per worktree carries all of its sessions.
         if (reopening.has(raw.localRoot)) return;

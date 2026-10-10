@@ -20,7 +20,9 @@ beforeAll(async () => {
 afterAll(() => fixture.remove());
 const { dataDir, git, commitFile, sandbox } = fixture;
 
-const { listWorktrees } = await import("../host/lib/engineCalls.ts");
+const Ops = await import("../host/lib/engineOps.ts");
+const listWorktrees = (projectId: string) =>
+  runHost(Ops.listWorktrees(projectId));
 const { worktreesHandlers } = await import("../host/ipc/modules/worktrees.ts");
 const { killScriptsForWorktree, startScript } =
   await import("../host/lib/scripts/index.ts");

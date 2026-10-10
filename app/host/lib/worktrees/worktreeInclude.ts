@@ -16,7 +16,7 @@ import {
   listIgnoredPaths,
   listUntrackedMatchingExcludeFile,
 } from "../git/branches";
-import { listCarryOverCheckouts } from "./carryOver";
+import type { CarryOverCheckout } from "./carryOver";
 
 const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 
@@ -51,10 +51,8 @@ async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
 // pattern that only exists on a feature branch's worktree still shows
 // up as covered here.
 export async function readWorktreeIncludeStatus(
-  projectId: string,
-  projectPath: string,
+  checkouts: readonly CarryOverCheckout[],
 ): Promise<WorktreeIncludeStatus> {
-  const checkouts = await listCarryOverCheckouts(projectId, projectPath);
   const perCheckout = await Promise.all(
     checkouts.map((checkout) => readOneStatus(checkout.path)),
   );

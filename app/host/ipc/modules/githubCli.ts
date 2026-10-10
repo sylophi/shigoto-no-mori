@@ -19,15 +19,13 @@ import {
   listPullRequestCandidates,
   resolvePullRequestCheckout,
 } from "@host/lib/githubCli/pullRequestCheckout";
-import { mergePullRequest } from "@host/lib/engineCalls";
+import type * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
-import { findProjectOrThrow } from "@host/lib/projects";
-import { fromPromise } from "@host/lib/util/fromPromise";
+import { findProject } from "@host/lib/projects";
 
 const projectPath = (projectId: string) =>
-  fromPromise(() => findProjectOrThrow(projectId)).pipe(
-    Effect.map((project) => project.path),
-  );
+  Effect.map(findProject(projectId), (project) => project.path);
 
 export const githubCliHandlers = {
   readiness: () => Effect.flatMap(GithubCli, (cli) => cli.readiness),
@@ -70,17 +68,20 @@ export const githubCliHandlers = {
       Effect.flatMap(GithubCli, (cli) => cli.description(cwd)),
     ),
 
-  mergePullRequest: async ({ projectId, number, method, stack }) => {
-    const project = await findProjectOrThrow(projectId);
-    // The CLI runs the gh merge and persists lastMergeMethod itself.
-    const result = await mergePullRequest(project, number, method, { stack });
-    // A landed merge changes upstream refs and the sidebar PR cache:
-    // evict so the next read sees the merged state. An armed or queued
-    // PR is still open, and the slim map doesn't carry either flag, so
-    // the (slow, project-wide) sweep isn't repeated for it.
-    if (result.outcome === "merged") evictProjectPullRequests(project.path);
-    return result;
-  },
+  mergePullRequest: ({ projectId, number, method, stack }) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      // The engine runs the gh merge and persists lastMergeMethod itself.
+      const result = yield* Ops.mergePullRequest(project, number, method, {
+        stack,
+      });
+      // A landed merge changes upstream refs and the sidebar PR cache:
+      // evict so the next read sees the merged state. An armed or queued
+      // PR is still open, and the slim map doesn't carry either flag, so
+      // the (slow, project-wide) sweep isn't repeated for it.
+      if (result.outcome === "merged") evictProjectPullRequests(project.path);
+      return result;
+    }),
 
   pullRequestDiff: ({ projectId, number }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
@@ -99,5 +100,5 @@ export const githubCliHandlers = {
 } satisfies Handlers<
   typeof githubCliContract,
   unknown,
-  GithubCli | ChildProcessSpawner.ChildProcessSpawner
+  GithubCli | ChildProcessSpawner.ChildProcessSpawner | Engine.Services
 >;

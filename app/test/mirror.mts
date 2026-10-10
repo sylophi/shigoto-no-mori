@@ -121,6 +121,7 @@ import { createMirrorGateway } from "../host/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
+import { sandboxEngine } from "./lib/sandboxEngine.mts";
 import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
 import { delay, processAlive } from "./lib/checkKit.mts";
 
@@ -132,6 +133,17 @@ const fileSyncDir = join(repoRoot, "file-sync");
 // the fixture identity set for the commits below (cliSandbox). The
 // document-run seam there is what the registered projects need (sm
 // projects add).
+
+// The sandbox's engine, which the follower and the bookkeeping read
+// the projects through.
+const sandboxHandle = async () => {
+  const engine = sandboxEngine();
+  if (engine === undefined) throw new Error("No sandbox engine is up.");
+  return engine;
+};
+const settleBookkeeping = async () =>
+  settleMirrorBookkeeping(await sandboxHandle());
+
 const fixture = cliSandbox("sm-mirror-check-", {
   // The fsevents binding's deprecation warning would otherwise land in
   // the build output on macOS 13+ (see scripts/build-cli.mts).
@@ -565,6 +577,7 @@ it("the create's ignores hold: /dist stays on A while its sibling crosses", asyn
 it("git: a fresh session on equal tips reports synced", async () => {
   // ---- The git follower, against the same wire ----
   follower = createGitFollower({
+    engine: sandboxHandle,
     sessions: () => {
       const sessions = daemon.sessions();
       if (filesStatus === null) return sessions;
@@ -1356,13 +1369,13 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     const release = holdRootChecks(["orig-halted"]);
     const sweptTo = async (
       expected: string[],
-      settle: () => Promise<unknown> = settleMirrorBookkeeping,
+      settle: () => Promise<unknown> = settleBookkeeping,
     ) => {
       await settle();
       assert.deepEqual([...live.keys()].toSorted(), expected);
     };
     await sweptTo(["halted", "new", "old", "went"], () =>
-      whileRecreating("old", settleMirrorBookkeeping),
+      whileRecreating("old", settleBookkeeping),
     );
     release();
     await sweptTo(["halted", "new", "old", "went"]);
@@ -1386,7 +1399,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       }),
     );
     await sweptTo(["new"], () =>
-      Promise.all([settleMirrorBookkeeping(), settleMirrorBookkeeping()]),
+      Promise.all([settleBookkeeping(), settleBookkeeping()]),
     );
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
     assert.deepEqual(
@@ -1403,7 +1416,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     await stopMirrorsForWorktree("orig-old");
     assert.ok(live.has("new"));
     status = "running";
-    await settleMirrorBookkeeping();
+    await settleBookkeeping();
     assert.ok(!live.has("new"));
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 

@@ -18,16 +18,18 @@
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
-import { rekeyWorktree } from "@host/lib/engineCalls";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Ops from "./engineOps";
 import { run } from "./git/core";
-import { listWorktreeIdentities } from "./git/worktrees";
-import { findProjectInsideDataDir, listProjects } from "./projects";
+import { findProjectInsideDataDir, freshProjects } from "./projects";
 import {
   clearDeleteInflight,
   getBusyOperations,
   markDeleteInflight,
 } from "./scripts";
 import { tempPathFor, unlinkIfExists } from "./util/atomicJson";
+import { fromPromise } from "./util/fromPromise";
 import {
   canonicalDataDirName,
   dataDir,
@@ -37,7 +39,7 @@ import {
   isENOENT,
   legacyDataDirPointerPath,
 } from "./util/paths";
-// newId is filled in by the re-key, which the CLI answers with.
+// newId is filled in by the re-key, which the engine answers with.
 type MovedWorktree = {
   oldId: string;
   oldPath: string;
@@ -45,70 +47,89 @@ type MovedWorktree = {
   newId?: string;
 };
 
-export async function moveDataDir(
+// A move refused before anything moved.
+class DataDirMoveError extends Schema.TaggedError<DataDirMoveError>()(
+  "DataDirMoveError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
   parentDir: string | undefined,
-  // Electron-side pre-rename hook: the caller closes its fs watchers on
-  // the data dir here -- they're moot anyway, the app relaunches after
-  // the move.
   opts: {
-    beforeMove?: () => void | Promise<void>;
+    // The caller closes its fs watchers on the data dir here, before the
+    // rename -- they're moot anyway, the app relaunches after the move.
+    beforeMove: Effect.Effect<void, E, R>;
     // Every script's kill chain, waited for (host/lib/scripts).
-    killAllScripts: () => Promise<void>;
+    killAllScripts: Effect.Effect<void, never, R>;
   },
-): Promise<void> {
+) {
   const oldDir = dataDir();
   // Resolved first: they throw when this session's data dir came from
   // an override, and nothing may be marked or reaped before that.
-  const pointerFile = dataDirPointerPath();
-  const legacyPointerFile = legacyDataDirPointerPath();
+  const [pointerFile, legacyPointerFile] = yield* Effect.try({
+    try: () => [dataDirPointerPath(), legacyDataDirPointerPath()] as const,
+    catch: (error) =>
+      new DataDirMoveError({
+        reason: error instanceof Error ? error.message : String(error),
+      }),
+  });
   const parent =
     parentDir === undefined ? dirname(defaultDataDir()) : expandHome(parentDir);
   // Never resolve against the process cwd: a relative parent would land
   // the data dir somewhere the user never saw.
   if (!isAbsolute(parent)) {
-    throw new Error(
-      `The new parent folder must be an absolute path: ${parentDir}`,
-    );
+    return yield* new DataDirMoveError({
+      reason: `The new parent folder must be an absolute path: ${parentDir}`,
+    });
   }
   const newDir = join(parent, canonicalDataDirName());
   const toDefault = newDir === defaultDataDir();
 
   if (isSameOrInside(newDir, oldDir)) {
-    throw new Error(
-      newDir === oldDir
-        ? `The data folder is already at ${oldDir}.`
-        : `Can't move the data folder inside itself (${oldDir}).`,
-    );
+    return yield* new DataDirMoveError({
+      reason:
+        newDir === oldDir
+          ? `The data folder is already at ${oldDir}.`
+          : `Can't move the data folder inside itself (${oldDir}).`,
+    });
   }
   // Same trap as nukeEverything: a project repo registered from inside
   // the data dir would be dragged along, breaking its recorded path.
-  const projects = await listProjects();
+  const projects = yield* freshProjects;
   const trapped = findProjectInsideDataDir(projects);
   if (trapped) {
-    throw new Error(
-      `Refusing to move: project "${trapped.name}" lives inside ` +
+    return yield* new DataDirMoveError({
+      reason:
+        `Refusing to move: project "${trapped.name}" lives inside ` +
         `${oldDir} and would be moved with it. Move the repository ` +
         "out first.",
-    );
+    });
   }
   // Running scripts are reaped below (same semantics as nuke), but
   // in-flight destructive lifecycle work (worktree/project deletes,
-  // delegated CLI children) is mid-write inside the data dir and can't be
+  // delegated engine runs) is mid-write inside the data dir and can't be
   // safely killed or moved under. Refuse instead.
   if (getBusyOperations().inflightDeletes > 0) {
-    throw new Error(
-      "Another operation is still running (worktree delete or CLI " +
+    return yield* new DataDirMoveError({
+      reason:
+        "Another operation is still running (worktree delete or CLI " +
         "command). Try again when it finishes.",
-    );
+    });
   }
-  await mkdir(parent, { recursive: true });
-  // Clear an existing empty placeholder before the rename. A non-empty
-  // directory is refused, never merged into.
-  await rmdir(newDir).catch((err) => {
-    if (!isENOENT(err)) {
-      throw new Error(`${newDir} already exists and is not empty.`);
-    }
+  yield* fromPromise(async () => {
+    await mkdir(parent, { recursive: true });
+    // Clear an existing empty placeholder before the rename. A non-empty
+    // directory is refused, never merged into.
+    await rmdir(newDir).catch((err) => {
+      if (!isENOENT(err)) {
+        throw new Error(`${newDir} already exists and is not empty.`);
+      }
+    });
   });
 
   // Managed worktrees whose checkout sits under the data dir: their ids get
@@ -117,26 +138,32 @@ export async function moveDataDir(
   // nuke flow), their shigomori state re-keyed, and their git metadata
   // repaired afterwards. Collected before anything moves, because
   // listing needs the old paths.
-  const repairTargets = await Promise.all(
-    projects.map(async (project) => {
-      try {
-        const identities = await listWorktreeIdentities(project.id);
-        const moved: MovedWorktree[] = identities
-          .filter((i) => !i.isPrimary && isSameOrInside(i.path, oldDir))
-          .map((i) => ({
-            oldId: i.id,
-            oldPath: i.path,
-            newPath: join(
-              newDir,
-              i.path.slice(oldDir.length).replace(/^[/\\]/, ""),
+  const repairTargets = yield* Effect.forEach(
+    projects,
+    (project) =>
+      Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
+        Effect.map((identities) => ({
+          project,
+          moved: identities
+            .filter((i) => !i.isPrimary && isSameOrInside(i.path, oldDir))
+            .map(
+              (i): MovedWorktree => ({
+                oldId: i.id,
+                oldPath: i.path,
+                newPath: join(
+                  newDir,
+                  i.path.slice(oldDir.length).replace(/^[/\\]/, ""),
+                ),
+              }),
             ),
-          }));
-        return { project, moved };
-      } catch {
+        })),
         // Repo moved or deleted, so nothing to repair for this one.
-        return { project, moved: [] as MovedWorktree[] };
-      }
-    }),
+        Effect.orElseSucceed(() => ({
+          project,
+          moved: [] as MovedWorktree[],
+        })),
+      ),
+    { concurrency: "unbounded" },
   );
 
   const marked = repairTargets.flatMap(({ moved }) =>
@@ -147,37 +174,41 @@ export async function moveDataDir(
   let pointerStaged = false;
   let rekeyed = false;
   let renamed = false;
-  try {
+  yield* Effect.gen(function* () {
     // Scripts running inside the worktrees we're about to move would
     // keep cwds pointing at the old location. Reap them first.
-    await opts.killAllScripts();
+    yield* opts.killAllScripts;
     // Stage the pointer BEFORE moving anything: a move that succeeds
     // but leaves the pointer unwritable would strand the data where no
     // boot can find it. Staged last of the preconditions so a failure
     // above can't orphan the temp file. The default location needs no
     // pointer, so none is staged for it.
     if (!toDefault) {
-      await mkdir(dirname(pointerFile), { recursive: true });
-      await writeFile(pointerTmp, `${newDir}\n`, "utf8");
+      yield* fromPromise(async () => {
+        await mkdir(dirname(pointerFile), { recursive: true });
+        await writeFile(pointerTmp, `${newDir}\n`, "utf8");
+      });
       pointerStaged = true;
     }
 
-    // Re-key the marks and per-worktree data while the CLI still reads
-    // the old location (the pointer file moves below). Undone below if
-    // the rename never happens.
-    await rekeyWorktrees(repairTargets, false);
+    // Re-key the marks and per-worktree data while the engine still
+    // reads the old location (the pointer file moves below). Undone
+    // below if the rename never happens.
+    yield* rekeyWorktrees(repairTargets, false);
     rekeyed = true;
 
-    await opts.beforeMove?.();
+    yield* opts.beforeMove;
 
     // rename() can't cross volumes. Fall back to copy, commit the
     // pointer, then remove the old tree. Symlinks (carry-over entries)
     // are copied as links, not followed.
-    let copied = false;
-    try {
-      await rename(oldDir, newDir);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EXDEV") throw err;
+    const copied = yield* fromPromise(async () => {
+      try {
+        await rename(oldDir, newDir);
+        return false;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EXDEV") throw err;
+      }
       try {
         await cp(oldDir, newDir, { recursive: true, verbatimSymlinks: true });
       } catch (cpErr) {
@@ -188,70 +219,94 @@ export async function moveDataDir(
         );
         throw cpErr;
       }
-      copied = true;
-    }
+      return true;
+    });
     renamed = true;
 
-    // Point both readers (app boot, CLI) at the new location. Atomic
-    // rename so no reader can ever see a half-written path. Committed
-    // before the old copy is deleted: if that cleanup fails midway, the
-    // pointer already names the complete new copy. Leftovers beat a
-    // boot against a half-deleted data dir. Moving to the default
-    // removes the pointer instead, and the pre-2.0 pointer goes either
-    // way: exactly one file may ever redirect a boot.
-    if (toDefault) {
-      await unlinkIfExists(pointerFile);
-    } else {
-      await rename(pointerTmp, pointerFile);
-    }
-    await unlinkIfExists(legacyPointerFile);
-    if (copied) {
-      await rm(oldDir, { recursive: true, force: true }).catch(() => undefined);
-    }
-
-    // Re-link git's worktree metadata (each worktree's .git file and
-    // the repo's .git/worktrees/<name>/gitdir both record absolute
-    // paths). Repair is idempotent and re-runnable from the repo by
-    // hand, so a failure here shouldn't undo an otherwise complete
-    // move.
-    await Promise.all(
-      repairTargets
-        .filter(({ moved }) => moved.length > 0)
-        .map(({ project, moved }) =>
-          run(project.path, [
-            "worktree",
-            "repair",
-            ...moved.map((m) => m.newPath),
-          ]).catch(() => undefined),
-        ),
-    );
-  } catch (err) {
-    if (pointerStaged) await unlinkIfExists(pointerTmp).catch(() => undefined);
-    if (rekeyed && !renamed) {
-      await rekeyWorktrees(repairTargets, true).catch(() => undefined);
-    }
-    throw err;
-  } finally {
-    for (const id of marked) clearDeleteInflight(id);
-  }
-}
-
-// Carries what the CLI keys by each moved worktree's id from its old id
-// to the one its new path hashes to (or back, on `reverse`). The
-// relocate flow's `sm worktrees move` does the same for one worktree.
-async function rekeyWorktrees(
-  targets: { project: { id: string }; moved: MovedWorktree[] }[],
-  reverse: boolean,
-): Promise<void> {
-  for (const { project, moved } of targets) {
-    for (const m of moved) {
-      if (!reverse) {
-        // oxlint-disable-next-line no-await-in-loop -- each re-key is a locked read-modify-write of the same files
-        m.newId = await rekeyWorktree(project.id, m.oldId, m.newPath);
-      } else if (m.newId !== undefined) {
-        // oxlint-disable-next-line no-await-in-loop -- see above
-        await rekeyWorktree(project.id, m.newId, m.oldPath);
+    yield* fromPromise(async () => {
+      // Point both readers (app boot, CLI) at the new location. Atomic
+      // rename so no reader can ever see a half-written path. Committed
+      // before the old copy is deleted: if that cleanup fails midway,
+      // the pointer already names the complete new copy. Leftovers beat
+      // a boot against a half-deleted data dir. Moving to the default
+      // removes the pointer instead, and the pre-2.0 pointer goes either
+      // way: exactly one file may ever redirect a boot.
+      if (toDefault) {
+        await unlinkIfExists(pointerFile);
+      } else {
+        await rename(pointerTmp, pointerFile);
       }
-    }
-  }
-}
+      await unlinkIfExists(legacyPointerFile);
+      if (copied) {
+        await rm(oldDir, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+      }
+
+      // Re-link git's worktree metadata (each worktree's .git file and
+      // the repo's .git/worktrees/<name>/gitdir both record absolute
+      // paths). Repair is idempotent and re-runnable from the repo by
+      // hand, so a failure here shouldn't undo an otherwise complete
+      // move.
+      await Promise.all(
+        repairTargets
+          .filter(({ moved }) => moved.length > 0)
+          .map(({ project, moved }) =>
+            run(project.path, [
+              "worktree",
+              "repair",
+              ...moved.map((m) => m.newPath),
+            ]).catch(() => undefined),
+          ),
+      );
+    });
+  }).pipe(
+    Effect.onError(() =>
+      Effect.gen(function* () {
+        if (pointerStaged) {
+          yield* Effect.promise(() =>
+            unlinkIfExists(pointerTmp).catch(() => undefined),
+          );
+        }
+        if (rekeyed && !renamed) {
+          yield* Effect.ignore(rekeyWorktrees(repairTargets, true));
+        }
+      }),
+    ),
+    Effect.ensuring(
+      Effect.sync(() => {
+        for (const id of marked) clearDeleteInflight(id);
+      }),
+    ),
+  );
+});
+
+// Carries what the engine keys by each moved worktree's id from its old
+// id to the one its new path hashes to (or back, on `reverse`). The
+// relocate flow's `sm worktrees move` does the same for one worktree.
+// Each re-key is a locked read-modify-write of the same files, so they
+// run one at a time.
+const rekeyWorktrees = (
+  targets: readonly { project: { id: string }; moved: MovedWorktree[] }[],
+  reverse: boolean,
+) =>
+  Effect.forEach(
+    targets.flatMap(({ project, moved }) =>
+      moved.map((m) => ({ projectId: project.id, m })),
+    ),
+    ({ projectId, m }) => {
+      if (!reverse) {
+        return Ops.rekeyWorktree(projectId, m.oldId, m.newPath).pipe(
+          Effect.tap((newId) =>
+            Effect.sync(() => {
+              m.newId = newId;
+            }),
+          ),
+        );
+      }
+      return m.newId === undefined
+        ? Effect.void
+        : Ops.rekeyWorktree(projectId, m.newId, m.oldPath);
+    },
+    { discard: true },
+  );

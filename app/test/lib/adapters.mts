@@ -87,11 +87,7 @@ function builtMacfs(): string {
 // is built (host/lib/engine.ts). Set here, so a proof never writes to
 // the dev app's, or to one the shell exported.
 process.env.SHIGOMORI_DATA_DIR = engineDataDir;
-const engine = Engine.adapter.pipe(
-  Layer.provideMerge(
-    Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" }),
-  ),
-);
+const engine = Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" });
 
 // No file-sync engine: a proof that runs one brings its own
 // (mirror.mts). The services the host's handlers answer on

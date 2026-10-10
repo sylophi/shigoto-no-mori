@@ -25,6 +25,7 @@ import {
 } from "@host/lib/projects";
 import {
   listCarryOverCandidates,
+  listCarryOverCheckouts,
   statCarryOverPaths,
 } from "@host/lib/worktrees/carryOver";
 import { readWorktreeIncludeStatus } from "@host/lib/worktrees/worktreeInclude";
@@ -121,6 +122,13 @@ const register = Effect.fn("projects.register")(function* (
   if (terrier) yield* Effect.flatMap(Terrier.Terrier, (it) => it.add(path));
   return yield* addProject(path);
 });
+
+// Every checkout of the project, the primary first, for what is carried
+// over into a new worktree.
+const checkoutsOf = (projectId: string) =>
+  Effect.flatMap(findProject(projectId), (project) =>
+    listCarryOverCheckouts(project.id, project.path),
+  );
 
 export const projectsViews: ViewHandlers<
   typeof projectsContract,
@@ -253,22 +261,20 @@ export const projectsHandlers = {
     Effect.map(Ops.worktreeDestination(projectId), ({ name }) => name),
 
   worktreeIncludeStatus: ({ projectId }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      fromPromise(() => readWorktreeIncludeStatus(project.id, project.path)),
+    Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
+      fromPromise(() => readWorktreeIncludeStatus(checkouts)),
     ),
 
   carryOverListing: ({ projectId, relative, ruleIgnored }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
+    Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
       fromPromise(() =>
-        listCarryOverCandidates(project.id, project.path, relative, {
-          ruleIgnored,
-        }),
+        listCarryOverCandidates(checkouts, relative, { ruleIgnored }),
       ),
     ),
 
   carryOverStats: ({ projectId, paths }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      fromPromise(() => statCarryOverPaths(project.id, project.path, paths)),
+    Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
+      fromPromise(() => statCarryOverPaths(checkouts, paths)),
     ),
 
   // The engine resolves icons through its shared cache (Icons.ts).

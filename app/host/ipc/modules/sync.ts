@@ -9,18 +9,21 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
-import { type Project } from "@shigomori/contracts/schemas";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {
   cachedIgnoredPaths,
   listWorktreeFolder,
 } from "@host/lib/worktrees/carryOver";
 import { hasCommit } from "@host/lib/git/refs";
+import * as Effect from "effect/Effect";
+import * as Engine from "@host/lib/engine";
 import {
-  findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
-  findWorktreePathOrThrow,
+  findProject,
+  findProjectAndWorktree,
+  findWorktreePath,
 } from "@host/lib/projects";
+import { fromPromise } from "@host/lib/util/fromPromise";
+import { withParentSpan } from "@host/lib/util/trace";
 import { cancelMove } from "@host/lib/sync/moves";
 import {
   attachLinkFarEnd,
@@ -34,56 +37,58 @@ import { pullWorktree, sendWorktree } from "@host/lib/sync/move";
 import { teardownSource } from "@host/lib/sync/receipts";
 
 export const syncHandlers = {
-  hasCommits: async ({ projectId, commits }) => {
-    const project = await findProjectOrThrow(projectId);
-    const present: string[] = [];
-    for (const commit of commits) {
-      // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
-      if (await hasCommit(project.path, commit)) present.push(commit);
-    }
-    return { present };
-  },
+  hasCommits: ({ projectId, commits }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(async () => {
+        const present: string[] = [];
+        for (const commit of commits) {
+          // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
+          if (await hasCommit(project.path, commit)) present.push(commit);
+        }
+        return { present };
+      }),
+    ),
 
-  worktreeFolder: async ({ relative, ruleIgnored, ...input }) =>
-    listWorktreeFolder(
-      await findWorktreePathOrThrow(input),
-      relative,
-      ruleIgnored,
+  worktreeFolder: ({ relative, ruleIgnored, ...input }) =>
+    Effect.flatMap(findWorktreePath(input), (path) =>
+      fromPromise(() => listWorktreeFolder(path, relative, ruleIgnored)),
     ),
 
   // The ignored files a capture leaves behind (see the contract note):
   // listed against the worktree, not the project, so a peer's
   // transplant dialog can name what a teardown would take with it.
-  ignoredPaths: async (input) => {
-    const path = await findWorktreePathOrThrow(input);
-    const [paths, patterns] = await Promise.all([
-      cachedIgnoredPaths(path),
-      listIgnoreRules(path),
-    ]);
-    return {
-      paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
-      total: paths.length,
-      patterns,
-    };
-  },
+  ignoredPaths: (input) =>
+    Effect.flatMap(findWorktreePath(input), (path) =>
+      fromPromise(async () => {
+        const [paths, patterns] = await Promise.all([
+          cachedIgnoredPaths(path),
+          listIgnoreRules(path),
+        ]);
+        return {
+          paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
+          total: paths.length,
+          patterns,
+        };
+      }),
+    ),
 
   // A pull's link (and the git follower's fetch): this host is the
   // source, answering until the peer is done. The open returns once
   // the link is attached, and the serving runs on without it.
-  openSource: async ({ projectId, worktreeId, channelId }, ctx) => {
-    const link = attachLinkFarEnd(ctx, channelId);
-    let project: Project;
-    try {
-      ({ project } = await findProjectAndWorktreeOrThrow(
+  openSource: ({ projectId, worktreeId, channelId }, ctx) =>
+    Effect.gen(function* () {
+      const link = attachLinkFarEnd(ctx, channelId);
+      const { project } = yield* findProjectAndWorktree(
         projectId,
         worktreeId,
-      ));
-    } catch (error) {
-      link.reset();
-      throw error;
-    }
-    void serveSource(link, project, worktreeId).catch(() => {});
-  },
+      ).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
+      const engine = yield* Engine.handle;
+      // Its answers continue the trace of the peer's call.
+      const span = yield* Effect.option(Effect.currentSpan);
+      void withParentSpan(span, () =>
+        serveSource(link, project, worktreeId, engine),
+      ).catch(() => {});
+    }),
 
   // A send's landing, run here for the sender (host/lib/sync/landing.ts).
   receiveWorktree: landForSender,
@@ -91,22 +96,32 @@ export const syncHandlers = {
   // The cancel, of a move this device runs (a pull, a send, a mirror
   // start) or lands for the calling peer. Keyed like the progress the
   // caller is watching. False once there is nothing left to cancel.
-  cancelMove: async ({ sourceWorktreeId }, ctx) => ({
+  cancelMove: ({ sourceWorktreeId }, ctx) => ({
     cancelled: cancelMove(ctx, sourceWorktreeId),
   }),
 
   // The git follower's push: the peer opened the link, and this host
   // asks it for the one bundle and unpacks it under refs/shigomori/.
-  receiveBundle: async ({ projectId, refs, haves, channelId }, ctx) => {
-    const link = attachLinkFarEnd(ctx, channelId);
-    return withLinkSource(link, async (source) =>
-      source.fetch({ refs, haves, into: await findProjectOrThrow(projectId) }),
-    );
-  },
+  receiveBundle: ({ projectId, refs, haves, channelId }, ctx) =>
+    Effect.gen(function* () {
+      const link = attachLinkFarEnd(ctx, channelId);
+      const into = yield* findProject(projectId).pipe(
+        Effect.tapError(() => Effect.sync(() => link.reset())),
+      );
+      const engine = yield* Engine.handle;
+      return yield* fromPromise(() =>
+        withLinkSource(
+          link,
+          (source) => source.fetch({ refs, haves, into }),
+          engine,
+        ),
+      );
+    }),
 
   pullWorktree,
 
-  sendWorktree: async (input, ctx) => (await sendWorktree(input, ctx)).result,
+  sendWorktree: (input, ctx) =>
+    Effect.map(sendWorktree(input, ctx), ({ result }) => result),
 
   // The source teardown, after either move (host/lib/sync/receipts.ts).
   // A send's source is this device's own, removed by the ordinary delete.

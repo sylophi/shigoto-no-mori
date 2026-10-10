@@ -7,6 +7,7 @@
 // (followPlan.ts), but the transfers name each side's own branch: a
 // pull asks for the peer's own head, a push lands this side's.
 import type { Project } from "@shigomori/contracts/schemas";
+import type * as Engine from "@host/lib/engine";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
@@ -56,6 +57,8 @@ export interface Round {
   readonly peerMirror: PeerMirrorApi;
   readonly local: GitState;
   readonly peer: GitState;
+  // The engine the bundles are made and unpacked on.
+  readonly engine: Engine.Handle;
 }
 
 // The haves for a pull whose tip is not here (see pull).
@@ -80,7 +83,7 @@ async function pullHaves(
 // for. `agreedTip` is the tip both sides last shared, the best have
 // after this side's own.
 export async function pull(
-  { project, localWorktree, session, peerSync, local, peer }: Round,
+  { project, localWorktree, session, peerSync, local, peer, engine }: Round,
   peerHead: GitHead,
   agreedTip: string | null,
 ): Promise<Outcome> {
@@ -113,6 +116,7 @@ export async function pull(
       peerSync,
       { projectId: session.projectId, worktreeId: session.worktreeId },
       (source) => source.fetch({ refs: wantRefs, haves, into: project }),
+      engine,
     );
   }
   const result = await applyGitState(project, localWorktree, {
@@ -130,7 +134,16 @@ export async function pull(
 // and the state applied there carries `headThere`, this side's head
 // in the peer's names.
 export async function push(
-  { project, localWorktree, session, peerSync, peerMirror, local, peer }: Round,
+  {
+    project,
+    localWorktree,
+    session,
+    peerSync,
+    peerMirror,
+    local,
+    peer,
+    engine,
+  }: Round,
   headThere: GitHead,
 ): Promise<Outcome> {
   const probe = [
@@ -156,13 +169,18 @@ export async function push(
     // The peer asks this side for the bundle over a link this side
     // opens (sync:receiveBundle, the peer's grant, the one the whole
     // session rides).
-    await offerSource(peerSync, project, localWorktree.id, (channelId) =>
-      peerSync.receiveBundle({
-        projectId: session.projectId,
-        refs: wantRefs,
-        haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
-        channelId,
-      }),
+    await offerSource(
+      peerSync,
+      project,
+      localWorktree.id,
+      (channelId) =>
+        peerSync.receiveBundle({
+          projectId: session.projectId,
+          refs: wantRefs,
+          haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
+          channelId,
+        }),
+      engine,
     );
   }
   const result = await peerMirror.applyGitState({

@@ -1,13 +1,13 @@
 import type { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import type { Handlers } from "@shigomori/contracts/types";
-import { readShigomoriConfig } from "@host/lib/config/project";
-import { writeProjectConfig } from "@host/lib/engineCalls";
+import type * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 
-export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
+export const shigomoriHandlers = {
   // The project's settings as stored. An unknown project id answers
   // with the entity-gone error.
-  read: ({ projectId }) => readShigomoriConfig(projectId),
+  read: ({ projectId }) => Ops.readProjectConfig(projectId),
   // The engine's write, which also handles the in-project exclude side
   // effect and refuses an unknown project the same way.
-  write: ({ projectId, config }) => writeProjectConfig(projectId, config),
-};
+  write: ({ projectId, config }) => Ops.writeProjectConfig(projectId, config),
+} satisfies Handlers<typeof shigomoriContract, unknown, Engine.Services>;

@@ -14,7 +14,6 @@ import {
 } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
-import { face } from "@host/lib/engineCalls";
 import * as Ops from "@host/lib/engineOps";
 import { run, runLenient } from "./core";
 import { upstreamName } from "./refs";
@@ -44,17 +43,6 @@ export const findWorktreeIdentity = Effect.fnUntraced(function* (
   if (!identity) return yield* new UnknownWorktreeError({ worktreeId });
   return identity;
 });
-
-// The Promise forms, for the host code not converted yet: removed with
-// the narrowed engine face (engineCalls.ts) in step 7's B4c PR.
-
-// A project's checkouts without git probes. `primaryRef` also resolves
-// the project's primary ref onto each.
-export const listWorktreeIdentities = face(
-  (projectId: string, opts: { primaryRef?: boolean } = {}) =>
-    Ops.listWorktreeIdentities({ projectId }, opts),
-);
-export const findWorktreeIdentityOrThrow = face(findWorktreeIdentity);
 
 // The engine's id rule (worktreeIdFromPath in worktreeLayout.ts), for the few
 // places that key something by a checkout path rather than by a listed
@@ -266,6 +254,24 @@ export async function readBranchHistory(
         : [];
     }),
   };
+}
+
+// Every checkout of the repo and the branch it has out (null when
+// detached), as git lists them.
+export async function listCheckouts(
+  repoPath: string,
+): Promise<{ path: string; branch: string | null }[]> {
+  const stdout = await run(repoPath, ["worktree", "list", "--porcelain", "-z"]);
+  const checkouts: { path: string; branch: string | null }[] = [];
+  for (const field of stdout.split("\0")) {
+    if (field.startsWith("worktree ")) {
+      checkouts.push({ path: field.slice("worktree ".length), branch: null });
+    } else if (field.startsWith("branch refs/heads/")) {
+      const open = checkouts.at(-1);
+      if (open) open.branch = field.slice("branch refs/heads/".length);
+    }
+  }
+  return checkouts;
 }
 
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is

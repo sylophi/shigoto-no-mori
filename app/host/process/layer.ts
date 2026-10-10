@@ -6,13 +6,14 @@
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { log, logFailure } from "@shared/log";
+import { log } from "@shared/log";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { readDeviceId } from "@host/lib/config/deviceId";
-import { refreshProjects } from "@host/lib/projects";
-import { loadSharedSettings } from "@host/lib/sharedSettings/store";
+import { setDeviceId } from "@host/lib/config/deviceId";
+import * as Ops from "@host/lib/engineOps";
+import { refresh } from "@host/lib/projects";
+import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -83,16 +84,10 @@ const scripts = (hurried: () => boolean) =>
 // The sweeps and watchers read the project list synchronously, from the
 // snapshot host/lib/projects keeps of the CLI's list.
 const firstProjectList = Layer.effectDiscard(
-  Effect.promise(() =>
-    logFailure("[projects] first list failed", refreshProjects),
-  ),
-);
-
-// The handlers read this device's copy of the shared settings
-// synchronously.
-const firstSharedSettings = Layer.effectDiscard(
-  Effect.promise(() =>
-    logFailure("[sharedSettings] first read failed", loadSharedSettings),
+  refresh.pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => log.warn("[projects] first list failed:", error)),
+    ),
   ),
 );
 
@@ -115,7 +110,7 @@ function onExternalStateChange() {
   for (const projectId of mirrored) announceProjectChanged(projectId);
   // The CLI may have added or removed a project: re-read the list,
   // then follow it with the git-directory watches.
-  void refreshProjects()
+  void Captures.onEngine(refresh)
     .catch(() => undefined)
     .then(Captures.reconcileGitWatchers);
   // A worktree or project gone takes its terminals with it.
@@ -237,10 +232,16 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     Layer.provideMerge(EngineStoreChanges.layer),
     // This device's id, which the wires above name themselves by, read
     // from the store once.
-    Layer.provideMerge(Layer.effectDiscard(Effect.promise(readDeviceId))),
+    Layer.provideMerge(
+      Layer.effectDiscard(
+        Effect.flatMap(Ops.deviceId, (id) =>
+          Effect.sync(() => setDeviceId(id)),
+        ),
+      ),
+    ),
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
-    Layer.provideMerge(Engine.adapter),
+    Layer.provideMerge(Captures.engine.layer),
     Layer.provideMerge(Engine.layer(engine)),
     // The Promise face of the platform's child processes for the code
     // that is not Effect yet. Last to go, so every finalizer above can
@@ -303,6 +304,8 @@ export const layer = (options: {
       starts("the background fetch", () =>
         startBackgroundFetch({
           refreshPullRequests: Captures.refreshPullRequests,
+          listIdentities: (projectId) =>
+            Captures.onEngine(Ops.listWorktreeIdentities({ projectId })),
         }),
       ),
     ),
@@ -313,6 +316,10 @@ export const layer = (options: {
       starts("the CLI link repair", () => void repairCliLinks()),
     ),
     Layer.provideMerge(firstProjectList),
-    Layer.provideMerge(firstSharedSettings),
+    // The handlers read this device's copy of the shared settings
+    // synchronously.
+    Layer.provideMerge(
+      logged("the shared settings", SharedSettingsStore.layer),
+    ),
     Layer.provideMerge(scriptsAndFoundation(options)),
   );

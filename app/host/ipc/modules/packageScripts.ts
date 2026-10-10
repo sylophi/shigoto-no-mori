@@ -1,6 +1,6 @@
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import type { Handlers } from "@shigomori/contracts/types";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject } from "@host/lib/projects";
 import { startScript } from "@host/lib/scripts";
 import {
   readLaunchRow,
@@ -10,12 +10,11 @@ import {
   writeScriptOrder,
   writeScriptSort,
 } from "@host/lib/scripts/packageScriptStats";
-import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
+import { findWorktreeIdentity } from "@host/lib/git/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { packageScriptLaunch, packageScripts } from "@host/lib/engineCalls";
+import * as Ops from "@host/lib/engineOps";
 import { scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -32,53 +31,56 @@ export const packageScriptsHandlers = {
   // The worktree's scripts in manifest order (an object
   // keeps that order), the manager the lockfile selects, and each
   // script's use stats. Null when there is no readable package.json.
-  list: async ({ projectId, worktreeId }) => {
-    const doc = await packageScripts(projectId, worktreeId);
-    if (doc === null) return null;
-    return {
-      scripts: Object.fromEntries(
-        doc.scripts.map((script) => [script.name, script.command]),
-      ),
-      packageManager: doc.packageManager,
-      usage: doc.usage,
-      launchRow: await readLaunchRow(projectId),
-    };
-  },
+  list: ({ projectId, worktreeId }) =>
+    Effect.gen(function* () {
+      const doc = yield* Ops.packageScripts(projectId, worktreeId);
+      if (doc === null) return null;
+      return {
+        scripts: Object.fromEntries(
+          doc.scripts.map((script) => [script.name, script.command]),
+        ),
+        packageManager: doc.packageManager,
+        usage: doc.usage,
+        launchRow: yield* readLaunchRow(projectId),
+      };
+    }),
 
-  getSort: async ({ projectId, knowsManual }) => {
-    const project = await findProjectOrThrow(projectId);
-    const mode = await readScriptSort(project.id);
-    return mode === "manual" && !knowsManual ? "manifest" : mode;
-  },
+  getSort: ({ projectId, knowsManual }) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const mode = yield* readScriptSort(project.id);
+      return mode === "manual" && !knowsManual ? "manifest" : mode;
+    }),
 
-  setSort: async ({ projectId, mode }) => {
-    const project = await findProjectOrThrow(projectId);
-    await writeScriptSort(project.id, mode);
-  },
+  setSort: ({ projectId, mode }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      writeScriptSort(project.id, mode),
+    ).pipe(Effect.asVoid),
 
-  getOrder: async ({ projectId }) => {
-    const project = await findProjectOrThrow(projectId);
-    return readScriptOrder(project.id);
-  },
+  getOrder: ({ projectId }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      readScriptOrder(project.id),
+    ),
 
-  setOrder: async ({ projectId, arranged }) => {
-    const project = await findProjectOrThrow(projectId);
-    await writeScriptOrder(project.id, arranged);
-  },
+  setOrder: ({ projectId, arranged }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      writeScriptOrder(project.id, arranged),
+    ).pipe(Effect.asVoid),
 
-  setLaunchRow: async ({ projectId, scriptName, onRow }) => {
-    const project = await findProjectOrThrow(projectId);
-    await writeLaunchRowScript(project.id, scriptName, onRow);
-  },
+  setLaunchRow: ({ projectId, scriptName, onRow }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      writeLaunchRowScript(project.id, scriptName, onRow),
+    ).pipe(Effect.asVoid),
 
   run: ({ projectId, worktreeId, scriptName }, handlerCtx) =>
     Effect.gen(function* () {
-      const project = yield* fromPromise(() => findProjectOrThrow(projectId));
-      const [worktree, doc] = yield* fromPromise(() =>
-        Promise.all([
-          findWorktreeIdentityOrThrow(project.id, worktreeId),
-          packageScripts(project.id, worktreeId),
-        ]),
+      const project = yield* findProject(projectId);
+      const [worktree, doc] = yield* Effect.all(
+        [
+          findWorktreeIdentity(project.id, worktreeId),
+          Ops.packageScripts(project.id, worktreeId),
+        ],
+        { concurrency: 2 },
       );
 
       // Validated here even though the engine validates again: a missing
@@ -90,9 +92,11 @@ export const packageScriptsHandlers = {
 
       // The engine picks the manager and counts the run in the use log;
       // the app's registry spawns the command with the SHIGOMORI_* env.
-      const { command, scriptEnv } = yield* fromPromise(() =>
-        packageScriptLaunch({ projectId, worktreeId, scriptName }),
-      );
+      const { command, scriptEnv } = yield* Ops.packageScriptLaunch({
+        projectId,
+        worktreeId,
+        scriptName,
+      });
       const runId = yield* startScript({
         command,
         slot: { kind: "package", name: scriptName },

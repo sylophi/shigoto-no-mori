@@ -25,6 +25,7 @@
 // mirror/<branch> in a mirror-<name> folder (contracts/git/branches.ts),
 // and the session's mode says so, so the git follower reads the two
 // branch names as one. Both primaries keep what they had.
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
@@ -53,6 +54,7 @@ import {
   peerWorktreesApiFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import { within } from "@host/lib/util/within";
 import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
@@ -158,88 +160,102 @@ export function currentMirrorList(): MirrorListResult | undefined {
 // for the mirror) is the send's cancel while the send runs, and
 // past it the same rollback as a failed session open, the session
 // ended if the open outran the cancel.
-export async function startMirrorTo(
+class MirrorStartRefusedError extends Schema.TaggedError<MirrorStartRefusedError>()(
+  "MirrorStartRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+export const startMirrorTo = (
   input: MirrorStartToPayload,
   ctx: HandlerContext,
-) {
-  const daemon = requireRunningEngine();
-  const refusal = mirrorStartRefusal(input.worktreeId, {
-    sessions: mirrorSessions(daemon),
-    servedWorktreeIds: listMirrorServing().map((stream) => stream.worktreeId),
-    invitedCopyIds: listMirrorInvites().map(
-      (invite) => invite.copy?.worktreeId,
-    ),
-  });
-  if (refusal !== null) throw new Error(refusal);
-  const { ignoreMode, ignores, ...sendInput } = input;
-  return runMove(ctx, input.worktreeId, async (signal) => {
-    const { source, result: sent } = await sendWorktree(sendInput, ctx, {
-      mirror: true,
-      signal,
+) =>
+  Effect.gen(function* () {
+    const daemon = requireRunningEngine();
+    const refusal = mirrorStartRefusal(input.worktreeId, {
+      sessions: mirrorSessions(daemon),
+      servedWorktreeIds: listMirrorServing().map((stream) => stream.worktreeId),
+      invitedCopyIds: listMirrorInvites().map(
+        (invite) => invite.copy?.worktreeId,
+      ),
     });
-    // The copy's root as the peer's landing answered it, re-parsed by
-    // the send.
-    const copy = sent.worktree;
-    let session: string;
-    try {
-      throwIfCancelled(signal);
-      // The copy's create ran its carry-over (and the setup script,
-      // when asked), which wrote files of the peer's own into it.
-      // Opened on that, the two-way session would hold every such
-      // path the rule does not leave out as a conflict from its first
-      // cycle (or carry a file only the copy has back here). So the
-      // copy is made an exact copy of the original first, the rule's
-      // paths left alone, and the session opens on two identical
-      // trees.
-      const replica = await transferFilesOnce(
-        {
-          localRoot: source.path,
-          localWorktreeId: source.id,
-          sourceDeviceId: input.targetDeviceId,
-          sourceProjectId: copy.projectId,
-          sourceWorktreeId: copy.id,
-          remoteRoot: copy.path,
-          name: source.branch,
-          ignores,
-          direction: "replica",
-        },
-        () => {},
-        signal,
-      );
-      throwIfCancelled(signal);
-      if (!replica.crossed) {
-        throw new Error(
-          `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
-        );
-      }
-      // A session the open made after the cancel is ended again.
-      session = await abortable(
-        signal,
-        daemon.create({
-          localRoot: source.path,
-          deviceId: input.targetDeviceId,
-          projectId: copy.projectId,
-          worktreeId: copy.id,
-          remoteRoot: copy.path,
-          name: source.branch,
-          localWorktreeId: source.id,
-          labels: startLabels(source, ignoreMode),
-          ignores,
-        }),
-        (made) => daemon.terminate(made),
-      );
-    } catch (error) {
-      await rollBackSent(input.targetDeviceId, copy);
-      throw error;
+    if (refusal !== null) {
+      return yield* new MirrorStartRefusedError({ reason: refusal });
     }
-    daemon.noteEvent(
-      source.id,
-      "started",
-      summarizeIgnores(ignoreMode, ignores),
+    const { ignoreMode, ignores, ...sendInput } = input;
+    return yield* runMove(ctx, input.worktreeId, (signal) =>
+      Effect.gen(function* () {
+        const { source, result: sent } = yield* sendWorktree(sendInput, ctx, {
+          mirror: true,
+        });
+        // The copy's root as the peer's landing answered it, re-parsed
+        // by the send.
+        const copy = sent.worktree;
+        const session = yield* fromPromise(async () => {
+          try {
+            throwIfCancelled(signal);
+            // The copy's create ran its carry-over (and the setup
+            // script, when asked), which wrote files of the peer's own
+            // into it. Opened on that, the two-way session would hold
+            // every such path the rule does not leave out as a conflict
+            // from its first cycle (or carry a file only the copy has
+            // back here). So the copy is made an exact copy of the
+            // original first, the rule's paths left alone, and the
+            // session opens on two identical trees.
+            const replica = await transferFilesOnce(
+              {
+                localRoot: source.path,
+                localWorktreeId: source.id,
+                sourceDeviceId: input.targetDeviceId,
+                sourceProjectId: copy.projectId,
+                sourceWorktreeId: copy.id,
+                remoteRoot: copy.path,
+                name: source.branch,
+                ignores,
+                direction: "replica",
+              },
+              () => {},
+              signal,
+            );
+            throwIfCancelled(signal);
+            if (!replica.crossed) {
+              throw new Error(
+                `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
+              );
+            }
+            // A session the open made after the cancel is ended again.
+            return await abortable(
+              signal,
+              daemon.create({
+                localRoot: source.path,
+                deviceId: input.targetDeviceId,
+                projectId: copy.projectId,
+                worktreeId: copy.id,
+                remoteRoot: copy.path,
+                name: source.branch,
+                localWorktreeId: source.id,
+                labels: startLabels(source, ignoreMode),
+                ignores,
+              }),
+              (made) => daemon.terminate(made),
+            );
+          } catch (error) {
+            await rollBackSent(input.targetDeviceId, copy);
+            throw error;
+          }
+        });
+        daemon.noteEvent(
+          source.id,
+          "started",
+          summarizeIgnores(ignoreMode, ignores),
+        );
+        return { ...sent, session };
+      }),
     );
-    return { ...sent, session };
   });
-}
 
 // The ask from the copy's side. The session runs on the peer, which
 // holds the original: this device invites the mirror (invites.ts),
@@ -252,10 +268,10 @@ export async function startMirrorTo(
 // cancel does: the peer's send stops and the copy it made here goes.
 // A start that fails withdraws the invitation: the peer's rollback
 // already removed whatever landed under it.
-export async function startMirrorFrom(
+export const startMirrorFrom = (
   input: MirrorStartFromPayload,
   ctx: HandlerContext,
-) {
+) => {
   const {
     sourceDeviceId,
     sourceProjectId: projectId,
@@ -263,46 +279,52 @@ export async function startMirrorFrom(
     sourceIdentity: identity,
     ...rule
   } = input;
-  const peerSync = peerSyncApiFor(sourceDeviceId);
-  const notify = ctx.notifier(syncContract, "pullProgress");
-  const stopRelay = peerSync.onPullProgress((frame) => {
-    const parsed = decodePullProgress(frame);
-    if (Option.isSome(parsed) && parsed.value.sourceWorktreeId === worktreeId) {
-      notify(parsed.value);
-    }
-  });
-  try {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const notify = ctx.notifier(syncContract, "pullProgress");
+      return peerSyncApiFor(sourceDeviceId).onPullProgress((frame) => {
+        const parsed = decodePullProgress(frame);
+        if (
+          Option.isSome(parsed) &&
+          parsed.value.sourceWorktreeId === worktreeId
+        ) {
+          notify(parsed.value);
+        }
+      });
+    }),
     // A move like the others (runMove), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a
     // caller going away both reach it, and interrupt the peer's send
     // over the device link. The invitation is made inside, once the
     // move holds its key: a second ask for the same worktree is refused
     // without touching the first's.
-    return await runMove(ctx, worktreeId, async (signal) => {
-      const invite = inviteMirror({
-        peerDeviceId: sourceDeviceId,
-        sourceWorktreeId: worktreeId,
-        identity,
-        cloneInto: rule.cloneInto,
-      });
-      try {
-        return decodeMirrorStartToResult(
-          await peerMirrorApiFor(sourceDeviceId, { signal }).startTo({
-            targetDeviceId: thisDeviceId(),
-            projectId,
-            worktreeId,
-            ...rule,
-          }),
-        );
-      } catch (error) {
-        invite.withdraw();
-        throw error;
-      }
-    });
-  } finally {
-    stopRelay();
-  }
-}
+    () =>
+      runMove(ctx, worktreeId, (signal) =>
+        fromPromise(async () => {
+          const invite = inviteMirror({
+            peerDeviceId: sourceDeviceId,
+            sourceWorktreeId: worktreeId,
+            identity,
+            cloneInto: rule.cloneInto,
+          });
+          try {
+            return decodeMirrorStartToResult(
+              await peerMirrorApiFor(sourceDeviceId, { signal }).startTo({
+                targetDeviceId: thisDeviceId(),
+                projectId,
+                worktreeId,
+                ...rule,
+              }),
+            );
+          } catch (error) {
+            invite.withdraw();
+            throw error;
+          }
+        }),
+      ),
+    (stopRelay) => Effect.sync(stopRelay),
+  );
+};
 
 // Stop ends the session and removes the copy the mirror made: the
 // mirror was the copy's reason to exist, and the source keeps the

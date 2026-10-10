@@ -39,7 +39,10 @@ import {
   selectionOfPreset,
   setupDefaultFor,
 } from "@shigomori/contracts/leaveOutRule";
-import { type Project } from "@shigomori/contracts/schemas";
+import {
+  type Project,
+  type WorktreeIdentity,
+} from "@shigomori/contracts/schemas";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
@@ -51,10 +54,7 @@ import {
   peerWorktreesApiFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
-import {
-  findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
-} from "@host/lib/projects";
+import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import {
   mirrorList,
@@ -64,7 +64,8 @@ import {
 } from "@host/mirror/sessions";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { listWorktrees } from "@host/lib/engineCalls";
+import * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 import {
   BLOCK_REASON,
   chooseTarget,
@@ -92,7 +93,7 @@ import {
   worktreesOn,
 } from "./peers";
 
-type Ops = Handlers<typeof controlContract, HandlerContext, HostServices>;
+type Handler = Handlers<typeof controlContract, HandlerContext, HostServices>;
 
 // A transfer, which the loopback serves as a stream of its progress
 // (the sync:pullProgress pushes `ctx` notifies) and then its answer.
@@ -202,20 +203,24 @@ const settleSource = (
   );
 };
 
-// A transfer's Promise half, then the source settled as its input asked.
+// A transfer, then the source settled as its input asked.
 const settled =
   <K extends "send" | "bring">(
     transfer: (
       input: Parameters<TransferOp<K>>[0],
       ctx: HandlerContext,
-    ) => Promise<
+    ) => Effect.Effect<
       | { readonly done: ControlTransferResult }
-      | { readonly moved: ControlTransferResult; readonly settle: Settle }
+      | { readonly moved: ControlTransferResult; readonly settle: Settle },
+      unknown,
+      HostServices
     >,
   ): TransferOp<K> =>
   (input, ctx) =>
     Effect.gen(function* () {
-      const moved = yield* fromPromise(() => transfer(input, ctx));
+      const moved = yield* transfer(input, ctx).pipe(
+        Effect.mapError(callFailureOf),
+      );
       if ("done" in moved) return moved.done;
       const source = yield* settleSource(input.source ?? "keep", moved.settle);
       return { ...moved.moved, source };
@@ -246,6 +251,7 @@ async function stopMirror(run: () => unknown): Promise<string | undefined> {
 async function alreadyMirrored(
   running: Running,
   device: string | undefined,
+  engine: Engine.Handle,
 ): Promise<ControlTransferResult> {
   const registry = await registryOrEmpty();
   const names = namesOf(registry);
@@ -270,7 +276,7 @@ async function alreadyMirrored(
         session.projectId,
         session.worktreeId,
       )
-    : (await listWorktrees(session.projectId)).find(
+    : (await Engine.runWith(engine)(Ops.listWorktrees(session.projectId))).find(
         (worktree) => worktree.id === session.worktreeId,
       );
   if (copy === undefined) {
@@ -297,36 +303,42 @@ function blockOf(peer: DirectPeer | undefined): Pick<ControlDevice, "block"> {
   return peer.sharesData ? {} : { block: "not-sharing" };
 }
 
-export const devices: Ops["devices"] = async ({ projectId }) => {
-  const { here, peers } = await roster();
-  if (projectId === undefined) {
-    const direct = await directPeers();
-    return {
-      thisDevice: here,
-      devices: peers.map((device) => ({
-        deviceId: device.deviceId,
-        name: nameOf(device),
-        platform: device.platform,
-        ...blockOf(direct[device.deviceId]),
-      })),
-    };
-  }
-  const identity = await repoIdentityOf(await findProjectOrThrow(projectId));
-  return {
-    thisDevice: here,
-    devices: await standingsOf(peers, identity, { grant: true }),
-  };
-};
+export const devices: Handler["devices"] = ({ projectId }) =>
+  Effect.gen(function* () {
+    const project =
+      projectId === undefined ? undefined : yield* findProject(projectId);
+    return yield* fromPromise(async () => {
+      const { here, peers } = await roster();
+      if (project === undefined) {
+        const direct = await directPeers();
+        return {
+          thisDevice: here,
+          devices: peers.map((device) => ({
+            deviceId: device.deviceId,
+            name: nameOf(device),
+            platform: device.platform,
+            ...blockOf(direct[device.deviceId]),
+          })),
+        };
+      }
+      const identity = await repoIdentityOf(project);
+      return {
+        thisDevice: here,
+        devices: await standingsOf(peers, identity, { grant: true }),
+      };
+    });
+  });
 
-export const peerWorktrees: Ops["peerWorktrees"] = async ({
+export const peerWorktrees: Handler["peerWorktrees"] = ({
   projectId,
   device,
-}) => {
-  const { standings } = await candidates(
-    await findProjectOrThrow(projectId),
-    device,
-    { grant: false },
+}) =>
+  Effect.flatMap(findProject(projectId), (project) =>
+    fromPromise(() => peerWorktreesOf(project, device)),
   );
+
+async function peerWorktreesOf(project: Project, device: string | undefined) {
+  const { standings } = await candidates(project, device, { grant: false });
   const unreachable = standings.filter(
     (standing) => standing.block === "offline",
   );
@@ -350,13 +362,57 @@ export const peerWorktrees: Ops["peerWorktrees"] = async ({
       (standing) => standing.name,
     ),
   };
-};
+}
 
-export const send = settled<"send">(async (input, ctx) => {
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    input.projectId,
-    input.worktreeId,
-  );
+export const send = settled<"send">((input, ctx) =>
+  Effect.gen(function* () {
+    const { project, worktree } = yield* findProjectAndWorktree(
+      input.projectId,
+      input.worktreeId,
+    );
+    const engine = yield* Engine.handle;
+    const first = yield* fromPromise(() =>
+      sendPlan(input, project, worktree, engine),
+    );
+    if (first.kind === "done") return { done: first.done };
+    const { payload, device, mirror } = first;
+    if (mirror) {
+      const { session, ...sent } = yield* startMirrorTo(payload, ctx);
+      return {
+        done: { ...sent, device, copySide: "remote" as const, session },
+      };
+    }
+    const sent = yield* syncHandlers.sendWorktree(payload, ctx);
+    return {
+      moved: { ...sent, device, copySide: "remote" as const },
+      settle: {
+        shelve: worktreesHandlers.setShelved({
+          projectId: project.id,
+          worktreeId: worktree.id,
+          shelved: true,
+        }),
+        teardown: syncHandlers.teardownSource(
+          {
+            direction: "send",
+            deviceId: payload.targetDeviceId,
+            projectId: project.id,
+            worktreeId: worktree.id,
+          },
+          ctx,
+        ),
+      },
+    };
+  }),
+);
+
+// A send's choices, made before anything moves: the device, the rule
+// and where a clone would land, or the running mirror that answers it.
+async function sendPlan(
+  input: Parameters<TransferOp<"send">>[0],
+  project: Project,
+  worktree: WorktreeIdentity,
+  engine: Engine.Handle,
+) {
   const mirror = input.mirror === true;
   if (mirror) {
     // Part of a mirror already: its original (a session run here)
@@ -367,15 +423,20 @@ export const send = settled<"send">(async (input, ctx) => {
         ? await peerMirrorOf(input, registryOrEmpty())
         : { deviceId: thisDeviceId(), session: own };
     if (running !== undefined) {
-      return { done: await alreadyMirrored(running, input.device) };
+      return {
+        kind: "done" as const,
+        done: await alreadyMirrored(running, input.device, engine),
+      };
     }
   }
   const { identity, target } = await pickDevice(project, input.device);
-  const choice = await choiceFor(identity, input, async () =>
-    syncHandlers.ignoredPaths({
-      projectId: project.id,
-      worktreeId: worktree.id,
-    }),
+  const choice = await choiceFor(identity, input, () =>
+    Engine.runWith(engine)(
+      syncHandlers.ignoredPaths({
+        projectId: project.id,
+        worktreeId: worktree.id,
+      }),
+    ),
   );
   const device = { deviceId: target.deviceId, name: target.name };
   const payload = {
@@ -393,34 +454,77 @@ export const send = settled<"send">(async (input, ctx) => {
         }
       : {}),
   };
-  if (mirror) {
-    const { session, ...sent } = await startMirrorTo(payload, ctx);
-    return { done: { ...sent, device, copySide: "remote", session } };
-  }
-  const sent = await syncHandlers.sendWorktree(payload, ctx);
-  return {
-    moved: { ...sent, device, copySide: "remote" },
-    settle: {
-      shelve: worktreesHandlers.setShelved({
-        projectId: project.id,
-        worktreeId: worktree.id,
-        shelved: true,
-      }),
-      teardown: syncHandlers.teardownSource(
+  return { kind: "plan" as const, payload, device, mirror };
+}
+
+export const bring = settled<"bring">((input, ctx) =>
+  Effect.gen(function* () {
+    const project = yield* findProject(input.projectId);
+    const engine = yield* Engine.handle;
+    const plan = yield* fromPromise(() => bringPlan(input, project, engine));
+    if (plan.kind === "done") return { done: plan.done };
+    const { found, identity, choice } = plan;
+    if (input.mirror === true) {
+      const { session, ...pulled } = yield* startMirrorFrom(
         {
-          direction: "send",
-          deviceId: target.deviceId,
-          projectId: project.id,
-          worktreeId: worktree.id,
+          sourceDeviceId: found.device.deviceId,
+          sourceProjectId: found.projectId,
+          sourceWorktreeId: found.worktree.id,
+          sourceIdentity: identity,
+          ...choice,
         },
         ctx,
-      ),
-    },
-  };
-});
+      );
+      return {
+        done: {
+          ...pulled,
+          device: found.device,
+          copySide: "local" as const,
+          session,
+        },
+      };
+    }
+    const pulled = yield* syncHandlers.pullWorktree(
+      {
+        sourceDeviceId: found.device.deviceId,
+        sourceProjectId: found.projectId,
+        sourceWorktreeId: found.worktree.id,
+        sourceIdentity: identity,
+        branch: found.worktree.branch,
+        worktreeName: pullWorktreeName(found.worktree),
+        ...choice,
+      },
+      ctx,
+    );
+    const sourceRef = {
+      direction: "pull" as const,
+      deviceId: found.device.deviceId,
+      projectId: found.projectId,
+      worktreeId: found.worktree.id,
+    };
+    return {
+      moved: { ...pulled, device: found.device, copySide: "local" as const },
+      settle: {
+        shelve: fromPromise(() =>
+          peerWorktreesApiFor(found.device.deviceId).setShelved({
+            projectId: found.projectId,
+            worktreeId: found.worktree.id,
+            shelved: true,
+          }),
+        ),
+        teardown: syncHandlers.teardownSource(sourceRef, ctx),
+      },
+    };
+  }),
+);
 
-export const bring = settled<"bring">(async (input, ctx) => {
-  const project = await findProjectOrThrow(input.projectId);
+// A bring's choices, made before anything moves: the peer's worktree
+// and the rule, or the running mirror that answers it.
+async function bringPlan(
+  input: Parameters<TransferOp<"bring">>[0],
+  project: Project,
+  engine: Engine.Handle,
+) {
   const { identity, standings } = await candidates(project, input.device, {
     grant: true,
   });
@@ -495,59 +599,19 @@ export const bring = settled<"bring">(async (input, ctx) => {
           )
         : { deviceId: thisDeviceId(), session: own };
     if (running !== undefined) {
-      return { done: await alreadyMirrored(running, undefined) };
+      return {
+        kind: "done" as const,
+        done: await alreadyMirrored(running, undefined, engine),
+      };
     }
-    const { session, ...pulled } = await startMirrorFrom(
-      {
-        sourceDeviceId: found.device.deviceId,
-        sourceProjectId: found.projectId,
-        sourceWorktreeId: found.worktree.id,
-        sourceIdentity: identity,
-        ...choice,
-      },
-      ctx,
-    );
-    return {
-      done: { ...pulled, device: found.device, copySide: "local", session },
-    };
   }
-  const pulled = await syncHandlers.pullWorktree(
-    {
-      sourceDeviceId: found.device.deviceId,
-      sourceProjectId: found.projectId,
-      sourceWorktreeId: found.worktree.id,
-      sourceIdentity: identity,
-      branch: found.worktree.branch,
-      worktreeName: pullWorktreeName(found.worktree),
-      ...choice,
-    },
-    ctx,
-  );
-  const sourceRef = {
-    direction: "pull" as const,
-    deviceId: found.device.deviceId,
-    projectId: found.projectId,
-    worktreeId: found.worktree.id,
-  };
-  return {
-    moved: { ...pulled, device: found.device, copySide: "local" },
-    settle: {
-      shelve: fromPromise(() =>
-        peerWorktreesApiFor(found.device.deviceId).setShelved({
-          projectId: found.projectId,
-          worktreeId: found.worktree.id,
-          shelved: true,
-        }),
-      ),
-      teardown: syncHandlers.teardownSource(sourceRef, ctx),
-    },
-  };
-});
+  return { kind: "plan" as const, found, identity, choice };
+}
 
 // The mirrors this device is part of: the ones it runs, and the
 // ones peers run against its worktrees, each seen from this side.
 // One registry read serves the peer scan and the names.
-export const mirrors: Ops["mirrors"] = async () => {
+export const mirrors: Handler["mirrors"] = async () => {
   const registry = registryOrEmpty();
   const [{ daemon, sessions }, afar, names] = await Promise.all([
     mirrorList(),
@@ -613,4 +677,4 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
       if (removed.ok) copyStayed = undefined;
     }
     return yield* answer((names) => peerMirrorView(afar, names), copyStayed);
-  })) satisfies Ops["mirrorStop"];
+  })) satisfies Handler["mirrorStop"];

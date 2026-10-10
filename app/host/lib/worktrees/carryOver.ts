@@ -21,10 +21,9 @@ import type {
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { listIgnoredPaths } from "../git/branches";
 import { chunked, runLenient } from "../git/core";
-import {
-  listWorktreeIdentities,
-  type WorktreeIdentity,
-} from "../git/worktrees";
+import * as Effect from "effect/Effect";
+import * as Ops from "../engineOps";
+import type { WorktreeIdentity } from "../git/worktrees";
 import { ttlMapCache } from "../util/ttlCache";
 
 export type CarryOverCheckout = Pick<
@@ -35,13 +34,19 @@ export type CarryOverCheckout = Pick<
 // Falls back to the primary alone when the worktree list can't be read.
 // A bare repo flags no identity as primary, so the first checkout stands
 // in.
-export async function listCarryOverCheckouts(
+export const listCarryOverCheckouts = (
   projectId: string,
   projectPath: string,
-): Promise<CarryOverCheckout[]> {
-  const identities = await listWorktreeIdentities(projectId).catch(
-    (): WorktreeIdentity[] => [],
+) =>
+  Ops.listWorktreeIdentities({ projectId }).pipe(
+    Effect.orElseSucceed((): readonly WorktreeIdentity[] => []),
+    Effect.map((identities) => primaryFirst(identities, projectPath)),
   );
+
+function primaryFirst(
+  identities: readonly WorktreeIdentity[],
+  projectPath: string,
+): CarryOverCheckout[] {
   const checkouts = identities.toSorted(
     (a, b) =>
       Number(b.isPrimary) - Number(a.isPrimary) || a.name.localeCompare(b.name),
@@ -118,12 +123,10 @@ function foldersFirst(
 // ruleIgnoredFolders below, for the leave-out picker: carry-over must
 // not take it, since such a folder holds a file git tracks.
 export async function listCarryOverCandidates(
-  projectId: string,
-  projectPath: string,
+  checkouts: readonly CarryOverCheckout[],
   relative: string,
   { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
 ): Promise<CarryOverCandidate[]> {
-  const checkouts = await listCarryOverCheckouts(projectId, projectPath);
   const listed = await Promise.all(
     checkouts.map(async (checkout) => {
       try {
@@ -255,11 +258,9 @@ export async function listWorktreeFolder(
 
 // Where each configured path currently exists.
 export async function statCarryOverPaths(
-  projectId: string,
-  projectPath: string,
+  checkouts: readonly CarryOverCheckout[],
   paths: readonly string[],
 ): Promise<Record<string, CarryOverStat>> {
-  const checkouts = await listCarryOverCheckouts(projectId, projectPath);
   const stats: Record<string, CarryOverStat> = {};
   await Promise.all(
     paths.map(async (path) => {

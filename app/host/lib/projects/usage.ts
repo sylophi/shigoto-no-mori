@@ -3,7 +3,7 @@
 // app records the uses (they are the app's UI actions, not CLI verbs),
 // and the project list reads them back as lastUsed and recentCount,
 // which feed the sidebar's recency and frequency sorts.
-import * as Engine from "../engine";
+import * as Effect from "effect/Effect";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
 
@@ -26,18 +26,18 @@ let usageFailureLogged = false;
 // notify the renderer to refresh its usage-sorted list, or null if the
 // payload had no project to attribute or the use wasn't recorded.
 // Best-effort: never let a stats write break the handler.
-export async function recordProjectActionUsage(
-  input: unknown,
-): Promise<string | null> {
-  if (!hasStringProjectId(input)) return null;
-  try {
-    await Engine.run(Ops.recordProjectUse(input.projectId));
-    return input.projectId;
-  } catch (error) {
-    if (!usageFailureLogged) {
-      usageFailureLogged = true;
-      log.warn("[usage] project use log not recorded:", error);
-    }
-    return null;
-  }
-}
+export const recordProjectActionUsage = (input: unknown) => {
+  if (!hasStringProjectId(input)) return Effect.succeed(null);
+  return Ops.recordProjectUse(input.projectId).pipe(
+    Effect.as(input.projectId),
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        if (!usageFailureLogged) {
+          usageFailureLogged = true;
+          log.warn("[usage] project use log not recorded:", cause);
+        }
+        return null;
+      }),
+    ),
+  );
+};

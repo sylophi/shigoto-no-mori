@@ -4,9 +4,15 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { NukeProgress } from "@shigomori/contracts/schemas";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { uninstallCliEverything } from "@host/lib/cli/install";
 import { nukeEverything } from "@host/lib/nuke";
 import { moveDataDir } from "@host/lib/dataDirMove";
+import { killAllScripts } from "@host/lib/scripts";
 import { implSlot } from "@host/lib/util/implSlot";
+import { fromPromise } from "@host/lib/util/fromPromise";
+import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
   dataDir,
@@ -15,12 +21,11 @@ import {
 } from "@host/lib/util/paths";
 
 // The electron layer injects the app-lifecycle teardown hooks at boot:
-// CLI uninstall, the watcher and updater-bridge stops, and the
+// the watcher and updater-bridge stops, and the
 // nuke-progress fan-out (which rides the Electron transport binding).
 // Keeping them behind a setter keeps this handler module free of
 // Electron imports.
 type RuntimeImpl = {
-  uninstallCliEverything: () => Promise<void>;
   releaseStore: () => Promise<void>;
   stopUpdaterBridge: () => void;
   // Unpublishes loopback.json, so the moved data dir never carries the
@@ -36,9 +41,16 @@ type RuntimeImpl = {
   // (it reaps every running script, and nobody here was asked), or
   // null when the host is idle.
   unattendedMoveRefusal: () => string | null;
-  // Every running script's kill chain, waited for.
-  killAllScripts: () => Promise<void>;
 };
+
+class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
+  "MoveRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 const { set: setRuntimeImpl, get: runtimeImpl } = implSlot<RuntimeImpl>(
   "runtime handler invoked before setRuntimeImpl registered one",
@@ -47,56 +59,61 @@ export { setRuntimeImpl };
 
 let moveInFlight = false;
 
-export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
-  {
-    // Host facts only. isDev deliberately isn't here: it describes the
-    // client build and rides the preload bridge (api.isDev) instead.
-    info: () => ({
-      dataDir: dataDir(),
-      dataDirSource: dataDirSource(),
-      // resolve() drops the trailing slash a hand-edited pointer may carry.
-      atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
-      canonicalDataDirName: canonicalDataDirName(),
-      homedir: homedir(),
-    }),
+export const runtimeHandlers = {
+  // Host facts only. isDev deliberately isn't here: it describes the
+  // client build and rides the preload bridge (api.isDev) instead.
+  info: () => ({
+    dataDir: dataDir(),
+    dataDirSource: dataDirSource(),
+    // resolve() drops the trailing slash a hand-edited pointer may carry.
+    atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
+    canonicalDataDirName: canonicalDataDirName(),
+    homedir: homedir(),
+  }),
 
-    moveDataDir: async ({ parentDir }, ctx) => {
+  moveDataDir: ({ parentDir }, ctx) =>
+    Effect.gen(function* () {
       const unattended = isRemoteCaller(ctx);
       // One move at a time, now that the local window is no longer the
       // only caller: two would share the staged pointer file and undo
       // each other's re-key.
       if (moveInFlight) {
-        throw new Error("The data folder is already being moved.");
+        return yield* new MoveRefusedError({
+          reason: "The data folder is already being moved.",
+        });
       }
       if (unattended) {
         const refusal = runtimeImpl().unattendedMoveRefusal();
-        if (refusal !== null) throw new Error(refusal);
+        if (refusal !== null) {
+          return yield* new MoveRefusedError({ reason: refusal });
+        }
       }
       moveInFlight = true;
       let watchersStopped = false;
-      try {
-        await moveDataDir(parentDir, {
-          killAllScripts: runtimeImpl().killAllScripts,
-          beforeMove: async () => {
-            watchersStopped = true;
-            await runtimeImpl().releaseStore();
-            runtimeImpl().stopUpdaterBridge();
-            await runtimeImpl().unpublishLoopback();
-          },
-        });
-      } catch (err) {
-        // A move that failed after the watchers stopped leaves this
-        // app running without them. At this machine the user sees the
-        // error and can restart. For a peer's move nobody here does,
-        // so the restart that brings them back happens anyway (the
-        // data dir and pointer are where they were).
-        if (unattended && watchersStopped) {
-          runtimeImpl().relaunchAppUnattended();
-        } else {
-          moveInFlight = false;
-        }
-        throw err;
-      }
+      yield* moveDataDir(parentDir, {
+        killAllScripts: killAllScripts(),
+        beforeMove: fromPromise(async () => {
+          watchersStopped = true;
+          await runtimeImpl().releaseStore();
+          runtimeImpl().stopUpdaterBridge();
+          await runtimeImpl().unpublishLoopback();
+        }),
+      }).pipe(
+        Effect.onError(() =>
+          Effect.sync(() => {
+            // A move that failed after the watchers stopped leaves this
+            // app running without them. At this machine the user sees
+            // the error and can restart. For a peer's move nobody here
+            // does, so the restart that brings them back happens anyway
+            // (the data dir and pointer are where they were).
+            if (unattended && watchersStopped) {
+              runtimeImpl().relaunchAppUnattended();
+            } else {
+              moveInFlight = false;
+            }
+          }),
+        ),
+      );
       // The latch stays set from here: the data dir is a boot-time
       // constant (initDataDir's one-shot guard exists precisely so it
       // can't change under live callers), so until the restart this
@@ -106,21 +123,20 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
       // to acknowledge with, so the host relaunches itself, after the
       // reply has left (the electron layer owns that timing).
       if (unattended) runtimeImpl().relaunchAppUnattended();
-    },
+    }),
 
-    nuke: async () => {
-      try {
-        await nukeEverything(
-          (progress) => runtimeImpl().broadcastNukeProgress(progress),
-          runtimeImpl().killAllScripts,
-        );
-      } finally {
+  nuke: () =>
+    Effect.gen(function* () {
+      yield* nukeEverything(
+        (progress) => runtimeImpl().broadcastNukeProgress(progress),
+        killAllScripts(),
+      ).pipe(
         // A wipe that failed past the rm still took the files along.
-        runtimeImpl().afterDataWipe();
-      }
+        Effect.ensuring(Effect.sync(() => runtimeImpl().afterDataWipe())),
+      );
       // Nuke means "remove everything shigomori put on this machine";
       // the CLI links and the shell-integration hooks are part of that.
       // Settings offers a fresh install afterwards.
-      await runtimeImpl().uninstallCliEverything();
-    },
-  };
+      yield* uninstallCliEverything;
+    }),
+} satisfies Handlers<typeof runtimeContract, HandlerContext, HostServices>;

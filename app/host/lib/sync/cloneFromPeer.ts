@@ -14,16 +14,13 @@
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import { mkdir, rm } from "node:fs/promises";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   type SyncCloneInto,
   SyncBundleRefSchema,
 } from "@shigomori/contracts/modules/sync";
-import type { Project } from "@shigomori/contracts/schemas";
 import { checkNewCheckoutDestination } from "@host/lib/git/clone";
 import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
-import { registerProject } from "@host/lib/projects";
 import { expandHome } from "@host/lib/util/paths";
 import { throwIfCancelled } from "./moves";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
@@ -31,10 +28,9 @@ import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
 
 // A cancel (`signal`, the move's) between steps undoes the folder like
-// any failure. During the fetch the link's reset does the failing. A
-// clone that got as far as its register stays: it is a checkout of
-// the repo at the place the user named, and a retry lands in it.
-export async function cloneProjectFromPeer(
+// any failure. During the fetch the link's reset does the failing.
+// Answers the checkout, which the caller registers.
+export async function cloneCheckoutFromPeer(
   source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
   // The branch the landing puts its copy on afterwards: the clone's own
@@ -42,7 +38,7 @@ export async function cloneProjectFromPeer(
   landing: string,
   onProgress?: (bytes: number, totalBytes: number) => void,
   signal?: AbortSignal,
-): Promise<Project> {
+): Promise<string> {
   // The source's default branch is what the checkout is made of, so the
   // clone reads as the repo (its identity is the root of that branch,
   // shared/git/repoIdentity.mts) and not as one worktree of it. The
@@ -115,17 +111,10 @@ export async function cloneProjectFromPeer(
         branch,
       ]);
     }
-    // Once past here the clone is registered and stays.
     throwIfCancelled(signal);
   } catch (error) {
     await rm(dest, { recursive: true, force: true }).catch(() => {});
     throw error;
   }
-  // The checkout stays if registering fails, so the error says where
-  // it is: a retry would only find the folder taken.
-  return registerProject(dest).catch((error: unknown) => {
-    throw new Error(
-      `Cloned into ${dest}, but couldn't add it as a project: ${errorMessageOf(error)}`,
-    );
-  });
+  return dest;
 }

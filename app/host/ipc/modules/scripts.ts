@@ -6,7 +6,7 @@ import {
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject } from "@host/lib/projects";
 import {
   attachScript,
   cancelScript,
@@ -20,7 +20,6 @@ import { shellQuote } from "@host/lib/util/shellQuote";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -66,10 +65,8 @@ export const scriptsViews: ViewHandlers<
 export const scriptsHandlers = {
   run: ({ projectId, worktreeId, script }, handlerCtx: HandlerContext) =>
     Effect.gen(function* () {
-      const project = yield* fromPromise(() => findProjectOrThrow(projectId));
-      const ctx = yield* fromPromise(() =>
-        prepareScriptRun(project, worktreeId),
-      );
+      const project = yield* findProject(projectId);
+      const ctx = yield* prepareScriptRun(project, worktreeId);
       const command = resolveScriptCommand(
         script,
         ctx.config,

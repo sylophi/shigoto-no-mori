@@ -29,15 +29,14 @@ import { projectsViews } from "../host/ipc/modules/projects.ts";
 import { scriptsViews } from "../host/ipc/modules/scripts.ts";
 import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
 import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
-import * as Engine from "../host/lib/engine.ts";
-import { setAutoPull, writeGlobalConfig } from "../host/lib/engineCalls.ts";
-import { writeWorktreeData } from "../host/lib/config/project.ts";
-import { readDeviceId } from "../host/lib/config/deviceId.ts";
+import * as Ops from "../host/lib/engineOps.ts";
+import { setDeviceId } from "../host/lib/config/deviceId.ts";
+import { deviceId as storedDeviceId } from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
 import * as Views from "../host/lib/views.ts";
 import * as Sharing from "../host/lib/sharing.ts";
 import { listWorktrees } from "../host/lib/git/worktrees.ts";
-import { registerProject } from "../host/lib/projects/index.ts";
+import { addProject } from "../host/lib/projects/index.ts";
 import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
 import { sharedSettingsCopy } from "../host/lib/sharedSettings/store.ts";
 import { initDataDirAt } from "../host/lib/util/paths.ts";
@@ -64,7 +63,7 @@ let repo: string;
 
 beforeAll(async () => {
   initDataDirAt(engineDataDir);
-  await readDeviceId();
+  await runHost(storedDeviceId).then(setDeviceId);
   repo = join(tempDir("sm-views-", track), "repo");
   mkdirSync(repo);
   git(repo, "init", "-q", "-b", "main");
@@ -92,7 +91,7 @@ const watch = <A,>(
     readonly quiet: Effect.Effect<void>;
   }) => Effect.Effect<void, unknown, Services | Scope.Scope>,
 ) =>
-  Engine.run(
+  runHost(
     Effect.gen(function* () {
       const values = yield* Stream.toQueue(stream, { capacity: "unbounded" });
       const next = Queue.take(values).pipe(Effect.orDie);
@@ -144,7 +143,7 @@ it("projects: a project registered through the engine joins the list", async () 
   await watch(projectsViews.watch(undefined), ({ first, next, tick, quiet }) =>
     Effect.gen(function* () {
       assert.ok(first.every((listed) => listed.path !== repo));
-      project = yield* Effect.promise(() => registerProject(repo));
+      project = yield* addProject(repo);
       projectId = project.id;
       yield* tick();
       const after = yield* next;
@@ -162,7 +161,7 @@ it("worktrees: an auto-pull mark set through the engine shows on its row", async
       const primary = first[0];
       assert.ok(primary !== undefined);
       assert.equal(primary.autoPull, false);
-      yield* Effect.promise(() => setAutoPull(project, primary.id, true));
+      yield* Ops.setAutoPull(project, primary.id, true);
       yield* tick();
       const [row] = yield* next;
       assert.equal(row?.autoPull, true);
@@ -206,11 +205,9 @@ it("ports: a port added through the engine joins the list", async () => {
     ({ first, next, tick }) =>
       Effect.gen(function* () {
         assert.deepEqual(first.ports, []);
-        yield* Effect.promise(() =>
-          writeWorktreeData(projectId, worktreeId, {
-            ports: [{ port: 45_123, label: "api" }],
-          }),
-        );
+        yield* Ops.writeWorktreeData(projectId, worktreeId, {
+          ports: [{ port: 45_123, label: "api" }],
+        });
         yield* tick();
         const after = yield* next;
         assert.deepEqual(
@@ -225,9 +222,7 @@ it("settings: a device setting written through the engine", async () => {
   await watch(globalConfigViews.watch(undefined), ({ first, next, tick }) =>
     Effect.gen(function* () {
       assert.equal(first.hiddenLaunchers, undefined);
-      yield* Effect.promise(() =>
-        writeGlobalConfig({ hiddenLaunchers: ["app:zed"] }),
-      );
+      yield* Ops.writeGlobalConfig({ hiddenLaunchers: ["app:zed"] });
       yield* tick();
       assert.deepEqual((yield* next).hiddenLaunchers, ["app:zed"]);
     }),
@@ -236,7 +231,7 @@ it("settings: a device setting written through the engine", async () => {
 
 it("sharing: set from the account page, then by a terminal's write, the switch moves and says so once per change, stored only while off", async () => {
   const announced: boolean[] = [];
-  await Engine.run(
+  await runHost(
     Effect.gen(function* () {
       const sharing = yield* Sharing.Sharing;
       const config = yield* EngineConfig.Config;

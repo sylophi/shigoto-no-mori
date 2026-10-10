@@ -1,6 +1,9 @@
 import { gitContract } from "@shigomori/contracts/modules/git";
 import type { Handlers } from "@shigomori/contracts/types";
-import { findProjectOrThrow } from "@host/lib/projects";
+import * as Effect from "effect/Effect";
+import type * as Engine from "@host/lib/engine";
+import { findProject } from "@host/lib/projects";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import { implSlot } from "@host/lib/util/implSlot";
 
 // The electron layer injects the background-fetch entry point at boot.
@@ -16,10 +19,10 @@ const { set: setGitImpl, get: gitImpl } = implSlot<GitImpl>(
 );
 export { setGitImpl };
 
-export const gitHandlers: Handlers<typeof gitContract> = {
-  refreshProject: async ({ projectId }) => {
-    const project = await findProjectOrThrow(projectId);
-    await gitImpl().refreshProject(project.id, project.path);
-  },
-  sweep: async () => gitImpl().sweepForPeer(),
-};
+export const gitHandlers = {
+  refreshProject: ({ projectId }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => gitImpl().refreshProject(project.id, project.path)),
+    ),
+  sweep: () => gitImpl().sweepForPeer(),
+} satisfies Handlers<typeof gitContract, unknown, Engine.Services>;

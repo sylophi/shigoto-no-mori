@@ -9,7 +9,10 @@
 // and projectPullRequestsRefreshed when a pass changed something so
 // the renderer, local or peer, can invalidate.
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import type { PullRequest } from "@shigomori/contracts/schemas";
+import type {
+  PullRequest,
+  WorktreeIdentity,
+} from "@shigomori/contracts/schemas";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
@@ -136,7 +139,7 @@ async function autoPullProject(
 ): Promise<void> {
   try {
     const { pulled, failed } = await sweepAutoPull(
-      projectId,
+      await listIdentities(projectId),
       runningScriptWorktreeIds(),
     );
     for (const { worktree, commits } of pulled) {
@@ -211,6 +214,9 @@ export function setWindowFocused(focused: boolean): void {
 let refreshPullRequests: (
   projectPath: string,
 ) => Promise<Map<string, PullRequest>> = async () => new Map();
+let listIdentities: (
+  projectId: string,
+) => Promise<readonly WorktreeIdentity[]> = async () => [];
 
 export function startBackgroundFetch(options: {
   // A fresh read of a project's pull requests, which the sidebar's map
@@ -218,9 +224,14 @@ export function startBackgroundFetch(options: {
   readonly refreshPullRequests: (
     projectPath: string,
   ) => Promise<Map<string, PullRequest>>;
+  // A project's checkouts, with their auto-pull marks.
+  readonly listIdentities: (
+    projectId: string,
+  ) => Promise<readonly WorktreeIdentity[]>;
 }): void {
   if (sweepHandle) return;
   refreshPullRequests = options.refreshPullRequests;
+  listIdentities = options.listIdentities;
   sweepProjects();
   sweepHandle = setInterval(sweepIfAttended, SWEEP_INTERVAL_MS);
 }

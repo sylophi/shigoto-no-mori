@@ -12,11 +12,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { CAPTURE_TIMEOUT_MS, loginShell } from "@host/lib/util/shellEnv";
-import * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { envSetting } from "@shared/config";
 
 const execFileP = promisify(execFile);
@@ -66,66 +66,75 @@ export function hookPathEnv(): Promise<Record<string, string>> {
 
 // The login shell as the engine's shell integration needs it: where
 // its config lives, and which shell it is.
-async function hookShell(): Promise<ShellIntegration.HookShell> {
-  const env = await hookPathEnv();
-  return {
-    zdotdir: env["ZDOTDIR"] ?? "",
-    configHome: env["XDG_CONFIG_HOME"],
-    loginShell: loginShell({ SHELL: envSetting("SHELL") }) ?? "",
-  };
-}
+const hookShell = Effect.promise(hookPathEnv).pipe(
+  Effect.map(
+    (env): ShellIntegration.HookShell => ({
+      zdotdir: env["ZDOTDIR"] ?? "",
+      configHome: env["XDG_CONFIG_HOME"],
+      loginShell: loginShell({ SHELL: envSetting("SHELL") }) ?? "",
+    }),
+  ),
+);
 
 const onShell = <A, E>(
   f: (
     integration: ShellIntegration.ShellIntegration["Service"],
     shell: ShellIntegration.HookShell,
   ) => Effect.Effect<A, E>,
-): Promise<A> => hookShell().then((shell) => Engine.run(Ops.onShell(shell, f)));
+) => Effect.flatMap(hookShell, (shell) => Ops.onShell(shell, f));
+
+class ShellHookError extends Schema.TaggedError<ShellHookError>()(
+  "ShellHookError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 // `shells` enumerates exactly the kinds sm supports, so the login
 // shell is "supported" iff it appears there.
-const statusNow = () =>
-  onShell((integration, shell) =>
-    Effect.map(
-      integration.status(shell),
-      ({ document }): ShellIntegrationStatus => ({
-        loginShell: document.loginShell === "" ? null : document.loginShell,
-        shells: document.shells,
-      }),
-    ),
-  );
-
-export function shellIntegrationStatus(): Promise<ShellIntegrationStatus> {
-  return statusNow();
-}
+export const shellIntegrationStatus = onShell((integration, shell) =>
+  Effect.map(
+    integration.status(shell),
+    ({ document }): ShellIntegrationStatus => ({
+      loginShell: document.loginShell === "" ? null : document.loginShell,
+      shells: document.shells,
+    }),
+  ),
+);
 
 // Settings never asks for an unsupported shell: the status it renders
 // already reported loginShell null.
-export async function installShellIntegration(): Promise<ShellIntegrationStatus> {
-  const kind = await onShell((integration, shell) =>
+export const installShellIntegration = Effect.gen(function* () {
+  const kind = yield* onShell((integration, shell) =>
     integration.loginShell(shell),
   );
-  if (kind === "") throw new Error("Couldn't determine your login shell.");
-  await onShell((integration, shell) => integration.install(kind, shell));
-  return statusNow();
-}
+  if (kind === "") {
+    return yield* new ShellHookError({
+      reason: "Couldn't determine your login shell.",
+    });
+  }
+  yield* onShell((integration, shell) => integration.install(kind, shell));
+  return yield* shellIntegrationStatus;
+});
 
 // Sweeps every supported shell. A partial removal (an edited block
 // sm refuses to touch) is not a failure: the returned status shows
 // the leftover as "modified" for the UI to explain. A hook that stays
 // installed means removal genuinely failed (an unwritable rc), so that
 // is surfaced.
-export async function uninstallShellIntegration(): Promise<ShellIntegrationStatus> {
-  const results = await onShell((integration, shell) =>
+export const uninstallShellIntegration = Effect.gen(function* () {
+  const results = yield* onShell((integration, shell) =>
     integration.uninstall(shell),
   );
-  const status = await statusNow();
+  const status = yield* shellIntegrationStatus;
   const failure = results.find(Result.isFailure);
   if (
     failure !== undefined &&
     status.shells.some((hook) => hook.state === "installed")
   ) {
-    throw new Error(failure.failure.message);
+    return yield* new ShellHookError({ reason: failure.failure.message });
   }
   return status;
-}
+});
