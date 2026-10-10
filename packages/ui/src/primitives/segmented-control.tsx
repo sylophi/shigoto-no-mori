@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Radio } from "@base-ui/react/radio";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import { SimpleTooltip } from "./tooltip.tsx";
 import { cn } from "../lib/utils.ts";
 
@@ -20,7 +22,9 @@ export interface SegmentedOption<T extends string> {
 // mode, carry-over mode, diff layout). One source of truth for the
 // track + selection treatment; call sites only pass sizing. The
 // data-slot doubles as the doubutsu hook. The overlay fills the track
-// with the --input tray tint once borders are stripped.
+// with the --input tray tint once borders are stripped. A radio group
+// (Base UI's): Tab reaches the picked option, and the arrows move the
+// pick.
 export function SegmentedControl<T extends string>({
   value,
   onChange,
@@ -40,8 +44,10 @@ export function SegmentedControl<T extends string>({
   "aria-label"?: string;
 }) {
   return (
-    <div
-      role="group"
+    <RadioGroup
+      value={value}
+      onValueChange={(next) => onChange(next as T)}
+      disabled={disabled}
       aria-label={ariaLabel}
       data-slot="segmented-control"
       className={cn(
@@ -51,12 +57,11 @@ export function SegmentedControl<T extends string>({
     >
       {options.map((opt) => (
         <SimpleTooltip key={opt.value} tip={opt.tip}>
-          <button
-            type="button"
-            onClick={() => onChange(opt.value)}
+          <Radio.Root
+            value={opt.value}
+            nativeButton
+            render={<button type="button" aria-label={opt.ariaLabel} />}
             disabled={disabled || opt.disabled}
-            aria-pressed={value === opt.value}
-            aria-label={opt.ariaLabel}
             className={cn(
               // Concentric with the track: the option radius is the
               // rounded-md outer radius (--radius * 0.8) minus the p-0.5
@@ -71,9 +76,9 @@ export function SegmentedControl<T extends string>({
             )}
           >
             {opt.label}
-          </button>
+          </Radio.Root>
         </SimpleTooltip>
       ))}
-    </div>
+    </RadioGroup>
   );
 }

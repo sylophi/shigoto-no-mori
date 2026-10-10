@@ -10,6 +10,7 @@
 // time (or again after its stream stopped) tells nothing: nothing
 // changed that this window saw.
 import type { QueryClient } from "@tanstack/react-query";
+import { interpolatePath } from "@tanstack/react-router";
 import type {
   AgentSession,
   ClientConfig,
@@ -21,7 +22,7 @@ import { harnessLabel } from "@shigomori/ui/lib/agentSessions.ts";
 import { documentFocused } from "@/lib/focus";
 import { hasLocalHost } from "@/lib/localHost";
 import { onWorktreeLists } from "@/lib/viewFeed";
-import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
   createExternalStore,
   useExternalStore,
@@ -115,11 +116,14 @@ function notify({ title, body, worktree, deviceId }: Notice): void {
   void window.api.window.notify({
     title,
     body: [worktree.title ?? worktree.name, body].filter(Boolean).join("\n"),
-    route: fillRoutePath(WORKTREE_ROUTE_PATHS.detail, {
-      deviceId,
-      projectId: worktree.projectId,
-      worktreeId: worktree.id,
-    }),
+    route: interpolatePath({
+      path: WORKTREE_ROUTE_PATHS.detail,
+      params: {
+        deviceId,
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+      },
+    }).interpolatedPath,
   });
 }
 

@@ -21,10 +21,11 @@ export function DoctorDialog({ onClose }: { onClose: () => void }) {
   const repair = useDoctorRepair();
   const repairing = useDoctorRepairing();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
+  const title = remote ? `Health check on ${deviceLabel}` : "Health check";
   return (
-    <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
+    <ModalShell label={title} onClose={onClose} popoverClassName="max-w-2xl">
       <DoctorDialogView
-        title={remote ? `Health check on ${deviceLabel}` : "Health check"}
+        title={title}
         // The last run's report stays cached, and a re-run must not pass
         // it off as this one's answer.
         report={isFetching || repairing || error ? undefined : data}
