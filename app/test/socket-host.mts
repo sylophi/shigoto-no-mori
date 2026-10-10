@@ -102,7 +102,10 @@ import {
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
 import { LinkGroup } from "@shigomori/contracts/link";
-import { sealDialer } from "@shared/remote/sealedSocket";
+import {
+  CLOSE_HANDSHAKE_FAILED,
+  sealDialer,
+} from "@shared/remote/sealedSocket";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import {
   inviteMirror,
@@ -417,6 +420,32 @@ it("refusal: a ticket the host never minted is a blocked verdict, and five of th
   const locked = await dialFails(listener);
   assert.equal(locked.blocked, false);
   assert.equal(locked.code, 4003);
+});
+
+it("lockout: a device on another version, refused past the threshold, leaves a correct dial from the same address accepted", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  // A build before sealed links opens with a clear frame of its own.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    // oxlint-disable-next-line no-await-in-loop -- one refusal at a time
+    const code = await new Promise<number>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
+      ws.on("open", () => ws.send(Buffer.from("link:challenge, in the clear")));
+      ws.on("close", (closed) => resolve(closed));
+      ws.on("error", () => {});
+    });
+    assert.equal(code, CLOSE_HANDSHAKE_FAILED);
+  }
+  // A sealed build on another protocol version.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    // oxlint-disable-next-line no-await-in-loop -- one refusal at a time
+    const refused = await dialFails(listener, {
+      protocolVersion: PROTOCOL_VERSION + 1,
+    });
+    assert.ok(refused.refusal instanceof ProtocolVersionMismatchError);
+  }
+  const connection = await dial(track, listener);
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
 });
 
 it("version: a hello on another protocol version is refused with ProtocolVersionMismatchError, a blocked verdict the dialer hands on", async () => {

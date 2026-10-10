@@ -950,8 +950,12 @@ export const make = (options: {
                           connection.ticketDeviceId = peer.deviceId;
                           return peer.publicKey;
                         },
-                        refused: (reason) => {
-                          recordAuthFailure(ip);
+                        // Only a ticket or a key that did not hold counts
+                        // toward the lockout: a device on another version
+                        // dialing in the middle of an upgrade is refused
+                        // without benching its address.
+                        refused: (reason, guessed) => {
+                          if (guessed) recordAuthFailure(ip);
                           log.warn(
                             `[link] refused a socket from ${ip}: ${reason}`,
                           );

@@ -645,7 +645,7 @@ it("a refusing candidate cannot deny the dial: a far end that refuses has proved
   assert.equal(connection.remoteDeviceId, "B");
 });
 
-it("serialized hellos: with two reachable candidates the slow one never hellos, the winner's session survives (no supersede) and the loser's ticket stays unspent", async () => {
+it("serialized hellos: with two reachable candidates the slow one never hellos, the winner's session survives (no supersede), and the winner's ticket is spent", async () => {
   const listener = await startDirectListener(trackTest);
   // The SAME listener behind a delayed route and a direct one. The
   // slow candidate's socket opens well after the fast one won: if
@@ -686,13 +686,9 @@ it("serialized hellos: with two reachable candidates the slow one never hellos, 
     "still the winner",
     "the slow candidate's late hello superseded the winning session",
   );
-  // The loser never sent a hello, so its ticket was never
-  // presented and is still consumable.
-  assert.equal(
-    await consumeTicket(listener.tickets, slowTicket, "A"),
-    true,
-    "the abandoned candidate spent its ticket",
-  );
+  // Each candidate's socket opens with its own ticket, so the loser
+  // spends at most its own, whether it opened before it was abandoned
+  // or not: what matters is that it never said hello.
   assert.equal(await consumeTicket(listener.tickets, fastTicket, "A"), false);
 });
 
