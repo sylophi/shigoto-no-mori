@@ -925,7 +925,7 @@
    1:1 diagonal costs one tile across for two down, the tile being 80x40. */
 .doubutsu [data-doubutsu-zone="main"] {
   isolation: isolate;
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%2280%22%20height%3D%2240%22%20viewBox%3D%220%200%2080%2040%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cmask%20id%3D%22m%22%20maskUnits%3D%22userSpaceOnUse%22%20x%3D%22-20%22%20y%3D%22-20%22%20width%3D%2240%22%20height%3D%2240%22%3E%3Crect%20x%3D%22-20%22%20y%3D%22-20%22%20width%3D%2240%22%20height%3D%2240%22%20fill%3D%22%23fff%22%2F%3E%3Cpath%20d%3D%22M-12.25%2012.25L10.5%20-10.5M-2%202V-8.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fmask%3E%3Cpath%20id%3D%22l%22%20d%3D%22M-12.25%2012.25A20%2020%200%200%201%2012.25%20-12.25A20%2020%200%200%201%20-12.25%2012.25Z%22%20mask%3D%22url(%23m)%22%2F%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23l%22%20x%3D%2213%22%20y%3D%2233%22%2F%3E%3Cuse%20href%3D%22%23l%22%20x%3D%2213%22%20y%3D%22-7%22%2F%3E%3Cuse%20href%3D%22%23l%22%20x%3D%2253%22%20y%3D%2213%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper: url("./wallpapers/leaf.svg");
   --doubutsu-wallpaper-size: 80px 40px;
   --doubutsu-wallpaper-opacity: 0.06;
   --doubutsu-drift-x: -80px;
@@ -940,7 +940,7 @@
    account's machines, which all run the same app somewhere else. Sparser
    than the leaves, so it sits a hair over them. */
 .doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="devices"]) {
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%2278%22%20height%3D%2278%22%20viewBox%3D%220%200%2078%2078%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cmask%20id%3D%22m%22%20maskUnits%3D%22userSpaceOnUse%22%20x%3D%22-20%22%20y%3D%22-20%22%20width%3D%2240%22%20height%3D%2240%22%3E%3Crect%20x%3D%22-20%22%20y%3D%22-20%22%20width%3D%2240%22%20height%3D%2240%22%20fill%3D%22%23fff%22%2F%3E%3Cpath%20d%3D%22M-5.6%200.4A6%206%200%200%201%20-3%20-3.9%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M3.2%20-9.6L8.6%20-11.4%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fmask%3E%3Cg%20id%3D%22a%22%20mask%3D%22url(%23m)%22%20transform%3D%22scale(1.25)%22%3E%3Cpath%20d%3D%22M0%20-5.2C2.5%20-7.6%208%20-7%208.4%20-1.6C8.8%203.6%205.6%208.4%202%208.4C1%208.4%200.6%208%200%208C-0.6%208%20-1%208.4%20-2%208.4C-5.6%208.4%20-8.8%203.6%20-8.4%20-1.6C-8%20-7%20-2.5%20-7.6%200%20-5.2Z%22%2F%3E%3Cpath%20d%3D%22M0%20-4.6L0.9%20-9.8%22%20stroke%3D%22%23000%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%20-9A5.6%205.6%200%200%201%2010.2%20-12A5.6%205.6%200%200%201%201.6%20-9Z%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23a%22%20x%3D%2220%22%20y%3D%2220%22%2F%3E%3Cuse%20href%3D%22%23a%22%20x%3D%2259%22%20y%3D%2259%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper: url("./wallpapers/apple.svg");
   --doubutsu-wallpaper-size: 78px 78px;
   --doubutsu-wallpaper-opacity: 0.065;
   --doubutsu-drift-x: 0px;
@@ -954,7 +954,7 @@
    a uniform tilt. Big solid fills, so it sits a notch under the
    blossoms. */
 .doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="settings"]) {
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22140%22%20height%3D%22140%22%20viewBox%3D%220%200%20140%20140%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cpath%20id%3D%22sq%22%20fill%3D%22%23000%22%20d%3D%22M-3.5%20-8h7a4.5%204.5%200%200%201%204.5%204.5v7a4.5%204.5%200%200%201%20-4.5%204.5h-7a4.5%204.5%200%200%201%20-4.5%20-4.5v-7a4.5%204.5%200%200%201%204.5%20-4.5Z%22%2F%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(28%2030)%20rotate(18)%20scale(1.25)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(78%2022)%20rotate(205)%20scale(0.75)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(118%2044)%20rotate(72)%20scale(1.05)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(18%2074)%20rotate(130)%20scale(0.85)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(62%2066)%20rotate(41)%20scale(1.4)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(104%2090)%20rotate(250)%20scale(0.65)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(40%20114)%20rotate(300)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(86%20122)%20rotate(155)%20scale(0.9)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(128%20118)%20rotate(85)%20scale(0.7)%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper: url("./wallpapers/square.svg");
   --doubutsu-wallpaper-size: 140px 140px;
   --doubutsu-wallpaper-opacity: 0.07;
   --doubutsu-drift-x: -140px;
@@ -966,7 +966,7 @@
    of the leaves. Clearing a forest is what lets it grow back, so the
    page wears what comes after the work rather than the work. */
 .doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="tidy"]) {
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22120%22%20height%3D%22120%22%20viewBox%3D%220%200%20120%20120%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22f%22%20fill%3D%22%23000%22%3E%3Ccircle%20cx%3D%220%22%20cy%3D%22-5.2%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%224.945%22%20cy%3D%22-1.607%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%223.057%22%20cy%3D%224.207%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%22-3.057%22%20cy%3D%224.207%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%22-4.945%22%20cy%3D%22-1.607%22%20r%3D%223.1%22%2F%3E%3Ccircle%20r%3D%222.6%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(28%2022)%20rotate(0)%20scale(1.2)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(84%2034)%20rotate(25)%20scale(0.85)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(56%2062)%20rotate(50)%20scale(1)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(20%2088)%20rotate(10)%20scale(0.75)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(96%2092)%20rotate(40)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(70%20104)%20rotate(66)%20scale(0.7)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(44%2034)%20rotate(18)%20scale(0.6)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(104%2056)%20rotate(42)%20scale(0.8)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(36%2062)%20rotate(58)%20scale(0.65)%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper: url("./wallpapers/flower.svg");
   --doubutsu-wallpaper-size: 120px 120px;
   --doubutsu-wallpaper-opacity: 0.075;
   --doubutsu-drift-x: 120px;
@@ -978,7 +978,7 @@
    and one angle on a diagonal checker, solid pads with the toes apart,
    walking up the page the way they point, at the same ~4.7px/s. */
 .doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="visitors"]) {
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%2284%22%20height%3D%2284%22%20viewBox%3D%220%200%2084%2084%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22p%22%3E%3Cpath%20d%3D%22M0%202.6C3.8%202.6%207.2%206.4%207.2%209.6C7.2%2012.2%205.2%2013.2%202.9%2012.6C1.7%2012.3.9%2011.8%200%2011.8C-.9%2011.8-1.7%2012.3-2.9%2012.6C-5.2%2013.2-7.2%2012.2-7.2%209.6C-7.2%206.4-3.8%202.6%200%202.6Z%22%2F%3E%3Cellipse%20cx%3D%22-7.6%22%20cy%3D%22-.6%22%20rx%3D%222.5%22%20ry%3D%223.3%22%20transform%3D%22rotate%28-28%20-7.6%20-.6%29%22%2F%3E%3Cellipse%20cx%3D%22-2.9%22%20cy%3D%22-5.4%22%20rx%3D%222.6%22%20ry%3D%223.5%22%20transform%3D%22rotate%28-9%20-2.9%20-5.4%29%22%2F%3E%3Cellipse%20cx%3D%222.9%22%20cy%3D%22-5.4%22%20rx%3D%222.6%22%20ry%3D%223.5%22%20transform%3D%22rotate%289%202.9%20-5.4%29%22%2F%3E%3Cellipse%20cx%3D%227.6%22%20cy%3D%22-.6%22%20rx%3D%222.5%22%20ry%3D%223.3%22%20transform%3D%22rotate%2828%207.6%20-.6%29%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23p%22%20transform%3D%22translate%2821%2021%29%20rotate%2820%29%20scale%28.8%29%22%2F%3E%3Cuse%20href%3D%22%23p%22%20transform%3D%22translate%2863%2063%29%20rotate%2820%29%20scale%28.8%29%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper: url("./wallpapers/paw.svg");
   --doubutsu-wallpaper-size: 84px 84px;
   --doubutsu-wallpaper-opacity: 0.065;
   --doubutsu-drift-x: 0px;

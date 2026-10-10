@@ -34,7 +34,7 @@ import { forests, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { projectIconSrc, projectNamed } from "./world.ts";
+import { projectNamed } from "./world.ts";
 
 const noop = () => {};
 const QUERY = "port";
@@ -56,11 +56,7 @@ const entryOf = (worktree: Worktree): PaletteEntry => ({
 });
 
 const icon = (project: Project, size = "size-4") => (
-  <ProjectIconView
-    src={projectIconSrc(project.name)}
-    name={project.name}
-    className={size}
-  />
+  <ProjectIconView src={null} name={project.name} className={size} />
 );
 
 const ROWS: PaletteRow[] = [
