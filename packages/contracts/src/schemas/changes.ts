@@ -4,10 +4,9 @@ import { WorktreeScopedPayloadSchema } from "./payloads.ts";
 import { GitRefNameSchema } from "./project.ts";
 import { CommitHashSchema, WorktreeSchema } from "./worktree.ts";
 
-// How much of a changed file is in the index, i.e. what a commit right
-// now would take from it. The changes page draws this as a checkbox:
-// "all" ticked, "none" clear, "partial" indeterminate (hunks staged from
-// a terminal. The app leaves those alone unless the box is toggled).
+// How much of a changed file is in the index. The changes page doesn't
+// tick from this (it keeps its own picks and stages them as it
+// commits), but it tells a staged addition from an untracked file.
 const StagedStateSchema = Schema.Literals(["none", "partial", "all"]);
 export type StagedState = typeof StagedStateSchema.Type;
 
@@ -50,8 +49,7 @@ export type ChangedFile = typeof ChangedFileSchema.Type;
 // A row's identity. Two rows can name one path: `git rm --cached f`
 // leaves a staged deletion and an untracked file, both called f, and
 // they are separate decisions with separate diffs and separate counts.
-// The kind tells them apart and survives a tick, which moves `staged`
-// and nothing else.
+// The kind tells them apart.
 export function changeKey(file: ChangedFile): string {
   return `${file.kind} ${file.path}`;
 }
@@ -88,24 +86,6 @@ export const FileDiffPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   paths: PathListSchema,
   untracked: Schema.Boolean,
-});
-
-export const SetStagedPayloadSchema = Schema.Struct({
-  ...WorktreeScopedPayloadSchema.fields,
-  paths: PathListSchema,
-  staged: Schema.Boolean,
-});
-
-export const CommitChangesPayloadSchema = Schema.Struct({
-  ...WorktreeScopedPayloadSchema.fields,
-  summary: Schema.Trim.check(Schema.isMinLength(1)),
-  description: Schema.optional(Schema.String),
-  // Staged before the commit. When nothing is ticked the page sends
-  // every path it listed, so "all of it" means what was on screen and
-  // not whatever landed in the tree since.
-  stagePaths: Schema.optional(Schema.Array(RepoRelPathSchema)),
-  // Rewrite HEAD instead of adding a commit on top of it.
-  amend: Schema.optional(Schema.Boolean),
 });
 
 // A commit's message split the way the composer holds it: first line,
@@ -229,7 +209,8 @@ export type GitOperationState = typeof GitOperationStateSchema.Type;
 export const ResolveConflictPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   path: RepoRelPathSchema,
-  side: Schema.Literals(["mine", "theirs"]),
+  // "as-is" takes the file as it stands, settled in an editor.
+  side: Schema.Literals(["mine", "theirs", "as-is"]),
 });
 
 // The ways another branch's work comes into the worktree's branch
@@ -290,16 +271,12 @@ const LineChangeSchema = Schema.Struct({
 });
 export type LineChange = typeof LineChangeSchema.Type;
 
-// A modified file's changes and which the next commit takes. Not
-// `editable` when the index holds something the working tree doesn't,
-// which no pick of these changes describes.
-export const HunkStatesSchema = Schema.Struct({
-  changes: Schema.Array(
-    Schema.Struct({ ...LineChangeSchema.fields, staged: Schema.Boolean }),
-  ),
-  editable: Schema.Boolean,
-});
-export type HunkStates = typeof HunkStatesSchema.Type;
+// The same change by its place in HEAD, which an edit elsewhere in the
+// file leaves where it was. Its place in the working tree moves with
+// every line added above it. How the page keeps a pick and how the
+// commit finds it again.
+export const sameRange = (a: LineChange, b: LineChange) =>
+  a.oldStart === b.oldStart && a.oldCount === b.oldCount;
 
 export const FileHunksPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
@@ -310,11 +287,48 @@ const LineChangeListSchema = Schema.Array(LineChangeSchema).check(
   Schema.isMinLength(1),
 );
 
-export const SetHunksStagedPayloadSchema = Schema.Struct({
-  ...FileHunksPayloadSchema.fields,
-  changes: LineChangeListSchema,
-  staged: Schema.Boolean,
+// A modified file's changes, and the HEAD they were read against: the
+// one their places are counted in.
+export const FileHunksSchema = Schema.Struct({
+  head: CommitHashSchema,
+  changes: Schema.Array(LineChangeSchema),
 });
+export type FileHunks = typeof FileHunksSchema.Type;
+
+// What a commit takes, as the page has it ticked: whole files by path
+// (both of a rename's), and the files ticked by hunk with the changes
+// picked and the HEAD they were picked against. The index is set to
+// exactly this first, so whatever was staged before (an agent's
+// `git mv`, a terminal's `git add`) only goes in if it is ticked. The
+// paths are what was on screen, not whatever landed in the tree since.
+const CommitPicksSchema = Schema.Struct({
+  paths: Schema.Array(RepoRelPathSchema),
+  hunks: Schema.Array(
+    Schema.Struct({
+      path: RepoRelPathSchema,
+      base: CommitHashSchema,
+      changes: LineChangeListSchema,
+    }),
+  ),
+});
+export type CommitPicks = typeof CommitPicksSchema.Type;
+
+// An amend without a summary keeps HEAD's message as it is.
+export const CommitChangesPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  summary: Schema.optional(Schema.Trim.check(Schema.isMinLength(1))),
+  description: Schema.optional(Schema.String),
+  ...CommitPicksSchema.fields,
+  // Rewrite HEAD instead of adding a commit on top of it.
+  amend: Schema.optional(Schema.Boolean),
+}).check(
+  Schema.makeFilter(
+    (payload: { amend?: boolean; summary?: string }) =>
+      payload.amend === true ||
+      payload.summary !== undefined ||
+      "A commit needs a summary",
+  ),
+);
 
 export const DiscardHunksPayloadSchema = Schema.Struct({
   ...FileHunksPayloadSchema.fields,

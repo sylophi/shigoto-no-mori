@@ -13,14 +13,13 @@ import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project, WorktreeRemoval } from "@shigomori/contracts/schemas";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
-  commitStaged,
   discardChanges,
   listChangesForPage,
   readCommitMessage,
   resetSoft,
   restoreDiscard,
-  setStaged,
 } from "@host/lib/git/changes";
+import { commitPicks } from "@host/lib/git/commit";
 import {
   getCommitDiff,
   getFileDiff,
@@ -32,11 +31,7 @@ import {
   rewordCommit,
   squashIntoParent,
 } from "@host/lib/git/history";
-import {
-  discardHunks,
-  readHunkStates,
-  setHunksStaged,
-} from "@host/lib/git/hunks";
+import { discardHunks, readHunks } from "@host/lib/git/hunks";
 import {
   applyStash,
   dropStash,
@@ -499,15 +494,7 @@ export const worktreesHandlers = {
 
   changeStatus: (input) => atPath(input, listChangesForPage),
 
-  setStaged: (input) =>
-    atPath(input, (path) => setStaged(path, input.paths, input.staged)),
-
-  fileHunks: (input) =>
-    atPath(input, (path) => readHunkStates(path, input.path)),
-  setHunksStaged: (input) =>
-    atPath(input, (path) =>
-      setHunksStaged(path, input.path, input.changes, input.staged),
-    ),
+  fileHunks: (input) => atPath(input, (path) => readHunks(path, input.path)),
   discardHunks: (input) =>
     mutateAndDescribeWith(input, (wt) =>
       discardHunks(wt.path, input.path, input.changes),
@@ -516,7 +503,7 @@ export const worktreesHandlers = {
     ),
 
   commit: (input) =>
-    mutateAndDescribeWith(input, (wt) => commitStaged(wt.path, input)).pipe(
+    mutateAndDescribeWith(input, (wt) => commitPicks(wt.path, input)).pipe(
       Effect.map(({ result, worktree }) => ({ hash: result, worktree })),
     ),
 

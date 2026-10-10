@@ -115,8 +115,8 @@ export function useWorktreeNav() {
       go("stash", { projectId, worktreeId, hash }, replace);
     },
 
-    // `replace` for a step between commits on a commit's page, so Back
-    // leaves the page rather than stepping back through every commit.
+    // `replace` from within the Git page, so Back leaves the page rather
+    // than stepping back through every commit.
     toCommit(
       projectId: string,
       worktreeId: string,

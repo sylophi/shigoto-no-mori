@@ -1,15 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
-import {
-  CommitDetailsView,
-  CommitStepsView,
-} from "@shigomori/ui/views/diff/CommitDetailsView.tsx";
+import { CommitDetailsView } from "@shigomori/ui/views/diff/CommitDetailsView.tsx";
 
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find. The moves
@@ -78,28 +74,6 @@ export function CommitDetails({
       canCommand={actions.canCommand}
       onNewWorktree={() => actions.newWorktreeFrom(commit)}
       dialog={actions.dialog}
-    />
-  );
-}
-
-// Beside a commit's view controls: a step to the commit after or before
-// it on the branch's timeline, so a branch reads commit by commit.
-export function CommitSteps({
-  worktree,
-  newer,
-  older,
-}: {
-  worktree: Worktree;
-  newer: string | undefined;
-  older: string | undefined;
-}) {
-  const nav = useWorktreeNav();
-  const step = (hash: string | undefined) =>
-    hash && nav.toCommit(worktree.projectId, worktree.id, hash, true);
-  return (
-    <CommitStepsView
-      onNewer={newer ? () => step(newer) : undefined}
-      onOlder={older ? () => step(older) : undefined}
     />
   );
 }

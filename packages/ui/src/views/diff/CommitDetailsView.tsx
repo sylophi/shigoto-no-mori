@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   Check,
   Combine,
   Copy,
@@ -15,8 +13,6 @@ import {
 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { useCopied } from "../../primitives/copy-button.tsx";
-import { IconButton } from "../../primitives/icon-button.tsx";
-import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -198,39 +194,5 @@ function CopyHashButton({ hash }: { hash: string }) {
       <span className="font-mono">{hash}</span>
       {copied ? <Check /> : <Copy />}
     </Button>
-  );
-}
-
-// Beside a commit's view controls: a step to the commit after or before
-// it on the branch's timeline, so a branch reads commit by commit.
-export function CommitStepsView({
-  onNewer,
-  onOlder,
-}: {
-  // Unset at that end of the timeline.
-  onNewer: (() => void) | undefined;
-  onOlder: (() => void) | undefined;
-}) {
-  return (
-    <div className="flex items-center">
-      <SimpleTooltip tip="Newer commit">
-        <IconButton
-          aria-label="Newer commit"
-          disabled={!onNewer}
-          onClick={onNewer}
-        >
-          <ArrowUp aria-hidden className="size-4" />
-        </IconButton>
-      </SimpleTooltip>
-      <SimpleTooltip tip="Older commit">
-        <IconButton
-          aria-label="Older commit"
-          disabled={!onOlder}
-          onClick={onOlder}
-        >
-          <ArrowDown aria-hidden className="size-4" />
-        </IconButton>
-      </SimpleTooltip>
-    </div>
   );
 }

@@ -10,7 +10,7 @@ import {
   SessionRowView,
 } from "../views/worktreeDetail/AgentSessionsMenuView.tsx";
 import {
-  BranchMenuView,
+  BranchActionsView,
   BranchTitleView,
 } from "../views/worktreeDetail/branch/BranchTitleView.tsx";
 import { BranchSwitcherView } from "../views/worktreeDetail/branch/BranchSwitcherView.tsx";
@@ -74,11 +74,11 @@ function branchTitle(worktree: Worktree, subtitle: boolean) {
       branch={worktree.branch}
       detached={worktree.detached}
       subtitle={subtitle}
-      menu={
-        <BranchMenuView
-          canCommand
+      actions={
+        <BranchActionsView
+          branch={worktree.branch}
           detached={worktree.detached}
-          onRename={noop}
+          onRename={worktree.detached ? undefined : noop}
           onSwitch={noop}
           onCopy={noop}
           switcher={
@@ -293,7 +293,7 @@ export function WorktreePagePartsScene() {
               onCommit: noop,
               onCancel: noop,
             }}
-            menu={null}
+            actions={null}
           />
         </Part>
         <Part label="Renaming the folder">

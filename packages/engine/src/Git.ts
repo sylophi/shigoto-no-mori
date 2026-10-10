@@ -518,22 +518,6 @@ export class Git extends Context.Service<
     }) => Effect.Effect<string, GitError | CloneDestinationError>;
 
     // --- the index ---
-    // Ticks or unticks whole files, then answers with a fresh listing.
-    // Writes to one worktree's index run one after another.
-    readonly setStaged: (input: {
-      readonly worktree: string;
-      readonly paths: readonly string[];
-      readonly staged: boolean;
-    }) => Effect.Effect<ChangedFile[], GitError>;
-    // Commits the index, `stagePaths` added first, and answers with
-    // the new HEAD's short hash. Hooks run as in a terminal.
-    readonly commit: (input: {
-      readonly worktree: string;
-      readonly summary: string;
-      readonly description?: string | undefined;
-      readonly amend?: boolean | undefined;
-      readonly stagePaths?: readonly string[] | undefined;
-    }) => Effect.Effect<string, GitError>;
     // `reset --soft` along HEAD's own line: back to an ancestor (an
     // undo), or forward to a descendant when `expectHead` pins where
     // HEAD must still be (its redo). Answers with where HEAD was.
@@ -760,8 +744,8 @@ const make = Effect.gen(function* () {
     );
 
   // Writes to one worktree's index run one after another: git takes
-  // index.lock for each, so two quick ticks, or a tick racing a commit,
-  // would otherwise fail on the lock instead of waiting.
+  // index.lock for each, so two quick discards, or a discard racing a
+  // reset, would otherwise fail on the lock instead of waiting.
   const indexLocks = new Map<string, Semaphore.Semaphore>();
   const onIndex = <A, E>(worktree: string, task: Effect.Effect<A, E>) => {
     let lock = indexLocks.get(worktree);
@@ -1550,61 +1534,6 @@ const make = Effect.gen(function* () {
 
   // --- the index ---
 
-  const setStaged = Effect.fn("Git.setStaged")(function* (input: {
-    readonly worktree: string;
-    readonly paths: readonly string[];
-    readonly staged: boolean;
-  }) {
-    // `add -A` stages a deleted file as a removal. Unstaging is `reset`
-    // rather than `restore --staged`, which refuses a path git doesn't
-    // know and an unborn branch. The fresh listing comes from the same
-    // slot, so two quick ticks answer in order. No counts: staging
-    // moves the index, and the counts compare the tree with HEAD.
-    return yield* onIndex(
-      input.worktree,
-      Effect.gen(function* () {
-        yield* runChunked(
-          input.worktree,
-          input.staged ? ["add", "-A"] : ["reset", "-q"],
-          input.paths,
-        );
-        return yield* status(input.worktree, "all");
-      }),
-    );
-  });
-
-  const commitIndex = Effect.fn("Git.commit")(function* (input: {
-    readonly worktree: string;
-    readonly summary: string;
-    readonly description?: string | undefined;
-    readonly amend?: boolean | undefined;
-    readonly stagePaths?: readonly string[] | undefined;
-  }) {
-    return yield* onIndex(
-      input.worktree,
-      Effect.gen(function* () {
-        if (input.stagePaths && input.stagePaths.length > 0) {
-          yield* runChunked(input.worktree, ["add", "-A"], input.stagePaths);
-        }
-        // Two -m flags make the summary and body separate paragraphs.
-        const body = input.description?.trim();
-        yield* run(input.worktree, [
-          "commit",
-          "--quiet",
-          ...(input.amend ? ["--amend"] : []),
-          "-m",
-          input.summary,
-          ...(body ? ["-m", body] : []),
-        ]);
-        return (yield* run(input.worktree, [
-          "rev-parse",
-          "--short",
-          "HEAD",
-        ])).trim();
-      }),
-    );
-  });
-
   const resetSoft = Effect.fn("Git.resetSoft")(function* (input: {
     readonly worktree: string;
     readonly target: string;
@@ -2018,8 +1947,6 @@ const make = Effect.gen(function* () {
       yield* rebaseOrMerge(input.worktree, input.primaryRef);
     }),
     clone,
-    setStaged,
-    commit: commitIndex,
     resetSoft,
     discard,
     restoreDiscard,

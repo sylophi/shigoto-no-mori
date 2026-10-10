@@ -5,13 +5,13 @@ import {
   useQueryClient,
   skipToken,
 } from "@tanstack/react-query";
-import { changeKey } from "@shigomori/contracts/schemas";
 import type {
   ChangedFile,
   CommitChangesResult,
+  CommitPicks,
+  FileHunks,
   CommitMessage,
   DiscardChangesResult,
-  HunkStates,
   LineChange,
   ResetSoftResult,
   Worktree,
@@ -28,8 +28,7 @@ import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // Every changed file: what it is, how much of it is staged, and its
 // +/- counts. The changes page draws its whole list from this and
-// fetches a diff only for the picked file, so a tick refreshes the list
-// and nothing else has to be kept in step.
+// fetches a diff only for the picked file.
 export function useWorktreeChanges(
   projectId: string,
   worktreeId: string | undefined,
@@ -52,64 +51,8 @@ export function useWorktreeChanges(
   });
 }
 
-interface SetStagedInput {
-  projectId: string;
-  worktreeId: string;
-  paths: string[];
-  staged: boolean;
-}
-
-// Tick or untick. Optimistic: the checkbox flips before git answers,
-// and the status the call answers with settles a partial file to "all"
-// in the same round trip, with no refetch.
-export function useSetStaged() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<readonly ChangedFile[], Error, SetStagedInput>({
-    mutationFn: (input) => api.worktrees.setStaged(input),
-    onMutate: async (vars) => {
-      const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
-      await queryClient.cancelQueries({ queryKey: key });
-      const paths = new Set(vars.paths);
-      queryClient.setQueryData<readonly ChangedFile[]>(key, (current) =>
-        current?.map((file) =>
-          paths.has(file.path)
-            ? { ...file, staged: vars.staged ? "all" : "none" }
-            : file,
-        ),
-      );
-    },
-    onSuccess: (files, vars) => {
-      const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
-      // The answer comes back without counts, since staging can't change
-      // them and re-reading every new file on each tick is what they
-      // would cost. Carry over the ones already on screen. A file this
-      // tick is the first to hear about shows none until the next full
-      // read.
-      const carried = new Map(
-        queryClient
-          .getQueryData<readonly ChangedFile[]>(key)
-          ?.map((file) => [changeKey(file), file.counts]),
-      );
-      queryClient.setQueryData(
-        key,
-        files.map((file) => {
-          const counts = carried.get(changeKey(file));
-          return counts ? { ...file, counts } : file;
-        }),
-      );
-    },
-    onError: (_err, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
-      });
-    },
-    meta: { errorTitle: "Couldn't update the selection" },
-  });
-}
-
-// One modified file's hunks and which the next commit takes. Off for
-// anything else (an untracked, deleted, renamed or conflicted file),
+// One modified file's hunks, to tick one at a time. Off for anything
+// else (an untracked, deleted, renamed or conflicted file),
 // which only ticks whole.
 export function useFileHunks(
   projectId: string,
@@ -117,55 +60,13 @@ export function useFileHunks(
   path: string | undefined,
 ) {
   const { api, keys } = useHostScope();
-  return useQuery<HunkStates>({
+  return useQuery<FileHunks>({
     queryKey: keys.worktreeFileHunks(projectId, worktreeId, path ?? ""),
     queryFn: path
       ? () => api.worktrees.fileHunks({ projectId, worktreeId, path })
       : skipToken,
     staleTime: 0,
     meta: { errorTitle: "Couldn't read the file's hunks" },
-  });
-}
-
-interface SetHunksStagedInput {
-  projectId: string;
-  worktreeId: string;
-  path: string;
-  changes: LineChange[];
-  staged: boolean;
-}
-
-// Tick or untick hunks. Answers with a fresh status, settled into the
-// list the way a file tick is, and the hunks are read again.
-export function useSetHunksStaged() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<readonly ChangedFile[], Error, SetHunksStagedInput>({
-    mutationFn: (input) => api.worktrees.setHunksStaged(input),
-    onSuccess: (files, vars) => {
-      const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
-      const carried = new Map(
-        queryClient
-          .getQueryData<readonly ChangedFile[]>(key)
-          ?.map((file) => [changeKey(file), file.counts]),
-      );
-      queryClient.setQueryData(
-        key,
-        files.map((file) => {
-          const counts = carried.get(changeKey(file));
-          return counts ? { ...file, counts } : file;
-        }),
-      );
-    },
-    onSettled: (_data, _err, vars) =>
-      queryClient.invalidateQueries({
-        queryKey: keys.worktreeFileHunks(
-          vars.projectId,
-          vars.worktreeId,
-          vars.path,
-        ),
-      }),
-    meta: { errorTitle: "Couldn't update the selection" },
   });
 }
 
@@ -235,12 +136,12 @@ export function useWorkingTreeMutation<
   });
 }
 
-interface CommitInput {
+interface CommitInput extends CommitPicks {
   projectId: string;
   worktreeId: string;
-  summary: string;
+  // Absent for an amend that keeps HEAD's message.
+  summary?: string;
   description?: string;
-  stagePaths?: string[];
   amend?: boolean;
 }
 
@@ -252,12 +153,15 @@ export function useCommitChanges() {
     mutationFn: (input) => api.worktrees.commit(input),
     onSuccess: (data, vars) => {
       // The page empties its own draft state. This covers the stored
-      // copy when the page was left before the commit landed.
-      clearCommitDraft(vars.projectId, vars.worktreeId);
+      // copy when the page was left before the commit landed. A commit
+      // that kept HEAD's message never used the draft.
+      if (vars.summary !== undefined) {
+        clearCommitDraft(vars.projectId, vars.worktreeId);
+      }
       writeBack(vars, data.worktree);
     },
-    // A commit-all stages everything before git can refuse (a hook, no
-    // identity), so the ticks have to be re-read either way.
+    // The index is set to the picks before git can refuse (a hook, no
+    // identity), and the status says what is in it, so it is re-read.
     onError: (_err, vars) => {
       void queryClient.invalidateQueries({
         queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
