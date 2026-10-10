@@ -9,12 +9,20 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@astrojs/react": "7.0.0",
+    "@shigomori/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.3.2",
     "astro": "^7.3.3",
-    "sharp": "^0.35.4"
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "sharp": "^0.35.4",
+    "shigoto-no-mori": "workspace:*"
   },
   "packageManager": "pnpm@12.4.1",
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "typescript": "^6.0.3"
   }
 }

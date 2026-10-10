@@ -1669,7 +1669,13 @@ function hubSnapshot(): HubStatus {
 }
 
 export function installFakeHostBridge(
-  opts: { webShell?: boolean; villageLife?: boolean } = {},
+  opts: {
+    webShell?: boolean;
+    villageLife?: boolean;
+    // A dev build (the badge, the theme hotkeys), as the fake host is
+    // unless it stands in for the released app (frames.tsx).
+    dev?: boolean;
+  } = {},
 ): ClientLinks["Service"] {
   WEB_SHELL = opts.webShell === true;
   villageLife =
@@ -1953,7 +1959,7 @@ export function installFakeHostBridge(
     deviceId: selfDeviceId,
     appVersion: FAKE_APP_VERSION,
     clerkPublishableKey: "pk_test_fake",
-    isDev: true,
+    isDev: opts.dev ?? true,
     isElectron: !WEB_SHELL,
     ...fixtureClient.api,
   };

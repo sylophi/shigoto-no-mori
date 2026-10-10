@@ -2,22 +2,25 @@
 import Band from "../components/Band.astro";
 import Card from "../components/Card.astro";
 import DownloadButtons from "../components/DownloadButtons.astro";
+import Frame from "../components/Frame.astro";
 import Icon from "../components/Icon.astro";
 import SectionHead from "../components/SectionHead.astro";
 import Shot from "../components/Shot.astro";
 import Page from "../layouts/Page.astro";
 import { WEB_APP } from "../site";
+import {
+  DevicesScene,
+  HeroScene,
+  PhoneScene,
+  TransplantScene,
+} from "../frames/scenes";
 
 import create from "../assets/create.webp";
 import dark from "../assets/dark.webp";
-import devices from "../assets/devices.webp";
-import hero from "../assets/hero.webp";
 import launch from "../assets/launch.webp";
-import phone from "../assets/phone.webp";
 import plain from "../assets/plain.webp";
 import row from "../assets/row.webp";
 import stack from "../assets/stack.webp";
-import transplant from "../assets/transplant.webp";
 
 // Widths the layout gives a full-width block on a phone.
 const PHONE = "(max-width: 760px) calc(100vw - 2.5rem)";
@@ -51,12 +54,13 @@ const PINS = [
       </p>
     </div>
     <div class="wrap wide stage">
-      <Shot
-        src={hero}
+      <Frame
+        Scene={HeroScene}
+        size={[1104, 690]}
+        shell="desktop"
+        live="/devices/dev_8f3ac2e1/projects/p_sm/worktrees/a10000000002"
         frame="window"
         class="stage-main"
-        priority
-        sizes={`${PHONE}, min(1075px, 84vw - 2.1rem)`}
         alt="The app's window: a mint sidebar listing worktrees across projects, each with its changed files, commits ahead and pull request number. The open worktree shows launcher buttons, its pull request with checks passed and a Merge button, and its recent commits."
       />
       <Shot
@@ -66,12 +70,12 @@ const PINS = [
         sizes="min(310px, 24vw)"
         alt=""
       />
-      <Shot
-        src={phone}
+      <Frame
+        Scene={PhoneScene}
+        size={[390, 844]}
+        shell="web"
         frame="phone"
         class="stage-phone"
-        eager
-        sizes="(max-width: 760px) calc(34vw - 1.85rem), min(240px, 20vw - 1.5rem)"
         alt="The same worktrees in the web app on a phone."
       />
     </div>
@@ -293,18 +297,22 @@ const PINS = [
         </Card>
       </div>
       <div class="machines-stage">
-        <Shot
-          src={devices}
+        <Frame
+          Scene={DevicesScene}
+          size={[1100, 688]}
+          shell="desktop"
+          live="/account"
           frame="window"
           class="machines-main"
-          sizes={`${PHONE}, min(905px, 78vw - 1.95rem)`}
           alt="The Devices page listing Studio Mac, Thinkpad and Mini with their connection state, their projects, and a port forwarded from Thinkpad."
         />
-        <Shot
-          src={transplant}
+        <Frame
+          Scene={TransplantScene}
+          size={[944, 656]}
+          crop={[24, 24, 896, 608]}
+          shell="part"
           frame="floating"
           class="machines-dialog"
-          sizes="(max-width: 760px) calc(92vw - 2.3rem), min(535px, 46vw - 1.15rem)"
           alt="The Transplant worktree dialog, moving fix-stale-locks from Studio Mac to Thinkpad with its carry-over files. A note says nothing on Studio Mac is deleted until the last step."
         />
       </div>
