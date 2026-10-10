@@ -38,9 +38,9 @@
  *      search-row, footer-row    popup search strips and footers: the
  *                                palette, the pickers, addProject/,
  *                                BranchCombobox, the diff file list's filter
- *      diff-view                 diff/DiffView.tsx
- *      diff-index                diff/DiffFileIndex.tsx
- *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
+ *      diff-view                 diff/DiffPageView.tsx
+ *      diff-index                diff/DiffFileIndexView.tsx
+ *      diff-index-row, diff-index-jump   diff/DiffFileIndexView.tsx
  *      file-tree                 files/FileTree.tsx
  *      file-view                 files/FileViewer.tsx
  *      live-card                 live/LiveCard.tsx

@@ -60,7 +60,7 @@ const FILTER_MIN_FILES = 8;
 //
 // Rows arrive built (patchFiles.ts). The caller decides whether they
 // come from the patch or from git status.
-export function DiffFileIndex({
+export function DiffFileIndexView({
   entries,
   activeKey,
   collapsedKeys,

@@ -2,10 +2,12 @@ import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { SubPageNotFoundView } from "@/components/shared/SubPageNotFoundView";
-import { DiffView } from "./DiffView";
+import { DiffPage } from "./DiffPage";
+import {
+  PullRequestDiffSubtitleView,
+  PullRequestDiffTitleView,
+} from "./DiffTitlesView";
 import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
-import { DiffStats } from "@/components/ui/diff-stats";
-import { pluralize } from "@/lib/pluralize";
 
 export function PullRequestDiff() {
   const { projectId, worktree, goBack, missing } = useRouteWorktree();
@@ -46,25 +48,18 @@ export function PullRequestDiff() {
   }
 
   return (
-    <DiffView
+    <DiffPage
       diff={diff}
       onBack={goBack}
       worktree={worktree}
-      title={
-        <>
-          {pr.title}{" "}
-          <span className="font-normal text-muted-foreground/60">
-            #{pr.number}
-          </span>
-        </>
-      }
+      title={<PullRequestDiffTitleView title={pr.title} number={pr.number} />}
       subtitle={
-        <>
-          {pluralize(pr.changedFiles, "file")} changed into{" "}
-          <span className="font-mono text-foreground/80">{pr.baseRefName}</span>
-          {", "}
-          <DiffStats additions={pr.additions} deletions={pr.deletions} />
-        </>
+        <PullRequestDiffSubtitleView
+          changedFiles={pr.changedFiles}
+          baseRefName={pr.baseRefName}
+          additions={pr.additions}
+          deletions={pr.deletions}
+        />
       }
       emptyMessage="No file changes in this PR."
     />

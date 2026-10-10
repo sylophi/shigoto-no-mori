@@ -10,7 +10,7 @@ import type { CommitSummary } from "@shigomori/contracts/schemas";
 // remote has it, rewriting it is a force-push conversation, not a
 // button. While an amend is underway the buttons step aside. The
 // composer's own header carries the cancel.
-export function LastCommitStrip({
+export function LastCommitStripView({
   commit,
   amending,
   canUndo,

@@ -6,7 +6,7 @@ import { StashMoves } from "@/components/worktreeDetail/git/StashMoves";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useStashDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { DiffView } from "./DiffView";
+import { DiffPage } from "./DiffPage";
 
 // The Git page's Stashes tab: the branch's stashes in the sidebar, under
 // the way to stash the changes, and the picked one's contents and moves
@@ -24,7 +24,7 @@ export function StashDiff() {
   const stash = stashes[index];
 
   return (
-    <DiffView
+    <DiffPage
       diff={diff}
       onBack={goBack}
       worktree={worktree}

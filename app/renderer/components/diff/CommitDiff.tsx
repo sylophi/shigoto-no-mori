@@ -1,4 +1,3 @@
-import { RelativeDate } from "@/components/ui/relative-date";
 import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
@@ -9,7 +8,8 @@ import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { CommitDetails, CommitSteps } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
-import { DiffView } from "./DiffView";
+import { DiffPage } from "./DiffPage";
+import { CommitBylineView } from "./DiffTitlesView";
 
 export function CommitDiff() {
   const { projectId, hash, worktree, goBack, missing } = useRouteWorktree();
@@ -40,21 +40,13 @@ export function CommitDiff() {
     worktree.recentCommits.find((c) => c.hash === hash);
 
   return (
-    <DiffView
+    <DiffPage
       diff={diff}
       onBack={goBack}
       worktree={worktree}
       title={commit?.subject ?? "Commit"}
       // A known commit's hash ends its details' row of buttons.
-      subtitle={
-        commit ? (
-          <>
-            By {commit.author}, <RelativeDate date={commit.date} />
-          </>
-        ) : (
-          <span className="font-mono">{hash}</span>
-        )
-      }
+      subtitle={<CommitBylineView commit={commit} hash={hash} />}
       details={
         commit && (
           <TimelineCommitDetails

@@ -70,15 +70,14 @@ const recording = vi.hoisted(() => {
 vi.mock("react/jsx-runtime", recording);
 vi.mock("react/jsx-dev-runtime", recording);
 
-// The areas not split yet (V3.md, step 6) leave these lists as their
-// PRs land. Two still hold a *View.tsx that is no view, which can't
-// even load here.
+// The areas not split yet (V3.md, step 6) leave this list as their
+// PRs land.
 const views = import.meta.glob<Record<string, unknown>>(
-  ["../renderer/components/**/*View.tsx", "!../renderer/components/diff/**"],
+  "../renderer/components/**/*View.tsx",
   { eager: true },
 );
 
-const PENDING = ["diff/", "files/", "live/", "palette/", "scriptConsole/"];
+const PENDING = ["files/", "live/", "palette/", "scriptConsole/"];
 
 // An intrinsic element opening (<div, <span ...>), not a type argument
 // (useState<string>), which follows an identifier.
