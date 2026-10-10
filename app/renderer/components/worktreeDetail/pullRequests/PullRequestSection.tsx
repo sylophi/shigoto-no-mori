@@ -6,8 +6,8 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { PullRequestBody } from "./PullRequestBody";
 import { PullRequestIdentity } from "./PullRequestIdentity";
-import { PullRequestSectionView } from "./PullRequestSectionView";
-import { StackListView } from "./StackListView";
+import { PullRequestSectionView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestSectionView.tsx";
+import { StackListView } from "@shigomori/ui/views/worktreeDetail/pullRequests/StackListView.tsx";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
   // Skip the PR query on detached HEAD. There's no branch to ask gh

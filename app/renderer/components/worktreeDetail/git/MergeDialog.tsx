@@ -12,7 +12,7 @@ import {
 } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { IntegrateMethod, Worktree } from "@shigomori/contracts/schemas";
-import { MergeDialogView } from "./MergeDialogView";
+import { MergeDialogView } from "@shigomori/ui/views/worktreeDetail/git/MergeDialogView.tsx";
 
 // The Git page's way to bring another branch in, opening the dialog.
 // None on a peer that takes no commands from here.

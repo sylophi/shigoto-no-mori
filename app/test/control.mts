@@ -97,7 +97,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { loose } from "@shigomori/contracts/schemas/loose";
 import { strict } from "@shigomori/contracts/schemas/strict";
-import { only } from "@shared/util/only";
+import { only } from "@shigomori/contracts/util/only";
 import {
   controlHandlers,
   controlTransfers,

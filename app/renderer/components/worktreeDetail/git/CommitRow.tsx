@@ -3,7 +3,7 @@
 import type { ComponentProps } from "react";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { CommitRowView } from "./CommitRowView";
+import { CommitRowView } from "@shigomori/ui/views/worktreeDetail/git/CommitRowView.tsx";
 
 export function CommitRow({
   worktree,

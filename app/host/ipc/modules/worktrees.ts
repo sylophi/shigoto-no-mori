@@ -87,7 +87,7 @@ import {
   pullRequestStackFor,
   stackCleanupFor,
   trunkOf,
-} from "@shared/pullRequestStack";
+} from "@shigomori/contracts/pullRequestStack";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { openTerminals } from "@host/lib/terminals/Terminals";
