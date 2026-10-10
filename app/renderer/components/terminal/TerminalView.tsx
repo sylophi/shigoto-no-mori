@@ -8,10 +8,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import {
-  readTerminalTheme,
-  sameTheme,
-} from "@/components/scriptConsole/terminalTheme";
+import { readTerminalTheme, sameTheme } from "./terminalTheme";
 
 // What the feed writes into once the screen is up.
 export type TerminalScreen = {

@@ -1,6 +1,11 @@
 import { lazy, Suspense } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { paramToSlot, type ScriptSlot } from "@/store/scriptSlot";
 import {
+  closeScriptTab,
+  drawerKey,
+  drawerOf,
+  pickDrawerTab,
   setDrawerHeight,
   setDrawerOpen,
   useTerminalDrawer,
@@ -19,20 +24,22 @@ const TerminalTabs = lazy(() =>
 const MIN_HEIGHT = 120;
 const MAX_SHARE = 0.8;
 
-export const drawerKey = (deviceId: string, worktree: Worktree): string =>
-  `${deviceId}/${worktree.projectId}/${worktree.id}`;
-
-// A worktree's terminals in the bottom drawer of its page, while it is
-// open. Closing the last terminal closes the drawer.
+// A worktree's terminals and the script consoles opened in it, in the
+// bottom drawer of its page, while it is open. Closing the last tab
+// closes the drawer.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const { deviceId } = useHostScope();
-  const { open, height } = useTerminalDrawer();
-  const key = drawerKey(deviceId, worktree);
-  if (!open.has(key)) return null;
+  const state = useTerminalDrawer();
+  const key = drawerKey(deviceId, worktree.projectId, worktree.id);
+  const drawer = drawerOf(state, key);
+  if (!drawer.open) return null;
   const close = () => setDrawerOpen(key, false);
+  const slots = drawer.scripts
+    .map(paramToSlot)
+    .filter((slot): slot is ScriptSlot => slot !== null);
   return (
     <TerminalDrawerView
-      height={height}
+      height={state.height}
       onHeight={(asked) =>
         setDrawerHeight(
           Math.round(
@@ -51,6 +58,13 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
             projectId: worktree.projectId,
             worktreeId: worktree.id,
           }}
+          scripts={{
+            worktree,
+            slots,
+            onClose: (slot) => closeScriptTab(key, slot),
+          }}
+          picked={drawer.picked}
+          onPick={(tab) => pickDrawerTab(key, tab)}
           onEmpty={close}
           onHide={close}
         />

@@ -33,7 +33,6 @@ import { KeyedSubscribers } from "./keyedSubscribers";
 // Re-export the slot codec so existing importers from "@/store/scriptRuns"
 // keep working without churning every consumer.
 export {
-  paramToSlot,
   scriptKey,
   slotLabel,
   slotToParam,

@@ -136,17 +136,10 @@ const devicesRedirectRoute = createRoute({
   },
 });
 
-// The console brings xterm along (a few hundred KB), which a session
-// that never opens a console has no use for at window open.
-const ScriptConsole = lazyRouteComponent(
-  () => import("@/components/scriptConsole/ScriptConsole"),
-  "ScriptConsole",
-);
-
 // The diff pages bring the diff renderer and the syntax
 // highlighter along, over a quarter of what boot would otherwise
 // download, and a session starts on a forest or a worktree, never on a
-// diff. Lazy like the console.
+// diff.
 const WorktreeDiff = lazyRouteComponent(
   () => import("@/components/diff/WorktreeDiff"),
   "WorktreeDiff",
@@ -274,12 +267,6 @@ const deviceTerminalsRoute = createRoute({
       : {},
 });
 
-const scriptConsoleRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.script,
-  component: withDeviceScope(ScriptConsole),
-});
-
 // The project pages, each lazy. A peer's project header offers the
 // same actions this machine's does, and they all land here.
 function projectRoute(
@@ -353,7 +340,6 @@ const routeTree = rootRoute.addChildren([
   stashDiffRoute,
   commitDiffRoute,
   worktreeFilesRoute,
-  scriptConsoleRoute,
   ...projectRoutes,
 ]);
 
