@@ -42,16 +42,16 @@ function readBootHint(): Theme {
   return "system";
 }
 
-// Whether the root wears `dark`, kept in step as whoever owns it
-// switches it.
-function useRootIsDark(root: HTMLElement): boolean {
+// The theme the root wears, kept in step as whoever owns it switches
+// it.
+function useRootTheme(root: HTMLElement): "light" | "dark" {
   return useSyncExternalStore(
     (onChange) => {
       const observer = new MutationObserver(onChange);
       observer.observe(root, { attributeFilter: ["class"] });
       return () => observer.disconnect();
     },
-    () => root.classList.contains("dark"),
+    () => (root.classList.contains("dark") ? "dark" : "light"),
   );
 }
 
@@ -67,7 +67,7 @@ export function ThemeProvider({
   children: ReactNode;
 }) {
   const root = useWindowRoot();
-  const rootIsDark = useRootIsDark(root);
+  const rootTheme = useRootTheme(root);
   const { data: config, isLoading } = useClientConfig();
   // Avoid a one-frame light-mode flash while clientConfig fetches by
   // trusting the localStorage mirror. Read live at evaluation time, not
@@ -96,12 +96,11 @@ export function ThemeProvider({
     return () => media.removeEventListener("change", handler);
   }, []);
 
-  const settingsResolved = applied === "system" ? systemTheme : applied;
   const resolved = fromRoot
-    ? rootIsDark
-      ? "dark"
-      : "light"
-    : settingsResolved;
+    ? rootTheme
+    : applied === "system"
+      ? systemTheme
+      : applied;
 
   useEffect(() => {
     if (!fromRoot) root.classList.toggle("dark", resolved === "dark");

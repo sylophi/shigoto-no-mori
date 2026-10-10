@@ -23,8 +23,8 @@ const overflows = (el: HTMLElement | null) =>
 // resizes, when anything inside it changes (a verb appears once its
 // query lands, a label turns into "Confirm delete?"), and when the
 // labels change width without either: a font finishes loading, or the
-// theme or layout on the window's root switches. Returns how far it collapsed,
-// for the tooltips.
+// theme or layout on the window's root switches. Returns how far it
+// collapsed, for the tooltips.
 export function useFittedLabels(
   footerRef: RefObject<HTMLElement | null>,
   leadingRef: RefObject<HTMLElement | null>,

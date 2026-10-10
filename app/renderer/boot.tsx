@@ -8,11 +8,10 @@
 // (@clerk/electron/react rides the preload bridge for token storage and
 // the system-browser OAuth transport, plain @clerk/react is the
 // browser's) and the router history (memory in a window, real browser
-// history in a tab). The wiring that only exists
-// on a machine with projects of its own (this machine's push watch,
-// the script run stream, the orphan sweep report, the worktree
-// lifecycle, the port forwards) starts only where there is a local
-// host.
+// history in a tab). The wiring that only exists on a machine with
+// projects of its own (this machine's push watch, the script run
+// stream, the orphan sweep report, the worktree lifecycle, the port
+// forwards) starts only where there is a local host.
 //
 // Callers must have installed window.api before importing this module:
 // several renderer modules read the bridge at module scope (queryKeys'
