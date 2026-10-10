@@ -145,7 +145,7 @@ export function makeWake(): Wake {
 // A schedule whose waits are `wake` waits: the wait runs in the step,
 // which answers no delay of its own. Last in a pipe, so what comes
 // before it (a status tap, another ladder) sees the delay it waits.
-export const wakeable =
+const wakeable =
   (wake: Wake) =>
   <Out, In, E, R>(
     schedule: Schedule.Schedule<Out, In, E, R>,
