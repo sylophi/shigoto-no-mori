@@ -12,7 +12,6 @@
 // headless proof.
 import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 import type { RendererContractApi } from "@shared/ipc/client";
-import type { ClientTransport } from "@shared/ipc/transport";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
@@ -51,31 +50,9 @@ export type RemoteDevice = {
   // in-flight dial joins it, one landing on no session rejects, and
   // the online-to-connected transition refetches it
   // (remoteDeviceSync.ts). Host calls route over the hub bridge onto
-  // the direct wire. Client-scoped calls reject (see
-  // rejectingClientTransport).
+  // the direct wire. Client-scoped calls reject (lib/runtime/Api.ts,
+  // peerApi).
   api?: RemoteDeviceApi;
-};
-
-// Client-scoped calls only make sense for the local machine, so a remote
-// device's client transport rejects them outright rather than sending
-// them over a wire that has no client scope.
-const REMOTE_CLIENT_SCOPE_MESSAGE =
-  "client-scoped call is not available for a remote device";
-
-export const rejectingClientTransport: ClientTransport = {
-  // Reject rather than throw synchronously so a client-scoped call on a
-  // remote device fails through the same promise path as any other
-  // transport error, matching the ClientTransport contract.
-  invoke() {
-    return Promise.reject(new Error(REMOTE_CLIENT_SCOPE_MESSAGE));
-  },
-  // Nothing to subscribe to over a scope that does not exist here. Log
-  // so a stray subscription is visible, and hand back a no-op unsubscribe
-  // so the caller's cleanup path stays uniform.
-  subscribe() {
-    console.warn(`[remote] ${REMOTE_CLIENT_SCOPE_MESSAGE}`);
-    return () => {};
-  },
 };
 
 // The snapshot store: a stable reference between changes, a NEW

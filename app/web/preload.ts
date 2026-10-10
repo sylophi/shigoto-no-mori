@@ -9,6 +9,7 @@
 import { viteEnv } from "./account/config";
 import { browserHintsOf } from "./account/deviceName";
 import { ACCOUNT_KEY } from "./account/store";
+import { disposeWithPage } from "@/lib/runtime/client";
 import { createWebBridge, type WebBridge } from "./ipc/register";
 
 let installed: WebBridge | null = null;
@@ -34,6 +35,7 @@ export function installWebBridge(): WebBridge {
   });
   window.api = bridge.api;
   installed = bridge;
+  disposeWithPage({ dispose: bridge.stop });
   // Boot reconcile: connect the hub socket when a credential is
   // already stored, mirroring the desktop's ready-handler refresh.
   void bridge.refreshHub();

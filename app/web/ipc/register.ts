@@ -5,8 +5,9 @@
 // (clientConfig, account, hub, shell, releases) and its copy of the
 // shared settings, on the tab's local registrar (localRegistrar.ts). It
 // builds the SAME window.api surface the desktop does: the scalar facts
-// (deviceId, appVersion, isDev, isElectron) plus buildApi over that
-// registrar, so renderer components mount unmodified.
+// (deviceId, appVersion, isDev, isElectron) plus the clients over that
+// registrar, on the tab's client runtime (renderer/lib/runtime), so
+// renderer components mount unmodified.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
 // browser global read at module scope, so the headless bridge check
@@ -15,7 +16,10 @@
 import { logFailure } from "@shared/log";
 import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
-import { buildApi, type RendererContractApi } from "@shared/ipc/client";
+import * as Layer from "effect/Layer";
+import { ClientLinks } from "@/lib/runtime/ClientLinks";
+import { startClientNow } from "@/lib/runtime/client";
+import type { ClientApi } from "@/lib/runtime/Api";
 import {
   accountContract,
   type AccountStatus,
@@ -91,7 +95,7 @@ export type WebBridge = {
     clerkPublishableKey: string;
     isDev: boolean;
     isElectron: boolean;
-  } & RendererContractApi;
+  } & ClientApi;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
@@ -107,7 +111,7 @@ export type WebBridge = {
   // next heartbeat tick.
   probe(): void;
   // Tears the hub socket down (tab teardown, tests), along with the
-  // direct plane it fronts.
+  // direct plane it fronts and the tab's client runtime.
   stop(): Promise<void>;
 };
 
@@ -458,6 +462,11 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     registrarOpts,
   );
 
+  // The tab serves both scopes itself: the client modules, and the host
+  // ones it has (its copy of the shared settings) or refuses.
+  const client = startClientNow(
+    Layer.succeed(ClientLinks, ClientLinks.of({ linkOf: () => tab.link })),
+  );
   const api = {
     deviceId,
     appVersion: deps.appVersion,
@@ -469,7 +478,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // a browser cannot bind a local TCP listener, and the tab's registrar
     // rejects the client-scoped portForward channels anyway.
     isElectron: false,
-    ...buildApi(() => tab.client),
+    ...client.api,
   };
 
   return {
@@ -484,9 +493,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       directPlane.probe();
     },
 
-    stop: () => {
+    stop: async () => {
       directPlane.stop();
-      return connection.stop();
+      await connection.stop();
+      await client.dispose();
     },
   };
 }

@@ -38,7 +38,6 @@
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
 import { hashKey, type QueryClient } from "@tanstack/react-query";
-import { buildApi } from "@shared/ipc/client";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
@@ -51,13 +50,11 @@ import {
   removeDeviceCache,
 } from "@/lib/queryKeys";
 import {
-  rejectingClientTransport,
   type RemoteDevice,
   type RemoteDeviceApi,
   setRemoteDevices,
 } from "./devices";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
-import { createHubClientTransport } from "./hubTransport";
 
 // The account device list lives in the shared react-query entry
 // (accountDevicesQueryOptions, whose comment says why there is one
@@ -145,10 +142,7 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
   if (watchPeer === null) {
     throw new Error("remote device sync used before startRemoteDeviceSync");
   }
-  const api = buildApi({
-    host: createHubClientTransport(deviceId),
-    client: rejectingClientTransport,
-  });
+  const api = window.api.peerApi(deviceId);
   apis.set(deviceId, { api, unwatch: watchPeer(deviceId, api) });
   return api;
 }
