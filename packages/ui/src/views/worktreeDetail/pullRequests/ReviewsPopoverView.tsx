@@ -18,7 +18,8 @@ import {
   sortReviewersWorstFirst,
 } from "../../../lib/pullRequest.ts";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas/index";
-import { REVIEWER_STATE, TONE_TEXT } from "./pullRequestShared.ts";
+import { REVIEWER_STATE } from "./pullRequestShared.ts";
+import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 
 const SUMMARY_ICON: Partial<Record<PullRequestTone, typeof UserRound>> = {
   emerald: UserRoundCheck,
@@ -47,7 +48,7 @@ export function ReviewsPopoverView({
   const icon = (
     <Icon
       aria-hidden
-      className={cn("size-3.5 shrink-0", TONE_TEXT[summary.tone])}
+      className={cn("size-3.5 shrink-0", TONE_MARK[summary.tone])}
     />
   );
   const words = compact ? (
@@ -91,7 +92,7 @@ export function ReviewsPopoverView({
               >
                 <StateIcon
                   aria-hidden
-                  className={cn("size-3 shrink-0", TONE_TEXT[tone])}
+                  className={cn("size-3 shrink-0", TONE_MARK[tone])}
                 />
                 <span className="min-w-0 flex-1 truncate text-foreground">
                   {login}

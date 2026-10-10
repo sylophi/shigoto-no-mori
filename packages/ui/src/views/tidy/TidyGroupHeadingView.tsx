@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { pluralize } from "../../lib/pluralize.ts";
 
 interface TidyGroupHeadingProps {
   project: Project;
@@ -32,7 +33,7 @@ export function TidyGroupHeadingView({
         </SimpleTooltip>
       </div>
       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-        {count} {count === 1 ? "worktree" : "worktrees"} · {formatBytes(bytes)}
+        {pluralize(count, "worktree")} · {formatBytes(bytes)}
       </span>
     </div>
   );

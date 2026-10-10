@@ -6,6 +6,7 @@ import { formatBytes } from "../../lib/formatBytes.ts";
 import type { TidySummary } from "./tidyModel.ts";
 import { TidyEntryTitleView } from "./TidyEntryTitleView.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { pluralize } from "../../lib/pluralize.ts";
 
 interface TidyConfirmProps {
   summary: TidySummary;
@@ -38,7 +39,7 @@ export function TidyConfirmView({
   return (
     <div className="flex min-h-0 flex-col p-5">
       <h2 className="text-base font-semibold">
-        Remove {count} {count === 1 ? "worktree" : "worktrees"}
+        Remove {pluralize(count, "worktree")}
         {/* Named up front: a selection reaching into several repos is a
               bigger act than tidying the one you were looking at. */}
         {projectCount > 1 && ` across ${projectCount} projects`}?
@@ -126,7 +127,7 @@ export function TidyConfirmView({
           disabled={blocked}
           onClick={onConfirm}
         >
-          Remove {count} {count === 1 ? "worktree" : "worktrees"}
+          Remove {pluralize(count, "worktree")}
         </Button>
       </div>
     </div>

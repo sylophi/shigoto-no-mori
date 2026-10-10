@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../primitives/dropdown-menu.tsx";
+import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "../../lib/pluralize.ts";
 import { cn } from "../../lib/utils.ts";
@@ -184,21 +185,19 @@ export function DiffFileIndexView({
             className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
           />
           {onToggleAll && (
-            <button
-              type="button"
+            <IconButton
+              size="xs"
               onClick={onToggleAll}
               aria-label={
                 allCollapsed ? "Expand all files" : "Collapse all files"
               }
-              data-icon-button
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               {allCollapsed ? (
                 <ChevronsUpDown aria-hidden className="size-3.5" />
               ) : (
                 <ChevronsDownUp aria-hidden className="size-3.5" />
               )}
-            </button>
+            </IconButton>
           )}
         </div>
       )}
@@ -389,8 +388,12 @@ function DiscardMenu({
       <DropdownMenuTrigger
         aria-label="Change actions"
         disabled={total === 0}
-        data-icon-button
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
+        render={
+          <IconButton
+            size="xs"
+            className="disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
+          />
+        }
       >
         <Ellipsis aria-hidden className="size-3.5" />
       </DropdownMenuTrigger>

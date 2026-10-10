@@ -319,8 +319,8 @@ export function DiffFileRowView({
         renderHeaderPrefix={
           onToggle
             ? () => (
-                <button
-                  type="button"
+                <IconButton
+                  size="xs"
                   onClick={() => onToggle(fileId, !collapsed)}
                   aria-expanded={!collapsed}
                   aria-label={
@@ -328,8 +328,6 @@ export function DiffFileRowView({
                       ? `Expand ${fileDiff.name}`
                       : `Collapse ${fileDiff.name}`
                   }
-                  data-icon-button
-                  className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <ChevronDown
                     aria-hidden
@@ -338,7 +336,7 @@ export function DiffFileRowView({
                       collapsed && "-rotate-90",
                     )}
                   />
-                </button>
+                </IconButton>
               )
             : undefined
         }

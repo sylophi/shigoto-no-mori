@@ -6,7 +6,7 @@ import type { PullRequestDetail } from "@shigomori/contracts/schemas/index";
 import { ChecksPopoverView } from "./ChecksPopoverView.tsx";
 import { ChecksSummaryIconView } from "./ChecksSummaryIconView.tsx";
 import { MergeStateIconView } from "./MergeStateIconView.tsx";
-import { TONE_TEXT } from "./pullRequestShared.ts";
+import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 
 // The merge box's one status (describeMergeVerdict): its words, with
 // the checks' spinner while they run and its tone's mark otherwise,
@@ -40,7 +40,7 @@ export function MergeStatusView({
       ) : (
         <span
           data-status-label
-          className={cn("min-w-0 truncate", TONE_TEXT[verdict.tone])}
+          className={cn("min-w-0 truncate", TONE_MARK[verdict.tone])}
         >
           {verdict.label}
         </span>

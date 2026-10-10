@@ -2,22 +2,10 @@ import { Loader2 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
+import { TONE_MARK } from "../../primitives/status-dot.tsx";
 
 // The tones a worktree's sync state is drawn in (the app's lib/syncState).
 export type SyncTone = "violet" | "emerald" | "sky" | "indigo" | "rose";
-
-// Tone-to-class lookup. Spelled out so Tailwind's JIT keeps the classes
-// in the build instead of pruning the dynamic interpolation.
-const TONE_CLASSES: Record<SyncTone, string> = {
-  violet:
-    "text-violet-500 hover:bg-violet-500/10 focus-visible:outline-violet-500",
-  emerald:
-    "text-emerald-500 hover:bg-emerald-500/10 focus-visible:outline-emerald-500",
-  sky: "text-sky-500 hover:bg-sky-500/10 focus-visible:outline-sky-500",
-  indigo:
-    "text-indigo-500 hover:bg-indigo-500/10 focus-visible:outline-indigo-500",
-  rose: "text-rose-500 hover:bg-rose-500/10 focus-visible:outline-rose-500",
-};
 
 // The pill's shape without its tone or its button behaviour, for a
 // status that stands where an action would (a pull held back, "Up to
@@ -56,7 +44,8 @@ export function SyncActionButtonView({
         className={cn(
           SYNC_PILL_SHAPE,
           "transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
-          TONE_CLASSES[tone],
+          TONE_MARK[tone],
+          "hover:bg-current/10 focus-visible:outline-current",
         )}
       >
         {label}

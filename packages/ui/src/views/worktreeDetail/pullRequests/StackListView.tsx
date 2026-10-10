@@ -10,7 +10,7 @@ import { cn } from "../../../lib/utils.ts";
 import type { PullRequestStack } from "@shigomori/contracts/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas/index";
 import { PullRequestTitleLinkView } from "./PullRequestTitleLinkView.tsx";
-import { TONE_TEXT } from "./pullRequestShared.ts";
+import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 
 export function StackListView({
@@ -42,7 +42,7 @@ export function StackListView({
             <SimpleTooltip tip={label}>
               <Icon
                 aria-label={label}
-                className={cn("size-3.5 shrink-0", TONE_TEXT[tone])}
+                className={cn("size-3.5 shrink-0", TONE_MARK[tone])}
               />
             </SimpleTooltip>
             <SimpleTooltip whenTruncated tip={entry.pr.title}>

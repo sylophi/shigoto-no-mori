@@ -22,6 +22,7 @@ import {
   BrowseKeyHintsView,
   BrowseUpItemView,
 } from "./BrowseListPartsView.tsx";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // Prefix used as the cmdk `value` for browse-list items. `hasHighlighted`
 // reads it back to tell "a row is highlighted" from "nothing is".
@@ -214,10 +215,7 @@ export function FolderPickerView({
         )}
       </Command.List>
 
-      <div
-        data-slot="footer-row"
-        className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-      >
+      <FooterRow className="justify-between">
         <div className="flex items-center gap-3">
           <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
         </div>
@@ -227,7 +225,7 @@ export function FolderPickerView({
             Open in Finder
           </ChipButton>
         )}
-      </div>
+      </FooterRow>
     </Command>
   );
 }

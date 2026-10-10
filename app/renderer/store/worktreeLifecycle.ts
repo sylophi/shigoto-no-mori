@@ -24,6 +24,7 @@ import {
 import { toast } from "@/lib/toast";
 import type { RendererApi } from "@/window";
 import { KeyedSubscribers } from "./keyedSubscribers";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
 export type { CreatePhase } from "@shigomori/contracts/schemas";
 
@@ -109,9 +110,7 @@ class WorktreeLifecycleStore {
         if (removed.length > 0) {
           deps?.onCarryOverReconciled?.(evt.projectId);
           toast.info(
-            `.worktreeinclude replaced ${removed.length} carry-over ${
-              removed.length === 1 ? "entry" : "entries"
-            }`,
+            `.worktreeinclude replaced ${pluralize(removed.length, "carry-over entry", "carry-over entries")}`,
             {
               description:
                 "The repo's .worktreeinclude file now covers these paths, so " +

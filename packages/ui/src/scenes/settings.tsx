@@ -29,7 +29,7 @@ import {
   PeerOfflineNoteView,
   PeerReadOnlyNoteView,
   PeerSettingsLoadingView,
-  PeerTogglesView,
+  DeviceTogglesView,
   PeerVersionLineView,
 } from "../views/settings/PeerDeviceSettingsView.tsx";
 import {
@@ -390,7 +390,7 @@ export function SettingsPartsScene() {
       </div>
       <div className="flex min-w-0 flex-col gap-8">
         <Part label="Worktrees and integrations, a peer read-only">
-          <PeerTogglesView
+          <DeviceTogglesView
             readOnly
             note={<PeerReadOnlyNoteView label={thinkpad.label} />}
             saveError={null}
@@ -400,7 +400,7 @@ export function SettingsPartsScene() {
               setForm={setForm}
               driveBase="/Volumes/<drive>/.sm/worktrees/<project>"
             />
-          </PeerTogglesView>
+          </DeviceTogglesView>
           <IntegrationTogglesView
             form={FORM}
             setForm={setForm}

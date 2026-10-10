@@ -46,10 +46,10 @@ export function PeerVersionLineView({ appVersion }: { appVersion: string }) {
   );
 }
 
-// inert rather than a disabled prop on every row: the toggles are
-// shared verbatim with the local form, and a read-only visitor needs
-// them readable, just not operable.
-export function PeerTogglesView({
+// A device's toggles, inert rather than disabled row by row while it
+// can be read but not commanded: a read-only visitor needs them
+// readable, just not operable.
+export function DeviceTogglesView({
   readOnly,
   note,
   saveError,

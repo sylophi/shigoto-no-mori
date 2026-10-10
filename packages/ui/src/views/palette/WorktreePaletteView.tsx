@@ -14,6 +14,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { PaneKeysProvider } from "./PaletteItemView.tsx";
 import type { PaletteRow } from "./paletteEntries.ts";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // The ⌘K palette's content, inside its dialog (WorktreePalette.tsx
 // runs it): the search row, the list beside the highlighted row's
@@ -118,10 +119,7 @@ export function PaletteDialogView({
         </div>
       </Command.List>
 
-      <div
-        data-slot="footer-row"
-        className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-      >
+      <FooterRow>
         <KbdHint
           keys={[<ArrowUp key="up" />, <ArrowDown key="down" />]}
           label="Navigate"
@@ -140,7 +138,7 @@ export function PaletteDialogView({
             <KbdHint keys={["⇥"]} label="Actions" />
           </>
         )}
-      </div>
+      </FooterRow>
     </Command>
   );
 }

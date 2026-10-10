@@ -37,6 +37,7 @@ import { ExternalLink } from "../../primitives/external-link.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
+import { pluralize } from "../../lib/pluralize.ts";
 
 export function PortForwardSectionView({
   canStart,
@@ -102,7 +103,7 @@ export function PortForwardSectionView({
           </ExternalLink>
           {forward.connCount > 0 && (
             <SimpleTooltip
-              tip={`${forward.connCount} open ${forward.connCount === 1 ? "connection" : "connections"}`}
+              tip={pluralize(forward.connCount, "open connection")}
             >
               <span className="tabular ml-1 text-3xs text-muted-foreground/70">
                 {forward.connCount}
