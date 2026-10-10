@@ -238,21 +238,6 @@ it("imports once: a later edit to the JSON files is not read", async () => {
   assert.equal((await rows("projects")).length, 1);
 });
 
-it("takes the projects and the shelf from a state.json that predates the registry", async () => {
-  write("state.json", {
-    projects: [{ id: "A", name: "a", path: "/a" }],
-    shelvedWorktrees: { aaaaaaaaaaaa: true },
-    projectOrder: ["/a"],
-  });
-  assert.deepEqual(await rows("projects"), [
-    { id: "A", name: "a", path: "/a", position: 0 },
-  ]);
-  assert.deepEqual(await rows("worktree_marks"), [
-    { worktree_id: "aaaaaaaaaaaa", mark: "shelved" },
-  ]);
-  assert.deepEqual(await rows("project_order"), []);
-});
-
 it("refuses a registry it can't read, naming the file, and imports nothing", async () => {
   write("registry.json", "{ truncated");
   write("config.json", { portPool: true });

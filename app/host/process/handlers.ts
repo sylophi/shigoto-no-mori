@@ -72,7 +72,6 @@ import {
 import { currentMirrorList, endMirrorIfCopyGone } from "@host/mirror/sessions";
 import {
   createNoAccountSweep,
-  endLegacyMirrors,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   settleMirrorBookkeeping,
@@ -292,9 +291,6 @@ export const mirrorDaemonLayer = MirrorDaemon.layer({
     gitFollower.sessionsChanged();
     observeMirrorHistory();
     reapOrphanedTransfers();
-    // A mirror an older build started from the copy's device
-    // (registry.ts isLegacyMirror), ended once, the worktree kept.
-    void endLegacyMirrors();
     noAccountSweep.run();
     // The stops that waited for the daemon, originals gone behind the
     // app's back, sessions a re-open replaced (registry.ts).

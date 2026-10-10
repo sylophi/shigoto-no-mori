@@ -46,8 +46,8 @@ export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
 // session that predates it, which read as "everything".
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
 
-// What kind of session it is (MIRROR_LABEL_MODE), or null for a
-// legacy mirror (below) or a mode this build does not know. A session
+// What kind of session it is (MIRROR_LABEL_MODE), or null for a mode
+// this build does not know. A session
 // from before the mode label says so in three labels of its own: the
 // engine keeps a session's labels for its life, so they are read here
 // until step 7 of V3.md drops them with the legacy sweep. A recreate
@@ -208,53 +208,14 @@ export function requireRunningEngine(): MirrorImpl {
 // transfer (host/mirror/oneShot.ts) rides the same daemon under a
 // label, and nothing that lists, follows or narrates mirrors should
 // see it. The transfer finds its own session on the raw list. Nor a
-// legacy mirror (below), which the follower would read the wrong way
-// round and which is ended on sight.
+// session in a mode this build does not know.
 export function mirrorSessions(
   daemon: Pick<MirrorImpl, "sessions">,
 ): MirrorSessionRaw[] {
-  return daemon
-    .sessions()
-    .filter((raw) => !isTransferSession(raw) && !isLegacyMirror(raw));
-}
-
-// A mirror an older build started from the copy's device: it ran
-// there, its local side the copy, and carries no mode (modeOf above).
-// A mirror runs on
-// the device holding the original now, so such a session is ended the
-// first time the engine reports it (main wires this to its snapshots):
-// the session only, never a worktree, and its thread (the copy's page)
-// says why and what to do. Each is asked once, like the orphaned
-// transfers: a terminate that fails is logged.
-function isLegacyMirror(raw: MirrorSessionRaw): boolean {
-  return modeOf(raw.labels) === null;
-}
-
-export const LEGACY_MIRROR_DETAIL =
-  "This mirror was started from the copy's device, which this version no longer does. Start it again from the original's page.";
-
-const endedLegacy = new Set<string>();
-
-export async function endLegacyMirrors(): Promise<void> {
-  const daemon = engineOrNull();
-  if (daemon === null || daemon.status() !== "running") return;
-  const doomed = daemon
-    .sessions()
-    .filter((raw) => isLegacyMirror(raw) && !endedLegacy.has(raw.session));
-  await Promise.all(
-    doomed.map(async (raw) => {
-      endedLegacy.add(raw.session);
-      try {
-        await daemon.terminate(raw.session);
-      } catch (error) {
-        log.warn(
-          `[mirror] could not end a mirror started from the copy's device: ${errorMessageOf(error)}`,
-        );
-        return;
-      }
-      daemon.noteEvent(localWorktreeIdOf(raw), "halted", LEGACY_MIRROR_DETAIL);
-    }),
-  );
+  return daemon.sessions().filter((raw) => {
+    const mode = modeOf(raw.labels);
+    return mode === "mirror" || mode === "mirror-branch";
+  });
 }
 
 // Which transfer a session is, written into its mode
