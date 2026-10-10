@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../lib/utils.ts";
+import { useThemeRoot } from "../root.tsx";
 
 // The open shells, bottom to top. Escape reaches the top one only, so
 // a picker over a dialog closes alone and the dialog under it stays.
@@ -49,15 +50,19 @@ export function ModalShell({
   popoverClassName,
   children,
 }: ModalShellProps) {
-  // Escape lives on the window, not the shell: after a click on the
-  // backdrop or a gap, focus (and the keydown target) is document.body,
-  // whose events never reach React's delegated handlers. Captured, so
-  // it lands before any handler inside the shell.
+  // Escape lives on the shell's document, not the shell: after a click
+  // on the backdrop or a gap, focus (and the keydown target) is the
+  // body, whose events never reach React's delegated handlers.
+  // Captured, so it lands before any handler inside the shell.
   const onEscapeRef = useRef(onEscape ?? onClose);
   onEscapeRef.current = onEscape ?? onClose;
   const closeOnEscapeRef = useRef(closeOnEscape);
   closeOnEscapeRef.current = closeOnEscape;
+  const root = useThemeRoot();
+  const backdropRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    const doc = backdropRef.current?.ownerDocument;
+    if (!doc) return;
     const id = Symbol("modal-shell");
     openShells.push(id);
     const onKey = (e: KeyboardEvent) => {
@@ -76,9 +81,9 @@ export function ModalShell({
       e.stopPropagation();
       onEscapeRef.current();
     };
-    window.addEventListener("keydown", onKey, true);
+    doc.addEventListener("keydown", onKey, true);
     return () => {
-      window.removeEventListener("keydown", onKey, true);
+      doc.removeEventListener("keydown", onKey, true);
       openShells.splice(openShells.indexOf(id), 1);
     };
   }, []);
@@ -86,7 +91,6 @@ export function ModalShell({
   // left in its place to animate out, then removed. A copy doesn't
   // carry scroll offsets, so they're kept as the lists scroll: read on
   // close, they'd force a layout in the middle of React's commit.
-  const backdropRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const backdrop = backdropRef.current;
     if (!backdrop) return;
@@ -102,9 +106,11 @@ export function ModalShell({
       // (its fade would wait to play until it's shown again), or the
       // shell is still on its way in (a fresh copy would jump back to
       // fully open first).
+      const doc = backdrop.ownerDocument;
       if (
-        matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        document.hidden ||
+        doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)")
+          .matches ||
+        doc.hidden ||
         backdrop.getAnimations().length > 0
       ) {
         return;
@@ -129,12 +135,13 @@ export function ModalShell({
       });
     };
   }, []);
-  // Portaled to <body>: the shell is fixed and z-50, but under doubutsu
-  // the main canvas is its own stacking context (isolation: isolate in
-  // doubutsu.css), which would trap the shell beneath the sidebar
-  // header's positioned title. Mounting at the body root puts it in
-  // the root context, above everything, in all four theme modes.
-  return createPortal(
+  // Portaled to the theme root: the shell is fixed and z-50, but under
+  // doubutsu the main canvas is its own stacking context (isolation:
+  // isolate in doubutsu.css), which would trap the shell beneath the
+  // sidebar header's positioned title. Mounting at the root puts it
+  // above everything, in all four theme modes. With no root (a server
+  // render) it draws in place.
+  const shell = (
     <div
       ref={backdropRef}
       role="presentation"
@@ -154,9 +161,9 @@ export function ModalShell({
       >
         {children}
       </ModalBox>
-    </div>,
-    document.body,
+    </div>
   );
+  return root ? createPortal(shell, root) : shell;
 }
 
 // The dialog's box, where ModalShell hangs it over the window. A scene

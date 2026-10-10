@@ -121,8 +121,8 @@ export function useClock(running: boolean): number {
   useEffect(() => {
     if (!running) return;
     setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [running]);
   return now;
 }

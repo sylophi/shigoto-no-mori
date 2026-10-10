@@ -150,7 +150,7 @@ export function MirrorManageDialogView({
       </FlowHeaderView>
 
       <FlowBodyView>
-        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid gap-5 @min-[48rem]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex min-w-0 flex-col gap-5">
             <div className="space-y-2">
               {pair}

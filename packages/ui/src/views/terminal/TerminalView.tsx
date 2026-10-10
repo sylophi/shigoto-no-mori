@@ -58,8 +58,10 @@ export function TerminalView({
     const host = hostRef.current;
     if (!host) return;
     let cancelled = false;
-    void document.fonts
-      .load(`12px ${getComputedStyle(host).fontFamily}`, "a\ue0b0")
+    const doc = host.ownerDocument;
+    const family = doc.defaultView?.getComputedStyle(host).fontFamily ?? "";
+    void doc.fonts
+      .load(`12px ${family}`, "a\ue0b0")
       .catch(() => {})
       .then(() => {
         if (!cancelled) setFontsIn(true);
@@ -76,7 +78,8 @@ export function TerminalView({
     const term = new Terminal({
       // Matches the host's `font-terminal text-xs`. xterm sizes its cell
       // grid from these, so they can't come from CSS.
-      fontFamily: getComputedStyle(host).fontFamily,
+      fontFamily:
+        host.ownerDocument.defaultView?.getComputedStyle(host).fontFamily,
       fontSize: 12,
       lineHeight: 1.25,
       cursorBlink: true,
@@ -105,7 +108,7 @@ export function TerminalView({
     // answered once. And only once the replay is parsed (TerminalScreen).
     let replayed = true;
     const dataSub = term.onData((data) => {
-      if (replayed && host.contains(document.activeElement)) {
+      if (replayed && host.contains(host.ownerDocument.activeElement)) {
         handlers.current.onInput(data);
       }
     });
@@ -130,9 +133,9 @@ export function TerminalView({
     const onFocus = () => propose(true);
     term.textarea?.addEventListener("focus", onFocus);
 
-    // Theme classes and the palette attribute live on <html> and flip
-    // after this component's own effects run, so watch the DOM rather
-    // than the theme hooks. Only a changed palette is handed to xterm:
+    // Theme classes and the palette attribute live on the window's theme
+    // root and flip after this component's own effects run, so watch the
+    // DOM rather than the theme hooks. Only a changed palette is handed to xterm:
     // it repaints everything for any new theme object.
     const themeObserver = new MutationObserver(() => {
       const next = readTerminalTheme(host);
@@ -140,10 +143,12 @@ export function TerminalView({
       theme = next;
       term.options.theme = next;
     });
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "data-palette"],
-    });
+    const themeRoot = host.closest("[data-theme-scope]");
+    if (themeRoot)
+      themeObserver.observe(themeRoot, {
+        attributes: true,
+        attributeFilter: ["class", "data-palette"],
+      });
 
     const stop = feed({
       replay: (data, reset) => {
@@ -179,7 +184,8 @@ export function TerminalView({
     if (!term) return;
     term.options.disableStdin = !live;
     term.write(live ? SHOW_CURSOR : HIDE_CURSOR);
-    if (!live && hostRef.current?.contains(document.activeElement)) {
+    const host = hostRef.current;
+    if (!live && host?.contains(host.ownerDocument.activeElement)) {
       term.blur();
     }
   }, [live, fontsIn]);

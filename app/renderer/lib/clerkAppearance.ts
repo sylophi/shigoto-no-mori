@@ -1,7 +1,7 @@
 // Binds Clerk's prebuilt components to the app's live theme without
-// forking their structure: every value is a CSS variable reference, so
-// light/dark and the doubutsu overlay (which remaps the same tokens)
-// propagate into Clerk's portaled surfaces with no remount. Clerk's UI
+// forking their structure: every value is a CSS variable reference,
+// which ClerkGate resolves against the theme root (Clerk's modal mounts
+// outside it) whenever light/dark or the doubutsu overlay changes. Clerk's UI
 // is outside doubutsu.css's selector contract. This appearance object
 // is its entire theming surface, so keep it to theme tokens
 // (theme-contract verifies every bare var here still resolves in both

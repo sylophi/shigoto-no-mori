@@ -10,6 +10,7 @@ import {
 } from "./floating-surface.ts";
 import { ChevronRightIcon, CheckIcon } from "lucide-react";
 import type { WithoutTitle } from "./tooltip.tsx";
+import { useThemeRoot } from "../root.tsx";
 
 const MENU_SURFACE_CLASS = cn(
   FLOATING_SURFACE_CLASS,
@@ -87,7 +88,7 @@ export function MenuPopupSurface({
   ...props
 }: MenuPopupSurfaceProps) {
   return (
-    <MenuPrimitive.Portal>
+    <MenuPrimitive.Portal container={useThemeRoot()}>
       <MenuPrimitive.Positioner
         className={FLOATING_POSITIONER_CLASS}
         align={align}

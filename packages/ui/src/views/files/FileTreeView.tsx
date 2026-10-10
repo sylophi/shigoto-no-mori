@@ -28,7 +28,8 @@ export function FileTreeView({
       ...e.currentTarget.querySelectorAll<HTMLElement>("[data-tree-path]"),
     ];
     if (rows.length === 0) return;
-    const at = rows.findIndex((row) => row === document.activeElement);
+    const active = e.currentTarget.ownerDocument.activeElement;
+    const at = rows.findIndex((row) => row === active);
     const row = rows[at];
     const focus = (i: number) => {
       e.preventDefault();

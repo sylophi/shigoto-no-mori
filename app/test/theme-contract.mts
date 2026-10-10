@@ -63,9 +63,6 @@ const RUNTIME_ATTRS = new Set([
   "data-disabled",
   "data-unchecked",
   "data-sonner-toast",
-  // Set through `dataset` (AppShell) and by web/public/boot-theme.js,
-  // so the attribute never appears literally in renderer source.
-  "data-layout",
   // sonner's list element, which phone.css keeps its hit areas out of.
   "data-sonner-toaster",
   // sonner's mark on the toasts it draws, as against a custom one.
