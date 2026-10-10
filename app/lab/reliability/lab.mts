@@ -123,7 +123,7 @@ const PAGE_HOOKS = `(() => {
   }
   window.Date = ShiftedDate;
   window.harnessShiftClock = (ms) => {
-    offset = ms;
+    offset += ms;
   };
   const seen = new WeakSet();
   new MutationObserver(() => {
@@ -204,7 +204,10 @@ export class Tab {
     }
   }
 
-  async shiftClock(ms: number): Promise<void> {
+  // Moves the page's wall clock ahead, as a sleep does. Only ahead: a
+  // clock that goes back is nothing a machine does, and Effect's
+  // schedules read it. A reload puts it right.
+  async advanceClock(ms: number): Promise<void> {
     await this.page.evaluate((offset) => window.harnessShiftClock(offset), ms);
   }
 }
