@@ -99,6 +99,7 @@ import {
   fakePoolPorts,
   fakeRemoteUrls,
   fakeRunningScripts,
+  fakeStashes,
   addLiveEdgeRuns,
   repoDescriptionFor,
   type FakeWorktree,
@@ -107,6 +108,7 @@ import {
 import { endpointState } from "@shigomori/ui/fixtures/mirrorFixtures.ts";
 import {
   FAKE_DETECTED,
+  FAKE_LAUNCHERS,
   fakeAgentHarnesses,
 } from "@shigomori/ui/fixtures/settingsFixtures.ts";
 import { villagerHandlersFor } from "./villagerData";
@@ -673,17 +675,7 @@ function hostHandlersFor(
         merges: [],
       };
     },
-    "worktrees:stashes": ({ worktreeId }) =>
-      worktreeId === "a10000000002"
-        ? [
-            {
-              hash: "5ca1ab1",
-              message: "Badge merged projects with their devices",
-              named: false,
-              date: new Date(Date.now() - 3 * 3600_000).toISOString(),
-            },
-          ]
-        : [],
+    "worktrees:stashes": ({ worktreeId }) => fakeStashes[worktreeId] ?? [],
     "worktrees:stashDiff": () => FAKE_DIFF,
     "worktrees:operation": () => ({
       operation: null,
@@ -771,11 +763,7 @@ function hostHandlersFor(
     },
     "launchers:detect": () => [...FAKE_DETECTED],
     "launchers:forProject": () => ({
-      entries: [
-        ...FAKE_DETECTED.filter((d) => d.available),
-        { kind: "custom", id: "custom:deploy", label: "Deploy preview" },
-        { kind: "web", id: "web:github", label: "GitHub" },
-      ],
+      entries: [...FAKE_LAUNCHERS],
       hiddenCount: 0,
     }),
     "packageScripts:list": () => ({
@@ -1669,7 +1657,13 @@ function hubSnapshot(): HubStatus {
 }
 
 export function installFakeHostBridge(
-  opts: { webShell?: boolean; villageLife?: boolean } = {},
+  opts: {
+    webShell?: boolean;
+    villageLife?: boolean;
+    // A dev build (the badge, the theme hotkeys), as the fake host is
+    // unless it stands in for the released app (frames.tsx).
+    dev?: boolean;
+  } = {},
 ): ClientLinks["Service"] {
   WEB_SHELL = opts.webShell === true;
   villageLife =
@@ -1953,7 +1947,7 @@ export function installFakeHostBridge(
     deviceId: selfDeviceId,
     appVersion: FAKE_APP_VERSION,
     clerkPublishableKey: "pk_test_fake",
-    isDev: true,
+    isDev: opts.dev ?? true,
     isElectron: !WEB_SHELL,
     ...fixtureClient.api,
   };
