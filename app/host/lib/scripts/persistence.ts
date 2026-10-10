@@ -17,6 +17,14 @@
 // process alone.
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
 import { atomicWriteJsonSync } from "../util/atomicJson";
@@ -139,30 +147,22 @@ interface LiveProcess {
 const PS_LINE =
   /^\s*(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+\d+:\d+:\d+\s+\d{4})\s+(.*)$/;
 
-async function readProcessTable(
-  pids: number[],
-): Promise<Map<number, LiveProcess>> {
+const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
   const table = new Map<number, LiveProcess>();
   if (pids.length === 0) return table;
-  let stdout: string;
-  try {
-    const result = await Processes.run(
-      Processes.exec(
-        "ps",
-        // -ww so a long dev-server command line isn't truncated, LC_ALL
-        // so lstart's month and day names stay parseable.
-        ["-ww", "-p", pids.join(","), "-o", "pid=,pgid=,lstart=,command="],
-        { env: { ...process.env, LC_ALL: "C" } },
-      ),
-    );
-    stdout = result.stdout;
-  } catch {
-    // `ps` exits non-zero when none of the pids are live, which is the
-    // ordinary "they all died with the app" case. A genuine failure to
-    // run it lands here too and leaves the table empty, so nothing gets
-    // signaled, which is the safe direction.
-    return table;
-  }
+  const listed = yield* Processes.exec(
+    "ps",
+    // -ww so a long dev-server command line isn't truncated, LC_ALL
+    // so lstart's month and day names stay parseable.
+    ["-ww", "-p", pids.join(","), "-o", "pid=,pgid=,lstart=,command="],
+    { env: { ...process.env, LC_ALL: "C" } },
+  ).pipe(Effect.option);
+  // `ps` exits non-zero when none of the pids are live, which is the
+  // ordinary "they all died with the app" case. A genuine failure to
+  // run it lands here too and leaves the table empty, so nothing gets
+  // signaled, which is the safe direction.
+  if (Option.isNone(listed)) return table;
+  const { stdout } = listed.value;
   for (const line of stdout.split("\n")) {
     const match = PS_LINE.exec(line);
     if (!match) continue;
@@ -186,7 +186,7 @@ async function readProcessTable(
     });
   }
   return table;
-}
+});
 
 // The recorded command is what we handed the login shell, but a shell
 // running a single simple command execs into it, so the live command
@@ -222,41 +222,34 @@ function isSameProcess(
 
 // Polls instead of waiting on an exit event: these processes are not
 // our children any more, so there is nothing to listen to.
-function waitForExit(pid: number, ms: number): Promise<boolean> {
-  const deadline = Date.now() + ms;
-  return new Promise((resolve) => {
-    const check = () => {
-      if (!isProcessAlive(pid)) {
-        resolve(true);
-        return;
-      }
-      if (Date.now() >= deadline) {
-        resolve(false);
-        return;
-      }
-      setTimeout(check, EXIT_POLL_MS);
-    };
-    setTimeout(check, EXIT_POLL_MS);
-  });
-}
+const waitForExit = (pid: number, ms: number) =>
+  Effect.sync(() => isProcessAlive(pid)).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(Duration.millis(EXIT_POLL_MS)),
+      while: (alive) => alive,
+    }),
+    Effect.delay(Duration.millis(EXIT_POLL_MS)),
+    Effect.timeoutOption(Duration.millis(ms)),
+    Effect.map(Option.isSome),
+  );
 
-async function killOrphan(record: PersistedScript): Promise<boolean> {
-  await Processes.run(signalTree(record.pid, "SIGTERM"));
-  if (await waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
+const killOrphan = Effect.fnUntraced(function* (record: PersistedScript) {
+  yield* signalTree(record.pid, "SIGTERM");
+  if (yield* waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
   // Still alive after the grace period, or the number was freed and
   // taken over in the meantime. Re-prove the identity before escalating
   // so SIGKILL can't chase whatever inherited the pid.
-  const table = await readProcessTable([record.pid]);
+  const table = yield* readProcessTable([record.pid]);
   if (!isSameProcess(record, table.get(record.pid))) return true;
-  await Processes.run(signalTree(record.pid, "SIGKILL"));
-  const died = await waitForExit(record.pid, ORPHAN_GRACE_MS);
+  yield* signalTree(record.pid, "SIGKILL");
+  const died = yield* waitForExit(record.pid, ORPHAN_GRACE_MS);
   if (!died) {
-    log.warn(
+    yield* Effect.logWarning(
       `[scripts] orphaned pid ${record.pid} survived SIGKILL, leaving it alone`,
     );
   }
   return died;
-}
+});
 
 // Survivors get killed rather than adopted back into the UI. Their
 // stdio pipes died with the main process that owned them, so there is
@@ -264,20 +257,23 @@ async function killOrphan(record: PersistedScript): Promise<boolean> {
 // row the user can only stop is worse than the invariant that what the
 // UI shows is what is running. Killing also frees the ports the next
 // run of the same script needs.
-async function reapOrphans(
+const reapOrphans = Effect.fnUntraced(function* (
   records: readonly PersistedScript[],
-): Promise<OrphanScriptReport> {
-  if (records.length === 0) return { stopped: 0 };
-  const table = await readProcessTable(records.map((r) => r.pid));
+) {
+  const none: OrphanScriptReport = { stopped: 0 };
+  if (records.length === 0) return none;
+  const table = yield* readProcessTable(records.map((r) => r.pid));
   const ours = records.filter((r) => isSameProcess(r, table.get(r.pid)));
-  if (ours.length === 0) return { stopped: 0 };
-  const outcomes = await Promise.all(ours.map((r) => killOrphan(r)));
+  if (ours.length === 0) return none;
+  const outcomes = yield* Effect.forEach(ours, killOrphan, {
+    concurrency: "unbounded",
+  });
   const stopped = outcomes.filter(Boolean).length;
-  log.warn(
+  yield* Effect.logWarning(
     `[scripts] stopped ${stopped} of ${ours.length} script(s) left running by a previous session`,
   );
-  return { stopped };
-}
+  return { stopped } satisfies OrphanScriptReport;
+});
 
 // Reads what the previous session left behind, then, unless another
 // live instance owns it, immediately claims the file for this
@@ -302,27 +298,44 @@ function claimOrphanRecords(): readonly PersistedScript[] {
   return previous?.scripts ?? [];
 }
 
-let sweep: Promise<OrphanScriptReport> | null = null;
-let reported = false;
+// The sweep of what a crash, a force quit or an OOM left running, which
+// skipped the quit's reap: its layer claims the record file at boot,
+// before any script can spawn (the claim is sync, so the file is ours
+// before the window opens), and kills in the background.
+export class OrphanSweep extends Context.Service<
+  OrphanSweep,
+  {
+    // The sweep's report, once, for the renderer's notice: it waits for
+    // the sweep rather than sampling it, since the window regularly
+    // finishes loading before a survivor has finished dying, and a
+    // report that came back empty for that reason would drop the
+    // notice. Every later ask answers nothing stopped.
+    readonly takeReport: Effect.Effect<OrphanScriptReport>;
+  }
+>()("sm/host/OrphanSweep") {}
 
-// Call once at boot, before any script can spawn. The claim is sync so
-// the file is ours before the window opens. The `ps` probe and the kill
-// escalation run in the background behind it.
-export function startOrphanScriptSweep(): void {
-  if (sweep) return;
-  const records = claimOrphanRecords();
-  sweep = reapOrphans(records).catch((error) => {
-    log.warn(`[scripts] orphan sweep failed: ${errorMessageOf(error)}`);
-    return { stopped: 0 };
-  });
-}
-
-// One-shot drain for the renderer's notice. Awaits the sweep rather
-// than sampling it: the window regularly finishes loading before a
-// survivor has finished dying, and a report that came back empty for
-// that reason would drop the notice entirely.
-export async function takeOrphanSweepReport(): Promise<OrphanScriptReport> {
-  if (!sweep || reported) return { stopped: 0 };
-  reported = true;
-  return await sweep;
-}
+export const layer = Layer.effect(
+  OrphanSweep,
+  Effect.gen(function* () {
+    const records = claimOrphanRecords();
+    const done = yield* Deferred.make<OrphanScriptReport>();
+    yield* reapOrphans(records).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("[scripts] orphan sweep failed", cause).pipe(
+          Effect.as({ stopped: 0 }),
+        ),
+      ),
+      Effect.flatMap((report) => Deferred.succeed(done, report)),
+      Effect.forkScoped,
+    );
+    const reported = yield* Ref.make(false);
+    return OrphanSweep.of({
+      takeReport: Ref.getAndSet(reported, true).pipe(
+        Effect.flatMap((was) =>
+          was ? Effect.succeed({ stopped: 0 }) : Deferred.await(done),
+        ),
+        Effect.withSpan("OrphanSweep.takeReport"),
+      ),
+    });
+  }),
+);

@@ -32,7 +32,7 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
-import type { GithubCli } from "@host/lib/githubCli/GithubCli";
+import type { HostServices } from "@host/process/services";
 import * as Terrier from "@host/lib/terrier";
 import { fromPromise } from "@host/lib/util/fromPromise";
 import { expandHome } from "@host/lib/util/paths";
@@ -54,6 +54,15 @@ class NotGitRepositoryError extends Schema.TaggedError<NotGitRepositoryError>()(
 ) {
   override get message(): string {
     return `${this.path} is not a git repository`;
+  }
+}
+
+class TerrierProjectError extends Schema.TaggedError<TerrierProjectError>()(
+  "TerrierProjectError",
+  { name: Schema.String },
+) {
+  override get message(): string {
+    return `${this.name} is registered via terrier. Unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`;
   }
 }
 
@@ -171,41 +180,47 @@ export const projectsHandlers = {
       return yield* registerNewCheckout(path, terrier, "Created");
     }),
 
-  remove: async ({ id }) => {
-    const removed = (await listProjects()).find((p) => p.id === id);
-    if (!removed) return;
-    if (removed.source === "terrier") {
-      // The UI disables removal for terrier-sourced projects, so this
-      // only backstops a stale renderer list.
-      throw new Error(
-        `${removed.name} is registered via terrier. Unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`,
+  remove: ({ id }) =>
+    Effect.gen(function* () {
+      const removed = (yield* fromPromise(listProjects)).find(
+        (p) => p.id === id,
       );
-    }
-    // The inflight mark blocks a renderer script run from spawning into
-    // the project for the whole removal, so the reap below snapshots a
-    // set nothing can add to.
-    markProjectDeleteInflight(id);
-    try {
-      // Registry drop and per-project state deletion (the icon cache
-      // entry included) run in the CLI, same engine as `sm projects
-      // remove`.
-      await removeProject(id);
-      // A path terrier also registers doesn't leave the sidebar:
-      // dropping the registry entry just demotes it to a terrier-sourced
-      // project, and when the id carries over (registration minted the
-      // deterministic terrier id) nothing is actually going away. Read
-      // from the list the removal left behind, so the answer is the
-      // CLI's own, not a guess at its rule.
-      const survived = (await refreshProjects()).some((p) => p.id === id);
-      // Reap scripts running in this project's worktrees: once the id
-      // is gone the renderer has no UI left to stop them, and the
-      // per-worktree delete path (which would normally kill them) can't
-      // be reached for an unknown project.
-      if (!survived) await killScriptsForProject(id);
-    } finally {
-      clearProjectDeleteInflight(id);
-    }
-  },
+      if (!removed) return;
+      if (removed.source === "terrier") {
+        // The UI disables removal for terrier-sourced projects, so this
+        // only backstops a stale renderer list.
+        return yield* new TerrierProjectError({ name: removed.name });
+      }
+      // The inflight mark blocks a renderer script run from spawning
+      // into the project for the whole removal, so the reap below
+      // snapshots a set nothing can add to.
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => markProjectDeleteInflight(id)),
+        () =>
+          Effect.gen(function* () {
+            // Registry drop and per-project state deletion (the icon
+            // cache entry included) run in the CLI, same engine as `sm
+            // projects remove`.
+            yield* fromPromise(() => removeProject(id));
+            // A path terrier also registers doesn't leave the sidebar:
+            // dropping the registry entry just demotes it to a
+            // terrier-sourced project, and when the id carries over
+            // (registration minted the deterministic terrier id) nothing
+            // is actually going away. Read from the list the removal
+            // left behind, so the answer is the CLI's own, not a guess
+            // at its rule.
+            const survived = (yield* fromPromise(refreshProjects)).some(
+              (p) => p.id === id,
+            );
+            // Reap scripts running in this project's worktrees: once the
+            // id is gone the renderer has no UI left to stop them, and
+            // the per-worktree delete path (which would normally kill
+            // them) can't be reached for an unknown project.
+            if (!survived) yield* killScriptsForProject(id);
+          }),
+        () => Effect.sync(() => clearProjectDeleteInflight(id)),
+      );
+    }),
 
   // Terrier-sourced projects are refused by the CLI, which says to
   // update terrier instead.
@@ -267,8 +282,4 @@ export const projectsHandlers = {
 
   // The engine resolves icons through its shared cache (Icons.ts).
   icon: ({ projectId }) => projectIcon(projectId),
-} satisfies Handlers<
-  typeof projectsContract,
-  unknown,
-  Terrier.Terrier | GithubCli
->;
+} satisfies Handlers<typeof projectsContract, unknown, HostServices>;

@@ -11,6 +11,10 @@
 // mirror, asks the peer to run its mirror:startTo into this device,
 // and relays the peer's progress. Nothing here moves a byte or touches
 // git itself.
+import type { HostServices } from "@host/process/services";
+import { fromPromise } from "@host/lib/util/fromPromise";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
 import { only } from "@shigomori/contracts/util/only";
 import {
   type ControlDevice,
@@ -87,7 +91,7 @@ import {
   worktreesOn,
 } from "./peers";
 
-type Ops = Handlers<typeof controlContract, HandlerContext>;
+type Ops = Handlers<typeof controlContract, HandlerContext, HostServices>;
 
 // A transfer, which the loopback serves as a stream of its progress
 // (the sync:pullProgress pushes `ctx` notifies) and then its answer.
@@ -529,47 +533,48 @@ export const mirrors: Ops["mirrors"] = async () => {
 // is gated on the runner's command-access switch). The names are only
 // for the answer, so the registry is read beside the stop and not
 // after it, once for the peer scan too.
-export const mirrorStop: Ops["mirrorStop"] = async (
-  { force, ...target },
-  ctx,
-) => {
-  const registry = registryOrEmpty();
-  const answer = async (
-    mirror: (names: Named[]) => ControlMirror,
-    copyStayed: string | undefined,
-  ) => ({
-    mirror: mirror(namesOf(await registry)),
-    ...(copyStayed === undefined ? {} : { copyStayed }),
-  });
-  const own = mirrorOf(target);
-  if (own !== undefined) {
-    const copyStayed = await stopMirror(() =>
-      stopMirrorSession(own.session, force === true),
+export const mirrorStop = (({ force, ...target }, ctx) =>
+  Effect.gen(function* () {
+    const registry = registryOrEmpty();
+    const answer = (
+      mirror: (names: Named[]) => ControlMirror,
+      copyStayed: string | undefined,
+    ) =>
+      fromPromise(async () => ({
+        mirror: mirror(namesOf(await registry)),
+        ...(copyStayed === undefined ? {} : { copyStayed }),
+      }));
+    const own = mirrorOf(target);
+    if (own !== undefined) {
+      const copyStayed = yield* fromPromise(() =>
+        stopMirror(() => stopMirrorSession(own.session, force === true)),
+      );
+      return yield* answer((names) => mirrorView(own, names), copyStayed);
+    }
+    const afar = yield* fromPromise(() => peerMirrorOf(target, registry));
+    if (afar === undefined) {
+      return yield* callFailureOf(
+        new ControlError("no-mirror", "That worktree isn't mirrored."),
+      );
+    }
+    let copyStayed = yield* fromPromise(() =>
+      stopMirror(() => afar.api.stop({ session: afar.session.session, force })),
     );
-    return answer((names) => mirrorView(own, names), copyStayed);
-  }
-  const afar = await peerMirrorOf(target, registry);
-  if (afar === undefined) {
-    throw new ControlError("no-mirror", "That worktree isn't mirrored.");
-  }
-  let copyStayed = await stopMirror(() =>
-    afar.api.stop({ session: afar.session.session, force }),
-  );
-  // The copy the peer could not remove is the one HERE: the peer
-  // removes it through this device's command-access switch, which
-  // need not be on for a peer this device only asked something of.
-  // The session is gone either way, so this device's own forced
-  // delete finishes what the runner's stop would have.
-  if (copyStayed !== undefined) {
-    const removed = await worktreesHandlers.delete(
-      {
-        projectId: target.projectId,
-        worktreeId: target.worktreeId,
-        force: true,
-      },
-      ctx,
-    );
-    if (removed.ok) copyStayed = undefined;
-  }
-  return answer((names) => peerMirrorView(afar, names), copyStayed);
-};
+    // The copy the peer could not remove is the one HERE: the peer
+    // removes it through this device's command-access switch, which
+    // need not be on for a peer this device only asked something of.
+    // The session is gone either way, so this device's own forced
+    // delete finishes what the runner's stop would have.
+    if (copyStayed !== undefined) {
+      const removed = yield* worktreesHandlers.delete(
+        {
+          projectId: target.projectId,
+          worktreeId: target.worktreeId,
+          force: true,
+        },
+        ctx,
+      );
+      if (removed.ok) copyStayed = undefined;
+    }
+    return yield* answer((names) => peerMirrorView(afar, names), copyStayed);
+  })) satisfies Ops["mirrorStop"];

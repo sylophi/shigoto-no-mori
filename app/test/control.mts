@@ -88,6 +88,8 @@ import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData"
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { registerHostContract } from "@shared/ipc/registerContract";
+import { runHost } from "./lib/adapters.mts";
+import type { HostServices } from "@host/process/services";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import {
@@ -165,7 +167,11 @@ type View = (input: unknown) => Stream.Stream<unknown, unknown, never>;
 // one's.
 async function startLoopback(options: {
   readonly file: string;
-  readonly handlers: Handlers<typeof controlContract, HandlerContext>;
+  readonly handlers: Handlers<
+    typeof controlContract,
+    HandlerContext,
+    HostServices
+  >;
   readonly transfers: Readonly<Record<string, View>>;
   readonly run: <A, E>(effect: Effect.Effect<A, E, never>) => Promise<A>;
 }) {
@@ -1200,13 +1206,21 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
     (input: I, ctx: HandlerContext) =>
       Engine.runAside(otherEngine.runPromise, () => run(input, ctx));
+  // A handler that answers with an effect runs it here, inside the
+  // aside, so its engine calls stay on the second engine.
+  const asOtherEffect =
+    <I, A, E>(
+      run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, HostServices>,
+    ) =>
+    (input: I, ctx: HandlerContext) =>
+      Engine.runAside(otherEngine.runPromise, () => runHost(run(input, ctx)));
   const otherControl = await startLoopback({
     file: join(otherDataDir, Loopback.LOOPBACK_FILE),
     handlers: {
       devices: asOther(controlHandlers.devices),
       peerWorktrees: asOther(controlHandlers.peerWorktrees),
       mirrors: asOther(controlHandlers.mirrors),
-      mirrorStop: asOther(controlHandlers.mirrorStop),
+      mirrorStop: asOtherEffect(controlHandlers.mirrorStop),
     },
     transfers: {
       send: followTransfer(asOther(send)),

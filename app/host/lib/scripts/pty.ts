@@ -15,7 +15,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -23,9 +22,7 @@ import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import * as PromiseAdapter from "../util/promiseAdapter";
 import { envSetting } from "../../../shared/config.ts";
-import { log } from "@shared/log";
 import { signalTree, signalTreeBestEffort } from "./process";
 
 // No process could be started: a missing login shell, or a PTY that
@@ -88,6 +85,8 @@ export interface PtyHandle {
   readonly onExit: (
     listener: (exit: { exitCode: number; signal?: number | undefined }) => void,
   ) => void;
+  // The child's exit, once it has drained its output.
+  readonly exit: Effect.Effect<unknown>;
 }
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
@@ -228,6 +227,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         listener(new Error(errorMessageOf(error)));
       }),
     onExit: (listener) => void child.onExit(listener),
+    exit,
   } satisfies PtyHandle;
 });
 
@@ -262,53 +262,21 @@ const make = Effect.gen(function* () {
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
     // The stopping is taken when close is called, not when its effect
-    // runs: a hurried quit's close reaches the run through the adapter
-    // a moment later, and the layer's own close may come first.
+    // runs: the layer's own close may come first.
     const close = (given: Stopping) => {
       stopping = given;
       return Scope.close(run, Exit.void);
     };
+    // A run that is over lets go of its scope, so the layer stops
+    // holding it. The release finds the child exited and signals
+    // nothing.
+    yield* handle.exit.pipe(
+      Effect.andThen(close({ graceMs: 0, wait: false })),
+      Effect.forkIn(scope),
+    );
     return { pty: handle, close };
   });
   return ScriptRuns.of({ open });
 });
 
 export const layer = Layer.effect(ScriptRuns, make);
-
-// For index.ts, whose callers are not Effect yet.
-const promiseAdapter = PromiseAdapter.make<ScriptRuns>("The scripts");
-export const adapter = promiseAdapter.layer;
-
-const onRuns = <A, E>(
-  f: (runs: ScriptRuns["Service"]) => Effect.Effect<A, E>,
-) =>
-  Effect.gen(function* () {
-    return yield* f(yield* ScriptRuns);
-  });
-
-// A run started from a synchronous caller: the spawn is synchronous, so
-// the run exists when this returns. Throws what the spawn threw.
-export function openRun(opts: SpawnOptions): {
-  pty: PtyHandle;
-  close: (stopping: Stopping) => Promise<void>;
-} {
-  const opened = promiseAdapter.runSyncOr(
-    onRuns((runs) => runs.open(opts)).pipe(Effect.result),
-    () => {
-      throw new Error("The app is still starting; try the script again.");
-    },
-  );
-  if (Result.isFailure(opened)) {
-    if (opened.failure.reason === "failed") {
-      log.warn(
-        `[scripts] the PTY did not start: ${errorMessageOf(opened.failure.cause)}`,
-      );
-    }
-    throw opened.failure;
-  }
-  const { pty: handle, close } = opened.success;
-  return {
-    pty: handle,
-    close: (stopping) => promiseAdapter.run(close(stopping)),
-  };
-}
