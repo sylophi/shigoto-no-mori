@@ -1,4 +1,5 @@
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 @import "tw-animate-css";
 /* Explicit content roots, relative to this file. Auto-detection scans
@@ -104,15 +105,30 @@
   --ring: var(--color-neutral-500);
 }
 
+/* From the nerd-fonts v3.5.1 NerdFontsSymbolsOnly release, its TTF
+   compressed to woff2 (license beside it). */
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/SymbolsNerdFontMono-Regular.woff2") format("woff2");
+}
+
 /* Outside the inline block below on purpose: inlined values leave no
    variable to remap. The type steps under Tailwind's text-xs are named
    tokens so they sit on the scale the phone layout remaps (phone.css):
    a `text-[11px]` literal would stay 11px on a phone. They carry no
    line-height, as the literals they replace never did. The sans stack
    is doubutsu's to swap for Zen Maru, so `font-sans` and the body
-   read the variable rather than a Geist stack baked in. */
+   read the variable rather than a Geist stack baked in. The terminal's
+   stack falls back to the Nerd Font symbols, for the icons a prompt
+   like Starship draws. */
 @theme {
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-terminal:
+    "JetBrains Mono Variable", "Symbols Nerd Font Mono", ui-monospace, monospace;
   --text-2xs: 0.6875rem;
   --text-3xs: 0.625rem;
   --text-4xs: 0.5625rem;
@@ -180,6 +196,15 @@
   }
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  /* Code reads as typed: the mono face's ligatures (`=>` as an arrow)
+     stay off, as in the terminal, which draws none. */
+  .font-mono,
+  code,
+  kbd,
+  pre,
+  samp {
+    font-variant-ligatures: none;
   }
 
   /* Native scrollbars stay the platform's: macOS's overlay bars show

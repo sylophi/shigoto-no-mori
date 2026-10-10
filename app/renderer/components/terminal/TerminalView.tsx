@@ -3,7 +3,7 @@
 // view only says what grid it has room for (onFit), on every change of
 // its box and whenever it takes focus, and draws at whatever size the
 // feed sets. A grid bigger than the box is cut off at its edges.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -50,12 +50,31 @@ export function TerminalView({
   const handlers = useRef({ onInput, onFit, onLink });
   handlers.current = { onInput, onFit, onLink };
 
+  // xterm keeps every glyph it has drawn, so it opens once both faces
+  // are in: one drawn in the fallback face would stay that way. A Nerd
+  // Font icon is what loads the symbols face.
+  const [fontsIn, setFontsIn] = useState(false);
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !feed) return;
+    if (!host) return;
+    let cancelled = false;
+    void document.fonts
+      .load(`12px ${getComputedStyle(host).fontFamily}`, "a\ue0b0")
+      .catch(() => {})
+      .then(() => {
+        if (!cancelled) setFontsIn(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !feed || !fontsIn) return;
     let theme = readTerminalTheme(host);
     const term = new Terminal({
-      // Matches the host's `font-mono text-xs`. xterm sizes its cell
+      // Matches the host's `font-terminal text-xs`. xterm sizes its cell
       // grid from these, so they can't come from CSS.
       fontFamily: getComputedStyle(host).fontFamily,
       fontSize: 12,
@@ -104,12 +123,9 @@ export function TerminalView({
       proposed = key;
       handlers.current.onFit(cols, rows);
     };
-    // Observing delivers the current size straight away. A size measured
-    // before the monospace face has loaded gets the cell width wrong, so
-    // measure again once fonts settle.
+    // Observing delivers the current size straight away.
     const observer = new ResizeObserver(() => propose(false));
     observer.observe(host);
-    void document.fonts.ready.then(() => propose(false));
     // Taking focus takes the size: the last terminal typed in decides it.
     const onFocus = () => propose(true);
     term.textarea?.addEventListener("focus", onFocus);
@@ -154,7 +170,7 @@ export function TerminalView({
       term.dispose();
       termRef.current = null;
     };
-  }, [feed]);
+  }, [feed, fontsIn]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
   // handed back, so Tab and the app's bare-key shortcuts work again.
@@ -166,7 +182,7 @@ export function TerminalView({
     if (!live && hostRef.current?.contains(document.activeElement)) {
       term.blur();
     }
-  }, [live]);
+  }, [live, fontsIn]);
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box, so padding on the host itself would count as columns.
@@ -176,7 +192,7 @@ export function TerminalView({
     <div
       data-slot="terminal"
       data-keyboard-surface="raw"
-      className="isolate h-full w-full overflow-hidden bg-background px-3 py-2 font-mono text-xs"
+      className="isolate h-full w-full overflow-hidden bg-background px-3 py-2 font-terminal text-xs"
     >
       <div
         ref={hostRef}

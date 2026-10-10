@@ -1,6 +1,7 @@
 // The terminal's parts: a worktree page's drawer with its tabs over a
 // script's console, a device's own terminals on their page over a
-// shell fed a fixture prompt, and the sidebar's list of them.
+// shell fed a fixture prompt with Nerd Font icons, and the sidebar's
+// list of them.
 import { ScriptConsoleView } from "@/components/scriptConsole/ScriptConsoleView";
 import { DeviceTerminalsPageView } from "@/components/terminal/DeviceTerminalsPageView";
 import { TerminalDrawerView } from "@/components/terminal/TerminalDrawerView";
@@ -18,7 +19,7 @@ import { deviceById } from "./world";
 
 const prompt: TerminalFeed = (screen) => {
   screen.replay(
-    "\x1b[32m~/code/forest\x1b[0m on \x1b[35mfeature/rarity\x1b[0m\r\n$ pnpm test\r\n\r\n \x1b[32m✓\x1b[0m test/rarity.mts (12 tests) 214ms\r\n\r\n Test Files  \x1b[32m1 passed\x1b[0m (1)\r\n      Tests  \x1b[32m12 passed\x1b[0m (12)\r\n\r\n$ ",
+    "\x1b[32m\uf115 ~/code/forest\x1b[0m on \x1b[35m\ue725 feature/rarity\x1b[0m\r\n$ pnpm test\r\n\r\n \x1b[32m✓\x1b[0m test/rarity.mts (12 tests) 214ms\r\n\r\n Test Files  \x1b[32m1 passed\x1b[0m (1)\r\n      Tests  \x1b[32m12 passed\x1b[0m (12)\r\n\r\n$ ",
     true,
   );
   return () => {};
