@@ -76,19 +76,15 @@ vi.mock("react/jsx-dev-runtime", recording);
 const views = import.meta.glob<Record<string, unknown>>(
   [
     "../renderer/components/**/*View.tsx",
-    "!../renderer/components/addProject/**",
     "!../renderer/components/diff/**",
   ],
   { eager: true },
 );
 
 const PENDING = [
-  "AddProjectModal.tsx",
-  "addProject/",
   "diff/",
   "files/",
   "live/",
-  "newWorktree/",
   "palette/",
   "scriptConsole/",
 ];

@@ -1,5 +1,5 @@
 // The pieces the folder browsers share: the Add Project dialog's
-// browse stage (addProject/AddExistingView.tsx) and the folder picker
+// browse stage (addProject/AddExistingForm.tsx) and the folder picker
 // (FolderPickerModal.tsx), whose input is the path, listed live, and
 // for the key hints also the filter-first picker (PathPickerModal.tsx).
 import { Command } from "cmdk";
