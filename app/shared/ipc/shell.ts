@@ -8,8 +8,7 @@ import { allContractModules } from "@shigomori/contracts/allModules";
 import { callsOf } from "@shigomori/contracts/contract";
 import { isHostSide } from "@shigomori/contracts/link";
 import * as RpcGroup from "effect/rpc/RpcGroup";
-import type { ClientTransport } from "@shared/ipc/transport";
-import { openPortLink } from "@shared/remote/portLink";
+import { portLink } from "@shared/remote/portLink";
 
 // The message that asks main for the page's port, and that hands it
 // to the page.
@@ -21,10 +20,10 @@ export const ShellGroup = RpcGroup.make(
     .flatMap((module) => callsOf(module)),
 );
 
-// The window's end: the contract clients' transport over the port the
-// preload handed over, for as long as the page lives.
-export function openShellLink(port: MessagePort): Promise<ClientTransport> {
-  return openPortLink(
+// The window's end: the link over the port the preload handed over, for
+// as long as its scope (the page's runtime) lives.
+export function shellLink(port: MessagePort) {
+  return portLink(
     {
       // A frame is a view into a buffer the encoder goes on writing,
       // which a port would clone whole: only its own bytes go.

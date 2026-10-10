@@ -25,7 +25,9 @@ import {
   ShellLink,
   type ShellRegistrar,
 } from "../main/ipc/shellLink";
-import { openShellLink } from "@shared/ipc/shell";
+import * as FiberSet from "effect/FiberSet";
+import { shellLink } from "@shared/ipc/shell";
+import { linkTransport } from "@shared/remote/rpcTransport";
 import type { HandlerContext } from "@shared/ipc/transport";
 
 const ADDRESS = {
@@ -75,8 +77,14 @@ async function serve(registrar: ShellRegistrar) {
     await Effect.runPromise(
       link.attach(asMainPort(port1) as never, webContents as never),
     );
+    const transport = await Effect.runPromise(
+      Effect.gen(function* () {
+        const runFork = yield* FiberSet.makeRuntime<never>();
+        return linkTransport(yield* shellLink(port2 as never), runFork);
+      }).pipe(Scope.provide(scope)),
+    );
     return {
-      transport: await openShellLink(port2 as never),
+      transport,
       close: () => port2.close(),
     };
   };

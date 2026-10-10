@@ -4,45 +4,60 @@
 // answers (window:hostAddress), and the shell with the one its host
 // reported. A link that drops is dialed again, at the address answered
 // then, so a host that went away (and came back on another port) is a
-// reconnect: calls made meanwhile wait for it, and subscriptions carry
-// over.
+// reconnect: calls made meanwhile wait for it, and push subscriptions
+// carry over. A view ends with the link it ran on.
 import { LoopbackGroup } from "@shigomori/contracts/link";
-import type { ClientTransport } from "@shared/ipc/transport";
-import { log } from "@shared/log";
-import {
-  type DeviceConnection,
-  type OpenClientSocket,
-  openDevice,
-} from "./deviceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import type { ClientTransport, Link } from "@shared/ipc/transport";
+import { log } from "@shared/log";
+import { dialDevice, type OpenClientSocket } from "./deviceLink";
+import { linkTransport, pushFanOut } from "./rpcTransport";
 
-// A view not started yet stops nothing.
-const noop = (): void => {};
+// Where the host listens now, and the device it is (this machine's).
+export type HostAddress = {
+  readonly port: number;
+  readonly token: string;
+  readonly deviceId: string;
+};
 
 // How long one dial may take, and the waits between failed ones.
 const DIAL_DEADLINE_MS = 10_000;
-const REDIAL_DELAYS_MS = [100, 250, 500, 1_000, 2_000, 5_000] as const;
+const REDIAL = Schedule.min([
+  Schedule.exponential("100 millis", 2.5),
+  Schedule.spaced("5 seconds"),
+]);
 
-export function connectHost(options: {
-  // Where the host listens now, and the device it is (this machine's),
-  // asked again on every dial.
-  readonly address: () => Promise<{
-    port: number;
-    token: string;
-    deviceId: string;
-  }>;
+export const hostLink = Effect.fnUntraced(function* (options: {
+  // Asked again on every dial.
+  readonly address: Effect.Effect<HostAddress, unknown>;
   readonly appVersion: string;
   readonly openSocket: OpenClientSocket;
-}): ClientTransport & {
-  // Drops the link and dials again: the shell's, when a host it forked
-  // says it is up, since the one it had is gone with the last.
-  readonly reconnect: () => void;
-} {
-  const subscribers = new Map<string, Set<(payload: unknown) => void>>();
+}): Effect.fn.Return<
+  Link & {
+    // Drops the link and dials again: the shell's, when a host it forked
+    // says it is up, since the one it had is gone with the last.
+    readonly reconnect: Effect.Effect<void>;
+  },
+  never,
+  Scope.Scope
+> {
+  const fanOut = pushFanOut();
+  const current = yield* Ref.make(yield* Deferred.make<Link>());
+  const reconnects = yield* Queue.sliding<void>(1);
 
-  const dialOnce = async (): Promise<DeviceConnection> => {
-    const { port, token, deviceId } = await options.address();
-    return openDevice({
+  // One link at a time, each in a scope of its own, which closes as it
+  // drops, as a reconnect is asked for, or as its dial fails.
+  yield* Effect.gen(function* () {
+    const { port, token, deviceId } = yield* options.address;
+    const dialed = yield* dialDevice({
       url: `ws://127.0.0.1:${port}`,
       ticket: token,
       group: LoopbackGroup,
@@ -51,71 +66,58 @@ export function connectHost(options: {
       expectedDeviceId: deviceId,
       openSocket: options.openSocket,
       deadlineMs: DIAL_DEADLINE_MS,
-      onClose: () => {
-        current = dial();
-      },
-      onPush: (channel, payload) => {
-        for (const handler of subscribers.get(channel) ?? []) handler(payload);
-      },
-    }).authenticate();
-  };
-
-  const dial = async (): Promise<DeviceConnection> => {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- one dial at a time
-        return await dialOnce();
-      } catch (error) {
-        const wait =
-          REDIAL_DELAYS_MS[Math.min(attempt, REDIAL_DELAYS_MS.length - 1)];
+      onPush: fanOut.emit,
+    });
+    yield* Deferred.succeed(yield* Ref.get(current), dialed.link);
+    yield* Effect.raceFirst(dialed.dropped, Queue.take(reconnects));
+    yield* Ref.set(current, yield* Deferred.make<Link>());
+  }).pipe(
+    Effect.scoped,
+    Effect.tapError((error) =>
+      Effect.sync(() =>
         log.warn(
-          `[host] could not reach this machine's host, again in ${wait} ms: ${errorMessageOf(error)}`,
-        );
-        // oxlint-disable-next-line no-await-in-loop -- the wait between dials
-        await new Promise((resolve) => setTimeout(resolve, wait));
-      }
-    }
-  };
+          `[host] could not reach this machine's host, dialing again: ${errorMessageOf(error)}`,
+        ),
+      ),
+    ),
+    Effect.retry(REDIAL),
+    Effect.forever,
+    Effect.forkScoped,
+  );
 
-  let current = dial();
-
+  const up = Effect.flatMap(Ref.get(current), Deferred.await);
   return {
-    reconnect() {
-      const previous = current;
-      current = dial();
-      void previous.then((connection) => connection.close()).catch(() => {});
-    },
     // The host is this machine's own build, which decodes what it sends.
     local: true,
-    invoke: async (channel, input, invokeOptions) =>
-      (await current).transport.invoke(channel, input, invokeOptions),
-    // A view on the link up now: a drop ends it, and the watcher's next
-    // watch waits for the redial.
-    watch(channel, input, observer) {
-      let stopped = false;
-      let stop = noop;
-      current.then(
-        (connection) => {
-          if (stopped) return;
-          stop = connection.transport.watch?.(channel, input, observer) ?? stop;
-        },
-        (error: unknown) => observer.end(error),
-      );
-      return () => {
-        stopped = true;
-        stop();
-      };
-    },
-    subscribe(channel, handler) {
-      let handlers = subscribers.get(channel);
-      if (handlers === undefined) {
-        handlers = new Set();
-        subscribers.set(channel, handlers);
-      }
-      handlers.add(handler);
-      return () => {
-        handlers.delete(handler);
-      };
-    },
+    call: (channel, input, span) =>
+      Effect.flatMap(up, (link) => link.call(channel, input, span)),
+    view: (channel, input) =>
+      Stream.unwrap(Effect.map(up, (link) => link.view(channel, input))),
+    pushes: fanOut.pushes,
+    reconnect: Queue.offer(reconnects, undefined).pipe(Effect.asVoid),
   };
+});
+
+// The Promise face, for the shell, whose link lives as long as its
+// process.
+export function connectHost(options: {
+  readonly address: () => Promise<HostAddress>;
+  readonly appVersion: string;
+  readonly openSocket: OpenClientSocket;
+}): ClientTransport & { readonly reconnect: () => void } {
+  return Effect.runSync(
+    Effect.gen(function* () {
+      const runFork = yield* FiberSet.makeRuntime<never>();
+      const link = yield* hostLink({
+        ...options,
+        address: Effect.tryPromise(options.address),
+      });
+      return {
+        ...linkTransport(link, runFork),
+        reconnect: () => {
+          runFork(link.reconnect);
+        },
+      };
+    }).pipe(Scope.provide(Scope.makeUnsafe())),
+  );
 }
