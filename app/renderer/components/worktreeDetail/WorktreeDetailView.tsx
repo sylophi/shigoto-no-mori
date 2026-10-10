@@ -37,6 +37,7 @@ export function WorktreeDetailView({
   ports,
   scripts,
   footer,
+  drawer,
 }: {
   // The resident's birthday party (BirthdayPartyView), thrown in the header.
   party?: ReactNode;
@@ -68,6 +69,8 @@ export function WorktreeDetailView({
   ports: ReactNode;
   scripts: ReactNode;
   footer: ReactNode;
+  // The terminal drawer, under the footer while it is open.
+  drawer?: ReactNode;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -151,6 +154,7 @@ export function WorktreeDetailView({
       </div>
 
       {footer}
+      {drawer}
     </div>
   );
 }

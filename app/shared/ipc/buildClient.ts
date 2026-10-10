@@ -11,8 +11,11 @@ import {
 } from "@shigomori/contracts/contract";
 import { safeDecode } from "@shigomori/contracts/codec";
 import type { ClientTransport } from "@shared/ipc/transport";
-import type { Client } from "@shigomori/contracts/types";
+import type { Client, ViewObserver } from "@shigomori/contracts/types";
 import { log } from "@shared/log";
+
+// A view not started yet stops nothing.
+const noop = (): void => {};
 
 export function buildClient<M extends ContractModule>(
   module: M,
@@ -28,6 +31,8 @@ export function buildClient<M extends ContractModule>(
       );
     } else if (isInvoke(call)) {
       out[key] = invoker(call, transport);
+    } else {
+      out[key] = watcher(call, transport);
     }
   }
   return out as Client<M>;
@@ -73,4 +78,48 @@ function subscriber(call: ContractCall, transport: ClientTransport) {
           `[contracts] dropped a ${channel} push this build does not read: ${decoded.error.message}`,
         );
     });
+}
+
+// A view's values are decoded as a push's are, and one that does not
+// decode ends the view, naming it.
+function watcher(call: ContractCall, transport: ClientTransport) {
+  const channel = channelOf(call);
+  const payload = payloadOf(call);
+  return (input: unknown, observer: ViewObserver<unknown>) => {
+    if (transport.watch === undefined) {
+      observer.end(new Error(`${channel} is not served on this wire`));
+      return () => {};
+    }
+    if (transport.local === true) {
+      return transport.watch(channel, input, observer);
+    }
+    let stop = noop;
+    let ended = false;
+    const end = (failure?: unknown) => {
+      if (ended) return;
+      ended = true;
+      observer.end(failure);
+    };
+    stop = transport.watch(channel, input, {
+      value: (raw) => {
+        if (ended) return;
+        const decoded = safeDecode(payload, raw);
+        if (decoded.success) {
+          observer.value(decoded.data);
+          return;
+        }
+        stop();
+        end(
+          new Error(
+            `${channel} sent a value this build does not read: ${decoded.error.message}`,
+          ),
+        );
+      },
+      end,
+    });
+    return () => {
+      ended = true;
+      stop();
+    };
+  };
 }

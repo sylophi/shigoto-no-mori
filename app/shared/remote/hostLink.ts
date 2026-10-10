@@ -16,6 +16,9 @@ import {
 } from "./deviceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
+// A view not started yet stops nothing.
+const noop = (): void => {};
+
 // How long one dial may take, and the waits between failed ones.
 const DIAL_DEADLINE_MS = 10_000;
 const REDIAL_DELAYS_MS = [100, 250, 500, 1_000, 2_000, 5_000] as const;
@@ -86,6 +89,23 @@ export function connectHost(options: {
     local: true,
     invoke: async (channel, input, invokeOptions) =>
       (await current).transport.invoke(channel, input, invokeOptions),
+    // A view on the link up now: a drop ends it, and the watcher's next
+    // watch waits for the redial.
+    watch(channel, input, observer) {
+      let stopped = false;
+      let stop = noop;
+      current.then(
+        (connection) => {
+          if (stopped) return;
+          stop = connection.transport.watch?.(channel, input, observer) ?? stop;
+        },
+        (error: unknown) => observer.end(error),
+      );
+      return () => {
+        stopped = true;
+        stop();
+      };
+    },
     subscribe(channel, handler) {
       let handlers = subscribers.get(channel);
       if (handlers === undefined) {

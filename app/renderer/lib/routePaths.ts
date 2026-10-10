@@ -39,6 +39,9 @@ export const PROJECT_ROUTE_PATHS = {
     "/devices/$deviceId/projects/$projectId/configure/worktree-location",
 } as const;
 
+// A device's own terminals (components/terminal/DeviceTerminals.tsx).
+export const DEVICE_TERMINALS_PATH = "/devices/$deviceId/terminals";
+
 // The sidebar and the palette name this machine's rows with no device
 // (worktreeRowKey), the routes name every device by id. These two cross
 // between the two spellings.

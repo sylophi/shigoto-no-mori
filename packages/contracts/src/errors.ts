@@ -50,6 +50,8 @@ export class UnknownTerminalError extends Schema.TaggedError<UnknownTerminalErro
   }
 }
 
+export const isUnknownTerminalError = Schema.is(UnknownTerminalError);
+
 export const isEntityGoneError = Schema.is(
   Schema.Union([UnknownProjectError, UnknownWorktreeError]),
 );

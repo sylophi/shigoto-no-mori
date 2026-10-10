@@ -37,6 +37,7 @@ import {
 } from "./flows";
 import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
+import { TerminalPartsScene } from "./terminal";
 import {
   WorktreePagePartsScene,
   WorktreePageScene,
@@ -87,4 +88,5 @@ export const scenes = {
   marks: { Scene: MarksScene, size: [640, 420] },
   folderPicker: { Scene: FolderPickerScene, ...DESKTOP },
   pathPicker: { Scene: PathPickerScene, ...DESKTOP },
+  terminalParts: { Scene: TerminalPartsScene, size: [1100, 720] },
 } satisfies Record<string, Scene>;
