@@ -410,6 +410,29 @@ const reloadAndSecondTab: Scenario = {
   },
 };
 
+const twoTabsRedial: Scenario = {
+  name: "two-tabs-redial",
+  does: "A second tab of the profile is opened, and both tabs' flows are cut at once, three times, so both dial the host together each time; every tab has to recover each time. A host that mints a device's direct tickets as one set refuses one of two tabs dialing together, and that tab has to ask again.",
+  boundMs: 30_000,
+  async run(lab) {
+    const second = await lab.openTab();
+    await recovered(lab, Date.now(), this.boundMs);
+    for (let round = 1; round <= 3; round++) {
+      // Past the supervisors' stable threshold, so each round's redial
+      // starts at the bottom of their ladders rather than climbing it.
+      await sleep(35_000);
+      changeHost(lab);
+      lab.network.down();
+      lab.network.restore({ cut: true });
+      lab.note(`both tabs cut, round ${round}`);
+      const took = await recovered(lab, Date.now(), this.boundMs);
+      lab.note(`round ${round} recovered in ${took} ms`);
+    }
+    await lab.closeTab(second);
+    return Date.now();
+  },
+};
+
 const tokenExpiry: Scenario = {
   name: "token-expiry",
   does: "Every tab's wall clock jumps two hours ahead, past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock; then the tab mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
@@ -521,6 +544,7 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   appRelaunch,
   tabSleep,
   reloadAndSecondTab,
+  twoTabsRedial,
   tokenExpiry,
 ];
 
