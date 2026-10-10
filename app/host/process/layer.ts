@@ -38,7 +38,7 @@ import * as Processes from "@host/lib/util/processes";
 import * as GitWatcher from "@host/lib/gitWatcher";
 import { startBackgroundFetch } from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
-import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
+import * as OrphanSweep from "@host/lib/scripts/persistence";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
@@ -263,9 +263,7 @@ const scriptsAndFoundation = (options: {
     // last run left running is reaped here. It claims the record file
     // synchronously, before any script can spawn, and kills in the
     // background.
-    Layer.provideMerge(
-      starts("the orphan script sweep", startOrphanScriptSweep),
-    ),
+    Layer.provideMerge(OrphanSweep.layer),
     // Every terminal, each saved for the next start as it closes with
     // the quit.
     Layer.provideMerge(Captures.terminals.layer),

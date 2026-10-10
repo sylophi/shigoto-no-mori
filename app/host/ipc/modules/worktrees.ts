@@ -790,7 +790,8 @@ async function mutateAndDescribe(
 }
 
 // The delete, for the sync teardown that removes a sent source, which is
-// not Effect yet. Goes with it.
+// not Effect yet. Removed by step 7's sync PR (V3.md, the host's Promise
+// adapters), which converts that teardown.
 const deletes = PromiseAdapter.make<HostServices>("The worktree deletes");
 export const deleteAdapter = deletes.layer;
 export const deleteWorktreeHere = (

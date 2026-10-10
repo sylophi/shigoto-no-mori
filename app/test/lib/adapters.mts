@@ -17,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
@@ -29,6 +29,7 @@ import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as Terrier from "../../host/lib/terrier.ts";
 import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
+import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
 import * as Views from "../../host/lib/views.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/ports.ts";
@@ -106,6 +107,13 @@ const runtime = ManagedRuntime.make(
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
+        // Nothing a previous run left behind to sweep.
+        Layer.succeed(
+          OrphanSweep.OrphanSweep,
+          OrphanSweep.OrphanSweep.of({
+            takeReport: Effect.succeed({ stopped: 0 }),
+          }),
+        ),
       ),
     ),
     Layer.provideMerge(
