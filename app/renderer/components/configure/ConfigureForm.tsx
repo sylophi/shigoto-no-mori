@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
-import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
@@ -20,7 +20,7 @@ import { LAUNCH_TAB } from "@/components/settings/settingsSections";
 import {
   type ConfigureFormState as FormState,
   ConfigureFormView,
-} from "./ConfigureFormView";
+} from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
 
 function fromConfig(
   config: ShigomoriConfig | null,

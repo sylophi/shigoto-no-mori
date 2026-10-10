@@ -7,7 +7,7 @@
 //
 // Written immediately through the client store, never staged in a form:
 // flipping it is the whole action.
-import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
+import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 
 export function KeepReachableToggleView({
   on,

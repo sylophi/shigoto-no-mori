@@ -4,7 +4,7 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import {
   CollapsedThroughProvider,
   FooterVerbView,

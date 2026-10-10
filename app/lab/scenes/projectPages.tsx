@@ -10,21 +10,21 @@ import { ProjectDevicePageView } from "@shigomori/ui/views/shared/ProjectDeviceP
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
-import { CarryOverRowView } from "@/components/configure/CarryOverRowView";
-import { CarryOverSectionView } from "@/components/configure/CarryOverSectionView";
-import { CarryOverTrailingView } from "@/components/configure/CarryOverTrailingView";
-import { ConfigureFormView } from "@/components/configure/ConfigureFormView";
+import { CarryOverRowView } from "@shigomori/ui/views/configure/CarryOverRowView.tsx";
+import { CarryOverSectionView } from "@shigomori/ui/views/configure/CarryOverSectionView.tsx";
+import { CarryOverTrailingView } from "@shigomori/ui/views/configure/CarryOverTrailingView.tsx";
+import { ConfigureFormView } from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
 import {
   ConfigureLoadFailureView,
   ConfigureSharedView,
-} from "@/components/configure/ConfigureProjectView";
-import { ConfigureSkeletonView } from "@/components/configure/ConfigureSkeletonView";
-import { CreateOnSectionView } from "@/components/configure/CreateOnSectionView";
+} from "@shigomori/ui/views/configure/ConfigureProjectView.tsx";
+import { ConfigureSkeletonView } from "@shigomori/ui/views/configure/ConfigureSkeletonView.tsx";
+import { CreateOnSectionView } from "@shigomori/ui/views/configure/CreateOnSectionView.tsx";
 import {
   FoundOnDevicesView,
   OnlyInWorktreesView,
-} from "@/components/configure/OnlyInWorktreesView";
-import { WorktreeLocationFieldView } from "@/components/configure/WorktreeLocationFieldView";
+} from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
+import { WorktreeLocationFieldView } from "@shigomori/ui/views/configure/WorktreeLocationFieldView.tsx";
 import { ConvertExternalView } from "@shigomori/ui/views/convertExternal/ConvertExternalView.tsx";
 import {
   ProjectGridLayoutView,

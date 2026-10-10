@@ -11,9 +11,9 @@
 // standing permanently open. Clicking Rename swaps the same line for the
 // inline editor (InlineNameEditorView).
 import { Pencil } from "lucide-react";
-import { InlineNameEditorView } from "@shigomori/ui/views/shared/InlineNameEditorView.tsx";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+import { InlineNameEditorView } from "../shared/InlineNameEditorView.tsx";
+import { Button } from "../../primitives/button.tsx";
+import { cn } from "../../lib/utils.ts";
 
 // The trigger is a separate export because it sits apart from the
 // field: the registry row keeps it with the row's other actions on the

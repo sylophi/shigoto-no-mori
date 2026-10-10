@@ -34,7 +34,7 @@ import {
 } from "@/components/diff/WorktreeDiffView";
 import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
 import { SyncActionButtonView } from "@/components/worktreeDetail/SyncActionButtonView";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { changeKey } from "@shigomori/contracts/schemas";
 import { createFakeChanges } from "../fake-host/changesFixtures";

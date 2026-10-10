@@ -53,7 +53,7 @@ import {
   mergeServiceEnv,
   resolveServiceConfig,
   type AccountServiceConfig,
-} from "@shared/account/serviceConfig";
+} from "@shigomori/contracts/accountServiceConfig";
 import { log } from "@shared/log";
 
 // Built lazily on first handler use, never at import time. This module is

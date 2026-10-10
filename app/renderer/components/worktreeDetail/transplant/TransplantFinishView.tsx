@@ -20,7 +20,7 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { Chip } from "@shigomori/ui/primitives/chip-button.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { FlowBodyView, FlowFooterView } from "../flow/FlowChromeView";

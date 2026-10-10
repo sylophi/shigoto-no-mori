@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";
-import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+import { fieldSetter } from "@shigomori/ui/hooks/useDirtyForm.ts";
 
 // How the sidebar dresses its rows, in Appearance: settings of this
 // window, saved with the rest of the local form. A row with nothing to

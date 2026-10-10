@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { runningScriptsQueryOptions } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
 import {
   EMPTY_STATE,

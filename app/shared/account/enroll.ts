@@ -17,7 +17,10 @@ import {
 } from "@shigomori/contracts/hubApi";
 import type { AccountService } from "./service";
 import type { AccountStore, StoredAccount } from "./credentialStore";
-import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
+import {
+  isConfigured,
+  type AccountServiceConfig,
+} from "@shigomori/contracts/accountServiceConfig";
 import { deriveAccountId } from "./token";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { log } from "@shared/log";

@@ -90,6 +90,12 @@ const HubStatusSchema = Schema.Struct({
   // always the same build. Never carries the hostname or any secret.
   tunnel: Schema.optional(TunnelStateSchema),
 });
+// How long a freshly provisioned tunnel is probed before the host
+// gives up and re-provisions (host/direct/cloudflared.ts): its DNS
+// record is new and may take this long to route. Shared so the
+// registry's "tunnel starting" note quotes the same figure.
+export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
+
 export type HubStatus = typeof HubStatusSchema.Type;
 
 // A push frame received from a peer, fanned out to every window. The

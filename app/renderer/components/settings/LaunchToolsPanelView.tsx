@@ -16,7 +16,7 @@ import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { CustomLauncherInputView } from "@shigomori/ui/views/shared/CustomLauncherInputView.tsx";
 import { ScriptEnvPopoverView } from "@shigomori/ui/views/shared/ScriptEnvPopoverView.tsx";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";
-import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
+import { useLauncherListEditor } from "@shigomori/ui/hooks/useLauncherListEditor.ts";
 import { DetectedToolsSectionView } from "./DetectedToolsSectionView";
 import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 

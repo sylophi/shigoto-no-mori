@@ -1,8 +1,8 @@
 import { useCarryOverListing } from "@/hooks/projects/useCarryOverListing";
 import type { CarryOverEntry } from "@shigomori/contracts/schemas";
-import { OnlyInWorktreesView } from "./OnlyInWorktreesView";
+import { OnlyInWorktreesView } from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
 import { PathPickerModal } from "@/components/shared/PathPickerModal";
-import { CarryOverTrailingView } from "./CarryOverTrailingView";
+import { CarryOverTrailingView } from "@shigomori/ui/views/configure/CarryOverTrailingView.tsx";
 
 interface CarryOverPickerModalProps {
   projectId: string;

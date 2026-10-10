@@ -14,7 +14,7 @@ import { reactCompiler } from "./vite.reactCompiler";
 import { dedupe } from "./vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
-import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
+import { ACCOUNT_ENV_KEYS } from "@shigomori/contracts/accountServiceConfig";
 import { fixedDevServerPort } from "./scripts/lib/portsEnvFile.mts";
 
 // Bounded, so a stalled remote (remoteTag's) costs the version rather

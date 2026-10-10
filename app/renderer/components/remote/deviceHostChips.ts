@@ -24,11 +24,7 @@ const CALM_REFETCH = {
   refetchOnWindowFocus: false,
 };
 
-export type HostChip = {
-  projectId: string;
-  name: string;
-  worktrees: number;
-};
+import type { HostChip } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
 
 export type HostChipIndex = {
   // deviceId -> that machine's projects. A device with no entry has no

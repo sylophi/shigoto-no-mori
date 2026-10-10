@@ -52,7 +52,7 @@ import { createHubConnection } from "../hub/connection";
 import {
   isConfigured,
   resolveServiceConfig,
-} from "@shared/account/serviceConfig";
+} from "@shigomori/contracts/accountServiceConfig";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";

@@ -5,7 +5,7 @@ import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeSta
 import { makeIgnoreMatcher } from "@shigomori/contracts/git/gitPaths";
 import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
-import { CarryOverSectionView } from "./CarryOverSectionView";
+import { CarryOverSectionView } from "@shigomori/ui/views/configure/CarryOverSectionView.tsx";
 
 interface CarryOverSectionProps {
   projectId: string;

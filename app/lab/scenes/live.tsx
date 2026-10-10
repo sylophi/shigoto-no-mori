@@ -25,7 +25,7 @@ import {
   LivePageView,
 } from "@shigomori/ui/views/live/LivePageView.tsx";
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   fakeRunningScripts,

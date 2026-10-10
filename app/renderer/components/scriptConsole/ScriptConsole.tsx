@@ -8,7 +8,7 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
-import { peerOutputHiddenNote } from "@/lib/commandAccessCopy";
+import { peerOutputHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { openExternalUrl } from "@/lib/openExternal";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import type { ScriptSlot } from "@/store/scriptRuns";

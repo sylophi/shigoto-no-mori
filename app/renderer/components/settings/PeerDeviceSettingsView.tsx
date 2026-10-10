@@ -2,7 +2,7 @@
 // them): why they aren't there yet, its reported version, and its
 // toggles frozen while it doesn't take commands from here.
 import type { ReactNode } from "react";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // This window can't reach the peer: on but not connected yet (a tunnel

@@ -26,7 +26,7 @@ import {
   selectionOfPreset,
 } from "../worktreeDetail/flow/ignoreChoice";
 import { LeaveOutPicker } from "../worktreeDetail/flow/LeaveOutPicker";
-import { FoundOnDevicesView } from "./OnlyInWorktreesView";
+import { FoundOnDevicesView } from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
 
 const NOTE =
   "The default when you mirror or transplant one of this project's worktrees.";

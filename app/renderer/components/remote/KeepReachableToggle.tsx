@@ -1,7 +1,7 @@
 import { keepReachableOn } from "@shigomori/contracts/schemas/config";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
-import { KeepReachableToggleView } from "./KeepReachableToggleView";
+import { KeepReachableToggleView } from "@shigomori/ui/views/remote/KeepReachableToggleView.tsx";
 
 // Launch-at-login via setLoginItemSettings only takes on macOS and
 // Windows. It is a no-op on Linux in Electron. The crash-recovery half

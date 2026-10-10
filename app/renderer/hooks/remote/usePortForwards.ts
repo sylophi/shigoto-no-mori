@@ -23,7 +23,7 @@ import type {
 } from "@shigomori/contracts/modules/portForward";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { hasLocalHost } from "@/lib/localHost";
 
 // Forwarding binds a real local TCP listener, which only the app can do
