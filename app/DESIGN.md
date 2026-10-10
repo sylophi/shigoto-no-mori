@@ -53,16 +53,27 @@ Rules that keep both themes cheap to maintain:
   `--input`, …), never hardcoded values. For status/semantic color, use
   only the raw families already in use: `emerald` (success, which
   follows the palette's accent), `rose` (danger/delete), `amber`
-  (warning), `sky` (info/update), and `green` for what is literally
+  (warning), `sky` (info/update), `violet` and `indigo` (a pull
+  request's and a sync's states), and `green` for what is literally
   green (a diff's additions, Nook's leaf), which no palette moves.
   Those are what
   doubutsu remaps via `--color-*`. A new raw family needs a matching
   remap entry in doubutsu.css.
+- **A tone's classes come from the one tone table**,
+  `primitives/status-dot.tsx`: `TONE_TEXT` for a status word,
+  `TONE_MARK` for an icon or a compact mark, `TONE_FILL` for the wash
+  behind it, `TONE_PILL` for a word on its wash, and `StatusDot` for a
+  dot. A view maps its states to a tone, never to class strings.
 - **Interactive primitives carry `data-slot`** (and `data-variant` where
   variants matter). Text fields use `primitives/input.tsx` /
   `primitives/textarea.tsx`, chips use `primitives/chip-button.tsx`,
-  few-way toggles use `primitives/segmented-control.tsx`. Don't
-  re-inline their class strings.
+  few-way toggles use `primitives/segmented-control.tsx`, a row's
+  label and status use `RowTag` and `ToneTag` (`primitives/row-tag.tsx`),
+  a popup's footer `primitives/footer-row.tsx`, an empty body
+  `primitives/empty-panel.tsx`, and a bare icon button
+  `primitives/icon-button.tsx` (`reveal` for one that shows on its
+  row's hover, `size="xs"` in a diff's headers). Don't re-inline their
+  class strings, and count a noun through `lib/pluralize.ts`.
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
   `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
