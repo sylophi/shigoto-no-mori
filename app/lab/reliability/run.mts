@@ -232,7 +232,6 @@ async function heal(): Promise<void> {
     await tab.setFrozen(false).catch(() => {});
     await tab.setOffline(false).catch(() => {});
     await tab.setHidden(false).catch(() => {});
-    await tab.shiftClock(0).catch(() => {});
   }
   for (const extra of lab.tabs.slice(1)) await lab.closeTab(extra);
   if (lab.hostPid() === null) {
