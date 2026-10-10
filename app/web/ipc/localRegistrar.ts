@@ -50,6 +50,7 @@ import type {
   ServerTransport,
 } from "@shared/ipc/transport";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
+import type { ViewObserver } from "@shigomori/contracts/types";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 
 // The hand-judged exceptions to the gated:false rule. Every entry
@@ -64,9 +65,17 @@ import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 //     every theme flip.
 const STUB_ALLOWED = new Set(["window:previewTheme"]);
 
+// A view the page serves itself (hub:watchPeer), observed until the
+// returned stop.
+type LocalView = (
+  input: unknown,
+  observer: ViewObserver<unknown>,
+) => () => void;
+
 export type LocalRegistrar = {
   server: ServerTransport;
   client: ClientTransport;
+  view: (channel: string, view: LocalView) => void;
 };
 
 // Every invoke (of one scope, when given), keyed by channel, for the
@@ -93,6 +102,7 @@ export function createLocalRegistrar(): LocalRegistrar {
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
   const subscribers = createSubscriberRegistry("tab");
+  const views = new Map<string, LocalView>();
   const invokeIndex = invokeIndexFor();
   // Fallback verdicts are computed once per channel: the policy is
   // deterministic and some stub outputs are sizeable object shapes. A
@@ -173,7 +183,21 @@ export function createLocalRegistrar(): LocalRegistrar {
     subscribe(channel, handler) {
       return subscribers.subscribe(channel, handler);
     },
+    watch(channel, input, observer) {
+      const view = views.get(channel);
+      if (view === undefined) {
+        observer.end(new Error(`${channel} is not available in the browser`));
+        return () => {};
+      }
+      return view(input, observer);
+    },
   };
 
-  return { server, client };
+  return {
+    server,
+    client,
+    view: (channel, view) => {
+      views.set(channel, view);
+    },
+  };
 }

@@ -607,6 +607,13 @@
       }
     }
   },
+  "hub:watchPeer": {
+    "payload": {
+      "deviceId": "y",
+      "channel": "lM"
+    },
+    "success": null
+  },
   "hygiene:diskUsage": {
     "payload": {
       "projectId": "H",

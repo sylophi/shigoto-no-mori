@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { DeviceIdSchema } from "../hubProtocol.ts";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
 // The renderer's bridge onto the main-process hub socket. The single hub socket lives in main, because the Durable
@@ -122,6 +122,18 @@ export const hubContract = defineContract(
     Schema.Struct({
       // Routed to a peer session keyed by this id (M6), so it carries the
       // shared device-id bound.
+      deviceId: DeviceIdSchema,
+      channel: Schema.NonEmptyString,
+      input: Schema.optional(Schema.Unknown),
+    }),
+    Schema.Unknown,
+  ),
+  // A peer's view (a terminal's attach) through the same session, its
+  // values as the peer sends them, which the caller decodes as the
+  // view's.
+  view(
+    "watchPeer",
+    Schema.Struct({
       deviceId: DeviceIdSchema,
       channel: Schema.NonEmptyString,
       input: Schema.optional(Schema.Unknown),
