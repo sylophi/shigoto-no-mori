@@ -13,8 +13,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Ops from "@host/lib/engineOps";
-import { peerWorktreeDataApiFor } from "@host/ipc/peerSync";
-import { fromPromise } from "@host/lib/util/fromPromise";
+import { peerWorktreeDataFor } from "@host/ipc/peerSync";
 
 export type WorktreeRef = { projectId: string; worktreeId: string };
 
@@ -37,24 +36,21 @@ export const followDescription = Effect.fnUntraced(function* (
   local: WorktreeRef,
   peer: WorktreeRef,
 ) {
-  const api = peerWorktreeDataApiFor(deviceId);
+  const api = peerWorktreeDataFor(deviceId);
   const [here, there] = yield* Effect.all(
     [
       Effect.map(
         Ops.readWorktreeData(local.projectId, local.worktreeId),
         descriptionOf,
       ),
-      Effect.map(
-        fromPromise(() => api.read(peer)),
-        descriptionOf,
-      ),
+      Effect.map(api.read(peer), descriptionOf),
     ],
     { concurrency: 2 },
   );
   const hereAt = here.describedAt ?? 0;
   const thereAt = there.describedAt ?? 0;
   if (hereAt > thereAt) {
-    yield* fromPromise(() => api.describe({ ...peer, description: here }));
+    yield* api.describe({ ...peer, description: here });
     return "there" as const;
   }
   if (thereAt > hereAt) {
@@ -76,7 +72,7 @@ export const followDescription = Effect.fnUntraced(function* (
       local.worktreeId,
       winner,
     );
-    yield* fromPromise(() => api.describe({ ...peer, description: winner }));
+    yield* api.describe({ ...peer, description: winner });
     return "there" as const;
   }
   return null;

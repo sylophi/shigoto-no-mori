@@ -21,15 +21,16 @@ import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
+import * as Effect from "effect/Effect";
 import {
-  peerClient,
-  peerWorktreesApiFor,
+  peerEffects,
+  peerWorktreesFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
-import { getRepoIdentity } from "@host/lib/git/repoIdentity";
+import * as Ops from "@host/lib/engineOps";
 import { mirrorList } from "@host/mirror/sessions";
 import { implSlot } from "@host/lib/util/implSlot";
-import { within } from "@host/lib/util/within";
+import type { PeerEffects } from "@host/ipc/peerSync";
 import type { Client } from "@shigomori/contracts/types";
 import {
   listed,
@@ -47,12 +48,12 @@ import {
 // themselves are reached through host/ipc/peerSync.ts.
 type ControlImpl = {
   // The account's device registry. Empty when signed out.
-  listDevices: () => Promise<DeviceInfo[]>;
+  listDevices: Effect.Effect<DeviceInfo[], unknown>;
   // The devices a direct session is established to (the only ones a
   // call can reach), each with whether it shares with this device and
   // runs its commands: the hub status snapshot's peerSharesData and
   // peerAcceptsCommands, the same reading the app's windows show.
-  directPeers: () => Promise<Readonly<Record<string, DirectPeer>>>;
+  directPeers: Effect.Effect<Readonly<Record<string, DirectPeer>>>;
 };
 
 export type DirectPeer = {
@@ -67,37 +68,43 @@ export { setControlImpl };
 
 // An ask that only informs an answer gets a probe's patience, the
 // registry included: it is a hub round trip with no clock of its own.
-const probe = <T>(asked: Promise<T>, late: () => T) =>
-  within(asked, PROBE_TIMEOUT_MS, late);
+const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
+  asked.pipe(
+    Effect.timeoutOrElse({
+      duration: PROBE_TIMEOUT_MS,
+      orElse: () => Effect.sync(late),
+    }),
+  );
 
-export async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
-  const { listDevices } = requireImpl();
-  let devices: DeviceInfo[];
-  try {
-    devices = await listDevices();
-  } catch (error) {
+export const roster = Effect.gen(function* () {
+  const devices = yield* requireImpl().listDevices.pipe(
     // A credential the hub no longer honors (the device was removed
     // from the account while the app held it) is the signed-out case
     // with a reason, not a raw hub error for the CLI to print.
-    if (!isHubRefusal(error)) throw error;
-    throw new ControlError(
-      "signed-out",
-      "This device's access to the account was removed. Sign in again from the app.",
-    );
-  }
+    Effect.mapError((error) =>
+      isHubRefusal(error)
+        ? new ControlError(
+            "signed-out",
+            "This device's access to the account was removed. Sign in again from the app.",
+          )
+        : error,
+    ),
+  );
   const hereId = thisDeviceId();
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) {
-    throw new ControlError(
-      "signed-out",
-      "This device isn't signed in to an account, so it has no other devices to reach. Sign in from the app first.",
+    return yield* Effect.fail(
+      new ControlError(
+        "signed-out",
+        "This device isn't signed in to an account, so it has no other devices to reach. Sign in from the app first.",
+      ),
     );
   }
   return {
-    here: { deviceId: hereId, name: nameOf(here) },
+    here: { deviceId: hereId, name: nameOf(here) } as Named,
     peers: peersOf(devices, hereId),
   };
-}
+});
 
 // Where each peer stands for one repo, in the dialogs' three blocks
 // (renderer/components/shared/deviceTargets.ts) but not their order:
@@ -106,117 +113,130 @@ export async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
 // command access off the status snapshot. A read leaves the access
 // out, since reads are ungated. The wording is the CLI's, pinned by
 // test/control.mts. The dialogs word the same blocks for their verbs.
-export async function standingsOf(
+export const standingsOf = (
   devices: DeviceInfo[],
   identity: string | null,
   { grant }: { grant: boolean },
-): Promise<ControlDevice[]> {
-  const direct = await requireImpl().directPeers();
-  return Promise.all(
-    devices.map((device) =>
-      standingOf(device, identity, direct[device.deviceId], grant),
+) =>
+  Effect.flatMap(requireImpl().directPeers, (direct) =>
+    Effect.forEach(
+      devices,
+      (device) => standingOf(device, identity, direct[device.deviceId], grant),
+      { concurrency: "unbounded" },
     ),
   );
-}
 
 // Sharing comes first: a device that isn't sharing serves nothing.
 // Then command access: a send needs it whether or not the device holds
 // the repo (without it, it clones the repo first), and a bring needs
 // both.
-async function standingOf(
+const standingOf = (
   device: DeviceInfo,
   identity: string | null,
   // Undefined when no direct session is established.
   peer: DirectPeer | undefined,
   grant: boolean,
-): Promise<ControlDevice> {
+): Effect.Effect<ControlDevice> => {
   const base = {
     deviceId: device.deviceId,
     name: nameOf(device),
     platform: device.platform,
   };
   const offline = { ...base, block: "offline" as const };
-  if (peer === undefined) return offline;
-  if (!peer.sharesData) return { ...base, block: "not-sharing" };
-  try {
-    const projects = await probe(
-      peerClient(projectsContract, device.deviceId).list(),
-      () => null,
-    );
-    if (projects === null) return offline;
-    // A null identity never matches: it means this device couldn't
-    // tell what repo this is, not "the same unknown repo".
-    const held =
-      identity === null
-        ? undefined
-        : projects.find(
-            (project) =>
-              project.identity === identity && project.pathExists !== false,
-          );
-    const holding = held === undefined ? {} : { projectId: held.id };
-    if (grant && !peer.acceptsCommands) {
-      return { ...base, ...holding, block: "no-grant" };
-    }
-    return held === undefined
-      ? { ...base, block: "no-project" }
-      : { ...base, ...holding };
-  } catch {
-    // The session dropped between the roster read and the ask.
-    return offline;
+  if (peer === undefined) return Effect.succeed(offline);
+  if (!peer.sharesData) {
+    return Effect.succeed({ ...base, block: "not-sharing" as const });
   }
-}
+  return probe(
+    peerEffects(projectsContract, device.deviceId).list(),
+    () => null,
+  ).pipe(
+    Effect.map((projects): ControlDevice => {
+      if (projects === null) return offline;
+      // A null identity never matches: it means this device couldn't
+      // tell what repo this is, not "the same unknown repo".
+      const held =
+        identity === null
+          ? undefined
+          : projects.find(
+              (project) =>
+                project.identity === identity && project.pathExists !== false,
+            );
+      const holding = held === undefined ? {} : { projectId: held.id };
+      if (grant && !peer.acceptsCommands) {
+        return { ...base, ...holding, block: "no-grant" };
+      }
+      return held === undefined
+        ? { ...base, block: "no-project" }
+        : { ...base, ...holding };
+    }),
+    // The session dropped between the roster read and the ask.
+    Effect.orElseSucceed(() => offline),
+  );
+};
 
 // A checkout git can't read (its folder moved away) has no identity
 // to match on, the same as one with no shared identity.
-export const repoIdentityOf = (project: Project): Promise<string | null> =>
-  getRepoIdentity(project.path).catch(() => null);
+export const repoIdentityOf = (project: Project) =>
+  Ops.repoIdentity(project.path).pipe(Effect.orElseSucceed(() => null));
 
 // The peers a transfer of this repo could run against: the named one,
 // or every one. Each comes back with its standing, blocked or not,
 // beside the identity they were matched on.
-export async function candidates(
+export const candidates = Effect.fnUntraced(function* (
   project: Project,
   query: string | undefined,
   { grant }: { grant: boolean },
-): Promise<{ identity: string | null; standings: ControlDevice[] }> {
-  const { peers } = await roster();
+) {
+  const { peers } = yield* roster;
   if (peers.length === 0) {
-    throw new ControlError(
-      "no-device",
-      "This account has no other device. Sign in to the app on another machine first.",
+    return yield* Effect.fail(
+      new ControlError(
+        "no-device",
+        "This account has no other device. Sign in to the app on another machine first.",
+      ),
     );
   }
   let asked = peers;
   if (query !== undefined) {
     asked = matchDevices(peers, query);
     if (asked.length === 0) {
-      throw new ControlError(
-        "no-device",
-        `No device is named "${query}". The account's other devices: ${listed(namesOf(peers))}.`,
+      return yield* Effect.fail(
+        new ControlError(
+          "no-device",
+          `No device is named "${query}". The account's other devices: ${listed(namesOf(peers))}.`,
+        ),
       );
     }
     if (asked.length > 1) {
-      throw new ControlError(
-        "ambiguous-device",
-        `"${query}" matches several devices: ${listed(namesOf(asked))}. Name one in full, or pass its id.`,
+      return yield* Effect.fail(
+        new ControlError(
+          "ambiguous-device",
+          `"${query}" matches several devices: ${listed(namesOf(asked))}. Name one in full, or pass its id.`,
+        ),
       );
     }
   }
-  const identity = await repoIdentityOf(project);
-  return { identity, standings: await standingsOf(asked, identity, { grant }) };
-}
+  const identity = yield* repoIdentityOf(project);
+  return {
+    identity,
+    standings: yield* standingsOf(asked, identity, { grant }),
+  };
+});
 
-export async function registryOrEmpty(): Promise<DeviceInfo[]> {
-  try {
-    return await probe(requireImpl().listDevices(), () => []);
-  } catch {
-    return [];
-  }
+export const registryOrEmpty = probe(requireListDevices(), () => []).pipe(
+  Effect.orElseSucceed((): DeviceInfo[] => []),
+);
+
+function requireListDevices() {
+  return Effect.suspend(() => requireImpl().listDevices);
 }
 
 // A session a peer runs against one of this device's worktrees, with
 // the peer and the client to drive it through.
-export type PeerMirror = Running & { api: Client<typeof mirrorContract> };
+export type PeerMirror = Running & {
+  api: PeerEffects<Client<typeof mirrorContract>>;
+};
 
 // The sessions peers run against this device's worktrees, found by
 // asking each connected peer of the registry for its list (a read,
@@ -224,55 +244,59 @@ export type PeerMirror = Running & { api: Client<typeof mirrorContract> };
 // session drops mid-ask, holds nothing this device can drive anyway.
 // Signed out, the registry is empty, so the answer is empty rather
 // than a refusal: the device's own sessions were already looked at.
-export async function peerMirrors(
-  registry: DeviceInfo[],
-): Promise<PeerMirror[]> {
-  const hereId = thisDeviceId();
-  const direct = await requireImpl().directPeers();
-  const peers = peersOf(registry, hereId).filter(
-    (device) => direct[device.deviceId]?.sharesData === true,
-  );
-  const found = await Promise.all(
-    peers.map(async (device): Promise<PeerMirror[]> => {
-      const api = peerClient(mirrorContract, device.deviceId);
-      try {
-        const list = await probe(api.list(), () => null);
-        if (list === null) return [];
-        return list.sessions
-          .filter((session) => session.deviceId === hereId)
-          .map((session) => ({ deviceId: device.deviceId, session, api }));
-      } catch {
-        return [];
-      }
-    }),
-  );
-  return found.flat();
-}
+export const peerMirrors = (registry: DeviceInfo[]) =>
+  Effect.gen(function* () {
+    const hereId = thisDeviceId();
+    const direct = yield* requireImpl().directPeers;
+    const peers = peersOf(registry, hereId).filter(
+      (device) => direct[device.deviceId]?.sharesData === true,
+    );
+    const found = yield* Effect.forEach(
+      peers,
+      (device) => {
+        const api = peerEffects(mirrorContract, device.deviceId);
+        return probe(api.list(), () => null).pipe(
+          Effect.map((list): PeerMirror[] =>
+            list === null
+              ? []
+              : list.sessions
+                  .filter((session) => session.deviceId === hereId)
+                  .map((session) => ({
+                    deviceId: device.deviceId,
+                    session,
+                    api,
+                  })),
+          ),
+          Effect.orElseSucceed((): PeerMirror[] => []),
+        );
+      },
+      { concurrency: "unbounded" },
+    );
+    return found.flat();
+  });
 
-export async function peerMirrorOf(
+export const peerMirrorOf = (
   target: { projectId: string; worktreeId: string },
-  registry: Promise<DeviceInfo[]>,
-): Promise<PeerMirror | undefined> {
-  return (await peerMirrors(await registry)).find(
-    ({ session }) =>
-      session.projectId === target.projectId &&
-      session.worktreeId === target.worktreeId,
+  registry: Effect.Effect<DeviceInfo[]>,
+) =>
+  Effect.map(Effect.flatMap(registry, peerMirrors), (mirrors) =>
+    mirrors.find(
+      ({ session }) =>
+        session.projectId === target.projectId &&
+        session.worktreeId === target.worktreeId,
+    ),
   );
-}
 
 // The mirror one of this device's worktrees is the original of, among
 // the sessions this device runs (a copy here is a peer's session).
-export function mirrorOf(target: {
-  projectId: string;
-  worktreeId: string;
-}): MirrorSession | undefined {
-  const { sessions } = mirrorList();
-  return sessions.find(
-    (candidate) =>
-      candidate.localProjectId === target.projectId &&
-      candidate.localWorktreeId === target.worktreeId,
+export const mirrorOf = (target: { projectId: string; worktreeId: string }) =>
+  Effect.map(mirrorList(), ({ sessions }): MirrorSession | undefined =>
+    sessions.find(
+      (candidate) =>
+        candidate.localProjectId === target.projectId &&
+        candidate.localWorktreeId === target.worktreeId,
+    ),
   );
-}
 
 // Where a send clones the repo on a device with no checkout of it, as
 // the dialogs' review defaults it (shared/cloneDestination.ts): the
@@ -281,29 +305,37 @@ export function mirrorOf(target: {
 // caller's pick, a path under this device's home read as the same path
 // under the target's, the way the default is. The target's home and
 // projects are its own answers, over the grant the send needs anyway.
-export async function cloneIntoOn(
+export const cloneIntoOn = (
   deviceId: string,
   project: Project,
   parent: string | undefined,
-): Promise<SyncCloneInto> {
+) => {
   const here = homedir();
   if (parent !== undefined) {
-    return cloneIntoOf(tildify(parent, here), project.path);
+    return Effect.succeed<SyncCloneInto>(
+      cloneIntoOf(tildify(parent, here), project.path),
+    );
   }
-  const [info, projects] = await Promise.all([
-    peerClient(runtimeContract, deviceId).info(),
-    peerClient(projectsContract, deviceId).list(),
-  ]);
-  return cloneIntoOf(
-    moveCloneParent({
-      sourcePath: project.path,
-      sourceHome: here,
-      destinationHome: info.homedir,
-      destinationProjects: projects,
-    }),
-    project.path,
+  return Effect.map(
+    Effect.all(
+      [
+        peerEffects(runtimeContract, deviceId).info(),
+        peerEffects(projectsContract, deviceId).list(),
+      ],
+      { concurrency: 2 },
+    ),
+    ([info, projects]): SyncCloneInto =>
+      cloneIntoOf(
+        moveCloneParent({
+          sourcePath: project.path,
+          sourceHome: here,
+          destinationHome: info.homedir,
+          destinationProjects: projects,
+        }),
+        project.path,
+      ),
   );
-}
+};
 
 // Every worktree of the repo that could move, on the peers that hold
 // it, beside the peers that hold it and did not answer. A
@@ -311,39 +343,50 @@ export async function cloneIntoOn(
 // can say which device to unblock. A worktree with no branch of its own
 // can't be moved (sync:sendWorktree refuses one the same way). A
 // primary is listed: a mirror can take it, and a bring says why not.
-export async function worktreesOn(standings: ControlDevice[]): Promise<{
-  worktrees: ControlPeerWorktree[];
-  unanswered: ControlDevice[];
-}> {
-  const unanswered: ControlDevice[] = [];
-  const lists = await Promise.all(
-    standings.map(async (device): Promise<ControlPeerWorktree[]> => {
-      const { projectId } = device;
-      if (projectId === undefined) return [];
-      try {
-        const answer = await probe(
-          peerWorktreesApiFor(device.deviceId).list({ projectId }),
+export const worktreesOn = (standings: ControlDevice[]) =>
+  Effect.gen(function* () {
+    const unanswered: ControlDevice[] = [];
+    const lists = yield* Effect.forEach(
+      standings,
+      (device) => {
+        const { projectId } = device;
+        if (projectId === undefined) {
+          return Effect.succeed([] as ControlPeerWorktree[]);
+        }
+        return probe(
+          peerWorktreesFor(device.deviceId).list({ projectId }),
           () => null,
+        ).pipe(
+          Effect.flatMap((answer) =>
+            answer === null ? Effect.fail("no answer") : Effect.succeed(answer),
+          ),
+          Effect.map((answer) =>
+            answer
+              .filter(
+                (worktree) =>
+                  !worktree.detached && isRealBranch(worktree.branch),
+              )
+              .map(
+                (worktree): ControlPeerWorktree => ({
+                  device: { deviceId: device.deviceId, name: device.name },
+                  projectId,
+                  worktree,
+                }),
+              ),
+          ),
+          Effect.catch(() =>
+            Effect.sync(() => {
+              unanswered.push(device);
+              return [] as ControlPeerWorktree[];
+            }),
+          ),
         );
-        if (answer === null) throw new Error("no answer");
-        return answer
-          .filter(
-            (worktree) => !worktree.detached && isRealBranch(worktree.branch),
-          )
-          .map((worktree) => ({
-            device: { deviceId: device.deviceId, name: device.name },
-            projectId,
-            worktree,
-          }));
-      } catch {
-        unanswered.push(device);
-        return [];
-      }
-    }),
-  );
-  return { worktrees: lists.flat(), unanswered };
-}
+      },
+      { concurrency: "unbounded" },
+    );
+    return { worktrees: lists.flat(), unanswered };
+  });
 
 // Which devices have a direct session up, each with whether it runs
 // this device's commands.
-export const directPeers = () => requireImpl().directPeers();
+export const directPeers = Effect.suspend(() => requireImpl().directPeers);

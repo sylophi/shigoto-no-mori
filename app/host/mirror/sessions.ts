@@ -26,6 +26,7 @@
 // and the session's mode says so, so the git follower reads the two
 // branch names as one. Both primaries keep what they had.
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
@@ -48,15 +49,13 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
-  peerMirrorApiFor,
-  peerSyncApiFor,
-  peerWorktreeOrUndefined,
-  peerWorktreesApiFor,
+  peerMirrorFor,
+  peerClient,
+  peerWorktree,
+  peerWorktreesFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
-import { fromPromise } from "@host/lib/util/fromPromise";
-import { within } from "@host/lib/util/within";
-import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
+import { runMove } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { inviteMirror, listMirrorInvites } from "./invites";
 import { transferFilesOnce } from "./oneShot";
@@ -73,6 +72,7 @@ import {
   engineOrNull,
   findSession,
   localWorktreeIdOf,
+  MirrorError,
   type MirrorSessionRaw,
   mirrorSessions,
   ORIGINAL_GONE_DETAIL,
@@ -112,41 +112,44 @@ let lastListed: MirrorSession[] = [];
 
 // A device's mirror picture: what mirror:list answers and what
 // mirror:changed carries. The same for every caller.
-export function mirrorList(daemon: Daemon = engine()): MirrorListResult {
-  const running = daemon.status() === "running";
-  const sessions = running
-    ? mirrorSessions(daemon).map((raw) =>
-        annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
-      )
-    : [...lastListed];
-  if (running) lastListed = [...sessions];
-  const live = new Set(sessions.map((session) => session.session));
-  for (const [id, session] of stopping) {
-    if (!live.has(id)) sessions.push(session);
-  }
-  return {
-    daemon: daemon.status(),
-    sessions,
-    serving: listMirrorServing(),
-  };
-}
+export const mirrorList = (daemon: Daemon = engine()) =>
+  Effect.gen(function* () {
+    const status = yield* daemon.status;
+    const running = status === "running";
+    const sessions = running
+      ? (yield* mirrorSessions(daemon)).map((raw) =>
+          annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
+        )
+      : [...lastListed];
+    if (running) lastListed = [...sessions];
+    const live = new Set(sessions.map((session) => session.session));
+    for (const [id, session] of stopping) {
+      if (!live.has(id)) sessions.push(session);
+    }
+    return {
+      daemon: status,
+      sessions,
+      serving: listMirrorServing(),
+    } satisfies MirrorListResult;
+  });
 
 // The list for the changed broadcast, or undefined, which a reader
 // answers by asking. Before the daemon is wired there is none to send.
-// A list that fails to build is said so: this runs off a timer, where
-// a throw would be the main process's uncaught exception.
-export function currentMirrorList(): MirrorListResult | undefined {
+// A list that fails to build is said so.
+export const currentMirrorList = Effect.suspend(() => {
   const daemon = engineOrNull();
-  if (daemon === null) return undefined;
-  try {
-    return mirrorList(daemon);
-  } catch (error) {
-    log.warn(
-      `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
-    );
-    return undefined;
-  }
-}
+  if (daemon === null) return Effect.succeed(undefined);
+  return mirrorList(daemon).pipe(
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        log.warn(
+          `[mirror] the changed broadcast goes without its list: ${errorMessageOf(cause)}`,
+        );
+        return undefined;
+      }),
+    ),
+  );
+});
 
 // The mirror: one of this device's worktrees, sent to a peer and kept
 // in step with the copy made there. No leave-out rule goes to the
@@ -174,9 +177,9 @@ export const startMirrorTo = (
   ctx: HandlerContext,
 ) =>
   Effect.gen(function* () {
-    const daemon = requireRunningEngine();
+    const daemon = yield* requireRunningEngine;
     const refusal = mirrorStartRefusal(input.worktreeId, {
-      sessions: mirrorSessions(daemon),
+      sessions: yield* mirrorSessions(daemon),
       servedWorktreeIds: listMirrorServing().map((stream) => stream.worktreeId),
       invitedCopyIds: listMirrorInvites().map(
         (invite) => invite.copy?.worktreeId,
@@ -186,7 +189,7 @@ export const startMirrorTo = (
       return yield* new MirrorStartRefusedError({ reason: refusal });
     }
     const { ignoreMode, ignores, ...sendInput } = input;
-    return yield* runMove(ctx, input.worktreeId, (signal) =>
+    return yield* runMove(ctx, input.worktreeId, () =>
       Effect.gen(function* () {
         const { source, result: sent } = yield* sendWorktree(sendInput, ctx, {
           mirror: true,
@@ -194,41 +197,38 @@ export const startMirrorTo = (
         // The copy's root as the peer's landing answered it, re-parsed
         // by the send.
         const copy = sent.worktree;
-        const session = yield* fromPromise(async () => {
-          try {
-            throwIfCancelled(signal);
-            // The copy's create ran its carry-over (and the setup
-            // script, when asked), which wrote files of the peer's own
-            // into it. Opened on that, the two-way session would hold
-            // every such path the rule does not leave out as a conflict
-            // from its first cycle (or carry a file only the copy has
-            // back here). So the copy is made an exact copy of the
-            // original first, the rule's paths left alone, and the
-            // session opens on two identical trees.
-            const replica = await transferFilesOnce(
-              {
-                localRoot: source.path,
-                localWorktreeId: source.id,
-                sourceDeviceId: input.targetDeviceId,
-                sourceProjectId: copy.projectId,
-                sourceWorktreeId: copy.id,
-                remoteRoot: copy.path,
-                name: source.branch,
-                ignores,
-                direction: "replica",
-              },
-              () => {},
-              signal,
-            );
-            throwIfCancelled(signal);
-            if (!replica.crossed) {
-              throw new Error(
-                `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
-              );
-            }
-            // A session the open made after the cancel is ended again.
-            return await abortable(
-              signal,
+        const session = yield* Effect.gen(function* () {
+          // The copy's create ran its carry-over (and the setup script,
+          // when asked), which wrote files of the peer's own into it.
+          // Opened on that, the two-way session would hold every such
+          // path the rule does not leave out as a conflict from its first
+          // cycle (or carry a file only the copy has back here). So the
+          // copy is made an exact copy of the original first, the rule's
+          // paths left alone, and the session opens on two identical
+          // trees.
+          const replica = yield* transferFilesOnce(
+            {
+              localRoot: source.path,
+              localWorktreeId: source.id,
+              sourceDeviceId: input.targetDeviceId,
+              sourceProjectId: copy.projectId,
+              sourceWorktreeId: copy.id,
+              remoteRoot: copy.path,
+              name: source.branch,
+              ignores,
+              direction: "replica",
+            },
+            () => {},
+          );
+          if (!replica.crossed) {
+            return yield* new MirrorError({
+              reason: `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
+            });
+          }
+          // A session the open made is ended again if the start was
+          // cancelled before it was in.
+          return yield* Effect.acquireRelease(
+            Effect.uninterruptible(
               daemon.create({
                 localRoot: source.path,
                 deviceId: input.targetDeviceId,
@@ -240,13 +240,16 @@ export const startMirrorTo = (
                 labels: startLabels(source, ignoreMode),
                 ignores,
               }),
-              (made) => daemon.terminate(made),
-            );
-          } catch (error) {
-            await rollBackSent(input.targetDeviceId, copy);
-            throw error;
-          }
-        });
+            ),
+            (made, exit) =>
+              Exit.hasInterrupts(exit)
+                ? Effect.ignore(daemon.terminate(made))
+                : Effect.void,
+          );
+        }).pipe(
+          Effect.scoped,
+          Effect.onError(() => rollBackSent(input.targetDeviceId, copy)),
+        );
         daemon.noteEvent(
           source.id,
           "started",
@@ -282,15 +285,17 @@ export const startMirrorFrom = (
   return Effect.acquireUseRelease(
     Effect.sync(() => {
       const notify = ctx.notifier(syncContract, "pullProgress");
-      return peerSyncApiFor(sourceDeviceId).onPullProgress((frame) => {
-        const parsed = decodePullProgress(frame);
-        if (
-          Option.isSome(parsed) &&
-          parsed.value.sourceWorktreeId === worktreeId
-        ) {
-          notify(parsed.value);
-        }
-      });
+      return peerClient(syncContract, sourceDeviceId).onPullProgress(
+        (frame) => {
+          const parsed = decodePullProgress(frame);
+          if (
+            Option.isSome(parsed) &&
+            parsed.value.sourceWorktreeId === worktreeId
+          ) {
+            notify(parsed.value);
+          }
+        },
+      );
     }),
     // A move like the others (runMove), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a
@@ -299,27 +304,23 @@ export const startMirrorFrom = (
     // move holds its key: a second ask for the same worktree is refused
     // without touching the first's.
     () =>
-      runMove(ctx, worktreeId, (signal) =>
-        fromPromise(async () => {
+      runMove(ctx, worktreeId, () =>
+        Effect.gen(function* () {
           const invite = inviteMirror({
             peerDeviceId: sourceDeviceId,
             sourceWorktreeId: worktreeId,
             identity,
             cloneInto: rule.cloneInto,
           });
-          try {
-            return decodeMirrorStartToResult(
-              await peerMirrorApiFor(sourceDeviceId, { signal }).startTo({
-                targetDeviceId: thisDeviceId(),
-                projectId,
-                worktreeId,
-                ...rule,
-              }),
-            );
-          } catch (error) {
-            invite.withdraw();
-            throw error;
-          }
+          const started = yield* peerMirrorFor(sourceDeviceId)
+            .startTo({
+              targetDeviceId: thisDeviceId(),
+              projectId,
+              worktreeId,
+              ...rule,
+            })
+            .pipe(Effect.onError(() => Effect.sync(() => invite.withdraw())));
+          return decodeMirrorStartToResult(started);
         }),
       ),
     (stopRelay) => Effect.sync(stopRelay),
@@ -339,73 +340,79 @@ export const startMirrorFrom = (
 // A stop whose original is gone (removed outside the app) ends the
 // session alone: the copy is then the only one there is, and it is
 // never removed, forced or not.
-export async function stopMirror(
-  session: string,
-  force: boolean,
-): Promise<{ removedCopy: boolean }> {
-  const daemon = engine();
-  const raw = findSession(daemon, session);
-  if (raw === undefined) {
-    throw new Error("That mirror is no longer running.");
-  }
-  if (!(await rootExists(raw.localRoot))) {
-    await endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
-    return { removedCopy: false };
-  }
-  // The copy goes with the stop, so it must hold nothing the original
-  // lacks: git in step, looked at again now rather than read off the
-  // last verdict (a commit on the copy a moment ago is exactly what
-  // must not be lost), and the files settled, since git says nothing
-  // about an edit the engine has not carried yet or holds still as a
-  // conflict.
-  if (!force) {
-    const git = await daemon.refreshGit(session);
-    const live = findSession(daemon, session) ?? raw;
-    const blocker = mirrorStopBlocker({ ...live, git });
-    if (blocker !== undefined) {
-      // A copy the peer no longer lists (deleted while this device
-      // missed the announcement, or moved) holds nothing to protect
-      // and nothing to remove, so the session just ends.
-      if (await endMirrorIfCopyGone(raw)) return { removedCopy: true };
-      throw new Error(mirrorStopRefusal(blocker));
+export const stopMirror = (session: string, force: boolean) =>
+  Effect.gen(function* () {
+    const daemon = engine();
+    const raw = yield* findSession(daemon, session);
+    if (raw === undefined) {
+      return yield* new MirrorError({
+        reason: "That mirror is no longer running.",
+      });
     }
-  }
-  stopping.set(session, {
-    ...annotateMirrorSession(raw, daemon.gitStatus(session)),
-    stopping: true,
+    if (!(yield* Effect.promise(() => rootExists(raw.localRoot)))) {
+      yield* endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
+      return { removedCopy: false };
+    }
+    // The copy goes with the stop, so it must hold nothing the original
+    // lacks: git in step, looked at again now rather than read off the
+    // last verdict (a commit on the copy a moment ago is exactly what
+    // must not be lost), and the files settled, since git says nothing
+    // about an edit the engine has not carried yet or holds still as a
+    // conflict.
+    if (!force) {
+      const git = yield* daemon.refreshGit(session);
+      const live = (yield* findSession(daemon, session)) ?? raw;
+      const blocker = mirrorStopBlocker({ ...live, git });
+      if (blocker !== undefined) {
+        // A copy the peer no longer lists (deleted while this device
+        // missed the announcement, or moved) holds nothing to protect
+        // and nothing to remove, so the session just ends.
+        if (yield* endMirrorIfCopyGone(raw)) return { removedCopy: true };
+        return yield* new MirrorError({ reason: mirrorStopRefusal(blocker) });
+      }
+    }
+    stopping.set(session, {
+      ...annotateMirrorSession(raw, daemon.gitStatus(session)),
+      stopping: true,
+    });
+    yield* stopAndRemoveCopy(daemon, session, raw).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          stopping.delete(session);
+          announceServingChange();
+        }),
+      ),
+    );
+    return { removedCopy: true };
   });
-  try {
-    await stopAndRemoveCopy(daemon, session, raw);
-  } finally {
-    stopping.delete(session);
-    announceServingChange();
-  }
-  return { removedCopy: true };
-}
 
 // The stop past the safety check: the engine ends the session, then
 // the copy on the peer goes. A copy that stayed is reported, with the
 // session already gone. The original here keeps its page, so its
 // thread gets the line either way.
-async function stopAndRemoveCopy(
+const stopAndRemoveCopy = Effect.fnUntraced(function* (
   daemon: Daemon,
   session: string,
   raw: MirrorSessionRaw,
-): Promise<void> {
-  await daemon.terminate(session);
-  const stayed = await peerWorktreesApiFor(raw.deviceId)
+) {
+  yield* daemon.terminate(session);
+  const stayed = yield* peerWorktreesFor(raw.deviceId)
     .delete({
       projectId: raw.projectId,
       worktreeId: raw.worktreeId,
       force: true,
     })
-    .then(
-      (removed) =>
+    .pipe(
+      Effect.map((removed) =>
         removed.ok ? null : `its ${removed.cleanupError.phase} step failed`,
+      ),
       // A forced stop of a copy that was already gone has nothing left
       // to remove.
-      async (error: unknown) =>
-        (await copyIsGone(raw)) ? null : errorMessageOf(error),
+      Effect.catch((error) =>
+        Effect.map(copyIsGone(raw), (gone) =>
+          gone ? null : errorMessageOf(error),
+        ),
+      ),
     );
   daemon.noteEvent(
     localWorktreeIdOf(raw),
@@ -413,69 +420,70 @@ async function stopAndRemoveCopy(
     stayed === null ? "" : "Copy on the other device kept",
   );
   if (stayed !== null) {
-    throw new Error(
-      `${MIRROR_COPY_STAYED} on the other device stayed: ${stayed}. Delete it from its page.`,
-    );
+    return yield* new MirrorError({
+      reason: `${MIRROR_COPY_STAYED} on the other device stayed: ${stayed}. Delete it from its page.`,
+    });
   }
-}
+});
 
 // Whether the peer answers, within a few seconds, that it no longer
 // lists the session's copy. A peer that fails or stalls is no answer.
 // A folder deleted by hand still lists until git prunes it.
 const COPY_PROBE_MS = 5_000;
-function copyIsGone(
+const copyIsGone = (
   raw: Pick<MirrorSessionRaw, "deviceId" | "projectId" | "worktreeId">,
-): Promise<boolean> {
-  const listed = peerWorktreeOrUndefined(
-    raw.deviceId,
-    raw.projectId,
-    raw.worktreeId,
-  ).then(
-    (copy) => copy === undefined,
-    () => false,
+) =>
+  peerWorktree(raw.deviceId, raw.projectId, raw.worktreeId).pipe(
+    Effect.map((copy) => copy === undefined),
+    Effect.timeoutOrElse({
+      duration: COPY_PROBE_MS,
+      orElse: () => Effect.succeed(false),
+    }),
+    Effect.orElseSucceed(() => false),
   );
-  return within(listed, COPY_PROBE_MS, () => false);
-}
 
 // A copy the peer no longer lists (deleted while this device missed
 // the announcement, or moved) ends its session: the stop's way out when
 // the copy cannot be confirmed in step. True when it ended them.
-export async function endMirrorIfCopyGone(session: {
+export const endMirrorIfCopyGone = (session: {
   deviceId: string;
   projectId: string;
   worktreeId: string;
-}): Promise<boolean> {
-  if (!(await copyIsGone(session))) return false;
-  await endMirrorsIntoGoneCopy(
-    session.deviceId,
-    session.projectId,
-    session.worktreeId,
-  );
-  return true;
-}
+}) =>
+  Effect.gen(function* () {
+    if (!(yield* copyIsGone(session))) return false;
+    yield* endMirrorsIntoGoneCopy(
+      session.deviceId,
+      session.projectId,
+      session.worktreeId,
+    );
+    return true;
+  });
 
 // A resume against a peer that is away answers with the connect's
 // error after the engine has already un-paused the session and started
 // its loop, which keeps retrying: that is a resume, not a failure, and
 // the page shows it reconnecting. A halted session resumes the same
 // way, its loop started again.
-export async function pauseOrResume(
-  session: string,
-  verb: "pause" | "resume",
-): Promise<void> {
-  const daemon = engine();
-  try {
-    await daemon[verb](session);
-  } catch (error) {
-    const after = findSession(daemon, session);
-    if (verb !== "resume" || after === undefined || after.paused) throw error;
-  }
-  daemon.noteEvent(
-    localWorktreeIdOf(findSession(daemon, session)),
-    verb === "pause" ? "paused" : "resumed",
-    "",
-  );
-}
+export const pauseOrResume = (session: string, verb: "pause" | "resume") =>
+  Effect.gen(function* () {
+    const daemon = engine();
+    yield* daemon[verb](session).pipe(
+      Effect.catch((error) =>
+        Effect.gen(function* () {
+          const after = yield* findSession(daemon, session);
+          if (verb !== "resume" || after === undefined || after.paused) {
+            return yield* error;
+          }
+        }),
+      ),
+    );
+    daemon.noteEvent(
+      localWorktreeIdOf(yield* findSession(daemon, session)),
+      verb === "pause" ? "paused" : "resumed",
+      "",
+    );
+  });
 
 // The engine cannot re-configure a live session, so a change of
 // ignores re-opens it on the same pair (MirrorImpl.recreate, which
@@ -489,37 +497,45 @@ export async function pauseOrResume(
 // pair in step that is nothing. On a paused, halted or conflicted
 // one it would bring back what was deleted on one side meanwhile,
 // and a paused session would come back running.
-export async function reopenMirror(
+export const reopenMirror = (
   session: string,
   ignoreMode: MirrorIgnoreMode,
   ignores: readonly string[],
-): Promise<{ session: string }> {
-  const daemon = engine();
-  const raw = findSession(daemon, session);
-  if (raw === undefined) {
-    throw new Error("That mirror is no longer running.");
-  }
-  if (!mirrorFilesSettled(raw)) {
-    throw new Error(
-      "What the mirror leaves out can change once it is running and in step. Resume it, or wait for it to catch up.",
+) =>
+  Effect.gen(function* () {
+    const daemon = engine();
+    const raw = yield* findSession(daemon, session);
+    if (raw === undefined) {
+      return yield* new MirrorError({
+        reason: "That mirror is no longer running.",
+      });
+    }
+    if (!mirrorFilesSettled(raw)) {
+      return yield* new MirrorError({
+        reason:
+          "What the mirror leaves out can change once it is running and in step. Resume it, or wait for it to catch up.",
+      });
+    }
+    if (reopening.has(session)) {
+      return yield* new MirrorError({
+        reason: "What the mirror leaves out is already changing.",
+      });
+    }
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => reopening.add(session)),
+      () =>
+        Effect.gen(function* () {
+          const next = yield* daemon.recreate(
+            session,
+            reopenInput(raw, ignoreMode, ignores),
+          );
+          daemon.noteEvent(
+            localWorktreeIdOf(raw),
+            "ignores-changed",
+            summarizeIgnores(ignoreMode, ignores),
+          );
+          return { session: next };
+        }),
+      () => Effect.sync(() => reopening.delete(session)),
     );
-  }
-  if (reopening.has(session)) {
-    throw new Error("What the mirror leaves out is already changing.");
-  }
-  reopening.add(session);
-  try {
-    const next = await daemon.recreate(
-      session,
-      reopenInput(raw, ignoreMode, ignores),
-    );
-    daemon.noteEvent(
-      localWorktreeIdOf(raw),
-      "ignores-changed",
-      summarizeIgnores(ignoreMode, ignores),
-    );
-    return { session: next };
-  } finally {
-    reopening.delete(session);
-  }
-}
+  });

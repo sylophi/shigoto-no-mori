@@ -24,6 +24,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
 import * as Engine from "../../host/lib/engine.ts";
+import * as BackgroundFetch from "../../host/lib/git/backgroundFetch.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
@@ -103,6 +104,15 @@ const runtime = ManagedRuntime.make(
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
+        // No fetches behind a proof's back.
+        Layer.succeed(
+          BackgroundFetch.BackgroundFetch,
+          BackgroundFetch.BackgroundFetch.of({
+            refreshProject: () => Effect.void,
+            sweepForPeer: Effect.succeed({ leaseMs: 0 }),
+            setWindowFocused: () => {},
+          }),
+        ),
         // Nothing a previous run left behind to sweep.
         Layer.succeed(
           OrphanSweep.OrphanSweep,

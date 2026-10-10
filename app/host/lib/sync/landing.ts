@@ -36,7 +36,7 @@ import {
   findProjectByIdentityOrFail,
 } from "@host/lib/projects";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
-import { cancellable, step } from "@host/lib/sync/moves";
+import { cancellable } from "@host/lib/sync/moves";
 import {
   attachLinkFarEnd,
   incomingRefFor,
@@ -211,15 +211,11 @@ export const landWorktree = (
       if (held === undefined) progress({ step: "clone" });
       project =
         held ??
-        (cloned = yield* step((stepSignal) =>
-          cloneCheckoutFromPeer(
-            source,
-            cloneInto,
-            landBranch,
-            (bytes, totalBytes) =>
-              progress({ step: "clone", bytes, totalBytes }),
-            stepSignal,
-          ),
+        (cloned = yield* cloneCheckoutFromPeer(
+          source,
+          cloneInto,
+          landBranch,
+          (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
         ).pipe(
           // A clone that got as far as its register stays: it is a
           // checkout of the repo at the place the user named, and a
@@ -253,16 +249,16 @@ export const landWorktree = (
     // ref covered by a have, so requesting a branch whose tip we already
     // hold would corrupt the transfer, not thin it. Both answers are
     // re-parsed by the link: their hashes flow into LOCAL git argv.
-    const branchTip = yield* step((stepSignal) =>
-      source.tip(branch, stepSignal),
-    ).pipe(Effect.withSpan("Landing.tip"));
+    const branchTip = yield* source
+      .tip(branch)
+      .pipe(Effect.withSpan("Landing.tip"));
     if (branchTip === null) {
       return yield* new SourceBranchGoneError({ branch });
     }
     progress({ step: "capture" });
-    const capture = yield* step((stepSignal) =>
-      source.capture(stepSignal),
-    ).pipe(Effect.withSpan("Landing.capture"));
+    const capture = yield* source.capture.pipe(
+      Effect.withSpan("Landing.capture"),
+    );
     const captured = capture.captured && capture.commit !== undefined;
     yield* Effect.annotateCurrentSpan("captured", captured);
 
@@ -289,20 +285,19 @@ export const landWorktree = (
           : yield* localBranchTips(project.path);
         // The fetch opens the transfer step itself with its (0, total)
         // frame, so only the nothing-to-fetch case needs a bare tick.
-        yield* step((stepSignal) =>
-          source.fetch({
-            signal: stepSignal,
+        yield* source
+          .fetch({
             refs: wantRefs,
             into: project,
             onProgress: (bytes, totalBytes) =>
               progress({ step: "transfer", bytes, totalBytes }),
             haves,
-          }),
-        ).pipe(
-          Effect.withSpan("Landing.fetch", {
-            attributes: { refs: wantRefs.length },
-          }),
-        );
+          })
+          .pipe(
+            Effect.withSpan("Landing.fetch", {
+              attributes: { refs: wantRefs.length },
+            }),
+          );
       } else {
         progress({ step: "transfer" });
       }

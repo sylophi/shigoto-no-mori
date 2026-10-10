@@ -81,20 +81,6 @@ function inSpan<A>(
   );
 }
 
-// An effect run where the graph's tracer is, so its spans land in the
-// same trace file as the Promise code's. `signal` interrupts it.
-export const runTraced = <A, E>(
-  effect: Effect.Effect<A, E>,
-  options?: { readonly signal?: AbortSignal | undefined },
-): Promise<A> => {
-  const parent = parentSpan();
-  const traced =
-    parent === undefined ? effect : Effect.withParentSpan(effect, parent);
-  return context === null
-    ? Effect.runPromise(traced, options)
-    : Effect.runPromiseWith(context)(traced, options);
-};
-
 // A root span: `run` gets it to hang its steps on.
 export const traced = <A>(
   name: string,

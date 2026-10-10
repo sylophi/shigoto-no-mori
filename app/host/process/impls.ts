@@ -6,13 +6,11 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { busyRemoteRefusal } from "@shared/busy";
 import { setCliImpl } from "@host/ipc/modules/cli";
-import { setGitImpl } from "@host/ipc/modules/git";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
 import { requireCliBinary } from "@host/lib/cli/binary";
 import { cliLinkStatus, installCliLinks } from "@host/lib/cli/install";
 import { hookPathEnv } from "@host/lib/cli/shell";
 import { onGlobalConfigChange } from "@host/lib/config/global";
-import { refreshProject, sweepForPeer } from "@host/lib/git/backgroundFetch";
 import { getBusyOperations } from "@host/lib/scripts";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
 import { publishLoopback, releaseStore, unpublishLoopback } from "./captures";
@@ -28,7 +26,6 @@ export function installHostImpls(): void {
     appVersion: () => hostFacts().appVersion,
     binaryPath: requireCliBinary,
   });
-  setGitImpl({ refreshProject, sweepForPeer });
   // Reconcile the listener on every config change, whatever the path:
   // the write handler, an external CLI write picked up by the store
   // watcher, and nuke wiping config.json all fan out through

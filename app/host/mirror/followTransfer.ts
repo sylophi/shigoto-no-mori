@@ -7,10 +7,10 @@
 // (followPlan.ts), but the transfers name each side's own branch: a
 // pull asks for the peer's own head, a push lands this side's.
 import type { Project } from "@shigomori/contracts/schemas";
-import type * as Engine from "@host/lib/engine";
-import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/promises";
-import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
-import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
+import * as Effect from "effect/Effect";
+import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
+import { offer, peerSource } from "@host/lib/sync/sourceLink";
+import { peerMirrorFor, peerSyncFor } from "@host/ipc/peerSync";
 import {
   CHANGED_LOCALLY,
   core,
@@ -29,70 +29,61 @@ import {
   indexRefFor,
 } from "./gitState";
 
-// Which way git follows this round (followPlan.ts decide), looking at
-// the histories for two sides that never agreed and sit on different
-// tips. The peer's tip is here only if it ever landed here: an unknown
-// or unrelated tip is two histories.
-export async function chooseDirection(
+export const chooseDirection = Effect.fnUntraced(function* (
   projectPath: string,
   agreed: GitStateCore | null,
   local: GitState,
   peer: GitState,
-): Promise<Direction> {
+) {
   const planned = decide(agreed, local, peer);
   if (planned !== "ancestry") return planned;
-  if (!(await hasCommit(projectPath, peer.tip))) return "diverged";
-  if (await isAncestor(projectPath, local.tip, peer.tip)) return "pull";
-  if (await isAncestor(projectPath, peer.tip, local.tip)) return "push";
-  return "diverged";
-}
+  if (!(yield* hasCommit(projectPath, peer.tip))) return "diverged";
+  if (yield* isAncestor(projectPath, local.tip, peer.tip)) return "pull";
+  if (yield* isAncestor(projectPath, peer.tip, local.tip)) return "push";
+  return "diverged" as Direction;
+});
 
-// One reconcile's view: the session, its two sides' APIs, and the
-// state each side read. `peer` is in this side's branch names.
 export interface Round {
   readonly project: Project;
   readonly localWorktree: { id: string; path: string };
   readonly session: FollowableSession;
-  readonly peerSync: PeerSyncApi;
-  readonly peerMirror: PeerMirrorApi;
   readonly local: GitState;
   readonly peer: GitState;
-  // The engine the bundles are made and unpacked on.
-  readonly engine: Engine.Handle;
 }
 
-// The haves for a pull whose tip is not here (see pull).
-async function pullHaves(
+const pullHaves = Effect.fnUntraced(function* (
   projectPath: string,
   localTip: string,
   agreedTip: string | null,
-): Promise<string[]> {
-  const [agreedHere, branchTips] = await Promise.all([
-    agreedTip === null || agreedTip === localTip
-      ? false
-      : hasCommit(projectPath, agreedTip),
-    localBranchTips(projectPath),
-  ]);
+) {
+  const [agreedHere, branchTips] = yield* Effect.all(
+    [
+      agreedTip === null || agreedTip === localTip
+        ? Effect.succeed(false)
+        : hasCommit(projectPath, agreedTip),
+      localBranchTips(projectPath),
+    ],
+    { concurrency: 2 },
+  );
   const first =
     agreedHere && agreedTip !== null ? [localTip, agreedTip] : [localTip];
   return [...new Set([...first, ...branchTips])].slice(0, 256);
-}
+});
 
-// Carry the peer's state here. `peer` is in this side's names and is
-// what lands. `peerHead` is the peer's own, which the bundle is asked
-// for. `agreedTip` is the tip both sides last shared, the best have
-// after this side's own.
-export async function pull(
-  { project, localWorktree, session, peerSync, local, peer, engine }: Round,
+export const pull = Effect.fnUntraced(function* (
+  { project, localWorktree, session, local, peer }: Round,
   peerHead: GitHead,
   agreedTip: string | null,
-): Promise<Outcome> {
-  const [tipIsLocal, indexCommitIsLocal] = await Promise.all([
-    hasCommit(project.path, peer.tip),
-    peer.indexCommit === null
-      ? true
-      : hasCommit(project.path, peer.indexCommit),
-  ]);
+) {
+  const [tipIsLocal, indexCommitIsLocal] = yield* Effect.all(
+    [
+      hasCommit(project.path, peer.tip),
+      peer.indexCommit === null
+        ? Effect.succeed(true)
+        : hasCommit(project.path, peer.indexCommit),
+    ],
+    { concurrency: 2 },
+  );
   const carry = refsToCarry(
     peerHead,
     !tipIsLocal,
@@ -111,46 +102,39 @@ export async function pull(
     // thin away objects the bundle has to carry.
     const haves = tipIsLocal
       ? [peer.tip]
-      : await pullHaves(project.path, local.tip, agreedTip);
-    await withPeerSource(
-      peerSync,
-      { projectId: session.projectId, worktreeId: session.worktreeId },
-      (source) => source.fetch({ refs: wantRefs, haves, into: project }),
-      engine,
+      : yield* pullHaves(project.path, local.tip, agreedTip);
+    yield* Effect.scoped(
+      Effect.flatMap(
+        peerSource(session.deviceId, {
+          projectId: session.projectId,
+          worktreeId: session.worktreeId,
+        }),
+        (source) => source.fetch({ refs: wantRefs, haves, into: project }),
+      ),
     );
   }
-  const result = await applyGitState(project, localWorktree, {
+  const result = yield* applyGitState(project, localWorktree, {
     expect: { tip: local.tip, indexTree: local.indexTree },
     state: core(peer),
     sweep,
   });
-  return result.applied || result.reason === CHANGED_LOCALLY
-    ? result
-    : { applied: false, reason: describeRefusal(result.reason, "here") };
-}
+  return (
+    result.applied || result.reason === CHANGED_LOCALLY
+      ? result
+      : { applied: false, reason: describeRefusal(result.reason, "here") }
+  ) as Outcome;
+});
 
-// Carry this side's state to the peer. The bundle names this side's
-// branch (it lands under the peer's incoming namespace by that name),
-// and the state applied there carries `headThere`, this side's head
-// in the peer's names.
-export async function push(
-  {
-    project,
-    localWorktree,
-    session,
-    peerSync,
-    peerMirror,
-    local,
-    peer,
-    engine,
-  }: Round,
+export const push = Effect.fnUntraced(function* (
+  { project, localWorktree, session, local, peer }: Round,
   headThere: GitHead,
-): Promise<Outcome> {
+) {
   const probe = [
     local.tip,
     ...(local.indexCommit === null ? [] : [local.indexCommit]),
   ];
-  const { present } = await peerSync.hasCommits({
+  const peerSync = peerSyncFor(session.deviceId);
+  const { present } = yield* peerSync.hasCommits({
     projectId: session.projectId,
     commits: probe,
   });
@@ -169,30 +153,27 @@ export async function push(
     // The peer asks this side for the bundle over a link this side
     // opens (sync:receiveBundle, the peer's grant, the one the whole
     // session rides).
-    await offerSource(
-      peerSync,
-      project,
-      localWorktree.id,
-      (channelId) =>
-        peerSync.receiveBundle({
-          projectId: session.projectId,
-          refs: wantRefs,
-          haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
-          channelId,
-        }),
-      engine,
+    yield* offer(session.deviceId, project, localWorktree.id, (channelId) =>
+      peerSync.receiveBundle({
+        projectId: session.projectId,
+        refs: wantRefs,
+        haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
+        channelId,
+      }),
     );
   }
-  const result = await peerMirror.applyGitState({
+  const result = yield* peerMirrorFor(session.deviceId).applyGitState({
     projectId: session.projectId,
     worktreeId: session.worktreeId,
     expect: { tip: peer.tip, indexTree: peer.indexTree },
     state: { ...core(local), head: headThere },
     sweep,
   });
-  if (result.applied) return { applied: true };
+  if (result.applied) return { applied: true } as Outcome;
   const reason = result.reason ?? "refused";
-  return reason === CHANGED_LOCALLY
-    ? { applied: false, reason }
-    : { applied: false, reason: describeRefusal(reason, "there") };
-}
+  return (
+    reason === CHANGED_LOCALLY
+      ? { applied: false, reason }
+      : { applied: false, reason: describeRefusal(reason, "there") }
+  ) as Outcome;
+});

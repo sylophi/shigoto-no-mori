@@ -37,11 +37,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import type * as Scope from "effect/Scope";
+import * as Fiber from "effect/Fiber";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { runTraced, traced, withParentSpan } from "@host/lib/util/trace";
 import {
   type SyncCapture,
   SyncCaptureSchema,
@@ -58,14 +58,18 @@ import {
   type Project,
 } from "@shigomori/contracts/schemas";
 import { strict } from "@shigomori/contracts/schemas/strict";
-import * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
-import type { PeerSyncApi } from "@host/ipc/peerSync";
-import { listRemoteEntries, refTip, treeOf } from "@host/lib/git/promises";
+import { peerChannelsFor, peerSyncFor } from "@host/ipc/peerSync";
+import { refTip, treeOf } from "@host/lib/git/refs";
+import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
 import { primaryRef } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
-import { MoveStepError, step, unwrapStep } from "./moves";
+
+// What the source's answers reach: the engine (its captures and
+// bundles) and git.
+type SourceServices = Engine.Services | ChildProcessSpawner.ChildProcessSpawner;
 
 // ---- The link: JSON lines and raw bytes over one channel.
 
@@ -74,18 +78,31 @@ export const LINK_GONE = "the other device went away mid-transfer";
 // that is, is a broken peer.
 const MAX_LINE_BYTES = 1 << 20;
 
+// What a link, or the other end over it, refused.
+export class LinkError extends Schema.TaggedError<LinkError>()("LinkError", {
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 export type Link = {
   // The next message, or null once the other end ended cleanly.
-  read(): Promise<unknown>;
+  read: Effect.Effect<unknown, LinkError>;
   // Exactly `bytes` raw bytes, each piece handed to `sink`. A piece is
-  // taken only once the sink resolved, so a slow disk slows the
+  // taken only once the sink is done with it, so a slow disk slows the
   // sender.
-  readBytes(
+  readBytes<E, R>(
     bytes: number,
-    sink: (piece: Buffer) => Promise<void>,
-  ): Promise<void>;
-  write(message: unknown): Promise<void>;
-  writeBytes(bytes: Uint8Array): Promise<void>;
+    sink: (piece: Buffer) => Effect.Effect<void, E, R>,
+  ): Effect.Effect<void, LinkError | E, R>;
+  write(message: unknown): Effect.Effect<void, LinkError>;
+  writeBytes(bytes: Uint8Array): Effect.Effect<void, LinkError>;
+  // Queues a message without waiting for the window, for what is
+  // presence rather than state (a progress frame): one the link can't
+  // take is dropped.
+  post(message: unknown): void;
   // Ends this direction once what is queued has gone.
   end(): void;
   // Tears the channel down now, failing whatever waits on it.
@@ -108,24 +125,22 @@ export function attachLink(
   // end waits on the ones not taken.
   const pending: { data: Buffer; consumed: () => void }[] = [];
   let ended = false;
-  let failure: Error | null = null;
+  let failure: LinkError | null = null;
   let arrived: (() => void) | null = null;
-  const writable = new Set<{
-    resolve: () => void;
-    reject: (e: Error) => void;
-  }>();
+  const writable = new Set<() => void>();
   const wake = (): void => {
     const waiting = arrived;
     arrived = null;
     waiting?.();
   };
   const closed = new AbortController();
-  const fail = (error: Error): void => {
+  const fail = (error: LinkError): void => {
     failure ??= error;
     wake();
-    for (const waiter of writable) waiter.reject(failure);
+    for (const waiter of writable) waiter();
     writable.clear();
   };
+  const gone = () => new LinkError({ reason: LINK_GONE });
   const handle = attach({
     onData(data, consumed) {
       pending.push({
@@ -140,84 +155,101 @@ export function attachLink(
     },
     onReset() {
       closed.abort();
-      fail(new Error(LINK_GONE));
+      fail(gone());
     },
     onWritable() {
-      for (const waiter of writable) waiter.resolve();
+      for (const waiter of writable) waiter();
       writable.clear();
     },
   });
   if (!handle.open) {
     closed.abort();
-    fail(new Error(LINK_GONE));
+    fail(gone());
   }
-  // Resolves once something arrives, the other end ends, or the link
-  // fails. One reader at a time: each side of a link is one loop.
-  const arrival = (): Promise<void> =>
-    new Promise((resolve) => {
-      arrived = resolve;
+  // Once something arrives, the other end ends, or the link fails.
+  // One reader at a time: each side of a link is one loop.
+  const arrival = Effect.callback<void>((resume) => {
+    const waiting = () => resume(Effect.void);
+    arrived = waiting;
+    return Effect.sync(() => {
+      if (arrived === waiting) arrived = null;
+    });
+  });
+  // A false return queued the bytes past the window: they go as the far
+  // end takes what is ahead, and the next write waits for that.
+  const writeBytes = (bytes: Uint8Array): Effect.Effect<void, LinkError> =>
+    Effect.suspend(() => {
+      if (failure !== null) return Effect.fail(failure);
+      if (!handle.open) return Effect.fail(gone());
+      if (handle.write(bytes)) return Effect.void;
+      return Effect.callback<void, LinkError>((resume) => {
+        const waiting = () =>
+          resume(failure === null ? Effect.void : Effect.fail(failure));
+        writable.add(waiting);
+        return Effect.sync(() => writable.delete(waiting));
+      });
     });
 
-  async function writeBytes(bytes: Uint8Array): Promise<void> {
-    if (failure !== null) throw failure;
-    if (!handle.open) throw new Error(LINK_GONE);
-    // A false return queued the bytes past the window: they go as the
-    // far end takes what is ahead, and the next write waits for that.
-    if (handle.write(bytes)) return;
-    await new Promise<void>((resolve, reject) => {
-      writable.add({ resolve, reject });
-    });
-  }
-
-  return {
-    async read() {
-      const parts: Buffer[] = [];
-      let size = 0;
-      for (;;) {
-        if (failure !== null) throw failure;
-        const head = pending[0];
-        if (head === undefined) {
-          if (ended) {
-            if (size === 0) return null;
-            throw new Error("the other device ended the transfer mid-message");
-          }
-          // oxlint-disable-next-line no-await-in-loop -- the reader waits for bytes
-          await arrival();
-          continue;
+  const read = Effect.gen(function* () {
+    const parts: Buffer[] = [];
+    let size = 0;
+    for (;;) {
+      if (failure !== null) return yield* failure;
+      const head = pending[0];
+      if (head === undefined) {
+        if (ended) {
+          if (size === 0) return null;
+          return yield* new LinkError({
+            reason: "the other device ended the transfer mid-message",
+          });
         }
-        const newline = head.data.indexOf(0x0a);
-        const take = newline === -1 ? head.data.length : newline + 1;
-        parts.push(head.data.subarray(0, take));
-        size += take;
-        if (take === head.data.length) {
-          pending.shift();
-          head.consumed();
-        } else {
-          head.data = head.data.subarray(take);
-        }
-        if (newline !== -1) {
-          return JSON.parse(
-            Buffer.concat(parts, size)
-              .subarray(0, size - 1)
-              .toString("utf8"),
-          ) as unknown;
-        }
-        if (size > MAX_LINE_BYTES) {
-          throw new Error("the other device sent an oversized message");
-        }
+        yield* arrival;
+        continue;
       }
-    },
-    async readBytes(bytes, sink) {
+      const newline = head.data.indexOf(0x0a);
+      const take = newline === -1 ? head.data.length : newline + 1;
+      parts.push(head.data.subarray(0, take));
+      size += take;
+      if (take === head.data.length) {
+        pending.shift();
+        head.consumed();
+      } else {
+        head.data = head.data.subarray(take);
+      }
+      if (newline !== -1) {
+        const line = Buffer.concat(parts, size)
+          .subarray(0, size - 1)
+          .toString("utf8");
+        return yield* Effect.try({
+          try: (): unknown => JSON.parse(line),
+          catch: () =>
+            new LinkError({ reason: "the other device sent a broken message" }),
+        });
+      }
+      if (size > MAX_LINE_BYTES) {
+        return yield* new LinkError({
+          reason: "the other device sent an oversized message",
+        });
+      }
+    }
+  });
+
+  const readBytes = <E, R>(
+    bytes: number,
+    sink: (piece: Buffer) => Effect.Effect<void, E, R>,
+  ) =>
+    Effect.gen(function* () {
       let left = bytes;
       while (left > 0) {
-        if (failure !== null) throw failure;
+        if (failure !== null) return yield* failure;
         const head = pending[0];
         if (head === undefined) {
           if (ended) {
-            throw new Error("the other device ended the transfer mid-bundle");
+            return yield* new LinkError({
+              reason: "the other device ended the transfer mid-bundle",
+            });
           }
-          // oxlint-disable-next-line no-await-in-loop -- the reader waits for bytes
-          await arrival();
+          yield* arrival;
           continue;
         }
         const take = Math.min(left, head.data.length);
@@ -225,19 +257,27 @@ export function attachLink(
         const piece = head.data.subarray(0, take);
         if (whole) pending.shift();
         else head.data = head.data.subarray(take);
-        // oxlint-disable-next-line no-await-in-loop -- one piece on disk before the next
-        await sink(piece);
+        // One piece on disk before the next.
+        yield* sink(piece);
         if (whole) head.consumed();
         left -= take;
       }
-    },
+    });
+
+  return {
+    read,
+    readBytes,
     write: (message) =>
       writeBytes(Buffer.from(`${JSON.stringify(message)}\n`, "utf8")),
     writeBytes,
+    post(message) {
+      if (failure !== null || !handle.open) return;
+      handle.write(Buffer.from(`${JSON.stringify(message)}\n`, "utf8"));
+    },
     end: () => handle.end(),
     reset() {
       handle.reset();
-      fail(new Error(LINK_GONE));
+      fail(gone());
     },
     closed: closed.signal,
   };
@@ -250,28 +290,6 @@ export function attachLink(
 export function attachLinkFarEnd(ctx: HandlerContext, channelId: string): Link {
   const channels = requireChannels(ctx, channelId);
   return attachLink((endpoint) => channels.attach(channelId, endpoint));
-}
-
-// This device's end of a link to a peer, attached BEFORE the call that
-// opens the peer's end is sent, so the peer's first bytes always find
-// it. The call's rejection resets it, and so does a cancel while it
-// waits (peerSource's release, through `onAttached`).
-async function openLink(
-  peer: Pick<PeerSyncApi, "channels">,
-  open: (channelId: string) => Promise<unknown>,
-  onAttached: (link: Link) => void = () => {},
-): Promise<Link> {
-  const channelId = mintHexId();
-  const mux = await peer.channels();
-  const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
-  onAttached(link);
-  try {
-    await open(channelId);
-  } catch (error) {
-    link.reset();
-    throw error;
-  }
-  return link;
 }
 
 // ---- The messages, validated at both ends: what a peer sends flows
@@ -381,173 +399,189 @@ function coalescedProgress(
 // What a source knows about its own worktree, read locally: the
 // answers its end of a link gives, and what a send's teardown checks
 // the source against (it is this device's own worktree then).
-// A question asked with a `signal` tears the link down when it fires,
-// so the question fails at once instead of waiting on the answer.
 export type SourceFacts = {
-  tip(branch: string, signal?: AbortSignal): Promise<string | null>;
-  capture(signal?: AbortSignal): Promise<SyncCapture>;
+  tip(branch: string): Effect.Effect<string | null, unknown, SourceServices>;
+  capture: Effect.Effect<SyncCapture, unknown, SourceServices>;
 };
 
-export function localSource(
-  project: Project,
-  worktreeId: string,
-  engine: Engine.Handle,
-): SourceFacts {
+export function localSource(project: Project, worktreeId: string): SourceFacts {
   return {
     tip: (branch) => refTip(project.path, `refs/heads/${branch}`),
-    capture: async () => {
-      const capture = await Engine.runWith(engine)(
-        Ops.dirtyCapture(project, worktreeId),
-      );
+    capture: Effect.gen(function* () {
+      const capture = yield* Ops.dirtyCapture(project, worktreeId);
       if (!capture.captured || capture.commit === undefined) {
         return { captured: false };
       }
       return {
         captured: true,
         commit: capture.commit,
-        tree: await treeOf(project.path, capture.commit),
-      };
-    },
+        tree: yield* treeOf(project.path, capture.commit),
+      } satisfies SyncCapture;
+    }),
   };
 }
 
 // A link that died with a bundle half sent cannot carry an answer: its
 // failure ends the serving and resets the link.
-class BrokenLink extends Error {}
+class BrokenLink extends Schema.TaggedError<BrokenLink>()("BrokenLink", {
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
-async function sendBundle(
+// A bundle's temp dir, removed whatever happens.
+const inTempDir = <A, E, R>(
+  prefix: string,
+  use: (dir: string) => Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => mkdtemp(join(tmpdir(), prefix))),
+    use,
+    (dir) =>
+      Effect.promise(() =>
+        rm(dir, { recursive: true, force: true }).catch(() => {}),
+      ),
+  );
+
+const sendBundle = (
   link: Link,
   project: Project,
   refs: readonly string[],
   haves: readonly string[],
-  engine: Engine.Handle,
-): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "sm-sync-"));
-  try {
-    const path = join(dir, "transfer.bundle");
-    // Only the byte count travels back. The CLI also reports the refs
-    // it resolved, but that list is computed against the repo AFTER
-    // `git bundle create` silently dropped any have-covered ref, so it
-    // can name refs the bundle lacks.
-    const { bytes } = await Engine.runWith(engine)(
-      Ops.bundleCreate(project, path, [...refs], [...haves]),
-    );
-    const file = await openFile(path, "r");
-    try {
-      await link.write({ bundle: { bytes } });
-      for (let offset = 0; offset < bytes;) {
-        // A buffer per piece: the channel holds on to what it could not
-        // send yet.
-        const piece = Buffer.allocUnsafe(
-          Math.min(CHANNEL_MAX_WRITE_BYTES, bytes - offset),
-        );
-        // oxlint-disable-next-line no-await-in-loop -- pieces go in order
-        const { bytesRead } = await file.read(piece, 0, piece.length, offset);
-        if (bytesRead === 0) throw new Error("the bundle shrank while sending");
-        // oxlint-disable-next-line no-await-in-loop -- the channel's window
-        await link.writeBytes(piece.subarray(0, bytesRead));
-        offset += bytesRead;
-      }
-    } catch (error) {
-      throw new BrokenLink(errorMessageOf(error));
-    } finally {
-      await file.close();
-    }
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
-  }
-}
+) =>
+  inTempDir("sm-sync-", (dir) =>
+    Effect.gen(function* () {
+      const path = join(dir, "transfer.bundle");
+      // Only the byte count travels back. The engine also reports the
+      // refs it resolved, but that list is computed against the repo
+      // AFTER `git bundle create` silently dropped any have-covered ref,
+      // so it can name refs the bundle lacks.
+      const { bytes } = yield* Ops.bundleCreate(
+        project,
+        path,
+        [...refs],
+        [...haves],
+      );
+      yield* Effect.acquireUseRelease(
+        Effect.promise(() => openFile(path, "r")),
+        (file) =>
+          Effect.gen(function* () {
+            yield* link.write({ bundle: { bytes } });
+            for (let offset = 0; offset < bytes;) {
+              // A buffer per piece: the channel holds on to what it could
+              // not send yet.
+              const piece = Buffer.allocUnsafe(
+                Math.min(CHANNEL_MAX_WRITE_BYTES, bytes - offset),
+              );
+              const { bytesRead } = yield* Effect.promise(() =>
+                file.read(piece, 0, piece.length, offset),
+              );
+              if (bytesRead === 0) {
+                return yield* new LinkError({
+                  reason: "the bundle shrank while sending",
+                });
+              }
+              yield* link.writeBytes(piece.subarray(0, bytesRead));
+              offset += bytesRead;
+            }
+          }).pipe(
+            Effect.mapError(
+              (error) => new BrokenLink({ reason: errorMessageOf(error) }),
+            ),
+          ),
+        (file) => Effect.promise(() => file.close()),
+      );
+    }),
+  );
 
 // One question, answered on the link.
-async function answerAsk(
+const answerAsk = (
   link: Link,
   project: Project,
   facts: SourceFacts,
   ask: typeof AskSchema.Type,
-  engine: Engine.Handle,
-): Promise<void> {
+) => {
   switch (ask.ask) {
     case "tip":
-      await link.write({ ok: { commit: await facts.tip(ask.branch) } });
-      return;
+      return Effect.flatMap(facts.tip(ask.branch), (commit) =>
+        link.write({ ok: { commit } }),
+      );
     case "capture":
-      await link.write({ ok: await facts.capture() });
-      return;
+      return Effect.flatMap(facts.capture, (capture) =>
+        link.write({ ok: capture }),
+      );
     case "clone":
-      await link.write({ ok: await cloneFactsOf(project, engine) });
-      return;
+      return Effect.flatMap(cloneFactsOf(project), (clone) =>
+        link.write({ ok: clone }),
+      );
     case "bundle":
-      await sendBundle(link, project, ask.refs, ask.haves, engine);
-      return;
+      return sendBundle(link, project, ask.refs, ask.haves);
   }
-}
+};
 
 // The source's end of a link: answers every question until the other
 // end is done, then ends its own direction. A question it cannot
 // answer is answered with the error (the first one is kept on
 // `failure`, so a caller whose run failed can tell its own trouble
 // from the other device's). A malformed message, or a bundle cut off
-// halfway, resets the link and rejects.
-export async function serveSource(
+// halfway, resets the link and fails.
+export const serveSource = (
   link: Link,
   project: Project,
   worktreeId: string,
-  engine: Engine.Handle,
   opts: {
     onProgress?: (frame: ProgressFrame) => void;
     failure?: { error?: unknown };
   } = {},
-): Promise<void> {
-  const facts = localSource(project, worktreeId, engine);
-  try {
+) => {
+  const facts = localSource(project, worktreeId);
+  return Effect.gen(function* () {
+    // One question at a time.
     for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- one question at a time
-      const message = await link.read();
+      const message = yield* link.read;
       if (message === null) {
         link.end();
         return;
       }
-      const request = decodeRequest(message);
+      const request = yield* Effect.try({
+        try: () => decodeRequest(message),
+        catch: () =>
+          new LinkError({ reason: "the other device asked something else" }),
+      });
       if ("progress" in request) {
         opts.onProgress?.(request.progress);
         continue;
       }
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- one question at a time
-        await traced("SourceLink.answer", { ask: request.ask }, () =>
-          answerAsk(link, project, facts, request, engine),
-        );
-      } catch (error) {
-        if (error instanceof BrokenLink) throw error;
-        if (opts.failure !== undefined) opts.failure.error ??= error;
-        // oxlint-disable-next-line no-await-in-loop -- one question at a time
-        await link.write({ error: errorMessageOf(error) });
-      }
+      yield* answerAsk(link, project, facts, request).pipe(
+        Effect.withSpan("SourceLink.answer", {
+          attributes: { ask: request.ask },
+        }),
+        Effect.catch((error): Effect.Effect<void, LinkError | BrokenLink> => {
+          if (error instanceof BrokenLink) return Effect.fail(error);
+          if (opts.failure !== undefined) opts.failure.error ??= error;
+          return link.write({ error: errorMessageOf(error) });
+        }),
+      );
     }
-  } catch (error) {
-    link.reset();
-    throw error;
-  }
-}
+  }).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
+};
 
 // The clone's two questions: the branch the source's checkout is
 // measured against (what a clone is made of) and where it was cloned
 // from (the remote the clone gets, by the clone payload's own rule,
 // shared/cloneUrl.ts).
-async function cloneFactsOf(
-  project: Project,
-  engine: Engine.Handle,
-): Promise<CloneFacts> {
-  const [branch, remotes] = await Promise.all([
-    Engine.runWith(engine)(primaryRef(project)),
-    listRemoteEntries(project.path),
-  ]);
-  return { branch, remoteUrl: pickCloneUrl(remotes) };
-}
-
-// For the Promise callers below: a failure as its step threw it.
-const runStep = <A>(effect: Effect.Effect<A, MoveStepError>) =>
-  runTraced(effect.pipe(Effect.mapError(unwrapStep)));
+const cloneFactsOf = (project: Project) =>
+  Effect.map(
+    Effect.all([primaryRef(project), listRemoteEntries(project.path)], {
+      concurrency: 2,
+    }),
+    ([branch, remotes]): CloneFacts => ({
+      branch,
+      remoteUrl: pickCloneUrl(remotes),
+    }),
+  );
 
 // A send's or a push's source end: this device opens a link on the
 // peer through `openOnPeer` (the call that makes the peer ask over it) and
@@ -556,20 +590,20 @@ const runStep = <A>(effect: Effect.Effect<A, MoveStepError>) =>
 // of it. The link ends with the answer, and is torn down when the call
 // fails or the move is interrupted, which fails the wait at once: the
 // peer's landing runs under the link (Link.closed) and stops with it.
-// An answer already on its way when the interrupt came is a landing
-// that finished, which `onLate` gets to undo.
-export const offer = <T>(
-  peer: Pick<PeerSyncApi, "channels">,
+// The peer's answer itself is not cut short: an interrupt stops
+// waiting at once, and an answer already on its way when it came is a
+// landing that finished, which `onLate` gets to undo.
+export const offer = <T, E, R, R2 = never>(
+  deviceId: string,
   project: Project,
   worktreeId: string,
-  openOnPeer: (channelId: string) => Promise<T>,
+  openOnPeer: (channelId: string) => Effect.Effect<T, E, R>,
   onProgress?: (frame: ProgressFrame) => void,
-  onLate?: (answer: T) => unknown,
+  onLate?: (answer: T) => Effect.Effect<unknown, never, R2>,
 ) =>
   Effect.gen(function* () {
     const channelId = mintHexId();
-    const engine = yield* Engine.handle;
-    const mux = yield* step(() => peer.channels());
+    const mux = yield* peerChannelsFor(deviceId);
     const link = yield* Effect.acquireRelease(
       Effect.sync(() =>
         attachLink((endpoint) => mux.attach(channelId, endpoint)),
@@ -586,50 +620,37 @@ export const offer = <T>(
     // peer tore down as its run failed is that run's news, which the
     // call brings.
     const failure: { error?: unknown } = {};
-    void serveSource(link, project, worktreeId, engine, {
-      onProgress,
-      failure,
-    }).catch(() => {});
-    // The peer's call continues the move's trace.
-    const span = yield* Effect.option(Effect.currentSpan);
-    const answering = withParentSpan(span, () => openOnPeer(channelId));
-    // Not a step: the peer's answer cannot be cut short, so an
-    // interrupt stops waiting at once and hands a late one to `onLate`.
-    return yield* Effect.tryPromise({
-      try: () => answering,
-      catch: (cause) => new MoveStepError({ cause }),
-    }).pipe(
+    yield* Effect.forkScoped(
+      Effect.ignore(
+        serveSource(link, project, worktreeId, { onProgress, failure }),
+      ),
+    );
+    const answering = yield* Effect.forkDetach(openOnPeer(channelId));
+    return yield* Fiber.join(answering).pipe(
       Effect.onInterrupt(() =>
-        Effect.sync(() => {
-          if (onLate !== undefined) answering.then(onLate).catch(() => {});
-        }),
+        onLate === undefined
+          ? Effect.void
+          : Effect.asVoid(
+              Effect.forkDetach(
+                Fiber.join(answering).pipe(
+                  Effect.flatMap(onLate),
+                  Effect.ignore,
+                ),
+              ),
+            ),
       ),
       Effect.mapError((error) =>
-        failure.error === undefined
-          ? error
-          : new MoveStepError({ cause: failure.error }),
+        failure.error === undefined ? error : failure.error,
       ),
     );
   }).pipe(Effect.scoped);
-
-// The same for a Promise caller (the git follower's push).
-export const offerSource = <T>(
-  peer: Pick<PeerSyncApi, "channels">,
-  project: Project,
-  worktreeId: string,
-  openOnPeer: (channelId: string) => Promise<T>,
-  engine: Engine.Handle,
-): Promise<T> =>
-  runStep(
-    offer(peer, project, worktreeId, openOnPeer).pipe(Effect.provide(engine)),
-  );
 
 // ---- The destination's side.
 
 type UnpackTarget = Project | { path: string };
 
 export type WorktreeSource = SourceFacts & {
-  cloneFacts(signal?: AbortSignal): Promise<CloneFacts>;
+  cloneFacts: Effect.Effect<CloneFacts, unknown, SourceServices>;
   // Asks for a bundle of `refs` thinned by `haves`, writes it to a temp
   // file as it arrives and unpacks it into `into`, every ref under
   // refs/shigomori/ (landingRefspec). Byte progress once with 0 when
@@ -639,8 +660,11 @@ export type WorktreeSource = SourceFacts & {
     haves: readonly string[];
     into: UnpackTarget;
     onProgress?: (bytes: number, totalBytes: number) => void;
-    signal?: AbortSignal;
-  }): Promise<{ fetched: { ref: string; commit: string }[] }>;
+  }): Effect.Effect<
+    { fetched: { ref: string; commit: string }[] },
+    unknown,
+    SourceServices
+  >;
   // A progress frame for the source's side to relay (a send's, over the
   // link the source opened). Never awaited: progress is presence, and a
   // lost frame changes nothing.
@@ -651,79 +675,88 @@ export type WorktreeSource = SourceFacts & {
 // send's, a push's), or a pull's, opened on first use (its refusals are
 // this device's own and come before any question).
 function askSource(
-  linkOrOpen: Link | (() => Promise<Link>),
-  engine: Engine.Handle,
+  linkOf: Effect.Effect<Link, unknown>,
+  relay: ((frame: ProgressFrame) => void) | null,
 ): WorktreeSource {
-  const opened =
-    typeof linkOrOpen === "function" ? linkOrOpen : async () => linkOrOpen;
-  const linkOf = async (signal: AbortSignal | undefined) => {
-    const link = await opened();
-    if (signal?.aborted) link.reset();
-    else signal?.addEventListener("abort", () => link.reset(), { once: true });
-    return link;
-  };
-  async function answer(
-    link: Link,
-    message: unknown,
-  ): Promise<typeof AnswerSchema.Type> {
-    await link.write(message);
-    const reply = await link.read();
-    if (reply === null) throw new Error(LINK_GONE);
-    const parsed = decodeAnswer(reply);
-    if ("error" in parsed) throw new Error(parsed.error);
-    return parsed;
-  }
-  async function ask<T>(
-    message: unknown,
-    decodeOk: (ok: unknown) => T,
-    signal: AbortSignal | undefined,
-  ): Promise<T> {
-    const parsed = await answer(await linkOf(signal), message);
-    if (!("ok" in parsed))
-      throw new Error("the other device answered out of turn");
-    return decodeOk(parsed.ok);
-  }
+  const answer = (link: Link, message: unknown) =>
+    Effect.gen(function* () {
+      yield* link.write(message);
+      const reply = yield* link.read;
+      if (reply === null) return yield* new LinkError({ reason: LINK_GONE });
+      const parsed = yield* Effect.try({
+        try: () => decodeAnswer(reply),
+        catch: () =>
+          new LinkError({ reason: "the other device answered out of turn" }),
+      });
+      if ("error" in parsed) {
+        return yield* new LinkError({ reason: parsed.error });
+      }
+      return parsed;
+    });
+  const ask = <T>(message: unknown, decodeOk: (ok: unknown) => T) =>
+    Effect.gen(function* () {
+      const parsed = yield* answer(yield* linkOf, message);
+      if (!("ok" in parsed)) {
+        return yield* new LinkError({
+          reason: "the other device answered out of turn",
+        });
+      }
+      return yield* Effect.try({
+        try: () => decodeOk(parsed.ok),
+        catch: () =>
+          new LinkError({ reason: "the other device answered out of turn" }),
+      });
+    });
   return {
-    tip: async (branch, signal) =>
-      (await ask({ ask: "tip", branch }, decodeTipAnswer, signal)).commit,
-    capture: (signal) => ask({ ask: "capture" }, decodeCapture, signal),
-    cloneFacts: (signal) => ask({ ask: "clone" }, decodeCloneFacts, signal),
-    async fetch({ refs, haves, into, onProgress, signal }) {
-      const link = await linkOf(signal);
-      const parsed = await answer(link, { ask: "bundle", refs, haves });
-      if (!("bundle" in parsed)) {
-        throw new Error("the other device answered out of turn");
-      }
-      const { bytes } = parsed.bundle;
-      onProgress?.(0, bytes);
-      const report = coalescedProgress(bytes, onProgress);
-      const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
-      try {
-        const path = join(dir, "incoming.bundle");
-        const file = await openFile(path, "w");
-        try {
-          let received = 0;
-          await link.readBytes(bytes, async (piece) => {
-            await file.write(piece);
-            received += piece.length;
-            report(received);
+    tip: (branch) =>
+      Effect.map(
+        ask({ ask: "tip", branch }, decodeTipAnswer),
+        (tip) => tip.commit,
+      ),
+    capture: ask({ ask: "capture" }, decodeCapture),
+    cloneFacts: ask({ ask: "clone" }, decodeCloneFacts),
+    fetch: ({ refs, haves, into, onProgress }) =>
+      Effect.gen(function* () {
+        const link = yield* linkOf;
+        const parsed = yield* answer(link, { ask: "bundle", refs, haves });
+        if (!("bundle" in parsed)) {
+          return yield* new LinkError({
+            reason: "the other device answered out of turn",
           });
-        } finally {
-          await file.close();
         }
-        return await Engine.runWith(engine)(
-          Ops.bundleUnpack(into, path, refs.map(landingRefspec)),
+        const { bytes } = parsed.bundle;
+        onProgress?.(0, bytes);
+        const report = coalescedProgress(bytes, onProgress);
+        return yield* inTempDir("sm-sync-recv-", (dir) =>
+          Effect.gen(function* () {
+            const path = join(dir, "incoming.bundle");
+            yield* Effect.acquireUseRelease(
+              Effect.promise(() => openFile(path, "w")),
+              (file) => {
+                let received = 0;
+                return link.readBytes(bytes, (piece) =>
+                  Effect.promise(async () => {
+                    await file.write(piece);
+                    received += piece.length;
+                    report(received);
+                  }),
+                );
+              },
+              (file) => Effect.promise(() => file.close()),
+            );
+            return yield* Ops.bundleUnpack(
+              into,
+              path,
+              refs.map(landingRefspec),
+            );
+          }),
         );
-      } finally {
-        await rm(dir, { recursive: true, force: true }).catch(() => {});
-      }
-    },
+      }),
     // Queued on the channel at once, so a frame reported just before
     // the landing returns still goes ahead of the link's end. A pull's
     // link has nothing to relay to: its progress is this device's own.
     report(frame) {
-      if (typeof linkOrOpen === "function") return;
-      void linkOrOpen.write({ progress: frame }).catch(() => {});
+      relay?.(frame);
     },
   };
 }
@@ -733,74 +766,49 @@ function askSource(
 // and is torn down when the scope fails or is interrupted, so a source
 // still sending a bundle stops and the question waiting on it fails.
 export const peerSource = (
-  peer: Pick<PeerSyncApi, "channels" | "openSource">,
+  deviceId: string,
   worktree: { projectId: string; worktreeId: string },
 ) =>
-  Effect.acquireRelease(
-    Effect.map(Engine.handle, (engine) => {
-      let opened: Promise<Link> | undefined;
-      let attached: Link | undefined;
-      const source = askSource(
-        () =>
-          (opened ??= openLink(
-            peer,
-            (channelId) => peer.openSource({ ...worktree, channelId }),
-            (link) => {
-              attached = link;
-            },
-          )),
-        engine,
-      );
-      return { source, attached: () => attached };
-    }),
+  Effect.gen(function* () {
+    let attached: Link | undefined;
+    // This device's end of the link is attached BEFORE the call that
+    // opens the peer's end is sent, so the peer's first bytes always
+    // find it. The call's failure resets it.
+    const open = Effect.gen(function* () {
+      const channelId = mintHexId();
+      const mux = yield* peerChannelsFor(deviceId);
+      const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
+      attached = link;
+      yield* peerSyncFor(deviceId)
+        .openSource({ ...worktree, channelId })
+        .pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
+      return link;
+    });
+    const linkOf = yield* Effect.cached(open);
     // A cancel must not wait on a peer that never answered the open,
     // so the link goes as soon as it is attached.
-    ({ attached }, exit) =>
+    yield* Effect.addFinalizer((exit) =>
       Effect.sync(() => {
-        const link = attached();
-        if (Exit.isSuccess(exit)) link?.end();
-        else link?.reset();
+        if (Exit.isSuccess(exit)) attached?.end();
+        else attached?.reset();
       }),
-  ).pipe(Effect.map(({ source }) => source));
-
-// A source for the length of a Promise caller's `run`.
-const withSource = <T>(
-  acquire: Effect.Effect<WorktreeSource, never, Scope.Scope | Engine.Services>,
-  run: (source: WorktreeSource) => Promise<T>,
-  engine: Engine.Handle,
-): Promise<T> =>
-  runStep(
-    acquire.pipe(
-      Effect.flatMap((source) => step(() => run(source))),
-      Effect.scoped,
-      Effect.provide(engine),
-    ),
-  );
-
-// The git follower's and the teardown's.
-export const withPeerSource = <T>(
-  peer: Pick<PeerSyncApi, "channels" | "openSource">,
-  worktree: { projectId: string; worktreeId: string },
-  run: (source: WorktreeSource) => Promise<T>,
-  engine: Engine.Handle,
-): Promise<T> => withSource(peerSource(peer, worktree), run, engine);
+    );
+    return askSource(linkOf, null);
+  });
 
 // A host handler's source over a link a peer opened, for the length of
 // the scope: it ends with the scope, and is torn down when the scope
 // fails or is interrupted.
 export const linkSource = (link: Link) =>
   Effect.acquireRelease(
-    Effect.map(Engine.handle, (engine) => askSource(link, engine)),
+    Effect.sync(() =>
+      askSource(Effect.succeed(link), (frame) =>
+        link.post({ progress: frame }),
+      ),
+    ),
     (_, exit) =>
       Effect.sync(() => {
         if (Exit.isSuccess(exit)) link.end();
         else link.reset();
       }),
   );
-
-// sync:receiveBundle's.
-export const withLinkSource = <T>(
-  link: Link,
-  run: (source: WorktreeSource) => Promise<T>,
-  engine: Engine.Handle,
-): Promise<T> => withSource(linkSource(link), run, engine);

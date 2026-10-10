@@ -28,6 +28,7 @@ import { codeOf } from "@shigomori/engine/errorDocument";
 import type { MergeMethod } from "@shigomori/engine/GitHub";
 import * as Hygiene from "@shigomori/engine/Hygiene";
 import * as Icons from "@shigomori/engine/Icons";
+import * as Identity from "@shigomori/engine/Identity";
 import * as Landing from "@shigomori/engine/Landing";
 import * as Open from "@shigomori/engine/Open";
 import * as Launchers from "@shigomori/engine/Launchers";
@@ -80,7 +81,6 @@ import {
   ConvertRefusedError,
   isEntityGoneError,
 } from "@shigomori/contracts/errors";
-import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import {
   clearCreateInflight,
   cliScriptStream,
@@ -560,10 +560,6 @@ export const addProject = Effect.fnUntraced(function* (path: string) {
   const project = yield* asChange(
     Effect.flatMap(Projects.Projects, (projects) => projects.add(path)),
   );
-  // A registration is the one moment a path's identity may have
-  // changed under the cache: a project removed and cloned again at the
-  // same path within the TTL would otherwise read as the old one.
-  forgetRepoIdentity(path);
   return yield* Schema.decodeEffect(ProjectSchema)(project);
 });
 
@@ -702,9 +698,6 @@ export const relocateProject = Effect.fnUntraced(function* (
     { projectId },
   );
   const project = yield* Schema.decodeEffect(ProjectSchema)(row);
-  // Like a registration, the identity cached for the path may be
-  // another repo's that once sat there.
-  forgetRepoIdentity(project.path);
   return project;
 });
 
@@ -978,6 +971,13 @@ const decodeProjectIcon = Schema.decodeUnknownSync(
 // Every registered project, terrier's merged in, decorated for the
 // sidebar. `refreshIcons` re-scans projects the icon cache remembers
 // as icon-less (the first list of a session).
+// The repo's identity (what makes the same project on two devices the
+// same repo), or null.
+export const repoIdentity = (projectPath: string) =>
+  Effect.flatMap(Identity.Identity, (identity) =>
+    Effect.map(identity.of(projectPath), (repo) => repo.identity),
+  );
+
 export const listProjects = Effect.fnUntraced(function* (
   opts: { refreshIcons?: boolean } = {},
 ) {

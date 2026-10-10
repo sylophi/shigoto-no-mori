@@ -128,7 +128,7 @@ export const primaryRef = Effect.fnUntraced(function* (project: Project) {
 });
 
 // Resolves which LOCAL project a peer's project corresponds to, by repo
-// identity (shared/git/repoIdentity.mts). First registry match wins: two
+// identity (packages/engine/src/Identity.ts). First registry match wins: two
 // local clones of the same repo are both legitimate targets, so the
 // ambiguity is benign. Read fresh from disk through the CLI rather than
 // trusted from the caller, so a pull can never be aimed at a

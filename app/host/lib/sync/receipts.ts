@@ -2,7 +2,6 @@
 // the teardown runs only when the receipt proves nothing can be lost.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import {
   type SyncMoveRef,
   type SyncReceipt,
@@ -10,13 +9,12 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
-import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
-import * as Engine from "@host/lib/engine";
+import { peerWorktreesFor } from "@host/ipc/peerSync";
 import { findProject } from "@host/lib/projects";
 import {
   localSource,
   type SourceFacts,
-  withPeerSource,
+  peerSource,
 } from "@host/lib/sync/sourceLink";
 
 // What each move captured and applied, by source worktree, for the
@@ -79,22 +77,15 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     projectId: move.projectId,
     worktreeId: move.worktreeId,
   };
-  const engine = yield* Engine.handle;
-  const here = pulled ? undefined : yield* findProject(move.projectId);
-  const changed = yield* fromPromise(() =>
-    here === undefined
-      ? withPeerSource(
-          peerSyncApiFor(move.deviceId),
-          target,
-          (source) => sourceChangedSince(source, receipt, PULLED),
-          engine,
-        )
-      : sourceChangedSince(
-          localSource(here, move.worktreeId, engine),
-          receipt,
-          SENT,
+  const changed = yield* pulled
+    ? Effect.scoped(
+        Effect.flatMap(peerSource(move.deviceId, target), (source) =>
+          sourceChangedSince(source, receipt, PULLED),
         ),
-  );
+      )
+    : Effect.flatMap(findProject(move.projectId), (here) =>
+        sourceChangedSince(localSource(here, move.worktreeId), receipt, SENT),
+      );
   if (changed !== undefined) {
     return { sourceRemoved: false, sourceError: changed } as const;
   }
@@ -104,7 +95,7 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     (force) => {
       const removal = { ...target, force, refuseRunningScripts: true };
       return pulled
-        ? fromPromise(() => peerWorktreesApiFor(move.deviceId).delete(removal))
+        ? peerWorktreesFor(move.deviceId).delete(removal)
         : removeHere(removal);
     },
   );
@@ -135,21 +126,21 @@ const SENT: ChangedWords = {
 // move captured (a fresh capture, compared by tree hash, since capture
 // commits are not deterministic). Anything else is work that never
 // crossed, and the reason comes back as the kept-source explanation.
-async function sourceChangedSince(
+const sourceChangedSince = Effect.fnUntraced(function* (
   source: SourceFacts,
   receipt: SyncReceipt,
   words: ChangedWords,
-): Promise<string | undefined> {
-  if ((await source.tip(receipt.branch)) !== receipt.branchTip) {
+) {
+  if ((yield* source.tip(receipt.branch)) !== receipt.branchTip) {
     return words.moved;
   }
-  const fresh = await source.capture();
+  const fresh = yield* source.capture;
   if (!fresh.captured) return receipt.captured ? words.changed : undefined;
   if (!receipt.captured || receipt.captureTree === undefined) {
     return words.neverMoved;
   }
   return fresh.tree === receipt.captureTree ? undefined : words.changed;
-}
+});
 
 // The source teardown. It runs ONLY when nothing the capture describes
 // can be lost: an unapplied capture means the uncommitted work still

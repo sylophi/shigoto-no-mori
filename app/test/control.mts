@@ -353,51 +353,55 @@ function fakeMirrorEngine() {
     excludedProblems: 0,
   };
   const impl: MirrorImpl = {
-    status: () => "running",
-    sessions: () => [...sessions.values()],
-    create: async (input) => {
-      next += 1;
-      const session = `sync_fake${next}`;
-      state.created.push(input);
-      sessions.set(session, {
-        session,
-        name: input.name,
-        labels: input.labels,
-        localRoot: input.localRoot,
-        deviceId: input.deviceId,
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-        remoteRoot: input.remoteRoot,
-        paused: false,
-        ignores: [...input.ignores],
-        createdAt: Date.now(),
-        status: "watching",
-        statusText: "Watching for changes",
-        successfulCycles: 1,
-        conflicts: [],
-        excludedConflicts: 0,
-        local: endpoint,
-        remote: endpoint,
-      });
-      return session;
-    },
-    recreate: () => Promise.reject(new Error("not in this check")),
-    terminate: async (session) => {
-      state.terminated.push(session);
-      sessions.delete(session);
-    },
-    pause: async (session) => {
-      const raw = sessions.get(session);
-      assert.ok(raw, `no session ${session}`);
-      raw.paused = true;
-    },
-    resume: async (session) => {
-      const raw = sessions.get(session);
-      assert.ok(raw, `no session ${session}`);
-      raw.paused = false;
-    },
+    status: Effect.succeed("running"),
+    sessions: Effect.sync(() => [...sessions.values()]),
+    create: (input) =>
+      Effect.sync(() => {
+        next += 1;
+        const session = `sync_fake${next}`;
+        state.created.push(input);
+        sessions.set(session, {
+          session,
+          name: input.name,
+          labels: input.labels,
+          localRoot: input.localRoot,
+          deviceId: input.deviceId,
+          projectId: input.projectId,
+          worktreeId: input.worktreeId,
+          remoteRoot: input.remoteRoot,
+          paused: false,
+          ignores: [...input.ignores],
+          createdAt: Date.now(),
+          status: "watching",
+          statusText: "Watching for changes",
+          successfulCycles: 1,
+          conflicts: [],
+          excludedConflicts: 0,
+          local: endpoint,
+          remote: endpoint,
+        });
+        return session;
+      }),
+    recreate: () => Effect.die(new Error("not in this check")),
+    terminate: (session) =>
+      Effect.sync(() => {
+        state.terminated.push(session);
+        sessions.delete(session);
+      }),
+    pause: (session) =>
+      Effect.sync(() => {
+        const raw = sessions.get(session);
+        assert.ok(raw, `no session ${session}`);
+        raw.paused = true;
+      }),
+    resume: (session) =>
+      Effect.sync(() => {
+        const raw = sessions.get(session);
+        assert.ok(raw, `no session ${session}`);
+        raw.paused = false;
+      }),
     gitStatus: () => ({ status: state.git, detail: "" }),
-    refreshGit: async () => ({ status: state.git, detail: "" }),
+    refreshGit: () => Effect.succeed({ status: state.git, detail: "" }),
     history: () => [],
     noteEvent: () => {},
     forgetHistory: () => {},
@@ -598,8 +602,8 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     },
   };
   setControlImpl({
-    listDevices: async () => registry,
-    directPeers: async () =>
+    listDevices: Effect.sync(() => registry),
+    directPeers: Effect.sync(() =>
       Object.fromEntries(
         connected.map((id) => [
           id,
@@ -609,6 +613,7 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
           },
         ]),
       ),
+    ),
   });
   // Every reach into the peer: its contracts, and the session's byte
   // channels, which a move's source link rides.

@@ -22,9 +22,6 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
-import * as Option from "effect/Option";
-import type * as Tracer from "effect/Tracer";
-import { withParentSpan } from "@host/lib/util/trace";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { onAbort } from "@host/lib/util/abort";
 
@@ -63,17 +60,19 @@ export const runMove = <A, E, R>(
   ctx: Pick<HandlerContext, "callerDeviceId" | "signal">,
   sourceWorktreeId: string,
   run: (signal: AbortSignal) => Effect.Effect<A, E, R>,
-): Effect.Effect<A, unknown, R> =>
-  Effect.suspend(() => {
-    const key = moveKey(ctx, sourceWorktreeId);
-    if (inFlight.has(key)) return Effect.fail(new MoveBusyError());
-    const controller = new AbortController();
-    inFlight.set(key, controller);
-    const signal = AbortSignal.any([ctx.signal, controller.signal]);
-    return cancellable(signal, run(signal)).pipe(
-      Effect.ensuring(Effect.sync(() => inFlight.delete(key))),
-    );
-  });
+): Effect.Effect<A, E | MoveBusyError | MoveCancelledError, R> =>
+  Effect.suspend(
+    (): Effect.Effect<A, E | MoveBusyError | MoveCancelledError, R> => {
+      const key = moveKey(ctx, sourceWorktreeId);
+      if (inFlight.has(key)) return Effect.fail(new MoveBusyError());
+      const controller = new AbortController();
+      inFlight.set(key, controller);
+      const signal = AbortSignal.any([ctx.signal, controller.signal]);
+      return cancellable(signal, run(signal)).pipe(
+        Effect.ensuring(Effect.sync(() => inFlight.delete(key))),
+      );
+    },
+  );
 
 // Cancels the move the caller has in flight by that key. False when
 // there is none: it finished, or never reached this host.
@@ -90,15 +89,12 @@ export function cancelMove(
 // A move run as one effect: the signal firing interrupts it, each step
 // that made something undoes it in its finalizer, and the move fails
 // with the cancel, whatever the step it was waiting on said when it
-// was cut short (a reset link, a killed child, a poll cut short). A
-// step's failure reaches the caller as it was thrown: the surfaces
-// branch on its class.
+// was cut short (a reset link, a killed child, a poll cut short).
 export const cancellable = <A, E, R>(
   signal: AbortSignal,
   move: Effect.Effect<A, E, R>,
-): Effect.Effect<A, unknown, R> =>
+): Effect.Effect<A, E | MoveCancelledError, R> =>
   move.pipe(
-    Effect.mapError(unwrapStep),
     Effect.raceFirst(
       Effect.callback<never, MoveCancelledError>((resume) => {
         const off = onAbort(signal, () =>
@@ -111,84 +107,3 @@ export const cancellable = <A, E, R>(
       signal.aborted ? new MoveCancelledError() : error,
     ),
   );
-
-// A step of a move that rejected. `cause` is what it threw.
-export class MoveStepError extends Schema.TaggedError<MoveStepError>()(
-  "MoveStepError",
-  { cause: Schema.Defect() },
-) {
-  override get message(): string {
-    return "A step of the move failed.";
-  }
-}
-
-const isMoveStepError = Schema.is(MoveStepError);
-
-// What a move's step threw, for the Promise caller.
-export const unwrapStep = (error: unknown): unknown =>
-  isMoveStepError(error) ? error.cause : error;
-
-// One step of a move that waits on a promise. Interrupting the move
-// aborts the signal it is given and waits for it to settle, so nothing
-// it was writing is still running when a finalizer undoes the move.
-// Its spans, and the peer calls it makes, are the move's.
-export const step = <A>(run: (signal: AbortSignal) => Promise<A>) =>
-  Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
-    stepUnder(span, run),
-  );
-
-const stepUnder = <A>(
-  span: Option.Option<Tracer.AnySpan>,
-  run: (signal: AbortSignal) => Promise<A>,
-) =>
-  Effect.callback<A, MoveStepError>((resume, signal) => {
-    const running = withParentSpan(span, () => run(signal));
-    running.then(
-      (value) => resume(Effect.succeed(value)),
-      (cause: unknown) => resume(Effect.fail(new MoveStepError({ cause }))),
-    );
-    return Effect.promise(() =>
-      running.then(
-        () => {},
-        () => {},
-      ),
-    );
-  });
-
-export function throwIfCancelled(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new MoveCancelledError();
-}
-
-// The promise, or the cancel, whichever comes first: for a wait that
-// cannot itself be cut short (a peer's answer, the daemon's create).
-// `onLate` takes what the promise resolves with after the cancel won
-// (a session the daemon made anyway), so the caller can undo it.
-export function abortable<T>(
-  signal: AbortSignal | undefined,
-  promise: Promise<T>,
-  onLate?: (value: T) => unknown,
-): Promise<T> {
-  if (signal === undefined) return promise;
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const off = onAbort(signal, () => {
-      if (settled) return;
-      settled = true;
-      reject(new MoveCancelledError());
-      promise.then((value) => onLate?.(value)).catch(() => {});
-    });
-    promise
-      .then(
-        (value) => {
-          if (!settled) resolve(value);
-        },
-        (error: unknown) => {
-          if (!settled) reject(error as Error);
-        },
-      )
-      .finally(() => {
-        settled = true;
-        off();
-      });
-  });
-}

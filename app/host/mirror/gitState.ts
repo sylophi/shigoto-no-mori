@@ -37,28 +37,39 @@
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
 import { copyFile, mkdtemp, stat } from "node:fs/promises";
-import { setTimeout as sleep } from "node:timers/promises";
 import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { operationInProgress } from "@host/lib/git/operation";
+import * as Deferred from "effect/Deferred";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { type GitError, run, runLenient } from "@host/lib/git/core";
+import { gitDirOf, operationInProgress } from "@host/lib/git/operation";
 import {
   deleteRef,
-  gitDirOf,
   hasCommit,
   hasObject,
   isAncestor,
-  listCheckouts,
   refTip,
-  run,
-  runLenient,
   treeOf,
   updateRef,
-} from "@host/lib/git/promises";
-import { ZERO_SHA } from "@host/lib/git/refs";
-import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+  ZERO_SHA,
+} from "@host/lib/git/refs";
+import { listCheckouts, worktreeIdFromPath } from "@host/lib/git/worktrees";
+
+// A state that can't be read or applied, in the words the other device
+// hears (an operation in progress among them, operationInRefusal).
+class GitStateError extends Schema.TaggedError<GitStateError>()(
+  "GitStateError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export type GitHead = { kind: "branch"; branch: string } | { kind: "detached" };
 
@@ -119,28 +130,29 @@ type HeadFacts = {
   operation: string | null;
 };
 
-async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
-  let out: string;
-  try {
-    out = await run(worktreePath, [
-      "rev-parse",
-      "HEAD",
-      "HEAD^{tree}",
-      "--symbolic-full-name",
-      "HEAD",
-      "--absolute-git-dir",
-    ]);
-  } catch (error) {
-    throw new Error(
-      `the worktree has no commits yet (${errorMessageOf(error)})`,
-      { cause: error },
-    );
-  }
+const readHeadFacts = Effect.fnUntraced(function* (worktreePath: string) {
+  const out = yield* run(worktreePath, [
+    "rev-parse",
+    "HEAD",
+    "HEAD^{tree}",
+    "--symbolic-full-name",
+    "HEAD",
+    "--absolute-git-dir",
+  ]).pipe(
+    Effect.mapError(
+      (error) =>
+        new GitStateError({
+          reason: `the worktree has no commits yet (${errorMessageOf(error)})`,
+        }),
+    ),
+  );
   const [tip = "", headTree = "", ref = "", gitDir = ""] = out
     .split("\n")
     .map((line) => line.trim());
   if (tip === "" || headTree === "" || gitDir === "") {
-    throw new Error("the worktree has no commits yet");
+    return yield* new GitStateError({
+      reason: "the worktree has no commits yet",
+    });
   }
   const head: GitHead = ref.startsWith("refs/heads/")
     ? { kind: "branch", branch: ref.slice("refs/heads/".length) }
@@ -150,9 +162,9 @@ async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
     tip,
     headTree,
     gitDir,
-    operation: await operationInProgress(gitDir),
-  };
-}
+    operation: yield* Effect.promise(() => operationInProgress(gitDir)),
+  } satisfies HeadFacts;
+});
 
 // The last index tree computed per worktree, keyed on the index file's
 // identity: the steady state of a mirrored worktree is "unchanged since
@@ -227,42 +239,47 @@ async function copyIndexToScratch(
   }
 }
 
-const indexTreeInFlight = new Map<string, Promise<string>>();
+const indexTreeInFlight = new Map<
+  string,
+  Deferred.Deferred<string, GitStateError>
+>();
 
 // The tree the index would commit right now. Concurrent readers of one
 // worktree (the follower and a peer's gitState call) share one run.
-function indexTreeOf(
-  worktreePath: string,
-  gitDir: string,
-  headTree: string,
-): Promise<string> {
-  const running = indexTreeInFlight.get(worktreePath);
-  if (running !== undefined) return running;
-  const started = computeIndexTree(worktreePath, gitDir, headTree).finally(
-    () => {
-      indexTreeInFlight.delete(worktreePath);
-    },
-  );
-  indexTreeInFlight.set(worktreePath, started);
-  return started;
-}
+const indexTreeOf = (worktreePath: string, gitDir: string, headTree: string) =>
+  Effect.suspend(() => {
+    const running = indexTreeInFlight.get(worktreePath);
+    if (running !== undefined) return Deferred.await(running);
+    const computing = Deferred.makeUnsafe<string, GitStateError>();
+    indexTreeInFlight.set(worktreePath, computing);
+    return computeIndexTree(worktreePath, gitDir, headTree).pipe(
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          indexTreeInFlight.delete(worktreePath);
+          Deferred.doneUnsafe(computing, exit);
+        }),
+      ),
+    );
+  });
 
-async function computeIndexTree(
+const computeIndexTree = Effect.fnUntraced(function* (
   worktreePath: string,
   gitDir: string,
   headTree: string,
-): Promise<string> {
+) {
   const indexPath = join(gitDir, "index");
-  let identity: IndexIdentity;
-  try {
-    const info = await stat(indexPath);
-    identity = {
-      size: info.size,
-      mtimeMs: info.mtimeMs,
-      ctimeMs: info.ctimeMs,
-      ino: info.ino,
-    };
-  } catch {
+  const identity = yield* Effect.promise(() =>
+    stat(indexPath).then(
+      (info): IndexIdentity => ({
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+        ctimeMs: info.ctimeMs,
+        ino: info.ino,
+      }),
+      () => null,
+    ),
+  );
+  if (identity === null) {
     // No index yet (a worktree git has not touched since creation):
     // the index would commit HEAD's tree.
     indexSnapshots.delete(worktreePath);
@@ -272,21 +289,20 @@ async function computeIndexTree(
   if (cached !== undefined && sameIdentity(cached, identity)) {
     return cached.tree;
   }
-  const copy = await copyIndexToScratch(worktreePath, indexPath);
-  let tree: string;
-  try {
-    tree = (
-      await run(worktreePath, ["write-tree"], { env: { GIT_INDEX_FILE: copy } })
-    ).trim();
-  } catch (error) {
-    throw new Error(
-      `the index cannot be snapshotted (unresolved conflicts?): ${errorMessageOf(error)}`,
-      { cause: error },
-    );
-  }
+  const unsnapshotted = (error: unknown) =>
+    new GitStateError({
+      reason: `the index cannot be snapshotted (unresolved conflicts?): ${errorMessageOf(error)}`,
+    });
+  const copy = yield* Effect.tryPromise({
+    try: () => copyIndexToScratch(worktreePath, indexPath),
+    catch: unsnapshotted,
+  });
+  const tree = (yield* run(worktreePath, ["write-tree"], {
+    env: { GIT_INDEX_FILE: copy },
+  }).pipe(Effect.mapError(unsnapshotted))).trim();
   indexSnapshots.set(worktreePath, { ...identity, tree });
   return tree;
-}
+});
 
 // The three facts, read-only: nothing is written. HEAD's tree rides
 // along for readGitState, which compares the index tree against it.
@@ -297,10 +313,10 @@ type Peek =
   | { operation: string }
   | (GitStateCore & { headTree: string; operation: null });
 
-async function peekGitState(worktreePath: string): Promise<Peek> {
-  const facts = await readHeadFacts(worktreePath);
-  if (facts.operation !== null) return { operation: facts.operation };
-  const indexTree = await indexTreeOf(
+const peekGitState = Effect.fnUntraced(function* (worktreePath: string) {
+  const facts = yield* readHeadFacts(worktreePath);
+  if (facts.operation !== null) return { operation: facts.operation } as Peek;
+  const indexTree = yield* indexTreeOf(
     worktreePath,
     facts.gitDir,
     facts.headTree,
@@ -311,8 +327,8 @@ async function peekGitState(worktreePath: string): Promise<Peek> {
     indexTree,
     headTree: facts.headTree,
     operation: null,
-  };
-}
+  } as Peek;
+});
 
 // Worktrees this process knows to carry NO index ref, so the clean
 // path deletes the ref only when one may exist: the first read per
@@ -325,50 +341,50 @@ const carrierClean = new Set<string>();
 // operationRefusal(...) while an operation is in progress, so the
 // follower reading here and the peer this read is served to both hear
 // the same words.
-export async function readGitState(
+export const readGitState = Effect.fnUntraced(function* (
   projectPath: string,
   worktreePath: string,
   worktreeId: string,
-): Promise<GitState> {
-  const peek = await peekGitState(worktreePath);
+) {
+  const peek = yield* peekGitState(worktreePath);
   if (peek.operation !== null) {
-    throw new Error(operationRefusal(peek.operation));
+    return yield* new GitStateError({
+      reason: operationRefusal(peek.operation),
+    });
   }
   const { headTree } = peek;
   const core = { head: peek.head, tip: peek.tip, indexTree: peek.indexTree };
   const ref = indexRefFor(worktreeId);
   if (core.indexTree === headTree) {
     if (!carrierClean.has(worktreeId)) {
-      await deleteRef(projectPath, ref).catch(() => {});
+      yield* Effect.ignore(deleteRef(projectPath, ref));
       carrierClean.add(worktreeId);
     }
-    return { ...core, indexCommit: null };
+    return { ...core, indexCommit: null } satisfies GitState;
   }
   carrierClean.delete(worktreeId);
-  const existing = await refTip(projectPath, ref);
+  const existing = yield* refTip(projectPath, ref);
   if (
     existing !== null &&
-    (await treeOf(projectPath, existing)) === core.indexTree
+    (yield* treeOf(projectPath, existing)) === core.indexTree
   ) {
-    return { ...core, indexCommit: existing };
+    return { ...core, indexCommit: existing } satisfies GitState;
   }
-  const commit = (
-    await run(
-      projectPath,
-      [
-        "commit-tree",
-        core.indexTree,
-        "-p",
-        core.tip,
-        "-m",
-        "shigomori index snapshot",
-      ],
-      { env: CAPTURE_IDENT },
-    )
-  ).trim();
-  await updateRef(projectPath, ref, commit);
-  return { ...core, indexCommit: commit };
-}
+  const commit = (yield* run(
+    projectPath,
+    [
+      "commit-tree",
+      core.indexTree,
+      "-p",
+      core.tip,
+      "-m",
+      "shigomori index snapshot",
+    ],
+    { env: CAPTURE_IDENT },
+  )).trim();
+  yield* updateRef(projectPath, ref, commit);
+  return { ...core, indexCommit: commit } satisfies GitState;
+});
 
 export type ApplyGitStateInput = {
   // The state the caller last observed here. Anything else means the
@@ -381,7 +397,7 @@ export type ApplyGitStateInput = {
   sweep?: readonly string[];
 };
 
-export type ApplyGitStateResult =
+type ApplyGitStateResult =
   | { applied: true }
   | { applied: false; reason: string };
 
@@ -394,45 +410,50 @@ export type ApplyGitStateResult =
 // or push created for this apply. They go whatever the outcome, so a
 // refused apply cannot leave one behind to block a later branch nested
 // under its name (refs/shigomori/incoming/feat blocks .../feat/x).
-export async function applyGitState(
+export const applyGitState = (
   project: Project,
   worktree: { id: string; path: string },
   input: ApplyGitStateInput,
-): Promise<ApplyGitStateResult> {
-  try {
-    return await applyGitStateUnswept(project, worktree, input);
-  } finally {
-    await Promise.all(
-      (input.sweep ?? [])
-        .filter((ref) => ref.startsWith("refs/shigomori/"))
-        .map((ref) => deleteRef(project.path, ref).catch(() => {})),
-    );
-  }
-}
+) =>
+  applyGitStateUnswept(project, worktree, input).pipe(
+    Effect.ensuring(
+      Effect.forEach(
+        (input.sweep ?? []).filter((ref) => ref.startsWith("refs/shigomori/")),
+        (ref) => Effect.ignore(deleteRef(project.path, ref)),
+        { concurrency: "unbounded", discard: true },
+      ),
+    ),
+  );
 
-async function applyGitStateUnswept(
+const refused = (reason: string): ApplyGitStateResult => ({
+  applied: false,
+  reason,
+});
+
+const applyGitStateUnswept = Effect.fnUntraced(function* (
   project: Project,
   worktree: { id: string; path: string },
   input: ApplyGitStateInput,
-): Promise<ApplyGitStateResult> {
-  const current = await peekGitState(worktree.path);
+) {
+  const current = yield* peekGitState(worktree.path);
   if (current.operation !== null) {
-    return { applied: false, reason: operationRefusal(current.operation) };
+    return refused(operationRefusal(current.operation));
   }
   if (
     current.tip !== input.expect.tip ||
     current.indexTree !== input.expect.indexTree
   ) {
-    return { applied: false, reason: "changed-locally" };
+    return refused("changed-locally");
   }
   const { state } = input;
-  const [tipHere, indexTreeHere] = await Promise.all([
-    hasCommit(project.path, state.tip),
-    hasObject(project.path, `${state.indexTree}^{tree}`),
-  ]);
-  if (!tipHere || !indexTreeHere) {
-    return { applied: false, reason: "missing-objects" };
-  }
+  const [tipHere, indexTreeHere] = yield* Effect.all(
+    [
+      hasCommit(project.path, state.tip),
+      hasObject(project.path, `${state.indexTree}^{tree}`),
+    ],
+    { concurrency: 2 },
+  );
+  if (!tipHere || !indexTreeHere) return refused("missing-objects");
 
   if (state.head.kind === "branch") {
     const target = state.head.branch;
@@ -441,7 +462,7 @@ async function applyGitStateUnswept(
       current.head.kind === "branch" ? current.head.branch : null;
     if (target === currentBranch) {
       if (current.tip !== state.tip) {
-        await updateRef(project.path, targetRef, state.tip, current.tip);
+        yield* updateRef(project.path, targetRef, state.tip, current.tip);
       }
     } else {
       // A branch switch. The branch may exist here already: refuse if
@@ -449,39 +470,37 @@ async function applyGitStateUnswept(
       // it carries commits the incoming tip does not (moving it would
       // orphan them). Otherwise create it or fast-forward it, then
       // point HEAD at it.
-      const checkouts = await listCheckouts(project.path);
+      const checkouts = yield* listCheckouts(project.path);
       const elsewhere = checkouts.find(
         (w) => w.branch === target && w.path !== worktree.path,
       );
       if (elsewhere !== undefined) {
-        return {
-          applied: false,
-          reason: `branch ${target} is checked out at ${elsewhere.path} on this device`,
-        };
+        return refused(
+          `branch ${target} is checked out at ${elsewhere.path} on this device`,
+        );
       }
-      const existingTip = await refTip(project.path, targetRef);
+      const existingTip = yield* refTip(project.path, targetRef);
       if (
         existingTip !== null &&
         existingTip !== state.tip &&
-        !(await isAncestor(project.path, existingTip, state.tip))
+        !(yield* isAncestor(project.path, existingTip, state.tip))
       ) {
-        return {
-          applied: false,
-          reason: `branch ${target} on this device has commits the other device does not`,
-        };
+        return refused(
+          `branch ${target} on this device has commits the other device does not`,
+        );
       }
       if (existingTip !== state.tip) {
-        await updateRef(
+        yield* updateRef(
           project.path,
           targetRef,
           state.tip,
           existingTip ?? ZERO_SHA,
         );
       }
-      await run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
+      yield* run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
     }
   } else if (current.head.kind !== "detached" || current.tip !== state.tip) {
-    await run(worktree.path, [
+    yield* run(worktree.path, [
       "update-ref",
       "--no-deref",
       "--end-of-options",
@@ -494,10 +513,10 @@ async function applyGitStateUnswept(
   // refresh re-stats every entry against the (already mirrored) files
   // so unchanged ones do not read as modified. refresh exits non-zero
   // when files differ from the index, which is the ordinary dirty case.
-  await readTreeRetrying(worktree.path, state.indexTree);
-  await runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
-  return { applied: true };
-}
+  yield* readTreeRetrying(worktree.path, state.indexTree);
+  yield* runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
+  return { applied: true } as ApplyGitStateResult;
+});
 
 // The pauses between read-tree attempts while another git process
 // holds the index lock. Any `git status` takes the lock for a moment
@@ -509,57 +528,54 @@ async function applyGitStateUnswept(
 // usually saves the round.
 const INDEX_LOCK_BACKOFF_MS = [50, 100, 200, 400, 800];
 
-async function readTreeRetrying(
-  worktreePath: string,
-  tree: string,
-): Promise<void> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- each attempt waits on the last
-      await run(worktreePath, ["read-tree", tree]);
-      return;
-    } catch (error) {
-      const pause = INDEX_LOCK_BACKOFF_MS[attempt];
-      if (
-        pause === undefined ||
-        !errorMessageOf(error).includes("index.lock")
-      ) {
-        throw error;
-      }
-      // oxlint-disable-next-line no-await-in-loop -- the backoff is the point
-      await sleep(pause);
-    }
-  }
-}
+const readTreeRetrying = (worktreePath: string, tree: string) => {
+  const attempt = (
+    n: number,
+  ): Effect.Effect<void, GitError, ChildProcessSpawner.ChildProcessSpawner> =>
+    run(worktreePath, ["read-tree", tree]).pipe(
+      Effect.asVoid,
+      Effect.catchIf(
+        (error) =>
+          INDEX_LOCK_BACKOFF_MS[n] !== undefined &&
+          error.reason.includes("index.lock"),
+        () =>
+          Effect.andThen(
+            Effect.sleep(INDEX_LOCK_BACKOFF_MS[n] ?? 0),
+            attempt(n + 1),
+          ),
+      ),
+    );
+  return attempt(0);
+};
 
 // Fires when the worktree's index file is rewritten (a stage, an
 // unstage, a checkout, also git's own refreshes: the consumer compares
 // trees to tell them apart). Returns the stop function. Resolves the
 // git dir once. A worktree whose git dir moves is a removed worktree.
-export async function watchIndexFile(
+export const watchIndexFile = (
   worktreePath: string,
   onChange: () => void,
   debounceMs = 300,
-): Promise<() => void> {
-  const gitDir = await gitDirOf(worktreePath);
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let watcher: ReturnType<typeof watch>;
-  try {
-    watcher = watch(gitDir, { persistent: false });
-  } catch {
-    return () => {};
-  }
-  watcher.on("change", (_event, file) => {
-    if (file !== "index") return;
-    if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      onChange();
-    }, debounceMs);
+) =>
+  Effect.map(gitDirOf(worktreePath), (gitDir) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let watcher: ReturnType<typeof watch>;
+    try {
+      watcher = watch(gitDir, { persistent: false });
+    } catch {
+      return () => {};
+    }
+    watcher.on("change", (_event, file) => {
+      if (file !== "index") return;
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        onChange();
+      }, debounceMs);
+    });
+    watcher.on("error", () => {});
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      watcher.close();
+    };
   });
-  watcher.on("error", () => {});
-  return () => {
-    if (timer !== null) clearTimeout(timer);
-    watcher.close();
-  };
-}

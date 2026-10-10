@@ -17,7 +17,6 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { FileSync } from "@host/fileSync/FileSync";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import { dataDir } from "@host/lib/util/paths";
 import { findProjectAndWorktree, findWorktreePath } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
@@ -143,14 +142,18 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
     stopIndexWatch: null,
   };
   serving.set(key, served);
-  void watchIndexFile(worktreePath, () =>
-    onServingGitChange?.({ projectId, worktreeId }),
-  ).then(
-    (stop) => {
-      if (serving.get(key) === served) served.stopIndexWatch = stop;
-      else stop();
-    },
-    () => {},
+  yield* Effect.forkDetach(
+    watchIndexFile(worktreePath, () =>
+      onServingGitChange?.({ projectId, worktreeId }),
+    ).pipe(
+      Effect.tap((stop) =>
+        Effect.sync(() => {
+          if (serving.get(key) === served) served.stopIndexWatch = stop;
+          else stop();
+        }),
+      ),
+      Effect.ignore,
+    ),
   );
   onServingChange?.();
 });
@@ -163,7 +166,7 @@ export const servedGitState = ({
   Effect.flatMap(
     findProjectAndWorktree(projectId, worktreeId),
     ({ project, worktree }) =>
-      fromPromise(() => readGitState(project.path, worktree.path, worktreeId)),
+      readGitState(project.path, worktree.path, worktreeId),
   );
 
 export const applyServedGitState = ({
@@ -178,12 +181,10 @@ export const applyServedGitState = ({
       projectId,
       worktreeId,
     );
-    const result = yield* fromPromise(() =>
-      applyGitState(
-        project,
-        { id: worktreeId, path: worktree.path },
-        { expect, state, sweep },
-      ),
+    const result = yield* applyGitState(
+      project,
+      { id: worktreeId, path: worktree.path },
+      { expect, state, sweep },
     );
     if (!result.applied) {
       return { applied: false as const, reason: result.reason };

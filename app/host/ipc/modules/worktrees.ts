@@ -87,7 +87,6 @@ import {
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { Terminals } from "@host/lib/terminals/Terminals";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import {
   moveMirrorsOfWorktree,
@@ -292,7 +291,7 @@ export const worktreesHandlers = {
         worktreeId,
         "This worktree is already being removed or moved.",
         Ops.moveWorktree(project, worktreeId, destinationPath),
-        (moved) => fromPromise(() => moveMirrorsOfWorktree(worktreeId, moved)),
+        (moved) => moveMirrorsOfWorktree(worktreeId, moved),
       );
     }),
 
@@ -311,8 +310,7 @@ export const worktreesHandlers = {
         worktreeId,
         "This worktree is already being removed or moved.",
         Ops.renameWorktree(project, worktreeId, name),
-        (renamed) =>
-          fromPromise(() => moveMirrorsOfWorktree(worktreeId, renamed)),
+        (renamed) => moveMirrorsOfWorktree(worktreeId, renamed),
       );
     }),
 
@@ -359,9 +357,7 @@ export const worktreesHandlers = {
           notifierFor(ctx),
         ),
         (outcome) =>
-          outcome.ok
-            ? fromPromise(() => stopMirrorsForWorktree(worktreeId))
-            : Effect.void,
+          outcome.ok ? stopMirrorsForWorktree(worktreeId) : Effect.void,
       ).pipe(
         Effect.tap((result) =>
           Effect.sync(() => {
@@ -423,9 +419,10 @@ export const worktreesHandlers = {
           notifierFor(ctx),
         ),
         (outcome) =>
-          fromPromise(() =>
-            Promise.all(outcome.removed.map(stopMirrorsForWorktree)),
-          ),
+          Effect.forEach(outcome.removed, stopMirrorsForWorktree, {
+            concurrency: "unbounded",
+            discard: true,
+          }),
       ).pipe(
         Effect.tap((result) =>
           Effect.gen(function* () {

@@ -63,9 +63,14 @@ import {
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 import * as Tracer from "effect/Tracer";
 import { setTraceContext } from "@host/lib/util/trace";
-import { type PeerChannels, setPeerReach } from "@host/ipc/peerSync";
+import {
+  type PeerChannels,
+  peerSyncFor,
+  setPeerReach,
+} from "@host/ipc/peerSync";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -84,12 +89,12 @@ import {
   attachLink,
   BundleAnswerSchema,
   LINK_GONE,
-  offerSource as offerSourceOn,
-  withPeerSource as withPeerSourceOn,
+  offer,
+  peerSource,
+  type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { mintHexId } from "@host/lib/hexId";
 import * as Projects from "@host/lib/projects";
-import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import {
   createCliRunner,
@@ -100,17 +105,11 @@ import {
 } from "./lib/checkKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
-import { sandboxEngine } from "./lib/sandboxEngine.mts";
 import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { addProject, secondEngine } from "./lib/smBinary.mts";
 
 // The host's engine reads and moves as Promises, on the sandbox's
 // engine (runHost).
-const sandboxHandle = () => {
-  const engine = sandboxEngine();
-  if (engine === undefined) throw new Error("No sandbox engine is up.");
-  return engine;
-};
 const readShigomoriConfig = (projectId: string) =>
   runHost(Ops.readProjectConfig(projectId));
 const readWorktreeData = (projectId: string, worktreeId: string) =>
@@ -135,17 +134,18 @@ const sendWorktreeHere = (
 ) => runHost(syncHandlers.sendWorktree(...args));
 const sendWorktree = (...args: Parameters<typeof sendWorktreeOn>) =>
   runHost(sendWorktreeOn(...args));
-const withPeerSource = <T,>(
-  peer: Parameters<typeof withPeerSourceOn>[0],
-  worktree: Parameters<typeof withPeerSourceOn>[1],
-  run: Parameters<typeof withPeerSourceOn<T>>[2],
-) => withPeerSourceOn(peer, worktree, run, sandboxHandle());
-const offerSource = <T,>(
-  peer: Parameters<typeof offerSourceOn>[0],
-  project: Parameters<typeof offerSourceOn>[1],
+// The source link to device A's worktree, for the length of `use`.
+const withPeerSource = <T, E>(
+  worktree: { projectId: string; worktreeId: string },
+  use: (source: WorktreeSource) => Effect.Effect<T, E, Services>,
+) => runHost(Effect.scoped(Effect.flatMap(peerSource("A", worktree), use)));
+// A link this device offers device A, opened there by `openOnPeer`.
+const offerSource = <T, E>(
+  project: Parameters<typeof offer>[1],
   worktreeId: string,
-  openOnPeer: (channelId: string) => Promise<T>,
-) => offerSourceOn(peer, project, worktreeId, openOnPeer, sandboxHandle());
+  openOnPeer: (channelId: string) => Effect.Effect<T, E>,
+) => runHost(offer("A", project, worktreeId, openOnPeer));
+const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers, and the engine on the sandbox's data dir
@@ -153,6 +153,16 @@ const offerSource = <T,>(
 const decodePullProgresses = Schema.decodeUnknownSync(
   Schema.Array(SyncPullProgressSchema),
 );
+
+// Every span either device makes, A's listener's included.
+const spans: Tracer.NativeSpan[] = [];
+const tracer = Tracer.make({
+  span: (options) => {
+    const span = new Tracer.NativeSpan(options);
+    spans.push(span);
+    return span;
+  },
+});
 
 const fixture = cliSandbox("sm-sync-check-");
 const { sandbox, git, gitBytes, gitOut, runCli, sm } = fixture;
@@ -253,7 +263,6 @@ let sync: ReturnType<typeof buildClient<typeof syncContract>>;
 let worktreesOverWire: ReturnType<typeof buildClient<typeof worktreesContract>>;
 let dirtyRef: string;
 let observed: ReturnType<typeof observedChannels>;
-let peerSync: typeof sync & { channels: PeerChannels };
 let worktreeRef: { projectId: string; worktreeId: string };
 let targetProject: Awaited<ReturnType<typeof findProjectOrThrow>>;
 let captureTip: string;
@@ -348,6 +357,7 @@ beforeAll(async () => {
   // exchange (bootDirectWire, the shared fixture). Teardowns collect
   // on the shared tracker for the afterAll below.
   ({ stub, listener, peerA } = await bootDirectWire(track, {
+    provide: Layer.succeed(Tracer.Tracer, tracer),
     contracts: [
       [syncContract, syncHandlers],
       // The teardown half of the transplant proof: the REAL worktrees
@@ -364,7 +374,11 @@ beforeAll(async () => {
   // The peer as the orchestrations reach it: the sync surface plus
   // the session's byte channels, observed.
   observed = observedChannels(peerA.channels);
-  peerSync = { ...sync, channels: observed.channels };
+  setPeerReach({
+    transportFor: () => peerA.transport,
+    channelsFor: () => observed.channels,
+    thisDeviceId: () => "B",
+  });
   worktreeRef = { projectId: sourceProjectId, worktreeId };
   targetProject = await findProjectOrThrow(targetProjectId);
 });
@@ -386,14 +400,13 @@ it("ungranted peer: openSource, receiveBundle, receiveWorktree and worktrees:del
   // again: a pull's link (the source's grant), a send's landing and
   // a push (the destination's).
   await assert.rejects(
-    () =>
-      withPeerSource(peerSync, worktreeRef, (source) => source.tip("feature")),
+    () => withPeerSource(worktreeRef, (source) => source.tip("feature")),
     refusedTyped,
   );
   await assert.rejects(
     () =>
-      offerSource(peerSync, targetProject, worktreeId, (channelId) =>
-        sync.receiveBundle({
+      offerSource(targetProject, worktreeId, (channelId) =>
+        peerSyncFor("A").receiveBundle({
           projectId: sourceProjectId,
           refs: ["refs/heads/main"],
           haves: [],
@@ -404,8 +417,8 @@ it("ungranted peer: openSource, receiveBundle, receiveWorktree and worktrees:del
   );
   await assert.rejects(
     () =>
-      offerSource(peerSync, targetProject, worktreeId, (channelId) =>
-        sync.receiveWorktree({
+      offerSource(targetProject, worktreeId, (channelId) =>
+        peerSyncFor("A").receiveWorktree({
           identity: "root:0000000000000000000000000000000000000000",
           branch: "feature",
           sourceWorktreeId: worktreeId,
@@ -438,9 +451,7 @@ it("a capture over the link snapshots the worktree to its capture ref with its t
   writeFileSync(join(worktreePath, "dirty.txt"), "uncommitted work\n");
   writeFileSync(join(worktreePath, ".gitignore"), "secret.env\n");
   writeFileSync(join(worktreePath, "secret.env"), "FIXTURE_ONLY=1\n");
-  const capture = await withPeerSource(peerSync, worktreeRef, (source) =>
-    source.capture(),
-  );
+  const capture = await withPeerSource(worktreeRef, (source) => source.capture);
   assert.equal(capture.captured, true, "capture reported clean");
   captureTip = await gitOut(sourceRepo, "rev-parse", dirtyRef);
   assert.equal(capture.commit, captureTip);
@@ -480,7 +491,7 @@ it("granted transfer: a >2.5 MB bundle crosses as channel frames with its progre
   const bytesBefore = observed.seen.bytesIn;
   const refsBefore = await refSnapshot(targetRepo);
   const progressed: [number, number][] = [];
-  const { fetched } = await withPeerSource(peerSync, worktreeRef, (source) =>
+  const { fetched } = await withPeerSource(worktreeRef, (source) =>
     source.fetch({
       refs: ["refs/heads/feature", dirtyRef],
       haves: [baseSha],
@@ -594,13 +605,15 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
   process.env.TMPDIR = tmp;
   try {
     const giving = await manualLink();
-    await giving.link.write({
-      ask: "bundle",
-      refs: ["refs/heads/huge"],
-      haves: [baseSha],
-    });
+    await Effect.runPromise(
+      giving.link.write({
+        ask: "bundle",
+        refs: ["refs/heads/huge"],
+        haves: [baseSha],
+      }),
+    );
     const header = Schema.decodeUnknownSync(BundleAnswerSchema)(
-      await giving.link.read(),
+      await Effect.runPromise(giving.link.read),
     );
     assert.ok(header.bundle.bytes > 5_000_000, "the huge bundle is small");
     await waitFor(
@@ -621,8 +634,13 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
   }
 
   const bad = await manualLink();
-  await bad.link.write({ ask: "bundle", refs: ["refs/tags/v1"], haves: [] });
-  await assert.rejects(() => bad.link.read(), new RegExp(LINK_GONE));
+  await Effect.runPromise(
+    bad.link.write({ ask: "bundle", refs: ["refs/tags/v1"], haves: [] }),
+  );
+  await assert.rejects(
+    () => Effect.runPromise(bad.link.read),
+    new RegExp(LINK_GONE),
+  );
 });
 
 it('corrupted bundle: unpack fails with the coded "bad-bundle" error', async () => {
@@ -660,11 +678,10 @@ it("push: a >2.5 MB bundle crosses on a link the pusher opened and lands under r
   await git(targetRepo, ["checkout", "-q", "main"]);
   const outBefore = observed.seen.bytesOut;
   const pushed = await offerSource(
-    peerSync,
     targetProject,
     worktreeIdFromPath(targetRepo),
     (channelId) =>
-      sync.receiveBundle({
+      peerSyncFor("A").receiveBundle({
         projectId: sourceProjectId,
         refs: ["refs/heads/pushed"],
         haves: [baseSha],
@@ -734,12 +751,12 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
     thisDeviceId: () => "B",
   });
   pullCtx = handlerCtx();
-  const repoIdentity = await getRepoIdentity(sourceRepo);
+  const repoIdentity = await repoIdentityOf(sourceRepo);
   assert.ok(repoIdentity, "fixture repos should carry a non-null identity");
   identity = repoIdentity;
   assert.equal(
     identity,
-    await getRepoIdentity(targetRepo),
+    await repoIdentityOf(targetRepo),
     "clone and source must share a repo identity",
   );
 
@@ -752,14 +769,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
     { title: "Second feature", description: "What it does.", describedAt: 7 },
   );
   // Every span the pull makes, on both devices.
-  const spans: Tracer.NativeSpan[] = [];
-  const tracer = Tracer.make({
-    span: (options) => {
-      const span = new Tracer.NativeSpan(options);
-      spans.push(span);
-      return span;
-    },
-  });
+  spans.length = 0;
   setTraceContext(Context.make(Tracer.Tracer, tracer));
   try {
     cleanPull = await runHost(
@@ -1367,16 +1377,14 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     onProgress?: (bytes: number, totalBytes: number) => void,
   ) =>
     withPeerSource(
-      peerSync,
       {
         projectId: sourceProjectId,
         worktreeId: worktreeIdFromPath(sourceRepo),
       },
-      async (source) =>
-        runHost(
-          Projects.addProject(
-            await cloneCheckoutFromPeer(source, into, landing, onProgress),
-          ),
+      (source) =>
+        Effect.flatMap(
+          cloneCheckoutFromPeer(source, into, landing, onProgress),
+          Projects.addProject,
         ),
     );
   const cloneFrames: [number, number][] = [];
@@ -1417,7 +1425,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     "",
   );
   assert.equal(
-    await getRepoIdentity(cloned.path),
+    await repoIdentityOf(cloned.path),
     identity,
     "the clone must read as the same repo",
   );
@@ -1743,8 +1751,8 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
       "the clone is registered on the landing side",
     );
     assert.equal(
-      await getRepoIdentity(loneSent.cloned.path),
-      await getRepoIdentity(loneRepo),
+      await repoIdentityOf(loneSent.cloned.path),
+      await repoIdentityOf(loneRepo),
       "the clone must read as the same repo",
     );
     assert.equal(
