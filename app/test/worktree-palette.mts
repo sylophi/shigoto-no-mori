@@ -40,7 +40,7 @@ import {
   type PalettePage,
 } from "@/components/palette/buildPaletteEntries";
 import { Radio } from "lucide-react";
-import { matchPositions } from "@/lib/fuzzyMatch";
+import { matchPositions } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";

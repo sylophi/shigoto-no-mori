@@ -1,0 +1,52 @@
+import { Save } from "lucide-react";
+import { Button } from "../../primitives/button.tsx";
+import { cn } from "../../lib/utils.ts";
+
+interface EditorFooterProps {
+  isDirty: boolean;
+  isPending: boolean;
+  isSuccess: boolean;
+  onDiscard: () => void;
+  onSave: () => void;
+  canSave?: boolean;
+}
+
+// react-doctor-disable-next-line react-doctor/no-many-boolean-props -- flags are orthogonal: isDirty is form-vs-saved, isPending/isSuccess come from React Query mutation state, can coexist
+export function EditorFooterView({
+  isDirty,
+  isPending,
+  isSuccess,
+  onDiscard,
+  onSave,
+  canSave,
+}: EditorFooterProps) {
+  const saveEnabled = canSave ?? isDirty;
+  return (
+    <footer
+      // Unsaved changes keep Escape from leaving the page (useEscapeGoesBack).
+      data-hold-escape={isDirty || undefined}
+      className="flex h-9.5 items-center gap-3 border-t border-border bg-card px-6 phone:h-11 phone:px-4"
+    >
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-xs",
+          isDirty ? "text-destructive" : "text-muted-foreground",
+        )}
+      >
+        {isDirty ? "Unsaved changes" : isSuccess ? "Saved." : ""}
+      </span>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={onDiscard}
+        disabled={!isDirty || isPending}
+      >
+        Discard
+      </Button>
+      <Button size="xs" onClick={onSave} disabled={!saveEnabled || isPending}>
+        <Save />
+        {isPending ? "Saving…" : "Save"}
+      </Button>
+    </footer>
+  );
+}

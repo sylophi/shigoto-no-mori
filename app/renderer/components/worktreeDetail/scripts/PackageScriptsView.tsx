@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Check, ChevronRight, Search } from "lucide-react";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PackageScriptSortMode } from "@shigomori/contracts/schemas";
 import {

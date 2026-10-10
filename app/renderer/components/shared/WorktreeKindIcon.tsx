@@ -1,4 +1,4 @@
-import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
+import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 

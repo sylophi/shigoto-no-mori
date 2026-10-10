@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Radio } from "lucide-react";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
+import { PageHeaderView } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
 
 // Everything running right now, across the account, on one page
 // (LivePage.tsx gathers it): each worktree with something live is a

@@ -25,7 +25,7 @@ import {
   SquareTerminal,
   type LucideIcon,
 } from "lucide-react";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import { TONE_PILL, TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { GRANTS, type GrantId } from "@shigomori/contracts/grants";

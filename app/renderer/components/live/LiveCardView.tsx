@@ -8,7 +8,7 @@ import {
   Plus,
 } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
+import { DeviceMarkView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
 import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
 import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";

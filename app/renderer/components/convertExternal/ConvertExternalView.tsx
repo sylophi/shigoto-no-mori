@@ -1,7 +1,7 @@
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import type { RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ConvertRowView } from "./ConvertRowView";
 

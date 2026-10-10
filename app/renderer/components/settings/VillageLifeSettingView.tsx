@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { ReactNode } from "react";
 import acNotice from "@shared/acNotice.json";

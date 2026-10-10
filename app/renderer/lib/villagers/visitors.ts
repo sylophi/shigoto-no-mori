@@ -6,7 +6,10 @@ import type {
   VillagerProfile,
   VillagerProfiles,
 } from "@shigomori/contracts/schemas";
-import { type VillagerRarity, villagerRarity } from "@shared/villagers/rarity";
+import {
+  type VillagerRarity,
+  villagerRarity,
+} from "@shigomori/ui/lib/villagers/rarity.ts";
 import type { VisitLog } from "./visitLog";
 
 // A villager's visits: how many, and the first and last (epoch ms).

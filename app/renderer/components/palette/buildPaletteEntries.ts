@@ -3,7 +3,7 @@ import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-import { rankByScore, scoreFields } from "@/lib/fuzzyMatch";
+import { rankByScore, scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { LucideIcon } from "lucide-react";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";

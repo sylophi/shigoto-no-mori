@@ -16,7 +16,7 @@ import {
   type KnownUpdates,
   type OutdatedDevice,
 } from "@/lib/updates";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { toast } from "@/lib/toast";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 

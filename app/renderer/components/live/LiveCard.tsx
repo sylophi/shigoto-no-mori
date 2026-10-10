@@ -26,7 +26,10 @@ import {
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
-import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
+import {
+  deviceStatusView,
+  THIS_DEVICE_VIEW,
+} from "@shigomori/ui/lib/deviceStatus.ts";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { mappedPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
 import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";

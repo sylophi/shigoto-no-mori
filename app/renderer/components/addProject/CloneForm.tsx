@@ -11,7 +11,7 @@ import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useGithubRepos } from "@/hooks/githubCli/useGithubRepos";
 import { useCloneProject } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { CloneFormView } from "./CloneFormView";
 import { ProgressPanelView } from "./DialogPartsView";
 import { useNewCheckout } from "./useNewCheckout";

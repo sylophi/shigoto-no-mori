@@ -7,14 +7,14 @@
 // whichever device it is made from. A project held on one device alone
 // has nothing to pick, so the section stays out.
 import { Check } from "lucide-react";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import type {
   DeviceBlock,
   DeviceTarget,
 } from "@/components/shared/deviceTargets";
 import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
 import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
-import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
+import { THIS_DEVICE_VIEW } from "@shigomori/ui/lib/deviceStatus.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A device holding the repo.

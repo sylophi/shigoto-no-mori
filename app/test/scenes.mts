@@ -8,12 +8,13 @@
 //      reaches for a hook that fetches, the router or window.api fails
 //      here rather than in the marketing build.
 //   2. Every view (an export named <Thing>View from a *View.tsx file
-//      under renderer/components) is drawn by some scene.
+//      under renderer/components or @shigomori/ui's views) is drawn by
+//      some scene.
 //   3. A component file under renderer/components that isn't a view
 //      has no markup of its own: it is a container, binding data to
 //      views. The primitives are @shigomori/ui's.
 //
-// covers: app/renderer/components/**
+// covers: app/renderer/components/** packages/ui/src/**
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -71,7 +72,10 @@ vi.mock("react/jsx-runtime", recording);
 vi.mock("react/jsx-dev-runtime", recording);
 
 const views = import.meta.glob<Record<string, unknown>>(
-  "../renderer/components/**/*View.tsx",
+  [
+    "../renderer/components/**/*View.tsx",
+    "../../packages/ui/src/views/**/*View.tsx",
+  ],
   { eager: true },
 );
 
@@ -91,7 +95,10 @@ it("renders every scene, and every view in one", () => {
   }
   const undrawn: string[] = [];
   for (const [file, module] of Object.entries(views)) {
-    const path = file.replace("../renderer/components/", "");
+    const path = file.replace(
+      /^\.\.\/(?:renderer\/components|\.\.\/packages\/ui\/src\/views)\//,
+      "",
+    );
     for (const [name, value] of Object.entries(module)) {
       if (!name.endsWith("View") || typeof value !== "function") continue;
       if (!drawn.has(value)) undrawn.push(`${path}#${name}`);

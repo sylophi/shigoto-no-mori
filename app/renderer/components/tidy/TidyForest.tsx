@@ -10,7 +10,7 @@ import {
   useHostDevicePick,
   type DeviceTab,
 } from "@/components/shared/DeviceTabs";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {

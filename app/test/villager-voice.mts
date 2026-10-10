@@ -23,7 +23,7 @@
 // Run: pnpm test villager-voice.
 import assert from "node:assert/strict";
 import type { VillagerProfiles, Worktree } from "@shigomori/contracts/schemas";
-import { villagerRarity } from "@shared/villagers/rarity";
+import { villagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
 import {
   MOVE_TOAST_MS,
   moveNews,
@@ -37,7 +37,7 @@ import {
   villagerSpecies,
   worktreeMoves,
   type Speaker,
-} from "@/lib/villagerVoice";
+} from "@shigomori/ui/lib/villagerVoice.ts";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { it } from "vitest";
 import { lastOf } from "./lib/checkKit.mts";

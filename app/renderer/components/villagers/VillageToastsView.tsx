@@ -4,8 +4,8 @@
 // lane's wrapper that sends news off at a click.
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
-import type { Speaker } from "@/lib/villagerVoice";
+import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
+import type { Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { MovingBoxView } from "./MovingBoxView";
 

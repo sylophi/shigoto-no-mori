@@ -2,7 +2,7 @@
 // listed afresh each time it opens.
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { BranchEntry } from "@/components/shared/BranchComboboxView";
+import type { BranchEntry } from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";

@@ -13,7 +13,7 @@ import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { SidebarViewSchema } from "@shigomori/contracts/schemas";
 import { Sidebar } from "@/components/sidebar/Sidebar";
-import { ForestPageView } from "@/components/ForestPageView";
+import { ForestPageView } from "@shigomori/ui/views/ForestPageView.tsx";
 import {
   useSetSidebarView,
   useSidebarView,

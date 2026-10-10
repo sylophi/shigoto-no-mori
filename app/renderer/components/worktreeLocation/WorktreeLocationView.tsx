@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 
 // The one scroll box every state of the page renders into.
 export function LocationPaneView({ children }: { children: ReactNode }) {

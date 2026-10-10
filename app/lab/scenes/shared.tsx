@@ -4,43 +4,43 @@
 import type { ReactNode } from "react";
 import { DEVICE_ICONS } from "@shigomori/contracts/deviceIcon";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { BranchComboboxView } from "@/components/shared/BranchComboboxView";
-import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInputView";
-import { DeviceChipView } from "@/components/shared/DeviceChipView";
+import { BranchComboboxView } from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
+import { CustomLauncherInputView } from "@shigomori/ui/views/shared/CustomLauncherInputView.tsx";
+import { DeviceChipView } from "@shigomori/ui/views/shared/DeviceChipView.tsx";
 import {
   DeviceGlyphView,
   DeviceLeadView,
   DeviceMarkView,
-} from "@/components/shared/DeviceGlyphView";
+} from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import {
   DeviceTabBarView,
   DeviceTabNoteView,
   StaleDeviceNoteView,
-} from "@/components/shared/DeviceTabBarView";
-import { EditorFooterView } from "@/components/shared/EditorFooterView";
+} from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
+import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import {
   BROWSE_VALUE_PREFIX,
   FolderPickerView,
-} from "@/components/shared/FolderPickerView";
-import { LauncherIconView } from "@/components/shared/LauncherIconView";
-import { PageShellView } from "@/components/shared/PageShellView";
-import { PathPickerView } from "@/components/shared/PathPickerView";
-import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
-import { ProjectDevicePageView } from "@/components/shared/ProjectDevicePageView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
-import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
-import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
-import { TerrierPawView } from "@/components/shared/TerrierPawView";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { VillagerIconView } from "@/components/shared/VillagerIconView";
+} from "@shigomori/ui/views/shared/FolderPickerView.tsx";
+import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
+import { PageShellView } from "@shigomori/ui/views/shared/PageShellView.tsx";
+import { PathPickerView } from "@shigomori/ui/views/shared/PathPickerView.tsx";
+import { PinnedMarkView } from "@shigomori/ui/views/shared/PinnedMarkView.tsx";
+import { ProjectDevicePageView } from "@shigomori/ui/views/shared/ProjectDevicePageView.tsx";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
+import { ScriptEnvPopoverView } from "@shigomori/ui/views/shared/ScriptEnvPopoverView.tsx";
+import { ScriptStatusBadgeView } from "@shigomori/ui/views/shared/ScriptStatusBadgeView.tsx";
+import { TerrierPawView } from "@shigomori/ui/views/shared/TerrierPawView.tsx";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
+import { VillagerIconView } from "@shigomori/ui/views/shared/VillagerIconView.tsx";
 import {
   VillagerFaceView,
   VillagerSaysView,
-} from "@/components/shared/VillagerSaysView";
-import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
-import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
-import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
-import type { ScriptRunState } from "@/store/scriptRuns";
+} from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
+import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
+import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
+import { WorktreeMoveDetailsView } from "@shigomori/ui/views/shared/WorktreeMoveDetailsView.tsx";
+import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { LOCAL_DEVICE_ID, MINI_ID, THINKPAD_ID } from "../fake-host/fixtures";
 import { SceneDialog, SceneWindowFrame } from "./frame";
 import { SceneSidebar } from "./sidebar";

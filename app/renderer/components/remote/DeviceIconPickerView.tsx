@@ -21,7 +21,7 @@ import {
 import {
   DeviceGlyphView,
   DeviceMarkView,
-} from "@/components/shared/DeviceGlyphView";
+} from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,

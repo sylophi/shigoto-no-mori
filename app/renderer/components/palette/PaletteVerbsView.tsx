@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { Play } from "lucide-react";
 import { Kbd } from "@shigomori/ui/primitives/kbd.tsx";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   PaletteGroupView,

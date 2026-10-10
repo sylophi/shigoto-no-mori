@@ -11,7 +11,7 @@
 // standing permanently open. Clicking Rename swaps the same line for the
 // inline editor (InlineNameEditorView).
 import { Pencil } from "lucide-react";
-import { InlineNameEditorView } from "@/components/shared/InlineNameEditorView";
+import { InlineNameEditorView } from "@shigomori/ui/views/shared/InlineNameEditorView.tsx";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 

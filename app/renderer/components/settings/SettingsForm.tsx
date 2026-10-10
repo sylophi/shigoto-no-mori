@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EditorFooterView } from "@/components/shared/EditorFooterView";
+import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import {
   SettingsSaveError,
   useSettingsSave,
@@ -14,7 +14,7 @@ import {
   useHostDevicePick,
   type DeviceRosterEntry,
 } from "@/components/shared/DeviceTabs";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { UpdateMark } from "@shigomori/ui/primitives/status-dot.tsx";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import {

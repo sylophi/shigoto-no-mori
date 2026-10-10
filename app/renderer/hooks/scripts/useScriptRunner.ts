@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { useQuery } from "@tanstack/react-query";
 import { runningScriptsQueryOptions } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -9,7 +10,6 @@ import {
   EMPTY_STATE,
   scriptKey,
   type ScriptKey,
-  type ScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
 import {

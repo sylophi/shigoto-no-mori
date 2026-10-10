@@ -1,5 +1,5 @@
 import { Heart } from "lucide-react";
-import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
+import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { StationeryPrintView } from "@/components/villagers/StationeryPrintView";
 import { FaceStampView } from "@/components/villagers/VillagerLetterView";
 import {
@@ -10,7 +10,7 @@ import { useFaceColor } from "@/hooks/villagers/useFaceColor";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import { villagerCatchphrase } from "@/lib/villagerVoice";
+import { villagerCatchphrase } from "@shigomori/ui/lib/villagerVoice.ts";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import {
   type Album,

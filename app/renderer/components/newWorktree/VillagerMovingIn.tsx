@@ -2,7 +2,7 @@ import { isBirthdayOn } from "@/lib/villagers/birthdays";
 import {
   VillagerFaceView,
   VillagerSaysView,
-} from "@/components/shared/VillagerSaysView";
+} from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { BirthdayFaceView } from "@/components/villagers/BirthdayFaceView";
 import { useToday } from "@/hooks/ui/useToday";
 import {
@@ -10,7 +10,7 @@ import {
   useVillagerProfiles,
 } from "@/hooks/villagers/useVillagers";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import { speakerFor, villagerLine } from "@/lib/villagerVoice";
+import { speakerFor, villagerLine } from "@shigomori/ui/lib/villagerVoice.ts";
 
 // The New Worktree form's hello while the folder it will create is a
 // character's name, after the destination line: "Sheldon is moving in,

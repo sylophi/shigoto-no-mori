@@ -1,7 +1,7 @@
 // A project's icon (ProjectIconView), its logo read off the device the
 // project lives on. `deviceId` names that machine when the caller is
 // not inside its scope (see useProjectIcon).
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 
 export function ProjectIcon({

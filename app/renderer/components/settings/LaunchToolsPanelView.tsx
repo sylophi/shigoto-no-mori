@@ -6,19 +6,19 @@ import {
   type DetectedLauncher,
 } from "@shigomori/contracts/schemas";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { LauncherIconView } from "@/components/shared/LauncherIconView";
+import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import {
   SectionHeading,
   SectionIntro,
 } from "@shigomori/ui/primitives/section-heading.tsx";
 import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInputView";
-import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
+import { CustomLauncherInputView } from "@shigomori/ui/views/shared/CustomLauncherInputView.tsx";
+import { ScriptEnvPopoverView } from "@shigomori/ui/views/shared/ScriptEnvPopoverView.tsx";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { DetectedToolsSectionView } from "./DetectedToolsSectionView";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 
 // The Launch tools tab: what the Launch section on THIS machine offers.
 // The keys it edits (launchers, hiddenLaunchers, launchScripts,

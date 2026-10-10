@@ -1,5 +1,5 @@
 import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
-import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
+import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { StashMoves } from "@/components/worktreeDetail/git/StashMoves";

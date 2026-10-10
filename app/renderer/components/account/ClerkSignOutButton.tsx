@@ -3,7 +3,7 @@
 // paths the status.configured gates keep off the tree when Clerk is
 // absent (see ClerkGate).
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
-import { SignOutButtonView } from "./AccountButtonsView";
+import { SignOutButtonView } from "@shigomori/ui/views/account/AccountButtonsView.tsx";
 
 export function ClerkSignOutButton({ className }: { className?: string }) {
   const signOut = useClerkSignOut();

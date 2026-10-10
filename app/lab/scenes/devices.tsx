@@ -6,9 +6,9 @@ import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import {
   SignInButtonView,
   SignOutButtonView,
-} from "@/components/account/AccountButtonsView";
-import { PageShellView } from "@/components/shared/PageShellView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
+} from "@shigomori/ui/views/account/AccountButtonsView.tsx";
+import { PageShellView } from "@shigomori/ui/views/shared/PageShellView.tsx";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import { AcceptCommandsToggleView } from "@/components/remote/AcceptCommandsToggleView";
 import {
   AccountLoadingView,

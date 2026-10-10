@@ -37,7 +37,7 @@ import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { showPrimaryInInbox } from "@/lib/showPrimaryInInbox";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
 import {
   combineFanOut,

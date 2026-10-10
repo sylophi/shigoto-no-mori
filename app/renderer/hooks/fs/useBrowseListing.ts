@@ -9,6 +9,7 @@ import {
   getBrowseParentPath,
   hasTrailingSlash,
 } from "@shigomori/contracts/projectPaths";
+import type { BrowseListing } from "@shigomori/ui/lib/browseListing.ts";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 
 interface UseBrowseListingOptions {
@@ -18,16 +19,12 @@ interface UseBrowseListingOptions {
   enabled?: boolean;
 }
 
-// What a browse list draws from (FolderPickerView and the add-project
-// views take it whole).
-export type BrowseListing = ReturnType<typeof useBrowseListing>;
-
 export function useBrowseListing({
   query,
   setQuery,
   setHighlighted,
   enabled = true,
-}: UseBrowseListingOptions) {
+}: UseBrowseListingOptions): BrowseListing {
   const browseDir = getBrowseDirectoryPath(query);
   const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
 

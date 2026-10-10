@@ -5,8 +5,8 @@
 // bar). It fills the box it is given, which a scene's frame sizes as
 // the window it draws.
 import type { ReactNode } from "react";
-import { AppShellView } from "@/components/AppShellView";
-import { PhoneTabBarView } from "@/components/PhoneTabBarView";
+import { AppShellView } from "@shigomori/ui/views/AppShellView.tsx";
+import { PhoneTabBarView } from "@shigomori/ui/views/PhoneTabBarView.tsx";
 import {
   MODAL_BACKDROP,
   ModalBox,

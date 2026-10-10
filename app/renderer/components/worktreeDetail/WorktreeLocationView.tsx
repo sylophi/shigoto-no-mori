@@ -4,7 +4,7 @@
 // the path's place with the folder's name, the one thing a rename
 // changes. A phone has no room for the path, so neither shows there.
 import { Pencil } from "lucide-react";
-import { InlineNameEditorView } from "@/components/shared/InlineNameEditorView";
+import { InlineNameEditorView } from "@shigomori/ui/views/shared/InlineNameEditorView.tsx";
 import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";

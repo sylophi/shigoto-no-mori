@@ -16,7 +16,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { ErrorFallbackView } from "@/components/ErrorFallbackView";
+import { ErrorFallbackView } from "@shigomori/ui/views/ErrorFallbackView.tsx";
 import { EmptyState } from "@/components/EmptyState";
 import { ForestPage } from "@/components/ForestPage";
 import { NotFoundPage } from "@/components/NotFoundPage";

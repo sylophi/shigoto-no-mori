@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import { SquareTerminal } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
+import { DeviceLeadView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";

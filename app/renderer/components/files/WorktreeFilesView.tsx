@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { EyeOff, Files, RotateCw } from "lucide-react";
-import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeaderView";
+import { PAGE_HEADER_PADDING } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
 import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
 import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";

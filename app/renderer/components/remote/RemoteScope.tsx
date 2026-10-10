@@ -16,7 +16,7 @@ import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { NotSharingView } from "./NotSharingView";
 import {

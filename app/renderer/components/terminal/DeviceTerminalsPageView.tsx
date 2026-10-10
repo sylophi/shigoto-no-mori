@@ -1,7 +1,7 @@
 // A device's own terminals, the ones no worktree holds, on a page of
 // their own: the device's name over the tabs.
 import type { ReactNode } from "react";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
+import { PageHeaderView } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
 
 export function DeviceTerminalsPageView({
   deviceName,

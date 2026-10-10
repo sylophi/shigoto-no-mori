@@ -8,7 +8,7 @@
 // side is a worktree of its own, with its own route, so the page stays
 // one device's throughout.
 import { useDeviceRoster } from "@/components/shared/DeviceTabs";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";

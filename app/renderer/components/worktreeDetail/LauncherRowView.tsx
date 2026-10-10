@@ -1,7 +1,7 @@
 // The launch tools as a row of pills (LauncherRow binds them), or what
 // to do when there are none to show.
 import { Loader2 } from "lucide-react";
-import { LauncherIconView } from "@/components/shared/LauncherIconView";
+import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";

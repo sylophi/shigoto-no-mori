@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import { LoadFailure } from "@shigomori/ui/primitives/load-failure.tsx";
 
 // The "All devices" tab's sections, the project's shared settings.

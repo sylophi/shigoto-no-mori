@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
-import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
+import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";

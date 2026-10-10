@@ -1,7 +1,7 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
 import { Folder, FolderGit2, FolderSearch } from "lucide-react";
-import type { BrowseListing } from "@/hooks/fs/useBrowseListing";
+import type { BrowseListing } from "@shigomori/ui/lib/browseListing.ts";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
@@ -9,7 +9,7 @@ import { FileManagerIcon } from "@shigomori/ui/primitives/file-manager.tsx";
 import {
   BrowseKeyHintsView,
   BrowseUpItemView,
-} from "@/components/shared/BrowseListPartsView";
+} from "@shigomori/ui/views/shared/BrowseListPartsView.tsx";
 import {
   ITEM_CLASS,
   keepFocusInInput,

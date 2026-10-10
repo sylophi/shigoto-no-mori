@@ -6,7 +6,7 @@
 // never disagree about a machine, and the name rides the tooltip.
 import { RefreshCw } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
+import { DeviceMarkView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 

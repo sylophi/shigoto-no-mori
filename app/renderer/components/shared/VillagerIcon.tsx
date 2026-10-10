@@ -1,6 +1,6 @@
 // A villager's bare face (VillagerIconView) by name slug.
 import type { ComponentProps } from "react";
-import { VillagerIconView } from "@/components/shared/VillagerIconView";
+import { VillagerIconView } from "@shigomori/ui/views/shared/VillagerIconView.tsx";
 import { useVillagerFace } from "@/hooks/villagers/useVillagers";
 
 export function VillagerIcon({

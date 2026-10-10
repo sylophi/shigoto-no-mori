@@ -1,6 +1,6 @@
-import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
+import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { VillagerRarity } from "@shared/villagers/rarity";
+import type { VillagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
 import { ConfettiView } from "./CelebrationView";
 
 // A paper party hat, tipped on its side: a striped cone with a pom on

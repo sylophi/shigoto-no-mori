@@ -1,12 +1,12 @@
 // The window's frame and the pages that are only the frame's: a fresh
 // install's home, the forest on a phone, an address with nothing at it,
 // a crash.
-import { PhoneBackBarView } from "@/components/AppShellView";
-import { ErrorFallbackView } from "@/components/ErrorFallbackView";
-import { FirstRunView } from "@/components/FirstRunView";
-import { ForestPageView } from "@/components/ForestPageView";
-import { NotFoundPageView } from "@/components/NotFoundPageView";
-import { WhatsNewLinkView } from "@/components/WhatsNewLinkView";
+import { PhoneBackBarView } from "@shigomori/ui/views/AppShellView.tsx";
+import { ErrorFallbackView } from "@shigomori/ui/views/ErrorFallbackView.tsx";
+import { FirstRunView } from "@shigomori/ui/views/FirstRunView.tsx";
+import { ForestPageView } from "@shigomori/ui/views/ForestPageView.tsx";
+import { NotFoundPageView } from "@shigomori/ui/views/NotFoundPageView.tsx";
+import { WhatsNewLinkView } from "@shigomori/ui/views/WhatsNewLinkView.tsx";
 import { SceneWindowFrame } from "./frame";
 import { SceneSidebar } from "./sidebar";
 

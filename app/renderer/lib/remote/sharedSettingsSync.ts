@@ -39,7 +39,7 @@ import {
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
 import { queryKeys } from "@/lib/queryKeys";
-import { deviceStatusView } from "./deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { remoteDeviceStore } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
 

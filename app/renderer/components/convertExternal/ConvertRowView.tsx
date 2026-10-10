@@ -1,5 +1,5 @@
 import { FileDiff } from "lucide-react";
-import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
+import { WorktreeMoveDetailsView } from "@shigomori/ui/views/shared/WorktreeMoveDetailsView.tsx";
 import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
 import { type RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";

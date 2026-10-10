@@ -33,8 +33,8 @@ import {
 import {
   ALL_DEVICES_TAB_ID,
   DeviceTabBarView,
-} from "@/components/shared/DeviceTabBarView";
-import { ProjectDevicePageView } from "./ProjectDevicePageView";
+} from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
+import { ProjectDevicePageView } from "@shigomori/ui/views/shared/ProjectDevicePageView.tsx";
 
 export function ProjectDevicePage({
   title,

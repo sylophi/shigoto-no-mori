@@ -4,7 +4,7 @@
 // close it to open a dialog.
 import { Archive, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import {
   Popover,
   PopoverClose,

@@ -1,4 +1,4 @@
-import { PageShellView } from "@/components/shared/PageShellView";
+import { PageShellView } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import { hasLocalHost } from "@/lib/localHost";
 import { AccountSection } from "./AccountSection";
 

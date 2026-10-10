@@ -3,8 +3,8 @@ import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { Project } from "@shigomori/contracts/schemas";
-import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
-import { TerrierPawView } from "@/components/shared/TerrierPawView";
+import { PinnedMarkView } from "@shigomori/ui/views/shared/PinnedMarkView.tsx";
+import { TerrierPawView } from "@shigomori/ui/views/shared/TerrierPawView.tsx";
 
 interface ProjectHeaderProps {
   project: Project;

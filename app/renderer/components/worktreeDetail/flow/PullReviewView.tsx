@@ -14,7 +14,7 @@ import {
 import { type ReactNode, useId } from "react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { PullRequestDetail, Worktree } from "@shigomori/contracts/schemas";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import {
   DropdownMenu,

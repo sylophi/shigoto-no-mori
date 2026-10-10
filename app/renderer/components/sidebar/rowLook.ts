@@ -1,6 +1,6 @@
 // How a worktree's sidebar row looks right now (useWorktreeEntry reads
 // it): the open one, what runs in it, a delete in flight.
-import type { ScriptActivityKind } from "@/store/scriptRuns";
+import type { ScriptActivityKind } from "@shigomori/ui/lib/scriptRun.ts";
 
 export interface WorktreeRowLook {
   isSelected: boolean;

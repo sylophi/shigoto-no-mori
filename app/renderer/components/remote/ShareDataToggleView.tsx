@@ -1,4 +1,4 @@
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 
 // "Share with other devices": whether THIS machine serves the account's
 // other devices anything at all.

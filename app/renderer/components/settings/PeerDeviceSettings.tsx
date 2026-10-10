@@ -13,7 +13,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";

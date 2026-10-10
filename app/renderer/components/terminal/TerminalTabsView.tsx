@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { useRovingPick } from "@/hooks/ui/useRovingPick";
+import { useRovingPick } from "@shigomori/ui/hooks/useRovingPick.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export type TerminalTab = {

@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import type { AgentSession } from "@shigomori/contracts/schemas";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import {

@@ -8,7 +8,7 @@ import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
   DeviceTabNoteView,
   StaleDeviceNoteView,
-} from "@/components/shared/DeviceTabBarView";
+} from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import {
@@ -28,7 +28,7 @@ import { localDeviceId } from "@/lib/queryKeys";
 import {
   deviceStatusView,
   type DeviceStatusView,
-} from "@/lib/remote/deviceStatus";
+} from "@shigomori/ui/lib/deviceStatus.ts";
 import {
   createExternalStore,
   useExternalStore,

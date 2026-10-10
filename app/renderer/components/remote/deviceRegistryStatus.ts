@@ -21,7 +21,7 @@ import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import {
   deviceStatusView,
   type DeviceStatusView,
-} from "@/lib/remote/deviceStatus";
+} from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
 
 // The same triple every other device surface renders: tone, label,

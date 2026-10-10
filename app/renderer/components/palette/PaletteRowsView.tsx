@@ -9,7 +9,7 @@ import { ownerOf } from "@/components/sidebar/buildSidebarRows";
 import { PullRequestPillView } from "@/components/sidebar/PullRequestPillView";
 import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { matchPositions } from "@/lib/fuzzyMatch";
+import { matchPositions } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@shigomori/ui/lib/utils.ts";

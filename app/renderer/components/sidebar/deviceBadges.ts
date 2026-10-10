@@ -1,7 +1,7 @@
 // The device badges the sidebar's rows wear (DeviceBadgeView), off the
 // device registry.
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView";
 
 // Every peer on the account as a badge, by device id: the lookup behind
