@@ -30,6 +30,15 @@ export function useUndoCommits(worktree: Worktree) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
 
+  // A failed read has the query's own toast.
+  const restoreMessage = (hash: string) =>
+    void queryClient
+      .fetchQuery(commitMessageQueryOptions(scope, projectId, worktreeId, hash))
+      .then(
+        (message) => fillEmptyCommitDraft(projectId, worktreeId, message),
+        () => {},
+      );
+
   const undoTo = ({
     target,
     count,
@@ -43,21 +52,7 @@ export function useUndoCommits(worktree: Worktree) {
           if (merge) nav.toCommit(projectId, worktreeId, target, true);
           else nav.toDiff(projectId, worktreeId, { replace: true });
           if (!merge && count === 1) {
-            // A failed read has the query's own toast.
-            void queryClient
-              .fetchQuery(
-                commitMessageQueryOptions(
-                  scope,
-                  projectId,
-                  worktreeId,
-                  previousHead,
-                ),
-              )
-              .then(
-                (message) =>
-                  fillEmptyCommitDraft(projectId, worktreeId, message),
-                () => {},
-              );
+            restoreMessage(previousHead);
             return;
           }
           toast(

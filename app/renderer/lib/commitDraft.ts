@@ -31,8 +31,12 @@ export function clearCommitDraft(projectId: string, worktreeId: string): void {
   removeStored(draftKey(projectId, worktreeId));
 }
 
-// The open changes pages, told which draft was filled under them.
-const listeners = new Set<(key: string) => void>();
+export function isEmptyDraft(draft: CommitDraft): boolean {
+  return !draft.summary && !draft.description;
+}
+
+// The open changes pages, by draft key.
+const listeners = new Set<(key: string, draft: CommitDraft) => void>();
 
 // Put `draft` in the box from outside the page, but only while it is
 // empty, so a message being written is never lost to it. An undone
@@ -42,11 +46,10 @@ export function fillEmptyCommitDraft(
   worktreeId: string,
   draft: CommitDraft,
 ): void {
-  const current = readCommitDraft(projectId, worktreeId);
-  if (current.summary || current.description) return;
+  if (!isEmptyDraft(readCommitDraft(projectId, worktreeId))) return;
   const key = draftKey(projectId, worktreeId);
   writeStored(key, JSON.stringify(draft));
-  for (const listener of listeners) listener(key);
+  for (const listener of listeners) listener(key, draft);
 }
 
 // The draft as state plus its persistence, owned by the changes page:
@@ -59,22 +62,29 @@ export function useCommitDraft(projectId: string, worktreeId: string) {
   const [draft, setDraft] = useState<CommitDraft>(() =>
     readCommitDraft(projectId, worktreeId),
   );
-  useEffect(() => {
-    if (draft.summary || draft.description) {
-      writeStored(draftKey(projectId, worktreeId), JSON.stringify(draft));
-    } else {
-      clearCommitDraft(projectId, worktreeId);
-    }
-  }, [draft, projectId, worktreeId]);
+  // Ahead of the persisting effect: a fill that landed between the first
+  // render and this subscription is picked up here, before that effect
+  // would clear it with the empty draft the render read.
   useEffect(() => {
     const key = draftKey(projectId, worktreeId);
-    const onFill = (filled: string) => {
-      if (filled === key) setDraft(readCommitDraft(projectId, worktreeId));
+    const stored = readCommitDraft(projectId, worktreeId);
+    if (!isEmptyDraft(stored)) {
+      setDraft((current) => (isEmptyDraft(current) ? stored : current));
+    }
+    const onFill = (filled: string, next: CommitDraft) => {
+      if (filled === key) setDraft(next);
     };
     listeners.add(onFill);
     return () => {
       listeners.delete(onFill);
     };
   }, [projectId, worktreeId]);
+  useEffect(() => {
+    if (isEmptyDraft(draft)) {
+      clearCommitDraft(projectId, worktreeId);
+    } else {
+      writeStored(draftKey(projectId, worktreeId), JSON.stringify(draft));
+    }
+  }, [draft, projectId, worktreeId]);
   return [draft, setDraft] as const;
 }
