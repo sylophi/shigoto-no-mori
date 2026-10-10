@@ -17,11 +17,13 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import {
   peerEffects,
   peerWorktreesFor,
@@ -48,7 +50,10 @@ import {
 // themselves are reached through host/ipc/peerSync.ts.
 type ControlImpl = {
   // The account's device registry. Empty when signed out.
-  listDevices: Effect.Effect<DeviceInfo[], unknown>;
+  listDevices: Effect.Effect<
+    DeviceInfo[],
+    ControlError | AccountUnreachableError
+  >;
   // The devices a direct session is established to (the only ones a
   // call can reach), each with whether it shares with this device and
   // runs its commands: the hub status snapshot's peerSharesData and
@@ -60,6 +65,32 @@ export type DirectPeer = {
   readonly sharesData: boolean;
   readonly acceptsCommands: boolean;
 };
+
+// The account's hub out of reach while listing the devices: a network
+// down, the hub redeploying.
+export class AccountUnreachableError extends Schema.TaggedError<AccountUnreachableError>()(
+  "AccountUnreachableError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return `Couldn't reach your account to find your devices (${this.reason}). Check the network, then try again.`;
+  }
+}
+
+// Why the device list failed, in the words the terminal prints: a
+// credential the hub no longer honors (the device was removed from the
+// account while the app held it) is the signed-out case, and anything
+// else the hub out of reach, with its cause.
+export function listDevicesFailure(
+  error: unknown,
+): ControlError | AccountUnreachableError {
+  return isHubRefusal(error)
+    ? new ControlError(
+        "signed-out",
+        "This device's access to the account was removed. Sign in again from the app.",
+      )
+    : new AccountUnreachableError({ reason: errorMessageOf(error) });
+}
 
 const { set: setControlImpl, get: requireImpl } = implSlot<ControlImpl>(
   "control op requested before setControlImpl ran",
@@ -77,19 +108,7 @@ const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
   );
 
 export const roster = Effect.gen(function* () {
-  const devices = yield* requireImpl().listDevices.pipe(
-    // A credential the hub no longer honors (the device was removed
-    // from the account while the app held it) is the signed-out case
-    // with a reason, not a raw hub error for the CLI to print.
-    Effect.mapError((error) =>
-      isHubRefusal(error)
-        ? new ControlError(
-            "signed-out",
-            "This device's access to the account was removed. Sign in again from the app.",
-          )
-        : error,
-    ),
-  );
+  const devices = yield* requireImpl().listDevices;
   const hereId = thisDeviceId();
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) {
