@@ -57,7 +57,8 @@ export function makeHistory(
 ): History {
   const chunks: Chunk[] = [];
   let length = 0;
-  // The seq of the last chunk dropped off the front, or the start's.
+  // The seq of the last chunk dropped or cut off the front, or the
+  // start's: a client holding less than that starts over.
   let dropped = seq;
   let last = seq;
   const append = (at: number, data: string) => {
@@ -66,12 +67,23 @@ export function makeHistory(
     if (kept.length === 0) return;
     chunks.push({ seq: at, data: kept });
     length += kept.length;
-    // The newest chunk stays whatever its size.
-    while (length > limit && chunks.length > 1) {
-      const first = chunks.shift();
+    // Whole chunks go first, then the oldest left is cut to its tail,
+    // from a line's start where it has one, so a flood keeps the last
+    // of it.
+    while (length > limit) {
+      const first = chunks[0];
       if (first === undefined) break;
-      length -= first.data.length;
+      const excess = length - limit;
       dropped = first.seq;
+      if (first.data.length <= excess) {
+        chunks.shift();
+        length -= first.data.length;
+        continue;
+      }
+      const line = first.data.indexOf("\n", excess);
+      const cut = line === -1 ? excess : line + 1;
+      chunks[0] = { seq: first.seq, data: first.data.slice(cut) };
+      length -= cut;
     }
   };
   if (text.length > 0) {
@@ -83,10 +95,9 @@ export function makeHistory(
     append,
     since: (after) => {
       const reset = after === undefined || after < dropped || after > last;
-      const from = reset ? dropped : after;
       return {
         data: chunks
-          .filter((chunk) => chunk.seq > from)
+          .filter((chunk) => reset || chunk.seq > after)
           .map((chunk) => chunk.data)
           .join(""),
         seq: last,
