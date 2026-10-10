@@ -3,9 +3,10 @@
 // layer's: closing it is closing that scope, whose release is the kill
 // chain. A terminal belongs to a worktree, which it starts in with the
 // environment the worktree's scripts get and closes with, or to the
-// device, where it starts in the folder the last one was in. A quit
-// saves each one's history and folder (SavedTerminals), and the next
-// start opens a fresh shell there under that history.
+// device, where it starts in the folder the last one was in. Its
+// history and folder are saved (SavedTerminals) a moment after its
+// output changes and again as it closes, so after a quit or a crash the
+// next start opens a fresh shell there under that history.
 //
 // Its output goes out in chunks, numbered by `seq`, to every client
 // attached, through a bounded PubSub: a client that stops taking holds
@@ -30,6 +31,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
@@ -62,6 +64,12 @@ const CLIENT_BACKLOG = 64;
 // paused, and below which it reads again.
 const PAUSE_AT = 1024 * 1024;
 const RESUME_AT = 256 * 1024;
+// A terminal's changed history is saved once its output has been quiet
+// this long, and at least this often while it keeps changing (a flood,
+// an agent CLI's spinner): what a crash may lose, against one write of
+// the whole ring each time.
+const SAVE_QUIET = Duration.seconds(2);
+const SAVE_AT_MOST = Duration.minutes(1);
 // A shell is stopped with SIGHUP, as when its window closes, and
 // SIGKILL a moment later if it is still there.
 const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
@@ -77,6 +85,10 @@ interface Session {
   readonly history: History;
   readonly events: PubSub.PubSub<TerminalEvent>;
   readonly scope: Scope.Closeable;
+  // Opened by output the store doesn't have yet, the last at
+  // `changedAt`.
+  readonly changed: Latch.Latch;
+  changedAt: number;
   seq: number;
   size: Size;
   exited: Option.Option<number | null>;
@@ -235,6 +247,8 @@ const make = <R>(options: {
           if (data.length > 0) {
             session.seq += 1;
             session.history.append(session.seq, data);
+            session.changedAt = yield* Clock.currentTimeMillis;
+            session.changed.openUnsafe();
             yield* PubSub.publish(session.events, {
               kind: "output",
               data,
@@ -274,6 +288,57 @@ const make = <R>(options: {
         yield* Scope.close(session.scope, Exit.void);
       });
 
+    // The folder a shell is in now, kept as the device's last when it is
+    // the device's.
+    const noteFolder = Effect.fnUntraced(function* (session: Session) {
+      const folder = yield* folderOf(session);
+      if (session.terminal.owner.kind === "device" && Option.isSome(folder)) {
+        yield* saved.setLastFolder(folder.value);
+      }
+      return folder;
+    });
+
+    // The terminal as it is now, in the store: its folder and its
+    // history. One row, written at once, so a crash leaves the last one
+    // whole.
+    const persist = Effect.fnUntraced(function* (session: Session) {
+      const folder = yield* noteFolder(session);
+      yield* saved.save({
+        ...session.terminal,
+        cwd: Option.getOrElse(folder, () => session.terminal.cwd),
+        seq: session.seq,
+        history: session.history.text(),
+      });
+    });
+
+    // Saves the terminal once its output settles, or a minute after it
+    // started changing, all that came in meanwhile in one write. A save
+    // the store refuses is left to the next.
+    const keepSaved = (session: Session) =>
+      Effect.forever(
+        Effect.gen(function* () {
+          yield* session.changed.await;
+          const deadline = session.changedAt + Duration.toMillis(SAVE_AT_MOST);
+          while (true) {
+            const due = Math.min(
+              session.changedAt + Duration.toMillis(SAVE_QUIET),
+              deadline,
+            );
+            const now = yield* Clock.currentTimeMillis;
+            if (now >= due) break;
+            yield* Effect.sleep(due - now);
+          }
+          session.changed.closeUnsafe();
+          // Gone with its shell, so its row goes as it closes.
+          if (session.forget) return;
+          yield* persist(session).pipe(
+            Effect.catchDefect((defect) =>
+              Effect.logWarning("[terminals] a terminal was not saved", defect),
+            ),
+          );
+        }),
+      );
+
     const begin = Effect.fnUntraced(function* (
       terminal: Terminal,
       env: Start["env"],
@@ -301,6 +366,8 @@ const make = <R>(options: {
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
+          changed: Latch.makeUnsafe(false),
+          changedAt: 0,
           seq: restored?.seq ?? 0,
           size,
           exited: Option.none(),
@@ -326,27 +393,17 @@ const make = <R>(options: {
           });
         });
         yield* Effect.forkIn(pump(session, reads, backlog), scope);
-        // Runs first as the scope closes, while the shell is still there
-        // to be asked where it is.
+        // Runs as the scope closes, while the shell is still there to be
+        // asked where it is, after the saver (forked below) has stopped.
         yield* Scope.addFinalizer(
           scope,
           Effect.gen(function* () {
-            const folder = yield* folderOf(session);
-            if (terminal.owner.kind === "device" && Option.isSome(folder)) {
-              yield* saved.setLastFolder(folder.value);
-            }
-            if (session.forget) {
-              yield* saved.forget(terminal.terminalId);
-              return;
-            }
-            yield* saved.save({
-              ...terminal,
-              cwd: Option.getOrElse(folder, () => terminal.cwd),
-              seq: session.seq,
-              history: session.history.text(),
-            });
+            if (!session.forget) return yield* persist(session);
+            yield* noteFolder(session);
+            yield* saved.forget(terminal.terminalId);
           }),
         );
+        yield* Effect.forkIn(keepSaved(session), scope);
         sessions.set(terminal.terminalId, session);
         yield* announce;
         return session;
@@ -391,13 +448,16 @@ const make = <R>(options: {
         { concurrency: "unbounded", discard: true },
       );
 
-    // What the last quit left, each in a fresh shell where it was. One
-    // whose worktree is gone is dropped.
+    // What the last run left, each in a fresh shell where it was, its
+    // row kept until the shell saves over it. One whose worktree is gone
+    // is dropped.
     const restore = Effect.gen(function* () {
       for (const terminal of yield* saved.list) {
-        yield* saved.forget(terminal.terminalId);
         const start = yield* Effect.option(startOf(terminal.owner));
-        if (Option.isNone(start)) continue;
+        if (Option.isNone(start)) {
+          yield* saved.forget(terminal.terminalId);
+          continue;
+        }
         const cwd = (yield* exists(terminal.cwd))
           ? terminal.cwd
           : (start.value.cwd ?? home);
@@ -405,6 +465,7 @@ const make = <R>(options: {
           seq: terminal.seq,
           history: terminal.history,
         }).pipe(
+          Effect.onError(() => saved.forget(terminal.terminalId)),
           Effect.catchTags({
             PtySpawnError: (error) =>
               Effect.logWarning(
