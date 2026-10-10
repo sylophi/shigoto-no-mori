@@ -7,11 +7,12 @@
 // starts the listener.
 //
 // A peer's socket opens sealed (shared/remote/sealedSocket.ts): the
-// ticket minted for it over the hub, spent before any crypto runs, then
-// a Noise handshake proving it holds the key the hub's roster names for
-// the device the ticket was minted for, and every frame after that
-// encrypted. Its hello must name that device and this build's protocol
-// version (modules/link.ts). Until then every other call is refused
+// ticket minted for it over the hub, checked before any crypto runs,
+// then a Noise handshake proving it holds the key the hub's roster names
+// for the device the ticket was minted for, and every frame after that
+// encrypted. Its hello must name that device, whose key the roster must
+// still hold, and this build's protocol version (modules/link.ts), and
+// only that hello spends the ticket. Until then every other call is refused
 // (PeerAuth). Then a call annotated gated:false runs for
 // the peer, and any other only under the host's live command switch, or
 // as a call the host itself invited (CommandGate). Above both sits the
@@ -83,7 +84,8 @@ import {
   SharingGate,
 } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
-import { sealListener } from "@shared/remote/sealedSocket";
+import { SEAL_OVERHEAD_BYTES, sealListener } from "@shared/remote/sealedSocket";
+import { sameKey } from "@shared/crypto/deviceKey";
 import {
   HELLO_TIMEOUT_MS,
   HOST_LIVENESS_TIMEOUT_MS,
@@ -105,10 +107,21 @@ export type WsServerTicketAuth = {
   // loopback's is its token, which the hello carries.
   readonly opens:
     | {
-        readonly admit: (
+        // What a ticket opens, spending nothing: the device it was
+        // minted for and the key the hub's roster holds for it, or null.
+        readonly check: (
           ticket: string,
           arrivedAs: DirectCandidateKind,
         ) => { deviceId: string; publicKey: Uint8Array } | null;
+        // Spends the ticket on its socket's hello, answering the device
+        // it was minted for, or null when it is no longer pending.
+        readonly spend: (
+          ticket: string,
+          arrivedAs: DirectCandidateKind,
+        ) => string | null;
+        // The key the roster holds for a device now, which the hello
+        // rechecks: a device removed since its handshake links nothing.
+        readonly keyOf: (deviceId: string) => Uint8Array | undefined;
         readonly localKey: () => KeyPair | null;
       }
     | { readonly token: string };
@@ -367,8 +380,14 @@ type Connection = {
   // The pushes for this peer alone (a move's progress).
   readonly pushes: PubSub.PubSub<Push>;
   readonly closed: AbortController;
-  // The device the ticket this socket opened with was minted for.
-  ticketDeviceId: string | null;
+  // What this socket opened with, once its handshake proved the
+  // dialer: the ticket, the device it was minted for, and the key the
+  // dialer proved, the roster's then.
+  opened: {
+    readonly ticket: string;
+    readonly deviceId: string;
+    readonly publicKey: Uint8Array;
+  } | null;
   helloSeen: boolean;
   deviceId: string | null;
   connectionId: string | null;
@@ -429,6 +448,8 @@ export const make = (options: {
       readonly opts: WsServerStartOpts;
       readonly scope: Scope.Closeable;
       readonly byDevice: Map<string, Map<string, Connection>>;
+      // Every connection, those yet to say hello included.
+      readonly connections: Map<number, Connection>;
     } | null = null;
 
     const isLockedOut = (ip: string): boolean => {
@@ -545,12 +566,20 @@ export const make = (options: {
             }
             connection.helloSeen = true;
             // A peer's hello names the device its ticket was minted for,
-            // whose key the handshake proved. The loopback's carries the
-            // token.
+            // whose key the handshake proved and the roster still holds
+            // for it, and only then spends the ticket: a device removed
+            // since, or a socket that lost its ticket to another, links
+            // nothing. The loopback's carries the token.
+            const opens = auth.opens;
+            const opened = connection.opened;
             const admitted =
-              "token" in auth.opens
-                ? payload.token === auth.opens.token
-                : payload.deviceId === connection.ticketDeviceId;
+              "token" in opens
+                ? payload.token === opens.token
+                : opened !== null &&
+                  payload.deviceId === opened.deviceId &&
+                  sameKey(opens.keyOf(opened.deviceId), opened.publicKey) &&
+                  opens.spend(opened.ticket, connection.arrivalKind) ===
+                    opened.deviceId;
             if (!admitted) {
               recordAuthFailure(connection.ip);
               log.warn(`[link] refused a hello from ${connection.ip}`);
@@ -867,7 +896,8 @@ export const make = (options: {
         const wss = new WebSocketServer({
           host: opts.bindAddress,
           port: opts.port,
-          maxPayload: MAX_INBOUND_FRAME_BYTES,
+          // A frame at the cap, sealed, carries its tag too.
+          maxPayload: MAX_INBOUND_FRAME_BYTES + SEAL_OVERHEAD_BYTES,
           // A browser offers it, and so does the desktop dialer on a
           // tunnel candidate, where a diff or a log is worth the CPU. A
           // LAN dial does not ask: its link outruns the deflate.
@@ -952,11 +982,16 @@ export const make = (options: {
                     ? ws
                     : sealListener(ws, {
                         localKey,
-                        admit: async (ticket) => {
-                          const peer = opens.admit(ticket, arrivalKind);
-                          if (peer === null) return null;
-                          connection.ticketDeviceId = peer.deviceId;
-                          return peer.publicKey;
+                        admit: async (ticket) =>
+                          opens.check(ticket, arrivalKind)?.publicKey ?? null,
+                        opened: (ticket, publicKey) => {
+                          const peer = opens.check(ticket, arrivalKind);
+                          if (
+                            peer !== null &&
+                            sameKey(peer.publicKey, publicKey)
+                          ) {
+                            connection.opened = { ticket, ...peer };
+                          }
                         },
                         // Only a ticket or a key that did not hold counts
                         // toward the lockout: a device on another version
@@ -975,7 +1010,7 @@ export const make = (options: {
                 pushes,
                 closed,
                 parser: serialization.makeUnsafe(),
-                ticketDeviceId: null,
+                opened: null,
                 helloSeen: false,
                 deviceId: null,
                 connectionId: null,
@@ -1064,7 +1099,7 @@ export const make = (options: {
             ? address.port
             : opts.port;
         log.info(`[link] listening on ${opts.bindAddress}:${port}`);
-        return { port, byDevice };
+        return { port, byDevice, connections };
       });
 
     const stopNow = Effect.suspend(() => {
@@ -1106,7 +1141,12 @@ export const make = (options: {
           );
           return;
         }
-        current = { opts, scope, byDevice: started.value.byDevice };
+        current = {
+          opts,
+          scope,
+          byDevice: started.value.byDevice,
+          connections: started.value.connections,
+        };
         status = {
           listening: true,
           port: started.value.port,
@@ -1131,14 +1171,15 @@ export const make = (options: {
       closePeersNotIn: (online) =>
         Effect.sync(() => {
           const live = new Set(online);
-          for (const [deviceId, held] of current?.byDevice ?? []) {
-            if (live.has(deviceId)) continue;
-            for (const connection of held.values()) {
-              connection.kill(
-                CLOSE_GOING_AWAY,
-                "no longer in the account roster",
-              );
-            }
+          // Linked or still to say hello: a socket whose handshake proved
+          // a device the roster dropped goes too.
+          for (const connection of current?.connections.values() ?? []) {
+            const deviceId = connection.deviceId ?? connection.opened?.deviceId;
+            if (deviceId === undefined || live.has(deviceId)) continue;
+            connection.kill(
+              CLOSE_GOING_AWAY,
+              "no longer in the account roster",
+            );
           }
         }),
     });
