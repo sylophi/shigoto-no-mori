@@ -77,7 +77,7 @@ const views = import.meta.glob<Record<string, unknown>>(
   { eager: true },
 );
 
-const PENDING = ["files/", "live/", "palette/", "scriptConsole/"];
+const PENDING = ["files/", "live/", "palette/"];
 
 // An intrinsic element opening (<div, <span ...>), not a type argument
 // (useState<string>), which follows an identifier.
