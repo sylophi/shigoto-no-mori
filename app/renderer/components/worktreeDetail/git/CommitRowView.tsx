@@ -29,7 +29,7 @@ import {
 import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
 import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import type { CommitRewrite } from "@/lib/commitRewrite";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import type { CommitActions } from "./useCommitActions";

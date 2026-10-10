@@ -1,0 +1,42 @@
+import { ArrowLeft, FolderSearch, Loader2 } from "lucide-react";
+import { PathSpan } from "../../primitives/path-span.tsx";
+import { KbdHint } from "../../primitives/kbd.tsx";
+import { IconButton } from "../../primitives/icon-button.tsx";
+
+interface ScanningPanelProps {
+  scanRoot: string;
+  home: string | null;
+  onCancel: () => void;
+}
+
+export function ScanningPanelView({
+  scanRoot,
+  home,
+  onCancel,
+}: ScanningPanelProps) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <IconButton onClick={onCancel} aria-label="Cancel">
+          <ArrowLeft className="size-4" />
+        </IconButton>
+        <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
+        <PathSpan
+          path={scanRoot}
+          home={home}
+          className="min-w-0 flex-1 truncate font-mono text-sm"
+        />
+      </div>
+      <div className="flex flex-col items-center gap-3 px-4 py-16 text-sm text-muted-foreground">
+        <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
+        <span>Looking for git repos…</span>
+      </div>
+      <div
+        data-slot="footer-row"
+        className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
+      >
+        <KbdHint keys={["Esc"]} label="Cancel" />
+      </div>
+    </div>
+  );
+}

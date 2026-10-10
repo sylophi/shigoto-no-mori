@@ -8,6 +8,7 @@ What crosses a wire or sits on disk, described once for every side: the app's ma
 - `src/hubProtocol.ts`: the bodies that API carries, the socket envelopes between a device and the hub, and the connectInfo ask and answer the devices relay through it.
 - `src/errors.ts`: the errors a contract names and the renderer recognizes.
 - `src/predicates/`, `src/deviceIcon.ts`, `src/platform.ts`, `src/mirrorIgnores.ts`: the values and checks the schemas are built from, which the app uses too.
+- `src/git/` (branch names, repo-relative paths, worktree layout paths), `src/projectPaths.ts` and `src/scriptEnv.ts`: pure helpers the host and the views both read, kept here because every side can compile the contracts and nothing else.
 
 Consumers import a module by its path under `src/`, without the extension: `@shigomori/contracts/modules/sync`, `@shigomori/contracts/predicates/webUrl`. The schemas also come as one barrel, `@shigomori/contracts/schemas`. Inside the package, imports are relative with the `.ts` extension.
 

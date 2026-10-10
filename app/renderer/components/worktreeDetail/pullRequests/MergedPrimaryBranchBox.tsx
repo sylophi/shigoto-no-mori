@@ -2,7 +2,7 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
-import { localBranchOf } from "@shared/git/branches";
+import { localBranchOf } from "@shigomori/contracts/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
 import { MergedPrimaryBranchBoxView } from "./MergedPrimaryBranchBoxView";
 

@@ -91,7 +91,7 @@ import {
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { openTerminals } from "@host/lib/terminals/Terminals";
-import { isSameOrInside } from "@shared/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import {
   moveMirrorsOfWorktree,
   stopMirrorsForWorktree,

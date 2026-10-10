@@ -1,7 +1,7 @@
-import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
+import { LAYOUT_OPTIONS } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import { managedDriveBaseFor } from "@shared/git/worktreeLayout";
+import { managedDriveBaseFor } from "@shigomori/contracts/git/worktreeLayout";
 import {
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,

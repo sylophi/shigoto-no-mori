@@ -12,7 +12,7 @@ import {
   type PullRequestCheckoutRef,
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
-import { forkBranchCandidates } from "@shared/git/branches";
+import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";

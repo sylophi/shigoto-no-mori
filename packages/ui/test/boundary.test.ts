@@ -27,10 +27,10 @@ const stripComments = (code: string) =>
   code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 // `from "x"` (imports and re-exports), `import("x")`, and `import "x"`
-// at the start of a statement. A `from` inside a string or after a dot
-// is not a keyword.
+// at the start of a statement. A `from` inside a string, after a dot or
+// ending a word like `branch-from` is not a keyword.
 const IMPORT_SPECIFIER =
-  /(?:(?<![\w$."'`])\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)["']([^"']+)["']/gm;
+  /(?:(?<![\w$."'`-])\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)["']([^"']+)["']/gm;
 
 const HOST_BRIDGE = /\bwindow\.api\b/;
 

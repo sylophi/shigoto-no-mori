@@ -57,7 +57,10 @@ import {
   ChangedFilesView,
   TransplantDetailsView,
 } from "@/components/worktreeDetail/transplant/TransplantReviewView";
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import {
+  pullLandingBranch,
+  pullWorktreeName,
+} from "@shigomori/contracts/git/branches";
 import { createFakeChanges } from "../fake-host/changesFixtures";
 import {
   LOCAL_DEVICE_ID,

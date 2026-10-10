@@ -10,8 +10,11 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { layoutInputsFor, worktreePathFor } from "@shared/git/worktreeLayout";
-import { ConvertExternalView } from "./ConvertExternalView";
+import {
+  layoutInputsFor,
+  worktreePathFor,
+} from "@shigomori/contracts/git/worktreeLayout";
+import { ConvertExternalView } from "@shigomori/ui/views/convertExternal/ConvertExternalView.tsx";
 import { withToggled } from "@/lib/toggleSet";
 import { isConvertRefusedError } from "@shigomori/contracts/errors";
 

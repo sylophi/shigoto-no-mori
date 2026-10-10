@@ -10,7 +10,7 @@ import {
   checksBreakdown,
   describeChecks,
   sortChecksWorstFirst,
-} from "@/lib/pullRequest";
+} from "@shigomori/ui/lib/pullRequest.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { CheckEntryView } from "./CheckEntryView";

@@ -2,7 +2,7 @@ import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
-import { projectDriveBaseFor } from "@shared/git/worktreeLayout";
+import { projectDriveBaseFor } from "@shigomori/contracts/git/worktreeLayout";
 import {
   DRIVE_PROJECT_STANDIN,
   IntegrationTogglesView,

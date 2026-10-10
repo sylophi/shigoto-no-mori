@@ -9,18 +9,18 @@ import {
   AddProjectNoDeviceView,
   type AddProjectMode,
 } from "@shigomori/ui/views/AddProjectModalView.tsx";
-import { AddExistingFormView } from "@/components/addProject/AddExistingFormView";
-import { CloneFormView } from "@/components/addProject/CloneFormView";
-import { CreateFormView } from "@/components/addProject/CreateFormView";
-import { ProgressPanelView } from "@/components/addProject/DialogPartsView";
-import { ResultsPanelView } from "@/components/addProject/ResultsPanelView";
-import { ScanningPanelView } from "@/components/addProject/ScanningPanelView";
-import { TerrierOptInView } from "@/components/addProject/TerrierOptInView";
+import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
+import { CloneFormView } from "@shigomori/ui/views/addProject/CloneFormView.tsx";
+import { CreateFormView } from "@shigomori/ui/views/addProject/CreateFormView.tsx";
+import { ProgressPanelView } from "@shigomori/ui/views/addProject/DialogPartsView.tsx";
+import { ResultsPanelView } from "@shigomori/ui/views/addProject/ResultsPanelView.tsx";
+import { ScanningPanelView } from "@shigomori/ui/views/addProject/ScanningPanelView.tsx";
+import { TerrierOptInView } from "@shigomori/ui/views/addProject/TerrierOptInView.tsx";
 import {
   NewWorktreeBodyView,
   NewWorktreeFormView,
-} from "@/components/newWorktree/NewWorktreeView";
-import { PullRequestSourceView } from "@/components/newWorktree/PullRequestPickerView";
+} from "@shigomori/ui/views/newWorktree/NewWorktreeView.tsx";
+import { PullRequestSourceView } from "@shigomori/ui/views/newWorktree/PullRequestPickerView.tsx";
 import { BranchComboboxView } from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
 import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { ProjectDevicePageView } from "@shigomori/ui/views/shared/ProjectDevicePageView.tsx";

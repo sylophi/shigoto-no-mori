@@ -22,7 +22,7 @@ import {
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { isOverlayOpen } from "@/lib/dom";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";

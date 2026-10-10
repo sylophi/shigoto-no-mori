@@ -33,15 +33,15 @@ import {
   summarize,
   type TidyEntry,
   type TidySort,
-} from "./tidyModel";
+} from "@shigomori/ui/views/tidy/tidyModel.ts";
 import { TidyConfirm } from "./TidyConfirm";
 import {
   TidyBodyView,
   TidyGroupView,
   TidyListView,
   TidyPageView,
-} from "./TidyForestView";
-import { TidyGroupHeadingView } from "./TidyGroupHeadingView";
+} from "@shigomori/ui/views/tidy/TidyForestView.tsx";
+import { TidyGroupHeadingView } from "@shigomori/ui/views/tidy/TidyGroupHeadingView.tsx";
 import { TidyRow } from "./TidyRow";
 import { withToggled } from "@/lib/toggleSet";
 

@@ -1,8 +1,11 @@
 import { Bot } from "lucide-react";
 import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { needLine } from "@/lib/agentNeeds";
-import { AGENT_STATE_VIEW, waitingSession } from "@/lib/agentSessions";
+import { needLine } from "@shigomori/ui/lib/agentNeeds.ts";
+import {
+  AGENT_STATE_VIEW,
+  waitingSession,
+} from "@shigomori/ui/lib/agentSessions.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 

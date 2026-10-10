@@ -31,12 +31,15 @@
 //
 // A primary checkout's mirror (its mode is mirror-branch) has
 // its copy on mirror/<branch> for whatever branch the original is on
-// (shared/git/branches.ts). The original is here, so the follower
+// (contracts/git/branches.ts). The original is here, so the follower
 // reads the peer's state with the mirror/ prefix taken off and sends
 // this side's with it put on, and everything else here (agreement,
 // divergence, the apply) works on one name per side.
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
-import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
+import {
+  mirrorBranchFor,
+  originalBranchOf,
+} from "@shigomori/contracts/git/branches";
 import {
   type GitHead,
   type GitState,

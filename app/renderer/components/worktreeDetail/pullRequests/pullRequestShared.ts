@@ -9,7 +9,7 @@ import {
   MinusCircle,
 } from "lucide-react";
 import { openExternalUrl } from "@/lib/openExternal";
-import type { PullRequestTone } from "@/lib/pullRequest";
+import type { PullRequestTone } from "@shigomori/ui/lib/pullRequest.ts";
 import type {
   PullRequestCheckBucket,
   PullRequestDetail,

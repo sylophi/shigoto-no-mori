@@ -15,7 +15,10 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { errorMessageOf, isContractError } from "@shigomori/contracts/errors";
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import {
+  pullLandingBranch,
+  pullWorktreeName,
+} from "@shigomori/contracts/git/branches";
 import { isRealBranch } from "@shigomori/contracts/schemas";
 import {
   type TransferFilesResult,

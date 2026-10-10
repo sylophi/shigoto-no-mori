@@ -5,7 +5,7 @@
 // stack as a rail in the same order. Merged rows stay: a stack whose
 // bottom landed is still that stack until the rest follows.
 import { GitBranch } from "lucide-react";
-import { describePullRequest } from "@/lib/pullRequest";
+import { describePullRequest } from "@shigomori/ui/lib/pullRequest.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas";

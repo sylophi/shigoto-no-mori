@@ -14,7 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
-import { pluralize } from "./pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import {
   deriveRemoteSyncState,
   syncWaitsForCleanTree,

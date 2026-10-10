@@ -9,7 +9,7 @@
 // match, so the gate at the call sites is UX, not the wall. Refusals
 // surface centrally, and the outcome is the caller's to report: the
 // dialog's last step is the report.
-import { pullWorktreeName } from "@shared/git/branches";
+import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
   type QueryClient,
   useMutation,

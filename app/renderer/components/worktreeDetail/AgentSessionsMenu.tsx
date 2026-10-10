@@ -6,7 +6,7 @@ import {
   useResumeAgent,
   useUnbindAgent,
 } from "@/hooks/worktrees/useWorktreeMutations";
-import { canResume } from "@/lib/agentSessions";
+import { canResume } from "@shigomori/ui/lib/agentSessions.ts";
 import type { AgentSession, Worktree } from "@shigomori/contracts/schemas";
 import { AgentSessionsMenuView, SessionRowView } from "./AgentSessionsMenuView";
 

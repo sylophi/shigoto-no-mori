@@ -45,7 +45,7 @@ import {
 import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { MirrorConflictsChipView } from "@/components/worktreeDetail/MirrorConflictsView";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   getBrowseLeafSegment,

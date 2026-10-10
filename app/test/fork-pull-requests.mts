@@ -19,7 +19,10 @@
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { ownBranchPullRequest, ownBranchPullRequests } from "@/lib/pullRequest";
+import {
+  ownBranchPullRequest,
+  ownBranchPullRequests,
+} from "@shigomori/ui/lib/pullRequest.ts";
 import {
   getWorktreePullRequest,
   refreshProjectPullRequests,

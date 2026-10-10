@@ -33,7 +33,7 @@ import {
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { mappedPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
 import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
-import { AgentItemView } from "./LiveItemsView";
+import { AgentItemView } from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import {
   DeviceHeadingView,
   LiveCardView,
@@ -43,7 +43,7 @@ import {
   PeerPortView,
   PortReadoutView,
   PortsStripView,
-} from "./LiveCardView";
+} from "@shigomori/ui/views/live/LiveCardView.tsx";
 import type { LiveCard as LiveCardModel } from "./liveModel";
 
 // A device's heading over its cards: its mark in its connection tone,

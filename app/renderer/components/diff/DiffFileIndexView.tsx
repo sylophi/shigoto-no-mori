@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";

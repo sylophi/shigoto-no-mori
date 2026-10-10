@@ -3,7 +3,7 @@ import {
   type TerminalFeed,
   type TerminalScreen,
   TerminalView,
-} from "@/components/terminal/TerminalView";
+} from "@shigomori/ui/views/terminal/TerminalView.tsx";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
@@ -13,7 +13,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { ScriptConsoleView } from "./ScriptConsoleView";
+import { ScriptConsoleView } from "@shigomori/ui/views/scriptConsole/ScriptConsoleView.tsx";
 
 // A script's console in the drawer, on whichever device the scope
 // names: its run-a-slot state, and the run's output in a terminal. The

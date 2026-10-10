@@ -1,4 +1,4 @@
-import { describePullRequest } from "@/lib/pullRequest";
+import { describePullRequest } from "@shigomori/ui/lib/pullRequest.ts";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { PullRequest } from "@shigomori/contracts/schemas";
 import { StatusPillView } from "./StatusPillView";

@@ -5,7 +5,7 @@ import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullR
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import { rankByScore, scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { LucideIcon } from "lucide-react";
-import { sanitizeBranchName } from "@shared/git/branches";
+import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import { isHiddenByPrefix } from "@shared/sharedSettings";
 import {

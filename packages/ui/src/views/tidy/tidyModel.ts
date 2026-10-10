@@ -1,0 +1,212 @@
+import {
+  deriveHygieneVerdict,
+  type HygieneVerdict,
+  type HygieneVerdictKind,
+  type Project,
+  type Worktree,
+  type WorktreeDiskUsage,
+  type WorktreeHygiene,
+} from "@shigomori/contracts/schemas/index";
+
+// One row on the tidy page: the worktree, the project it belongs to, and
+// everything we judged about it. `disk` is undefined until that
+// worktree's walk lands.
+export interface TidyEntry {
+  worktree: Worktree;
+  // Carried on the row because the page spans every project: without it
+  // two worktrees called "misty-otter" in different repos are
+  // indistinguishable, and the confirm step would name a directory the
+  // user can't place.
+  project: Project;
+  verdict: HygieneVerdict;
+  disk: WorktreeDiskUsage | undefined;
+  // True when the walk failed rather than simply not having finished.
+  // The row shows a dash instead of waiting forever.
+  diskFailed: boolean;
+  // The last commit's date, and what the Age sort uses. Null for a
+  // worktree with no commits at all.
+  //
+  // Deliberately not backfilled from file mtimes: `git worktree add`
+  // stamps every checked-out file with the current time, so a worktree
+  // branched from year-old work would report itself as seconds old.
+  // The row renders this as "committed X ago", which a mtime isn't.
+  // File activity is surfaced separately as `lastActivityAt`.
+  ageAt: number | null;
+  // Newest mtime outside dependency/build dirs. Meaningful mainly for a
+  // worktree that has been edited since its last commit.
+  lastActivityAt: number | null;
+}
+
+export type TidySort = "recommended" | "size" | "age" | "project";
+
+export const TIDY_SORT_OPTIONS = [
+  { value: "recommended" as const, label: "Recommended" },
+  { value: "size" as const, label: "Size" },
+  { value: "age" as const, label: "Age" },
+  { value: "project" as const, label: "Project" },
+];
+
+// Display order when sorting by "Recommended": the removable ones first,
+// then increasingly attached work, with the project's default branch
+// pinned last since removing it would delete the branch itself.
+const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
+  merged: 0,
+  absorbed: 1,
+  unknown: 2,
+  active: 3,
+  unpushed: 4,
+  dirty: 5,
+  defaultBranch: 6,
+};
+
+export function buildTidyEntries(
+  projects: readonly Project[],
+  worktreesByProject: Map<string, readonly Worktree[]>,
+  hygieneById: Map<string, WorktreeHygiene>,
+  diskById: Map<string, WorktreeDiskUsage>,
+  diskFailedIds: ReadonlySet<string>,
+): TidyEntry[] {
+  return projects.flatMap((project) =>
+    (worktreesByProject.get(project.id) ?? []).map((worktree) => {
+      const hygiene = hygieneById.get(worktree.id);
+      const disk = diskById.get(worktree.id);
+      return {
+        worktree,
+        project,
+        disk,
+        diskFailed: diskFailedIds.has(worktree.id),
+        verdict: deriveHygieneVerdict(worktree, hygiene),
+        ageAt: hygiene?.lastCommitAt ?? null,
+        lastActivityAt: disk?.lastActivityAt ?? null,
+      };
+    }),
+  );
+}
+
+// A worktree whose size hasn't landed sorts as 0 and an unknown age
+// sorts as "newest", so unmeasured rows sink to the bottom rather than
+// jumping to the top of a destructive list. Sizes are
+// `reclaimableBytes`, what removal would free, never the footprint.
+const bytes = (entry: TidyEntry) => entry.disk?.reclaimableBytes ?? 0;
+const age = (entry: TidyEntry) => entry.ageAt ?? Number.MAX_SAFE_INTEGER;
+const rank = (entry: TidyEntry) => VERDICT_RANK[entry.verdict.kind];
+
+// Every byte total on the page (headline, per project, per selection)
+// goes through here, so "a row still being walked counts as zero" is
+// stated once and every figure is a floor in the same way.
+export function sumBytes(entries: TidyEntry[]): number {
+  return entries.reduce((total, entry) => total + bytes(entry), 0);
+}
+
+export function sortTidyEntries(
+  entries: TidyEntry[],
+  sort: TidySort,
+): TidyEntry[] {
+  return entries.toSorted((a, b) => {
+    if (sort === "size") return bytes(b) - bytes(a);
+    if (sort === "age") return age(a) - age(b);
+    if (sort === "project") {
+      // Keeps every project's rows contiguous so the list can be broken
+      // into labelled groups, and orders within a project exactly the
+      // way "Recommended" would. Two projects can share a name (the name
+      // is a directory basename), so the id breaks the tie rather than
+      // letting their rows interleave into duplicate groups.
+      const byProject =
+        a.project.name.localeCompare(b.project.name) ||
+        a.project.id.localeCompare(b.project.id);
+      if (byProject !== 0) return byProject;
+      return rank(a) - rank(b) || bytes(b) - bytes(a);
+    }
+    return rank(a) - rank(b) || bytes(b) - bytes(a);
+  });
+}
+
+export interface TidyGroup {
+  project: Project;
+  entries: TidyEntry[];
+  // Measured bytes across the group, so a project's header can carry the
+  // number that decides whether it is worth opening at all.
+  bytes: number;
+}
+
+// Splits an already-sorted list into the runs of one project each. Only
+// the "Project" sort produces contiguous runs, so this is only asked for
+// there. Every other sort is deliberately one flat cross-project list.
+export function groupByProject(entries: TidyEntry[]): TidyGroup[] {
+  const groups: TidyGroup[] = [];
+  for (const entry of entries) {
+    const last = groups.at(-1);
+    if (last?.project.id === entry.project.id) last.entries.push(entry);
+    else groups.push({ project: entry.project, entries: [entry], bytes: 0 });
+  }
+  for (const group of groups) group.bytes = sumBytes(group.entries);
+  return groups;
+}
+
+// The rows we are willing to tick on the user's behalf, and the only
+// rule that decides it. Nothing dirty, unmerged or detached is ever in
+// here. That is the whole safety guarantee of the page, so the page
+// reads its "safe to remove" count off this same list rather than
+// re-filtering with its own copy of the predicate.
+export function safeToRemove(entries: TidyEntry[]): TidyEntry[] {
+  return entries.filter((entry) => entry.verdict.safe);
+}
+
+// How many distinct projects a set of rows reaches into. The headline
+// stat asks it of every row and the confirm step asks it of the ticked
+// ones, so both ask the same way and neither can drift from the list
+// they describe.
+export function projectCount(entries: TidyEntry[]): number {
+  return new Set(entries.map((entry) => entry.project.id)).size;
+}
+
+export interface TidySummary {
+  selected: TidyEntry[];
+  // Selected rows the page would not have ticked itself. Non-empty means
+  // the confirm step demands an extra acknowledgement.
+  risky: TidyEntry[];
+  // How many distinct projects the selection reaches into. The confirm
+  // step leads with this: removing worktrees from four repos at once is
+  // a different act from tidying one.
+  projectCount: number;
+  // Bytes freed by the current selection, counting only measured rows.
+  reclaimBytes: number;
+  // True when some selected row hasn't finished measuring, so the
+  // reclaim figure is a floor.
+  reclaimPartial: boolean;
+}
+
+export function summarize(
+  entries: TidyEntry[],
+  selected: ReadonlySet<string>,
+): TidySummary {
+  const picked = entries.filter((entry) => selected.has(entry.worktree.id));
+  return {
+    selected: picked,
+    risky: picked.filter((entry) => !entry.verdict.safe),
+    projectCount: projectCount(picked),
+    reclaimBytes: sumBytes(picked),
+    reclaimPartial: picked.some((entry) => entry.disk === undefined),
+  };
+}
+
+// The disk walks' progress across the page, as the app's
+// useWorktreeHygiene sums it.
+export interface DiskUsageTotals {
+  byId: Map<string, WorktreeDiskUsage>;
+  // Worktrees whose walk failed outright, usually one that went away
+  // mid-measure. Distinct from "not measured yet", which is what an
+  // absent entry means, so the row can stop waiting on it.
+  failed: Set<string>;
+  // Reclaimable bytes summed over the worktrees that have finished
+  // measuring, so the total can be shown climbing rather than withheld
+  // until the end.
+  measuredBytes: number;
+  measuredCount: number;
+  totalCount: number;
+  // True while at least one walk is still running.
+  measuring: boolean;
+  // True when any finished walk hit unreadable entries, making the total
+  // a floor. The UI marks the figure approximate.
+  partial: boolean;
+}

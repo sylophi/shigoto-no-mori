@@ -10,7 +10,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { BranchRow } from "./BranchRow";
 import { NewBranchForm } from "./NewBranchForm";
-import { ManageBranchesView } from "./ManageBranchesView";
+import { ManageBranchesView } from "@shigomori/ui/views/manageBranches/ManageBranchesView.tsx";
 
 export function ManageBranches() {
   return (

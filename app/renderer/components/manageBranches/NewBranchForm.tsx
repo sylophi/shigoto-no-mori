@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { useCreateBranch } from "@/hooks/git/useBranches";
-import { NewBranchFormView } from "./NewBranchFormView";
+import { NewBranchFormView } from "@shigomori/ui/views/manageBranches/NewBranchFormView.tsx";
 
 export function NewBranchForm({
   projectId,

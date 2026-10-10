@@ -15,17 +15,20 @@ import {
   useLiveMirrors,
   useRunningScripts,
 } from "@/hooks/live/useLiveActivity";
-import { agentsNeedYou } from "@/lib/agentNeeds";
+import { agentsNeedYou } from "@shigomori/ui/lib/agentNeeds.ts";
 import { useWaitingAgents } from "@/lib/agentWatch";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
-import { LiveDeviceSectionView, LivePageView } from "./LivePageView";
+import {
+  LiveDeviceSectionView,
+  LivePageView,
+} from "@shigomori/ui/views/live/LivePageView.tsx";
 import { buildLive, countLive, type LiveDevice } from "./liveModel";
 
 // "1 agent needs you, with 2 scripts, 1 port forward and 1 mirror

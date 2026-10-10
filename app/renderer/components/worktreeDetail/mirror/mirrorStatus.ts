@@ -13,7 +13,7 @@ import {
   type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
 import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
 // The states in which files cross or are written. The engine passes
 // through them on every cycle, but only stays long enough to be seen

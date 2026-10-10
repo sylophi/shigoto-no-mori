@@ -1,7 +1,7 @@
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useResetSoft } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import type { Worktree } from "@shigomori/contracts/schemas";

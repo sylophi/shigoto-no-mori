@@ -23,7 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find

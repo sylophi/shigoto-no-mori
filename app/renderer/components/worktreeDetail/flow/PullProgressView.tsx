@@ -21,9 +21,12 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { formatBytes } from "@/lib/formatBytes";
-import { pluralize } from "@/lib/pluralize";
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import { formatBytes } from "@shigomori/ui/lib/formatBytes.ts";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import {
+  pullLandingBranch,
+  pullWorktreeName,
+} from "@shigomori/contracts/git/branches";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { LandingTarget } from "./cloneDestination";
 import type { CreatePlan } from "./createPlan";

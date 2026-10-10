@@ -6,7 +6,7 @@ import {
   useWorktreeStashes,
 } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { StashListView } from "./StashListView";
 

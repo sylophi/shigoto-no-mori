@@ -5,7 +5,10 @@ import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Project } from "@shigomori/contracts/schemas";
 import { LocationForm } from "./LocationForm";
-import { LocationPaneView, LocationSkeletonView } from "./WorktreeLocationView";
+import {
+  LocationPaneView,
+  LocationSkeletonView,
+} from "@shigomori/ui/views/worktreeLocation/WorktreeLocationView.tsx";
 
 export function WorktreeLocation() {
   return (

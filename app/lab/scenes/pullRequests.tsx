@@ -22,7 +22,7 @@ import {
   describeMergeState,
   describeMergeVerdict,
   sortChecksWorstFirst,
-} from "@/lib/pullRequest";
+} from "@shigomori/ui/lib/pullRequest.ts";
 import { pullRequestStackFor } from "@shared/pullRequestStack";
 import type {
   PullRequest,

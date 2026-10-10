@@ -6,7 +6,7 @@ import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
 import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import type {
   IntegrateMethod,
   MergePreview,

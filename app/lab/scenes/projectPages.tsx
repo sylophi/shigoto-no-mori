@@ -25,7 +25,7 @@ import {
   OnlyInWorktreesView,
 } from "@/components/configure/OnlyInWorktreesView";
 import { WorktreeLocationFieldView } from "@/components/configure/WorktreeLocationFieldView";
-import { ConvertExternalView } from "@/components/convertExternal/ConvertExternalView";
+import { ConvertExternalView } from "@shigomori/ui/views/convertExternal/ConvertExternalView.tsx";
 import {
   ProjectGridLayoutView,
   ProjectGridView,
@@ -34,22 +34,22 @@ import {
 import {
   BranchDeleteDialogView,
   BranchRowView,
-} from "@/components/manageBranches/BranchRowView";
+} from "@shigomori/ui/views/manageBranches/BranchRowView.tsx";
 import {
   LocalBranchListView,
   ManageBranchesView,
   RemoteBranchesView,
-} from "@/components/manageBranches/ManageBranchesView";
-import { NewBranchFormView } from "@/components/manageBranches/NewBranchFormView";
-import { TidyConfirmView } from "@/components/tidy/TidyConfirmView";
+} from "@shigomori/ui/views/manageBranches/ManageBranchesView.tsx";
+import { NewBranchFormView } from "@shigomori/ui/views/manageBranches/NewBranchFormView.tsx";
+import { TidyConfirmView } from "@shigomori/ui/views/tidy/TidyConfirmView.tsx";
 import {
   TidyBodyView,
   TidyGroupView,
   TidyListView,
   TidyPageView,
-} from "@/components/tidy/TidyForestView";
-import { TidyGroupHeadingView } from "@/components/tidy/TidyGroupHeadingView";
-import { TidyRowView } from "@/components/tidy/TidyRowView";
+} from "@shigomori/ui/views/tidy/TidyForestView.tsx";
+import { TidyGroupHeadingView } from "@shigomori/ui/views/tidy/TidyGroupHeadingView.tsx";
+import { TidyRowView } from "@shigomori/ui/views/tidy/TidyRowView.tsx";
 import {
   buildTidyEntries,
   groupByProject,
@@ -57,14 +57,14 @@ import {
   sortTidyEntries,
   sumBytes,
   summarize,
-} from "@/components/tidy/tidyModel";
+} from "@shigomori/ui/views/tidy/tidyModel.ts";
 import { LeaveOutPickerView } from "@/components/worktreeDetail/flow/LeaveOutPickerView";
-import { LocationFormView } from "@/components/worktreeLocation/LocationFormView";
+import { LocationFormView } from "@shigomori/ui/views/worktreeLocation/LocationFormView.tsx";
 import {
   LocationPaneView,
   LocationSkeletonView,
-} from "@/components/worktreeLocation/WorktreeLocationView";
-import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
+} from "@shigomori/ui/views/worktreeLocation/WorktreeLocationView.tsx";
+import { LAYOUT_OPTIONS } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   forests,

@@ -5,7 +5,7 @@
 // host's history no longer reaches back that far, starts over from all
 // of it.
 import { isUnknownTerminalError } from "@shigomori/contracts/errors";
-import type { TerminalScreen } from "@/components/terminal/TerminalView";
+import type { TerminalScreen } from "@shigomori/ui/views/terminal/TerminalView.tsx";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 
 // A view not started yet stops nothing.

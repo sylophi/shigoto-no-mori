@@ -16,7 +16,10 @@ import {
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { pullRequestMutationKey } from "@/hooks/projects/useProjectPullRequests";
-import { mergeStateSettling, ownBranchPullRequest } from "@/lib/pullRequest";
+import {
+  mergeStateSettling,
+  ownBranchPullRequest,
+} from "@shigomori/ui/lib/pullRequest.ts";
 
 // How often, and for how long, to re-ask while GitHub is still
 // computing the merge state. Some PRs sit at UNKNOWN until something

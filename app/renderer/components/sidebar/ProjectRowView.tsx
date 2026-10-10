@@ -2,7 +2,7 @@
 // how many worktrees it holds on the list, and its actions.
 import type { ReactNode } from "react";
 import type { DraggableAttributes } from "@dnd-kit/core";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function ProjectRowView({

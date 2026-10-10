@@ -17,8 +17,8 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
-import { needView } from "@/lib/agentNeeds";
-import { harnessLabel } from "@/lib/agentSessions";
+import { needView } from "@shigomori/ui/lib/agentNeeds.ts";
+import { harnessLabel } from "@shigomori/ui/lib/agentSessions.ts";
 import { documentFocused } from "@/lib/focus";
 import { hasLocalHost } from "@/lib/localHost";
 import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";

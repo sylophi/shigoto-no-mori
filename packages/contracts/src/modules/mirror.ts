@@ -69,7 +69,7 @@ export {
 // What kind of session it is, one label the host writes at the start
 // (host/mirror/registry.ts modeOf reads it): "mirror", "mirror-branch"
 // for a primary checkout's mirror (the copy sits on mirror/<branch> for
-// whatever branch the original is on, shared/git/branches.ts, and the
+// whatever branch the original is on, contracts/git/branches.ts, and the
 // git follower reads the two names as one branch), or
 // "transfer-<token>" for the session a pull opens to carry a
 // transplant's ignored files across once (host/mirror/oneShot.ts),

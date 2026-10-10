@@ -17,8 +17,12 @@ import {
   agentSessionsState,
   harnessLabel,
   waitingSession,
-} from "@/lib/agentSessions";
-import { needLine, needView, stateLabel } from "@/lib/agentNeeds";
+} from "@shigomori/ui/lib/agentSessions.ts";
+import {
+  needLine,
+  needView,
+  stateLabel,
+} from "@shigomori/ui/lib/agentNeeds.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { AgentSession } from "@shigomori/contracts/schemas";
 import { FooterVerbView, LABEL_RANK } from "./FooterVerbView";

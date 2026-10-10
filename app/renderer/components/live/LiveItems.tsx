@@ -33,7 +33,7 @@ import {
   MirrorSessionItemView,
   MirrorStreamItemView,
   ScriptItemView,
-} from "./LiveItemsView";
+} from "@shigomori/ui/views/live/LiveItemsView.tsx";
 
 // A device inline, by its id.
 function DeviceName({ deviceId }: { deviceId: string }) {

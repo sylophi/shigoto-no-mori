@@ -20,8 +20,8 @@ import {
   PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
   pullRequestBlockedBy,
   pullRequestFolderName,
-} from "@/lib/pullRequest";
-import { localBranchOf } from "@shared/git/branches";
+} from "@shigomori/ui/lib/pullRequest.ts";
+import { localBranchOf } from "@shigomori/contracts/git/branches";
 import {
   isRealBranch,
   type CreateWorktreeResult,
@@ -29,12 +29,12 @@ import {
   type PullRequestCandidate,
   type Worktree,
 } from "@shigomori/contracts/schemas";
-import { PullRequestSourceView } from "./PullRequestPickerView";
+import { PullRequestSourceView } from "@shigomori/ui/views/newWorktree/PullRequestPickerView.tsx";
 import {
   NewWorktreeBodyView,
   NewWorktreeFormView,
   type NewWorktreeMode,
-} from "./NewWorktreeView";
+} from "@shigomori/ui/views/newWorktree/NewWorktreeView.tsx";
 
 // The source the form opens on. Gives way to "branch-from" when the
 // pull request source turns out to be unavailable here.

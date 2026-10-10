@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
 import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
-import { makeIgnoreMatcher } from "@shared/git/gitPaths";
+import { makeIgnoreMatcher } from "@shigomori/contracts/git/gitPaths";
 import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
 import { CarryOverSectionView } from "./CarryOverSectionView";
