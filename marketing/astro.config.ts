@@ -18,10 +18,10 @@ const app = resolve(dirname(fileURLToPath(import.meta.url)), "../app");
 
 // The modules the app shares with the ui package (React, Base UI,
 // effect, ...) resolve once, from the app, as in every build of the
-// renderer tree (app/vite.dedupe.ts). Vite's own dedupe resolves from
-// this package instead, which holds none of them but React.
+// renderer tree (app/vite.dedupe.ts). Vite's own dedupe would resolve
+// them from this package instead, which holds none of them but React.
 function resolveSharedFromApp(): Plugin {
-  const shared = new Set([...dedupe, "react", "react-dom"]);
+  const shared = new Set(dedupe);
   const from = resolve(app, "package.json");
   return {
     name: "resolve-shared-from-app",
@@ -113,7 +113,6 @@ export default defineConfig({
     define: fixtureDefine,
     // The app's stylesheet stops at the frames' roots.
     css: { postcss: { plugins: [insideTheRoot()] } },
-
     plugins: [
       resolveSharedFromApp(),
       pageHasAppStylesheets(),
