@@ -1,16 +1,14 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, type Ref, useState } from "react";
 import { Heart } from "lucide-react";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { StationeryPrint } from "@/components/villagers/StationeryPrint";
-import { FaceStamp } from "@/components/villagers/VillagerLetter";
+import { StationeryPrintView } from "@/components/villagers/StationeryPrintView";
+import { FaceStampView } from "@/components/villagers/VillagerLetterView";
 import {
-  Nameplate,
+  NameplateView,
   villagerInk,
-} from "@/components/villagers/VillagerDialogue";
+} from "@/components/villagers/VillagerDialogueView";
 import { useFaceColor } from "@/hooks/villagers/useFaceColor";
-import { useVillagerFace } from "@/hooks/villagers/useVillagers";
-import { useSeen } from "@/hooks/ui/useSeen";
 import { useNow } from "@/hooks/ui/useNow";
 import { useToday } from "@/hooks/ui/useToday";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -47,19 +45,21 @@ export const ALBUM_GRID =
 // once: nobody waits on the five-hundredth.
 const STAGGERED = 24;
 
-export function VisitorSlot({
+export function VisitorSlotView({
   entry,
   index,
   bestFriend,
+  face,
+  slotRef,
 }: {
   entry: AlbumEntry;
   index: number;
   // The one villager met most (Album.bestFriend), whose sticker says so.
   bestFriend: boolean;
+  // Their face, once loaded: it loads once the slot is scrolled near.
+  face: string | null;
+  slotRef?: Ref<HTMLDivElement>;
 }) {
-  // A face loads once its slot is scrolled near.
-  const [ref, seen] = useSeen<HTMLDivElement>();
-  const face = useVillagerFace(seen ? entry.slug : null);
   // The pop is on the slot and not the sticker: doubutsu takes over a
   // button's animation while it is hovered or pressed, and handing it
   // back would play the pop again. The slot is what's hovered too,
@@ -67,7 +67,7 @@ export function VisitorSlot({
   // pointer.
   return (
     <div
-      ref={ref}
+      ref={slotRef}
       style={{ animationDelay: `${Math.min(index, STAGGERED) * 30}ms` }}
       className={`visitor-pop group/sticker ${ALBUM_SLOT}`}
     >
@@ -161,7 +161,7 @@ function StickerFront({
       className={cn(FACE_SIDE, "bg-card px-2.5 pt-7 pb-3 shadow-sm")}
     >
       {rarity === "legendary" && (
-        <StationeryPrint paper={paper} className="opacity-20" />
+        <StationeryPrintView paper={paper} className="opacity-20" />
       )}
       {rarity === "rare" && (
         <span
@@ -184,7 +184,7 @@ function StickerFront({
       <span className="relative flex size-16 items-center justify-center">
         {face !== null &&
           (rarity === "legendary" ? (
-            <FaceStamp
+            <FaceStampView
               face={face}
               tint={paper.color}
               className="size-full rotate-3 bg-popover transition-transform duration-300 group-hover/sticker:rotate-0"
@@ -198,9 +198,9 @@ function StickerFront({
       </span>
       <span className="relative mt-2 flex h-5 max-w-full items-center">
         {rarity === "rare" ? (
-          <Nameplate className="truncate px-2 text-xs">
+          <NameplateView className="truncate px-2 text-xs">
             {profile.name}
-          </Nameplate>
+          </NameplateView>
         ) : (
           <span
             className={cn(

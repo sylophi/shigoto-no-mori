@@ -3,7 +3,7 @@ import {
   VillagerFaceView,
   VillagerSaysView,
 } from "@/components/shared/VillagerSaysView";
-import { BirthdayFace } from "@/components/villagers/BirthdayFace";
+import { BirthdayFaceView } from "@/components/villagers/BirthdayFaceView";
 import { useToday } from "@/hooks/ui/useToday";
 import {
   useVillagerFace,
@@ -41,7 +41,7 @@ export function VillagerMovingIn({ folderName }: { folderName: string }) {
       {" "}
       {face &&
         (birthday ? (
-          <BirthdayFace face={face} className={cn(faceClass, "mt-1")} />
+          <BirthdayFaceView face={face} className={cn(faceClass, "mt-1")} />
         ) : (
           <VillagerFaceView face={face} className={faceClass} />
         ))}

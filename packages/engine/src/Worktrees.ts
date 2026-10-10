@@ -75,8 +75,8 @@ import {
 import * as WorktreeData from "./WorktreeData.ts";
 import {
   cleanPath,
-  driveBaseOf,
   isManagedPath,
+  ownedLevels,
   worktreeIdFromPath,
 } from "./worktreeLayout.ts";
 
@@ -2442,23 +2442,14 @@ const make = Effect.gen(function* () {
       );
     });
 
-  // Removes the folders a worktree leaves empty when they are ours: the
-  // project's folder under the managed root, the in-project base, and the
-  // managed root on the project's drive, whole once the last project
-  // leaves it.
+  // Removes the folders a worktree leaves empty when they are ours.
   const pruneEmptyParents = (worktreePath: string, projectPath: string) =>
     Effect.gen(function* () {
       const parent = path.dirname(worktreePath);
-      const place = { dataDir: paths.dataDir, dataDirName: paths.dataDirName };
-      const levels =
-        parent ===
-        path.join(paths.dataDir, "worktrees", path.basename(projectPath))
-          ? 1
-          : parent === path.join(projectPath, ".shigomori", "worktrees")
-            ? 2
-            : parent === driveBaseOf(projectPath, place)
-              ? 3
-              : 0;
+      const levels = ownedLevels(parent, projectPath, {
+        dataDir: paths.dataDir,
+        dataDirName: paths.dataDirName,
+      });
       // rmdir, which takes only an empty folder: something written there
       // since keeps it.
       let dir = parent;

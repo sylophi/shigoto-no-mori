@@ -1,14 +1,14 @@
 import { Cake } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Resident } from "@/hooks/villagers/useResident";
-import { BirthdayFace } from "./BirthdayFace";
+import { BirthdayFaceView } from "./BirthdayFaceView";
 
 // The cake a worktree row wears on its villager's birthday, with their
 // party-hatted face in the tooltip. Nothing on any other day, or for any
 // other name, whichever device the worktree lives on. The row already
 // holds its resident (useResident), so it hands it over rather than
 // have the badge look them up again.
-export function BirthdayBadge({ resident }: { resident: Resident | null }) {
+export function BirthdayBadgeView({ resident }: { resident: Resident | null }) {
   if (!resident?.birthday) return null;
   const tip = `${resident.profile.name}'s birthday today`;
   return (
@@ -16,7 +16,7 @@ export function BirthdayBadge({ resident }: { resident: Resident | null }) {
       tip={
         <span className="flex items-center gap-2">
           {resident.face && (
-            <BirthdayFace face={resident.face} className="mt-1 size-6" />
+            <BirthdayFaceView face={resident.face} className="mt-1 size-6" />
           )}
           {tip}
         </span>

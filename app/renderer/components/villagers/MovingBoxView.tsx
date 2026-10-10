@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 // A cardboard moving box, flaps open and taped down the middle: what a
 // villager moving out is packed into. Drawn flat, in the amber the theme
 // remaps. Size it with `className` (a width: it keeps its own aspect).
-export function MovingBox({ className }: { className?: string }) {
+export function MovingBoxView({ className }: { className?: string }) {
   return (
     <svg
       aria-hidden

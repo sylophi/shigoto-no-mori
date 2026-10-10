@@ -34,8 +34,9 @@ import { it } from "vitest";
 // bare stand-in is enough to load them under node.
 // @ts-expect-error a bare stand-in, not the whole preload api
 globalThis.window = { api: { deviceId: "village-life-check" } };
-const { fromConfig, toClientConfig, toDeviceSettingsPatch } =
+const { toClientConfig, toDeviceSettingsPatch } =
   await import("@/hooks/config/useSettingsSave");
+const { fromConfig } = await import("@/hooks/config/settingsForm");
 
 it("unset, each setting reads off", () => {
   assert.equal(doubutsuNamesEnabled({}), false);

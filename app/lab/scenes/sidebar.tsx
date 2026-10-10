@@ -3,6 +3,7 @@
 // the brand header, the device filter, the view's own controls and
 // rows, and the footer. The rows are the app's own (buildSidebarRows,
 // buildInboxRows) over the fixture forests.
+import type { ReactNode } from "react";
 import type { SidebarView } from "@shigomori/contracts/schemas";
 import { AddProjectButtonView } from "@/components/sidebar/AddProjectButtonView";
 import {
@@ -34,6 +35,7 @@ import {
   SidebarScrollerView,
   ViewPaneView,
 } from "@/components/sidebar/SidebarFrameView";
+import { SidebarTakeoverSlotView } from "@/components/sidebar/SidebarTakeoverView";
 import {
   SidebarFooterView,
   SidebarNavActionsView,
@@ -415,6 +417,7 @@ export function SceneSidebar({
   selected = null,
   footer = true,
   pathname = "/",
+  takeover,
 }: {
   shell?: SceneShell;
   view: SidebarView;
@@ -426,6 +429,8 @@ export function SceneSidebar({
   footer?: boolean;
   // The page on screen, whose footer button lights.
   pathname?: string;
+  // A page's own list, in place of the forest (SidebarTakeoverView).
+  takeover?: ReactNode;
 }) {
   const hasLocalHost = shell === "desktop";
   const inbox = view === "inbox";
@@ -439,7 +444,7 @@ export function SceneSidebar({
         showDevStyle={false}
         onRevealProd={noop}
       />
-      <ForestSlotView takenOver={false} handedOver={false}>
+      <ForestSlotView takenOver={takeover !== undefined} handedOver={false}>
         <DeviceFilterBarView
           choices={filterChoices(shell)}
           selectedId={ALL_DEVICES}
@@ -494,7 +499,7 @@ export function SceneSidebar({
             <SidebarEmptyStateView message={model.emptyMessage} />
           </SidebarScrollerView>
         </ViewPaneView>
-        {footer && (
+        {footer && takeover === undefined && (
           <SidebarFooterView
             toggle={<SidebarViewToggleView view={view} onChange={noop} />}
             actions={
@@ -509,6 +514,9 @@ export function SceneSidebar({
           />
         )}
       </ForestSlotView>
+      {takeover !== undefined && (
+        <SidebarTakeoverSlotView>{takeover}</SidebarTakeoverSlotView>
+      )}
     </SidebarAsideView>
   );
 }

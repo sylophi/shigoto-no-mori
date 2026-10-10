@@ -27,7 +27,7 @@ const seedProject = (files: Record<string, string>) => {
     projects: [{ id: "P1", name: "repo", path: repo }],
   });
   const tree = (name: string) => {
-    const path = join(repo, ".shigomori", "worktrees", name);
+    const path = join(repo, ".shigomori", "wt", name);
     box.git(repo, "worktree", "add", "-q", "-b", name, path);
     return path;
   };

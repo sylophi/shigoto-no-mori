@@ -1,11 +1,11 @@
 import { type CSSProperties, useState } from "react";
 import { stationeryFor } from "@/lib/villagers/stationery";
-import { StationeryPrint } from "./StationeryPrint";
+import { StationeryPrintView } from "./StationeryPrintView";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
-import { NextArrow } from "./NextArrow";
-import { MoveCaption } from "./VillagerDialogue";
-import { TypedWords } from "./TypedWords";
+import { NextArrowView } from "./NextArrowView";
+import { MoveCaptionView } from "./VillagerDialogueView";
+import { TypedWordsView } from "./TypedWordsView";
 
 // A legendary character's news: a letter on their own stationery that
 // arrives as a small scene (DESIGN.md, "Village life: rarity", with the
@@ -23,7 +23,7 @@ const PERFORATED: CSSProperties = {
   mask: "linear-gradient(#000 0 0) content-box, radial-gradient(circle, transparent 1.9px, #000 2.3px) -4px -4px / 8px 8px padding-box",
 };
 
-export function VillagerLetter({
+export function VillagerLetterView({
   news,
   speaker,
   words,
@@ -46,13 +46,13 @@ export function VillagerLetter({
       >
         {/* The stationery's print, over the paper and under the page
             written on. */}
-        <StationeryPrint paper={paper} className="opacity-55" />
+        <StationeryPrintView paper={paper} className="opacity-55" />
         <div className="villager-rise relative rounded-xl bg-popover/90 px-4 pt-3 pb-2.5">
           <div className="pr-14">
-            <MoveCaption news={news} ink={paper.ink} />
+            <MoveCaptionView news={news} ink={paper.ink} />
           </div>
           <p className="mt-1 bg-[linear-gradient(transparent_calc(100%-1px),color-mix(in_oklab,var(--color-amber-400)_40%,transparent)_0)] bg-size-[100%_1.75rem] text-[15px] leading-7 font-medium">
-            <TypedWords
+            <TypedWordsView
               words={words}
               delayMs={WORDS_AT}
               letterMs={LETTER_MS}
@@ -66,7 +66,7 @@ export function VillagerLetter({
             farewell={farewell}
           />
         </div>
-        <NextArrow
+        <NextArrowView
           shown={signed}
           className={cn("absolute right-4 bottom-1", paper.ink)}
         />
@@ -143,7 +143,7 @@ function Signature({
 // Their face on a postage stamp with perforated edges, over a wash of
 // their stationery's color (`tint`). Size, lean and placement are the
 // caller's, and so is the stamp's paper (a background utility).
-export function FaceStamp({
+export function FaceStampView({
   face,
   tint,
   className,
@@ -211,7 +211,7 @@ function Stamp({
         aria-hidden
         className="villager-stamp-drop absolute top-0 right-0 z-10 rotate-6"
       >
-        <FaceStamp face={face} tint={tint} className="size-14 bg-popover" />
+        <FaceStampView face={face} tint={tint} className="size-14 bg-popover" />
       </span>
       <svg
         aria-hidden

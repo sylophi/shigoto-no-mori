@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 // (VillageToaster). It fades in when `shown`, bobbing. Place and color
 // it with `className`. A screen reader hears how to send the news away
 // instead, since the card has no close button to find.
-export function NextArrow({
+export function NextArrowView({
   shown = true,
   className,
 }: {

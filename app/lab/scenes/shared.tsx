@@ -287,8 +287,8 @@ export function MarksScene() {
         detached={false}
         fromPath="~/dev/sm-hummingbird"
         fromTip="/Users/rin/dev/sm-hummingbird"
-        toPath="~/.sm/worktrees/shigoto-no-mori/happy-hummingbird"
-        toTip="/Users/rin/.sm/worktrees/shigoto-no-mori/happy-hummingbird"
+        toPath="~/.sm/wt/shigoto-no-mori/happy-hummingbird"
+        toTip="/Users/rin/.sm/wt/shigoto-no-mori/happy-hummingbird"
         status={{ kind: "running" }}
         labels={{ running: "Moving", done: "Moved", error: "Couldn't move" }}
       />

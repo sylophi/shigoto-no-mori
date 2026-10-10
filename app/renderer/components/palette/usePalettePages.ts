@@ -5,12 +5,12 @@ import {
   Radio,
   Settings as SettingsIcon,
 } from "lucide-react";
+import { selectSettingsTab } from "@/components/settings/settingsNav";
 import {
   ACCOUNT_SECTION,
-  selectSettingsTab,
   settingsSections,
   TIDY_SECTION,
-} from "@/components/settings/settingsNav";
+} from "@/components/settings/settingsSections";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { hasLocalHost } from "@/lib/localHost";
 import type { PalettePage } from "./buildPaletteEntries";
@@ -21,7 +21,7 @@ import type { PalettePage } from "./buildPaletteEntries";
 export function usePalettePages(): PalettePage[] {
   const navigate = useNavigate();
   const villageLife = useVillageLife();
-  const { client, host } = settingsSections(false, villageLife);
+  const { client, host } = settingsSections(false, villageLife, hasLocalHost);
   const pages: PalettePage[] = [
     {
       key: "page:live",

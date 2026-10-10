@@ -14,6 +14,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
 import type { AllChannelHandlers } from "@shared/ipc/client";
+import { DAY, FAKE_VISITS } from "./villagerFixtures";
 
 const faces = import.meta.glob<string>("./villager-data/ready/faces/*.png", {
   query: "?inline",
@@ -108,41 +109,8 @@ export function villagerHandlersFor(): AllChannelHandlers {
 
 // The Visitors album's log (renderer/lib/villagers/visitLog.ts), kept
 // in localStorage, posed fresh on every load, before the renderer reads
-// it: a spread of visits, or none with
-// ?visits=none. Slug, times, and the days ago of the first and last.
-// Frillard and Lloid carry the longest species and a wiki-flavored one,
-// for the back of a card.
-const DAY = 24 * 60 * 60_000;
-const FAKE_VISITS: [string, number, number, number][] = [
-  ["raymond", 17, 200, 1],
-  ["marshal", 6, 150, 9],
-  ["judy", 4, 120, 30],
-  ["sherb", 3, 90, 12],
-  ["stitches", 3, 140, 22],
-  ["sheldon", 5, 170, 3],
-  ["ankha", 2, 80, 40],
-  ["zucker", 2, 75, 5],
-  ["dom", 2, 90, 30],
-  ["fauna", 2, 64, 21],
-  ["bob", 1, 2, 2],
-  ["audie", 1, 60, 60],
-  ["lolly", 1, 4, 4],
-  ["maple", 1, 200, 200],
-  ["ketchup", 1, 11, 11],
-  ["molly", 1, 25, 25],
-  ["ace", 1, 1, 1],
-  ["tom-nook", 2, 180, 20],
-  ["isabelle", 3, 160, 7],
-  ["kk-slider", 1, 3, 3],
-  ["celeste", 1, 50, 50],
-  ["pascal", 1, 6, 6],
-  ["katrina", 1, 45, 45],
-  ["leif", 2, 100, 14],
-  ["daisy-mae", 2, 70, 16],
-  ["frillard", 1, 33, 33],
-  ["lloid", 1, 75, 75],
-];
-
+// it: the fixture visits (villagerFixtures.ts), or none with
+// ?visits=none.
 function poseFakeVisits(): void {
   const none = new URLSearchParams(location.search).get("visits") === "none";
   const now = Date.now();

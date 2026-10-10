@@ -95,6 +95,7 @@ import {
   worktree as worktreeFixture,
 } from "./fixtures";
 import { endpointState } from "./mirrorFixtures";
+import { FAKE_DETECTED, fakeAgentHarnesses } from "./settingsFixtures";
 import { villagerHandlersFor } from "./villagerData";
 
 // A fixture table: a handler for each channel it answers, typed by the
@@ -291,22 +292,7 @@ function hostHandlersFor(
   );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   // Claude Code's hooks in, Codex's waiting on a fresh install.
-  let agentHarnesses: AgentHarnessStatus[] = [
-    {
-      id: "claude",
-      label: "Claude Code",
-      detected: true,
-      path: `${disk.home}/.claude/settings.json`,
-      hooks: "installed",
-    },
-    {
-      id: "codex",
-      label: "Codex",
-      detected: true,
-      path: `${disk.home}/.codex/hooks.json`,
-      hooks: "missing",
-    },
-  ];
+  let agentHarnesses = fakeAgentHarnesses(disk.home);
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
@@ -1358,7 +1344,7 @@ async function fakeSyncPull(
     projectId: project.id,
     name,
     branch: input.landBranch ?? input.branch,
-    path: `/Users/rin/.sm/worktrees/${project.name}/${name}`,
+    path: `/Users/rin/.sm/wt/${project.name}/${name}`,
     ahead: sourceWorktree?.ahead ?? 0,
     behind: 0,
     changedCount: sourceWorktree?.changedCount ?? 0,
@@ -1387,31 +1373,6 @@ async function fakeSyncPull(
     ...(files ? { files: { crossed: true, conflicts: 0 } } : {}),
   };
 }
-
-const FAKE_DETECTED = [
-  { kind: "detected", id: "app:vscode", label: "VS Code", available: true },
-  { kind: "detected", id: "app:terminal", label: "Terminal", available: true },
-  { kind: "detected", id: "app:ghostty", label: "Ghostty", available: true },
-  { kind: "detected", id: "app:finder", label: "Finder", available: true },
-  { kind: "detected", id: "app:codex", label: "ChatGPT", available: true },
-  {
-    kind: "detected",
-    id: "app:claude-code",
-    label: "Claude Code",
-    available: true,
-  },
-  { kind: "detected", id: "app:neovim", label: "Neovim", available: true },
-  { kind: "detected", id: "app:lazygit", label: "lazygit", available: true },
-  { kind: "detected", id: "app:gemini", label: "Gemini CLI", available: false },
-  {
-    kind: "detected",
-    id: "app:copilot",
-    label: "Copilot CLI",
-    available: false,
-  },
-  { kind: "detected", id: "app:vim", label: "Vim", available: false },
-  { kind: "detected", id: "app:helix", label: "Helix", available: false },
-] as const;
 
 // ---- account and presence state the fake host can change ----
 
@@ -1585,7 +1546,7 @@ function initCrowd(): void {
             projectId: id,
             name: animal,
             branch: n === 0 ? "fix-flaky-sync" : "exp/redo-cache",
-            path: `/Users/rin/.sm/worktrees/${name}/${animal}`,
+            path: `/Users/rin/.sm/wt/${name}/${animal}`,
           }),
       ),
     );
