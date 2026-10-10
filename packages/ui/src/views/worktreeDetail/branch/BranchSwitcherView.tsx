@@ -49,7 +49,7 @@ export function BranchSwitcherView({
       onOpenChange={onOpenChange}
       autoHighlight
     >
-      <Combobox.Portal container={useThemeRoot() ?? undefined}>
+      <Combobox.Portal container={useThemeRoot()}>
         <Combobox.Positioner
           anchor={anchorRef}
           sideOffset={6}

@@ -47,7 +47,7 @@ function TooltipContent({
     "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   >) {
   return (
-    <TooltipPrimitive.Portal container={useThemeRoot() ?? undefined}>
+    <TooltipPrimitive.Portal container={useThemeRoot()}>
       <TooltipPrimitive.Positioner
         anchor={anchor}
         align={align}

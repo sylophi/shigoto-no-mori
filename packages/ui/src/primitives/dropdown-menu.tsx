@@ -88,7 +88,7 @@ export function MenuPopupSurface({
   ...props
 }: MenuPopupSurfaceProps) {
   return (
-    <MenuPrimitive.Portal container={useThemeRoot() ?? undefined}>
+    <MenuPrimitive.Portal container={useThemeRoot()}>
       <MenuPrimitive.Positioner
         className={FLOATING_POSITIONER_CLASS}
         align={align}

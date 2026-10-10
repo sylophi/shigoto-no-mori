@@ -13,7 +13,7 @@ function SheetPortal({ ...props }: SheetPrimitive.Portal.Props) {
   return (
     <SheetPrimitive.Portal
       data-slot="sheet-portal"
-      container={useThemeRoot() ?? undefined}
+      container={useThemeRoot()}
       {...props}
     />
   );

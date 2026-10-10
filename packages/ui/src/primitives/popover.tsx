@@ -42,7 +42,7 @@ function PopoverContent({
   >) {
   const popupRef = useRef<HTMLDivElement>(null);
   return (
-    <PopoverPrimitive.Portal container={useThemeRoot() ?? undefined}>
+    <PopoverPrimitive.Portal container={useThemeRoot()}>
       <PopoverPrimitive.Positioner
         className={FLOATING_POSITIONER_CLASS}
         align={align}

@@ -134,7 +134,7 @@ export function BranchComboboxView({
           className="size-3.5 shrink-0 text-muted-foreground/60"
         />
       </Combobox.Trigger>
-      <Combobox.Portal container={useThemeRoot() ?? undefined}>
+      <Combobox.Portal container={useThemeRoot()}>
         <Combobox.Positioner
           sideOffset={4}
           side="bottom"

@@ -6,16 +6,33 @@
 // and a phone-width session must not pay for a permanently invisible
 // copy of it.
 import { useSyncExternalStore } from "react";
+import {
+  createExternalStore,
+  type ExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import { hasLocalHost } from "@/lib/localHost";
 import { themeRoot } from "@/lib/themeRoot";
 
 const PHONE_BELOW_PX = 768;
 
-function subscribeToRootWidth(onChange: () => void): () => void {
-  const observer = new ResizeObserver(onChange);
-  observer.observe(themeRoot());
-  return () => observer.disconnect();
+// One observer for the page, as the root lives as long as it does,
+// made on first use so importing this module needs no window. Readers
+// get the last answer rather than a fresh layout read each render.
+let phoneStore: ExternalStore<boolean> | undefined;
+function rootIsNarrow(): ExternalStore<boolean> {
+  if (phoneStore) return phoneStore;
+  const root = themeRoot();
+  const narrow = () => root.getBoundingClientRect().width < PHONE_BELOW_PX;
+  const store = createExternalStore(narrow());
+  new ResizeObserver(() => {
+    const next = narrow();
+    if (next !== store.get()) store.publish(next);
+  }).observe(root);
+  return (phoneStore = store);
 }
+
+const subscribeToRootWidth = (onChange: () => void) =>
+  rootIsNarrow().subscribe(onChange);
 
 // The desktop window never takes the phone layout: its minimum width
 // sits below the breakpoint, and a folded sidebar would put its toggle
@@ -26,9 +43,7 @@ const subscribeToNothing = () => () => {};
 // The phone layout: a bottom tab bar, the forest as a page of its own,
 // and the worktree pages stacked over it. Only ever the browser tab's.
 export function isPhoneLayout(): boolean {
-  return (
-    !hasLocalHost && themeRoot().getBoundingClientRect().width < PHONE_BELOW_PX
-  );
+  return !hasLocalHost && rootIsNarrow().get();
 }
 
 export function usePhoneLayout(): boolean {
