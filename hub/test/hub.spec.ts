@@ -4,10 +4,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { env, listDurableObjectIds } from "cloudflare:test";
 import {
+  CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
+  CLOSE_RATE_LIMITED,
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
   encodeEnvelope,
+  MAX_DEVICE_CONNECTIONS,
+  MAX_ACCOUNT_DEVICES,
   MAX_ONLINE_DEVICES,
   MAX_HUB_MESSAGE_BYTES,
   hubTextWithinLimit,
@@ -222,6 +226,76 @@ describe("a web device's tabs", () => {
   });
 });
 
+describe("a device's socket cap", () => {
+  it("lets the oldest of a device's sockets give way past the cap, whatever its kind", async () => {
+    const { credential } = await enroll(
+      "acct-socket-cap",
+      "dev-socket-cap",
+      "Chrome on macOS",
+      "web",
+      "browser",
+    );
+    const sockets = [];
+    for (let i = 0; i < MAX_DEVICE_CONNECTIONS; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- age is open order, so these have to land one at a time
+      sockets.push(await openSocket((await mintTicket(credential)).ticket));
+    }
+    const [oldest, next] = sockets;
+    if (oldest === undefined || next === undefined) {
+      throw new Error("the cap is at least two");
+    }
+    await next.untilPresence(["dev-socket-cap"]);
+    const newest = await openSocket((await mintTicket(credential)).ticket);
+    expect((await oldest.closed).code).toBe(CLOSE_SUPERSEDED);
+    await newest.untilPresence(["dev-socket-cap"]);
+    await next.untilPresence(["dev-socket-cap"]);
+  });
+});
+
+describe("rotation", () => {
+  it("closes the device's sockets when it enrolls again, and they dial back with the new credential", async () => {
+    const { socket } = await enrollAndConnect("acct-rotate", "dev-rotate");
+    await socket.untilPresence(["dev-rotate"]);
+    const watcher = await enrollAndConnect("acct-rotate", "dev-rotate-peer");
+    await watcher.socket.untilPresence(["dev-rotate", "dev-rotate-peer"]);
+    const { credential } = await enroll("acct-rotate", "dev-rotate");
+    expect((await socket.closed).code).toBe(CLOSE_CREDENTIAL_ROTATED);
+    await watcher.socket.untilPresence(["dev-rotate-peer"]);
+    const redial = await openSocket((await mintTicket(credential)).ticket);
+    await redial.untilPresence(["dev-rotate", "dev-rotate-peer"]);
+  });
+
+  it("refuses a ticket minted before the device enrolled again", async () => {
+    const first = await enroll("acct-rotate-ticket", "dev-rotate-ticket");
+    const { ticket } = await mintTicket(first.credential);
+    await enroll("acct-rotate-ticket", "dev-rotate-ticket");
+    const socket = await openSocket(ticket);
+    expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
+  });
+
+  it("refuses a ticket stored under a credential the device no longer holds", async () => {
+    // A mint that read the old credential and stored its ticket after
+    // the rotation dropped the device's tickets.
+    await enroll("acct-rotate-race", "dev-rotate-race");
+    const hub = env.DEVICE_HUB.get(
+      env.DEVICE_HUB.idFromName("acct-rotate-race"),
+    );
+    const random = await hub.mintTicket(
+      {
+        deviceId: "dev-rotate-race",
+        kind: "desktop",
+        connectionId: newConnectionId(),
+        credentialHash: "a credential rotated away",
+      },
+      60_000,
+    );
+    const socket = await openSocket(
+      await signedTicket("acct-rotate-race", random),
+    );
+    expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
+  });
+});
+
 describe("relaying", () => {
   it("relays an opaque frame between two devices, unchanged", async () => {
     const a = await enrollAndConnect("acct-hub", "dev-hub-a");
@@ -262,14 +336,20 @@ describe("relaying", () => {
     const b = await enrollAndConnect("acct-big", "dev-big-b");
     await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
     await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // Just past the device hub's control-frame cap (64 KiB since the
-    // wire went orchestration-only): a legitimate broker frame is far
-    // smaller, so anything here is a client aiming data at the wrong
-    // wire and gets the nack.
+    // A send right at the device hub's control-frame cap (64 KiB since
+    // the wire went orchestration-only), whose forward, naming the
+    // sender where the send named the target, lands just past it: a
+    // legitimate broker frame is far smaller, so anything here is a
+    // client aiming data at the wrong wire and gets the nack.
+    const overhead = encodeEnvelope({
+      t: "relay",
+      to: "dev-big-b",
+      frame: "",
+    }).length;
     a.socket.send({
       t: "relay",
       to: "dev-big-b",
-      frame: "x".repeat(MAX_HUB_MESSAGE_BYTES + 1),
+      frame: "x".repeat(MAX_HUB_MESSAGE_BYTES - overhead),
     });
     expect(await a.socket.next()).toEqual({
       t: "nack",
@@ -333,6 +413,36 @@ describe("relaying", () => {
       reason: "offline",
     });
     await b.socket.expectSilence();
+  });
+});
+
+describe("what a socket may send", () => {
+  it("cuts a socket that sends more than any envelope could be, before parsing it", async () => {
+    const { socket } = await enrollAndConnect("acct-input-size", "dev-input");
+    await socket.untilPresence(["dev-input"]);
+    socket.ws.send("x".repeat(MAX_HUB_MESSAGE_BYTES + 1));
+    expect((await socket.closed).code).toBe(1009);
+  });
+
+  it("cuts a socket that sends faster than its budget", async () => {
+    const { socket } = await enrollAndConnect("acct-input-rate", "dev-rate");
+    await socket.untilPresence(["dev-rate"]);
+    // Malformed, so nothing is relayed or answered: only the count
+    // matters. Far more than the burst, in less time than it refills.
+    for (let i = 0; i < 1000; i++) socket.ws.send("{}");
+    expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
+  });
+
+  it("lets a dial storm's worth of asks through", async () => {
+    const { socket } = await enrollAndConnect("acct-input-storm", "dev-storm");
+    await enrollAndConnect("acct-input-storm", "dev-storm-peer");
+    await socket.untilPresence(["dev-storm", "dev-storm-peer"]);
+    // Two messages per peer of an account at its device cap.
+    for (let i = 0; i < 2 * (MAX_ACCOUNT_DEVICES - 1); i++) {
+      socket.send({ t: "relay", to: "dev-storm-peer", frame: `ask:${i}:x` });
+    }
+    socket.send({ t: "relay", to: "dev-gone", frame: "x" });
+    expect(await socket.next()).toMatchObject({ t: "nack", to: "dev-gone" });
   });
 });
 

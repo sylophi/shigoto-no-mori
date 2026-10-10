@@ -310,16 +310,15 @@ describe("tunnel teardown on revoke", () => {
     expect(stub.dnsRecords).toHaveLength(0);
   });
 
-  it("revoking also sweeps a tunnel provisioned under the older, shorter name", async () => {
+  it("revoking leaves alone a tunnel under the older, shorter name, which could be another device's", async () => {
     const stub = createCfStub();
     const worker = makeTestWorker({ cfFetch: stub.cfFetch });
     const accountId = "acct-tunnel-legacy";
     const deviceId = "dev-tl-1";
     const { credential } = await enroll(accountId, deviceId);
-    // What an older Worker left behind: the same device's tunnel under
-    // the 12-hex name, with its DNS record. Widening the name re-keys
-    // the device, so unless teardown knows the old width this pair
-    // outlives the device that owned it.
+    // A tunnel and record under the 12-hex name this device's ids would
+    // have had under the old width. Nothing proves they are this
+    // device's: a name that short can be reached from other ids.
     const digest = await sha256Hex(`${accountId}:${deviceId}`);
     const legacyName = `sm-${digest.slice(0, 12)}`;
     stub.tunnels.push({
@@ -334,7 +333,6 @@ describe("tunnel teardown on revoke", () => {
       content: "legacy-tunnel.cfargotunnel.com",
       proxied: true,
     });
-    // The device then provisions under the current name, so both exist.
     expect(
       (await call(provisionRequest(credential, 4321), tunnelEnv(), worker))
         .status,
@@ -347,8 +345,10 @@ describe("tunnel teardown on revoke", () => {
       worker,
     );
     expect(revoked.status).toBe(204);
-    expect(stub.liveTunnels()).toHaveLength(0);
-    expect(stub.dnsRecords).toHaveLength(0);
+    expect(stub.liveTunnels().map((tunnel) => tunnel.id)).toEqual([
+      "legacy-tunnel",
+    ]);
+    expect(stub.dnsRecords.map((record) => record.id)).toEqual(["legacy-dns"]);
   });
 
   it("a CF teardown failure never fails the revoke itself", async () => {
