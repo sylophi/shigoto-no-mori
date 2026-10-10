@@ -233,14 +233,16 @@ const transplant = async (
   input: Parameters<typeof syncHandlers.pullWorktree>[0],
 ) => {
   const pulled = await syncHandlers.pullWorktree(input, pullCtx);
-  const torn = await syncHandlers.teardownSource(
-    {
-      direction: "pull",
-      deviceId: input.sourceDeviceId,
-      projectId: input.sourceProjectId,
-      worktreeId: input.sourceWorktreeId,
-    },
-    pullCtx,
+  const torn = await runHost(
+    syncHandlers.teardownSource(
+      {
+        direction: "pull",
+        deviceId: input.sourceDeviceId,
+        projectId: input.sourceProjectId,
+        worktreeId: input.sourceWorktreeId,
+      },
+      pullCtx,
+    ),
   );
   return { ...pulled, ...torn };
 };
@@ -1077,27 +1079,31 @@ it("teardownSource: refuses without a receipt, refuses a source that changed aft
   // matches the receipt again.
   await assert.rejects(
     async () =>
-      syncHandlers.teardownSource(
-        {
-          direction: "pull",
-          deviceId: "A",
-          projectId: sourceProjectId,
-          worktreeId: "0123456789ab",
-        },
-        pullCtx,
+      runHost(
+        syncHandlers.teardownSource(
+          {
+            direction: "pull",
+            deviceId: "A",
+            projectId: sourceProjectId,
+            worktreeId: "0123456789ab",
+          },
+          pullCtx,
+        ),
       ),
     /No pull recorded/,
   );
   await assert.rejects(
     async () =>
-      syncHandlers.teardownSource(
-        {
-          direction: "pull",
-          deviceId: "A",
-          projectId: sourceProjectId,
-          worktreeId: wt3Id,
-        },
-        pullCtx,
+      runHost(
+        syncHandlers.teardownSource(
+          {
+            direction: "pull",
+            deviceId: "A",
+            projectId: sourceProjectId,
+            worktreeId: wt3Id,
+          },
+          pullCtx,
+        ),
       ),
     /No pull recorded/,
   );
@@ -1131,13 +1137,17 @@ it("teardownSource: refuses without a receipt, refuses a source that changed aft
   assert.equal(latePull.dirtyApplied, true);
   // The user takes their time. Meanwhile something edits the source.
   writeFileSync(join(wt6Path, "draft.txt"), "draft, then edited\n");
-  const refusedLate = await syncHandlers.teardownSource(wt6Source, pullCtx);
+  const refusedLate = await runHost(
+    syncHandlers.teardownSource(wt6Source, pullCtx),
+  );
   assert.equal(refusedLate.sourceRemoved, false);
   assert.match(refusedLate.sourceError ?? "", /changed after/);
   assert.equal(existsSync(wt6Path), true, "a changed source must survive");
   // Back to exactly the captured state, the receipt matches again.
   writeFileSync(join(wt6Path, "draft.txt"), "draft\n");
-  const lateTeardown = await syncHandlers.teardownSource(wt6Source, pullCtx);
+  const lateTeardown = await runHost(
+    syncHandlers.teardownSource(wt6Source, pullCtx),
+  );
   assert.equal(lateTeardown.sourceRemoved, true, lateTeardown.sourceError);
   assert.equal(existsSync(wt6Path), false);
 });
@@ -1177,7 +1187,7 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
     },
   });
   await assert.rejects(
-    async () => syncHandlers.teardownSource(wt7Sent, pullCtx),
+    async () => runHost(syncHandlers.teardownSource(wt7Sent, pullCtx)),
     /No send recorded/,
   );
   const sent = await syncHandlers.sendWorktree(wt7, sendCtx);
@@ -1220,12 +1230,12 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
     /The other device answered: feature7 is already checked out/,
   );
   writeFileSync(join(wt7Path, "draft.txt"), "sent draft, then edited\n");
-  const keptSent = await syncHandlers.teardownSource(wt7Sent, pullCtx);
+  const keptSent = await runHost(syncHandlers.teardownSource(wt7Sent, pullCtx));
   assert.equal(keptSent.sourceRemoved, false);
   assert.match(keptSent.sourceError ?? "", /changed after/);
   assert.equal(existsSync(wt7Path), true, "a changed source must survive");
   writeFileSync(join(wt7Path, "draft.txt"), "sent draft\n");
-  const tornSent = await syncHandlers.teardownSource(wt7Sent, pullCtx);
+  const tornSent = await runHost(syncHandlers.teardownSource(wt7Sent, pullCtx));
   assert.equal(tornSent.sourceRemoved, true, tornSent.sourceError);
   assert.equal(existsSync(wt7Path), false);
 });
@@ -1575,14 +1585,16 @@ describe("cancelMove", () => {
     await landedNothing("cancel2", wtCancel2Path);
     await assert.rejects(
       async () =>
-        syncHandlers.teardownSource(
-          {
-            direction: "send",
-            deviceId: "A",
-            projectId: sourceProjectId,
-            worktreeId: wtCancel2Id,
-          },
-          pullCtx,
+        runHost(
+          syncHandlers.teardownSource(
+            {
+              direction: "send",
+              deviceId: "A",
+              projectId: sourceProjectId,
+              worktreeId: wtCancel2Id,
+            },
+            pullCtx,
+          ),
         ),
       /No send recorded/,
       "a cancelled send must leave no receipt to tear the source down on",
@@ -1719,14 +1731,16 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     // Its teardown runs on the sending side, against that side's own
     // registry, on the receipt the peer's landing made.
     const loneTorn = await asOtherDevice(() =>
-      syncHandlers.teardownSource(
-        {
-          direction: "send",
-          deviceId: "A",
-          projectId: loneProjectId,
-          worktreeId: loneWt.worktreeId,
-        },
-        pullCtx,
+      runHost(
+        syncHandlers.teardownSource(
+          {
+            direction: "send",
+            deviceId: "A",
+            projectId: loneProjectId,
+            worktreeId: loneWt.worktreeId,
+          },
+          pullCtx,
+        ),
       ),
     );
     assert.equal(loneTorn.sourceRemoved, true, loneTorn.sourceError);

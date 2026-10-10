@@ -1,6 +1,8 @@
 // What each move recorded, and the source teardown that decides on it:
 // the teardown runs only when the receipt proves nothing can be lost.
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import {
   type SyncMoveRef,
   type SyncReceipt,
@@ -47,54 +49,65 @@ export function remember(move: SyncMoveRef, receipt: SyncReceipt): void {
 // so a refused or failed one can be retried. A pull's source is the
 // peer's worktree, checked over a link and removed through the
 // peer's grant-gated delete. A send's is this device's own.
-export async function teardownSource(
+// No receipt for the move asked about, in the words of its direction.
+class NoReceiptError extends Schema.TaggedError<NoReceiptError>()(
+  "NoReceiptError",
+  { pulled: Schema.Boolean },
+) {
+  override get message(): string {
+    return this.pulled
+      ? "No pull recorded for that worktree on this device. Bring it here first."
+      : "No send recorded for that worktree on this device. Send it first.";
+  }
+}
+
+export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
   move: SyncMoveRef,
   removeHere: (removal: {
     projectId: string;
     worktreeId: string;
     force: boolean;
     refuseRunningScripts: boolean;
-  }) => unknown,
-): Promise<SyncTeardownSourceResult> {
+  }) => Effect.Effect<unknown, E, R>,
+) {
   const key = receiptKey(move);
   const receipt = receipts.get(key);
   const pulled = move.direction === "pull";
-  if (receipt === undefined) {
-    throw new Error(
-      pulled
-        ? "No pull recorded for that worktree on this device. Bring it here first."
-        : "No send recorded for that worktree on this device. Send it first.",
-    );
-  }
+  if (receipt === undefined) return yield* new NoReceiptError({ pulled });
   const target = {
     projectId: move.projectId,
     worktreeId: move.worktreeId,
   };
-  const changed = pulled
-    ? await withPeerSource(peerSyncApiFor(move.deviceId), target, (source) =>
-        sourceChangedSince(source, receipt, PULLED),
-      )
-    : await sourceChangedSince(
-        localSource(await findProjectOrThrow(move.projectId), move.worktreeId),
-        receipt,
-        SENT,
-      );
+  const changed = yield* fromPromise(async () =>
+    pulled
+      ? withPeerSource(peerSyncApiFor(move.deviceId), target, (source) =>
+          sourceChangedSince(source, receipt, PULLED),
+        )
+      : sourceChangedSince(
+          localSource(
+            await findProjectOrThrow(move.projectId),
+            move.worktreeId,
+          ),
+          receipt,
+          SENT,
+        ),
+  );
   if (changed !== undefined) {
-    return { sourceRemoved: false, sourceError: changed };
+    return { sourceRemoved: false, sourceError: changed } as const;
   }
-  const result = await tearDown(
+  const result = yield* tearDown(
     receipt,
     pulled ? "here" : "on the other device",
     (force) => {
       const removal = { ...target, force, refuseRunningScripts: true };
       return pulled
-        ? peerWorktreesApiFor(move.deviceId).delete(removal)
+        ? fromPromise(() => peerWorktreesApiFor(move.deviceId).delete(removal))
         : removeHere(removal);
     },
   );
   if (result.sourceRemoved) receipts.delete(key);
   return result;
-}
+});
 
 // Why a source no longer matches its receipt, in the words of the
 // device asking: the peer's worktree after a pull, this device's own
@@ -150,18 +163,18 @@ async function sourceChangedSince(
 // engine), so the branch then exists on both
 // devices, which is not lossy. `landed` is where the copy went, for
 // the refusal's wording.
-async function tearDown(
+const tearDown = <R>(
   moved: { captured: boolean; dirtyApplied: boolean },
   landed: "here" | "on the other device",
-  remove: (force: boolean) => unknown,
-): Promise<SyncTeardownSourceResult> {
+  remove: (force: boolean) => Effect.Effect<unknown, unknown, R>,
+): Effect.Effect<SyncTeardownSourceResult, never, R> => {
   if (moved.captured && !moved.dirtyApplied) {
-    return {
+    return Effect.succeed({
       sourceRemoved: false,
       sourceError: `the uncommitted changes could not be applied ${landed} and only exist on the source worktree`,
-    };
+    });
   }
-  try {
+  return Effect.gen(function* () {
     // Force only when the dirty state was actually captured and
     // applied. The CLI's --force does more than skip its own
     // clean-tree guard (cmd_rm.go requireClean): it also switches to
@@ -177,9 +190,9 @@ async function tearDown(
     // transplants because git refuses non-forced removal of them.
     // refuseRunningScripts is the app-side guard the local
     // kill-then-delete path deliberately lacks.
-    const removed = Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(
-      await remove(moved.captured),
-    );
+    const removed = yield* Schema.decodeUnknownEffect(
+      DeleteWorktreeResultSchema,
+    )(yield* remove(moved.captured));
     if (removed.ok) return { sourceRemoved: true };
     // ok:false means the worktree was NOT removed: cleanup scripts
     // run before `git worktree remove` and a failure aborts the
@@ -189,7 +202,12 @@ async function tearDown(
       sourceRemoved: false,
       sourceError: `cleanup failed on the source device (${removed.cleanupError.phase})`,
     };
-  } catch (error) {
-    return { sourceRemoved: false, sourceError: errorMessageOf(error) };
-  }
-}
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed({
+        sourceRemoved: false,
+        sourceError: errorMessageOf(error),
+      }),
+    ),
+  );
+};

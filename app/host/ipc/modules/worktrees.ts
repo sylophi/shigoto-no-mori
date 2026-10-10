@@ -1,7 +1,5 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Effect from "effect/Effect";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
-import type { HostServices } from "@host/process/services";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -788,13 +786,3 @@ async function mutateAndDescribe(
 ): Promise<Worktree> {
   return (await mutateAndDescribeWith(scope, action)).worktree;
 }
-
-// The delete, for the sync teardown that removes a sent source, which is
-// not Effect yet. Removed by step 7's sync PR (V3.md, the host's Promise
-// adapters), which converts that teardown.
-const deletes = PromiseAdapter.make<HostServices>("The worktree deletes");
-export const deleteAdapter = deletes.layer;
-export const deleteWorktreeHere = (
-  removal: Parameters<typeof worktreesHandlers.delete>[0],
-  ctx: HandlerContext,
-) => deletes.run(worktreesHandlers.delete(removal, ctx));

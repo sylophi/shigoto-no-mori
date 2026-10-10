@@ -13,7 +13,7 @@
 // git itself.
 import type { HostServices } from "@host/process/services";
 import { fromPromise } from "@host/lib/util/fromPromise";
-import { callFailureOf } from "@shigomori/contracts/errors";
+import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import { only } from "@shigomori/contracts/util/only";
 import {
@@ -98,7 +98,7 @@ type Ops = Handlers<typeof controlContract, HandlerContext, HostServices>;
 type TransferOp<K extends "send" | "bring"> = (
   input: Parameters<ViewHandlers<typeof controlContract, never>[K]>[0],
   ctx: HandlerContext,
-) => Promise<ControlTransferResult>;
+) => Effect.Effect<ControlTransferResult, CallFailure, HostServices>;
 
 // The one device a send goes to, among the candidates (plan.ts
 // chooseTarget).
@@ -158,31 +158,67 @@ async function choiceFor(
 // What became of the source, in the finish step's terms. A fate that
 // could not be carried out is an answer, never a throw: the transfer
 // already stands.
-async function settleSource(
+// A transfer done, with how to settle its source.
+type Settle = {
+  readonly shelve: () => Promise<unknown>;
+  readonly teardown: Effect.Effect<
+    { sourceRemoved: boolean; sourceError?: string },
+    unknown,
+    HostServices
+  >;
+};
+
+const settleSource = (
   fate: "keep" | "shelve" | "teardown",
-  run: {
-    shelve: () => Promise<unknown>;
-    teardown: () => Promise<{ sourceRemoved: boolean; sourceError?: string }>;
-  },
-): Promise<NonNullable<ControlTransferResult["source"]>> {
-  if (fate === "keep") return { fate, done: true };
-  try {
-    if (fate === "shelve") {
-      await run.shelve();
-      return { fate, done: true };
-    }
-    const result = await run.teardown();
-    return result.sourceRemoved
-      ? { fate, done: true }
-      : {
-          fate,
-          done: false,
-          error: result.sourceError ?? "its teardown was refused.",
-        };
-  } catch (error) {
-    return { fate, done: false, error: errorMessageOf(error) };
-  }
-}
+  run: Settle,
+): Effect.Effect<
+  NonNullable<ControlTransferResult["source"]>,
+  never,
+  HostServices
+> => {
+  if (fate === "keep") return Effect.succeed({ fate, done: true });
+  const outcome: Effect.Effect<
+    NonNullable<ControlTransferResult["source"]>,
+    unknown,
+    HostServices
+  > = fate === "shelve"
+    ? fromPromise(run.shelve).pipe(Effect.as({ fate, done: true }))
+    : run.teardown.pipe(
+        Effect.map((result) =>
+          result.sourceRemoved
+            ? { fate, done: true }
+            : {
+                fate,
+                done: false,
+                error: result.sourceError ?? "its teardown was refused.",
+              },
+        ),
+      );
+  return outcome.pipe(
+    Effect.catch((error) =>
+      Effect.succeed({ fate, done: false, error: errorMessageOf(error) }),
+    ),
+  );
+};
+
+// A transfer's Promise half, then the source settled as its input asked.
+const settled =
+  <K extends "send" | "bring">(
+    transfer: (
+      input: Parameters<TransferOp<K>>[0],
+      ctx: HandlerContext,
+    ) => Promise<
+      | { readonly done: ControlTransferResult }
+      | { readonly moved: ControlTransferResult; readonly settle: Settle }
+    >,
+  ): TransferOp<K> =>
+  (input, ctx) =>
+    Effect.gen(function* () {
+      const moved = yield* fromPromise(() => transfer(input, ctx));
+      if ("done" in moved) return moved.done;
+      const source = yield* settleSource(input.source ?? "keep", moved.settle);
+      return { ...moved.moved, source };
+    });
 
 // A stop's two refusals told apart, wherever it ran: the confirmation
 // rule is the CLI's typed error, and a copy that stayed comes back as
@@ -315,10 +351,7 @@ export const peerWorktrees: Ops["peerWorktrees"] = async ({
   };
 };
 
-export const send: TransferOp<"send"> = async (
-  input,
-  ctx,
-): Promise<ControlTransferResult> => {
+export const send = settled<"send">(async (input, ctx) => {
   const { project, worktree } = await findProjectAndWorktreeOrThrow(
     input.projectId,
     input.worktreeId,
@@ -333,15 +366,15 @@ export const send: TransferOp<"send"> = async (
         ? await peerMirrorOf(input, registryOrEmpty())
         : { deviceId: thisDeviceId(), session: own };
     if (running !== undefined) {
-      return alreadyMirrored(running, input.device);
+      return { done: await alreadyMirrored(running, input.device) };
     }
   }
   const { identity, target } = await pickDevice(project, input.device);
   const choice = await choiceFor(identity, input, async () =>
-    syncHandlers.ignoredPaths(
-      { projectId: project.id, worktreeId: worktree.id },
-      ctx,
-    ),
+    syncHandlers.ignoredPaths({
+      projectId: project.id,
+      worktreeId: worktree.id,
+    }),
   );
   const device = { deviceId: target.deviceId, name: target.name };
   const payload = {
@@ -361,18 +394,19 @@ export const send: TransferOp<"send"> = async (
   };
   if (mirror) {
     const { session, ...sent } = await startMirrorTo(payload, ctx);
-    return { ...sent, device, copySide: "remote", session };
+    return { done: { ...sent, device, copySide: "remote", session } };
   }
   const sent = await syncHandlers.sendWorktree(payload, ctx);
-  const source = await settleSource(input.source ?? "keep", {
-    shelve: async () =>
-      worktreesHandlers.setShelved({
-        projectId: project.id,
-        worktreeId: worktree.id,
-        shelved: true,
-      }),
-    teardown: async () =>
-      syncHandlers.teardownSource(
+  return {
+    moved: { ...sent, device, copySide: "remote" },
+    settle: {
+      shelve: async () =>
+        worktreesHandlers.setShelved({
+          projectId: project.id,
+          worktreeId: worktree.id,
+          shelved: true,
+        }),
+      teardown: syncHandlers.teardownSource(
         {
           direction: "send",
           deviceId: target.deviceId,
@@ -381,14 +415,11 @@ export const send: TransferOp<"send"> = async (
         },
         ctx,
       ),
-  });
-  return { ...sent, device, copySide: "remote", source };
-};
+    },
+  };
+});
 
-export const bring: TransferOp<"bring"> = async (
-  input,
-  ctx,
-): Promise<ControlTransferResult> => {
+export const bring = settled<"bring">(async (input, ctx) => {
   const project = await findProjectOrThrow(input.projectId);
   const { identity, standings } = await candidates(project, input.device, {
     grant: true,
@@ -464,7 +495,7 @@ export const bring: TransferOp<"bring"> = async (
           )
         : { deviceId: thisDeviceId(), session: own };
     if (running !== undefined) {
-      return alreadyMirrored(running, undefined);
+      return { done: await alreadyMirrored(running, undefined) };
     }
     const { session, ...pulled } = await startMirrorFrom(
       {
@@ -476,7 +507,9 @@ export const bring: TransferOp<"bring"> = async (
       },
       ctx,
     );
-    return { ...pulled, device: found.device, copySide: "local", session };
+    return {
+      done: { ...pulled, device: found.device, copySide: "local", session },
+    };
   }
   const pulled = await syncHandlers.pullWorktree(
     {
@@ -496,17 +529,19 @@ export const bring: TransferOp<"bring"> = async (
     projectId: found.projectId,
     worktreeId: found.worktree.id,
   };
-  const source = await settleSource(input.source ?? "keep", {
-    shelve: () =>
-      peerWorktreesApiFor(found.device.deviceId).setShelved({
-        projectId: found.projectId,
-        worktreeId: found.worktree.id,
-        shelved: true,
-      }),
-    teardown: async () => syncHandlers.teardownSource(sourceRef, ctx),
-  });
-  return { ...pulled, device: found.device, copySide: "local", source };
-};
+  return {
+    moved: { ...pulled, device: found.device, copySide: "local" },
+    settle: {
+      shelve: () =>
+        peerWorktreesApiFor(found.device.deviceId).setShelved({
+          projectId: found.projectId,
+          worktreeId: found.worktree.id,
+          shelved: true,
+        }),
+      teardown: syncHandlers.teardownSource(sourceRef, ctx),
+    },
+  };
+});
 
 // The mirrors this device is part of: the ones it runs, and the
 // ones peers run against its worktrees, each seen from this side.
