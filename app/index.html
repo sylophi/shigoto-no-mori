@@ -22,8 +22,8 @@
       // Apply persisted theme to the root element synchronously, before
       // React runs, so the first paint matches the user's choice. The
       // window itself is transparent (vibrancy: "sidebar" in
-      // main/index.ts); the opaque background is painted by the main
-      // detail pane only.
+      // main/index.ts), and only the main detail pane paints an opaque
+      // background.
       (function () {
         try {
           // Key must match THEME_STORAGE_KEY in renderer/hooks/ui/useTheme.tsx.
