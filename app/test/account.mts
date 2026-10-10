@@ -788,6 +788,40 @@ it("store: a record enrolled before device keys reads as signed out, keeping its
   assert.equal(keyless.rememberedDeviceName(), "Kept");
 });
 
+it("enroll flow: a device enrolled before keys enrolls again with a key and keeps its command-access switch", async () => {
+  const store = memoryStore(
+    JSON.stringify({
+      v: 1,
+      enc: false,
+      credential: "old",
+      accountId: "user_abc",
+      deviceName: "Kept",
+      acceptsCommands: true,
+    }),
+  );
+  assert.equal(store.readWithoutKey()?.acceptsCommands, true);
+  const { service } = stubService(() =>
+    json({ credential: "cred-1", device: DEVICE }),
+  );
+  await enrollDevice(
+    {
+      config: CONFIG,
+      service,
+      store,
+      deviceId: "device-uuid",
+      fallbackDeviceName: "Fallback Mac",
+      platform: "darwin",
+      detectedIcon: "laptop",
+    },
+    fakeSessionJwt("user_abc"),
+  );
+  const record = readRecord(store);
+  assert.equal(record.credential, "cred-1");
+  assert.equal(record.deviceName, "Kept");
+  assert.equal(record.acceptsCommands, true);
+  assert.equal(store.readWithoutKey(), null);
+});
+
 it("device icon detection: Apple product names and model identifiers, DMI chassis codes, virtual machines", () => {
   assert.equal(deviceShapeFromAppleModel("MacBook Pro"), "laptop");
   assert.equal(deviceShapeFromAppleModel("MacBookAir10,1"), "laptop");

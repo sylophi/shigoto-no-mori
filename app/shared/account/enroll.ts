@@ -48,7 +48,7 @@ type EnrollDeviceDeps = {
 // after. Takes the record the caller already read: a read is a file
 // parse plus a keychain decrypt, not something to repeat per field.
 export function effectiveDeviceIcon(
-  record: StoredAccount | null,
+  record: Pick<StoredAccount, "deviceIcon"> | null,
   store: Pick<AccountStore, "rememberedDeviceIcon">,
   detectedIcon: DeviceIcon,
 ): DeviceIcon {
@@ -66,7 +66,10 @@ export async function enrollDevice(
   if (!isConfigured(deps.config)) {
     throw new Error("the device hub is not configured on this build");
   }
-  const stored = deps.store.read();
+  // A record from before device keys counts as the one this enrollment
+  // replaces: the same device, keeping its name, its pick and its
+  // command-access switch.
+  const stored = deps.store.read() ?? deps.store.readWithoutKey();
   const deviceName =
     stored?.deviceName ??
     deps.store.rememberedDeviceName() ??

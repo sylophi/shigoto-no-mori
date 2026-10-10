@@ -87,9 +87,10 @@ export type AccountStore = {
   // where the Clerk session lives (ClerkAccountSync), once the user
   // signs in where it does not.
   read(): StoredAccount | null;
-  // Whether the store holds a record enrolled before device keys, the
-  // one read() refuses: the device enrolls again to make its key.
-  enrolledWithoutKey(): boolean;
+  // The record enrolled before device keys, the one read() refuses,
+  // or null: the device enrolls again to make its key, and keeps what
+  // the record held (enroll.ts).
+  readWithoutKey(): Omit<StoredAccount, "deviceKey"> | null;
   // read() !== null, for callers that only need the verdict.
   signedIn(): boolean;
   write(account: StoredAccount): void;
@@ -262,14 +263,18 @@ export function createAccountStore(opts: {
       return this.read() !== null;
     },
 
-    enrolledWithoutKey() {
+    readWithoutKey() {
       const doc = readDoc();
-      return (
-        doc !== null &&
-        !("signedOut" in doc) &&
-        typeof doc.credential === "string" &&
-        doc.deviceKey === undefined
-      );
+      if (
+        doc === null ||
+        "signedOut" in doc ||
+        typeof doc.deviceName !== "string" ||
+        doc.deviceKey !== undefined
+      ) {
+        return null;
+      }
+      const opened = decrypt(doc);
+      return opened === null ? null : withIdentity(doc, opened);
     },
 
     clear() {

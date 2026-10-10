@@ -237,7 +237,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
       detectedDeviceIcon: detectedIcon,
       sharedSignIn: false,
-      needsDeviceKey: store.enrolledWithoutKey(),
+      needsDeviceKey: store.readWithoutKey() !== null,
     };
   }
 

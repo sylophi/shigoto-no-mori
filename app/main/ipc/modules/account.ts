@@ -264,7 +264,7 @@ function statusOf(
     sharedSignIn: existsSync(
       join(app.getPath("userData"), CLONED_LOGIN_MARKER),
     ),
-    needsDeviceKey: store().enrolledWithoutKey(),
+    needsDeviceKey: store().readWithoutKey() !== null,
   };
 }
 
