@@ -142,7 +142,17 @@ export class Tab {
     return this.cdp;
   }
 
+  // The network gone or back, as the page's OS reports it. A window
+  // hears only the event: Chromium's offline emulation also cuts the
+  // window's loopback to its own host, which no real outage does, and
+  // leaves its views frozen on their last value.
   async setOffline(offline: boolean): Promise<void> {
+    if (this.app !== null) {
+      await this.page.evaluate((gone) => {
+        window.dispatchEvent(new Event(gone ? "offline" : "online"));
+      }, offline);
+      return;
+    }
     await (
       await this.session()
     ).send("Network.emulateNetworkConditions", {
