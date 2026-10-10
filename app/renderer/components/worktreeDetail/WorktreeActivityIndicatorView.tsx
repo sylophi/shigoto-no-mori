@@ -1,7 +1,7 @@
 import { RefreshCw } from "lucide-react";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The page's one refresh, in the header's top row. It spins through
 // whatever the page is waiting on (a ref fetch, the worktree or branch

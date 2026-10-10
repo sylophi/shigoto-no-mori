@@ -1,5 +1,5 @@
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { LoadFailure } from "@/components/ui/load-failure";
+import { LoadFailure } from "@shigomori/ui/primitives/load-failure.tsx";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";

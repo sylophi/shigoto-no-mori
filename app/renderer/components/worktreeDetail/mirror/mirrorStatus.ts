@@ -12,7 +12,7 @@ import {
   type MirrorSession,
   type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
-import type { StatusTone } from "@/components/ui/status-dot";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { pluralize } from "@/lib/pluralize";
 
 // The states in which files cross or are written. The engine passes

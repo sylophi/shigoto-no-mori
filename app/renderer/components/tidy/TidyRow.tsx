@@ -1,5 +1,5 @@
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import type { RowStatus } from "@/components/ui/row-status";
+import type { RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
 import type { TidyEntry } from "./tidyModel";
 import { TidyRowView } from "./TidyRowView";
 

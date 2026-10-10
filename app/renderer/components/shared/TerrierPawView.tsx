@@ -1,6 +1,6 @@
 import { PawPrint } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // Terrier's mark: the paw on a terrier-sourced project (Project.source),
 // on its page's header and, with Mark terrier projects on, its title

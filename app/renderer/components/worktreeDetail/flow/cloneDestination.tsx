@@ -22,7 +22,7 @@ import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
-import { ensureTrailingSep, tildify } from "@shared/projectPaths";
+import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
 
 type CloneDestination = {
   // The project on the peer, for the name and the words.

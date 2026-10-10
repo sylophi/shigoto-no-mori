@@ -3,8 +3,8 @@
 // trimmed to the ones that fit on one line, measured off a hidden copy.
 import type { ReactNode, Ref } from "react";
 import { Play, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export function ScriptLaunchRowView({
   pinned,

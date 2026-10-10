@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import type { DoctorReport } from "@shigomori/contracts/modules/cli";
 import { Stethoscope } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { SectionIntro } from "@/components/ui/section-heading";
-import { StatusDot } from "@/components/ui/status-dot";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
+import { StatusDot } from "@shigomori/ui/primitives/status-dot.tsx";
 import { summaryLabel, summaryTone } from "./DoctorDialogView";
 
 // Settings' door to `sm doctor` on whichever device the section is

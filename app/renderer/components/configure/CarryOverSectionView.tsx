@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SectionIntro } from "@/components/ui/section-heading";
-import { Switch } from "@/components/ui/switch";
-import { ExternalLink } from "@/components/ui/external-link";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
+import { Switch } from "@shigomori/ui/primitives/switch.tsx";
+import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
 import { normalizeRelPath } from "@shared/git/gitPaths";
 import type {
   CarryOverEntry,

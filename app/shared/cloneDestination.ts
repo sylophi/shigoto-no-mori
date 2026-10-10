@@ -10,7 +10,7 @@ import {
   getBrowseParentPath,
   normalizeForSubmit,
   tildify,
-} from "@shared/projectPaths";
+} from "@shigomori/contracts/projectPaths";
 
 // The folder this device already keeps most of its repos in, so a new
 // one joins its siblings instead of being dropped in the home folder.

@@ -1,23 +1,23 @@
 import type { KeyboardEvent } from "react";
 import { Command } from "cmdk";
 import { Folder } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ChipButton } from "@/components/ui/chip-button";
-import { FileManagerIcon } from "@/components/ui/file-manager";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { FileManagerIcon } from "@shigomori/ui/primitives/file-manager.tsx";
+import { Kbd, KbdGroup } from "@shigomori/ui/primitives/kbd.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { BrowseListing } from "@/hooks/fs/useBrowseListing";
 import {
   ITEM_CLASS,
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
+} from "@shigomori/ui/primitives/cmdk-classes.ts";
 import {
   canNavigateUp,
   ensureTrailingSep,
   isAnchoredPath,
   normalizeForSubmit,
-} from "@shared/projectPaths";
+} from "@shigomori/contracts/projectPaths";
 import { BrowseKeyHintsView, BrowseUpItemView } from "./BrowseListPartsView";
 
 // Prefix used as the cmdk `value` for browse-list items. `hasHighlighted`

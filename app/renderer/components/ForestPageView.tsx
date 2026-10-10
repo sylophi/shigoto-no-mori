@@ -4,7 +4,7 @@
 // leaves like every other room. On a wide viewport the forest is the
 // sidebar, so the page has nothing to show but a pointer to it.
 import type { ReactNode } from "react";
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 
 export function ForestPageView({
   phone,

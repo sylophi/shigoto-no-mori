@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { SectionIntro } from "@/components/ui/section-heading";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
 import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";

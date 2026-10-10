@@ -4,9 +4,9 @@
 // the inbox's, beside the device and mirror marks. The tip comes off
 // this machine's forwards (useWorktreeForwardTip).
 import { Cable } from "lucide-react";
-import { TONE_TEXT } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function ForwardMarkView({ tip }: { tip: string }) {
   return (

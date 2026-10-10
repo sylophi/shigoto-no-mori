@@ -6,10 +6,10 @@ import {
   type CustomPort,
   type WorktreePort,
 } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { PortFormView } from "./PortFormView";
 
 // `plain`: rows without the cards' borders and fills (PortRowView), and

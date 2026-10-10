@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 // The one scroll box every state of the page renders into.

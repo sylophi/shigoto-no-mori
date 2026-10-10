@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { GitMerge } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { getBrowseParentPath } from "@shared/projectPaths";
+import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import { notifyError, toast } from "@/lib/toast";
 import { DataLocationSectionView } from "./DataLocationSectionView";
 

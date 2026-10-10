@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
 import { sanitizeBranchName } from "@shared/git/branches";
 
 export function NewBranchFormView({

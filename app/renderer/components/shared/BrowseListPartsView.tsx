@@ -4,8 +4,8 @@
 // for the key hints also the filter-first picker (PathPickerModal.tsx).
 import { Command } from "cmdk";
 import { ArrowLeft, CornerLeftUp } from "lucide-react";
-import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
-import { KbdHint } from "@/components/ui/kbd";
+import { ITEM_CLASS } from "@shigomori/ui/primitives/cmdk-classes.ts";
+import { KbdHint } from "@shigomori/ui/primitives/kbd.tsx";
 
 // The `..` row at the top of a cmdk browse list, one folder up. Its
 // value carries the lists' "browse:" row prefix.

@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { ScrollText } from "lucide-react";
 import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import {
   BuildVersionLineView,
   ChangelogButtonView,

@@ -10,8 +10,8 @@
 // toast per action rather than one per port.
 import type { ReactNode } from "react";
 import { Loader2, Power, PowerOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export type ForwardAllMode = "start" | "stop";
 

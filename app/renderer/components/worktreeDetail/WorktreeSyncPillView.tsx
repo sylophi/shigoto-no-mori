@@ -8,9 +8,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { SYNC_PILL_SHAPE, SyncActionButtonView } from "./SyncActionButtonView";
 
 // A move that waits on something else (worktreeSyncView's `held`).

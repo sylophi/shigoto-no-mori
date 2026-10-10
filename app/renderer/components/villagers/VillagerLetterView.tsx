@@ -1,7 +1,7 @@
 import { type CSSProperties, useState } from "react";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import { StationeryPrintView } from "./StationeryPrintView";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
 import { NextArrowView } from "./NextArrowView";
 import { MoveCaptionView } from "./VillagerDialogueView";

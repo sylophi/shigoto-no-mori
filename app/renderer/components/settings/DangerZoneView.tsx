@@ -1,8 +1,8 @@
 import { Flame } from "lucide-react";
 import type { NukeProgress } from "@shigomori/contracts/schemas";
-import { BlockingOverlay } from "@/components/ui/blocking-overlay";
-import { Button } from "@/components/ui/button";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { BlockingOverlay } from "@shigomori/ui/primitives/blocking-overlay.tsx";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 
 // This machine's nuke: everything shigomori made, gone. DangerZone runs
 // it.

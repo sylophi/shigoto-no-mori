@@ -1,8 +1,8 @@
 // The worktree page's Launch section (LaunchSection binds it): the
 // launch tools on this device, and the package.json scripts.
 import type { ReactNode } from "react";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 
 export function LaunchSectionView({
   tools,

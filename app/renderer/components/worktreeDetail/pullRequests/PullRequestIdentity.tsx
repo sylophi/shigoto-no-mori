@@ -1,7 +1,7 @@
 // A PR's identity (PullRequestIdentityView), measured whether "last
 // updated" fits beside the author's line.
 import { useLayoutEffect, useRef, useState } from "react";
-import { useNow } from "@/hooks/ui/useNow";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { PullRequestDetail, Worktree } from "@shigomori/contracts/schemas";
 import { PullRequestIdentityView } from "./PullRequestIdentityView";

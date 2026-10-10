@@ -6,12 +6,12 @@
 // bottom landed is still that stack until the rest follows.
 import { GitBranch } from "lucide-react";
 import { describePullRequest } from "@/lib/pullRequest";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { PullRequestTitleLinkView } from "./PullRequestTitleLinkView";
 import { TONE_TEXT } from "./pullRequestShared";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export function StackListView({
   worktree,

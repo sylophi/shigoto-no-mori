@@ -21,12 +21,12 @@ import { AlertTriangle, GitPullRequest } from "lucide-react";
 import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useNow } from "@/hooks/ui/useNow";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { pluralize } from "@/lib/pluralize";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";
 import { StatusPillView } from "@/components/sidebar/StatusPillView";
 import type {

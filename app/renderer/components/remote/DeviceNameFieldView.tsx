@@ -12,8 +12,8 @@
 // inline editor (InlineNameEditorView).
 import { Pencil } from "lucide-react";
 import { InlineNameEditorView } from "@/components/shared/InlineNameEditorView";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The trigger is a separate export because it sits apart from the
 // field: the registry row keeps it with the row's other actions on the

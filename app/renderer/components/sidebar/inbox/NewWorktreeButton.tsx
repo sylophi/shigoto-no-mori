@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";

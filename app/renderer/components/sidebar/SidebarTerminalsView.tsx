@@ -6,9 +6,9 @@ import type { ReactNode } from "react";
 import { SquareTerminal } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
-import type { StatusTone } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function SidebarTerminalsView({ children }: { children: ReactNode }) {
   return (

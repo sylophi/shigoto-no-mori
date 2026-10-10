@@ -6,9 +6,9 @@
 // the landing machine's home.
 import { Check, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { formatElapsed } from "./pullSteps";
 
 export function StepRailView({

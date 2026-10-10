@@ -3,9 +3,9 @@
 // other states in a scene of their own.
 import type { ReactNode } from "react";
 import { GitBranch } from "lucide-react";
-import { StaticMenu } from "@/components/ui/dropdown-menu";
-import { ModalBox } from "@/components/ui/modal-shell";
-import { TONE_PILL } from "@/components/ui/status-dot";
+import { StaticMenu } from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
+import { TONE_PILL } from "@shigomori/ui/primitives/status-dot.tsx";
 import {
   CardListView,
   CardSkeletonView,

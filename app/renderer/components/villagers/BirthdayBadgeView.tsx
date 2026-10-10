@@ -1,5 +1,5 @@
 import { Cake } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { Resident } from "@/hooks/villagers/useResident";
 import { BirthdayFaceView } from "./BirthdayFaceView";
 

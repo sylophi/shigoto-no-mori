@@ -1,5 +1,5 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn, dragRegion } from "@/lib/utils";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn, dragRegion } from "@shigomori/ui/lib/utils.ts";
 
 // Dev builds mark the title so a stray window is never mistaken for the
 // packaged app. Both themes also carry a one-way peek at prod styling:

@@ -13,7 +13,7 @@
 // of the devices, for what belongs to all of them at once (`renderAllDevices`).
 import { useState, type ReactNode } from "react";
 import { DeviceChip } from "@/components/shared/DeviceChip";
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import {
   useProjectNav,

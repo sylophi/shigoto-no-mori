@@ -1,5 +1,5 @@
-import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
+import { Switch } from "@shigomori/ui/primitives/switch.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 interface ToggleRowProps {
   checked: boolean;

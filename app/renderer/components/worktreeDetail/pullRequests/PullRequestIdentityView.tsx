@@ -1,6 +1,6 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { Ref } from "react";
-import { formatRelativeTime } from "@/lib/relativeTime";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { DiffButtonView } from "../DiffButtonView";
 import { PullRequestStateLabelView } from "./PullRequestStateLabelView";

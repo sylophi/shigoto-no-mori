@@ -1,9 +1,9 @@
 import { Bot } from "lucide-react";
-import { TONE_TEXT } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { needLine } from "@/lib/agentNeeds";
 import { AGENT_STATE_VIEW, waitingSession } from "@/lib/agentSessions";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 
 // A worktree's row while one of its agent sessions waits on you (a

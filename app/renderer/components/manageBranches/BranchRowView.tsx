@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { Check, Pencil, Trash2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { Input } from "@/components/ui/input";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { sanitizeBranchName } from "@shared/git/branches";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { IconButton } from "@/components/ui/icon-button";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 
 // One local branch: its name, renamed in place, the worktree it is
 // checked out in, and its removal (BranchRow.tsx binds them).

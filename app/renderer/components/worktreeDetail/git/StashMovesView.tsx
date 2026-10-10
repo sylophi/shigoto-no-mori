@@ -1,5 +1,5 @@
 import { ArchiveRestore, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 
 // Under a stash's title on the Stashes tab: put it back (and drop it,
 // or keep it), or drop it. A restore lands on the changes it went back

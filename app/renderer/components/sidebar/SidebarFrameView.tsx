@@ -2,7 +2,7 @@
 // beside a page's takeover, and the parts of a view's pane, which a
 // scene composes into a sidebar of its own.
 import { useState, type ReactNode, type Ref } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { ARRIVE_FROM } from "./sidebarChrome";
 import { ROW_LAYOUT, type SidebarRow } from "./sidebarRow";
 

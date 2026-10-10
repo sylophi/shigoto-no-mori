@@ -1,4 +1,4 @@
-import { Textarea } from "@/components/ui/textarea";
+import { Textarea } from "@shigomori/ui/primitives/textarea.tsx";
 
 interface ScriptFieldProps {
   id: string;

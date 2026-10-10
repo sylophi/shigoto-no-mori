@@ -2,8 +2,8 @@
 // list's box, each row at its offset, and the rows that stand for a
 // listing still on its way or one that failed.
 import type { ReactNode, Ref } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { ARRIVE_FROM } from "./sidebarChrome";
 import { ROW_LAYOUT, type SidebarRow } from "./sidebarRow";
 

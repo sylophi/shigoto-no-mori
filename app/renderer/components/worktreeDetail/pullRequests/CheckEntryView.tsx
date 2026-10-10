@@ -1,9 +1,9 @@
 import { ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { openExternalUrl } from "@/lib/openExternal";
 import type { PullRequestCheck } from "@shigomori/contracts/schemas";
 import { CHECK_BUCKET_ICON, TONE_TEXT } from "./pullRequestShared";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export function CheckEntryView({ check }: { check: PullRequestCheck }) {
   const { Icon, tone, label } = CHECK_BUCKET_ICON[check.bucket];

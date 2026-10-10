@@ -7,10 +7,10 @@
 // Save) and holds on every device.
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip-button";
-import { Input } from "@/components/ui/input";
-import { SectionIntro } from "@/components/ui/section-heading";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Chip } from "@shigomori/ui/primitives/chip-button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
 import type { WorktreePrefixList } from "@/hooks/sharedSettings/useWorktreePrefixes";
 
 const COPY: Record<

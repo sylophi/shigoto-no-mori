@@ -4,9 +4,9 @@ import {
   HEADING_CLASS,
   ITEM_CLASS,
   keepFocusInInput,
-} from "@/components/ui/cmdk-classes";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/cmdk-classes.ts";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // Whether the pane an item sits in holds the keys. The palette has two
 // panes, the rows and the highlighted row's verbs, and ↑↓ and ↩ move

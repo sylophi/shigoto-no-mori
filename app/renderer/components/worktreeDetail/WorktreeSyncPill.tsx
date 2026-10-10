@@ -10,7 +10,7 @@ import {
 } from "@/hooks/worktrees/useWorktreeSync";
 import { worktreeSyncView } from "@/lib/syncState";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { SyncActionButtonView } from "./SyncActionButtonView";
 import { HeldSyncView, PickSideView } from "./WorktreeSyncPillView";
 

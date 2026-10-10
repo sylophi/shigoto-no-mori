@@ -15,8 +15,8 @@ import type { SidebarView } from "@shigomori/contracts/schemas";
 import {
   SegmentedControl,
   type SegmentedOption,
-} from "@/components/ui/segmented-control";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/segmented-control.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
 export function SidebarFooterView({

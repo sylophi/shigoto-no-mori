@@ -1,10 +1,10 @@
 import { FileDiff } from "lucide-react";
 import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
-import { Checkbox } from "@/components/ui/checkbox";
-import { type RowStatus } from "@/components/ui/row-status";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { tildify } from "@shared/projectPaths";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
+import { type RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import type { Worktree } from "@shigomori/contracts/schemas";
 
 interface ConvertRowProps {

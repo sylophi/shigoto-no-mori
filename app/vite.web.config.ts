@@ -11,6 +11,7 @@ import { cpSync, createReadStream, existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
+import { dedupe } from "./vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
@@ -168,10 +169,7 @@ export default defineConfig(({ mode }) => {
     // Env files are read from the app root, beside the desktop's.
     envDir: __dirname,
     resolve: {
-      // One effect for the app and the contracts, which reach it through
-      // their own node_modules link: the binary codecs of one copy cannot
-      // read the schemas another built.
-      dedupe: ["effect"],
+      dedupe,
       alias: {
         "@": resolve(__dirname, "renderer"),
         "@shared": resolve(__dirname, "shared"),

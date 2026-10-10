@@ -3,7 +3,7 @@ import { DeviceMenuRowView } from "./DeviceMenuRowView";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import {
   CONFIRM_QUICK_MS,
   useConfirmTwiceKeyed,

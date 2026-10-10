@@ -14,7 +14,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import { isHubUnreachable } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import {
   useAccountDevices,
   useLocalDevice,
@@ -34,7 +34,7 @@ import {
   useHubStatus,
   useTunnelState,
 } from "@/hooks/remote/useHubStatus";
-import { useNow } from "@/hooks/ui/useNow";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { localDeviceId } from "@/lib/queryKeys";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";

@@ -3,7 +3,7 @@
 // by it, with the stack it sits in, and the boxes that clean up after a
 // PR closed or merged.
 import type { ReactNode } from "react";
-import { StaticPopover } from "@/components/ui/popover";
+import { StaticPopover } from "@shigomori/ui/primitives/popover.tsx";
 import { CheckEntryView } from "@/components/worktreeDetail/pullRequests/CheckEntryView";
 import { ClosedPullRequestBoxView } from "@/components/worktreeDetail/pullRequests/ClosedPullRequestBoxView";
 import {

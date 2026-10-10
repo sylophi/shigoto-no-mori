@@ -1,17 +1,17 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { Command, useCommandState } from "cmdk";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { KbdHint } from "@/components/ui/kbd";
+import { KbdHint } from "@shigomori/ui/primitives/kbd.tsx";
 import {
   EMPTY_CLASS,
   INPUT_CLASS,
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { BranchLabel } from "@/components/ui/branch-label";
+} from "@shigomori/ui/primitives/cmdk-classes.ts";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
 import { DeviceBadgeView } from "@/components/sidebar/DeviceBadgeView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { PaneKeysProvider } from "./PaletteItemView";
 import type { PaletteRow } from "./PaletteRows";
 

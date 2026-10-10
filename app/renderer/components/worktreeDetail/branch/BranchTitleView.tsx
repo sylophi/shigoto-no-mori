@@ -1,18 +1,18 @@
 import { useRef, type ReactNode } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
-import { BranchLabel } from "@/components/ui/branch-label";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { InlineError } from "@/components/ui/inline-error";
-import { Input } from "@/components/ui/input";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
 import { sanitizeBranchName } from "@shared/git/branches";
-import { IconButton } from "@/components/ui/icon-button";
-import { cn } from "@/lib/utils";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // The branch's two sizes: the page's title, or a line under the work's
 // own title. The rename field is as tall as the line it stands in for,

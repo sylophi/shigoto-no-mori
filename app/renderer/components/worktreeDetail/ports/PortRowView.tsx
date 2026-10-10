@@ -10,11 +10,11 @@
 import { useState, type ReactNode } from "react";
 import { Pencil, X } from "lucide-react";
 import type { CustomPort, WorktreePort } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { RowTag } from "@/components/ui/row-tag";
-import { StatusDot } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
+import { StatusDot } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { OpenLocalhostButtonView } from "./OpenLocalhostButtonView";
 import { PortFormView } from "./PortFormView";
 

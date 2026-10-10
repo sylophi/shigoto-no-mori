@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A doubutsu character's bare face (VillagerIcon reads it by name slug
 // from this device's villager data, gated by useVillageLife). No face

@@ -10,7 +10,7 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { peerOutputHiddenNote } from "@/lib/commandAccessCopy";
 import { openExternalUrl } from "@/lib/openExternal";
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptConsoleView } from "./ScriptConsoleView";

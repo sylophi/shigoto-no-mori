@@ -2,7 +2,7 @@
 // package.json scripts, then the lifecycle scripts the project runs
 // around a worktree's life.
 import type { ReactNode } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import { ScriptListView } from "./ScriptListView";
 
 export function ScriptsSectionView({

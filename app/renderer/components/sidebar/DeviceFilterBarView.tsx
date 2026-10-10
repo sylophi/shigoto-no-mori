@@ -14,13 +14,13 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
-import { Button } from "@/components/ui/button";
-import type { StatusTone } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import { deviceAbbrev } from "@/lib/deviceAbbrev";
 import { deviceTitle } from "@/lib/remote/deviceStatus";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The All pill's id.
 export const ALL_DEVICES = "all";

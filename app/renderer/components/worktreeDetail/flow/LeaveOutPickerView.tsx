@@ -20,20 +20,20 @@ import {
   MIRROR_IGNORES_LIMIT,
 } from "@shigomori/contracts/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
-import { Button } from "@/components/ui/button";
-import { MaterialIcon } from "@/components/ui/material-icon";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { MaterialIcon } from "@shigomori/ui/primitives/material-icon.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { withToggled } from "@/lib/toggleSet";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { CARD, CARD_NOTE, CardSkeletonView } from "./FlowChromeView";
 import {
   exceptionsOf,
   type IgnoreBase,
   type IgnoreSelection,
 } from "@shared/leaveOutRule";
-import { IconButton } from "@/components/ui/icon-button";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 
 // What stays behind before the exceptions (nothing, or what git
 // ignores), in the words each base goes by. The heading beside the

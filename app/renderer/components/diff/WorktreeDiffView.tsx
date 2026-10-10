@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { CircleCheck } from "lucide-react";
-import { Kbd } from "@/components/ui/kbd";
+import { Kbd } from "@shigomori/ui/primitives/kbd.tsx";
 
 // The foot of the changes page's file list (WorktreeDiff.tsx fills it):
 // where a commit lands, the last commit while it can still be amended,

@@ -1,11 +1,11 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
-import { PathSpan } from "@/components/ui/path-span";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
 import { KeyedButtonView } from "./DialogPartsView";
 import { ResultRowView } from "./ResultRowView";
-import { IconButton } from "@/components/ui/icon-button";
-import { MODAL_COMMAND_CLASS } from "@/components/ui/cmdk-classes";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { MODAL_COMMAND_CLASS } from "@shigomori/ui/primitives/cmdk-classes.ts";
 
 interface ResultsPanelProps {
   scanRoot: string;

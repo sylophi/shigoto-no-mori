@@ -1,8 +1,8 @@
 import { ChevronRight, Play, Square } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { ScriptRunState } from "@/store/scriptRuns";
 import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export function ScriptRowView({
   label,

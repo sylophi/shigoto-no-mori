@@ -1,7 +1,10 @@
 import { useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import {
   SidebarTakeoverSlotView,
   SidebarTakeoverView,

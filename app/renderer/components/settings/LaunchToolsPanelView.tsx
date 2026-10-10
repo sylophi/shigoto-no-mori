@@ -5,11 +5,14 @@ import {
   TERMINAL_IDS,
   type DetectedLauncher,
 } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { LauncherIconView } from "@/components/shared/LauncherIconView";
-import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  SectionHeading,
+  SectionIntro,
+} from "@shigomori/ui/primitives/section-heading.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInputView";
 import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";

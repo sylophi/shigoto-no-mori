@@ -11,14 +11,14 @@
 // diff at once, so the header doesn't grow when the lookup answers.
 import type { ReactNode, Ref } from "react";
 import { ArrowLeft, Layers2 } from "lucide-react";
-import { IconButton } from "@/components/ui/icon-button";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/popover.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { DiffButtonView } from "./DiffButtonView";
 
 export function WorktreeHeaderView({

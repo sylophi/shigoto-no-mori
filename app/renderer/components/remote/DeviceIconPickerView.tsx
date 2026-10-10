@@ -28,9 +28,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { StatusTone } from "@/components/ui/status-dot";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function DeviceIconPickerView({
   icon,

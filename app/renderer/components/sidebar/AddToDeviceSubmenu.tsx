@@ -15,7 +15,7 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { notifyError, toast } from "@/lib/toast";

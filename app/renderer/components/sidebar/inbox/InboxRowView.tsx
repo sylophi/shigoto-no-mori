@@ -1,9 +1,9 @@
 // The inbox's row (InboxRow binds it): the tree's row
 // (WorktreeEntryView) with the project and the time over it.
 import type { ComponentProps, ReactNode } from "react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useNow } from "@/hooks/ui/useNow";
-import { formatRelativeTime } from "@/lib/relativeTime";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import {
   worktreeLastActivityAt,
   type Project,

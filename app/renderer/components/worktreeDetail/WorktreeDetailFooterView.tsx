@@ -1,8 +1,8 @@
 import { Trash2 } from "lucide-react";
 import type { ReactNode, Ref } from "react";
-import { Button } from "@/components/ui/button";
-import { InlineError } from "@/components/ui/inline-error";
-import { assertNever } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import {

@@ -3,8 +3,8 @@
 // header go through.
 import type { ReactNode } from "react";
 import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
-import { StaticMenu } from "@/components/ui/dropdown-menu";
-import { StaticPopover } from "@/components/ui/popover";
+import { StaticMenu } from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { StaticPopover } from "@shigomori/ui/primitives/popover.tsx";
 import {
   AgentSessionsMenuView,
   SessionRowView,

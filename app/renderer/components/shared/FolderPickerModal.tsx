@@ -5,11 +5,11 @@ import {
   FolderPickerView,
   type FolderPickerProps,
 } from "@/components/shared/FolderPickerView";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import { ensureTrailingSep } from "@shared/projectPaths";
+import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
 
 export function FolderPickerModal({
   initialPath,

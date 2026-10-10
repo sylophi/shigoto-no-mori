@@ -1,6 +1,6 @@
 import { Save } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 interface EditorFooterProps {
   isDirty: boolean;

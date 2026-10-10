@@ -1,5 +1,5 @@
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { TidySummary } from "./tidyModel";
 import { TidyConfirmView } from "./TidyConfirmView";
 

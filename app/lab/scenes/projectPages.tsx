@@ -9,7 +9,7 @@ import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { ProjectDevicePageView } from "@/components/shared/ProjectDevicePageView";
 import { ProjectIconView } from "@/components/shared/ProjectIconView";
 import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
-import { ModalBox } from "@/components/ui/modal-shell";
+import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { CarryOverRowView } from "@/components/configure/CarryOverRowView";
 import { CarryOverSectionView } from "@/components/configure/CarryOverSectionView";
 import { CarryOverTrailingView } from "@/components/configure/CarryOverTrailingView";

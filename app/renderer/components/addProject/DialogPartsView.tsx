@@ -6,10 +6,13 @@ import type {
 } from "react";
 import { Command } from "cmdk";
 import { FolderInput, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Kbd, KbdGroup, KbdHint } from "@/components/ui/kbd";
-import { PathSpan } from "@/components/ui/path-span";
-import { SimpleTooltip, type WithoutTitle } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Kbd, KbdGroup, KbdHint } from "@shigomori/ui/primitives/kbd.tsx";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import {
+  SimpleTooltip,
+  type WithoutTitle,
+} from "@shigomori/ui/primitives/tooltip.tsx";
 
 // The clone's and the new repository's top row: what to make, and the
 // button that makes it, the way the folder browser's row reads. Inside

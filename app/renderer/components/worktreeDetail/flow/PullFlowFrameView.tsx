@@ -3,7 +3,7 @@
 // dialog's own words under its title, the step rail, and the step.
 import type { ReactNode } from "react";
 import { Ban, Check, Loader2, X, type LucideIcon } from "lucide-react";
-import { TONE_PILL } from "@/components/ui/status-dot";
+import { TONE_PILL } from "@shigomori/ui/primitives/status-dot.tsx";
 import { FlowHeaderView, StepRailView } from "./FlowChromeView";
 import type { FlowStage } from "./pullSteps";
 

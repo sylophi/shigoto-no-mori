@@ -232,7 +232,7 @@
 /* A ghost button is bare text or a bare icon until the pointer finds
    it, and a finger never hovers, so on a phone nothing says it can be
    tapped. The same goes for the bare icon buttons written outside the
-   primitive (ui/icon-button.tsx and its kin), which mark themselves
+   primitive (primitives/icon-button.tsx and its kin), which mark themselves
    with data-icon-button. Both rest on a fill here, with the hairline
    v1's outline buttons wear (doubutsu zeroes --border, and its cream
    card already stands off the patterned canvas). The back button opts

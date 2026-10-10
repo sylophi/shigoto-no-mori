@@ -4,10 +4,13 @@
 // the project's own tools.
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { FolderOpen, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { PathSpan } from "@/components/ui/path-span";
-import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import {
+  SectionHeading,
+  SectionIntro,
+} from "@shigomori/ui/primitives/section-heading.tsx";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import type {

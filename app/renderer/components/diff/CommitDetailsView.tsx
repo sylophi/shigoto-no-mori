@@ -13,16 +13,16 @@ import {
   TextCursorInput,
   Undo2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useCopied } from "@/components/ui/copy-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { useCopied } from "@shigomori/ui/primitives/copy-button.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { pluralize } from "@/lib/pluralize";
 
 // Under a commit's title on its page: the rest of its message, and what

@@ -1,8 +1,8 @@
 import { Loader2 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { SyncTone } from "@/lib/syncState";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // Tone-to-class lookup. Spelled out so Tailwind's JIT keeps the classes
 // in the build instead of pruning the dynamic interpolation.

@@ -1,8 +1,8 @@
 import { FolderOpen } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { tildify } from "@shared/projectPaths";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import type { WorktreeLayout } from "@shigomori/contracts/schemas";
 import type { DeviceLayout } from "@/hooks/config/useDeviceLayout";
 import type { LayoutOption } from "./layoutOptions";

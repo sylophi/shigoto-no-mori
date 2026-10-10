@@ -1,20 +1,20 @@
 import type { ReactNode, Ref } from "react";
 import { ChevronDown, CircleSlash, Layers2, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import {
   type describeMergeVerdict,
   MERGE_METHOD_LABEL,
 } from "@/lib/pullRequest";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type {
   MergeMethod,
   PullRequestDetail,

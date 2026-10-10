@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A cardboard moving box, flaps open and taped down the middle: what a
 // villager moving out is packed into. Drawn flat, in the amber the theme

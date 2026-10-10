@@ -8,13 +8,13 @@ import {
   isBetween,
   releaseVersionOf,
 } from "@shared/releases";
-import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
-import { LoadFailure } from "@/components/ui/load-failure";
-import { Markdown } from "@/components/ui/markdown";
-import { RowTag } from "@/components/ui/row-tag";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TONE_PILL } from "@/components/ui/status-dot";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { LoadFailure } from "@shigomori/ui/primitives/load-failure.tsx";
+import { Markdown } from "@shigomori/ui/primitives/markdown.tsx";
+import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { TONE_PILL } from "@shigomori/ui/primitives/status-dot.tsx";
 import { openExternalUrl } from "@/lib/openExternal";
 import { pluralize } from "@/lib/pluralize";
 import {

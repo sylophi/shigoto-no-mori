@@ -13,7 +13,7 @@ import {
   GitCompareArrows,
   type LucideIcon,
 } from "lucide-react";
-import { assertNever } from "./utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { pluralize } from "./pluralize";
 import {
   deriveRemoteSyncState,

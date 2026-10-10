@@ -1,5 +1,5 @@
 import type { VillagerDataStatus } from "@shigomori/contracts/schemas";
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 
 // What the Village life row and the villager data control under it say
 // and offer (VillageLifeSetting.tsx, VillagerDataControl.tsx). Pure, so

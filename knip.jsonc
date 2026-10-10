@@ -42,6 +42,10 @@
       // The entrypoint Bun compiles.
       "entry": ["src/main.ts"],
     },
+    // Its exports map makes every module an entry, like the contracts'.
+    "packages/ui": {
+      "includeEntryExports": true,
+    },
     "packages/engine": {
       // Run by path from the store's test, in a process of its own.
       "entry": ["test/fixtures/*.ts"],

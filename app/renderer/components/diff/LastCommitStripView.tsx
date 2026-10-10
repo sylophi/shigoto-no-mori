@@ -1,7 +1,7 @@
 import { GitCommitHorizontal, PencilLine, Undo2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 
 // The commit HEAD is on, with the two things the changes page can do

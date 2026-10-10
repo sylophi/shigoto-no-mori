@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RewordDialogView, RewordFormView } from "./RewordDialogView";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";

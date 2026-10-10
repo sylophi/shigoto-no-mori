@@ -4,14 +4,14 @@ import {
   UserRoundCheck,
   UserRoundX,
 } from "lucide-react";
-import { Chip, ChipButton } from "@/components/ui/chip-button";
+import { Chip, ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/popover.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   describeReviews,
   type PullRequestTone,

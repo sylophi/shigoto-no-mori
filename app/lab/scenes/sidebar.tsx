@@ -59,7 +59,7 @@ import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import type { SidebarMarks } from "@/hooks/config/useSidebarMarks";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import {
   accountDevices,
   FAKE_APP_VERSION,

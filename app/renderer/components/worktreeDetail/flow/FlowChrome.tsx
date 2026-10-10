@@ -1,4 +1,4 @@
-import { PathSpan } from "@/components/ui/path-span";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 

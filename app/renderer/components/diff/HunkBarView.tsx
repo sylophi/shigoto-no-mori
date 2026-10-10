@@ -1,6 +1,6 @@
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs";
 import { Undo2 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
 import type {
   HunkStates,
   LineChange,

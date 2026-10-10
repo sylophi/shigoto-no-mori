@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import type { DraggableAttributes } from "@dnd-kit/core";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function ProjectRowView({
   sortable,

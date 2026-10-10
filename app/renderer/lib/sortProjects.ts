@@ -1,4 +1,4 @@
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import type { Project, ProjectSortMode } from "@shigomori/contracts/schemas";
 
 // Orders the sidebar project list for display. `manual` preserves the stored

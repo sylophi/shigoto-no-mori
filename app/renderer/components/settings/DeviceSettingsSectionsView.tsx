@@ -2,9 +2,9 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { digitsOnly } from "@shigomori/contracts/schemas";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";
 import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { ExternalLink } from "@/components/ui/external-link";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
 
 const PORT_POOL = {

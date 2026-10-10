@@ -8,10 +8,10 @@ import {
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { PathSpan } from "@/components/ui/path-span";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
 import { BrowseKeyHintsView } from "./BrowseListPartsView";
 import { type PickerEntry, PickerRowView } from "./PickerRowView";
-import { IconButton } from "@/components/ui/icon-button";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 
 // The folder browser behind the carry-over picker and the "leave out"
 // pickers: a filter that owns the keyboard, folders to step into, and

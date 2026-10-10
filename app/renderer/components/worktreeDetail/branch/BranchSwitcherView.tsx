@@ -3,7 +3,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import { Check, Loader2, Search } from "lucide-react";
 import { type BranchEntry } from "@/components/shared/BranchComboboxView";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // Switching the worktree's branch, opened from the branch's menu
 // (BranchMenuView). BranchSwitcher lists the branches.

@@ -1,7 +1,7 @@
-import { Chip } from "@/components/ui/chip-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Chip } from "@shigomori/ui/primitives/chip-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { describeChecks, type MergeVerdict } from "@/lib/pullRequest";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { ChecksPopoverView } from "./ChecksPopoverView";
 import { ChecksSummaryIconView } from "./ChecksSummaryIconView";

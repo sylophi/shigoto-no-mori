@@ -1,5 +1,5 @@
 import { CircleAlert, CircleCheck, CircleDashed } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestTone } from "@/lib/pullRequest";
 import { TONE_TEXT } from "./pullRequestShared";
 

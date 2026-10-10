@@ -3,7 +3,7 @@
 // only under a remote host scope.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { deviceTitle, type DeviceStatusView } from "@/lib/remote/deviceStatus";
 
 // The pill shape, shared with the device tabs (DeviceTabBarView): one

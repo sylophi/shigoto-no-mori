@@ -1,4 +1,4 @@
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
+import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destructive-button.tsx";
 
 export function MergedPrimaryBranchBoxView({
   target,

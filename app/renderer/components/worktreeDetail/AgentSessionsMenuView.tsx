@@ -1,17 +1,17 @@
 import type { ReactNode } from "react";
 import { Bot, Check, Copy, Play, Unlink } from "lucide-react";
-import { useCopied } from "@/components/ui/copy-button";
+import { useCopied } from "@shigomori/ui/primitives/copy-button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { IconButton } from "@/components/ui/icon-button";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { StatusDot, TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import {
   AGENT_STATE_VIEW,
   agentSessionsState,
@@ -19,7 +19,7 @@ import {
   waitingSession,
 } from "@/lib/agentSessions";
 import { needLine, needView, stateLabel } from "@/lib/agentNeeds";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { AgentSession } from "@shigomori/contracts/schemas";
 import { FooterVerbView, LABEL_RANK } from "./FooterVerbView";
 

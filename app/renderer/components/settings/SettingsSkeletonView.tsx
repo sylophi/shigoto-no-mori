@@ -1,5 +1,5 @@
 import { PageHeaderView } from "@/components/shared/PageHeaderView";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 
 export function SettingsSkeletonView() {
   return (

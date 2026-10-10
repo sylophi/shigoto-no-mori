@@ -2,10 +2,10 @@ import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
 import { Folder, FolderGit2, FolderSearch } from "lucide-react";
 import type { BrowseListing } from "@/hooks/fs/useBrowseListing";
-import { Button } from "@/components/ui/button";
-import { ChipButton } from "@/components/ui/chip-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { FileManagerIcon } from "@/components/ui/file-manager";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { FileManagerIcon } from "@shigomori/ui/primitives/file-manager.tsx";
 import {
   BrowseKeyHintsView,
   BrowseUpItemView,
@@ -14,7 +14,7 @@ import {
   ITEM_CLASS,
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
+} from "@shigomori/ui/primitives/cmdk-classes.ts";
 import { KeyedButtonView } from "./DialogPartsView";
 
 // The add-existing tab's browse stage: the path as typed, the folders

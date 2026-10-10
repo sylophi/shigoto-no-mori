@@ -1,19 +1,19 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
 import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { Input } from "@/components/ui/input";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import {
   SegmentedControl,
   type SegmentedOption,
-} from "@/components/ui/segmented-control";
+} from "@shigomori/ui/primitives/segmented-control.tsx";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 import {
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
 } from "@shared/git/branches";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export type NewWorktreeMode = "branch-from" | "checkout" | "pull-request";
 

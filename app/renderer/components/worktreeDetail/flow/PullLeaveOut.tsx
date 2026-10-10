@@ -4,7 +4,7 @@
 // device, opens on it. The row stays out of the way while the two
 // agree.
 import { Bookmark } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import type { PullChoiceState } from "./ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "./LeaveOutPicker";
 

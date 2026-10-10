@@ -3,7 +3,7 @@
 // chip, the sidebar badge and the account page read the same. Tones stay
 // within the four raw families the theme remaps (emerald, rose, amber,
 // sky) plus slate for off, per the doubutsu contract.
-import type { StatusTone } from "@/components/ui/status-dot";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import type { RemoteDeviceStatus } from "./devices";
 
 export type DeviceStatusView = {

@@ -7,8 +7,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   PROJECT_ACTION_HOOKS,
   PROJECT_MENU_TRIGGER_CLASS,

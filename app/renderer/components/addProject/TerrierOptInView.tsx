@@ -1,4 +1,4 @@
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
 
 // The add-project footer's box: the project goes into terrier too.
 export function TerrierOptInView({

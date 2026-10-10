@@ -1,4 +1,4 @@
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { InboxRow } from "./inbox/InboxRow";
 import { FoldHeaderView } from "./FoldHeaderView";
 import { ProjectRow } from "./ProjectRow";

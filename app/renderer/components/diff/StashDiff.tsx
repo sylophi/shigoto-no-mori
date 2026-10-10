@@ -1,4 +1,4 @@
-import { RelativeDate } from "@/components/ui/relative-date";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";

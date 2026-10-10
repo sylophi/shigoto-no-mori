@@ -1,4 +1,4 @@
-import { InlineError } from "@/components/ui/inline-error";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 
 // The muted line for every state but error, null where the button says

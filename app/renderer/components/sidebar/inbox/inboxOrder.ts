@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { createExternalStore } from "@/store/externalStore";
+import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 import type { SidebarRow } from "../sidebarRow";
 
 type InboxWorktreeRow = Extract<SidebarRow, { kind: "inbox-worktree" }>;

@@ -7,7 +7,7 @@
 // Checked:
 //   1. Every data-slot / data-doubutsu-zone / data-doubutsu-page /
 //      data-variant value the CSS selects must be set somewhere in
-//      renderer source.
+//      renderer source or @shigomori/ui's.
 //   2. The `doubutsu-only` and `data-row-idx` app markers must exist.
 //   3. Upstream attributes (Base UI, cmdk, sonner) must still appear in
 //      the installed packages, which catches breaking upgrades.
@@ -16,7 +16,7 @@
 //      the two rules it renders against. It ships as a committed png,
 //      so a stripped hook there is invisible until a release.
 //
-// covers: app/renderer/** app/scripts/dmg-background.html
+// covers: app/renderer/** packages/ui/src/** app/scripts/dmg-background.html
 // covers: pnpm-lock.yaml
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -40,7 +40,10 @@ const HOOKING_CSS = [
 ];
 
 let rendererSource = "";
-for (const file of walk(join(root, "renderer"), /\.(tsx?|css)$/)) {
+for (const file of [
+  ...walk(join(root, "renderer"), /\.(tsx?|css)$/),
+  ...walk(join(root, "..", "packages", "ui", "src"), /\.(tsx?|css)$/),
+]) {
   // Neither stylesheet counts as a setter: one naming a slot must not
   // vouch for the other selecting it.
   if (HOOKING_CSS.some(({ name }) => file.endsWith(name))) continue;

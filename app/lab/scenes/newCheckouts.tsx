@@ -28,7 +28,7 @@ import {
   VillagerFaceView,
   VillagerSaysView,
 } from "@/components/shared/VillagerSaysView";
-import { ModalBox } from "@/components/ui/modal-shell";
+import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   forests,

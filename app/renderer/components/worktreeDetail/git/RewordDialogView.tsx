@@ -2,9 +2,9 @@
 // in a ModalShell): the commit's summary and description, editable,
 // read off the commit before the form shows.
 import type { KeyboardEvent, ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { Textarea } from "@shigomori/ui/primitives/textarea.tsx";
 
 export function RewordDialogView({
   hash,

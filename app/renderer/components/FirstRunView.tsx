@@ -1,8 +1,8 @@
 // A fresh install's home page: what the app is for, and the way to
 // the first project.
 import { TreeDeciduous } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Kbd, KbdGroup } from "@shigomori/ui/primitives/kbd.tsx";
 
 export function FirstRunView({ onAdd }: { onAdd: () => void }) {
   return (

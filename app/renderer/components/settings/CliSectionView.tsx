@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { Download, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
-import { tildify } from "@shared/projectPaths";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import {
+  SectionHeading,
+  SectionIntro,
+} from "@shigomori/ui/primitives/section-heading.tsx";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import type {
   CliStatus,
   ShellIntegrationStatus,

@@ -1,5 +1,5 @@
-import { RelativeDate } from "@/components/ui/relative-date";
-import { DiffStats } from "@/components/ui/diff-stats";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
 import { pluralize } from "@/lib/pluralize";
 
 // What the diff pages say under (or as) their titles, each page's

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Extract a macOS .app's icon to a 128px PNG under renderer/app-icons/.
+# Extract a macOS .app's icon to a 128px PNG under packages/ui/src/app-icons/.
 # Usage: scripts/extract-app-icon.sh <path-to-.app> <id>
 # The launcher row finds an icon by file name, so <id> is the app's id
 # in packages/engine/src/data/launcher-catalog.json.
@@ -38,7 +38,7 @@ if [ ! -f "$ICNS" ]; then
   exit 1
 fi
 
-OUT="renderer/app-icons/$NAME.png"
+OUT="../packages/ui/src/app-icons/$NAME.png"
 mkdir -p "$(dirname "$OUT")"
 sips -s format png "$ICNS" --out "$OUT" -Z 128 > /dev/null
 echo "wrote $OUT"

@@ -1,6 +1,6 @@
 import { Info } from "lucide-react";
 import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { ReactNode } from "react";
 import acNotice from "@shared/acNotice.json";
 import type { villageLifeRow } from "./villagerDataView";

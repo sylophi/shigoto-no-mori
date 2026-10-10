@@ -17,7 +17,7 @@
 import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shared/remote/supervisor";
-import { formatRelativeTime } from "@/lib/relativeTime";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import {
   deviceStatusView,
   type DeviceStatusView,

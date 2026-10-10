@@ -1,7 +1,7 @@
 import { type CSSProperties, type Ref, useState } from "react";
 import { Heart } from "lucide-react";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { StationeryPrintView } from "@/components/villagers/StationeryPrintView";
 import { FaceStampView } from "@/components/villagers/VillagerLetterView";
 import {
@@ -9,10 +9,10 @@ import {
   villagerInk,
 } from "@/components/villagers/VillagerDialogueView";
 import { useFaceColor } from "@/hooks/villagers/useFaceColor";
-import { useNow } from "@/hooks/ui/useNow";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useToday } from "@/hooks/ui/useToday";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { villagerCatchphrase, villagerSpecies } from "@/lib/villagerVoice";
 import { birthdayLabel } from "@/lib/villagers/birthdays";
 import { stationeryFor } from "@/lib/villagers/stationery";

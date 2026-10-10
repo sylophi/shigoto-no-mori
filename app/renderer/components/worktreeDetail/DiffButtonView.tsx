@@ -1,5 +1,5 @@
 import { ChevronRight, FileDiff } from "lucide-react";
-import { DiffStats } from "@/components/ui/diff-stats";
+import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
 
 // The way to a diff: the file icon and count, the lines it adds and
 // takes, like the Branch section's changes button. `words={false}`

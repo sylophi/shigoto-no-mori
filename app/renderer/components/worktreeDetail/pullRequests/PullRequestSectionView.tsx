@@ -3,7 +3,7 @@
 // to do about it. Held in place under its heading while the PR the
 // project's map knows of is looked up.
 import type { ReactNode } from "react";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 
 export function PullRequestSectionView({
   identity,

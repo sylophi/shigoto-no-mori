@@ -1,7 +1,10 @@
-import { BranchLabel } from "@/components/ui/branch-label";
-import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
-import { InlineError } from "@/components/ui/inline-error";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
+import {
+  type RowStatus,
+  RowStatusBadge,
+} from "@shigomori/ui/primitives/row-status.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 interface WorktreeMoveDetailsProps {
   branch: string;

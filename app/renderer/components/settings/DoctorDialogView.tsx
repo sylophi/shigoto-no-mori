@@ -14,26 +14,26 @@ import type {
   DoctorFinding,
   DoctorReport,
 } from "@shigomori/contracts/modules/cli";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { RowTag } from "@/components/ui/row-tag";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import {
   StatusDot,
   TONE_PILL,
   TONE_TEXT,
   type StatusTone,
-} from "@/components/ui/status-dot";
+} from "@shigomori/ui/primitives/status-dot.tsx";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   CARD,
   FlowBodyView,
   FlowFooterView,
   FlowHeaderView,
 } from "../worktreeDetail/flow/FlowChromeView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // `sm doctor` for the scoped device, behind Settings' health check
 // button: the same checklist a terminal prints (install, data folder,

@@ -10,7 +10,7 @@ import {
   HYGIENE_VERDICT_LABEL,
   type HygieneVerdictKind,
 } from "@shigomori/contracts/schemas";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // Tone per verdict, spelled out as whole class strings because Tailwind
 // can't see interpolated names. Stays inside the four raw palette

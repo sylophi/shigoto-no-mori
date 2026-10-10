@@ -1,6 +1,6 @@
 import { ChevronDown, type LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 interface FoldHeaderProps {
   label: string;

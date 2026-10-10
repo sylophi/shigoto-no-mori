@@ -7,7 +7,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+} from "@shigomori/ui/primitives/context-menu.tsx";
 import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";

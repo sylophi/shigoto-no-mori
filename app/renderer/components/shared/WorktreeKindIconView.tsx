@@ -1,5 +1,5 @@
 import { Archive, FolderTree, Hammer, House } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { isAgentWorking, type Worktree } from "@shigomori/contracts/schemas";
 
 const KINDS = {

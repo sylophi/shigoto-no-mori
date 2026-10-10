@@ -6,7 +6,7 @@ import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import type { Speaker } from "@/lib/villagerVoice";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { MovingBoxView } from "./MovingBoxView";
 
 // News goes at a click anywhere on it, or Enter on it focused, the way

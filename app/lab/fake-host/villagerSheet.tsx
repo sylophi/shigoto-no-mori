@@ -10,7 +10,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoot } from "react-dom/client";
 import { VillagerIcon } from "@/components/shared/VillagerIcon";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { villagerManifest } from "@shared/villagers/manifest";
 import { fakeHasVillagerData } from "./villagerData";
 

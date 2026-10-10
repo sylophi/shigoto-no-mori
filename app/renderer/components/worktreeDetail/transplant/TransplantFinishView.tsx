@@ -16,16 +16,16 @@ import {
   errorMessageOf,
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
-import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip-button";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { InlineError } from "@/components/ui/inline-error";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Chip } from "@shigomori/ui/primitives/chip-button.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { FlowBodyView, FlowFooterView } from "../flow/FlowChromeView";
 import type { Landing } from "../flow/pullSteps";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export type SourceChoice = "keep" | "shelve" | "teardown";
 

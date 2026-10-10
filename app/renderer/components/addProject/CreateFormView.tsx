@@ -1,17 +1,17 @@
 import type { ReactNode, RefObject } from "react";
 import { ChevronDown, FolderPlus } from "lucide-react";
 import type { GhUnavailableReason } from "@shigomori/contracts/schemas";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { GithubMark } from "@/components/ui/svgs/github-mark";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { GithubMark } from "@shigomori/ui/primitives/svgs/github-mark.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { GH_UNAVAILABLE_TEXT } from "@/lib/pullRequest";
 import {
   ActionInputRowView,

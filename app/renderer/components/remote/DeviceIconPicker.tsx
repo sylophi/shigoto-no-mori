@@ -1,5 +1,5 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import type { StatusTone } from "@/components/ui/status-dot";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { useAccountStatus, useSetDeviceIcon } from "@/hooks/account/useAccount";
 import { DeviceIconPickerView } from "./DeviceIconPickerView";
 

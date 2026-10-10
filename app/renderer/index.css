@@ -7,9 +7,11 @@
    naming renderer/ here, every utility that appears only in renderer
    components silently drops out of the web bundle (unstyled reused
    pages). The desktop build (app root) is unaffected but keeps the
-   same explicit inventory. */
+   same explicit inventory, and @shigomori/ui's sources (the primitives)
+   sit outside both. */
 @source "./";
 @source "../web";
+@source "../../packages/ui/src";
 /* xterm's stylesheet (the script console) goes under the base layer so
    any utility on the console's own elements outranks it without
    fighting its specificity. */

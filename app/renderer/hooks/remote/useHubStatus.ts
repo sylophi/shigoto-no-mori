@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from "react";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 
 // The hub bridge's live status snapshot as a module-scope store with

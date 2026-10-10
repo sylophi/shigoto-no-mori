@@ -1,5 +1,5 @@
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { Resident } from "@/hooks/villagers/useResident";
 import { PartyFaceView } from "./BirthdayFaceView";
 

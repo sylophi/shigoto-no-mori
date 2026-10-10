@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";

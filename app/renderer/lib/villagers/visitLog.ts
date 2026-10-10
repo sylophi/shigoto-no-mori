@@ -33,7 +33,10 @@ import {
   queryKeysFor,
 } from "@/lib/queryKeys";
 import { keyOf, residentOf } from "@/lib/villagerVoice";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import { villageProfiles } from "./speakers";
 
 const LOG_KEY = "villagers.visits";

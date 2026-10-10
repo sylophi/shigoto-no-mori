@@ -15,7 +15,10 @@ import { useParams } from "@tanstack/react-router";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { rowDeviceId } from "@/lib/routePaths";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import { projectGroupKey } from "./buildSidebarRows";
 
 const store = createExternalStore<{

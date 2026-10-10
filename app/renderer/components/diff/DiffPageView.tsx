@@ -8,14 +8,18 @@ import {
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeaderView";
-import { BackButton } from "@/components/ui/back-button";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { ChipButton } from "@/components/ui/chip-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from "@shigomori/ui/primitives/sheet.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   CODE_GAP_BLOCK,
   CODE_LINE_HEIGHT,

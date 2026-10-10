@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useReleases } from "@/hooks/system/useReleases";
 import { ChangelogDialogView, type StagedUpdate } from "./ChangelogDialogView";
 

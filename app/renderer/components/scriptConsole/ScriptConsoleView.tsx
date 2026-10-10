@@ -3,10 +3,10 @@
 import type { ReactNode } from "react";
 import { Play, Square, Trash2 } from "lucide-react";
 import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
-import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { ScriptRunState } from "@/store/scriptRuns";
 
 export function ScriptConsoleView({
