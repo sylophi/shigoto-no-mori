@@ -29,6 +29,7 @@
     "fake-host": "node scripts/ensure-ports.mts && vite --config lab/fake-host/vite.config.ts",
     "fake-host:web": "node scripts/ensure-ports.mts && vite --config lab/fake-host/vite.web.config.ts",
     "scenes:compare": "node lab/scene-compare/compare.mts",
+    "reliability": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lab/reliability/run.mts",
     "licenses": "node scripts/generate-third-party-licenses.mts",
     "villagers:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/lib/register-ts-alias.mts scripts/fetch-villager-data.mts",
     "licenses:check": "node scripts/generate-third-party-licenses.mts --check",
