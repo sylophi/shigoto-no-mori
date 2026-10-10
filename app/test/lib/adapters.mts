@@ -20,6 +20,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Migration from "@shigomori/engine/Migration";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
@@ -89,7 +90,11 @@ function builtMacfs(): string {
 // is built (host/lib/engine.ts). Set here, so a proof never writes to
 // the dev app's, or to one the shell exported.
 process.env.SHIGOMORI_DATA_DIR = engineDataDir;
-const engine = Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" });
+const engine = Engine.layer({
+  flavor: "dev",
+  macfs: builtMacfs(),
+  sm: "smd",
+}).pipe(Layer.provideMerge(Migration.layer));
 
 // No file-sync engine: a proof that runs one brings its own
 // (mirror.mts). The services the host's handlers answer on

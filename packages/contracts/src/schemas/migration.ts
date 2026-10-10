@@ -40,3 +40,12 @@ export const MigrationSchema = Schema.Struct({
   worktrees: Schema.NullOr(WorktreeMoveStepSchema),
 });
 export type MigrationProgress = typeof MigrationSchema.Type;
+
+// Whether a migration is under way: planned, owing a step, and one of
+// them not ended yet.
+export const migrationRunning = (migration: MigrationProgress): boolean =>
+  migration.planned &&
+  [migration.import, migration.worktrees].some(
+    (step) =>
+      step !== null && (step.state === "waiting" || step.state === "running"),
+  );

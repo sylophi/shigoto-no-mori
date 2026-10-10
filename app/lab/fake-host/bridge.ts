@@ -1713,15 +1713,11 @@ export function installFakeHostBridge(
   // matching the real browser bridge's shape.
   const localForest = forests[LOCAL_DEVICE_ID];
   if (localForest === undefined) throw new Error("[fake-host] no local forest");
-  const localHost = createFixtureWire(
-    "host",
-    (emit) =>
-      WEB_SHELL
-        ? // A browser still keeps its own copy of the shared settings.
-          sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
-        : hostHandlersFor(localForest, emit),
-    (channel) =>
-      channel === "migration:watch" ? Stream.make(posedMigration()) : undefined,
+  const localHost = createFixtureWire("host", (emit) =>
+    WEB_SHELL
+      ? // A browser still keeps its own copy of the shared settings.
+        sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
+      : hostHandlersFor(localForest, emit),
   );
 
   const webDevice: DeviceInfo = {
@@ -1837,6 +1833,7 @@ export function installFakeHostBridge(
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
+    "migration:read": () => posedMigration(),
     "account:enroll": async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));
       keyDue = false;

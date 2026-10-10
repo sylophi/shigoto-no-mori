@@ -3,6 +3,7 @@
 // the app's own lifetime there). Wired by the shell as the host starts
 // (main/hostProcess.ts).
 import type { UpdaterState } from "@shigomori/contracts/schemas";
+import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import { implSlot } from "@host/lib/util/implSlot";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
@@ -22,9 +23,8 @@ export type ShellCalls = {
   // The bridge the terminal's `sm update` asks the updater through,
   // stopped before a wipe of the data folder it lives in.
   readonly stopUpdaterBridge: () => Promise<void>;
-  // The v3 migration started or ended, which routes the shell's windows
-  // to its page meanwhile.
-  readonly migrating: (on: boolean) => Promise<void>;
+  // The v3 migration as it goes, which the shell serves its windows.
+  readonly migration: (progress: MigrationProgress) => Promise<void>;
 };
 
 const { set: setShellCalls, get: shellCalls } = implSlot<ShellCalls>(

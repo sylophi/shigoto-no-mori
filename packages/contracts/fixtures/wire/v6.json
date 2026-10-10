@@ -712,13 +712,24 @@
       "enabled": false
     }
   },
-  "migration:watch": {
+  "migration:changed": {
+    "payload": {
+      "planned": false,
+      "import": null,
+      "worktrees": null
+    }
+  },
+  "migration:read": {
     "success": {
       "planned": false,
-      "import": {
-        "state": "done"
-      },
-      "worktrees": null
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
     }
   },
   "mirror:applyGitState": {
@@ -1325,14 +1336,7 @@
   "nav:launchById": {
     "payload": "\udc00"
   },
-  "nav:migrating": {
-    "success": true
-  },
   "nav:openSettings": {},
-  "nav:showMigration": {},
-  "nav:takeDeepLink": {
-    "success": " "
-  },
   "nav:takeDeepLink": {
     "success": " "
   },
@@ -1858,8 +1862,20 @@
       "storeReport": "e"
     }
   },
-  "shellCalls:migrating": {
-    "payload": true
+  "shellCalls:migration": {
+    "payload": {
+      "planned": true,
+      "import": {
+        "state": "running"
+      },
+      "worktrees": {
+        "state": "stuck",
+        "moved": -8e-323,
+        "total": 1.7976931348623123e308,
+        "current": null,
+        "stuck": []
+      }
+    }
   },
   "shellCalls:ready": {
     "payload": {

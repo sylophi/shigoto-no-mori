@@ -40,6 +40,8 @@ import {
 } from "@shigomori/ui/views/AppShellView.tsx";
 import { MIGRATION_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { useMigration } from "@/hooks/useMigration";
+import { migrationRunning } from "@shigomori/contracts/schemas/migration";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -72,16 +74,14 @@ export function AppShell() {
       }),
     [navigate],
   );
-  // The v3 migration's page while the host runs it, as the shell says
-  // (main/electron/windows.ts): asked as the window mounts, and heard
-  // when it begins later.
+  // The v3 migration's page while it runs, whatever the window showed.
+  const migration = useMigration();
+  const migrating = migration !== null && migrationRunning(migration);
   useEffect(() => {
-    const show = () => void navigate({ to: MIGRATION_PATH, replace: true });
-    void window.api.nav.migrating().then((on) => {
-      if (on) show();
-    });
-    return window.api.nav.onShowMigration(show);
-  }, [navigate]);
+    if (migrating && pathname !== MIGRATION_PATH) {
+      void navigate({ to: MIGRATION_PATH, replace: true });
+    }
+  }, [migrating, pathname, navigate]);
 
   useDeepLinks();
 

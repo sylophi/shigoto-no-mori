@@ -27,7 +27,7 @@ import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
 import { HOST_FACTS_FLAG, type HostFacts } from "@host/process/facts";
 import { appPlace } from "./electron/appPlace";
-import { noteMigrating } from "./electron/windows";
+import { noteMigration } from "./ipc/modules/migration";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { stopUpdaterBridge } from "./electron/updaterBridge";
@@ -115,7 +115,7 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     tell(session().updaterState(currentUpdaterState()));
   },
   failed: (failure) => onFailed(failure),
-  migrating: (on) => noteMigrating(on),
+  migration: (progress) => noteMigration(progress),
   relaunch: () => relaunchAppUnattended(),
   updaterCheck: () => updaterCalls.check(),
   updaterInstall: ({ unattended }) => updaterCalls.install(unattended),

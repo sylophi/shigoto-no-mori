@@ -138,7 +138,7 @@ async function main(): Promise<void> {
         update: (unattended) => shell.updaterUpdate({ unattended }),
       },
       stopUpdaterBridge: () => shell.stopUpdaterBridge(),
-      migrating: (on) => shell.migrating(on),
+      migration: (progress) => shell.migration(progress),
     },
     quit,
   });

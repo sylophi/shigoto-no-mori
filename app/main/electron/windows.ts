@@ -8,8 +8,8 @@
 // window's route and bounds are remembered (windows.json in userData)
 // and the next start opens them again, one window on the home route
 // when there is nothing to bring back. While the host runs the v3
-// migration, every window shows its page in place of the app, one
-// opened meanwhile included. The app quits with its last window
+// migration, a window opened meanwhile shows its page in place of the
+// app. The app quits with its last window
 // (main/index.ts).
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, type Rectangle, screen } from "electron";
@@ -306,25 +306,9 @@ function showCrashGiveUpDialog(): void {
   );
 }
 
-export function isMigrating(): boolean {
-  return migrating;
-}
-
-// The host began or ended the v3 migration. Each open window shows its
-// page as it begins; the page itself opens the app as it ends.
+// The host began or ended the v3 migration: a window opened meanwhile
+// shows its page. Open ones follow it themselves (AppShell).
 export function noteMigrating(on: boolean): void {
-  if (on && !migrating) {
-    for (const entry of held) {
-      if (!entry.dead) {
-        broadcast(
-          navContract,
-          "showMigration",
-          undefined,
-          entry.window.webContents,
-        );
-      }
-    }
-  }
   migrating = on;
 }
 

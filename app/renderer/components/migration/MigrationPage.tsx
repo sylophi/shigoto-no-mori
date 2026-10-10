@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { callOf } from "@shigomori/contracts/contract";
-import { migrationContract } from "@shigomori/contracts/modules/migration";
+import { useMigration } from "@/hooks/useMigration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import {
   migrationEnded,
@@ -11,17 +10,6 @@ import {
   type EnrollmentStep,
   useEnrollment,
 } from "@/hooks/account/useEnrollment";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
-import { hostViewAtom } from "@/lib/runtime/atoms";
-import { useView } from "@/lib/runtime/viewHooks";
-
-const migrationAtom = hostViewAtom({
-  deviceId: localDeviceId,
-  localDeviceId,
-  view: callOf(migrationContract, "watch"),
-  input: undefined,
-});
 
 const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   done: { state: "done", asks: false },
@@ -30,13 +18,13 @@ const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   "sign-in": { state: "waiting", asks: true },
 };
 
-// The v3 migration as this machine's host runs it, in place of the app
+// The v3 migration as this machine's shell serves it, in place of the app
 // (the /migration route), with this device's enrollment for its key
 // (useEnrollment) as its sign-in: by itself while the session lives, a
 // button once it has lapsed. With every step done it opens the app, and
 // with nothing to migrate at once.
 export function MigrationPage() {
-  const { data: migration } = useView(hasLocalHost ? migrationAtom : null);
+  const migration = useMigration() ?? undefined;
   const enrollment = useEnrollment();
   // Shown from the moment it is due, and done once it no longer is.
   const [keyDue, setKeyDue] = useState(false);

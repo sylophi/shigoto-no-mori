@@ -45,7 +45,6 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
-import { migrationContract } from "@shigomori/contracts/modules/migration";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import { cliContract } from "@shigomori/contracts/modules/cli";
@@ -113,7 +112,6 @@ import {
 } from "@host/ipc/modules/sharedSettings";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
-import { migrationViews } from "@host/ipc/modules/migration";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
@@ -760,7 +758,6 @@ export function registerHostHandlers(): void {
   registerContract(branchesContract, branchesHandlers);
   registerContract(globalConfigContract, globalConfigHandlers);
   registerViews(globalConfigContract, globalConfigViews);
-  registerViews(migrationContract, migrationViews);
   registerContract(portPoolContract, portPoolHandlers);
   registerContract(portsContract, portsHandlers);
   registerViews(portsContract, portsViews);

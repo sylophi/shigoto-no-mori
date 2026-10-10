@@ -60,6 +60,7 @@ import {
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
 import * as Captures from "./captures";
+import * as Migration from "@shigomori/engine/Migration";
 import * as MigrationShell from "./migration";
 
 // What the user started through a script must not outlive the app,
@@ -233,9 +234,11 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Captures.engine.layer),
-    // The shell hears the v3 migration start and end.
-    Layer.provideMerge(MigrationShell.tellShell),
     Layer.provideMerge(Engine.layer(engine)),
+    // The v3 migration the store and the move into wt/ report to, told
+    // to the shell from before the store opens.
+    Layer.provideMerge(MigrationShell.tellShell),
+    Layer.provideMerge(Migration.layer),
     // The Promise face of the platform's child processes for the code
     // that is not Effect yet. Last to go, so every finalizer above can
     // still spawn.
