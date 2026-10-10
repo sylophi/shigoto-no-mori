@@ -35,7 +35,7 @@ import {
 } from "@shigomori/ui/views/home/ProjectGridView.tsx";
 
 export function ProjectGrid() {
-  const sources = useForestSources({ warm: true });
+  const sources = useForestSources();
   // Read once per visit, like the palette's: the page is up between
   // visits, never during one.
   const [visits] = useState(readWorktreeVisits);

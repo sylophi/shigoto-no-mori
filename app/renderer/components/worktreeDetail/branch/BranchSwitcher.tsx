@@ -33,9 +33,6 @@ export function BranchSwitcher({
     void queryClient.invalidateQueries({
       queryKey: keys.branches(worktree.projectId),
     });
-    void queryClient.invalidateQueries({
-      queryKey: keys.worktrees(worktree.projectId),
-    });
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- on opening only
   }, [open]);
 

@@ -247,7 +247,10 @@ export const layer = Layer.effect(Registry, make);
 The renderer's rule lives in `app/DESIGN.md` ("Views and containers").
 In short: a view takes data and callbacks and only draws; a container
 binds data to a view and has no markup of its own; nothing in the
-renderer touches a global.
+renderer touches a global. A host view (a streaming RPC) reaches a
+container as an atom on the client's runtime, and a request (a value
+computed when asked) as a React Query query; a push never feeds a
+reactivity key.
 
 ## Before you push
 

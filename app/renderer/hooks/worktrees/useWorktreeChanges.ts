@@ -22,6 +22,8 @@ import {
   type HostScope,
 } from "@/hooks/remote/useHostScope";
 import { clearCommitDraft } from "@/lib/commitDraft";
+import { useRegistry } from "@/lib/runtime/viewHooks";
+import { writeBackWorktree } from "@/hooks/worktrees/useWorktrees";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // Every changed file: what it is, how much of it is staged, and its
@@ -199,19 +201,19 @@ export function invalidateTreeState(
   }
 }
 
-// That, and the worktree the call answered with written back, for the
-// sidebar's count and recent commits.
-export function invalidateWorkingTree(
-  queryClient: ReturnType<typeof useQueryClient>,
-  keys: QueryKeyRegistry,
-  scope: { projectId: string; worktreeId: string },
-  worktree: Worktree,
-): void {
-  queryClient.setQueryData<readonly Worktree[]>(
-    keys.worktrees(scope.projectId),
-    (list) => list?.map((w) => (w.id === worktree.id ? worktree : w)),
-  );
-  invalidateTreeState(queryClient, keys, scope);
+// That, and the worktree the call answered with written back into its
+// list, for the sidebar's count and recent commits.
+export function useWorkingTreeWriteBack() {
+  const queryClient = useQueryClient();
+  const registry = useRegistry();
+  const { deviceId, keys } = useHostScope();
+  return (
+    scope: { projectId: string; worktreeId: string },
+    worktree: Worktree,
+  ): void => {
+    writeBackWorktree(registry, deviceId, worktree);
+    invalidateTreeState(queryClient, keys, scope);
+  };
 }
 
 // Discard, restore and undo share one shape: call the api, then write
@@ -224,12 +226,11 @@ export function useWorkingTreeMutation<
   worktreeOf: (result: Result) => Worktree,
   errorTitle: string,
 ) {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
+  const writeBack = useWorkingTreeWriteBack();
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => call(api, input),
-    onSuccess: (data, vars) =>
-      invalidateWorkingTree(queryClient, keys, vars, worktreeOf(data)),
+    onSuccess: (data, vars) => writeBack(vars, worktreeOf(data)),
     meta: { errorTitle },
   });
 }
@@ -246,13 +247,14 @@ interface CommitInput {
 export function useCommitChanges() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
+  const writeBack = useWorkingTreeWriteBack();
   return useMutation<CommitChangesResult, Error, CommitInput>({
     mutationFn: (input) => api.worktrees.commit(input),
     onSuccess: (data, vars) => {
       // The page empties its own draft state. This covers the stored
       // copy when the page was left before the commit landed.
       clearCommitDraft(vars.projectId, vars.worktreeId);
-      invalidateWorkingTree(queryClient, keys, vars, data.worktree);
+      writeBack(vars, data.worktree);
     },
     // A commit-all stages everything before git can refuse (a hook, no
     // identity), so the ticks have to be re-read either way.

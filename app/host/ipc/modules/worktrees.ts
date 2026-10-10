@@ -191,6 +191,8 @@ export const worktreesViews: ViewHandlers<
           "shelf_snapshots",
           "worktree_data",
           "agent_sessions",
+          // Codex-style names and the idle shelf.
+          "device_config",
         ),
         gitMoved(projectId),
       ),

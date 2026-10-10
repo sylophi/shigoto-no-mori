@@ -16,6 +16,6 @@ applyPose();
 // the stamp comes off before the app reads it.
 delete document.documentElement.dataset["layout"];
 
-installFakeHostBridge();
+const links = installFakeHostBridge();
 
-void import("./boot");
+void import("./boot").then(({ bootFakeHost }) => bootFakeHost(links));

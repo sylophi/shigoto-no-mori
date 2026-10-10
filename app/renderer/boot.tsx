@@ -22,7 +22,11 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import type { RouterHistory } from "@tanstack/react-router";
+import { RegistryContext } from "@effect/atom-react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { App } from "./App";
+import { clientLinksAtom } from "./lib/runtime/atoms";
+import type { ClientLinks } from "./lib/runtime/ClientLinks";
 import { AppToaster } from "./components/AppChrome";
 import { UpdateNews } from "./components/UpdateNews";
 import { ErrorDetailsHost } from "@shigomori/ui/primitives/inline-error.tsx";
@@ -66,10 +70,22 @@ import("@shigomori/ui/styles/fonts.css").catch(() => {});
 export function bootApp({
   ClerkProvider,
   history,
+  links,
 }: {
   ClerkProvider: ClerkProviderComponent;
   history: RouterHistory;
+  // The client's links (lib/runtime/client.ts), which the atoms' host
+  // views ride.
+  links: ClientLinks["Service"];
 }): AppRouter {
+  // The window's atoms, over its client's links, for as long as the
+  // page lives.
+  const registry = AtomRegistry.make({
+    initialValues: [[clientLinksAtom, links]],
+  });
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) registry.dispose();
+  });
   // The shared config (defaults, global error toasts, the meta
   // opt-outs) lives in lib/queryClientOptions.ts.
   const queryClient = createAppQueryClient();
@@ -92,6 +108,7 @@ export function bootApp({
     } else if (removal.state === "removed") {
       forgetDeletedWorktree(
         queryClient,
+        registry,
         deviceId,
         removal.projectId,
         removal.worktreeId,
@@ -163,16 +180,18 @@ export function bootApp({
 
   createRoot(rootElement).render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <OutsideProvider value={outside}>
-          <ClerkGate Provider={ClerkProvider}>
-            <App router={router} />
-          </ClerkGate>
-          <AppToaster />
-          <UpdateNews />
-          <ErrorDetailsHost />
-        </OutsideProvider>
-      </QueryClientProvider>
+      <RegistryContext value={registry}>
+        <QueryClientProvider client={queryClient}>
+          <OutsideProvider value={outside}>
+            <ClerkGate Provider={ClerkProvider}>
+              <App router={router} />
+            </ClerkGate>
+            <AppToaster />
+            <UpdateNews />
+            <ErrorDetailsHost />
+          </OutsideProvider>
+        </QueryClientProvider>
+      </RegistryContext>
     </StrictMode>,
   );
 

@@ -63,13 +63,10 @@ function buildQueryKeys(deviceId: string) {
   return {
     globalConfig: () => host("globalConfig"),
 
-    projects: () => host("projects"),
     projectIcon: (projectId: string) => host("projectIcon", projectId),
 
     shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),
 
-    worktrees: (projectId: string | null) => host("worktrees", projectId),
-    worktreesAll: () => host("worktrees"),
     worktreeData: (projectId: string | null, worktreeId: string | null) =>
       host("worktreeData", projectId, worktreeId),
     // Every file diff of one worktree sits under this prefix, so the
@@ -405,18 +402,9 @@ function externalChangeAllows(queryKey: readonly unknown[]): boolean {
 // The project-id slot of a project-scoped host key, derived from a
 // sample built key like the PR matcher below, so the slot follows the
 // builders if the prefix ever grows instead of silently drifting.
-const projectIdIndex = queryKeysFor("d").worktrees("p").indexOf("p");
+const projectIdIndex = queryKeysFor("d").shigomoriConfig("p").indexOf("p");
 function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
   return queryKey[0] === HOST_SCOPE ? queryKey[projectIdIndex] : undefined;
-}
-
-// One project's worktree list, on any device (worktrees(projectId)),
-// for a watcher over the whole cache (lib/villagers/moves.ts).
-export function isWorktreeListKey(queryKey: readonly unknown[]): boolean {
-  return (
-    queryKeyDomain(queryKey) === "worktrees" &&
-    typeof hostKeyProjectId(queryKey) === "string"
-  );
 }
 
 // The EXTERNAL-CHANGE sweep, scoped to one device. Host-scoped keys
