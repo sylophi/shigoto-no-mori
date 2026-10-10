@@ -159,7 +159,7 @@ function WorktreeFilesPage({
             open={treeSheetOpen}
             onOpenChange={setTreeSheetOpen}
           >
-            <FileTree {...treeProps} className="h-[70dvh] w-full" />
+            <FileTree {...treeProps} className="h-[70cqh] w-full" />
           </FilesTreeSheetView>
         )
       }

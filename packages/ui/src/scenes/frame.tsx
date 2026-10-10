@@ -65,7 +65,7 @@ export function SceneWindowFrame({
         />
       }
       overlays={overlays}
-      className={cn("h-full", overlays !== undefined && "relative")}
+      className={cn(overlays !== undefined && "relative")}
     >
       {children}
     </AppShellView>

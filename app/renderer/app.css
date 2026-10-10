@@ -5,3 +5,15 @@
 @import "@shigomori/ui/styles/index.css";
 @source "./";
 @source "../web";
+
+/* The page a window is: its root, filling it. @shigomori/ui's
+   stylesheet stops at the root (insideTheRoot.ts), so the page's own
+   margin and height are the app's. */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+}

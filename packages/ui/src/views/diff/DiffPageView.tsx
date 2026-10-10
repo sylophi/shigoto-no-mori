@@ -244,7 +244,7 @@ export function DiffFilesSheetView({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" showCloseButton={false} className="gap-0 p-0">
         <SheetTitle className="sr-only">{title}</SheetTitle>
-        <div className="flex h-[70dvh] w-full flex-col">{children}</div>
+        <div className="flex h-[70cqh] w-full flex-col">{children}</div>
       </SheetContent>
     </Sheet>
   );

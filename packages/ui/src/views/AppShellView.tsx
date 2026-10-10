@@ -54,7 +54,7 @@ export function AppShellView({
   return (
     <div
       className={cn(
-        "flex h-dvh overflow-hidden text-foreground",
+        "flex h-full overflow-hidden text-foreground",
         // The desktop window is transparent so the sidebar's vibrancy
         // material shows through, and the main pane paints its own
         // background. A browser tab has no material, so the root paints.

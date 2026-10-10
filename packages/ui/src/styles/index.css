@@ -76,14 +76,6 @@
   --input: var(--color-neutral-200);
   --ring: var(--color-neutral-400);
   --radius: 0.625rem;
-  /* The scale again, from the @theme block below: Tailwind declares it
-     on :root, where --radius is unset, so a var(--radius-md) would read
-     nothing there. */
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
 .dark {
@@ -171,16 +163,17 @@
 }
 
 @layer base {
-  * {
+  :where([data-theme-scope], [data-theme-scope] *) {
     @apply border-border outline-ring/50;
   }
-  /* A window's root is a container, so a view's `@min-*` widths read
-     the window, whatever box draws it, rather than the viewport. The
+  /* A window's root is a container, so a view's `@min-*` widths and
+     `cqh` heights read the window, whatever box draws it, rather than
+     the viewport. Its height is the box's, never its content's. The
      web app's is named for the phone layout's query (phone.css). Its
      background is the one the page's canvas wears (AppShell). */
   [data-shell] {
     background-color: var(--background);
-    container-type: inline-size;
+    container-type: size;
   }
   [data-shell="web"] {
     container-name: web;
@@ -202,10 +195,7 @@
   /* Code reads as typed: the mono face's ligatures (`=>` as an arrow)
      stay off, as in the terminal, which draws none. */
   .font-mono,
-  code,
-  kbd,
-  pre,
-  samp {
+  :where([data-theme-scope]) :is(code, kbd, pre, samp) {
     font-variant-ligatures: none;
   }
 

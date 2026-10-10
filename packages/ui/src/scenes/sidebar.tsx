@@ -68,7 +68,6 @@ import {
   THINKPAD_ID,
 } from "../fixtures/fixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
-import { projectIconSrc } from "./world.ts";
 
 // Which app draws the forest: the desktop window on Studio Mac, whose
 // own projects are local there, or the web shell, a browser to which
@@ -324,12 +323,7 @@ function SceneRow({
           header={
             <ProjectHeaderView
               project={row.project}
-              icon={
-                <ProjectIconView
-                  src={projectIconSrc(row.project.name)}
-                  name={row.project.name}
-                />
-              }
+              icon={<ProjectIconView src={null} name={row.project.name} />}
               badges={<DeviceBadgeClusterView devices={row.devices} />}
               terrier={false}
               pinned={row.pinned}
@@ -406,7 +400,7 @@ function SceneRow({
           entry={entryOf(row.worktree.id, selected, row.device !== undefined)}
           projectIcon={
             <ProjectIconView
-              src={projectIconSrc(row.project.name)}
+              src={null}
               name={row.project.name}
               className="size-3"
             />

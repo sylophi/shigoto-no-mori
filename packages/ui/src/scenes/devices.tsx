@@ -47,7 +47,7 @@ import {
 } from "../fixtures/fixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { deviceById, projectIconSrc } from "./world.ts";
+import { deviceById } from "./world.ts";
 
 const noop = () => {};
 const ACCOUNT_ID = "user_2rin8xk3";
@@ -61,13 +61,7 @@ function hostChips(deviceId: string) {
     projectId: project.id,
     name: project.name,
     worktrees: forest?.worktrees[project.id]?.length ?? 0,
-    icon: (
-      <ProjectIconView
-        src={projectIconSrc(project.name)}
-        name={project.name}
-        className="size-3"
-      />
-    ),
+    icon: <ProjectIconView src={null} name={project.name} className="size-3" />,
   }));
 }
 

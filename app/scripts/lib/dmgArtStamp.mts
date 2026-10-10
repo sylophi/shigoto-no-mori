@@ -12,11 +12,13 @@ import {
 const ROOT = join(import.meta.dirname, "..", "..");
 
 // The design the pixels are rendered from: the stylesheet the art is
-// drawn with, the art itself, the geometry both it and the maker read,
+// drawn with and the leaf wallpaper it draws, the art itself, the
+// geometry both it and the maker read,
 // and the webfont package (a bump reshapes every glyph in the window).
 // Not the render script, since editing that means running it.
 const INPUT_FILES = [
   "../packages/ui/src/styles/doubutsu.css",
+  "../packages/ui/src/styles/wallpapers/leaf.svg",
   "scripts/dmg-background.html",
   "shared/packaging/dmgLayout.mts",
 ];

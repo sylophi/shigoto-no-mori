@@ -76,12 +76,7 @@ import {
 import { fakeDiskUsage, fakeHygiene } from "../fixtures/tidyFixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { sceneGrid, SceneSidebar } from "./sidebar.tsx";
-import {
-  deviceById,
-  deviceTabs,
-  projectIconSrc,
-  projectNamed,
-} from "./world.ts";
+import { deviceById, deviceTabs, projectNamed } from "./world.ts";
 
 const noop = () => {};
 const HOME = "/Users/rin";
@@ -102,7 +97,7 @@ const BRANCHES = {
 };
 
 const icon = (name: string) => (
-  <ProjectIconView src={projectIconSrc(name)} name={name} className="size-3" />
+  <ProjectIconView src={null} name={name} className="size-3" />
 );
 
 function projectPage(title: string, body: ReactNode) {
@@ -612,7 +607,7 @@ export function HomeScene() {
                       triggerRef={{ current: null }}
                       icon={
                         <ProjectIconView
-                          src={projectIconSrc(row.project.name)}
+                          src={null}
                           name={row.project.name}
                           className="size-8"
                         />

@@ -27,12 +27,12 @@ function fadeOut(ghost: HTMLElement) {
 }
 
 // The backdrop a dialog hangs from, over the window it fills. The
-// before: is the 10vh a short dialog hangs from, so it doesn't jump as
-// it grows. A taller dialog eats that gap first, then caps at the
-// window, where its scrolling body takes the rest (any wrappers above
-// that body need min-h-0).
+// before: is the gap, a tenth of the window's height, a short dialog
+// hangs from, so it doesn't jump as it grows. A taller dialog eats that
+// gap first, then caps at the window, where its scrolling body takes
+// the rest (any wrappers above that body need min-h-0).
 export const MODAL_BACKDROP =
-  "inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]";
+  "inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10cqh-1rem)]";
 
 interface ModalShellProps {
   // The dialog's name for assistive tech, usually the title it draws.

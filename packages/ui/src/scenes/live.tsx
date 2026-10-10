@@ -34,12 +34,7 @@ import {
 } from "../fixtures/fixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import {
-  deviceById,
-  projectIconSrc,
-  projectNamed,
-  worktreeNamed,
-} from "./world.ts";
+import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
 
 const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
@@ -54,13 +49,7 @@ const runOf = (worktreeId: string) =>
 function header(worktree: Worktree, title: string | null) {
   return (
     <LiveWorktreeHeaderView
-      icon={
-        <ProjectIconView
-          src={projectIconSrc(SM.name)}
-          name={SM.name}
-          className="size-8"
-        />
-      }
+      icon={<ProjectIconView src={null} name={SM.name} className="size-8" />}
       heading={{ title, branch: worktree.branch, detached: false }}
       subline={`${worktree.name} in ${SM.name}`}
       renderLink={({ children, ...props }) => (

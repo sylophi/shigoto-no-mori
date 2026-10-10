@@ -8,6 +8,7 @@ import react from "@vitejs/plugin-react";
 import { reactCompiler } from "../../vite.reactCompiler";
 import { dedupe } from "../../vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
+import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
 import type { UserConfig } from "vite";
 import { fixedDevServerPort } from "../../scripts/lib/portsEnvFile.mts";
 
@@ -52,6 +53,8 @@ export function fakeHostBaseConfig(opts: {
       __APP_VERSION__: JSON.stringify("2.0.3"),
       __APP_COMMIT__: JSON.stringify("fake-host"),
     },
+    // The package's stylesheet stops at the theme root.
+    css: { postcss: { plugins: [insideTheRoot()] } },
     plugins: [tailwindcss(), react(), reactCompiler()],
   };
 }
