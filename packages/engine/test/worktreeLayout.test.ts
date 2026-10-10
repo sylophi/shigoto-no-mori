@@ -99,19 +99,8 @@ it("counts the drive base as managed wherever the data dir is", () => {
   }
   assert.equal(
     managedBases("/Users/me/code/repo", {}, place("/Users/me/.sm")).length,
-    4,
+    2,
   );
-});
-
-it("keeps the worktrees under the v2 roots managed", () => {
-  const bases = managedBases(external, {}, place("/Users/me/.sm"));
-  for (const v2 of [
-    "/Users/me/.sm/worktrees/repo",
-    `${external}/.shigomori/worktrees`,
-    "/Volumes/Ext/.sm/worktrees/repo",
-  ]) {
-    assert.ok(isManagedPath(`${v2}/otter`, bases), v2);
-  }
 });
 
 it("holds a worktree managed by its parent, not a prefix", () => {

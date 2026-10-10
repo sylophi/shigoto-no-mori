@@ -89,6 +89,7 @@ import * as WorktreeData from "./WorktreeData.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { scriptOf, type WorktreeIdentity } from "./Worktrees.ts";
+import * as WtFolder from "./WtFolder.ts";
 
 // --- the document ---------------------------------------------------------
 
@@ -165,7 +166,18 @@ export class MovedWorktreePending extends Schema.TaggedError<MovedWorktreePendin
   }
 }
 
+// A v2 worktree the retried move still couldn't take.
+export class WorktreesNotMoved extends Schema.TaggedError<WorktreesNotMoved>()(
+  "WorktreesNotMoved",
+  { why: Schema.String },
+) {
+  override get message(): string {
+    return this.why;
+  }
+}
+
 type RepairError =
+  | WorktreesNotMoved
   | Git.GitError
   | PlatformError.PlatformError
   | MovedWorktreePending
@@ -193,7 +205,8 @@ type StoreServices =
   | Registry.Registry
   | Terrier.Terrier
   | Worktrees.Worktrees
-  | WorktreeData.WorktreeData;
+  | WorktreeData.WorktreeData
+  | WtFolder.WtFolder;
 
 const isStoreImportError = Schema.is(StoreImportError);
 
@@ -1680,6 +1693,49 @@ const make = Effect.gen(function* () {
       return entries;
     });
 
+  // The v2 worktrees the v3 migration couldn't move into `wt/`, each
+  // with why, and the move tried again.
+  const checkWtMoves = (project: ListedProject) =>
+    Effect.gen(function* () {
+      const folder = yield* WtFolder.WtFolder;
+      const unmoved = (yield* folder.unmoved).filter(
+        (row) => row.projectId === project.id,
+      );
+      if (unmoved.length === 0) return [];
+      const n = unmoved.length;
+      const shown = unmoved.map(
+        ({ fromPath, error }) =>
+          `${collapseHome(home, fromPath)}${error === null ? "" : ` (${error})`}`,
+      );
+      return [
+        repairable<StoreServices>(
+          check("Projects", "project-wt-moves", project.name).warn(
+            `${n} worktree${plural(n)} still in a v2 folder, not moved into wt/: ${shown.join(", ")}`,
+            "Clear what stopped the move (unlock it, finish the operation, move the existing folder aside), then run the fix to try again.",
+          ),
+          {
+            prompt: "",
+            label: `moved ${n} worktree${plural(n)} into wt/ for ${project.name}`,
+            destructive: false,
+            writesStore: true,
+            apply: Effect.gen(function* () {
+              const left = yield* folder.retry(project.id);
+              if (left.length > 0) {
+                return yield* new WorktreesNotMoved({
+                  why: left
+                    .map(
+                      ({ fromPath, error }) =>
+                        `${collapseHome(home, fromPath)}: ${error ?? "not moved"}`,
+                    )
+                    .join(", "),
+                });
+              }
+            }),
+          },
+        ),
+      ];
+    });
+
   // Lifecycle scripts fail late and loudly, mid-create. A script naming
   // a file that isn't in the repo is the common cause, and checkable
   // without running anything.
@@ -1916,6 +1972,7 @@ const make = Effect.gen(function* () {
         : [project.path];
       entries.push(
         ...(yield* checkProjectWorktrees(project, identities, bases)),
+        ...(yield* checkWtMoves(project)),
         ...(yield* checkProjectScripts(project, settings)),
         ...(yield* checkWorktreeInclude(project, settings)),
         ...(yield* checkCarryOver(project, settings, checkouts)),

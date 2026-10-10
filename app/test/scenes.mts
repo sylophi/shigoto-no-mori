@@ -74,23 +74,11 @@ vi.mock("react/jsx-dev-runtime", recording);
 // PRs land. Two still hold a *View.tsx that is no view, which can't
 // even load here.
 const views = import.meta.glob<Record<string, unknown>>(
-  [
-    "../renderer/components/**/*View.tsx",
-    "!../renderer/components/addProject/**",
-    "!../renderer/components/diff/**",
-  ],
+  ["../renderer/components/**/*View.tsx", "!../renderer/components/diff/**"],
   { eager: true },
 );
 
-const PENDING = [
-  "AddProjectModal.tsx",
-  "addProject/",
-  "diff/",
-  "files/",
-  "live/",
-  "newWorktree/",
-  "palette/",
-];
+const PENDING = ["diff/", "files/", "live/", "palette/"];
 
 // An intrinsic element opening (<div, <span ...>), not a type argument
 // (useState<string>), which follows an identifier.

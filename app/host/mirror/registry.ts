@@ -30,6 +30,8 @@ import {
   forgetMirrorInvitesOf,
 } from "@host/mirror/invites";
 import { log } from "@shared/log";
+import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { wtFolderMovedTo } from "@host/lib/engineCalls";
 
 // The label keys the start orchestration writes on a session, lifted
 // back out for the renderer by annotate below. Labels are the one
@@ -468,6 +470,7 @@ export async function settleMirrorBookkeeping(): Promise<void> {
   await Promise.all(ids.map((id) => endSessionsOnWorktree(daemon, id)));
 
   const sessions = mirrorSessions(daemon);
+  const reopening = new Set<string>();
   const live = new Set(sessions.map((raw) => raw.session));
   for (const id of rootLooks) if (!live.has(id)) rootLooks.delete(id);
   const replaced = new Set(
@@ -487,11 +490,26 @@ export async function settleMirrorBookkeeping(): Promise<void> {
       if (holdingRoots.has(localWorktreeIdOf(raw))) return;
       if (rootLooks.has(raw.session)) return;
       rootLooks.add(raw.session);
-      const ended =
-        !(await rootExists(raw.localRoot)) &&
-        (await endOnce(raw.session, () =>
-          endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL),
-        ));
+      if (await rootExists(raw.localRoot)) {
+        rootLooks.delete(raw.session);
+        return;
+      }
+      // The v3 migration moved the original into wt/: the mirror
+      // re-opens there, as after a move.
+      const movedTo = await wtFolderMovedTo(raw.localRoot).catch(() => null);
+      if (movedTo !== null && (await rootExists(movedTo))) {
+        // One re-open per worktree carries all of its sessions.
+        if (reopening.has(raw.localRoot)) return;
+        reopening.add(raw.localRoot);
+        await moveMirrorsOfWorktree(localWorktreeIdOf(raw), {
+          id: worktreeIdFromPath(movedTo),
+          path: movedTo,
+        });
+        return;
+      }
+      const ended = await endOnce(raw.session, () =>
+        endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL),
+      );
       if (!ended) rootLooks.delete(raw.session);
     }),
   );

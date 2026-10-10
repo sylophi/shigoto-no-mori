@@ -6,8 +6,6 @@ import {
   type RefObject,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Command } from "cmdk";
-import { Folder, FolderGit2, FolderSearch } from "lucide-react";
 import {
   canNavigateUp,
   ensureTrailingSep,
@@ -15,33 +13,20 @@ import {
   isAnchoredPath,
   normalizeForSubmit,
 } from "@shared/projectPaths";
-import { Button } from "@/components/ui/button";
-import { ChipButton } from "@/components/ui/chip-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { FileManagerIcon } from "@/components/ui/file-manager";
-import {
-  BrowseKeyHintsView,
-  BrowseUpItemView,
-} from "@/components/shared/BrowseListPartsView";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import {
-  ITEM_CLASS,
-  keepFocusInInput,
-  MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { ScanningPanel } from "./ScanningPanel";
-import { ResultsPanel } from "./ResultsPanel";
+import { ScanningPanelView } from "./ScanningPanelView";
+import { ResultsPanelView } from "./ResultsPanelView";
 import { useTerrierOptIn } from "./TerrierOptIn";
 import { useBrowseState } from "./useBrowseState";
-import { KeyedButton } from "./DialogParts";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 import { withToggled } from "@/lib/toggleSet";
+import { AddExistingFormView } from "./AddExistingFormView";
 
-interface AddExistingViewProps {
+interface AddExistingFormProps {
   // The input value IS the path. Tildified paths are expanded server-side.
   // Owned by the dialog, so it outlives a change of device.
   query: string;
@@ -58,14 +43,14 @@ type AddExistingStage = "browse" | "scanning" | "results";
 
 // react-doctor-disable-next-line react-doctor/no-giant-component -- browse logic already extracted to useBrowseState; remaining scan flow + keyboard handlers are tightly coupled
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- fields split between browse and scan flows; transitions are linear and local, useReducer would add boilerplate without removing branching
-export function AddExistingView({
+export function AddExistingForm({
   query,
   setQuery,
   addToTerrier,
   setAddToTerrier,
   onClose,
   escapeRef,
-}: AddExistingViewProps) {
+}: AddExistingFormProps) {
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
   const queryClient = useQueryClient();
@@ -281,13 +266,13 @@ export function AddExistingView({
 
   if (stage === "scanning") {
     return (
-      <ScanningPanel scanRoot={scanRoot} home={home} onCancel={exitScan} />
+      <ScanningPanelView scanRoot={scanRoot} home={home} onCancel={exitScan} />
     );
   }
 
   if (stage === "results") {
     return (
-      <ResultsPanel
+      <ResultsPanelView
         scanRoot={scanRoot}
         home={home}
         results={scanResults}
@@ -306,141 +291,47 @@ export function AddExistingView({
     );
   }
 
-  // Browse stage.
-  const submitLabel = targetIsGitRepo ? "Add" : "Scan for repos in folder";
-  const submitKbd = hasHighlighted ? "⌘↩" : "↩";
-  const canPrimary = targetIsGitRepo
-    ? submitTarget.length > 0
-    : hasTrailingSlash(browseDir) && !!listing && !error;
-
   return (
-    <Command
-      label="Add project"
-      loop
-      shouldFilter={false}
-      value={highlighted}
-      onValueChange={setHighlighted}
-      className={MODAL_COMMAND_CLASS}
-    >
-      <div
-        data-slot="search-row"
-        className="relative flex items-center gap-2 border-b border-border px-3 py-2"
-      >
-        <Command.Input
-          ref={inputRef}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
-          autoFocus
-          value={query}
-          onValueChange={setQuery}
-          onKeyDown={onInputKeyDown}
-          placeholder="Folder path"
-          className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-        />
-        <KeyedButton
-          icon={
-            targetIsGitRepo ? (
-              <FolderGit2 className="size-3.5" />
-            ) : (
-              <FolderSearch className="size-3.5" />
-            )
-          }
-          label={
-            addProject.isPending && targetIsGitRepo ? "Adding…" : submitLabel
-          }
-          keys={submitKbd}
-          onMouseDown={keepFocusInInput}
-          onClick={() => void primaryAction()}
-          disabled={!canPrimary || addProject.isPending}
-          aria-label={`${submitLabel} (${submitKbd})`}
-        />
-      </div>
-
-      <Command.List
-        onMouseDown={keepFocusInInput}
-        className="overflow-y-auto p-2"
-      >
-        {canBrowseUp && <BrowseUpItemView onSelect={browseUp} />}
-
-        {filtered.map((entry) => {
-          const entryPath = `${browseDir}${entry.name}`;
-          const registered =
-            listedDir !== null &&
-            registeredPaths.has(`${listedDir}${entry.name}`);
-          return (
-            <Command.Item
-              key={entry.name}
-              value={`browse:${entryPath}`}
-              keywords={[entry.name]}
-              onSelect={() => browseTo(entry.name)}
-              className={ITEM_CLASS}
-            >
-              {entry.isGitRepo ? (
-                <FolderGit2 className="size-4 text-foreground" />
-              ) : (
-                <Folder className="size-4 text-muted-foreground/80" />
-              )}
-              <SimpleTooltip whenTruncated lazy tip={entry.name}>
-                <span className="min-w-0 flex-1 truncate font-mono">
-                  {entry.name}
-                </span>
-              </SimpleTooltip>
-              {entry.isGitRepo &&
-                (registered ? (
-                  <span className="text-xs text-muted-foreground/80">
-                    Added
-                  </span>
-                ) : (
-                  <div
-                    className="inline-flex items-center"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    role="presentation"
-                  >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={() => void submit(entryPath)}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                ))}
-            </Command.Item>
-          );
-        })}
-
-        {isLoading && !listing && (
-          <div className="p-3 text-xs text-muted-foreground">Loading…</div>
-        )}
-        {!isLoading && !error && filtered.length === 0 && (
-          <div className="p-3 text-center text-xs text-muted-foreground">
-            {leafFilter.length > 0
-              ? `No folders matching "${leafFilter}".`
-              : "Empty directory."}
-          </div>
-        )}
-      </Command.List>
-
-      <div
-        data-slot="footer-row"
-        className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-      >
-        <div className="flex items-center gap-3">
-          <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
-        </div>
-        <div className="flex items-center gap-3">
-          {terrierOptIn}
-          {/* The native dialog is this machine's, so it can't pick a
-              folder on a peer's disk. */}
-          {!scope.remote && (
-            <ChipButton onClick={() => void pickViaDialog()}>
-              <FileManagerIcon />
-              Add project from Finder
-            </ChipButton>
-          )}
-        </div>
-      </div>
-    </Command>
+    <AddExistingFormView
+      query={query}
+      onQuery={setQuery}
+      inputRef={inputRef}
+      onInputKeyDown={onInputKeyDown}
+      highlighted={highlighted}
+      onHighlight={setHighlighted}
+      browseDir={browseDir}
+      entries={filtered}
+      registeredNames={
+        new Set(
+          listedDir === null
+            ? []
+            : filtered
+                .filter((entry) =>
+                  registeredPaths.has(`${listedDir}${entry.name}`),
+                )
+                .map((entry) => entry.name),
+        )
+      }
+      isLoading={isLoading}
+      hasListing={!!listing}
+      error={error}
+      leafFilter={leafFilter}
+      targetIsGitRepo={targetIsGitRepo}
+      canPrimary={
+        targetIsGitRepo
+          ? submitTarget.length > 0
+          : hasTrailingSlash(browseDir) && !!listing && !error
+      }
+      pending={addProject.isPending}
+      onPrimary={() => void primaryAction()}
+      canBrowseUp={canBrowseUp}
+      onBrowseUp={browseUp}
+      onBrowseTo={browseTo}
+      onAdd={(path) => void submit(path)}
+      terrierOptIn={terrierOptIn}
+      // The native dialog is this machine's, so it can't pick a folder
+      // on a peer's disk.
+      onPickFolder={scope.remote ? null : () => void pickViaDialog()}
+    />
   );
 }

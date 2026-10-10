@@ -1,17 +1,9 @@
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useEffect, useState } from "react";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { Input } from "@/components/ui/input";
-import { ErrorBanner } from "@/components/ui/error-banner";
 import { VillagerMovingIn } from "./VillagerMovingIn";
-import {
-  SegmentedControl,
-  type SegmentedOption,
-} from "@/components/ui/segmented-control";
+
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useGoBack } from "@/hooks/ui/useGoBack";
@@ -29,11 +21,7 @@ import {
   pullRequestBlockedBy,
   pullRequestFolderName,
 } from "@/lib/pullRequest";
-import {
-  sanitizeBranchName,
-  sanitizeWorktreeNameInput,
-  localBranchOf,
-} from "@shared/git/branches";
+import { localBranchOf } from "@shared/git/branches";
 import {
   isRealBranch,
   type CreateWorktreeResult,
@@ -41,38 +29,16 @@ import {
   type PullRequestCandidate,
   type Worktree,
 } from "@shigomori/contracts/schemas";
-import { PullRequestSource } from "./PullRequestPicker";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { cn } from "@/lib/utils";
-
-type Mode = "branch-from" | "checkout" | "pull-request";
-
-// What the destination line leads with, per mode. The device, when there
-// is a choice of one, is spliced in after this: "... checked out on
-// Thinkpad into /home/...".
-const MODE_DEST_LEAD: Record<Mode, string> = {
-  "branch-from": "A new branch created off the source. Checked out",
-  checkout: "Check out the source branch",
-  "pull-request": "Check out the pull request's head",
-};
-
-// Where a PR checkout's folder name comes from. "pr" is the numbered
-// name, "branch" is the PR's head ref, "custom" hands the field over.
-type PrFolderSource = "pr" | "branch" | "custom";
-
-// Branch leads: it's what `prFolderFrom` starts on, and a control whose
-// default sits in the middle reads as if something was already changed.
-const PR_FOLDER_OPTIONS = [
-  { value: "branch", label: "Branch" },
-  { value: "pr", label: "PR" },
-  { value: "custom", label: "Custom" },
-] as const satisfies readonly SegmentedOption<PrFolderSource>[];
+import { PullRequestSourceView } from "./PullRequestPickerView";
+import {
+  NewWorktreeBodyView,
+  NewWorktreeFormView,
+  type NewWorktreeMode,
+} from "./NewWorktreeView";
 
 // The source the form opens on. Gives way to "branch-from" when the
 // pull request source turns out to be unavailable here.
-const DEFAULT_MODE: Mode = "pull-request";
-
-const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
+const DEFAULT_MODE: NewWorktreeMode = "pull-request";
 
 // The page: which project, and on which machine. The frame every
 // project page shares picks the device (a tab per device holding the
@@ -85,17 +51,15 @@ export function NewWorktree() {
   return (
     <ProjectDevicePage title="New worktree">
       {(scoped, tab) => (
-        <div className={PAGE_BODY}>
-          <div className="flex flex-col gap-7">
-            <NewWorktreeForm
-              project={scoped}
-              // Undefined with no choice of device: the form keeps the
-              // copy it has always had rather than naming a machine
-              // nobody chose.
-              deviceLabel={tab?.label}
-            />
-          </div>
-        </div>
+        <NewWorktreeBodyView>
+          <NewWorktreeForm
+            project={scoped}
+            // Undefined with no choice of device: the form keeps the
+            // copy it has always had rather than naming a machine
+            // nobody chose.
+            deviceLabel={tab?.label}
+          />
+        </NewWorktreeBodyView>
       )}
     </ProjectDevicePage>
   );
@@ -147,13 +111,13 @@ function NewWorktreeForm({
       (remoteRefs.has(ref) && localRefs.has(localBranchOf(ref, remoteRefs))),
   );
   // null until the user picks a source, same as the seeded fields below.
-  const [modeInput, setModeInput] = useState<Mode | null>(null);
+  const [modeInput, setModeInput] = useState<NewWorktreeMode | null>(null);
   // Which source to open on, latched from the first availability verdict
   // we hear. Deriving it from the live query instead would let a later
   // refetch that can't reach GitHub move someone out of the pull request
   // source (PR already picked) and into a submittable branch-from
   // form they never asked for.
-  const [defaultMode, setDefaultMode] = useState<Mode | null>(null);
+  const [defaultMode, setDefaultMode] = useState<NewWorktreeMode | null>(null);
   // gh runs on the scoped device, so a pull request checks out there
   // like any other source. Its readiness verdict (below) says whether
   // that device can offer it.
@@ -249,12 +213,6 @@ function NewWorktreeForm({
     folderName.length > 0 &&
     worktrees.some((w) => w.name.toLowerCase() === folderName.toLowerCase());
 
-  // A non-empty source that sanitizes to nothing (reserved words like
-  // root/primary, dot names, DOS device names) would otherwise leave
-  // the form silently unsubmittable: blank folder field, disabled
-  // Create, and no branch to blame.
-  const folderUnusable = folderSourceRaw.length > 0 && folderName.length === 0;
-
   // Checkout mode waits for the branch list: the occupancy gate reads
   // it, and submitting before it lands would let the CLI find the
   // collision instead.
@@ -295,251 +253,87 @@ function NewWorktreeForm({
 
   const busy = create.isPending || createFromPr.isPending;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (canSubmit && !busy) {
-      handleCreate();
-    }
-  };
-
   // Scoped to the active mode: a mutation keeps its last error, so the
   // other mode's stale failure would otherwise sit on top of this one.
   const errorMessage =
     (prMode ? createFromPr.error : create.error)?.message ?? null;
   const destName = folderName || "…";
   const destPath = destRoot ? `${destRoot}/${destName}` : destName;
-  const destLead = MODE_DEST_LEAD[mode];
-  const destTrail =
-    mode === "checkout"
-      ? ". Branches already checked out in another worktree are hidden."
-      : ".";
 
   return (
-    <form className="flex flex-col gap-7" onSubmit={handleSubmit}>
-      {/* First, and outside the sections it governs: the pull request
-        mode hides the source field, and a toggle that moves out from
-        under the cursor as it's clicked is worse than the gap. The
-        wrapper keeps the track hugging its options, since a bare flex
-        child would stretch to the form's width. */}
-      <div className="space-y-2">
-        <SegmentedControl
-          aria-label="Worktree source mode"
-          value={mode}
-          onChange={setModeInput}
-          // Pull request leads: it's the source the form opens on, and the
-          // selected segment should be the one your eye lands on first.
-          // It stays in place when unavailable rather than dropping out,
-          // since segments that reshuffle once the availability check
-          // lands would move out from under the cursor.
-          options={[
-            {
-              value: "pull-request",
-              label: "From pull request",
-              disabled: prOptionOff !== undefined,
-              tip: prOptionOff,
-            },
-            { value: "branch-from", label: "Branch from source" },
-            { value: "checkout", label: "Check out source" },
-          ]}
-          disabled={busy}
-        />
-      </div>
-
-      {!prMode && (
-        <div className="space-y-2">
-          <label htmlFor="branch-base" className="block text-sm font-medium">
-            Source
-          </label>
-          <BranchCombobox
-            id="branch-base"
-            projectId={project.id}
-            value={base}
-            onChange={setBaseInput}
-            placeholder={
-              mode === "checkout" ? "Pick a branch" : (defaultBranch ?? "main")
-            }
-            disabled={busy || !defaultBranch}
-            excludeBranches={mode === "checkout" ? hiddenInCheckout : undefined}
-            pinnedBranch={defaultBranch}
-          />
-          {deviceLabel && (
-            <p className="text-xs text-muted-foreground">
-              Branches are read from {deviceLabel}&apos;s checkout.
-            </p>
-          )}
-          {baseHolder && (
-            <p className="text-xs text-destructive">
-              <span className="font-mono">{base}</span>
-              {checkoutBranch !== base && (
-                <>
-                  {" "}
-                  lands on <span className="font-mono">{checkoutBranch}</span>,
-                  which
-                </>
-              )}{" "}
-              is already checked out in {baseHolder.name}.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {prMode ? (
-          <PullRequestSource
-            query={candidates}
-            unavailableText={prUnavailable}
-            selected={selectedPr}
-            onSelect={setSelectedPr}
-            worktreeByBranch={worktreeByBranch}
-            disabled={busy}
-          />
-        ) : (
-          <>
-            <label htmlFor="branch-name" className="block text-sm font-medium">
-              Branch name
-            </label>
-            <Input
-              id="branch-name"
-              type="text"
-              value={mode === "checkout" ? checkoutBranch : branchName}
-              onChange={(e) =>
-                setBranchNameInput(sanitizeBranchName(e.target.value))
-              }
-              placeholder="feat/new-thing"
-              disabled={busy || mode === "checkout"}
-              // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
-              autoFocus
-              className={TEXT_INPUT_CLASS}
-            />
-            {branchTaken && (
-              <p className="text-xs text-destructive">
-                A branch named <span className="font-mono">{branchName}</span>{" "}
-                already exists in this project.
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <label htmlFor="worktree-name" className="block text-sm font-medium">
-            Worktree folder
-          </label>
-          {prMode ? (
-            <SegmentedControl
-              aria-label="Worktree folder name source"
-              value={useBranchAsFolder ? prFolderFrom : "custom"}
-              onChange={(next) => {
-                if (next === "custom") {
-                  // Seed the editable field with whatever was just shown,
-                  // so switching doesn't blow away the user's context.
-                  setWorktreeName(folderName);
-                  setUseBranchAsFolder(false);
-                  return;
-                }
-                setPrFolderFrom(next);
-                setUseBranchAsFolder(true);
-              }}
-              options={PR_FOLDER_OPTIONS}
-              disabled={busy}
-              // The row is baseline-aligned for the label and the old
-              // checkbox, but a bordered track wants its own centering.
-              className="self-center"
-              optionClassName="px-2 py-0.5 text-2xs"
-            />
-          ) : (
-            <label
-              className={cn(
-                "-mx-1 flex cursor-pointer items-center gap-2 rounded-md px-1 text-xs text-muted-foreground select-none",
-                !busy && "hover:bg-muted dark:hover:bg-muted/50",
-              )}
-            >
-              <Checkbox
-                checked={useBranchAsFolder}
-                onCheckedChange={(next) => {
-                  if (!next) {
-                    // Seed the editable field with whatever was just shown,
-                    // so toggling off doesn't blow away the user's context.
-                    setWorktreeName(folderName);
-                  }
-                  setUseBranchAsFolder(next);
-                }}
-                disabled={busy}
-              />
-              Use {mode === "checkout" ? "source" : "branch"} name
-            </label>
-          )}
-        </div>
-        <Input
-          id="worktree-name"
-          type="text"
-          value={useBranchAsFolder ? folderName : worktreeName}
-          onChange={(e) =>
-            setWorktreeName(sanitizeWorktreeNameInput(e.target.value))
+    <NewWorktreeFormView
+      mode={mode}
+      onMode={setModeInput}
+      prOptionOff={prOptionOff}
+      busy={busy}
+      sourcePicker={
+        <BranchCombobox
+          id="branch-base"
+          projectId={project.id}
+          value={base}
+          onChange={setBaseInput}
+          placeholder={
+            mode === "checkout" ? "Pick a branch" : (defaultBranch ?? "main")
           }
-          placeholder={pickedName ?? "huggy-salamander"}
-          disabled={busy || useBranchAsFolder}
-          className={TEXT_INPUT_CLASS}
+          disabled={busy || !defaultBranch}
+          excludeBranches={mode === "checkout" ? hiddenInCheckout : undefined}
+          pinnedBranch={defaultBranch}
         />
-        {folderTaken && (
-          <p className="text-xs text-destructive">
-            A worktree folder named{" "}
-            <span className="font-mono">{folderName}</span> already exists in
-            this project.
-          </p>
-        )}
-        {folderUnusable && (
-          <p className="text-xs text-destructive">
-            <span className="font-mono">{folderSourceRaw}</span> can't be used
-            as a folder name (root, primary, and dot names are reserved). Pick a
-            different folder name.
-          </p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          {destLead}
-          {deviceLabel ? ` on ${deviceLabel}` : ""} into{" "}
-          <span className="font-mono text-foreground/80 select-text">
-            {destPath}
-          </span>
-          {destTrail}
-          {!folderTaken && <VillagerMovingIn folderName={folderName} />}
-        </p>
-      </div>
-
-      <ToggleRowView
-        checked={cloneFiles}
-        onCheckedChange={setCloneFiles}
-        label="Clone files from an existing checkout"
-        description="Copies tracked files in from the primary checkout, or the one on the source branch, as clones that share disk space with the originals. Much faster on large repos."
-        disabled={busy}
-      />
-
-      {errorMessage && (
-        <ErrorBanner
-          message={errorMessage}
-          title="Couldn't create the worktree"
-        />
-      )}
-
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={goBack}
+      }
+      deviceLabel={deviceLabel}
+      base={base}
+      checkoutBranch={checkoutBranch}
+      baseHolder={baseHolder?.name}
+      prSource={
+        <PullRequestSourceView
+          query={candidates}
+          unavailableText={prUnavailable}
+          selected={selectedPr}
+          onSelect={setSelectedPr}
+          worktreeByBranch={worktreeByBranch}
           disabled={busy}
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canSubmit || busy} size="sm">
-          {busy
-            ? "Creating…"
-            : deviceLabel
-              ? `Create on ${deviceLabel}`
-              : "Create worktree"}
-        </Button>
-      </div>
-    </form>
+        />
+      }
+      branchName={branchName}
+      onBranchName={setBranchNameInput}
+      branchTaken={branchTaken}
+      useBranchAsFolder={useBranchAsFolder}
+      prFolderFrom={prFolderFrom}
+      onPrFolder={(next) => {
+        if (next === "custom") {
+          // Seed the editable field with whatever was just shown,
+          // so switching doesn't blow away the user's context.
+          setWorktreeName(folderName);
+          setUseBranchAsFolder(false);
+          return;
+        }
+        setPrFolderFrom(next);
+        setUseBranchAsFolder(true);
+      }}
+      onUseSourceName={(next) => {
+        if (!next) {
+          // Seed the editable field with whatever was just shown,
+          // so toggling off doesn't blow away the user's context.
+          setWorktreeName(folderName);
+        }
+        setUseBranchAsFolder(next);
+      }}
+      worktreeName={worktreeName}
+      onWorktreeName={setWorktreeName}
+      folderName={folderName}
+      folderPlaceholder={pickedName ?? "huggy-salamander"}
+      folderTaken={folderTaken}
+      folderSourceRaw={folderSourceRaw}
+      destPath={destPath}
+      villager={<VillagerMovingIn folderName={folderName} />}
+      cloneFiles={cloneFiles}
+      onCloneFiles={setCloneFiles}
+      errorMessage={errorMessage}
+      canSubmit={canSubmit}
+      onSubmit={() => {
+        if (canSubmit && !busy) handleCreate();
+      }}
+      onCancel={goBack}
+    />
   );
 }

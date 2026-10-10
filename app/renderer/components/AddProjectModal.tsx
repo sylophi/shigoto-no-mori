@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { repoNameFromUrl } from "@shared/cloneUrl";
-import { EmptyPanel } from "@/components/ui/empty-panel";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import {
   DeviceTabPanel,
@@ -12,17 +10,14 @@ import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { localDeviceId } from "@/lib/queryKeys";
-import { AddExistingView } from "./addProject/AddExistingView";
-import { CloneView } from "./addProject/CloneView";
-import { CreateView } from "./addProject/CreateView";
-
-type AddProjectMode = "existing" | "clone" | "create";
-
-const MODE_OPTIONS = [
-  { value: "existing", label: "Add existing" },
-  { value: "clone", label: "Clone" },
-  { value: "create", label: "Create new" },
-] as const;
+import { AddExistingForm } from "./addProject/AddExistingForm";
+import { CloneForm } from "./addProject/CloneForm";
+import { CreateForm } from "./addProject/CreateForm";
+import {
+  type AddProjectMode,
+  AddProjectHeaderView,
+  AddProjectNoDeviceView,
+} from "./AddProjectModalView";
 
 // Standalone host for the add-project flow (File → Add project…, ⌘N, and
 // the sidebar ＋ button). The shortcut is a native menu accelerator in
@@ -96,28 +91,26 @@ function AddProjectDialog() {
       onClose={onClose}
       onEscape={() => (escapeRef.current ?? onClose)()}
     >
-      <div className="flex flex-col gap-2 border-b border-border py-2">
-        <SegmentedControl
-          value={mode}
-          onChange={setMode}
-          options={MODE_OPTIONS}
-          aria-label="How to add the project"
-          className="mx-3 self-start"
-        />
-        {tabs.length > 1 && picked && (
-          <DeviceTabBarView
-            tabs={tabs}
-            selectedId={picked.deviceId}
-            onSelect={pick}
-            // phone:px-3 as well: the bar's own phone:px-4 outlives a bare px-3.
-            className="px-3 phone:px-3"
-          />
-        )}
-      </div>
+      <AddProjectHeaderView
+        mode={mode}
+        onMode={setMode}
+        tabs={
+          tabs.length > 1 &&
+          picked && (
+            <DeviceTabBarView
+              tabs={tabs}
+              selectedId={picked.deviceId}
+              onSelect={pick}
+              // phone:px-3 as well: the bar's own phone:px-4 outlives a bare px-3.
+              className="px-3 phone:px-3"
+            />
+          )
+        }
+      />
       {picked ? (
         <DeviceTabPanel tab={picked} subject="its folder listing">
           {mode === "existing" && (
-            <AddExistingView
+            <AddExistingForm
               query={query}
               setQuery={setPathOrUrl}
               addToTerrier={addToTerrier}
@@ -127,7 +120,7 @@ function AddProjectDialog() {
             />
           )}
           {mode === "clone" && (
-            <CloneView
+            <CloneForm
               url={url}
               setUrl={setUrl}
               addToTerrier={addToTerrier}
@@ -136,7 +129,7 @@ function AddProjectDialog() {
             />
           )}
           {mode === "create" && (
-            <CreateView
+            <CreateForm
               name={name}
               setName={setName}
               addToTerrier={addToTerrier}
@@ -146,13 +139,7 @@ function AddProjectDialog() {
           )}
         </DeviceTabPanel>
       ) : (
-        <div className="p-6">
-          <EmptyPanel>
-            {status?.signedIn === true
-              ? "No device that holds projects is signed in to this account."
-              : "Sign in to add a project from one of the account's devices."}
-          </EmptyPanel>
-        </div>
+        <AddProjectNoDeviceView signedIn={status?.signedIn === true} />
       )}
     </ModalShell>
   );

@@ -8,6 +8,7 @@ import {
   type MergeMethod,
   type MergePullRequestResult,
   type PullRequestCheck,
+  type PullRequestCandidate,
   type PullRequestCheckBucket,
   type PullRequestMergeState,
   type PullRequestReviews,
@@ -59,6 +60,52 @@ const FAKE_PRS = {
     "exp/terrier-sync",
   ),
 };
+
+// The open PRs the new-worktree form offers as sources, by when they
+// last moved: the repo's open ones, a draft, and one from a fork.
+export function fakePullRequestCandidates(): PullRequestCandidate[] {
+  const HOUR = 3_600_000;
+  const at = (hoursAgo: number) =>
+    new Date(Date.now() - hoursAgo * HOUR).toISOString();
+  const open = Object.entries(FAKE_PRS)
+    .filter(([, pr]) => pr.state === "OPEN")
+    .map(([headRefName, pr], i) => ({
+      number: pr.number,
+      url: pr.url,
+      title: pr.title,
+      isDraft: false,
+      headRefName,
+      authorLogin: "sylophi",
+      fromFork: false,
+      headRepo: null,
+      updatedAt: at(2 + i * 5),
+    }));
+  return [
+    {
+      number: 158,
+      url: "https://github.com/sylophi/shigoto-no-mori/pull/158",
+      title: "Show the villager's house in the worktree header",
+      isDraft: true,
+      headRefName: "villager-house-header",
+      authorLogin: "sylophi",
+      fromFork: false,
+      headRepo: null,
+      updatedAt: at(1),
+    },
+    ...open,
+    {
+      number: 156,
+      url: "https://github.com/sylophi/shigoto-no-mori/pull/156",
+      title: "Read the ports file on Windows",
+      isDraft: false,
+      headRefName: "windows-ports",
+      authorLogin: "kokoro-dev",
+      fromFork: true,
+      headRepo: "kokoro-dev/shigoto-no-mori",
+      updatedAt: at(30),
+    },
+  ];
+}
 
 const FAKE_PR_BRANCH = "v2-exp/remote-ui-flows";
 const FAKE_PR_SLIM = FAKE_PRS[FAKE_PR_BRANCH];
