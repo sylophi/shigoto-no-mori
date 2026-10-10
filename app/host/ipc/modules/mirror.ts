@@ -25,7 +25,11 @@ import {
 export const mirrorViews: ViewHandlers<typeof mirrorContract, Views.Services> =
   {
     watch: () =>
-      Views.view(() => mirrorList(), Views.pushed(mirrorContract, "changed")),
+      Views.view(
+        "mirror:watch",
+        () => mirrorList(),
+        Views.pushed(mirrorContract, "changed"),
+      ),
   };
 
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {

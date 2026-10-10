@@ -126,6 +126,7 @@ export const projectsViews: ViewHandlers<
   // a missing folder are neither, and show on the next of these.
   watch: () =>
     Views.view(
+      "projects:watch",
       listProjectsWithStatus,
       Views.either(
         Views.wrote(

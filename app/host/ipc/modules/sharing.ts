@@ -11,7 +11,11 @@ export const sharingViews: ViewHandlers<
   Views.Services | Sharing.Sharing
 > = {
   watch: () =>
-    Views.view(() => current, Views.pushed(sharingContract, "changed")),
+    Views.view(
+      "sharing:watch",
+      () => current,
+      Views.pushed(sharingContract, "changed"),
+    ),
 };
 
 export const sharingHandlers = {

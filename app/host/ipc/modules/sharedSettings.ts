@@ -11,6 +11,7 @@ export const sharedSettingsViews: ViewHandlers<
   // ahead of the store.
   watch: () =>
     Views.view(
+      "sharedSettings:watch",
       () => sharedSettingsCopy.read(),
       Views.pushed(sharedSettingsContract, "changed"),
     ),

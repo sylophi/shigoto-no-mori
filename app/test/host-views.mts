@@ -17,7 +17,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import type * as Scope from "effect/Scope";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { afterAll, beforeAll, it } from "vitest";
@@ -33,6 +34,7 @@ import { setAutoPull, writeGlobalConfig } from "../host/lib/engineCalls.ts";
 import { writeWorktreeData } from "../host/lib/config/project.ts";
 import { readDeviceId } from "../host/lib/config/deviceId.ts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
+import * as Views from "../host/lib/views.ts";
 import * as Sharing from "../host/lib/sharing.ts";
 import { listWorktrees } from "../host/lib/git/worktrees.ts";
 import { registerProject } from "../host/lib/projects/index.ts";
@@ -74,10 +76,7 @@ afterAll(async () => {
   await teardown();
 });
 
-type Services =
-  | StoreChanges.StoreChanges
-  | HostPushes.HostPushes
-  | HostServices;
+type Services = Views.Services | HostServices;
 
 // A view watched: `next` is its next value, `push` makes a host push as
 // the broadcast seam would, `tick` moves the clock past the store's
@@ -117,7 +116,7 @@ const watch = <A,>(
       // The store's tick runs on the TestClock the body moves.
       // The host's services beneath, the proof file's own.
       Effect.provide(
-        Layer.mergeAll(StoreChanges.layer, HostPushes.layer).pipe(
+        Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer).pipe(
           Layer.provideMerge(TestClock.layer()),
           Layer.provideMerge(Layer.effectContext(Effect.promise(hostContext))),
         ),
@@ -330,6 +329,64 @@ it("mirrors: the daemon coming up, on mirror:changed", async () => {
       status = "running";
       yield* push(channel(mirrorContract, "changed"));
       assert.equal((yield* next).daemon, "running");
+    }),
+  );
+});
+
+it("one read per view and input: a second subscriber joins it on the current value, and the read ends with its last subscriber", async () => {
+  let reads = 0;
+  let value = 0;
+  const bump = "test:bump";
+  const counted = (key: string) =>
+    Views.view(
+      key,
+      () => {
+        reads += 1;
+        return value;
+      },
+      (signal) => signal.kind === "push" && signal.push.channel === bump,
+    );
+  const subscribe = (key: string) =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const values = yield* Stream.toQueue(counted(key), {
+        capacity: "unbounded",
+      }).pipe(Scope.provide(scope));
+      return {
+        next: Queue.take(values).pipe(Effect.orDie),
+        end: Scope.close(scope, Exit.void),
+      };
+    });
+  await watch(Stream.make(0), ({ push }) =>
+    Effect.gen(function* () {
+      const first = yield* subscribe("test:a");
+      assert.equal(yield* first.next, 0);
+      const second = yield* subscribe("test:a");
+      assert.equal(yield* second.next, 0, "the late one starts from it");
+      assert.equal(reads, 1, "one read for both");
+      // Another input is a read of its own.
+      const other = yield* subscribe("test:b");
+      assert.equal(yield* other.next, 0);
+      assert.equal(reads, 2);
+      yield* other.end;
+
+      value = 1;
+      yield* push(bump);
+      assert.equal(yield* first.next, 1);
+      assert.equal(yield* second.next, 1);
+      assert.equal(reads, 3, "one read for the change");
+
+      // The first gone, the read goes on for the second.
+      yield* first.end;
+      value = 2;
+      yield* push(bump);
+      assert.equal(yield* second.next, 2);
+      assert.equal(reads, 4);
+      yield* second.end;
+      const again = yield* subscribe("test:a");
+      assert.equal(yield* again.next, 2);
+      assert.equal(reads, 5, "the last one gone, the next reads afresh");
+      yield* again.end;
     }),
   );
 });
