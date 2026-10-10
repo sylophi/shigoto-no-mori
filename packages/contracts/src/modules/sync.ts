@@ -408,7 +408,7 @@ export type SyncReceipt = typeof SyncReceiptSchema.Type;
 // identity, the branch, the folder name) supplied by the source
 // itself, plus the link it opened. `landBranch` is the branch the copy
 // is created on when it is not the source's own (a primary's mirror
-// lands on mirror/<branch>, shared/git/branches.ts). The commits still
+// lands on mirror/<branch>, contracts/git/branches.ts). The commits still
 // arrive under `branch`.
 const SyncReceiveWorktreePayloadSchema = strict(
   Schema.Struct({

@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
 import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import type {

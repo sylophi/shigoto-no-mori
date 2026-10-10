@@ -11,7 +11,7 @@ import {
   PeerPortView,
   PortReadoutView,
   PortsStripView,
-} from "@/components/live/LiveCardView";
+} from "@shigomori/ui/views/live/LiveCardView.tsx";
 import {
   AgentItemView,
   DeviceNameView,
@@ -19,11 +19,11 @@ import {
   MirrorSessionItemView,
   MirrorStreamItemView,
   ScriptItemView,
-} from "@/components/live/LiveItemsView";
+} from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import {
   LiveDeviceSectionView,
   LivePageView,
-} from "@/components/live/LivePageView";
+} from "@shigomori/ui/views/live/LivePageView.tsx";
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import type { Worktree } from "@shigomori/contracts/schemas";

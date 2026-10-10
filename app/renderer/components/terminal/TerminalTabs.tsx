@@ -11,7 +11,7 @@ import { notifyError } from "@/lib/toast";
 import { scriptTabId } from "@/store/terminalDrawer";
 import { slotLabel, type ScriptSlot } from "@/store/scriptSlot";
 import { Terminal } from "./Terminal";
-import { TerminalTabsView } from "./TerminalTabsView";
+import { TerminalTabsView } from "@shigomori/ui/views/terminal/TerminalTabsView.tsx";
 
 const ownedBy = (terminal: TerminalInfo, owner: TerminalOwner): boolean =>
   owner.kind === "device"

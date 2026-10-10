@@ -10,7 +10,7 @@ import {
   describeMergeState,
   MERGE_METHOD_LABEL,
   resolveMergeMethod,
-} from "@/lib/pullRequest";
+} from "@shigomori/ui/lib/pullRequest.ts";
 import { stackMergeSet, type PullRequestStack } from "@shared/pullRequestStack";
 import type {
   MergeMethod,

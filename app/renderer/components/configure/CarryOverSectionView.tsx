@@ -4,7 +4,7 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
 import { Switch } from "@shigomori/ui/primitives/switch.tsx";
 import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
-import { normalizeRelPath } from "@shared/git/gitPaths";
+import { normalizeRelPath } from "@shigomori/contracts/git/gitPaths";
 import type {
   CarryOverEntry,
   CarryOverStat,

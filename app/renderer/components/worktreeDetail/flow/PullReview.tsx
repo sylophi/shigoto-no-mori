@@ -11,7 +11,10 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import {
+  pullLandingBranch,
+  pullWorktreeName,
+} from "@shigomori/contracts/git/branches";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useBranches } from "@/hooks/git/useBranches";

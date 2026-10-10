@@ -1,14 +1,12 @@
 // The scoped device's side of the worktree layout math
-// (shared/git/worktreeLayout.ts): where its data dir is, and whether
+// (@shigomori/contracts/git/worktreeLayout): where its data dir is, and whether
 // its managedOnProjectDrive setting keeps managed worktrees on the
 // project's drive. With its home, for the paths the callers tildify.
 // Null until both the runtime paths and the settings are read.
 import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
-import type { DeviceLayoutInputs } from "@shared/git/worktreeLayout";
+import type { DeviceLayout } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-
-export type DeviceLayout = DeviceLayoutInputs & { homedir: string };
 
 export function useDeviceLayout(): DeviceLayout | null {
   const { data: runtime } = useRuntimeInfo();

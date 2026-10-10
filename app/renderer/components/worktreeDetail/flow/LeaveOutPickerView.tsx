@@ -13,7 +13,7 @@
 import type { ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { normalizeRelPath } from "@shared/git/gitPaths";
+import { normalizeRelPath } from "@shigomori/contracts/git/gitPaths";
 import {
   BRING_PATHS_LIMIT,
   bringRulesRoom,

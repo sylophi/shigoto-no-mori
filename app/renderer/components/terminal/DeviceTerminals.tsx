@@ -2,7 +2,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
 import { DEVICE_TERMINALS_PATH } from "@/lib/routePaths";
-import { DeviceTerminalsPageView } from "./DeviceTerminalsPageView";
+import { DeviceTerminalsPageView } from "@shigomori/ui/views/terminal/DeviceTerminalsPageView.tsx";
 import { TerminalTabs } from "./TerminalTabs";
 
 // The scoped device's own terminals, the picked one in the URL.

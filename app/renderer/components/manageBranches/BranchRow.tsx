@@ -5,7 +5,10 @@ import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isBranchNotMergedError } from "@shigomori/contracts/errors";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { BranchDeleteDialogView, BranchRowView } from "./BranchRowView";
+import {
+  BranchDeleteDialogView,
+  BranchRowView,
+} from "@shigomori/ui/views/manageBranches/BranchRowView.tsx";
 
 export function BranchRow({
   projectId,

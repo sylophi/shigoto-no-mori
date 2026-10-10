@@ -1,7 +1,7 @@
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import type { RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
-import type { TidyEntry } from "./tidyModel";
-import { TidyRowView } from "./TidyRowView";
+import type { TidyEntry } from "@shigomori/ui/views/tidy/tidyModel.ts";
+import { TidyRowView } from "@shigomori/ui/views/tidy/TidyRowView.tsx";
 
 // One worktree in the tidy list (TidyRowView), its project's icon read
 // through the scope's api.

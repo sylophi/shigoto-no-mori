@@ -7,7 +7,7 @@ import { useBranches } from "@/hooks/git/useBranches";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { localBranchOf } from "@shared/git/branches";
+import { localBranchOf } from "@shigomori/contracts/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
 import { BranchSwitcherView } from "./BranchSwitcherView";
 

@@ -16,7 +16,7 @@ import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
 import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import { TONE_PILL } from "@shigomori/ui/primitives/status-dot.tsx";
 import { openExternalUrl } from "@/lib/openExternal";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import {
   FlowBodyView,
   FlowFooterView,

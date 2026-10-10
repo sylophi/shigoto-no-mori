@@ -25,7 +25,7 @@ import {
   TONE_TEXT,
   type StatusTone,
 } from "@shigomori/ui/primitives/status-dot.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   CARD,

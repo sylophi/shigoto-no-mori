@@ -9,7 +9,7 @@ import {
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
-import { sanitizeBranchName } from "@shared/git/branches";
+import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
 import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";

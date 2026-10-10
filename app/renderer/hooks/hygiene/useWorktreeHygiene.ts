@@ -1,4 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
+import type { DiskUsageTotals } from "@shigomori/ui/views/tidy/tidyModel.ts";
 import type {
   Project,
   WorktreeDiskUsage,
@@ -58,25 +59,6 @@ export function useAllProjectHygiene(
     // its identity.
     combine: combineHygiene,
   });
-}
-
-export interface DiskUsageTotals {
-  byId: Map<string, WorktreeDiskUsage>;
-  // Worktrees whose walk failed outright, usually one that went away
-  // mid-measure. Distinct from "not measured yet", which is what an
-  // absent entry means, so the row can stop waiting on it.
-  failed: Set<string>;
-  // Reclaimable bytes summed over the worktrees that have finished
-  // measuring, so the total can be shown climbing rather than withheld
-  // until the end.
-  measuredBytes: number;
-  measuredCount: number;
-  totalCount: number;
-  // True while at least one walk is still running.
-  measuring: boolean;
-  // True when any finished walk hit unreadable entries, making the total
-  // a floor. The UI marks the figure approximate.
-  partial: boolean;
 }
 
 // What a disk query needs to identify its worktree. Taking the pair

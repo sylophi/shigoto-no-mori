@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import type { PullRequestStack } from "@shared/pullRequestStack";
-import { describeMergeVerdict } from "@/lib/pullRequest";
+import { describeMergeVerdict } from "@shigomori/ui/lib/pullRequest.ts";
 import type {
   MergeMethod,
   PullRequestDetail,

@@ -1,6 +1,6 @@
 import { CircleAlert, CircleCheck, CircleSlash, Loader2 } from "lucide-react";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { PullRequestTone } from "@/lib/pullRequest";
+import type { PullRequestTone } from "@shigomori/ui/lib/pullRequest.ts";
 import { TONE_TEXT } from "./pullRequestShared";
 
 export function ChecksSummaryIconView({ tone }: { tone: PullRequestTone }) {

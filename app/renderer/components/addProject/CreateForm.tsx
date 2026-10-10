@@ -12,8 +12,11 @@ import {
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useCreateProject } from "@/hooks/projects/useProjects";
 import { notifyError } from "@/lib/toast";
-import { CreateFormView, type Visibility } from "./CreateFormView";
-import { ProgressPanelView } from "./DialogPartsView";
+import {
+  CreateFormView,
+  type Visibility,
+} from "@shigomori/ui/views/addProject/CreateFormView.tsx";
+import { ProgressPanelView } from "@shigomori/ui/views/addProject/DialogPartsView.tsx";
 import { useNewCheckout } from "./useNewCheckout";
 
 const isFolderName = Schema.is(CreateProjectPayloadSchema.fields.name);

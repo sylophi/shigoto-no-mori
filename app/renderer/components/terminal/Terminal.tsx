@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { openExternalUrl } from "@/lib/openExternal";
 import { attachTerminal } from "@/lib/terminalFeed";
-import { TerminalView, type TerminalFeed } from "./TerminalView";
+import {
+  TerminalView,
+  type TerminalFeed,
+} from "@shigomori/ui/views/terminal/TerminalView.tsx";
 
 // One of the scoped device's terminals, attached for as long as it is
 // on screen.

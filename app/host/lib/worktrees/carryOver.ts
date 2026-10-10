@@ -10,7 +10,10 @@
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
+import {
+  makeIgnoreMatcher,
+  normalizeRelPath,
+} from "@shigomori/contracts/git/gitPaths";
 import type {
   CarryOverCandidate,
   CarryOverStat,

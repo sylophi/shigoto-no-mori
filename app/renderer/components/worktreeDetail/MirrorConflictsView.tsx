@@ -21,7 +21,7 @@ import {
   type StatusTone,
   TONE_TEXT,
 } from "@shigomori/ui/primitives/status-dot.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { revealInFolder } from "@/lib/openExternal";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 

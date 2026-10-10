@@ -18,13 +18,13 @@ import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { ScanningPanelView } from "./ScanningPanelView";
-import { ResultsPanelView } from "./ResultsPanelView";
+import { ScanningPanelView } from "@shigomori/ui/views/addProject/ScanningPanelView.tsx";
+import { ResultsPanelView } from "@shigomori/ui/views/addProject/ResultsPanelView.tsx";
 import { useTerrierOptIn } from "./TerrierOptIn";
 import { useBrowseState } from "./useBrowseState";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 import { withToggled } from "@/lib/toggleSet";
-import { AddExistingFormView } from "./AddExistingFormView";
+import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
 
 interface AddExistingFormProps {
   // The input value IS the path. Tildified paths are expanded server-side.
