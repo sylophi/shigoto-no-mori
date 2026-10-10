@@ -1,4 +1,3 @@
-import type { UseQueryResult } from "@tanstack/react-query";
 import { GitPullRequest, GitPullRequestDraft } from "lucide-react";
 import type {
   PullRequestCandidate,
@@ -16,7 +15,7 @@ import { cn } from "@/lib/utils";
 // stands in for it, and the line describing what the selected PR checks
 // out. The form hands over the query rather than its unpacked states so
 // the four ways this can render stay in one place.
-export function PullRequestSource({
+export function PullRequestSourceView({
   query,
   unavailableText,
   selected,
@@ -24,7 +23,11 @@ export function PullRequestSource({
   worktreeByBranch,
   disabled,
 }: {
-  query: UseQueryResult<PullRequestCandidateList>;
+  // The candidates query, as far as it has got.
+  query:
+    | { isPending: true; isError: false }
+    | { isPending: false; isError: true; error: Error }
+    | { isPending: false; isError: false; data: PullRequestCandidateList };
   // Set when the query came back "unavailable". The form shows the same
   // line on the mode toggle.
   unavailableText: string | undefined;

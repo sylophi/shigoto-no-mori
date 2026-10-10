@@ -42,6 +42,12 @@ import {
   ProjectPagesPartsScene,
   TidyScene,
 } from "./projectPages";
+import {
+  AddProjectPartsScene,
+  AddProjectScene,
+  NewWorktreeBranchScene,
+  NewWorktreeScene,
+} from "./newCheckouts";
 import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
 import {
@@ -92,6 +98,10 @@ export const scenes = {
   tidy: { Scene: TidyScene, ...DESKTOP },
   home: { Scene: HomeScene, ...DESKTOP },
   homeEmpty: { Scene: HomeEmptyScene, size: [700, 300] },
+  newWorktree: { Scene: NewWorktreeScene, ...DESKTOP },
+  newWorktreeBranch: { Scene: NewWorktreeBranchScene, ...DESKTOP },
+  addProject: { Scene: AddProjectScene, ...DESKTOP },
+  addProjectParts: { Scene: AddProjectPartsScene, size: [1300, 1500] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

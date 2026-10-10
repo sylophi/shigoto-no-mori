@@ -3,7 +3,7 @@
 // aren't among the group's members, and a pick opens the add-project
 // dialog on that device with the repo's remote already in the input,
 // so getting a project onto a new machine is the pick, a glance at the
-// folder, and ↩. The clone itself is the dialog's (CloneView).
+// folder, and ↩. The clone itself is the dialog's (CloneForm).
 //
 // The remote comes from a member that has the repo. projects:cloneUrl
 // is a read, so any member with a session can answer it, including a

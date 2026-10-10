@@ -9,7 +9,7 @@ interface ScanningPanelProps {
   onCancel: () => void;
 }
 
-export function ScanningPanel({
+export function ScanningPanelView({
   scanRoot,
   home,
   onCancel,
