@@ -101,3 +101,24 @@ it("lists none of terrier's while its listing isn't in the shape read", async ()
     assert.deepEqual(rows, []);
   }
 });
+
+it("lists terrier's projects as soon as the switch turns on", async () => {
+  const repo = box.repo("repo");
+  box.fakeBin(
+    "terrier",
+    `if [ "$1" = version ]; then echo v0.1.0; else echo '{"projects":[{"path":"${repo}"}]}'; fi`,
+  );
+  const listed = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const config = yield* Config.Config;
+      const before = (yield* registry.listed).length;
+      yield* config.set({ kind: "device" }, "terrier", "true");
+      const on = (yield* registry.listed).map(({ path }) => path);
+      yield* config.set({ kind: "device" }, "terrier", "false");
+      const off = (yield* registry.listed).length;
+      return [before, on, off];
+    }),
+  );
+  assert.deepEqual(listed, [0, [repo], 0]);
+});

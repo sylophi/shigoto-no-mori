@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { callOf } from "@shigomori/contracts/contract";
-import { migrationContract } from "@shigomori/contracts/modules/migration";
+import { useAccountStatus } from "@/hooks/account/useAccount";
+import { useMigration } from "@/hooks/useMigration";
+import { migrationOwed } from "@shigomori/contracts/schemas/migration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import {
   migrationEnded,
@@ -11,17 +12,6 @@ import {
   type EnrollmentStep,
   useEnrollment,
 } from "@/hooks/account/useEnrollment";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
-import { hostViewAtom } from "@/lib/runtime/atoms";
-import { useView } from "@/lib/runtime/viewHooks";
-
-const migrationAtom = hostViewAtom({
-  deviceId: localDeviceId,
-  localDeviceId,
-  view: callOf(migrationContract, "watch"),
-  input: undefined,
-});
 
 const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   done: { state: "done", asks: false },
@@ -30,13 +20,13 @@ const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   "sign-in": { state: "waiting", asks: true },
 };
 
-// The v3 migration as this machine's host runs it, in place of the app
+// The v3 migration as this machine's shell serves it, in place of the app
 // (the /migration route), with this device's enrollment for its key
 // (useEnrollment) as its sign-in: by itself while the session lives, a
 // button once it has lapsed. With every step done it opens the app, and
 // with nothing to migrate at once.
 export function MigrationPage() {
-  const { data: migration } = useView(hasLocalHost ? migrationAtom : null);
+  const migration = useMigration();
   const enrollment = useEnrollment();
   // Shown from the moment it is due, and done once it no longer is.
   const [keyDue, setKeyDue] = useState(false);
@@ -48,10 +38,18 @@ export function MigrationPage() {
       ? SIGN_IN["sign-in"]
       : SIGN_IN[enrollment.step];
   const navigate = useNavigate();
+  // Not before the account says whether the device key is due.
+  const { data: account } = useAccountStatus();
   const { open } =
-    migration === undefined
+    migration == null || account === undefined
       ? { open: false }
       : migrationEnded(migration, signIn);
+  // On to the app, for every window: the shell keeps the page until one
+  // goes on past it.
+  const goOn = () => {
+    void window.api.migration.continue();
+    void navigate({ to: "/", replace: true });
+  };
 
   // A live session enrolls once, by itself.
   const { step, run } = enrollment;
@@ -62,17 +60,28 @@ export function MigrationPage() {
     run();
   }, [keyDue, step, run]);
 
+  // Every step done, or nothing (left) to show.
+  const nothing =
+    migration === null ||
+    (migration !== undefined && migration.planned && !migrationOwed(migration));
   useEffect(() => {
-    if (open) void navigate({ to: "/", replace: true });
-  }, [open, navigate]);
+    if (open) {
+      void window.api.migration.continue();
+      void navigate({ to: "/", replace: true });
+    } else if (nothing) {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [open, nothing, navigate]);
 
-  if (migration === undefined || !migration.planned) return null;
+  // Nothing drawn on the way out, so a migration that finished clean
+  // never flashes the page.
+  if (migration == null || !migrationOwed(migration) || open) return null;
   return (
     <MigrationView
       migration={migration}
       signIn={signIn}
       onSignIn={run}
-      onContinue={() => void navigate({ to: "/", replace: true })}
+      onContinue={goOn}
     />
   );
 }

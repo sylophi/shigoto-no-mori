@@ -7,8 +7,10 @@
 // window focused last, or a new one if none is open. At a quit each
 // window's route and bounds are remembered (windows.json in userData)
 // and the next start opens them again, one window on the home route
-// when there is nothing to bring back. The app quits with its last
-// window (main/index.ts).
+// when there is nothing to bring back. Until the app opens past the v3
+// migration, a window opened meanwhile shows its page in place of the
+// app. The app quits with its last window
+// (main/index.ts).
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, type Rectangle, screen } from "electron";
 import * as Schema from "effect/Schema";
@@ -40,6 +42,8 @@ import {
 } from "./restartVisibility";
 
 const HOME_ROUTE = "/";
+// The v3 migration's page (renderer/lib/routePaths.ts).
+const MIGRATION_ROUTE = "/migration";
 
 // How far a new window sits from the one it opened from, so it does
 // not cover it exactly.
@@ -90,6 +94,9 @@ let started = false;
 let launchLink: string | null = null;
 
 let isShuttingDown: () => boolean = () => false;
+
+// Whether the host is running the v3 migration (noteMigrating).
+let migrating = false;
 
 function rememberedPath(): string {
   return join(app.getPath("userData"), "windows.json");
@@ -158,6 +165,7 @@ function create(
     };
   } = {},
 ): Held {
+  if (migrating) route = MIGRATION_ROUTE;
   // Drive the native appearance from the saved theme before constructing
   // the window so the macOS vibrancy material picks the right light/dark
   // variant on first paint. Absent or "system" delegates back to the OS.
@@ -296,6 +304,12 @@ function showCrashGiveUpDialog(): void {
       "to avoid a crash loop. Quit and relaunch the app. If it keeps " +
       "happening, restart your machine or reinstall.",
   );
+}
+
+// Whether the v3 migration's page shows: a window opened meanwhile
+// opens on it. Open ones follow it themselves (AppShell).
+export function noteMigrating(on: boolean): void {
+  migrating = on;
 }
 
 // A new window on `route`, cascaded off the window focused last.

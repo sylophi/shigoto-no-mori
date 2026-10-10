@@ -705,13 +705,38 @@
       "enabled": false
     }
   },
-  "migration:watch": {
+  "migration:changed": {
+    "payload": {
+      "planned": false,
+      "import": null,
+      "worktrees": null
+    }
+  },
+  "migration:continue": {},
+  "migration:read": {
     "success": {
       "planned": false,
-      "import": {
-        "state": "done"
-      },
-      "worktrees": null
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
+    }
+  },
+  "migration:read": {
+    "success": {
+      "planned": false,
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
     }
   },
   "mirror:applyGitState": {
@@ -1842,6 +1867,21 @@
     "payload": {
       "message": "0",
       "storeReport": "e"
+    }
+  },
+  "shellCalls:migration": {
+    "payload": {
+      "planned": true,
+      "import": {
+        "state": "running"
+      },
+      "worktrees": {
+        "state": "stuck",
+        "moved": -8e-323,
+        "total": 1.7976931348623123e308,
+        "current": null,
+        "stuck": []
+      }
     }
   },
   "shellCalls:ready": {
