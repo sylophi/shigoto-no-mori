@@ -22,7 +22,7 @@ import type {
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResult,
 } from "@shigomori/contracts/modules/sync";
-import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
+import type { MirrorIgnoreChoice } from "@shigomori/contracts/leaveOutRule";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";

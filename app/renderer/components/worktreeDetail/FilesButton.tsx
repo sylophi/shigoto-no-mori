@@ -7,8 +7,8 @@ import { FolderSearch } from "lucide-react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { FooterActionButtonView } from "./FooterActionButtonView";
-import { LABEL_RANK } from "./FooterVerbView";
+import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
+import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
 
 export function FilesButton({ worktree }: { worktree: Worktree }) {
   const { toFiles } = useWorktreeNav();

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Check, GitBranch, TriangleAlert } from "lucide-react";
 import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { SYNC_PILL_SHAPE } from "@/components/worktreeDetail/SyncActionButtonView";
+import { SYNC_PILL_SHAPE } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // Where a commit from this page lands, and what the remote is owed:

@@ -10,7 +10,7 @@ import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { LauncherRowView } from "./LauncherRowView";
+import { LauncherRowView } from "@shigomori/ui/views/worktreeDetail/LauncherRowView.tsx";
 
 export function LauncherRow({ worktree }: { worktree: Worktree }) {
   const { data, isLoading } = useLauncherForProject(worktree.projectId);

@@ -7,7 +7,7 @@ import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { WorktreeMirrorLink } from "@/hooks/remote/useMirrors";
 import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
-import { describeMirror } from "./mirrorStatus";
+import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 
 export function useMirrorView(
   link: WorktreeMirrorLink,

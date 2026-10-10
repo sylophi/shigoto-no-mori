@@ -13,7 +13,7 @@ import {
 import {
   ScriptLaunchButtonView,
   ScriptLaunchRowView,
-} from "./ScriptLaunchRowView";
+} from "@shigomori/ui/views/worktreeDetail/ScriptLaunchRowView.tsx";
 
 // Matches the `gap-2` on both the visible row and the measurer.
 const GAP_PX = 8;

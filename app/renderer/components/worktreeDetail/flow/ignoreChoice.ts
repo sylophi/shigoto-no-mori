@@ -26,7 +26,7 @@ import {
   resolveIgnores,
   selectionOfPreset,
   setupDefaultFor,
-} from "@shared/leaveOutRule";
+} from "@shigomori/contracts/leaveOutRule";
 import {
   useLeaveOutPreset,
   useSaveLeaveOutPreset,

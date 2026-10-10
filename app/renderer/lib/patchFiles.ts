@@ -4,11 +4,8 @@
 // a read-only diff, from git status on the changes page).
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
 import { changeKey } from "@shigomori/contracts/schemas";
-import type {
-  ChangeCounts,
-  ChangedFile,
-  ChangeKind,
-} from "@shigomori/contracts/schemas";
+import type { ChangedFile, ChangeKind } from "@shigomori/contracts/schemas";
+import type { ChangeMark, IndexEntry } from "@shigomori/ui/lib/indexEntry.ts";
 
 // Stable identity for one file inside one patch. `name` alone collides
 // on a rename pair (the old path can still appear as another entry), so
@@ -39,11 +36,6 @@ function fileStats(file: FileDiffMetadata): {
 // column reads faster than five icons and costs one character of rail
 // width. Colors stay inside the families doubutsu remaps, an addition
 // on green like the diff stats.
-interface ChangeMark {
-  mark: string;
-  label: string;
-  className: string;
-}
 
 const ADDED: ChangeMark = {
   mark: "A",
@@ -93,17 +85,6 @@ const STATUS_MARKS: Record<ChangeKind, ChangeMark> = {
 // One row of the file rail. The rail draws these and nothing else, so
 // where the rows come from is the caller's decision rather than a shape
 // the rail has to know about.
-export interface IndexEntry {
-  // Row identity: what the filter and the React key run on, what a
-  // click hands back, and what marks the row as the current one.
-  key: string;
-  path: string;
-  prevPath: string | null;
-  mark: ChangeMark;
-  stats: ChangeCounts | null;
-  // The status row behind this file, absent on a read-only diff.
-  row: ChangedFile | null;
-}
 
 // A read-only patch is its own table of contents: one row per file it
 // carries, in the order the scroll area has them. The key is the

@@ -17,27 +17,16 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
+import type {
+  CloneDestination,
+  LandingTarget,
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
 import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
-
-type CloneDestination = {
-  // The project on the peer, for the name and the words.
-  projectName: string;
-  // The pair the pull takes, the parent tildified as the picker
-  // reports it (the host expands `~`).
-  cloneInto: SyncCloneInto;
-  // The whole path, for display.
-  dest: string;
-  setParent: (chosen: string) => void;
-};
-
-export type LandingTarget =
-  | { project: Project; clone?: undefined }
-  | { project?: undefined; clone: CloneDestination };
 
 // The clone the flow would make, computed only while it is the
 // landing (`enabled`): the reads behind it are the destination's home

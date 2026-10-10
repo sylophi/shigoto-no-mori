@@ -33,7 +33,7 @@ import {
   CleanTreeMessageView,
 } from "@/components/diff/WorktreeDiffView";
 import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
-import { SyncActionButtonView } from "@/components/worktreeDetail/SyncActionButtonView";
+import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { changeKey } from "@shigomori/contracts/schemas";

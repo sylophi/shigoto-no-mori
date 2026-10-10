@@ -9,7 +9,7 @@ import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { SyncActionButtonView } from "./SyncActionButtonView";
+import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 
 // Precondition: caller has verified the worktree is eligible
 // (non-primary, non-detached, behindPrimary > 0). The label still falls

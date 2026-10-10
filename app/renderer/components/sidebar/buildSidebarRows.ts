@@ -6,7 +6,10 @@ import {
 import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
 import { isAgentWorking } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";
-import { groupPrefixOf, isHiddenByPrefix } from "@shared/sharedSettings";
+import {
+  groupPrefixOf,
+  isHiddenByPrefix,
+} from "@shigomori/contracts/sharedSettings";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";

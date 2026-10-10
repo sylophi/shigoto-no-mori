@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { normalizeWorktreePrefixes } from "@shared/sharedSettings";
+import { normalizeWorktreePrefixes } from "@shigomori/contracts/sharedSettings";
 import {
   type WorktreePrefixList,
   useSaveWorktreePrefixes,

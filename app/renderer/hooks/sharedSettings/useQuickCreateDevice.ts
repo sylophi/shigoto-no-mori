@@ -3,7 +3,7 @@
 // header IS the identity group), so the pick made on one device holds
 // on all of them. Undefined means no pick: the header falls back to
 // its first live device, this machine first.
-import { sharedSettingKeys } from "@shared/sharedSettings";
+import { sharedSettingKeys } from "@shigomori/contracts/sharedSettings";
 import {
   useSetSharedSetting,
   useSharedStringSetting,

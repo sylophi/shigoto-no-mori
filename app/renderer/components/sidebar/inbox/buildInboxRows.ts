@@ -1,5 +1,5 @@
 import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
-import { groupPrefixOf } from "@shared/sharedSettings";
+import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
 import { showPrimaryInInbox } from "@/lib/showPrimaryInInbox";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";

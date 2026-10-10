@@ -11,8 +11,11 @@ import {
 import { worktreeSyncView } from "@/lib/syncState";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
-import { SyncActionButtonView } from "./SyncActionButtonView";
-import { HeldSyncView, PickSideView } from "./WorktreeSyncPillView";
+import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
+import {
+  HeldSyncView,
+  PickSideView,
+} from "@shigomori/ui/views/worktreeDetail/WorktreeSyncPillView.tsx";
 
 interface WorktreeSyncPillProps {
   worktree: Worktree;

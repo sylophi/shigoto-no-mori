@@ -1,0 +1,62 @@
+import { ArrowDownUp } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../primitives/dropdown-menu.tsx";
+import type { PackageScriptSortMode } from "@shigomori/contracts/schemas/index";
+
+const SORT_OPTIONS: ReadonlyArray<{
+  value: PackageScriptSortMode;
+  label: string;
+}> = [
+  { value: "frequent", label: "Most used" },
+  { value: "recent", label: "Most recently used" },
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "manifest", label: "package.json" },
+  { value: "manual", label: "Manual order" },
+];
+
+export function SortMenuView({
+  value,
+  onChange,
+  onArrange,
+}: {
+  value: PackageScriptSortMode;
+  onChange: (mode: PackageScriptSortMode) => void;
+  onArrange: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Sort scripts"
+        data-icon-button
+        className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
+      >
+        <ArrowDownUp aria-hidden className="size-3" />
+        <span>Sort</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(v) => onChange(v as PackageScriptSortMode)}
+        >
+          {SORT_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        {/* Sized like the radio items above, which are text-sm. */}
+        <DropdownMenuItem onClick={onArrange} className="pl-1.5 text-sm">
+          Set manual order
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

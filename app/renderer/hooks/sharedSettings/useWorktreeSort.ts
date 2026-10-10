@@ -9,7 +9,10 @@ import {
   type WorktreeSortMode,
   WorktreeSortModeSchema,
 } from "@shigomori/contracts/schemas";
-import { sharedSettingKeys, worktreeSortValues } from "@shared/sharedSettings";
+import {
+  sharedSettingKeys,
+  worktreeSortValues,
+} from "@shigomori/contracts/sharedSettings";
 import {
   useSetSharedSetting,
   useSharedSettingsView,

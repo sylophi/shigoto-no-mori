@@ -8,7 +8,10 @@ import {
 } from "@/hooks/worktrees/useWorktreeMutations";
 import { canResume } from "@shigomori/ui/lib/agentSessions.ts";
 import type { AgentSession, Worktree } from "@shigomori/contracts/schemas";
-import { AgentSessionsMenuView, SessionRowView } from "./AgentSessionsMenuView";
+import {
+  AgentSessionsMenuView,
+  SessionRowView,
+} from "@shigomori/ui/views/worktreeDetail/AgentSessionsMenuView.tsx";
 
 export function AgentSessionsMenu({
   worktree,

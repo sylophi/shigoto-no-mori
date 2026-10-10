@@ -13,7 +13,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
 import { getDeviceId } from "../config/deviceId";
 import * as Engine from "../engine";

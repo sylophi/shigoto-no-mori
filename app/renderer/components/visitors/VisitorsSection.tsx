@@ -8,7 +8,7 @@ import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
-import { withMember } from "@/lib/toggleSet";
+import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { resetVisits } from "@/lib/villagers/visitLog";
 import {
   buildAlbum,

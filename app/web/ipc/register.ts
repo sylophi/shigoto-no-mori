@@ -37,7 +37,7 @@ import {
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import {
   effectiveDeviceIcon,

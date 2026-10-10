@@ -13,7 +13,7 @@ import {
   FlowFooterView,
   FlowHeaderView,
   StepRailView,
-} from "@/components/worktreeDetail/flow/FlowChromeView";
+} from "@shigomori/ui/views/worktreeDetail/flow/FlowChromeView.tsx";
 import {
   CommitMenuItemsView,
   CommitRowView,
@@ -39,19 +39,19 @@ import {
 import { StashListView } from "@/components/worktreeDetail/git/StashListView";
 import { StashMovesView } from "@/components/worktreeDetail/git/StashMovesView";
 import type { CommitActions } from "@/components/worktreeDetail/git/useCommitActions";
-import { ForwardAllButtonView } from "@/components/worktreeDetail/ports/ForwardAllButtonView";
-import { ForwardControlView } from "@/components/worktreeDetail/ports/ForwardControlView";
-import { OpenLocalhostButtonView } from "@/components/worktreeDetail/ports/OpenLocalhostButtonView";
+import { ForwardAllButtonView } from "@shigomori/ui/views/worktreeDetail/ports/ForwardAllButtonView.tsx";
+import { ForwardControlView } from "@shigomori/ui/views/worktreeDetail/ports/ForwardControlView.tsx";
+import { OpenLocalhostButtonView } from "@shigomori/ui/views/worktreeDetail/ports/OpenLocalhostButtonView.tsx";
 import {
   PortActionsView,
   PortListView,
-} from "@/components/worktreeDetail/ports/PortListView";
+} from "@shigomori/ui/views/worktreeDetail/ports/PortListView.tsx";
 import {
   forwardBandClass,
   PortRowView,
-} from "@/components/worktreeDetail/ports/PortRowView";
-import { PortsDialogView } from "@/components/worktreeDetail/ports/PortsDialogView";
-import { PortsSectionView } from "@/components/worktreeDetail/ports/PortsSectionView";
+} from "@shigomori/ui/views/worktreeDetail/ports/PortRowView.tsx";
+import { PortsDialogView } from "@shigomori/ui/views/worktreeDetail/ports/PortsDialogView.tsx";
+import { PortsSectionView } from "@shigomori/ui/views/worktreeDetail/ports/PortsSectionView.tsx";
 import {
   ArrangeScriptRowView,
   ScriptDragPreviewView,
@@ -60,11 +60,11 @@ import { PackageScriptsView } from "@/components/worktreeDetail/scripts/PackageS
 import { ScriptListView } from "@/components/worktreeDetail/scripts/ScriptListView";
 import { ScriptRowView } from "@/components/worktreeDetail/scripts/ScriptRowView";
 import { ScriptsSectionView } from "@/components/worktreeDetail/scripts/ScriptsSectionView";
-import { SyncActionButtonView } from "@/components/worktreeDetail/SyncActionButtonView";
+import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 import {
   HeldSyncView,
   PickSideView,
-} from "@/components/worktreeDetail/WorktreeSyncPillView";
+} from "@shigomori/ui/views/worktreeDetail/WorktreeSyncPillView.tsx";
 import { NO_REWRITE } from "@/lib/commitRewrite";
 import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import type {

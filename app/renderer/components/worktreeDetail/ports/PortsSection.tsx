@@ -4,7 +4,7 @@
 // edit.
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { PortActions, PortList, usePortList } from "./PortList";
-import { PortsSectionView } from "./PortsSectionView";
+import { PortsSectionView } from "@shigomori/ui/views/worktreeDetail/ports/PortsSectionView.tsx";
 
 export function PortsSection({ worktree }: { worktree: Worktree }) {
   const state = usePortList(worktree);

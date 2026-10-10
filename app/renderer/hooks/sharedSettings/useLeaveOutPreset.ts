@@ -10,7 +10,7 @@ import {
   leaveOutPresetValue,
   parseLeaveOutPreset,
   sharedSettingKeys,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import {
   useSetSharedSetting,
   useSharedStringSetting,

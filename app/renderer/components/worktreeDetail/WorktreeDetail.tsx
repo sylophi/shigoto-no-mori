@@ -7,7 +7,7 @@ import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
-import { WorktreeUnavailableView } from "./WorktreeDetailView";
+import { WorktreeUnavailableView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
 
 export function WorktreeDetail() {
   const { projectId, worktreeId } = useScopedWorktreeParams();

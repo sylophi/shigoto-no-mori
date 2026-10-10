@@ -6,7 +6,7 @@ import {
   useSetShelved,
 } from "@/hooks/worktrees/useWorktreeMutations";
 import { isManagedWorktree, type Worktree } from "@shigomori/contracts/schemas";
-import { WorktreeOptionsView } from "./WorktreeOptionsView";
+import { WorktreeOptionsView } from "@shigomori/ui/views/worktreeDetail/WorktreeOptionsView.tsx";
 
 export function WorktreeOptions({
   worktree,

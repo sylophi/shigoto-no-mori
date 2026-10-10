@@ -14,7 +14,7 @@ import { PullRequestStateLabelView } from "./pullRequests/PullRequestStateLabelV
 import { StackListView } from "./pullRequests/StackListView";
 import { PullRequestTitleLinkView } from "./pullRequests/PullRequestTitleLinkView";
 import { MERGE_VERB } from "./pullRequests/pullRequestShared";
-import { WorktreeHeaderView } from "./WorktreeHeaderView";
+import { WorktreeHeaderView } from "@shigomori/ui/views/worktreeDetail/WorktreeHeaderView.tsx";
 
 export function WorktreeHeader({
   worktree,

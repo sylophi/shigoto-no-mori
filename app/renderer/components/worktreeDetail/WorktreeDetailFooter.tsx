@@ -6,7 +6,7 @@ import { useFittedLabels } from "./footerFit";
 import {
   type WorktreeDetailFooterProps,
   WorktreeDetailFooterView,
-} from "./WorktreeDetailFooterView";
+} from "@shigomori/ui/views/worktreeDetail/WorktreeDetailFooterView.tsx";
 import { WorktreeOptions } from "./WorktreeOptions";
 
 export function WorktreeDetailFooter({

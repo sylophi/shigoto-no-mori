@@ -9,7 +9,7 @@
 // the device running it.
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { MirrorConflictsChipView } from "@/components/worktreeDetail/MirrorConflictsView";
+import { MirrorConflictsChipView } from "@shigomori/ui/views/worktreeDetail/MirrorConflictsView.tsx";
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import {
   useWorktreeMirrorLinks,
@@ -20,7 +20,7 @@ import {
   MirrorLineView,
   MirrorPillView,
   MirrorStatusChipView,
-} from "./MirrorPillView";
+} from "@shigomori/ui/views/worktreeDetail/MirrorPillView.tsx";
 
 export function MirrorPill({ worktree }: { worktree: Worktree }) {
   const links = useWorktreeMirrorLinks(worktree);

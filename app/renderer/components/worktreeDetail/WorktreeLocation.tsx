@@ -6,7 +6,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRenameWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { WorktreeLocationView } from "./WorktreeLocationView";
+import { WorktreeLocationView } from "@shigomori/ui/views/worktreeDetail/WorktreeLocationView.tsx";
 
 export function WorktreeLocation({
   worktree,

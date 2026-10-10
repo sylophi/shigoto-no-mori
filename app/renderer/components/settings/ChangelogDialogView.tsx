@@ -21,7 +21,7 @@ import {
   FlowBodyView,
   FlowFooterView,
   FlowHeaderView,
-} from "../worktreeDetail/flow/FlowChromeView";
+} from "@shigomori/ui/views/worktreeDetail/flow/FlowChromeView.tsx";
 
 // The update the preview is of: the version it brings, and the notes
 // the update feed sent with it when there are any (the stand-in when

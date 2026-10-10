@@ -2,7 +2,10 @@
 // setting by the project's group key (projectGroupKey), like the
 // worktree sort, so a repo pinned on one device is pinned on all of
 // them.
-import { pinnedProjectKeys, sharedSettingKeys } from "@shared/sharedSettings";
+import {
+  pinnedProjectKeys,
+  sharedSettingKeys,
+} from "@shigomori/contracts/sharedSettings";
 import {
   useSetSharedSetting,
   useSharedSettingsView,
