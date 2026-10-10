@@ -26,7 +26,7 @@ import {
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
 import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
-import { buildGrid } from "./gridModel";
+import { buildGrid } from "@shigomori/ui/views/home/gridModel.ts";
 import type { GroupWork } from "@shigomori/ui/views/home/ProjectGridView.tsx";
 import {
   ProjectGridLayoutView,

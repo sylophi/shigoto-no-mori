@@ -25,7 +25,7 @@ const MENU_RADIO_ITEM_CLASS =
   "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 const MENU_SEPARATOR_CLASS = "-mx-1 my-1 h-px bg-border";
 
-// A menu drawn open in place, for a scene (lab/scenes): Base UI's parts
+// A menu drawn open in place, for a scene (src/scenes): Base UI's parts
 // need an open menu and a portal, neither of which draws on a server,
 // so under this surface the parts below draw their own markup, with the
 // live menu's slots and classes. Placed by its parent, where the live

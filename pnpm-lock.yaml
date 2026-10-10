@@ -718,6 +718,9 @@ importers:
       dompurify:
         specifier: 'catalog:'
         version: 3.4.15
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.2
       lucide-react:
         specifier: 'catalog:'
         version: 1.23.0(react@19.2.7)

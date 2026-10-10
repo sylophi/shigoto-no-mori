@@ -1,4 +1,3 @@
-/* The app's stylesheet, and the utilities only a scene's own layout
-   uses: ../scenes sits outside the app's sources. */
+/* The app's stylesheet. The scenes' own layout utilities are
+   @shigomori/ui's sources, which its stylesheet names. */
 @import "../../renderer/app.css";
-@source "../scenes";

@@ -22,7 +22,7 @@
 // piece of news.
 import type { QueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { villageNewsEnabled } from "@shared/villageLife";
+import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";

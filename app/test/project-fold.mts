@@ -23,16 +23,16 @@ import {
   projectGroupOrder,
   remoteWorktreeKey,
   worktreeRowKey,
-} from "@/components/sidebar/buildSidebarRows";
+} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import type {
   Project,
   PullRequest,
   Worktree,
   WorktreeSortMode,
 } from "@shigomori/contracts/schemas";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 
 const project = (name: string): Project => ({

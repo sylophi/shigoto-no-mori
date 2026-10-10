@@ -75,9 +75,9 @@ import {
   fakeMergePullRequest,
   fakePullRequestDetail,
   fakePullRequests,
-} from "./pullRequestFixtures";
-import { createFakeChanges } from "./changesFixtures";
-import { FAKE_TREE, fakeFile } from "./filesFixtures";
+} from "@shigomori/ui/fixtures/pullRequestFixtures.ts";
+import { createFakeChanges } from "@shigomori/ui/fixtures/changesFixtures.ts";
+import { FAKE_TREE, fakeFile } from "@shigomori/ui/fixtures/filesFixtures.ts";
 import { invokeIndexFor } from "../../web/ipc/localRegistrar";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../../web/ipc/stubDefaults";
 import {
@@ -104,10 +104,26 @@ import {
   repoDescriptionFor,
   type FakeWorktree,
   worktree as worktreeFixture,
-} from "./fixtures";
-import { endpointState } from "./mirrorFixtures";
-import { FAKE_DETECTED, fakeAgentHarnesses } from "./settingsFixtures";
+} from "@shigomori/ui/fixtures/fixtures.ts";
+import { endpointState } from "@shigomori/ui/fixtures/mirrorFixtures.ts";
+import {
+  FAKE_DETECTED,
+  fakeAgentHarnesses,
+} from "@shigomori/ui/fixtures/settingsFixtures.ts";
 import { villagerHandlersFor } from "./villagerData";
+
+// A worktree id the contracts accept (12 hex), the same for the same
+// seed: FNV-1a over it, twice with different offsets for 48 bits.
+function worktreeIdOf(seed: string): string {
+  const half = (offset: number) => {
+    let hash = offset;
+    for (let i = 0; i < seed.length; i++) {
+      hash = Math.imul(hash ^ seed.charCodeAt(i), 16777619) >>> 0;
+    }
+    return (hash & 0xffffff).toString(16).padStart(6, "0");
+  };
+  return half(2166136261) + half(84696351);
+}
 
 // A fixture table: a handler for each channel it answers, typed by the
 // contract. A channel the table leaves out falls back to a
@@ -335,7 +351,7 @@ function registerProject(
   forest.projects.push(project);
   forest.worktrees[project.id] = [
     worktreeFixture({
-      id: `fake${String(Date.now()).slice(-9)}`,
+      id: worktreeIdOf(`${project.id} main`),
       projectId: project.id,
       name,
       branch: "main",
@@ -660,7 +676,7 @@ function hostHandlersFor(
       };
     },
     "worktrees:stashes": ({ worktreeId }) =>
-      worktreeId === "wt_sm_hum"
+      worktreeId === "a10000000002"
         ? [
             {
               hash: "5ca1ab1",
@@ -1559,7 +1575,7 @@ function initCrowd(): void {
       });
       forest.worktrees[id] = [
         worktreeFixture({
-          id: `wt_${id}`,
+          id: worktreeIdOf(id),
           projectId: id,
           name,
           branch: "main",
@@ -1573,7 +1589,7 @@ function initCrowd(): void {
       CROWD_ANIMALS.slice(0, i % 8 === 0 ? 1 : i % 4 === 0 ? 2 : 0).map(
         (animal, n) =>
           worktreeFixture({
-            id: `wt_crowd_${i}_${n}`,
+            id: worktreeIdOf(`crowd ${i} ${n}`),
             projectId: id,
             name: animal,
             branch: n === 0 ? "fix-flaky-sync" : "exp/redo-cache",
@@ -1612,7 +1628,7 @@ function initMissing(): void {
   });
   local.worktrees["p_missing"] = [
     worktreeFixture({
-      id: "wt_missing",
+      id: "d40000000001",
       projectId: "p_missing",
       name: "tanuki-notes",
       branch: "main",
@@ -2001,7 +2017,7 @@ export function installFakeHostBridge(
       if (action === "add") {
         list.push(
           worktreeFixture({
-            id: `fake${Date.now().toString(36)}${name}`,
+            id: worktreeIdOf(`${project.id} ${name} ${Date.now()}`),
             projectId: project.id,
             name,
             branch: name,
@@ -2037,7 +2053,7 @@ export function installFakeHostBridge(
     void fakeMirrorStartTo(localForest, {
       targetDeviceId: THINKPAD_ID,
       projectId: "p_sm",
-      worktreeId: "wt_sm_badger",
+      worktreeId: "a10000000003",
       ignoreMode: "gitignored",
       ignores: [],
     });

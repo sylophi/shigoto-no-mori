@@ -16,8 +16,8 @@ import {
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
-import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
-import { fromConfig } from "./settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
+import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
 
 // A launcher row persists only once both halves are filled in.
 // Half-typed rows live purely in form state. Shared by the encoders so

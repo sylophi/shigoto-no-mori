@@ -13,13 +13,13 @@
 import { useEffect } from "react";
 import { useParams } from "@tanstack/react-router";
 import type { Project } from "@shigomori/contracts/schemas";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import { rowDeviceId } from "@/lib/routePaths";
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
-import { projectGroupKey } from "./buildSidebarRows";
+import { projectGroupKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 
 const store = createExternalStore<{
   // Null on the list.

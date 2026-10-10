@@ -1,5 +1,5 @@
 import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
-import { villageLifeShows } from "@shared/villageLife";
+import { villageLifeShows } from "@shigomori/ui/lib/villageLife.ts";
 import { VillageLifeSettingView } from "@shigomori/ui/views/settings/VillageLifeSettingView.tsx";
 import { VillagerDataControl } from "./VillagerDataControl";
 import { villageLifeRow } from "@shigomori/ui/views/settings/villagerDataView.ts";

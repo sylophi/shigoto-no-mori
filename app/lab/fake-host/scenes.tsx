@@ -1,13 +1,13 @@
 // The scene viewer: /scenes.html?scene=<name> on the desktop fake
-// host's server draws one scene (../scenes/index.ts) at its own size,
+// host's server draws one scene (@shigomori/ui's src/scenes) at its own size,
 // with the app's own stylesheet and the layout its window takes.
 // Without ?scene it lists them. The appearance poses apply (pose.ts:
 // ?theme, ?doubutsu, ?light, ?dark).
 import { createRoot } from "react-dom/client";
 import "./scenes.css";
 import "@shigomori/ui/styles/fonts.css";
-import { windowAttributes } from "../scenes/frame";
-import { type Scene, scenes } from "../scenes/index";
+import { windowAttributes } from "@shigomori/ui/scenes/frame.tsx";
+import { type Scene, scenes } from "@shigomori/ui/scenes/index.ts";
 import { applyPose } from "./pose";
 
 applyPose();

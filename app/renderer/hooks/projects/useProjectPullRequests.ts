@@ -147,7 +147,3 @@ export function useAllProjectPullRequests(projects: readonly Project[]) {
     combine: combineFanOut,
   });
 }
-
-export type ProjectPullRequestQueries = ReturnType<
-  typeof useAllProjectPullRequests
->;

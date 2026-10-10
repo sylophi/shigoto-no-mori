@@ -190,7 +190,7 @@ export function CreateRowView({
   );
 }
 
-export function PaletteRowLayoutView({
+function PaletteRowLayoutView({
   icon,
   title,
   detail,
@@ -230,13 +230,7 @@ export function PaletteRowLayoutView({
 
 // `text` with the letters the query matched drawn heavier and
 // underlined, so a row shows why it is in the list.
-export function HighlightView({
-  text,
-  query,
-}: {
-  text: string;
-  query: string;
-}) {
+function HighlightView({ text, query }: { text: string; query: string }) {
   const positions = matchPositions(query, text);
   if (!positions) return text;
   const marked = new Set(positions);

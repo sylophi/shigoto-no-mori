@@ -56,7 +56,3 @@ export function useAllProjectShigomoriConfigs(projects: readonly Project[]) {
     combine: combineFanOut,
   });
 }
-
-export type ProjectShigomoriConfigQueries = ReturnType<
-  typeof useAllProjectShigomoriConfigs
->;
