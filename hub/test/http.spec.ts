@@ -188,6 +188,36 @@ describe("POST /devices/enroll", () => {
     await enroll("acct-cap-neighbor", "dev-cap-neighbor");
   });
 
+  it("holds the cap against enrollments that arrive together", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 2 * MAX_ACCOUNT_DEVICES }, (_, i) =>
+        call(
+          enrollRequest(`${TEST_TOKEN_PREFIX}acct-cap-race`, {
+            deviceId: `dev-cap-race-${i}`,
+            name: "Racer",
+            platform: "darwin",
+            icon: "laptop",
+          }),
+        ),
+      ),
+    );
+    const enrolled = await Promise.all(
+      responses.map(async (response) => {
+        expect(response.status).toBe(200);
+        return Schema.decodeUnknownSync(EnrollResponseSchema)(
+          await response.json(),
+        );
+      }),
+    );
+    // Each over the cap took the place of the stalest, so the last
+    // enrolled still holds a live credential.
+    const last = enrolled.at(-1);
+    if (last === undefined) throw new Error("the race enrolls devices");
+    const listed = await call(listRequest(last.credential));
+    const { devices } = (await listed.json()) as { devices: unknown[] };
+    expect(devices).toHaveLength(MAX_ACCOUNT_DEVICES);
+  });
+
   it("rejects the same deviceId under a different account with 409", async () => {
     await enroll("acct-conflict-a", "dev-conflict");
     const response = await call(
@@ -571,6 +601,16 @@ describe("the version floor", () => {
       }),
     );
     expect(response.status).toBe(200);
+  });
+});
+
+describe("logging", () => {
+  // The connect route carries its ticket in the query string, and an
+  // invocation log records each request's URL.
+  it("keeps request URLs out of every environment's logs", () => {
+    for (const name of ["production", "dev"] as const) {
+      expect(env.TEST_OBSERVABILITY[name]?.logs?.invocation_logs).toBe(false);
+    }
   });
 });
 

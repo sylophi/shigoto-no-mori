@@ -19,12 +19,14 @@ import { randomBase64url } from "./crypto.ts";
 // connect and mints again.
 const MAX_UNCONSUMED_TICKETS = 64;
 
-// Who a ticket admits: the device, its kind, and the connection its
-// dialer named.
+// Who a ticket admits: the device, its kind, the connection its dialer
+// named, and the credential it was minted with, which must still be the
+// device's when the ticket is spent.
 export interface TicketHolder {
   readonly deviceId: string;
   readonly kind: DeviceKind;
   readonly connectionId: string;
+  readonly credentialHash: string;
 }
 
 export class Tickets extends Context.Service<
@@ -40,7 +42,8 @@ export class Tickets extends Context.Service<
     readonly take: (
       random: string,
     ) => Effect.Effect<TicketHolder | null, SqlError>;
-    // Drops the device's unconsumed tickets, at its revoke.
+    // Drops the device's unconsumed tickets, at its revoke and when it
+    // enrolls again.
     readonly dropDevice: (deviceId: string) => Effect.Effect<void, SqlError>;
   }
 >()("sm/hub/Tickets") {}
@@ -59,6 +62,13 @@ const migrations = SqliteMigrator.fromRecord({
       sql`ALTER TABLE tickets ADD COLUMN kind TEXT NOT NULL DEFAULT 'desktop'`,
       sql`ALTER TABLE tickets ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''`,
     ),
+  ),
+  // A ticket stored before this has no credential to match and is
+  // refused, which costs its dialer one mint.
+  "0003_ticket_credential": Effect.flatMap(
+    SqlClient.SqlClient,
+    (sql) =>
+      sql`ALTER TABLE tickets ADD COLUMN credential_hash TEXT NOT NULL DEFAULT ''`,
   ),
 });
 
@@ -84,6 +94,7 @@ const make = Effect.gen(function* () {
       device_id: holder.deviceId,
       kind: holder.kind,
       connection_id: holder.connectionId,
+      credential_hash: holder.credentialHash,
       expires_at: now + ttlMs,
     })}`;
     return random;
@@ -97,15 +108,17 @@ const make = Effect.gen(function* () {
       device_id: string;
       kind: DeviceKind;
       connection_id: string;
+      credential_hash: string;
       expires_at: number;
     }>`DELETE FROM tickets WHERE random = ${random}
-       RETURNING device_id, kind, connection_id, expires_at`;
+       RETURNING device_id, kind, connection_id, credential_hash, expires_at`;
     const [row] = rows;
     if (row === undefined || row.expires_at <= now) return null;
     return {
       deviceId: row.device_id,
       kind: row.kind,
       connectionId: row.connection_id,
+      credentialHash: row.credential_hash,
     };
   });
 

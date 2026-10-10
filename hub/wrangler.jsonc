@@ -85,8 +85,14 @@
       "simple": { "limit": 60, "period": 60 },
     },
   ],
+  // Workers Logs keeps what the code logs, which the hub's trace needs.
+  // Invocation logs stay off: they record each request's URL, and the
+  // connect route carries its ticket in the query string.
   "observability": {
     "enabled": true,
+    "logs": {
+      "invocation_logs": false,
+    },
   },
   // Production serves from its custom domain on the shigomori.com zone
   // with the workers.dev route switched off, for the same reason as

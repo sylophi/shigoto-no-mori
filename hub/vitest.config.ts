@@ -9,10 +9,22 @@ import {
 } from "@cloudflare/vitest-pool-workers";
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
+import { unstable_readConfig } from "wrangler";
 
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(
     join(import.meta.dirname, "migrations"),
+  );
+  // Each environment's logging, as wrangler resolves it, for the proof
+  // that no request URL is logged.
+  const observability = Object.fromEntries(
+    ["production", "dev"].map((name) => [
+      name,
+      unstable_readConfig({
+        config: join(import.meta.dirname, "wrangler.jsonc"),
+        env: name === "dev" ? "dev" : undefined,
+      }).observability ?? null,
+    ]),
   );
   return {
     plugins: [
@@ -26,6 +38,7 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
+            TEST_OBSERVABILITY: observability,
             // Stands in for the wrangler secret, any string signs.
             TICKET_SIGNING_KEY: "test-ticket-signing-key",
           },
