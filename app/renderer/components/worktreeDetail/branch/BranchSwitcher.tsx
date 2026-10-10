@@ -44,7 +44,7 @@ export function BranchSwitcher({
   }
   // Local branches always shown; remotes only when no matching local
   // exists. Picking a remote orphan creates a local tracking branch
-  // (main's checkoutBranch resolves the qualified ref, so which remote
+  // (the host's checkoutBranch resolves the qualified ref, so which remote
   // was picked survives when several carry the same name).
   const localSet = new Set(branches?.local ?? []);
   const remoteSet = new Set(branches?.remote ?? []);

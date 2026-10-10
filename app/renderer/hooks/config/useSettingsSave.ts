@@ -58,7 +58,7 @@ export function toDeviceSettingsPatch(
 
 // This machine's encoding: the peer patch plus the launch catalog,
 // which this window's Launch tools section edits. Also the dirty
-// projection, so an unchanged device half skips the CLI spawn.
+// projection, so an unchanged device half skips the device write.
 function toLocalDeviceSettingsPatch(
   state: SettingsFormState,
 ): DeviceSettingsPatch {
@@ -164,8 +164,8 @@ export function invalidateDeviceSettingsQueries(
 // error reset atomically per save (two mutations left a failed half's
 // error sticky across later successful saves). Each store gets a dirty
 // guard on its canonical serialized doc: an unchanged device patch
-// skips the CLI spawn entirely (a device write costs a CLI run plus
-// launcher re-detection), and an unchanged appearance doc skips
+// skips the device write entirely (a store write plus launcher
+// re-detection), and an unchanged appearance doc skips
 // clientConfig.json.
 // Writes run device first, then client, sequentially: a device failure
 // persists nothing, and a client failure after a landed device write

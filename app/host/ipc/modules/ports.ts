@@ -1,5 +1,6 @@
 import { portsContract } from "@shigomori/contracts/modules/ports";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
@@ -15,7 +16,7 @@ const listPorts = (worktree: {
 
 export const portsHandlers = {
   list: listPorts,
-} satisfies Handlers<typeof portsContract, unknown, Ports.Ports>;
+} satisfies EffectHandlers<typeof portsContract, unknown, Ports.Ports>;
 
 export const portsViews: ViewHandlers<
   typeof portsContract,

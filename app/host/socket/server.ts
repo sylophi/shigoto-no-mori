@@ -309,15 +309,22 @@ export function createLinkRegistrar(): LinkRegistrar {
   };
 }
 
+// The graph's services, once the root has them: a call or a view that
+// comes first waits for them, and is refused if the graph failed.
+export type LateServices = Effect.Effect<
+  Context.Context<HostServices>,
+  CallFailure
+>;
+
 // A contract call: the registered handler, run with the graph's
 // services, interrupted when the peer cancels it or its link drops, its
 // failure crossing as the contract error it is, or as RemoteCallError
 // with its message and code.
 const serve =
-  (channel: string, fn: Served, services: Context.Context<HostServices>) =>
-  (payload: unknown) =>
+  (channel: string, fn: Served, services: LateServices) => (payload: unknown) =>
     Effect.gen(function* () {
       const peer = yield* LinkPeer;
+      const context = yield* services;
       return yield* fn(
         {
           connection: peer.closed,
@@ -326,7 +333,7 @@ const serve =
           notifier: (module, key) => (push) => peer.notify(module, key, push),
         },
         payload,
-      ).pipe(Effect.provideContext(services));
+      ).pipe(Effect.provideContext(context));
     }).pipe(Effect.annotateSpans({ channel }));
 
 // A frame's messages. One malformed frame is dropped rather than taking
@@ -399,15 +406,15 @@ export const make = (options: {
   readonly group?: typeof LinkGroup | typeof LoopbackGroup;
   readonly local?: boolean;
   readonly sharing?: LinkSharing;
+  readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
-    const { registrar, auth, sharing } = options;
+    const { registrar, auth, sharing, services } = options;
     const group = (options.group ?? LinkGroup) as typeof LinkGroup;
     const local = options.local === true;
     const sharingNow =
       sharing === undefined ? Effect.succeed(true) : sharing.current;
-    // What the views read, and the pushes every peer hears.
-    const services = yield* Effect.context<HostServices>();
+    // The pushes every peer hears.
     const hostPushes = yield* HostPushes.HostPushes;
     const runFork = yield* FiberSet.makeRuntime<never>();
     const lifecycle = yield* Semaphore.make(1);
@@ -673,10 +680,11 @@ export const make = (options: {
         // A view, failing as an invoke does: the contract error it is,
         // or RemoteCallError with its message and code.
         const watch = (view: View) => (payload: unknown) =>
-          view(payload).pipe(
-            Stream.provideContext(services),
-            Stream.mapError(callFailureOf),
-          );
+          Stream.unwrap(
+            Effect.map(services, (context) =>
+              view(payload).pipe(Stream.provideContext(context)),
+            ),
+          ).pipe(Stream.mapError(callFailureOf));
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
         for (const call of group.requests.values()) {
@@ -1140,6 +1148,7 @@ export const layer = (options: {
   readonly registrar: LinkRegistrar;
   readonly auth: WsServerTicketAuth;
   readonly seesPush: LinkSharing["seesPush"];
+  readonly services: LateServices;
 }) =>
   Layer.effect(
     DeviceLink,
@@ -1148,6 +1157,7 @@ export const layer = (options: {
       return yield* make({
         registrar: options.registrar,
         auth: options.auth,
+        services: options.services,
         sharing: {
           current: sharing.current,
           changes: sharing.changes,

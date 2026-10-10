@@ -12,7 +12,7 @@ import { CARD, FlowBodyView, FlowFooterView } from "../flow/FlowChromeView.tsx";
 import type { FlowStage } from "../flow/pullSteps.ts";
 
 // A primary checkout's copy lands on a branch of its own
-// (contracts/git/branches.ts), which the words say when the two differ.
+// (contracts' git/branches.ts), which the words say when the two differ.
 export function MirrorHeadlineView({
   stage,
   branch,

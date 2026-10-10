@@ -1,5 +1,5 @@
 import { gitContract } from "@shigomori/contracts/modules/git";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import { BackgroundFetch } from "@host/lib/git/backgroundFetch";
 import { findProject } from "@host/lib/projects";
@@ -12,4 +12,4 @@ export const gitHandlers = {
       yield* (yield* BackgroundFetch).refreshProject(project.id, project.path);
     }),
   sweep: () => Effect.flatMap(BackgroundFetch, (fetch) => fetch.sweepForPeer),
-} satisfies Handlers<typeof gitContract, unknown, HostServices>;
+} satisfies EffectHandlers<typeof gitContract, unknown, HostServices>;

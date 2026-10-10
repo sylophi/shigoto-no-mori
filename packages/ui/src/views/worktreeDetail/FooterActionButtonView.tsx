@@ -2,7 +2,7 @@
 // button that opens a dialog or a page. Files leads on every worktree,
 // then Mirror (or, mirrored, the running mirror's Mirroring in its
 // place). Each gives up its label on a narrow footer at its own rank
-// (footerFit.tsx).
+// (the app's worktreeDetail/footerFit.ts).
 import type { ReactNode } from "react";
 import { FooterVerbView } from "./FooterVerbView.tsx";
 

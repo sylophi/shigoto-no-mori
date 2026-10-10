@@ -47,7 +47,6 @@ import { PortNumberSchema } from "./schemas/ports.ts";
 // connectInfo ask and answer, and presence, all small control frames, so this is a
 // control-frame budget rather than a data budget. Contract data rides
 // the device links and never this wire. An oversize forward is
-
 // answered with a `too-large` nack to the sender. The worst legitimate
 // frame is a connectInfo answer (a handful of URLs and tickets), far
 // under this, and the worst-case presence roster fits too (asserted in

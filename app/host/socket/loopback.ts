@@ -22,7 +22,11 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import { mintHexId } from "@host/lib/hexId";
-import { type LinkRegistrar, make as makeLink } from "./server";
+import {
+  type LateServices,
+  type LinkRegistrar,
+  make as makeLink,
+} from "./server";
 
 // The engine's Control.ts reads this name and shape.
 export const LOOPBACK_FILE = "loopback.json";
@@ -63,6 +67,7 @@ const make = (options: {
   // The one page origin the listener admits beside an origin-less dial:
   // the desktop window's (its renderer scheme), which dials it too.
   readonly allowedOrigin?: string;
+  readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -71,6 +76,7 @@ const make = (options: {
       registrar: options.registrar,
       group: LoopbackGroup,
       local: true,
+      services: options.services,
       auth: {
         opens: { token },
         // Its callers command this machine as its owner.

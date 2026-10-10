@@ -9,7 +9,6 @@
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import * as DeviceLink from "@host/socket/server";
-import { invokeInCallSpan, withParentSpan } from "@host/lib/util/trace";
 import type { WsServerStartOpts } from "@host/socket/server";
 import * as Effect from "effect/Effect";
 import { callFailureOf } from "@shigomori/contracts/errors";
@@ -39,6 +38,7 @@ import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import {
   broadcastAll,
+  type EffectHandlers,
   registerHostContract,
 } from "@shared/ipc/registerContract";
 import type { HostServices } from "@host/process/services";
@@ -48,7 +48,6 @@ import type {
   HandlerContext,
   ServerTransport,
 } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
 import { WebSocket as WsClient } from "ws";
 import { type DeviceConnection, openDevice } from "@shared/remote/deviceLink";
 import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
@@ -130,32 +129,38 @@ export async function startDirectListener(
   const host = await hostContext();
   const runtime = ManagedRuntime.make(
     Layer.provideMerge(
-      DeviceLink.layer({
-        registrar,
-        auth: {
-          // The roster's keys are the test keys (hubStub.mts), the
-          // listener's its device id's.
-          opens: {
-            admit: (ticket, arrivedAs) => {
-              const deviceId = tickets.consume(ticket, arrivedAs);
-              return deviceId === null
-                ? null
-                : {
-                    deviceId,
-                    publicKey:
-                      opts.peerKey?.(deviceId) ??
-                      testDeviceKey(deviceId).pair.publicKey,
-                  };
+      // Its calls run on the services beneath it, there from the start.
+      Layer.unwrap(
+        Effect.map(Effect.context<HostServices>(), (services) =>
+          DeviceLink.layer({
+            services: Effect.succeed(services),
+            registrar,
+            auth: {
+              // The roster's keys are the test keys (hubStub.mts), the
+              // listener's its device id's.
+              opens: {
+                admit: (ticket, arrivedAs) => {
+                  const deviceId = tickets.consume(ticket, arrivedAs);
+                  return deviceId === null
+                    ? null
+                    : {
+                        deviceId,
+                        publicKey:
+                          opts.peerKey?.(deviceId) ??
+                          testDeviceKey(deviceId).pair.publicKey,
+                      };
+                },
+                localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
+              },
+              isCommandGranted: () => accepts,
+              ...(opts.isInvited === undefined
+                ? {}
+                : { isInvited: opts.isInvited }),
             },
-            localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
-          },
-          isCommandGranted: () => accepts,
-          ...(opts.isInvited === undefined
-            ? {}
-            : { isInvited: opts.isInvited }),
-        },
-        seesPush: opts.seesPush ?? (() => false),
-      }),
+            seesPush: opts.seesPush ?? (() => false),
+          }),
+        ),
+      ),
       Layer.mergeAll(
         // The host's services, beneath the stand-ins below.
         Layer.succeedContext(host),
@@ -187,19 +192,16 @@ export async function startDirectListener(
   const binding: WsServerBinding = {
     ...registrar,
     serve: registrar.handle,
-    // Each call's signal aborts when the call is interrupted, and its
-    // span is the parent of the handler's, as the host's are.
+    // A proof's own channel: each call's signal aborts when the call is
+    // interrupted.
     handle: (channel, fn, handleOpts) =>
       registrar.handle(
         channel,
         (ctx, raw) =>
-          Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
-            Effect.tryPromise({
-              try: (signal) =>
-                withParentSpan(span, () => fn({ ...ctx, signal }, raw)),
-              catch: callFailureOf,
-            }),
-          ),
+          Effect.tryPromise({
+            try: async (signal) => fn({ ...ctx, signal }, raw),
+            catch: callFailureOf,
+          }),
         handleOpts,
       ),
     broadcastAll: (channel, payload, broadcastOpts) =>
@@ -346,7 +348,10 @@ export async function bootBrokeredPair(
 }
 
 export type ServedContracts<C extends readonly ContractModule[]> = {
-  [I in keyof C]: readonly [C[I], Handlers<C[I], HandlerContext, HostServices>];
+  [I in keyof C]: readonly [
+    C[I],
+    EffectHandlers<C[I], HandlerContext, HostServices>,
+  ];
 };
 
 export type DirectWire = {
@@ -395,7 +400,6 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
           {
             validateOutputs: true,
             onUsageTracked: () => {},
-            invoke: invokeInCallSpan,
           },
         );
       }

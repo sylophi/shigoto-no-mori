@@ -4,7 +4,9 @@
 // here (host/mirror/serving.ts).
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
+import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
 import type { HostServices } from "@host/process/services";
 import { forgetMirrorInvitesOf } from "@host/mirror/invites";
@@ -44,13 +46,11 @@ export const mirrorHandlers = {
     reopenMirror(session, ignoreMode, ignores),
   // The runner ended its mirror into a copy here and kept the copy:
   // the invitation goes, the worktree stays.
-  release: ({ worktreeId }) => {
-    forgetMirrorInvitesOf(worktreeId);
-  },
-  history: ({ localWorktreeId }) => ({
-    events: engine().history(localWorktreeId),
-  }),
+  release: ({ worktreeId }) =>
+    Effect.sync(() => forgetMirrorInvitesOf(worktreeId)),
+  history: ({ localWorktreeId }) =>
+    Effect.sync(() => ({ events: engine().history(localWorktreeId) })),
   openStream: (input, ctx: HandlerContext) => serveStream(input, ctx),
   gitState: (input) => servedGitState(input),
   applyGitState: (input) => applyServedGitState(input),
-} satisfies Handlers<typeof mirrorContract, HandlerContext, HostServices>;
+} satisfies EffectHandlers<typeof mirrorContract, HandlerContext, HostServices>;

@@ -8,16 +8,19 @@
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
 import type { NukeProgress, Project } from "@shigomori/contracts/schemas";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
 import { pruneStaleWorktrees } from "./git/worktrees";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { clearDeleteInflight, markDeleteInflight } from "./scripts";
-import { fromPromise } from "./util/fromPromise";
 import { dataDir } from "./util/paths";
 import { log } from "@shared/log";
+
+// A step on the file system, its failure as it crosses a wire.
+const fsStep = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: callFailureOf });
 
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
@@ -108,7 +111,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R>(
       { concurrency: "unbounded", discard: true },
     );
     onProgress({ phase: "wipe" });
-    yield* fromPromise(() => rm(dataDir(), { recursive: true, force: true }));
+    yield* fsStep(() => rm(dataDir(), { recursive: true, force: true }));
   }).pipe(
     Effect.ensuring(
       Effect.sync(() => {

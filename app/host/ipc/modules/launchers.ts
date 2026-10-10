@@ -1,5 +1,5 @@
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
@@ -29,4 +29,4 @@ export const launchersHandlers = {
     Effect.flatMap(findProject(projectId), (project) =>
       Ops.openLauncher(project, worktreeId, launcherId),
     ),
-} satisfies Handlers<typeof launchersContract, unknown, Engine.Services>;
+} satisfies EffectHandlers<typeof launchersContract, unknown, Engine.Services>;
