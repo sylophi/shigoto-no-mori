@@ -5,8 +5,8 @@
 // so the header chrome, the inset and the tab wiring live in exactly
 // one place.
 import type React from "react";
-import { cn } from "@/lib/utils";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // One padding for both shells: the desktop pages sit under the window
 // chrome, and since the web shell became a sidebar layout its pages

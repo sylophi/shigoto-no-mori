@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { DiffStats } from "@/components/ui/diff-stats";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
-import { getBrowseLeafSegment } from "@shared/projectPaths";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import type {
   CommitSummary,
   ChangedFile,

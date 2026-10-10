@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { PullRequest } from "@shigomori/contracts/schemas";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { openPullRequest } from "./pullRequestShared";
 
 // The PR's title as the link to it on GitHub. Shared with the stack

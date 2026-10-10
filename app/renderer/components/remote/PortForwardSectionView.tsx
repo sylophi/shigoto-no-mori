@@ -31,11 +31,11 @@ import {
   X,
 } from "lucide-react";
 import { parsePortNumber } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { Chip, ChipButton } from "@/components/ui/chip-button";
-import { ExternalLink } from "@/components/ui/external-link";
-import { Input } from "@/components/ui/input";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Chip, ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 
 export function PortForwardSectionView({

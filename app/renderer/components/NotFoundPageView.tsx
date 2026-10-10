@@ -1,7 +1,7 @@
 // Catch-all for unknown paths (a browser tab can land on one through
 // its address bar): never a white screen, always a way back.
-import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 
 export function NotFoundPageView({ onHome }: { onHome: () => void }) {
   return (

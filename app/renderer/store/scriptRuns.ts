@@ -24,7 +24,7 @@ import {
 import { localDeviceId } from "@/lib/queryKeys";
 import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import type { RendererApi } from "@/window";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
 import { errorMessageOf } from "@shigomori/contracts/errors";

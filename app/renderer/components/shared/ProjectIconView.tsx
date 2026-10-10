@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A project's icon: the logo its repo carries, or, for a repo with none,
 // a tile with the name's initial in a hue drawn from the name. Keyed by

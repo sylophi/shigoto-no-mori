@@ -1,8 +1,12 @@
+// The views run in a browser window and, for the scenes, in Node with
+// no window, so they get the DOM's types and Vite's (asset imports,
+// import.meta.env) and nothing of Node's.
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }

@@ -1,8 +1,8 @@
 // A peer's pages when its session is not up, drawn (RemoteScope.tsx
 // decides which): the page under a banner, or no page at all.
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 
 export function RemoteScopeFrameView({
   banner,

@@ -9,17 +9,17 @@ import {
 } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
-import { BranchLabel } from "@/components/ui/branch-label";
-import { ChipButton } from "@/components/ui/chip-button";
-import { ExternalLink } from "@/components/ui/external-link";
-import { Skeleton } from "@/components/ui/skeleton";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import {
   StatusDot,
   TONE_TEXT,
   type StatusTone,
-} from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The Live page's surfaces (LiveCard.tsx binds them): a device's
 // heading, and the card of one worktree's live things. A card is built

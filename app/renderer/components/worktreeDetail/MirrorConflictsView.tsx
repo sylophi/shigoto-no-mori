@@ -7,7 +7,7 @@
 // sentence that clears them.
 import { FolderOpen, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
-import { ChipButton } from "@/components/ui/chip-button";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,11 +16,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import {
+  type StatusTone,
+  TONE_TEXT,
+} from "@shigomori/ui/primitives/status-dot.tsx";
 import { pluralize } from "@/lib/pluralize";
 import { revealInFolder } from "@/lib/openExternal";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 type MirrorConflict = MirrorSession["conflicts"][number];
 

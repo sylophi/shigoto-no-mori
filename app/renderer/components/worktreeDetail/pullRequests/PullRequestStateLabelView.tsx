@@ -1,5 +1,5 @@
 import { describePullRequest } from "@/lib/pullRequest";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequest } from "@shigomori/contracts/schemas";
 import { STATE_LABEL, TONE_FILL, TONE_TEXT } from "./pullRequestShared";
 

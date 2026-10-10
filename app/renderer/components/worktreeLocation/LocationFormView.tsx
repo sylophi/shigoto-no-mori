@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import type { RowStatus } from "@/components/ui/row-status";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import type { RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
 import type { DeviceLayout } from "@/hooks/config/useDeviceLayout";
 import type { Worktree, WorktreeLayout } from "@shigomori/contracts/schemas";
 import { pluralize } from "@/lib/pluralize";
 import { LayoutOptionItemView } from "./LayoutOptionItemView";
 import { LAYOUT_OPTIONS } from "./layoutOptions";
 import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
-import { tildify } from "@shared/projectPaths";
+import { tildify } from "@shigomori/contracts/projectPaths";
 
 // The project's worktree layout, picked, and the worktrees the pick
 // moves (LocationForm.tsx saves it and runs the moves).

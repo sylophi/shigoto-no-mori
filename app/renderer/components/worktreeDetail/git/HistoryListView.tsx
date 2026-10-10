@@ -3,11 +3,11 @@
 // the refs that matter drawn as lines across the list where they point.
 import type { ReactNode } from "react";
 import { ChevronRight, Layers, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { HistorySelection, useRowSelection } from "./CommitRowView";
 
 export function HistoryListView({

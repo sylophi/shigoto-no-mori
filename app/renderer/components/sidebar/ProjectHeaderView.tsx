@@ -1,7 +1,7 @@
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { cn } from "@/lib/utils";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { Project } from "@shigomori/contracts/schemas";
 import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
 import { TerrierPawView } from "@/components/shared/TerrierPawView";

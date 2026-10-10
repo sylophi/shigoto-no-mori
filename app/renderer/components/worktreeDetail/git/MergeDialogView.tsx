@@ -1,11 +1,11 @@
 // The merge dialog's content (MergeDialog puts it in a ModalShell).
 import type { ReactNode } from "react";
 import { Check, TriangleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { InlineError } from "@/components/ui/inline-error";
-import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { pluralize } from "@/lib/pluralize";
 import type {
   IntegrateMethod,

@@ -1,5 +1,5 @@
 import { Pin } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // The pin after a pinned project's name, in the sidebar and on the
 // home page's tiles.

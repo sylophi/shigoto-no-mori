@@ -15,20 +15,20 @@ import { type ReactNode, useId } from "react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { PullRequestDetail, Worktree } from "@shigomori/contracts/schemas";
 import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { PathSpan } from "@/components/ui/path-span";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { Switch } from "@shigomori/ui/primitives/switch.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { LandingTarget } from "./cloneDestination";
 import { FlowBodyView, FlowFooterView } from "./FlowChromeView";
 import type { DeviceTarget } from "@/components/shared/deviceTargets";

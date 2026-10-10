@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { EmptyPanel } from "@/components/ui/empty-panel";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 
 export type AddProjectMode = "existing" | "clone" | "create";
 

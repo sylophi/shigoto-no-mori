@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The little arrow Animal Crossing bobs under a finished line, waiting
 // on a press of A: here, the sign that village news goes at a click

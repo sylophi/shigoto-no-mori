@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ArrowRight, type LucideIcon, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
-import { ModalBox } from "@/components/ui/modal-shell";
+import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { changeEntries } from "@/lib/patchFiles";
 import { worktreeTitle } from "@/lib/worktreeTitle";

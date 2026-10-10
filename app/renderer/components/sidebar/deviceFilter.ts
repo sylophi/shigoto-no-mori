@@ -10,7 +10,10 @@ import {
   useDeviceRoster,
   type DeviceRosterEntry,
 } from "@/components/shared/DeviceTabs";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 
 const store = createExternalStore<string | null>(null);
 

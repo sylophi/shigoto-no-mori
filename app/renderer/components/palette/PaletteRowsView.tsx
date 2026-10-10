@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { Loader2, Plus } from "lucide-react";
-import { BranchLabel } from "@/components/ui/branch-label";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
 import {
   DeviceBadgeView,
   MirrorBadgeView,
@@ -8,11 +8,11 @@ import {
 import { ownerOf } from "@/components/sidebar/buildSidebarRows";
 import { PullRequestPillView } from "@/components/sidebar/PullRequestPillView";
 import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { matchPositions } from "@/lib/fuzzyMatch";
-import { formatRelativeTime } from "@/lib/relativeTime";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { worktreeTitle } from "@/lib/worktreeTitle";
 import { worktreeLastActivityAt } from "@shigomori/contracts/schemas";
 import type {

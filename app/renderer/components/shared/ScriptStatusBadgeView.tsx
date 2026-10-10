@@ -1,8 +1,8 @@
 import { Loader2 } from "lucide-react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { useNow } from "@/hooks/ui/useNow";
-import { formatRelativeTime } from "@/lib/relativeTime";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import type { ScriptRunState } from "@/store/scriptRuns";
 
 interface ScriptStatusBadgeProps {

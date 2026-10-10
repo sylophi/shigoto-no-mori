@@ -13,10 +13,10 @@ import {
   type CustomPort,
   type WorktreePort,
 } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { TONE_TEXT } from "@/components/ui/status-dot";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function PortFormView({
   initial,

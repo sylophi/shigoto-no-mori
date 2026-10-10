@@ -3,7 +3,10 @@
 // one opens no shell there), the script consoles opened in it as tabs,
 // and the tab picked; and the one height every drawer shares. A tab is
 // named by a terminal's id, or `script:` and its slot's param.
-import { createExternalStore, useExternalStore } from "./externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import { slotToParam, type ScriptSlot } from "./scriptSlot";
 
 type Drawer = {

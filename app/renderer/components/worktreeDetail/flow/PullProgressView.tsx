@@ -17,14 +17,14 @@ import {
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { LandingTarget } from "./cloneDestination";
 import type { CreatePlan } from "./createPlan";
 import { FlowBodyView, FlowFooterView } from "./FlowChromeView";
@@ -38,7 +38,7 @@ import {
   stepPosition,
   stepStates,
 } from "./pullSteps";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 type ExtraRow = { title: string; detail: ReactNode };
 const NO_EXTRA_ROWS: ExtraRow[] = [];

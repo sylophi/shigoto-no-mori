@@ -9,9 +9,9 @@
 //      here rather than in the marketing build.
 //   2. Every view (an export named <Thing>View from a *View.tsx file
 //      under renderer/components) is drawn by some scene.
-//   3. A component file under renderer/components that isn't a view,
-//      outside the ui/ primitives, has no markup of its own: it is a
-//      container, binding data to views.
+//   3. A component file under renderer/components that isn't a view
+//      has no markup of its own: it is a container, binding data to
+//      views. The primitives are @shigomori/ui's.
 //
 // covers: app/renderer/components/**
 import assert from "node:assert/strict";
@@ -105,7 +105,7 @@ it("keeps markup out of containers", () => {
   const offenders: string[] = [];
   for (const file of walk(root, /\.tsx$/)) {
     const path = relative(root, file);
-    if (path.startsWith("ui/") || path.endsWith("View.tsx")) continue;
+    if (path.endsWith("View.tsx")) continue;
     const tag = MARKUP.exec(stripComments(readFileSync(file, "utf8")));
     if (tag) offenders.push(`${path} <${tag[1]}>`);
   }

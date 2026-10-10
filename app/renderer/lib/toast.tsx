@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { InlineError } from "@/components/ui/inline-error";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 
 function describe(err: unknown): string | undefined {
   if (err instanceof Error) return err.message;

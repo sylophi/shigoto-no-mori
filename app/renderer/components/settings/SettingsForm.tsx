@@ -15,7 +15,7 @@ import {
   type DeviceRosterEntry,
 } from "@/components/shared/DeviceTabs";
 import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
-import { UpdateMark } from "@/components/ui/status-dot";
+import { UpdateMark } from "@shigomori/ui/primitives/status-dot.tsx";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import {
   useOutdatedDevices,

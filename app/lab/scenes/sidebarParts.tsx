@@ -30,7 +30,10 @@ import {
 } from "@/components/sidebar/SidebarRowsView";
 import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
 import { ProjectIconView } from "@/components/shared/ProjectIconView";
-import { DropdownMenuItem, StaticMenu } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuItem,
+  StaticMenu,
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fake-host/fixtures";
 import { projectRows } from "./sidebar";
 import {

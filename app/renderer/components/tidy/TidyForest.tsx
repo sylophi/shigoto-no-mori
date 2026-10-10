@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import type { RowStatus } from "@/components/ui/row-status";
+import type { RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import {
   DeviceTabPanel,

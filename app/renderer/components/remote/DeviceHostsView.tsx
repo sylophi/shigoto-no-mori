@@ -16,9 +16,9 @@
 // says "last known" rather than pretending the numbers are live.
 import { type ReactNode, useState } from "react";
 import { FolderGit2 } from "lucide-react";
-import { Chip, ChipButton } from "@/components/ui/chip-button";
+import { Chip, ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
 import type { HostChip } from "./deviceHostChips";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // Enough to name a machine's forest at a glance. Past this the strip
 // folds behind a count. A power user's main box can register dozens of

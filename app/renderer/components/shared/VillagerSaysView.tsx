@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { VillagerLine } from "@/lib/villagerVoice";
 
 // How a villager shows on a product surface (DESIGN.md, "Village life:

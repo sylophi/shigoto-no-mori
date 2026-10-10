@@ -4,9 +4,9 @@
 // A device's name (DeviceNameFieldView) and a worktree's folder
 // (WorktreeLocationView) are renamed with it.
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export function InlineNameEditorView({
   name,

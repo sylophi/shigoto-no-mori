@@ -1,7 +1,7 @@
 // The account's two buttons, drawn (ClerkSignInButton.tsx and
 // ClerkSignOutButton.tsx drive Clerk behind them).
 import { LogIn, LogOut } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 
 // Signed in to Clerk with no device enrolled, the button retries the
 // enrollment instead of asking for a sign-in.

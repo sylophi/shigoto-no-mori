@@ -8,7 +8,7 @@ import {
   getBrowseLeafSegment,
   getBrowseParentPath,
   hasTrailingSlash,
-} from "@shared/projectPaths";
+} from "@shigomori/contracts/projectPaths";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 
 interface UseBrowseListingOptions {

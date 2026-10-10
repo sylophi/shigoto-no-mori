@@ -7,12 +7,12 @@ import {
   PAGE_HEADER_TABS_ROW,
 } from "@/components/shared/PageHeaderView";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { PARTY_HOST } from "@/components/villagers/BirthdayPartyView";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { LifecycleBannerView } from "./LifecycleBannerView";
 
 export function WorktreeDetailView({

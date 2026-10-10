@@ -1,8 +1,8 @@
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { worktreeTitle } from "@/lib/worktreeTitle";
-import { BranchLabel } from "@/components/ui/branch-label";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
 import { BirthdayBadgeView } from "@/components/villagers/BirthdayBadgeView";

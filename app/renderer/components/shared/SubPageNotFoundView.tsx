@@ -1,5 +1,5 @@
-import { BackButton } from "@/components/ui/back-button";
-import { Button } from "@/components/ui/button";
+import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 
 export function SubPageNotFoundView({
   onBack,

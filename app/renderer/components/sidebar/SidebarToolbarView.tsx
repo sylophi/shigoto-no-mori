@@ -4,8 +4,8 @@ import type {
   ProjectSortMode,
   WorktreeSortMode,
 } from "@shigomori/contracts/schemas";
-import { BackButton } from "@/components/ui/back-button";
-import { cn } from "@/lib/utils";
+import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
 type SortOption<T> = { value: T; label: string };

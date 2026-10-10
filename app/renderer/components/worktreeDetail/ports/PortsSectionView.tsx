@@ -1,7 +1,7 @@
 // The worktree page's Ports section (PortsSection binds it): the
 // worktree's ports, with their actions beside the heading.
 import type { ReactNode } from "react";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 
 export function PortsSectionView({
   actions,

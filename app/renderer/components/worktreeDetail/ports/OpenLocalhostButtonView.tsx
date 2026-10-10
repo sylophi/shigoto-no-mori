@@ -2,8 +2,8 @@
 // shared by the local row (the port itself) and the forward band (the
 // local end of a live forward). Same failure toast as ui/external-link.
 import { ExternalLink } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { openExternalUrl } from "@/lib/openExternal";
 
 export function OpenLocalhostButtonView({

@@ -9,7 +9,7 @@ import {
   type PathPickerProps,
 } from "@/components/shared/PathPickerView";
 import type { PickerEntry } from "@/components/shared/PickerRowView";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 
 export type PathPickerModalProps<E extends PickerEntry> = PathPickerProps<E> & {

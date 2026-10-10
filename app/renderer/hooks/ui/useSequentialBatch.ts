@@ -1,5 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { type RowStatus } from "@/components/ui/row-status";
+import { type RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { holdVillagerMoves } from "@/lib/villagers/moves";
 

@@ -3,12 +3,15 @@ import { FoldVertical, RotateCcw } from "lucide-react";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { DialogueFrameView } from "@/components/villagers/VillagerDialogueView";
 import { TypedWordsView } from "@/components/villagers/TypedWordsView";
-import { ChipButton } from "@/components/ui/chip-button";
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
-import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destructive-button.tsx";
+import {
+  SectionHeading,
+  SectionIntro,
+} from "@shigomori/ui/primitives/section-heading.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { VisitorSort } from "@/lib/villagers/visitors";
 import { AlbumProgressView } from "./AlbumProgressView";
 import { ALBUM_GRID, ALBUM_SLOT } from "./VisitorStickerView";

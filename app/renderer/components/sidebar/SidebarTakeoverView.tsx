@@ -2,8 +2,8 @@
 // into the slot), led by the way back off the page, and the slot it
 // lands in, which arrives from the right as the forest steps aside.
 import type { ReactNode, Ref } from "react";
-import { BackButton } from "@/components/ui/back-button";
-import { cn } from "@/lib/utils";
+import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { ARRIVE_FROM } from "./sidebarChrome";
 
 export function SidebarTakeoverView({

@@ -7,10 +7,13 @@
 // reconnects, rose for a halt or an error, slate for paused.
 import { RefreshCw } from "lucide-react";
 import type { ComponentType, ReactNode, SVGProps } from "react";
-import { Chip } from "@/components/ui/chip-button";
-import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Chip } from "@shigomori/ui/primitives/chip-button.tsx";
+import {
+  type StatusTone,
+  TONE_TEXT,
+} from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 

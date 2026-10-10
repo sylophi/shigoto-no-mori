@@ -10,7 +10,7 @@ import {
   useRelocatingProject,
 } from "@/hooks/projects/useProjects";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
-import { getBrowseParentPath } from "@shared/projectPaths";
+import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { GroupMember } from "./ProjectGroupActions";
 

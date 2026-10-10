@@ -1,6 +1,6 @@
 import { Download, RefreshCw, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destructive-button.tsx";
 import type { villagerDataView } from "./villagerDataView";
 
 // The villager data, beside the Village life row: download it, follow

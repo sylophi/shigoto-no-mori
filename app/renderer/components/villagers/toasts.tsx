@@ -6,7 +6,7 @@ import {
   toast,
 } from "sonner";
 import { VillagerSaysView } from "@/components/shared/VillagerSaysView";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   MOVE_TOAST_MS,
   type MoveNews,

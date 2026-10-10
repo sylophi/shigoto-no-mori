@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { FolderInput, FolderOpen, RotateCcw } from "lucide-react";
-import { BlockingOverlay } from "@/components/ui/blocking-overlay";
-import { Button } from "@/components/ui/button";
-import { PathSpan } from "@/components/ui/path-span";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { BlockingOverlay } from "@shigomori/ui/primitives/blocking-overlay.tsx";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 
 // Where the shigomori data dir lives, and the flow that moves it. The
 // picker (the in-app FolderPickerModal, which still offers Finder on

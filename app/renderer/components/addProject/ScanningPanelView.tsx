@@ -1,7 +1,7 @@
 import { ArrowLeft, FolderSearch, Loader2 } from "lucide-react";
-import { PathSpan } from "@/components/ui/path-span";
-import { KbdHint } from "@/components/ui/kbd";
-import { IconButton } from "@/components/ui/icon-button";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import { KbdHint } from "@shigomori/ui/primitives/kbd.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 
 interface ScanningPanelProps {
   scanRoot: string;

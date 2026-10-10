@@ -4,12 +4,12 @@ import type {
   PullRequestCandidateList,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useNow } from "@/hooks/ui/useNow";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { pullRequestBlockedBy } from "@/lib/pullRequest";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The whole "From pull request" source: the list, whichever state
 // stands in for it, and the line describing what the selected PR checks

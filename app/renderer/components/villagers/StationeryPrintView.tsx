@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { printStyle, type Stationery } from "@/lib/villagers/stationery";
 
 // A legendary character's stationery printed over whatever holds it,

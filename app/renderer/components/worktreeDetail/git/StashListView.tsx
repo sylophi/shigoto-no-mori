@@ -1,8 +1,8 @@
 import { Archive } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { StashEntry } from "@shigomori/contracts/schemas";
 
 // The Git page's Stashes tab: the way to stash the uncommitted changes

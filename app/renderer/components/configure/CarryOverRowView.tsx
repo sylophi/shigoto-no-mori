@@ -1,15 +1,15 @@
 import { AlertTriangle, Copy as CopyIcon, X } from "lucide-react";
-import { MaterialIcon } from "@/components/ui/material-icon";
-import { cn } from "@/lib/utils";
+import { MaterialIcon } from "@shigomori/ui/primitives/material-icon.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type {
   CarryOverEntry,
   CarryOverStat,
 } from "@shigomori/contracts/schemas";
 import { ModePickerView } from "./ModePickerView";
 import { OnlyInWorktreesView } from "./OnlyInWorktreesView";
-import { ChipButton } from "@/components/ui/chip-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 interface CarryOverRowProps {
   entry: CarryOverEntry;

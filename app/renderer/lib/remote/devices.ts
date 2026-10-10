@@ -10,7 +10,7 @@
 // facts. It is NOT the transport machinery (that is the hub bridge in
 // main); it is the renderer's wiring around it, so it stays out of the
 // headless proof.
-import { createExternalStore } from "@/store/externalStore";
+import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 import type { RendererContractApi } from "@shared/ipc/client";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { SupervisorStatus } from "@shared/remote/supervisor";

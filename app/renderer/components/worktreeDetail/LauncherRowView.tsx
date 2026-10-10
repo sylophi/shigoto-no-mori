@@ -2,8 +2,8 @@
 // to do when there are none to show.
 import { Loader2 } from "lucide-react";
 import { LauncherIconView } from "@/components/shared/LauncherIconView";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";
 
 export function LauncherRowView({

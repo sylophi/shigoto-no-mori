@@ -2,7 +2,7 @@
 // the account line with its sign-out, what is wrong with this device's
 // sign-in, and one row per machine.
 import type { ReactNode } from "react";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { abbreviateId } from "@/lib/abbreviateId";
 
 export type RegistryList =

@@ -3,21 +3,21 @@
 // one made from its project's own logo, else an SVG (mostly svgl's).
 import type { ComponentType } from "react";
 import { Sparkles } from "lucide-react";
-import { Copilot } from "@/components/ui/svgs/copilot";
-import { Gemini } from "@/components/ui/svgs/gemini";
-import { GithubMark } from "@/components/ui/svgs/github-mark";
-import { Gitui } from "@/components/ui/svgs/gitui";
-import { Helix } from "@/components/ui/svgs/helix";
-import { Intellijidea } from "@/components/ui/svgs/intellijidea";
-import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
-import { Neovim } from "@/components/ui/svgs/neovim";
-import { Phpstorm } from "@/components/ui/svgs/phpstorm";
-import { Pi } from "@/components/ui/svgs/pi";
-import { Pycharm } from "@/components/ui/svgs/pycharm";
-import { Rider } from "@/components/ui/svgs/rider";
-import { Rubymine } from "@/components/ui/svgs/rubymine";
-import { Vim } from "@/components/ui/svgs/vim";
-import { Webstorm } from "@/components/ui/svgs/webstorm";
+import { Copilot } from "@shigomori/ui/primitives/svgs/copilot.tsx";
+import { Gemini } from "@shigomori/ui/primitives/svgs/gemini.tsx";
+import { GithubMark } from "@shigomori/ui/primitives/svgs/github-mark.tsx";
+import { Gitui } from "@shigomori/ui/primitives/svgs/gitui.tsx";
+import { Helix } from "@shigomori/ui/primitives/svgs/helix.tsx";
+import { Intellijidea } from "@shigomori/ui/primitives/svgs/intellijidea.tsx";
+import { JetbrainsSolid } from "@shigomori/ui/primitives/svgs/jetbrains-solid.tsx";
+import { Neovim } from "@shigomori/ui/primitives/svgs/neovim.tsx";
+import { Phpstorm } from "@shigomori/ui/primitives/svgs/phpstorm.tsx";
+import { Pi } from "@shigomori/ui/primitives/svgs/pi.tsx";
+import { Pycharm } from "@shigomori/ui/primitives/svgs/pycharm.tsx";
+import { Rider } from "@shigomori/ui/primitives/svgs/rider.tsx";
+import { Rubymine } from "@shigomori/ui/primitives/svgs/rubymine.tsx";
+import { Vim } from "@shigomori/ui/primitives/svgs/vim.tsx";
+import { Webstorm } from "@shigomori/ui/primitives/svgs/webstorm.tsx";
 import {
   parseLauncherId,
   WEB_GITHUB_ID,
@@ -35,7 +35,7 @@ interface LauncherIconProps {
 // can't reach the prototype.
 const APP_ICON_URL = new Map(
   Object.entries(
-    import.meta.glob<string>("../../app-icons/*.png", {
+    import.meta.glob<string>("../../../../packages/ui/src/app-icons/*.png", {
       eager: true,
       query: "?url",
       import: "default",

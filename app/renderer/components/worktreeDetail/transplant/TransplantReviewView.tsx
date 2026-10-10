@@ -3,12 +3,12 @@
 // project's carry-over.
 import type { ReactNode } from "react";
 import { Check } from "lucide-react";
-import { DiffStats } from "@/components/ui/diff-stats";
-import { RowTag } from "@/components/ui/row-tag";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
+import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { IndexEntry } from "@/lib/patchFiles";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   CARD_NOTE,
   CardListView,

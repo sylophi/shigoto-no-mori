@@ -23,7 +23,10 @@ import { documentFocused } from "@/lib/focus";
 import { hasLocalHost } from "@/lib/localHost";
 import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
 import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 
 // An agent session waiting on you, in a worktree on any device.
 export type WaitingAgent = {

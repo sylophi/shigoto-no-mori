@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestTone } from "@/lib/pullRequest";
 
 // Superset of PullRequestTone so the PR badge and sync-state badges

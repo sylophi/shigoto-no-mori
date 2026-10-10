@@ -1,6 +1,6 @@
 // No `title` attribute on a DOM element and no SVG `<title>`. The
 // browser's tooltip ignores the theme, waits its own delay, and can't be
-// styled. The app's is SimpleTooltip (ui/tooltip.tsx). A component's own
+// styled. The app's is SimpleTooltip (primitives/tooltip.tsx). A component's own
 // `title` prop (a dialog's heading) is its business: the rule sees
 // elements whose name is lowercase (`<span>`) or dotted
 // (`<Combobox.Trigger>`, a library's primitive passing props to the
@@ -18,7 +18,7 @@ function isDomElement(name: JsxName): boolean {
 }
 
 const message =
-  "The browser's tooltip ignores the app's look. Wrap the element in SimpleTooltip (ui/tooltip.tsx) instead.";
+  "The browser's tooltip ignores the app's look. Wrap the element in SimpleTooltip (primitives/tooltip.tsx) instead.";
 
 export default {
   meta: {

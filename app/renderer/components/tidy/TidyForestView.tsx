@@ -2,8 +2,8 @@
 // device's forest, the sort and the selection, the rows, and the
 // removal.
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 import type { DiskUsageTotals } from "@/hooks/hygiene/useWorktreeHygiene";

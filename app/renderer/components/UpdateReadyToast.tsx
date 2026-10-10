@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { ChangelogDialog } from "@/components/settings/ChangelogDialog";
 import { useOnSettingsPages } from "@/components/settings/SettingsSidebarNav";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { WhatsNewLinkView } from "@/components/WhatsNewLinkView";
 import { useOutdatedDevices, useUpdateAll } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";

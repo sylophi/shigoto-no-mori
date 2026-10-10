@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // How much of the album (or a section of it) is filled: an emerald fill
 // on a muted track, growing in from empty. Size the track with

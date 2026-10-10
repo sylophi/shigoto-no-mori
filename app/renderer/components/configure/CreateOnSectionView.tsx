@@ -12,10 +12,10 @@ import type {
   DeviceBlock,
   DeviceTarget,
 } from "@/components/shared/deviceTargets";
-import { RowTag } from "@/components/ui/row-tag";
-import { SectionIntro } from "@/components/ui/section-heading";
+import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
 import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A device holding the repo.
 export type CreateOnHolder = Pick<

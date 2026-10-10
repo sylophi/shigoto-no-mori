@@ -12,7 +12,7 @@ import {
   hasTrailingSlash,
   isAnchoredPath,
   normalizeForSubmit,
-} from "@shared/projectPaths";
+} from "@shigomori/contracts/projectPaths";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
 import { useHostScope } from "@/hooks/remote/useHostScope";

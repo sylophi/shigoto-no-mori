@@ -25,7 +25,7 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { DeviceMenuRowView } from "./DeviceMenuRowView";

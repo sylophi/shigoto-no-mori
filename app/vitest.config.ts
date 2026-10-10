@@ -3,6 +3,7 @@
 // ports, so they run one file at a time, each in a process of its own.
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
+import { dedupe } from "./vite.dedupe";
 
 const dir = (name: string) => join(import.meta.dirname, name);
 
@@ -10,6 +11,7 @@ export default defineConfig({
   // The tsconfig path aliases. Vite resolves extensionless specifiers
   // and bare JSON imports on its own.
   resolve: {
+    dedupe,
     alias: {
       "@shared": dir("shared"),
       "@host": dir("host"),

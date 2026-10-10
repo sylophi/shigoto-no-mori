@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { ChevronsUpDown, Loader2, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import type { BranchList } from "@shigomori/contracts/schemas";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // The branch picker (BranchCombobox reads the project's branches).
 export interface BranchComboboxProps {

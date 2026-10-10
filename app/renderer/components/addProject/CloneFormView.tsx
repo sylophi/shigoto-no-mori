@@ -5,10 +5,10 @@ import {
   ITEM_CLASS,
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { GithubMark } from "@/components/ui/svgs/github-mark";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/cmdk-classes.ts";
+import { GithubMark } from "@shigomori/ui/primitives/svgs/github-mark.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   ActionInputRowView,
   DestinationRowView,

@@ -3,7 +3,7 @@
 // same list in its Ports section (PortsSection). In the frame the
 // mirror and transplant dialogs use.
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { PortActions, PortList, usePortList } from "./PortList";
 import { PortsDialogView } from "./PortsDialogView";
