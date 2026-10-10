@@ -25,8 +25,8 @@ import {
   DropStashPayloadSchema,
   FileDiffPayloadSchema,
   FileHunksPayloadSchema,
+  FileHunksSchema,
   GitOperationStateSchema,
-  HunkStatesSchema,
   ListCommitsPayloadSchema,
   MergeBranchPayloadSchema,
   MergeBranchResultSchema,
@@ -44,9 +44,7 @@ import {
   ResolveConflictPayloadSchema,
   RewordCommitPayloadSchema,
   SetAutoPullPayloadSchema,
-  SetHunksStagedPayloadSchema,
   SetShelvedPayloadSchema,
-  SetStagedPayloadSchema,
   SquashCommitPayloadSchema,
   StashChangesPayloadSchema,
   StashEntrySchema,
@@ -188,8 +186,7 @@ export const worktreesContract = defineContract(
     grant: "browseFiles",
   }),
   // The changes page's list: every changed file, its index state and
-  // its counts. The one read the page needs to draw the rail, and the
-  // one a tick refetches.
+  // its counts. The one read the page needs to draw the rail.
   invoke(
     "changeStatus",
     WorktreeScopedPayloadSchema,
@@ -202,24 +199,12 @@ export const worktreesContract = defineContract(
     Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },
   ),
-  // Answers with the fresh status so a tick settles in one round trip.
-  invoke("setStaged", SetStagedPayloadSchema, Schema.Array(ChangedFileSchema), {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  // One modified file's hunks (host/lib/git/hunks.ts): which the next
-  // commit takes, ticking them, and throwing them away.
-  invoke("fileHunks", FileHunksPayloadSchema, HunkStatesSchema, {
+  // One modified file's hunks (host/lib/git/hunks.ts), to tick and
+  // throw away one at a time.
+  invoke("fileHunks", FileHunksPayloadSchema, FileHunksSchema, {
     remote: true,
     gated: false,
   }),
-  invoke(
-    "setHunksStaged",
-    SetHunksStagedPayloadSchema,
-    Schema.Array(ChangedFileSchema),
-    { remote: true, gated: true, grant: "changeCode" },
-  ),
   invoke(
     "discardHunks",
     DiscardHunksPayloadSchema,

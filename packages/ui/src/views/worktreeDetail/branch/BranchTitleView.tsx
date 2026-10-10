@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { BranchLabel } from "../../../primitives/branch-label.tsx";
+import { CopyButton } from "../../../primitives/copy-button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,15 +40,15 @@ const SIZES = {
 
 // The branch, renamed in place. The page's title, unless the work has
 // a title of its own (useWorktreeTitle), and then a line under it.
-// Rename, switch and copy sit behind one button (BranchMenuView), so
-// the line keeps its room for what's beside it (WorktreeHeaderView).
-// BranchTitle holds the edit and runs the rename.
+// Rename, switch and copy sit beside it (BranchActionsView), and behind
+// one button on a phone, so the name keeps the room. BranchTitle holds
+// the edit and runs the rename.
 export function BranchTitleView({
   branch,
   detached,
   subtitle = false,
   editing,
-  menu,
+  actions,
   titleRef,
 }: {
   branch: string;
@@ -62,8 +63,8 @@ export function BranchTitleView({
     onCommit: () => void;
     onCancel: () => void;
   };
-  // The branch's menu (BranchMenu), beside the name.
-  menu: ReactNode;
+  // The branch's buttons (BranchActionsView), beside the name.
+  actions: ReactNode;
   // The name's element, which the switcher hangs from.
   titleRef?: React.Ref<HTMLHeadingElement>;
 }) {
@@ -122,7 +123,7 @@ export function BranchTitleView({
   }
 
   return (
-    <div className="group/branch flex min-w-0 items-center gap-1.5">
+    <div className="group/copy flex min-w-0 items-center gap-1.5">
       <SimpleTooltip
         whenTruncated
         tip={<BranchLabel branch={branch} detached={detached} />}
@@ -139,29 +140,36 @@ export function BranchTitleView({
           />
         </Heading>
       </SimpleTooltip>
-      {menu}
+      {actions}
     </div>
   );
 }
 
-// Rename, switch and copy behind one button. Only copy on a peer that
-// takes no commands from here.
-export function BranchMenuView({
-  canCommand,
+// The branch's buttons wait for the cursor, as its copy button does.
+const HOVER_ONLY = "group-hover/copy:opacity-100";
+
+// Rename, switch and copy beside the branch, and on a phone behind one
+// button in their place. Rename and switch only where they're offered:
+// only copy on a peer that takes no commands from here, and no rename
+// for a detached head, which can still switch onto a branch.
+export function BranchActionsView({
+  branch,
   detached,
   onRename,
   onSwitch,
   onCopy,
   switcher,
 }: {
-  canCommand: boolean;
+  branch: string;
   detached: boolean;
-  onRename: () => void;
-  onSwitch: () => void;
+  onRename: (() => void) | undefined;
+  onSwitch: (() => void) | undefined;
   onCopy: () => void;
-  // The switcher (BranchSwitcher), hung from the name.
+  // The switcher (BranchSwitcher) with its own button, hung from the
+  // name. Mounted on a phone too, where the menu opens it.
   switcher: ReactNode;
 }) {
+  const copyLabel = detached ? "Copy commit hash" : "Copy branch name";
   // Set when an item hands focus on (the rename field, the switcher),
   // so the closing menu doesn't take it back to its button.
   const handedOff = useRef(false);
@@ -171,13 +179,26 @@ export function BranchMenuView({
   };
   return (
     <>
+      <div className="contents phone:hidden">
+        {onRename && (
+          <IconButton
+            onClick={onRename}
+            aria-label="Rename branch"
+            reveal
+            className={HOVER_ONLY}
+          >
+            <Pencil className="size-3.5" />
+          </IconButton>
+        )}
+        {switcher}
+        <CopyButton value={branch} label={copyLabel} />
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
             <IconButton
               aria-label="Branch actions"
-              reveal
-              className="group-hover/branch:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
+              className="hidden shrink-0 text-muted-foreground/50 data-[popup-open]:bg-accent data-[popup-open]:text-foreground phone:block"
             >
               <ChevronDown aria-hidden className="size-3.5" />
             </IconButton>
@@ -192,24 +213,19 @@ export function BranchMenuView({
             return !keep;
           }}
         >
-          {/* A detached head has no branch to rename, but can switch
-              onto one. */}
-          {canCommand && !detached && (
+          {onRename && (
             <DropdownMenuItem onClick={handOff(onRename)}>
               Rename branch
             </DropdownMenuItem>
           )}
-          {canCommand && (
+          {onSwitch && (
             <DropdownMenuItem onClick={handOff(onSwitch)}>
               Switch branch…
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={onCopy}>
-            {detached ? "Copy commit hash" : "Copy branch name"}
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onCopy}>{copyLabel}</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {switcher}
     </>
   );
 }

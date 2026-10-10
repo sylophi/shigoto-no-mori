@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { Check, Loader2, Search } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { type BranchEntry } from "../../shared/BranchComboboxView.tsx";
 import { rankByScore } from "../../../lib/fuzzyMatch.ts";
+import { IconButton } from "../../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { useThemeRoot } from "../../../root.tsx";
 
-// Switching the worktree's branch, opened from the branch's menu
-// (BranchMenuView). BranchSwitcher lists the branches.
+// Switching the worktree's branch, from its own button beside the name
+// or from the phone's branch menu (BranchActionsView). BranchSwitcher
+// lists the branches.
 export function BranchSwitcherView({
   branch,
   entries,
@@ -49,6 +51,18 @@ export function BranchSwitcherView({
       onOpenChange={onOpenChange}
       autoHighlight
     >
+      <Combobox.Trigger
+        render={
+          <IconButton
+            aria-label="Switch branch"
+            reveal
+            // Beside the branch, which shows it on hover (BranchTitleView).
+            className="group-hover/copy:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
+          />
+        }
+      >
+        <ChevronsUpDown aria-hidden className="size-3.5" />
+      </Combobox.Trigger>
       <Combobox.Portal container={useThemeRoot()}>
         <Combobox.Positioner
           anchor={anchorRef}

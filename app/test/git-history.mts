@@ -509,3 +509,12 @@ it("in a rebase, mine is the worktree's own commit, and abort puts it back", asy
   assert.equal((await readOperation(repo)).operation, null);
   assert.equal(rev(repo, "HEAD"), rev(repo, "main"));
 });
+
+it("a conflict settled in an editor is taken as it stands", async () => {
+  const repo = seedConflict();
+  await mergePrimaryKeepingConflicts(repo, repo, "main");
+  writeFileSync(join(repo, "a.txt"), "both\n");
+  await resolveConflict(repo, "a.txt", "as-is");
+  assert.equal((await readOperation(repo)).conflicted, 0);
+  assert.equal(git(repo, "show", ":a.txt"), "both\n");
+});

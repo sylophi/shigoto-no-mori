@@ -1,7 +1,9 @@
-// Durable proof for the changes page's git (host/lib/git/changes.ts)
-// against a REAL repository: the status parser's rows and counts,
-// ticking files in and out of the index, commit and amend with the
-// message read back, undo and redo along HEAD's line with every refusal
+// Durable proof for the changes page's git (host/lib/git/changes.ts and
+// commit.ts) against a REAL repository: the status parser's rows and
+// counts, a commit taking exactly the picked files whatever was staged
+// (a rename included, a file deleted since skipped, on an unborn branch,
+// and a merge still committing as one), amend with the message read
+// back or kept as it was, undo and redo along HEAD's line with every refusal
 // (moved HEAD, a commit off the line, a merge), and discard with its
 // snapshot ref, the way back through restoreDiscard, the nested-repo
 // refusal and the snapshot prune.
@@ -19,14 +21,13 @@ import {
 import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
 import { only } from "@shigomori/contracts/util/only";
-import { it } from "vitest";
 import {
   sandboxGit,
   scrubbedGitEnv,
   scrubProcessGitEnv,
   tempDir,
-  type Track,
 } from "./lib/checkKit.mts";
+import { it } from "vitest";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // changes.ts runs git under this process's environment. The pre-commit
@@ -42,21 +43,28 @@ scrubProcessGitEnv({
 });
 
 const {
-  commitStaged,
   discardChanges,
   listChangedFiles,
   listChangesForPage,
   readCommitMessage,
   resetSoft,
   restoreDiscard,
-  setStaged,
 } = await import("../host/lib/git/changes.ts");
+const { commitPicks } = await import("../host/lib/git/commit.ts");
+
+// A commit of whole files, the way the page sends one with nothing
+// ticked by hunk.
+const commitPaths = (
+  repo: string,
+  message: { summary?: string; description?: string; amend?: boolean },
+  paths: string[],
+) => commitPicks(repo, { ...message, paths, hunks: [] });
 
 const git = sandboxGit(gitEnv);
 
 // A repository with one commit holding a.txt, b.txt and dir/c.txt.
-function seedRepo(track: Track): string {
-  const repo = tempDir("sm-changes-", track);
+function seedRepo(): string {
+  const repo = tempDir("sm-changes-", trackTest);
   git(repo, "init", "-q", "-b", "main");
   write(repo, "a.txt", "one\ntwo\nthree\n");
   write(repo, "b.txt", "bee\n");
@@ -68,11 +76,11 @@ function seedRepo(track: Track): string {
 }
 
 // seedRepo plus a second commit editing a.txt, for the undo checks.
-async function seedWithSecond(track: Track) {
-  const repo = seedRepo(track);
+async function seedWithSecond() {
+  const repo = seedRepo();
   const root = rev(repo, "HEAD");
   write(repo, "a.txt", "second\n");
-  await commitStaged(repo, { summary: "Second", stagePaths: ["a.txt"] });
+  await commitPaths(repo, { summary: "Second" }, ["a.txt"]);
   return { repo, root, second: rev(repo, "HEAD") };
 }
 
@@ -95,7 +103,7 @@ function rowOf(files: readonly ChangedFile[], path: string): ChangedFile {
 }
 
 it("the page lists each kind of change with its counts, sorted by path", async () => {
-  const repo = seedRepo(trackTest);
+  const repo = seedRepo();
   write(repo, "a.txt", "one\n2\nthree\nfour\n"); // edit
   rmSync(join(repo, "b.txt")); // delete
   git(repo, "mv", "dir/c.txt", "dir/moved.txt"); // staged rename
@@ -162,7 +170,7 @@ it("the page lists each kind of change with its counts, sorted by path", async (
 });
 
 it("a file edited in the index and again since reads as partial", async () => {
-  const repo = seedRepo(trackTest);
+  const repo = seedRepo();
   write(repo, "a.txt", "staged\n");
   git(repo, "add", "a.txt");
   write(repo, "a.txt", "staged then edited\n");
@@ -181,82 +189,124 @@ it("a file edited in the index and again since reads as partial", async () => {
   });
 });
 
-it("ticking stages an addition, an edit and a removal, and unticking takes each back", async () => {
-  const repo = seedRepo(trackTest);
+it("a commit takes exactly the picked paths, and what was staged but not picked stays out and on disk", async () => {
+  const repo = seedRepo();
   write(repo, "a.txt", "edited\n");
   rmSync(join(repo, "b.txt"));
   write(repo, "a[1].txt", "glob-shaped name\n");
-  const paths = ["a.txt", "b.txt", "a[1].txt"];
+  git(repo, "mv", "dir/c.txt", "dir/moved.txt"); // staged rename
+  write(repo, "staged.txt", "an agent's git add\n");
+  git(repo, "add", "staged.txt");
 
-  const staged = await setStaged(repo, paths, true);
-  assert.deepEqual(
-    paths.map((p) => rowOf(staged, p).staged),
-    ["all", "all", "all"],
+  const hash = await commitPaths(
+    repo,
+    {
+      summary: "Edit, remove, add, move",
+      description: "  Body line one.\n\nBody line two.  ",
+    },
+    ["a.txt", "b.txt", "a[1].txt", "dir/c.txt", "dir/moved.txt"],
   );
-  assert.equal(rowOf(staged, "b.txt").kind, "deleted");
-  assert.equal(rowOf(staged, "a[1].txt").kind, "added");
-
-  const unstaged = await setStaged(repo, paths, false);
-  assert.deepEqual(
-    paths.map((p) => rowOf(unstaged, p).staged),
-    ["none", "none", "none"],
-  );
-  // Nothing left in the index, nothing lost on disk.
-  assert.equal(git(repo, "diff", "--cached", "--name-only"), "");
-  assert.equal(read(repo, "a.txt"), "edited\n");
-  assert.equal(read(repo, "a[1].txt"), "glob-shaped name\n");
-});
-
-it("a commit takes the ticked files plus stagePaths, and the message reads back split", async () => {
-  const repo = seedRepo(trackTest);
-  write(repo, "a.txt", "edited\n");
-  write(repo, "b.txt", "also edited\n");
-  write(repo, "loose.txt", "left out\n");
-  git(repo, "add", "a.txt");
-
-  const hash = await commitStaged(repo, {
-    summary: "Edit a and b",
-    description: "  Body line one.\n\nBody line two.  ",
-    stagePaths: ["b.txt"],
-  });
   assert.equal(rev(repo, "HEAD").startsWith(hash), true);
   assert.equal(
-    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
-    "a.txt\nb.txt",
+    git(repo, "show", "--name-status", "-M", "--format=", "HEAD").trim(),
+    "M\ta.txt\nA\ta[1].txt\nD\tb.txt\nR100\tdir/c.txt\tdir/moved.txt",
   );
   assert.deepEqual(await readCommitMessage(repo, "HEAD"), {
-    summary: "Edit a and b",
+    summary: "Edit, remove, add, move",
     description: "Body line one.\n\nBody line two.",
   });
-  const files = await listChangesForPage(repo);
   assert.deepEqual(
-    files.map((f) => f.path),
-    ["loose.txt"],
+    (await listChangesForPage(repo)).map((f) => [f.path, f.staged]),
+    [["staged.txt", "none"]],
   );
+  assert.equal(read(repo, "staged.txt"), "an agent's git add\n");
+
   // No body: the message is the summary alone.
   write(repo, "a.txt", "again\n");
-  await commitStaged(repo, {
-    summary: "Only a subject",
-    description: "   ",
-    stagePaths: ["a.txt"],
-  });
+  await commitPaths(repo, { summary: "Only a subject", description: "   " }, [
+    "a.txt",
+  ]);
   assert.deepEqual(await readCommitMessage(repo, "HEAD"), {
     summary: "Only a subject",
     description: "",
   });
 });
 
-it("amend folds the index into HEAD under the new message", async () => {
-  const repo = seedRepo(trackTest);
+it("a picked file deleted before the commit is skipped, not a refusal", async () => {
+  const repo = seedRepo();
+  write(repo, "a.txt", "edited\n");
+  await commitPaths(repo, { summary: "Edit a" }, ["a.txt", "scratch.txt"]);
+  assert.equal(
+    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
+    "a.txt",
+  );
+});
+
+it("a file staged past .gitignore still commits", async () => {
+  const repo = seedRepo();
+  write(repo, ".gitignore", "*.log\n");
+  write(repo, "out.log", "forced\n");
+  git(repo, "add", "-f", "out.log");
+  await commitPaths(repo, { summary: "Forced" }, ["out.log"]);
+  assert.equal(
+    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
+    "out.log",
+  );
+});
+
+it("a commit git refuses puts the index back the way it was", async () => {
+  const repo = seedRepo();
+  git(repo, "mv", "dir/c.txt", "dir/moved.txt");
+  write(repo, "a.txt", "edited\n");
+  write(repo, ".git/hooks/pre-commit", "#!/bin/sh\necho no >&2\nexit 1\n");
+  execFileSync("chmod", ["+x", join(repo, ".git/hooks/pre-commit")]);
+  const before = git(repo, "diff", "--cached", "--name-status", "-M");
+  await assert.rejects(
+    commitPaths(repo, { summary: "Refused" }, ["a.txt"]),
+    /no/,
+  );
+  assert.equal(git(repo, "diff", "--cached", "--name-status", "-M"), before);
+});
+
+it("a commit lands on an unborn branch", async () => {
+  const repo = tempDir("sm-changes-unborn-", trackTest);
+  git(repo, "init", "-q", "-b", "main");
+  write(repo, "first.txt", "first\n");
+  write(repo, "later.txt", "later\n");
+  await commitPaths(repo, { summary: "First" }, ["first.txt"]);
+  assert.equal(
+    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
+    "first.txt",
+  );
+});
+
+it("a merge in progress still commits as a merge", async () => {
+  const repo = seedRepo();
+  git(repo, "checkout", "-q", "-b", "other");
+  write(repo, "b.txt", "from other\n");
+  git(repo, "commit", "-q", "-am", "Other");
+  git(repo, "checkout", "-q", "main");
+  write(repo, "a.txt", "from main\n");
+  git(repo, "commit", "-q", "-am", "Main");
+  git(repo, "merge", "-q", "--no-ff", "--no-commit", "other");
+  await commitPaths(repo, { summary: "Merge other" }, ["b.txt"]);
+  assert.equal(
+    git(repo, "rev-list", "--parents", "-n1", "HEAD").trim().split(" ").length,
+    3,
+  );
+  assert.equal(read(repo, "b.txt"), "from other\n");
+  assert.equal(git(repo, "status", "--porcelain"), "");
+});
+
+it("amend folds the picks into HEAD under a new message or the one it has, or rewrites only the message", async () => {
+  const repo = seedRepo();
   const root = rev(repo, "HEAD");
   write(repo, "a.txt", "first\n");
-  await commitStaged(repo, { summary: "First try", stagePaths: ["a.txt"] });
+  await commitPaths(repo, { summary: "First try" }, ["a.txt"]);
   write(repo, "b.txt", "fixed up\n");
-  const hash = await commitStaged(repo, {
-    summary: "Second try",
-    amend: true,
-    stagePaths: ["b.txt"],
-  });
+  const hash = await commitPaths(repo, { summary: "Second try", amend: true }, [
+    "b.txt",
+  ]);
   assert.equal(rev(repo, "HEAD").startsWith(hash), true);
   assert.equal(rev(repo, "HEAD~1"), root, "still one commit above root");
   assert.equal(
@@ -264,10 +314,32 @@ it("amend folds the index into HEAD under the new message", async () => {
     "a.txt\nb.txt",
   );
   assert.equal((await readCommitMessage(repo, "HEAD")).summary, "Second try");
+
+  write(repo, "dir/c.txt", "left out\n");
+  git(repo, "add", "dir/c.txt");
+  await commitPaths(repo, { summary: "Third try", amend: true }, []);
+  assert.equal(
+    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
+    "a.txt\nb.txt",
+  );
+  assert.equal((await readCommitMessage(repo, "HEAD")).summary, "Third try");
+
+  // No summary: the files go in under the message HEAD already has.
+  git(repo, "commit", "-q", "--amend", "-m", "Fourth try", "-m", "Body");
+  await commitPaths(repo, { amend: true }, ["dir/c.txt"]);
+  assert.equal(rev(repo, "HEAD~1"), root);
+  assert.equal(
+    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
+    "a.txt\nb.txt\ndir/c.txt",
+  );
+  assert.deepEqual(await readCommitMessage(repo, "HEAD"), {
+    summary: "Fourth try",
+    description: "Body",
+  });
 });
 
 it("undo soft-resets to an ancestor, keeps the files, and redo needs HEAD where it was", async () => {
-  const { repo, root, second } = await seedWithSecond(trackTest);
+  const { repo, root, second } = await seedWithSecond();
 
   const was = await resetSoft(repo, root, undefined);
   assert.equal(was, second);
@@ -291,7 +363,7 @@ it("undo soft-resets to an ancestor, keeps the files, and redo needs HEAD where 
 });
 
 it("undo refuses a moved HEAD, a commit off the line, and a range over a merge", async () => {
-  const { repo, root, second } = await seedWithSecond(trackTest);
+  const { repo, root, second } = await seedWithSecond();
 
   // Moved on: the pin names a commit HEAD no longer is.
   await assert.rejects(resetSoft(repo, root, root), /branch has moved on/);
@@ -321,7 +393,7 @@ it("undo refuses a moved HEAD, a commit off the line, and a range over a merge",
 });
 
 it("discard restores tracked files, removes untracked ones, and keeps a snapshot ref", async () => {
-  const repo = seedRepo(trackTest);
+  const repo = seedRepo();
   write(repo, "a.txt", "edited\n"); // edit, unstaged
   write(repo, "b.txt", "staged edit\n");
   git(repo, "add", "b.txt"); // edit, staged
@@ -366,7 +438,7 @@ it("discard restores tracked files, removes untracked ones, and keeps a snapshot
 });
 
 it("restoreDiscard puts the discard back, unstaged, and re-deletes what was deleted", async () => {
-  const repo = seedRepo(trackTest);
+  const repo = seedRepo();
   write(repo, "a.txt", "edited\n");
   rmSync(join(repo, "b.txt"));
   mkdirSync(join(repo, "fresh"));
@@ -405,7 +477,7 @@ it("a discard on an unborn branch snapshots as a root commit and restores", asyn
 });
 
 it("a nested repository is left in place and named in the error", async () => {
-  const repo = seedRepo(trackTest);
+  const repo = seedRepo();
   const nested = join(repo, "vendor", "inner");
   mkdirSync(nested, { recursive: true });
   git(nested, "init", "-q", "-b", "main");
@@ -433,7 +505,7 @@ it("a nested repository is left in place and named in the error", async () => {
 });
 
 it("only the newest 40 discard snapshots are kept", async () => {
-  const repo = seedRepo(trackTest);
+  const repo = seedRepo();
   // 41 older snapshots seeded by name: millisecond timestamps of the
   // same width as Date.now(), all in the past, so the real discard's
   // ref sorts newest.

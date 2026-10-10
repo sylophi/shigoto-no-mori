@@ -4,7 +4,6 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import {
   useMergeBranch,
   useMergePreview,
@@ -43,7 +42,6 @@ function MergeDialog({
   onClose: () => void;
 }) {
   const nav = useWorktreeNav();
-  const say = useWorktreeSuccessToast();
   const { projectId, id: worktreeId, branch } = worktree;
   const [ref, setRef] = useState(
     worktree.primaryRef !== undefined && !worktree.isPrimary
@@ -91,7 +89,6 @@ function MergeDialog({
             nav.toDiff(projectId, worktreeId, { replace: true });
             return;
           }
-          say(after, DONE[method](ref));
           const head = after.recentCommits[0]?.hash;
           if (head) nav.toCommit(projectId, worktreeId, head, true);
         },
@@ -145,10 +142,3 @@ function MergeDialog({
     </ModalShell>
   );
 }
-
-const DONE: Record<IntegrateMethod, (ref: string) => string> = {
-  merge: (ref) => `Merged ${ref}`,
-  squash: (ref) => `Squashed ${ref} into one commit`,
-  rebase: (ref) => `Rebased onto ${ref}`,
-  fastForward: (ref) => `Fast-forwarded to ${ref}`,
-};
