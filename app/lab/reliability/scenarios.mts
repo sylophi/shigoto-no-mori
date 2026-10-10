@@ -590,7 +590,7 @@ const appRelaunch: Scenario = {
 
 const laptopSleep: Scenario = {
   name: "laptop-sleep",
-  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT), the pages' clocks jump by the time asleep and the tabs wake.",
+  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and the tabs wake.",
   boundMs: 30_000,
   async run(lab, random) {
     const ms = between(random, 30_000, 120_000);
@@ -604,9 +604,6 @@ const laptopSleep: Scenario = {
     await sleep(ms);
     lab.network.restore({ cut: true });
     for (const [app, pids] of frozen) app.thaw(pids);
-    await Promise.all(
-      lab.windows.map((tab) => tab.advanceClock(ms).catch(() => {})),
-    );
     await Promise.all(
       lab.tabs.map(async (tab) => {
         await tab.setFrozen(false);
@@ -755,17 +752,24 @@ const twoTabsRedial: Scenario = {
 
 const tokenExpiry: Scenario = {
   name: "token-expiry",
-  does: "Every page's wall clock jumps two hours ahead (and stays there, as after a sleep, until the next reload), past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock. Then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
+  does: "Every tab sleeps (hidden and frozen) and every window goes offline, the network gone for 75 s, past the Clerk session token's minute and a hub ticket's minute, then they wake on a changed network, so every connection is dialed again after its tokens lapsed. Then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry. Real time passes, rather than a page clock moving, which would skew the page against every other device (`clock-skew` does that on purpose).",
   boundMs: 30_000,
   async run(lab) {
-    await forEachPage(lab, (tab) => tab.advanceClock(2 * 60 * 60 * 1000));
-    lab.note("clocks moved two hours ahead");
+    await Promise.all(lab.tabs.map((tab) => tab.setHidden(true)));
+    await Promise.all(lab.tabs.map((tab) => tab.setFrozen(true)));
+    await Promise.all(lab.windows.map((tab) => tab.setOffline(true)));
     lab.network.down();
-    await forEachPage(lab, (tab) => tab.setOffline(true));
     changeHost(lab);
-    await sleep(10_000);
+    lab.note("pages asleep for 75 s");
+    await sleep(75_000);
     lab.network.restore({ cut: true });
-    await forEachPage(lab, (tab) => tab.setOffline(false));
+    await Promise.all(lab.windows.map((tab) => tab.setOffline(false)));
+    await Promise.all(
+      lab.tabs.map(async (tab) => {
+        await tab.setFrozen(false);
+        await tab.setHidden(false);
+      }),
+    );
     const restored = Date.now();
     await forEachPage(lab, async (tab) => {
       const fresh = await tab.page.evaluate(async () => {
@@ -779,6 +783,23 @@ const tokenExpiry: Scenario = {
     });
     lab.note("fresh Clerk tokens minted and the device list read");
     return restored;
+  },
+};
+
+const clockSkew: Scenario = {
+  name: "clock-skew",
+  does: "Every page's wall clock runs two hours ahead of the other devices', and every flow is cut so each connection is dialed again on the skewed clock: a device whose clock is off has to connect all the same. Then the pages are reloaded, which puts their clocks right, and recover again.",
+  boundMs: 30_000,
+  async run(lab) {
+    await forEachPage(lab, (tab) => tab.advanceClock(2 * 60 * 60 * 1000));
+    lab.note("page clocks two hours ahead");
+    changeHost(lab);
+    lab.network.down();
+    lab.network.restore({ cut: true });
+    const took = await recovered(lab, Date.now(), this.boundMs);
+    lab.note(`recovered on the skewed clocks in ${took} ms`);
+    await forEachPage(lab, (tab) => tab.page.reload().then(() => undefined));
+    return Date.now();
   },
 };
 
@@ -871,8 +892,11 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   tokenExpiry,
 ];
 
+// clock-skew joins the soak once a skewed device connects (V3.md, the
+// reliability pass).
 export const ALL_SCENARIOS: readonly Scenario[] = [
   ...SOAK_SCENARIOS,
+  clockSkew,
   signOutWithSibling,
 ];
 

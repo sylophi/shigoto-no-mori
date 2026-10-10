@@ -56,9 +56,9 @@ export const CLIENT_KINDS = ["web", "desktop", "tunnel", "terminal"] as const;
 export type ClientKind = (typeof CLIENT_KINDS)[number];
 
 // What the harness injects into every page: a visibility it controls
-// (headless Chrome never hides a page) and a wall-clock offset (a sleep
-// longer than a token's life, without waiting for it), and each toast
-// as a console line, so what reached the user is in the trace.
+// (headless Chrome never hides a page), a wall-clock offset (a device
+// whose clock is off, for clock-skew), and each toast as a console
+// line, so what reached the user is in the trace.
 const PAGE_HOOKS = `(() => {
   if (window.harnessSetHidden !== undefined) return;
   let hidden = false;
@@ -171,9 +171,8 @@ export class Tab {
       await session.send("Debugger.disable").catch(() => {});
     }
   }
-
-  // Moves the page's wall clock ahead, as a sleep does. Only ahead: a
-  // clock that goes back is nothing a machine does, and Effect's
+  // Moves the page's wall clock ahead of the other devices'. Only ahead:
+  // a clock that goes back is nothing a machine does, and Effect's
   // schedules read it. A reload puts it right.
   async advanceClock(ms: number): Promise<void> {
     await this.page.evaluate((offset) => window.harnessShiftClock(offset), ms);
