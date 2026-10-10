@@ -25,7 +25,6 @@ import * as Engine from "../../host/lib/engine.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
-import * as Villagers from "../../host/lib/villagers.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -91,8 +90,6 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.adapter),
     Layer.provideMerge(GithubCli.layer),
-    Layer.provideMerge(Villagers.adapter),
-    Layer.provideMerge(Villagers.deviceLayer),
     Layer.provideMerge(engine),
     Layer.provideMerge(NodeServices.layer),
   ),

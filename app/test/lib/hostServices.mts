@@ -5,7 +5,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Layer from "effect/Layer";
 import * as Ports from "../../host/lib/ports.ts";
 import * as Terrier from "../../host/lib/terrier.ts";
+import * as Villagers from "../../host/lib/villagers.ts";
 
-export const hostServices = Layer.mergeAll(Ports.layer, Terrier.layer).pipe(
-  Layer.provideMerge(NodeServices.layer),
-);
+export const hostServices = Layer.mergeAll(
+  Ports.layer,
+  Terrier.layer,
+  Villagers.deviceLayer,
+).pipe(Layer.provideMerge(NodeServices.layer));

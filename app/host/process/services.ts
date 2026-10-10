@@ -4,9 +4,11 @@ import type * as Ports from "@host/lib/ports";
 import type * as Sharing from "@host/lib/sharing";
 import type * as Terrier from "@host/lib/terrier";
 import type * as Views from "@host/lib/views";
+import type * as Villagers from "@host/lib/villagers";
 
 export type HostServices =
   | Views.Services
   | Ports.Ports
   | Sharing.Sharing
-  | Terrier.Terrier;
+  | Terrier.Terrier
+  | Villagers.VillagerData;

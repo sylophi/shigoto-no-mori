@@ -1,8 +1,17 @@
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
 import type { Handlers } from "@shigomori/contracts/types";
-import { call as onData } from "@host/lib/villagers";
+import * as Effect from "effect/Effect";
+import { VillagerData } from "@host/lib/villagers";
 
-export const villagersHandlers: Handlers<typeof villagersContract> = {
+const onData = <A, E>(
+  f: (data: VillagerData["Service"]) => Effect.Effect<A, E>,
+) => Effect.flatMap(VillagerData, f);
+
+export const villagersHandlers: Handlers<
+  typeof villagersContract,
+  unknown,
+  VillagerData
+> = {
   status: () => onData((data) => data.status),
   download: () => onData((data) => data.start),
   cancel: () => onData((data) => data.cancel),

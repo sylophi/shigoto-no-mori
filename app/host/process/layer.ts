@@ -239,7 +239,6 @@ const toolAnswers = GithubCli.adapter.pipe(
 const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
   toolAnswers.pipe(
     // A villager download under way stops here, and resumes next launch.
-    Layer.provideMerge(Villagers.adapter),
     Layer.provideMerge(Villagers.deviceLayer),
     // Every push the host makes and every store write, which the wires
     // and the views read.
