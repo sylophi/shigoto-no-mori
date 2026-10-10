@@ -256,15 +256,6 @@ function startLocalHost(queryClient: QueryClient): void {
     };
   });
 
-  // Boot warmth for the device config: the appearance providers moved
-  // to the client store and no longer keep this query alive, but the
-  // first paint of the launch gates (ScriptLaunchRow, the tidy page)
-  // still reads it. Prefetch once so those mounts hit a warm cache.
-  void queryClient.prefetchQuery({
-    queryKey: queryKeys.globalConfig(),
-    queryFn: () => window.api.globalConfig.read(),
-  });
-
   // The host rewrote project.json (carry-over entries removed in favor
   // of .worktreeinclude); drop the caches that mirror it so open views
   // refresh.
