@@ -103,6 +103,7 @@ function MergeDialog({
     // Held open while the move runs: closed, its stop or its failure
     // would go unsaid.
     <ModalShell
+      label={`Merge into ${branch}`}
       onClose={() => {
         if (!merge.isPending) onClose();
       }}

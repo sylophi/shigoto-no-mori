@@ -1,10 +1,6 @@
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
-import { useLocation } from "@tanstack/react-router";
-import {
-  matchRoutePath,
-  rowDeviceId,
-  WORKTREE_ROUTE_PATHS,
-} from "@/lib/routePaths";
+import { useMatch } from "@tanstack/react-router";
+import { rowDeviceId, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
   useEffect,
   useLayoutEffect,
@@ -47,26 +43,6 @@ type Level = SidebarViewModel["level"];
 // its enclosing component out of React Compiler memoization and
 // re-renders it on every scroll offset. Isolating it here keeps
 // Sidebar's row-model build memoized.
-// The worktree an open detail page shows, local or on a peer, its
-// device spelled the way the rows spell it (none for this machine's).
-function matchWorktreeDetail(pathname: string): {
-  deviceId?: string;
-  projectId: string;
-  worktreeId: string;
-} | null {
-  const match = matchRoutePath(WORKTREE_ROUTE_PATHS.detail, pathname);
-  if (!match) return null;
-  const { deviceId, projectId, worktreeId } = match;
-  if (
-    deviceId === undefined ||
-    projectId === undefined ||
-    worktreeId === undefined
-  ) {
-    return null;
-  }
-  return { deviceId: rowDeviceId(deviceId), projectId, worktreeId };
-}
-
 export function SidebarList({
   rows,
   revealKey,
@@ -143,15 +119,21 @@ export function SidebarList({
   // render until it exists; the ref stops repeat scrolls afterwards so
   // the user can still scroll away freely.
   // Any device's detail page, so a peer's worktree is revealed too.
-  const { pathname } = useLocation();
-  const open = matchWorktreeDetail(pathname);
+  const open = useMatch({
+    from: WORKTREE_ROUTE_PATHS.detail,
+    shouldThrow: false,
+    select: (match) => match.params,
+  });
   const lastRevealedRef = useRef<string | null>(null);
   useEffect(() => {
-    const { deviceId, projectId, worktreeId } = open ?? {};
-    if (!projectId || !worktreeId) {
+    if (!open) {
       lastRevealedRef.current = null;
       return;
     }
+    const { projectId, worktreeId } = open;
+    // The device spelled the way the rows spell it (none for this
+    // machine's).
+    const deviceId = rowDeviceId(open.deviceId);
     const revealed = `${deviceId ?? ""}:${worktreeId}`;
     if (lastRevealedRef.current === revealed) return;
     const key = revealKey(projectId, worktreeId, deviceId);

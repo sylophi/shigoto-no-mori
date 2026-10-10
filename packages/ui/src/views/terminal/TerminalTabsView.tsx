@@ -3,10 +3,11 @@
 // place it sits in adds after that (a drawer's hide). Left and right arrows move the
 // pick, as tabs do.
 import type { ReactNode } from "react";
+import { Tabs } from "@base-ui/react/tabs";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { useRovingPick } from "../../hooks/useRovingPick.ts";
+import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
 import { cn } from "../../lib/utils.ts";
 
 export type TerminalTab = {
@@ -36,18 +37,20 @@ export function TerminalTabsView({
   // The picked tab's body.
   children: ReactNode;
 }) {
-  const { listRef, onKeyDown } = useRovingPick({
-    ids: tabs.map((tab) => tab.id),
-    selectedId: selectedId ?? "",
-    onSelect,
-    pickedSelector: '[aria-selected="true"]',
-  });
+  const listRef = useRevealPicked(
+    selectedId,
+    tabs.map((tab) => tab.id),
+  );
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <Tabs.Root
+      value={selectedId}
+      onValueChange={(id: string) => onSelect(id)}
+      className="flex h-full min-h-0 flex-col"
+    >
       <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border px-2">
-        <div
+        <Tabs.List
           ref={listRef}
-          role="tablist"
+          activateOnFocus
           aria-label="Terminals"
           className="flex min-w-0 [scrollbar-width:none] items-center gap-0.5 overflow-x-auto"
         >
@@ -64,14 +67,9 @@ export function TerminalTabsView({
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <button
-                  type="button"
-                  role="tab"
+                <Tabs.Tab
+                  value={tab.id}
                   aria-label={tab.label}
-                  aria-selected={selected}
-                  tabIndex={selected ? 0 : -1}
-                  onClick={() => onSelect(tab.id)}
-                  onKeyDown={onKeyDown}
                   className={cn(
                     "flex h-full items-center pl-2",
                     tab.ended && "opacity-60",
@@ -82,7 +80,7 @@ export function TerminalTabsView({
                       {tab.label}
                     </span>
                   </SimpleTooltip>
-                </button>
+                </Tabs.Tab>
                 <IconButton
                   aria-label={`Close ${tab.label}`}
                   onClick={() => onClose(tab.id)}
@@ -93,7 +91,7 @@ export function TerminalTabsView({
               </div>
             );
           })}
-        </div>
+        </Tabs.List>
         {onNew && (
           <IconButton aria-label="New terminal" onClick={onNew}>
             <Plus className="size-3.5" />
@@ -110,6 +108,6 @@ export function TerminalTabsView({
         )}
       </div>
       <div className="min-h-0 flex-1">{children}</div>
-    </div>
+    </Tabs.Root>
   );
 }

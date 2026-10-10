@@ -55,7 +55,7 @@ export function FolderPickerModal({
   return (
     // Escape is owned by the Command.Input handler so it can also exit
     // typeahead state; let the input swallow it before the shell sees it.
-    <ModalShell onClose={onClose} closeOnEscape={false}>
+    <ModalShell label={title} onClose={onClose} closeOnEscape={false}>
       <FolderPickerView
         {...props}
         title={title}
