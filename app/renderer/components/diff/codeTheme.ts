@@ -21,9 +21,12 @@ export const CODE_THEME = {
 export const CODE_LINE_HEIGHT = 18;
 export const CODE_GAP_BLOCK = 4;
 
-// CSS custom properties inherit through the library's shadow DOM, so
-// setting them on a wrapper applies to every pierre child.
+// CSS custom properties and inherited properties reach through the
+// library's shadow DOM, so setting them on a wrapper applies to every
+// pierre child. Ligatures stay off, as everywhere code shows (index.css).
 export const CODE_STYLE = {
+  "--diffs-font-family": "var(--font-mono)",
+  fontVariantLigatures: "none",
   "--diffs-font-size": "12px",
   "--diffs-line-height": `${CODE_LINE_HEIGHT}px`,
   "--diffs-gap-block": `${CODE_GAP_BLOCK}px`,

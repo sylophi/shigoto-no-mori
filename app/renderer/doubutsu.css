@@ -745,10 +745,9 @@
    The face is the --font-sans token above. Body lifts to 700 (the AC
    base weight). Tailwind's explicit weight
    utilities are re-pinned so anything labeled font-medium is still at
-   least as bold as the body, preserving hierarchy. Mono wants roughly
-   a 550: 500 looks anemic next to Zen Maru's chunky strokes and 600
-   reads too loud, but the system mono stack has no weight between, so
-   500 plus a hairline text-stroke splits the difference. */
+   least as bold as the body, preserving hierarchy. Mono sits at 550:
+   500 looks anemic next to Zen Maru's chunky strokes and 600 reads too
+   loud. */
 .doubutsu body {
   font-weight: 700;
 }
@@ -756,24 +755,21 @@
 .doubutsu pre,
 .doubutsu code,
 .doubutsu kbd {
-  font-weight: 500;
-  -webkit-text-stroke: 0.2px currentColor;
+  font-weight: 550;
 }
 /* A mono input's placeholder reads as prose (placeholder:font-sans),
    but it inherits the mono treatment above. It takes the body's weight
    back. */
 .doubutsu .placeholder\:font-sans::placeholder {
   font-weight: 700;
-  -webkit-text-stroke: 0;
 }
 /* The pierre diff viewer renders inside shadow DOM, where the class
    selectors above can't reach, but the body's 700 still gets in via
    inheritance, so diff code rendered fat. Pin the mono treatment on
-   the wrapper; font-weight and text-stroke are inherited properties,
-   so they carry across the shadow boundary. */
+   the wrapper; font-weight is inherited, so it carries across the
+   shadow boundary. */
 .doubutsu :is([data-slot="diff-view"], [data-slot="file-view"]) {
-  font-weight: 500;
-  -webkit-text-stroke: 0.2px currentColor;
+  font-weight: 550;
 }
 /* A step under the body: the contrast a muted prefix or suffix beside
    a title wants. */
