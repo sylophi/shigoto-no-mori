@@ -76,12 +76,10 @@ export function useWorktreeDataWrite() {
       return { projectId, worktreeId };
     },
     onSuccess: ({ projectId, worktreeId }) => {
+      // The port list is derived from this file, and its view reads it
+      // again on the write.
       void queryClient.invalidateQueries({
         queryKey: keys.worktreeData(projectId, worktreeId),
-      });
-      // The port list is derived from this file, so it moves with it.
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreePorts(projectId, worktreeId),
       });
     },
     meta: { errorTitle: "Couldn't save worktree state" },
