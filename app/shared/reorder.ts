@@ -1,4 +1,4 @@
-// Pure array reordering used by both the main process (when persisting
+// Pure array reordering used by both the host (when persisting
 // the new order to disk) and the renderer (for the optimistic React
 // Query cache write before the IPC round-trip resolves).
 export function reorderProjects<T extends { id: string }>(

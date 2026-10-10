@@ -12,7 +12,7 @@
 // attached (the host attaches before answering). An open that fails
 // resets the channel and destroys the socket. From then on the adapter
 // (host/socket/channelStreams.ts) carries bytes, ends and resets both
-// ways with credit-based backpressure, so a slow local consumer pauses
+// ways with the channel's backpressure, so a slow local consumer pauses
 // the peer's source and the reverse.
 import type { Server, Socket } from "node:net";
 import type { ChannelHandle } from "@shigomori/contracts/link";
@@ -153,8 +153,8 @@ export function bridgeSocket(
     if (dead) return;
     opts.onOpened?.();
     if (opts.carried !== undefined && opts.carried.length > 0) {
-      // Out of credit already (not in practice: the window is 4 MiB):
-      // stay paused, the adapter resumes on the peer's credit.
+      // Past the window already (not in practice: it is 4 MiB): stay
+      // paused, the adapter resumes once the queue drains (onWritable).
       if (!handle.write(opts.carried)) return;
     }
     socket.resume();

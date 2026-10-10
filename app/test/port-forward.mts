@@ -1,6 +1,5 @@
-// Durable proof for port forwarding over byte channels (binary
-// channel frames): TCP bytes cross a REAL DIRECT
-// websocket between the two fixtures as channel frames
+// Durable proof for port forwarding over byte channels: TCP bytes
+// cross a REAL DIRECT websocket between the two fixtures on a channel
 // (shared/remote/channels.ts), brokered by the stub device hub
 // exactly as production does (test/lib/directBoot.mts). Nothing
 // here is a double on the forward path: device A registers the REAL
@@ -409,7 +408,7 @@ it("end state: a fresh channel opens and round-trips after full teardown", async
 });
 
 it("engine: a local dial round-trips through the whole chain, and a duplicate start returns the existing forward", async () => {
-  // ---- Slice B: the client engine over the same wire ----
+  // ---- The client engine over the same wire ----
 
   // The engine on device B, its forward api the SAME peer client the
   // direct scenarios drove, so nothing on the forward path is a

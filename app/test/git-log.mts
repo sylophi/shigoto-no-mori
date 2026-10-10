@@ -4,8 +4,8 @@
 //
 // Asserts: the format and every case in shared/fixtures/git-log.json
 // match, and a subject carrying the record sentinel, committed in a
-// real repo, stays one commit. The CLI's go test holds its own parser
-// to the same fixture.
+// real repo, stays one commit. The engine's parser (gitParse.ts) is
+// held to the same fixture.
 //
 // Run: pnpm test git-log.
 //

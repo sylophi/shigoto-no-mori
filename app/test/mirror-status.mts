@@ -1,5 +1,5 @@
 // Durable proof for the mirror's one-line status (describeMirror in
-// renderer/components/worktreeDetail/mirror/mirrorStatus.ts). The
+// ui's views/worktreeDetail/mirror/mirrorStatus.ts). The
 // engine runs a cycle on every filesystem event, ignored paths
 // included, so a live mirror passes through its scanning states all
 // the time without a file moving.

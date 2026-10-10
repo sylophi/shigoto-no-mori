@@ -12,7 +12,7 @@
 // revokes this device then clears the envelope, read-classified OS-bound
 // channels answer structural stub defaults while every mutation-shaped
 // or unclassified channel REJECTS (fail-closed, including enum/union
-// outputs the walker refuses to fabricate), the step-6 remote flips
+// outputs the walker refuses to fabricate), the remote reads and writes
 // (fs, the projects/packageScripts preference writes,
 // globalConfig.writeDeviceSettings) keep rejecting as mutating-rejects,
 // the status snapshot reports no peer's command access it was not told
@@ -278,12 +278,10 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
     bridge.api.portForward.start({ deviceId: "d1", remotePort: 3000 }),
     refused,
   );
-  // The step-6 flips (v2 slice B): these were unclassified-rejects
-  // before (remote:false, no mutating tag) and are mutating-rejects
-  // now (remote:true, mutating:true). Either way the tab's registrar
-  // must refuse them: the fs reads because they are gated on the
-  // command-access switch, the preference/registry writes and the device-settings
-  // write because they are commands.
+  // These are mutating-rejects (remote:true, mutating:true), and
+  // the tab's registrar must refuse them: the fs reads because they
+  // are gated on the command-access switch, the preference/registry
+  // writes and the device-settings write because they are commands.
   await assert.rejects(bridge.api.fs.listDirectory({ path: "/tmp" }), refused);
   await assert.rejects(
     bridge.api.fs.scanForGitRepos({ path: "/tmp" }),

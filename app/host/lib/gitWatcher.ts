@@ -106,12 +106,10 @@ export class GitWatcher extends Context.Service<
   {
     // Bring the watched set in line with the registry: one watch per
     // project whose git directory resolves, dropped when the project
-    // leaves the registry or its git directory moves. Runs at boot, on
-    // every managed-root change (a CLI or an external write) and after
-    // every settled host mutation (an app-side add or remove runs as a
-    // CLI child whose write the state watcher drops as the app's own),
-    // which together cover every way a project is added, removed or
-    // relocated.
+    // leaves the registry or its git directory moves. Runs at boot and on
+    // every store change, the terminal's or the app's own
+    // (host/process/layer.ts), which together cover every way a project is
+    // added, removed or relocated.
     readonly reconcile: Effect.Effect<void>;
   }
 >()("sm/main/GitWatcher") {}
@@ -128,10 +126,7 @@ const make = (deps: GitWatcherDeps) =>
     const serial = yield* Semaphore.make(1);
 
     // One project's pings: its git directory's relevant changes,
-    // debounced. Suppression is checked at event time, not when the
-    // debounce fires, mirroring the state watcher: a CLI child finishing
-    // right after an external commit must not swallow the refresh that
-    // commit deserves.
+    // debounced.
     const watch = (projectId: string, entry: { readonly gitDir: string }) =>
       fs.watch(entry.gitDir, { recursive: true }).pipe(
         Stream.filter((event) => isRelevantGitPath(event.path)),

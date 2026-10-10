@@ -3,9 +3,8 @@
 // long-lived `daemon` behind host/mirror/daemon.ts and one `serve`
 // child per stream a peer opens (host/ipc/modules/mirror.ts). Both
 // are spoken to as a byte stream over stdin/stdout, never as document
-// runs, so this seam is separate from the CLI delegate on purpose: the
-// engine is not the CLI, nobody types its commands, and only this
-// process ever starts it.
+// runs: nobody types the engine's commands, and only this process ever
+// starts it.
 //
 // Every child runs in its own process group, in a scope under this
 // service's.

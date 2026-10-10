@@ -77,7 +77,7 @@ type FetchServices =
   | ChildProcessSpawner.ChildProcessSpawner;
 
 // What a pass tells: the pushes on every wire, and a ref move the app
-// made itself, announced as the git watcher would an external one.
+// made itself, announced as the git watcher announces any.
 export interface Options {
   readonly broadcast: typeof broadcastAll;
   readonly announceProjectChanged: (projectId: string) => void;
@@ -106,9 +106,8 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     let windowFocused = false;
 
     // Fast-forward the project's auto-pull worktrees (autoPullSweep.ts).
-    // The merge is an app-run git command, so the git-directory watcher
-    // drops its ref move as the app's own: the project-scoped announcement
-    // the watcher would have made for an external pull comes from here.
+    // The project-scoped announcement goes out from here as the pass ends,
+    // beside the git-directory watcher's own after its debounce.
     // Never fails: a failed pull is one worktree's problem and must not
     // read as a failed fetch.
     const autoPullProject = (projectId: string, projectPath: string) =>

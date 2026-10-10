@@ -1,4 +1,4 @@
-// Durable proof for villager birthdays (renderer/lib/villagers/birthdays.ts).
+// Durable proof for villager birthdays (ui's lib/villagers/birthdays.ts).
 //
 // Asserts:
 // - a birthday falls on its local calendar day, and a leap-day one is

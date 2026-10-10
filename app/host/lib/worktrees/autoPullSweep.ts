@@ -1,5 +1,5 @@
 // The pull behind the auto-pull mark (`sm worktrees autopull`, which
-// the CLI keeps in registry.json and reports on every identity): after
+// the engine keeps in its registry and reports on every identity): after
 // the app's
 // background fetch, every marked worktree in the project that has
 // nothing of its own fast-forwards onto its upstream, so a checkout

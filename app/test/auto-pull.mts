@@ -5,7 +5,7 @@
 // worktree untouched: a local commit, a modified file, an untracked
 // file, a detached HEAD, a missing upstream, an app-started script.
 // The sweep is checked to pull only the marked worktree of a project,
-// and the mark (the CLI's, `sm worktrees autopull`) to round-trip
+// and the mark (the engine's, `sm worktrees autopull`) to round-trip
 // through a sandbox store and back out on the identities the
 // sweep reads.
 //

@@ -1,6 +1,6 @@
 // The updater's on-disk bridge to the CLI. `sm update` has no IPC
-// channel into the app, so the two talk through the data dir like
-// every other app<->CLI feature: the app publishes its updater state to
+// channel into the app's updater, so the two talk through the data
+// dir: the app publishes its updater state to
 // updater.json ({ pid, appVersion, state }) on boot and on every state
 // change, and consumes updater-request.json ({ action, requestedAt })
 // written by the CLI. Requests are picked up at boot (a request can

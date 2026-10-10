@@ -42,9 +42,9 @@ type Found = {
 
 let found: Found | null = null;
 
-// Called once at launch from main/index.ts, before anything reads the
-// data dir. Refuses a second call so a stray re-init fails loudly
-// instead of flipping the path under live callers.
+// Called once at launch (main/index.ts, host/process/host.ts), before
+// anything reads the data dir. Refuses a second call so a stray re-init
+// fails loudly instead of flipping the path under live callers.
 export async function initDataDir(flavor: Flavor): Promise<void> {
   if (found !== null) throw new Error("dataDir already initialized");
   const paths = await Effect.runPromise(

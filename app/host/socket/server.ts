@@ -2,7 +2,7 @@
 // listener another device dials, serving every contract call annotated
 // `remote` over Effect RPC, the pushes as streams, and the byte
 // channels. Registration and listening are apart on purpose:
-// main/ipc/register.ts records every remote handler in the registrar at
+// host/process/wires.ts records every remote handler in the registrar at
 // boot whether or not the device is enrolled, so signing in later only
 // starts the listener.
 //
@@ -169,7 +169,7 @@ const SWITCHES = new Set([
 
 export type WsServerStartOpts = {
   port: number;
-  // main binds "::" (dual stack), because it advertises IPv6
+  // The host binds "::" (dual stack), because it advertises IPv6
   // candidates too. Tests bind loopback.
   bindAddress: string;
   // This device's id and app version, for the welcome.

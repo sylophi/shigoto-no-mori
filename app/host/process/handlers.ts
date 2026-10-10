@@ -201,13 +201,13 @@ const mirrorGateway = createMirrorGateway({
 });
 // The daemon snapshots on every cycle of every session and the
 // follower reports every verdict. The renderer's ping is coalesced so
-// a busy mirror costs viewers one refetch per beat, not one per cycle.
+// a busy mirror costs viewers one re-read per beat, not one per cycle.
 const broadcastMirrorChanged = coalesce(() => {
   void Graph.run(currentMirrorList).then(
     (list) => {
       // The list is validated against its strict schema on the way
       // out, and one that fails it goes out as the bare signal (a
-      // reader then asks), as it did before the broadcast carried a list.
+      // reader then asks).
       try {
         broadcastAll(mirrorContract, "changed", list);
       } catch (error) {
@@ -503,9 +503,8 @@ export const mirrorLayer = Layer.effectDiscard(
         // ends and the original keeps its own.
         onCopyGone: (session) =>
           void Graph.run(endMirrorIfCopyGone(session)).catch(() => {}),
-        // A pull it applied here is a ref move the git watcher skips as
-        // the app's own: announced like one, so the pages showing it
-        // refetch.
+        // A pull it applied here is announced at once, so the pages
+        // showing it refetch without waiting on the git watcher.
         onLocalApplied: (projectId) => announceProjectChanged(projectId),
       });
       return { daemon, follower };
@@ -518,8 +517,8 @@ export const mirrorLayer = Layer.effectDiscard(
 // refetch that project's rows), and the mirror's git follower
 // re-looking at every session in the project (a commit or checkout
 // here must reach the peer). Sent by the git-directory watcher for
-// every external ref move, and by the app-run git commands the watcher
-// skips as the app's own when no renderer caller invalidates for them.
+// every ref move, and by the app-run git commands that tell it at once
+// rather than wait out the watcher's debounce.
 export function announceProjectChanged(projectId: string): void {
   broadcastAll(gitContract, "projectChanged", { projectId });
   mirror.now()?.follower.onLocalProjectChanged(projectId);

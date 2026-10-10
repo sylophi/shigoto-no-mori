@@ -1,5 +1,5 @@
 // The app's own JSON files (the running scripts, the mirror files, the
-// control address, the updater bridge, userData's client config):
+// windows and the updater bridge, userData's client config):
 // whole-file writes through a temp sibling, so a reader never sees one
 // half written, and schema-checked reads. The projects, worktrees and
 // settings are the store's (host/lib/engine.ts).
@@ -81,7 +81,7 @@ export function tempPathFor(filePath: string): string {
 
 // `mode` sets the permission bits on the created file (masked by umask
 // like any create), for a file kept out of the data dir's
-// world-readable set, e.g. the control server's token file.
+// world-readable set, e.g. a file holding a token.
 export function atomicWriteJsonSync(
   filePath: string,
   value: unknown,

@@ -1,6 +1,6 @@
 // Durable proof for the sidebar tree's two levels: the list of
 // projects, and one project on its own (buildSidebarRows in
-// renderer/components/sidebar/buildSidebarRows.ts).
+// ui's views/sidebar/buildSidebarRows.ts).
 //
 // Asserts: on the list a project draws its header alone, counting the
 // worktrees it holds beside its primary checkouts: the ones it would

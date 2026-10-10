@@ -7,7 +7,7 @@
 // mirror:openStream over a REAL direct websocket (brokered by the stub
 // device hub exactly as production does, test/lib/directBoot.mts),
 // A's handler spawns a REAL `file-sync serve` for a REAL registered
-// worktree. Bytes cross as binary channel frames on the direct socket
+// worktree. Bytes cross on a byte channel of the direct socket
 // (shared/remote/channels.ts, bridged by
 // host/portForward/bridge.ts). The sm CLI is built too, only to
 // register the fixture project the way the app would. Asserts:
@@ -43,10 +43,8 @@
 //   - B's primary checkout (the original, on the device running the
 //     session) mirrored to a mirror/main worktree on A carries commits
 //     both ways, and A's own main never moves.
-// And the legacy sweep: a session an older build started from the
-// copy's device is hidden from the mirror surfaces and ended once,
-// its thread told why, with nothing deleted. And a peer's removed
-// worktree (worktrees:removal) ends only the sessions into that copy.
+// And a peer's removed worktree (worktrees:removal) ends only the
+// sessions into that copy.
 // And the sweep of sessions brought back for a device on no account
 // asks about each session once.
 //

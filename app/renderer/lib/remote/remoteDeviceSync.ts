@@ -129,7 +129,7 @@ let lastSharing: Readonly<Record<string, boolean>> = {};
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
 // pending link per event. A single in-flight run plus a dirty latch
-// reruns once with the newest status when work piles up (M3).
+// reruns once with the newest status when work piles up.
 let inFlight = false;
 let dirty = false;
 let queuedStatus: HubStatus | undefined;
@@ -207,7 +207,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   const knownIds = new Set(list.map((info) => info.deviceId));
   // A presence roster naming a device the account list has never seen
   // (a peer enrolled elsewhere) forces a refetch, or that device would
-  // stay invisible until a restart (M3). Only a hub-driven pass asks
+  // stay invisible until a restart. Only a hub-driven pass asks
   // (status came in), never the pass a refetch's own landing queues:
   // a roster ghost the list will never explain would otherwise refetch
   // forever, while this way it re-asks once per hub event, as before.

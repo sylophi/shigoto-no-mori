@@ -195,7 +195,7 @@ export function createHubConnectionCore(
   let socketStatus: SupervisorStatus = { phase: "idle" };
   // The in-flight dial's cancel handle, so stop() can abort a dial that
   // has not yet established (the mint fetch or a half-open socket), not
-  // only an established socket (C2).
+  // only an established socket.
   let pendingDialAbort: AbortController | null = null;
   // Serializes refresh/stop so a fast account double-toggle cannot
   // interleave one refresh's stop with another's start.
@@ -225,7 +225,7 @@ export function createHubConnectionCore(
       pendingDialAbort = dialAbort;
       // One settle per dial: whichever of accept, timeout, close, mint
       // failure or stop lands first owns the outcome, and no later event
-      // can flip established or fire a second onClose (C5).
+      // can flip established or fire a second onClose.
       let settled = false;
       let established = false;
       let ownerClosed = false;
@@ -237,7 +237,7 @@ export function createHubConnectionCore(
 
       // stop() aborts this. Kill a half-open socket so an orphan dial
       // cannot complete after stop and get superseded into terminal
-      // blocked (C2).
+      // blocked.
       dialAbort.signal.addEventListener("abort", () => {
         if (settled) return;
         settled = true;
@@ -247,7 +247,7 @@ export function createHubConnectionCore(
       });
 
       // The mint has its own deadline so a black-holed route cannot
-      // strand the supervisor in "connecting" forever (C6). It shares
+      // strand the supervisor in "connecting" forever. It shares
       // dialAbort so stop() cancels the fetch too.
       const mintTimer = setTimeout(() => dialAbort.abort(), ACCEPT_TIMEOUT_MS);
       void opts
@@ -288,7 +288,7 @@ export function createHubConnectionCore(
         const socket = deps.openSocket(connectUrlFor(opts.hubUrl, ticket));
         ws = socket;
         // Set true once stop() or a rejection lands, so no further
-        // inbound frame runs a handler even while the socket drains (S3).
+        // inbound frame runs a handler even while the socket drains.
         let dead = false;
         // The link half of a teardown, shared by every path that ends
         // this socket (owner close, platform close, heartbeat death).
@@ -356,8 +356,7 @@ export function createHubConnectionCore(
                   dead = true;
                   heartbeat.stop();
                   // Tear the link down SYNCHRONOUSLY so pending asks
-                  // reject at once rather than waiting on the close event
-                  // (S3).
+                  // reject at once rather than waiting on the close event.
                   tearDownLink();
                   socket.close();
                   // close() is advisory: node ws can hold it for ~30s
@@ -379,14 +378,14 @@ export function createHubConnectionCore(
         socket.onMessage((text) => {
           // Once dead (owner close or a rejection), no further inbound
           // frame runs a handler even though the socket may still
-          // deliver buffered frames while closing (S3).
+          // deliver buffered frames while closing.
           if (dead) return;
           // Any inbound message proves the hub alive. A pong is not an
           // envelope, so it stops here.
           heartbeat.noteInbound();
           if (text === HUB_PONG) return;
           // Wrap so a throw cannot escape into the platform's event
-          // delivery and become an uncaught exception (M4).
+          // delivery and become an uncaught exception.
           try {
             nextLink.handleMessage(text);
           } catch (error) {
@@ -430,7 +429,7 @@ export function createHubConnectionCore(
     current = null;
     // Cancel any in-flight dial (mint fetch or half-open socket) so an
     // orphan connect cannot complete after stop and be superseded into
-    // terminal blocked (C2).
+    // terminal blocked.
     if (pendingDialAbort !== null) {
       pendingDialAbort.abort();
       pendingDialAbort = null;
@@ -512,7 +511,7 @@ export function createHubConnectionCore(
       const localDeviceId = current?.opts.deviceId;
       // The link owns the authoritative roster, so this reads it rather
       // than keeping a second copy that a stale generation's close
-      // could wipe (C4). Presence includes the receiver per
+      // could wipe. Presence includes the receiver per
       // protocol.ts, so the local device is filtered out.
       const online = (link?.onlineDeviceIds() ?? []).filter(
         (id) => id !== localDeviceId,

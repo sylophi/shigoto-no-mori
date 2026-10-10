@@ -7,7 +7,7 @@
 // child via env (TUNNEL_TOKEN), never argv, and never appears in logs
 // or status objects.
 //
-// Main reconciles the Tunnel alongside the direct listener, so
+// The host reconciles the Tunnel alongside the direct listener, so
 // sign-out, an account switch and the directConnections opt-out all
 // land here as reconcile(null). The child lives in the scope of the
 // supervision fiber reconcile starts, which closes when the wanted
@@ -247,7 +247,7 @@ export interface Options {
   // HTTPS and reads any edge answer that the LISTENER produced (the
   // 426 a ws server earns for a non-upgrade GET) as routable.
   readonly probe?: ((hostname: string) => Effect.Effect<boolean>) | undefined;
-  // Where the live child's pid is recorded so a crashed Electron's
+  // Where the live child's pid is recorded so a crashed host's
   // orphaned cloudflared can be reaped on the next launch. A getter
   // because the userData path is an app-ready fact. When absent
   // (tests), the bookkeeping is disabled.
@@ -398,7 +398,7 @@ const make = (options: Options) =>
     });
 
     // Kill a previous app instance's orphaned cloudflared, recorded in the
-    // pid file: nothing reaps the child when Electron dies without running
+    // pid file: nothing reaps the child when the host dies without running
     // its quit (a crash, a SIGKILL), so the next launch does. The
     // process NAME is verified before killing so a recycled pid never
     // takes out an innocent process. Residual exposure, accepted: when the

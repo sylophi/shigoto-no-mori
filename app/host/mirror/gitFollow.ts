@@ -133,9 +133,9 @@ export const makeGitFollower = (deps: {
   // checks that don't exercise it.
   followDescription?: boolean;
   // A pull landed here: refs, HEAD and the index moved in the local
-  // project by the app's own git, which the git-directory watcher
-  // skips as the app's own writes, so nothing else would tell this
-  // device's pages (and its viewers) that the worktree moved.
+  // project by the app's own git. The git-directory watcher pings for
+  // the refs after its debounce and never for the index, so this tells
+  // this device's pages (and its viewers) at once.
   onLocalApplied?: (localProjectId: string) => void;
 }) =>
   Effect.gen(function* () {

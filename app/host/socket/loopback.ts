@@ -1,6 +1,6 @@
 // The device link a second time, on loopback, for the processes on this
-// machine: the terminal `sm` (packages/engine/src/Control.ts) and, once
-// the host runs as a process of its own, the app's windows. It serves
+// machine: the terminal `sm` (packages/engine/src/Control.ts), the
+// app's windows and its shell. It serves
 // LoopbackGroup (@shigomori/contracts/link): every host call, its pushes
 // and views, and the control contract's ops.
 //

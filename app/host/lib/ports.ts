@@ -1,6 +1,6 @@
 // A worktree's ports (packages/contracts/src/modules/ports.ts):
 // port-pool's allocation for the directory when the integration is on,
-// then the user-added entries from the worktree data file, each probed
+// then the user-added entries from the worktree's data, each probed
 // on this machine's loopback.
 //
 // The user's port-pool tool keeps its per-project config at
@@ -132,10 +132,8 @@ const make = Effect.gen(function* () {
 
   // Keyed by the state file's path, so a change of XDG_DATA_HOME (the
   // proof's isolation, port-pool's own dev-run advice) is a different
-  // entry rather than a stale hit. Read as plain JSON, not through the
-  // shigomori JSON helper: the file and its schemaVersion are
-  // port-pool's, so the helper's "written by a newer build" note would
-  // be about the wrong program. Absent means port-pool has never run,
+  // entry rather than a stale hit. Read as plain JSON: the file and its
+  // schemaVersion are port-pool's. Absent means port-pool has never run,
   // and corrupt is port-pool's to report: both read as no allocations.
   const allocations = yield* Cache.make({
     lookup: (statePath: string) =>

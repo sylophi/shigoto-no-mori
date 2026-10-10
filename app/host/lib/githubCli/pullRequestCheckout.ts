@@ -2,8 +2,8 @@
 // picker's list of open PRs, and the resolver that turns the PR the user
 // picked into a local branch. The resolver stops there on purpose. From
 // the local branch, worktrees.create takes over through the ordinary
-// `checkout` path, so the bundled CLI stays the create engine and knows
-// nothing about PRs.
+// `checkout` path, so the engine's create stays the one create and
+// knows nothing about PRs.
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";

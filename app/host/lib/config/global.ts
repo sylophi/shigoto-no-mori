@@ -18,7 +18,7 @@ export const globalConfigWrites = Semaphore.makeUnsafe(1);
 // so a listener registered here runs on all of them. directConnections
 // has no Settings UI (it is toggled through the CLI, which never touches
 // the IPC write handler), so this subscriber is what makes EVERY change
-// reconcile the direct listener. Host owns the mechanism, main
+// reconcile the direct listener. Host owns the mechanism, process/impls.ts
 // registers the one reconciler.
 type ConfigChangeListener = () => void;
 const configChangeListeners = new Set<ConfigChangeListener>();

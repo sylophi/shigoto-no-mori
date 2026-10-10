@@ -18,9 +18,9 @@ import { broadcastAll, refreshDirectHost } from "./wires";
 
 export function installHostImpls(): void {
   // Reconcile the listener on every config change, whatever the path:
-  // the write handler, an external CLI write picked up by the store
-  // watcher, and nuke wiping config.json all fan out through
-  // invalidateGlobalConfigCache to this one subscriber, so the
+  // the write handler and a terminal write the store's changes show both
+  // end in globalConfigChanged (host/lib/config/global.ts), which calls
+  // this one subscriber, so the
   // directConnections opt-out applies without a restart. The refresh
   // never rejects, so fire and forget is safe. The start's pass is the
   // account's first report (handlers.ts applyAccount).

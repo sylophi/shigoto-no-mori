@@ -1,5 +1,5 @@
 // Durable proof for the order of the sidebar tree's project groups
-// (projectGroupOrder in renderer/components/sidebar/buildSidebarRows.ts).
+// (projectGroupOrder in ui's views/sidebar/buildSidebarRows.ts).
 // The order is decided over every device's projects, so the device
 // filter only drops groups and never reshuffles the ones left.
 //

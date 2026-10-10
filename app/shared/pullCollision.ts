@@ -1,5 +1,5 @@
 // Why a pull of a branch onto this device is refused up front, told
-// once: the pull handler (host/ipc/modules/sync.ts) throws it, and the
+// once: the pull's landing (host/lib/sync/landing.ts) throws it, and the
 // transplant review shows it before the user gets that far, so the
 // two never drift apart.
 // Why a pull under the source's folder name is refused up front: the

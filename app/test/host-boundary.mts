@@ -1,6 +1,6 @@
 // Enforces the host/client split at the source level, so the split
 // can't erode one convenient import at a time. host/ is the code that
-// will one day serve a remote client, shared/ and the contracts
+// serves remote clients, shared/ and the contracts
 // package are what both sides compile, and none may know Electron
 // exists. Remoteness
 // itself lives in the transport a connection is built on -- feature

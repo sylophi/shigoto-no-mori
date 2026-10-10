@@ -13,7 +13,7 @@
 // and the account page says so).
 //
 // .mts with no imports, loadable by plain `node scripts/*.mts` and by
-// main through the @shared alias. Never import this from the renderer.
+// the host through the @shared alias. Never import this from the renderer.
 export const CLOUDFLARED_VERSION = "2026.8.3";
 
 // Repo-relative directory the fetched binary lands in (gitignored).

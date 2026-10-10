@@ -2,8 +2,8 @@
 // https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees):
 // gitignore-syntax patterns
 // whose matches, when also gitignored, are copied into new worktrees.
-// Creation-time application lives in the CLI engine. This module only
-// backs the Configure view's read.
+// Creation-time application lives in the engine (CarryOver.ts). This
+// module only backs the Configure view's read.
 
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
@@ -53,7 +53,7 @@ const resolveMatchedPaths = (projectPath: string) =>
 // creation-time reconciliation.
 //
 // Every checkout's own .worktreeinclude counts, resolved against that
-// checkout's gitignore and unioned, the same way the CLI resolves it at
+// checkout's gitignore and unioned, the same way the engine resolves it at
 // creation (the engine's CarryOver.ts). So a
 // pattern that only exists on a feature branch's worktree still shows
 // up as covered here.

@@ -19,11 +19,10 @@ import {
   defaultDataDir,
 } from "@host/lib/util/paths";
 
-// The electron layer injects the app-lifecycle teardown hooks at boot:
-// the watcher and updater-bridge stops, and the
-// nuke-progress fan-out (which rides the Electron transport binding).
-// Keeping them behind a setter keeps this handler module free of
-// Electron imports.
+// The host's root injects the app-lifecycle teardown hooks at boot
+// (process/impls.ts): the store's release, the updater bridge's stop,
+// the loopback's unpublish and the nuke-progress fan-out. Keeping them
+// behind a setter keeps this handler module free of the root's wiring.
 type RuntimeImpl = {
   releaseStore: Effect.Effect<void>;
   stopUpdaterBridge: () => void;
@@ -123,7 +122,7 @@ export const runtimeHandlers = {
       // The local renderer calls the window module's `relaunch` once
       // this reply lands. A peer has no window module on this machine
       // to acknowledge with, so the host relaunches itself, after the
-      // reply has left (the electron layer owns that timing).
+      // reply has left (the shell owns that timing).
       if (unattended) runtimeImpl().relaunchAppUnattended();
     }),
 

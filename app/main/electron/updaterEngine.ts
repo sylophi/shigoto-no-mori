@@ -1,5 +1,5 @@
 // The engine's updater (packages/engine/src/Updater.ts) as the shell
-// runs it: decision 6 of V3.md keeps the updater in Electron's process,
+// runs it: the updater stays in Electron's process,
 // so it gets a small graph of its own here, over the engine's paths and
 // the platform's fetch, files and child processes (the shell's graph,
 // main/index.ts, provides the last two).

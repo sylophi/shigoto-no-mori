@@ -80,7 +80,7 @@ const END = "__SHIGOMORI_ENV_END__";
 
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
-// Same budget as the other login-shell probe (electron/cliShell.ts).
+// Same budget as the other login-shell probe (lib/cli/shell.ts).
 // Past it the app runs on the Finder-launch environment.
 export const CAPTURE_TIMEOUT_MS = 5000;
 

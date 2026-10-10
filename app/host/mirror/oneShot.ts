@@ -56,7 +56,7 @@ function failed(error: string): TransferFilesResult {
 }
 
 // An interrupt (the move's cancel) ends the session where it stands, a
-// create the cancel outran included (main's sweep is the backstop, by
+// create the cancel outran included (the host's sweep is the backstop, by
 // the token). The caller decides what becomes of the worktree.
 export const transferFilesOnce = (
   input: {
@@ -83,7 +83,7 @@ export const transferFilesOnce = (
     (token) =>
       Effect.gen(function* () {
         const daemon = yield* requireRunningEngine;
-        // Ended whatever happens: after the terminate, so main's sweep
+        // Ended whatever happens: after the terminate, so the host's sweep
         // only picks the session up when that failed.
         return yield* Effect.acquireUseRelease(
           Effect.uninterruptible(

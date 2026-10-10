@@ -1,4 +1,4 @@
-// Durable proof for stack detection (shared/pullRequestStack.ts), the
+// Durable proof for stack detection (contracts' pullRequestStack.ts), the
 // pure read the sidebar pill, the worktree page and the merge button
 // all share. A chain of PRs based on each other's heads is a stack,
 // bottom first, and a merged bottom stays in it. The trunk is never a

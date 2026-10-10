@@ -2,7 +2,7 @@
 // a send this device runs, or a mirror start (a send with a session on
 // top). Each runs under an AbortSignal of its own, minted here and
 // handed down through every step that can wait (the source link, the
-// CLI child, the file transfer's poll), keyed the way the caller keys
+// engine's create, the file transfer's poll), keyed the way the caller keys
 // its progress: by the source worktree id, scoped to the calling peer,
 // so a cancel finds exactly the move its caller asked for and never
 // another device's. A landing this host runs for a peer's send is not
@@ -16,9 +16,9 @@
 // interrupts (cancellable): what a step made is undone by its
 // finalizer (the created worktree removed, the link reset), and the
 // call fails with MOVE_CANCELLED, whatever the step was waiting on
-// said when it was cut short. Per-key rather than per-call because the
-// wire has no request cancellation: a cancel frame and a per-call
-// signal on the context would retire this registry.
+// said when it was cut short. Per-key rather than per-call because a
+// cancel can come from outside the call: the terminal's verb or a
+// peer's mirror asks for it by key (sync:cancelMove).
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";

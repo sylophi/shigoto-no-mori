@@ -1,5 +1,5 @@
 // Durable proof for the Visitors album's model
-// (renderer/lib/villagers/visitors.ts).
+// (ui's lib/villagers/visitors.ts).
 //
 // Asserts:
 // - the visit log tallies by villager, leaving out a mirror's copy, and

@@ -5,7 +5,7 @@
 // every change is written back behind it in the order it was made.
 //
 // The rule a copy keeps (store and announce only what changed) is
-// shared/sharedSettings.ts's createSharedSettingsCopy. This file is its
+// contracts' sharedSettings.ts's createSharedSettingsCopy. This file is its
 // storage.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
@@ -67,8 +67,8 @@ type ChangeListener = (doc: SharedSettingsDoc) => void;
 const changeListeners = new Set<ChangeListener>();
 
 // Followers of "this copy moved", fired after the write landed and
-// never for a merge that learned nothing. The Electron layer fans it
-// out to every window and peer (main/electron/hostImpls.ts).
+// never for a merge that learned nothing. The host's root fans it
+// out to every window and peer (process/impls.ts).
 export function onSharedSettingsChange(listener: ChangeListener): () => void {
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);

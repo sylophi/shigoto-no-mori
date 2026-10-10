@@ -1,6 +1,6 @@
 // The mirror daemon's slot and the vocabulary around it: the labels the
 // start orchestration writes on a session, the raw shapes the daemon
-// reports, and the impl main wires in following the setPortForwardEngine
+// reports, and the impl the root wires in following the setPortForwardEngine
 // precedent. Separate from the mirror handler module so the worktree
 // tombstone protocol (host/lib/scripts/index.ts withDeleteInflight)
 // can stop a worktree's mirrors without importing that module (which
@@ -96,8 +96,8 @@ export function carriedLabels(
   };
 }
 
-// What the daemon reports for one session, before annotation (shared/
-// ipc/modules/mirror.ts), re-exported for the host's own callers.
+// What the daemon reports for one session, before annotation
+// (contracts' modules/mirror.ts), re-exported for the host's own callers.
 export type { MirrorSessionRaw };
 
 // The create request the daemon takes (file-sync/engine.go
@@ -222,7 +222,7 @@ export const mirrorSessions = (daemon: Pick<MirrorImpl, "sessions">) =>
 // Which transfer a session is, written into its mode
 // ("transfer-<token>"): one token per transfer, live from before its create is sent until
 // its pull has ended it. A transfer session whose token is not live
-// here has nobody waiting on it, and main ends it on sight, since no
+// here has nobody waiting on it, and the host ends it on sight, since no
 // mirror surface would ever show it. That covers every way one gets
 // left behind: a quit or a crash mid-transfer (the engine persists its
 // sessions, and the next launch knows none of their tokens), a create
@@ -350,7 +350,7 @@ export const ORIGINAL_GONE_DETAIL =
   "This worktree was removed outside the app, so the mirror ended. The copy on the other device stays as a worktree.";
 
 // The bookkeeping every snapshot of a running daemon is checked
-// against (main wires it to the daemon's onChange):
+// against (the root wires it to the daemon's onChange):
 //   - the stops that came while the daemon was down, replayed,
 //   - a session whose original is gone (removed from a terminal, from
 //     Finder, or while the app was not running, none of which pass the

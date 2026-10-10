@@ -1,6 +1,6 @@
 // What the host knows of the app it serves: handed over once, as it
 // starts, by the shell that started it (main/hostProcess.ts). The host
-// asks Electron nothing (decision 6 of V3.md), so its version, where
+// asks Electron nothing, so its version, where
 // its binaries are and the page origin its loopback admits all come
 // from here.
 import * as Schema from "effect/Schema";

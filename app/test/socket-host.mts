@@ -1149,7 +1149,7 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   // and gh it spawns.
   assert.equal(annotation(callOf(gitContract, "sweep"), Gated), false);
   assert.equal(annotation(callOf(globalConfigContract, "read"), Gated), false);
-  // The step-6 flips (v2 slice B). Every fs call is remote AND
+  // Every fs call is remote AND
   // gated: they read, but they disclose arbitrary absolute
   // paths, so they ride the command grant rather than the ungated
   // read set.
@@ -1215,9 +1215,9 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       `sync.${key} must require the command grant`,
     );
   }
-  // The byte-stream opens (step 8, reworked onto channels): both
-  // are grant-gated commands. The bytes themselves ride binary
-  // channel frames, never invokes.
+  // The byte-stream opens: both
+  // are grant-gated commands. The bytes themselves ride the
+  // channel, never invokes.
   for (const [name, call] of [
     ["forward.open", callOf(forwardContract, "open")],
     ["mirror.openStream", callOf(mirrorContract, "openStream")],

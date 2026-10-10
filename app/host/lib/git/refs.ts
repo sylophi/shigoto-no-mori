@@ -77,7 +77,7 @@ export const countCommits = (
     (out) => Number(out.trim()),
   );
 
-// Leaves out what any remote has, as the CLI's unpushed count does.
+// Leaves out what any remote has, as the engine's unpushed count does.
 const NOT_ON_A_REMOTE = ["--not", "--remotes", "--not"];
 
 // HEAD's own commits past `ref`: how many, how many of them are

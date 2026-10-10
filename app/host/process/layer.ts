@@ -84,7 +84,7 @@ const scripts = (hurried: () => boolean) =>
   );
 
 // The sweeps and watchers read the project list synchronously, from the
-// snapshot host/lib/projects keeps of the CLI's list.
+// snapshot host/lib/projects keeps of the engine's list.
 const firstProjectList = Layer.effectDiscard(
   refresh.pipe(
     Effect.catch((error) =>
@@ -109,7 +109,7 @@ function onExternalStateChange() {
       .filter((projectId) => projectId !== undefined),
   );
   for (const projectId of mirrored) announceProjectChanged(projectId);
-  // The CLI may have added or removed a project: re-read the list,
+  // The terminal may have added or removed a project: re-read the list,
   // then follow it with the git-directory watches.
   // A watcher that failed to start has nothing to follow.
   void Graph.run(
@@ -193,9 +193,9 @@ const remotePlanes = onQuit(
 
 // The mirror engine: the git follower, the daemon, and the gateway the
 // daemon dials peers through. The daemon resumes persisted sessions the
-// moment it is up, so it starts with the app. After app ready: the sessions it
-// resumes are swept for a device on no account, which reads the
-// credential, and safeStorage cannot decrypt it before ready.
+// moment it is up, so it starts with the app. The sessions it resumes
+// are swept for a device on no account once the shell's first account
+// report lands (handlers.ts noAccountSweep).
 const mirrorFollower = logged("the mirror follower", mirrorLayer);
 const mirrorDaemon = mirrorDaemonLayer;
 const mirrorGateway = lifetime(

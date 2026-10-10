@@ -102,8 +102,7 @@ export function persistRunningScripts(
   }
 }
 
-// Lock-free like config/store.ts's reader: the rename above keeps the
-// file itself always whole.
+// Lock-free: the rename above keeps the file itself always whole.
 function readSnapshot(): Snapshot | null {
   let raw: string;
   try {
@@ -252,7 +251,7 @@ const killOrphan = Effect.fnUntraced(function* (record: PersistedScript) {
 });
 
 // Survivors get killed rather than adopted back into the UI. Their
-// stdio pipes died with the main process that owned them, so there is
+// stdio pipes died with the host process that owned them, so there is
 // no output left to stream and no console history to restore, and a
 // row the user can only stop is worse than the invariant that what the
 // UI shows is what is running. Killing also frees the ports the next

@@ -8,7 +8,7 @@ import { findProject } from "@host/lib/projects";
 // The launcher row is the engine's: the tool catalog, what is installed,
 // the GitHub entry, custom commands, the hidden filter and the
 // rolling-window use order all come from `sm launchers`, and a launch
-// is `sm open`, which counts the use in the same state.json log a
+// is `sm open`, which counts the use in the same use log a
 // terminal launch bumps. So the row orders the same wherever a tool was
 // last opened from.
 export const launchersHandlers = {

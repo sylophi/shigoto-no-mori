@@ -1,5 +1,5 @@
 // Durable proof for the ⌘K worktree palette's list
-// (renderer/components/palette/buildPaletteEntries.ts).
+// (ui's views/palette/buildPaletteEntries.ts).
 //
 // Asserts: every worktree on every device lands in one list, a mirrored
 // pair once (as its local row, wearing the peer's badge). Visits lead

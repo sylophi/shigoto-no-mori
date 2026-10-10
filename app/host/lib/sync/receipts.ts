@@ -170,8 +170,8 @@ const tearDown = <R>(
   }
   return Effect.gen(function* () {
     // Force only when the dirty state was actually captured and
-    // applied. The CLI's --force does more than skip its own
-    // clean-tree guard (cmd_rm.go requireClean): it also switches to
+    // applied. The engine's force does more than skip its own
+    // clean-tree guard (Worktrees' checkRemovable): it also switches to
     // `git worktree remove --force`, which skips git's own dirty check
     // and so would silently destroy work a capture cannot carry
     // (submodule-only dirt captures as clean,

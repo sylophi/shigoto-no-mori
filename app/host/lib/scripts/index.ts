@@ -9,7 +9,7 @@
 // its own: stopping a run is closing that scope.
 //
 // On app quit (host/process/layer.ts) we kill every running script the same way
-// before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
+// before letting the host exit, so a Cmd-Q never orphans `npm run dev`.
 import type { BusyOperations } from "@shared/busy";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -175,7 +175,7 @@ interface ScriptWorktree {
 }
 
 // The SHIGOMORI_* values startScript can't derive from the worktree
-// and project it is given (the CLI's lifecycleEnvInputs).
+// and project it is given (the engine's ScriptContext).
 export interface ScriptEnvValues {
   // Branch checked out in the primary worktree; "" when there is none.
   projectBranch: string;
@@ -220,7 +220,7 @@ interface RunArgs {
 }
 
 // What the kill chain (killRecord) needs of a run. The app's own PTY
-// runs and the CLI-run lifecycle scripts (cliScriptStream) both keep
+// runs and the engine-run lifecycle scripts (cliScriptStream) both keep
 // one. They differ in how a signal reaches the tree.
 interface Killable {
   runId: string;
@@ -259,17 +259,18 @@ interface RunRecord extends Killable {
   startedAt: number;
 }
 
-// What stopping a run reaches: the signals a CLI-run script's tree is
+// What stopping a run reaches: the signals an engine-run script's tree is
 // sent through.
 type KillServices = Effect.Services<ReturnType<typeof signalPidTree>>;
 
 const runningScripts = new Map<string, RunRecord>();
 
-// Lifecycle scripts the CLI runs on the app's behalf (a create's
+// Lifecycle scripts the engine runs on the app's behalf (a create's
 // setup, an rm's teardown), which stream through the same events but
 // have no PTY here. Booked from their "started" document so the
 // console's Stop reaches them (cancelScript), and dropped on their
-// "exit". Not persisted: they die with the CLI at quit (killAllCli).
+// "exit". Not persisted: each ends with the engine run that started
+// it, a quit's included.
 interface CliScriptRun extends Killable {
   settle: () => void;
   projectId: string;
@@ -280,10 +281,10 @@ interface CliScriptRun extends Killable {
 
 const cliScripts = new Map<string, CliScriptRun>();
 
-// One CLI run's script events, on their way to the renderer. An exit
+// One engine run's script events, on their way to the renderer. An exit
 // the app cancelled reports null the way a cancelled PTY run does, so
 // the UI says stopped, not failed (the shell turns SIGTERM into exit
-// 143). `end` is for the CLI going away without an exit for a script
+// 143). `end` is for the engine run going away without an exit for a script
 // it started (killed, crashed): the booking is dropped so a pending
 // kill chain returns and nothing can be signalled at a stale pid.
 export function cliScriptStream(notify: NotifyScriptEvent): {
@@ -407,7 +408,7 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
 }
 
 // Worktrees whose create run (carry-over, the setup script, port
-// provision) is still working in the checkout: past the CLI's
+// provision) is still working in the checkout: past the engine's
 // "created" document, not yet exited.
 const inflightCreateIds = new Set<string>();
 
@@ -440,7 +441,7 @@ export const assertWorktreeMutable = (
 // in the old path), stop the mirrors rooted in it after the mutation
 // (a session would otherwise sit halted on a root that is gone or
 // moved, with the peer still calling its worktree mirrored), and
-// always clear the mark. The mirrors go AFTER, not before: the CLI may
+// always clear the mark. The mirrors go AFTER, not before: the engine may
 // refuse the mutation (a dirty tree without --force), and a mirror
 // stopped ahead of a refusal cannot be started again while the branch
 // is still checked out here. The engine is two-way safe, so the gap
@@ -514,9 +515,9 @@ export function clearProjectDeleteInflight(projectId: string): void {
 export type { BusyOperations } from "@shared/busy";
 
 // Extra sources of in-flight lifecycle work that live outside this
-// module (the CLI runner registers its child count). Aggregating here
-// means every getBusyOperations caller sees the full picture instead
-// of each consumer patching the count locally.
+// module (lib/engine.ts registers the engine's changing calls).
+// Aggregating here means every getBusyOperations caller sees the full
+// picture instead of each consumer patching the count locally.
 const inflightContributors: Array<() => number> = [];
 
 export function registerInflightContributor(count: () => number): void {
@@ -555,7 +556,7 @@ export function getRunningScriptWorktrees(): RunningScriptWorktree[] {
   return Array.from(byWorktree.values());
 }
 
-// Every script running here now, the app's own and the CLI's
+// Every script running here now, the app's own and the engine's
 // lifecycle runs alike, oldest first (scripts:list).
 export function listRunningScripts(): RunningScript[] {
   const runs: RunningScript[] = [];
@@ -654,8 +655,9 @@ const killRecord = Effect.fnUntraced(function* (
   yield* record.stop(opts.graceMs ?? DEFAULT_GRACE_MS);
 });
 
-// The kill chain for a lifecycle script the CLI runs, which is no child
-// of ours: its pid and descendants, never its group (cliScriptStream).
+// The kill chain for a lifecycle script the engine runs, which leads no
+// group of its own: its pid and descendants, never its group
+// (cliScriptStream).
 const stopPidTree = Effect.fnUntraced(function* (
   pid: number,
   done: Promise<void>,
@@ -825,7 +827,7 @@ export const startScript = Effect.fn("Scripts.start")(function* (
 });
 
 // Keystrokes from the console. A no-op when the run isn't one of ours
-// (already exited, or a lifecycle script the CLI ran on the app's
+// (already exited, or a lifecycle script the engine ran on the app's
 // behalf, which streams output through the same events but has no PTY
 // here).
 // Both calls can also fail on a PTY that is being torn down (the exit
@@ -845,7 +847,7 @@ export function resizeScript(runId: string, cols: number, rows: number): void {
 }
 
 // The console's Stop: a run the app spawned, or a lifecycle script the
-// CLI is running on its behalf.
+// engine is running on its behalf.
 export const cancelScript = Effect.fn("Scripts.cancel")(function* (
   runId: string,
 ) {
@@ -875,7 +877,7 @@ export const killScriptsForProject = (projectId: string) =>
   killMatching((r) => r.projectId === projectId, "Project removed");
 
 // The one caller that tunes the grace period is the quit path, which
-// can't wait out the default before Electron tears the process down.
+// can't wait out the default before the shell tears the host down.
 export const killAllScripts = (opts: KillOptions = {}) =>
   killMatching(() => true, "App quit", opts);
 

@@ -33,7 +33,7 @@
 //   - a superseded socket is KILLED: nothing it delivers after the
 //     supersede executes a handler.
 //   - the dialer opens candidates concurrently under ONE overall
-//     deadline (hellos serialized, see slice B below): a junk
+//     deadline (hellos serialized, see below): a junk
 //     candidate cannot defeat a reachable one, a peer that never
 //     answers the ask cannot hang the bridge cache (the attempt
 //     rejects typed), and a blocked verdict is terminal for the whole
@@ -43,7 +43,7 @@
 //   - presence scopes the data plane: a peer leaving a LIVE roster
 //     loses its direct sessions host-side and client-side, while our
 //     own hub link going down leaves them alone.
-//   - the session cache is direct or nothing (slice C): a working
+//   - the session cache is direct or nothing: a working
 //     listener yields a direct session reported via
 //     directPeerVersions, a dead socket drops the cache, and a FAILED
 //     dial rejects with the typed unreachable outcome with no hub
@@ -53,7 +53,7 @@
 //   - pushes from the host reach a direct-connected client through the
 //     shared peerPush path while the hub stub forwards nothing.
 //
-// SLICE B (tunnel endpoints) adds:
+// The tunnel endpoints add:
 //
 //   - the host advertises a tunnel-kind candidate with its own
 //     ticket exactly while the tunnel reports healthy, omits it
@@ -324,7 +324,7 @@ function fakeAskDialer(
     localKey: () => testDeviceKey("A").pair,
     peerKey: (deviceId) => testDeviceKey(deviceId).pair.publicKey,
     dialableKinds: opts.dialableKinds,
-    // The production socket (main injects ws), so the errno path the
+    // The production socket (the host injects ws), so the errno path the
     // seam exists for is what the proof runs.
     openSocket: (url) => new WsClient(url),
     deadlineMs: opts.deadlineMs ?? 4000,
@@ -1650,7 +1650,7 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
     (error) =>
       error instanceof RemoteConnectError &&
       // The exhaustion message names the candidate and, through
-      // the ws socket main injects, the errno itself, which is
+      // the ws socket the host injects, the errno itself, which is
       // what makes a failed dial diagnosable on the account page.
       /lan ws:\/\/.*ECONNREFUSED/.test(error.message),
   );

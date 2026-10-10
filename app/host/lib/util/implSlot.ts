@@ -1,5 +1,5 @@
 // A hook for an implementation the composition root wires in at boot
-// (main/electron/hostImpls.ts, main/ipc/handlers.ts, a test's setup).
+// (host/process/impls.ts, a test's setup).
 // Handler modules stay free of Electron and of the wiring; each keeps
 // one slot and throws its own message when something calls through
 // before the setter ran.

@@ -1,8 +1,7 @@
 // What the terminal `sm`, an agent or the app itself writes to the
 // store, in the host: the engine's StoreChanges, which the views re-read
-// off (views.ts), and today's pushes for the renderer, which still
-// invalidates its queries on them (step 6 of V3.md subscribes it to the
-// views instead).
+// off (views.ts), and the pushes the renderer's requests (React Query)
+// invalidate on.
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import type { Table } from "@shigomori/engine/StoreChanges";
 import * as Effect from "effect/Effect";

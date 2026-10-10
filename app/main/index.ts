@@ -116,7 +116,7 @@ takeUpdateEndpointOverrides();
 
 // One live instance per data dir. A second copy (typically a fresh
 // download in ~/Downloads beside the installed app) would run its own
-// state watcher, background fetcher, updater and script registry over
+// host, background fetcher, updater and script registry over
 // the same files. `app.exit` skips before-quit, so the losing process
 // never reaches the quit sequence at the bottom of this file: it can't
 // prompt about busy work, and it can't reap scripts that belong to the
@@ -128,7 +128,7 @@ if (!app.requestSingleInstanceLock()) {
 
 // A packaged launch starts from its launcher's environment, Finder's
 // stripped one or a terminal's (or an agent's) whole one: rebuild it
-// from the login shell, see core/shellEnv.ts. Started here, after the
+// from the login shell, see host/lib/util/shellEnv.ts. Started here, after the
 // lock (a losing second instance must not run the user's startup
 // files for nothing) and before Chromium's own startup, which the
 // shell then runs alongside. Awaited in the ready handler, before
@@ -205,8 +205,8 @@ function dataDirOrNone(): string {
 let graph: Promise<unknown> = Promise.resolve();
 
 // An update install or a relaunch: a quit that neither asks about busy
-// work nor waits for it (hostLayer.ts has why), counted from the moment
-// it is asked for, before its quit arrives.
+// work nor waits for it (host/process/layer.ts has why), counted from
+// the moment it is asked for, before its quit arrives.
 function isHurriedQuit(): boolean {
   return isInstallingUpdate() || isRelaunching();
 }
@@ -333,7 +333,7 @@ function showHostFailure(failure: HostFailure): void {
 }
 
 // Every quit path lands here: the graph's shutdown runs its finalizers
-// (hostLayer.ts), then `app.exit` ends the process without coming back
+// (shellLayer.ts), then `app.exit` ends the process without coming back
 // through before-quit. A second quit while the graph closes is let
 // through as Electron's own, the way out of a finalizer that hangs.
 let quitting = false;

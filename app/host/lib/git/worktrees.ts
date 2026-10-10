@@ -21,7 +21,7 @@ import { upstreamName } from "./refs";
 export type { WorktreeIdentity };
 
 // The sidebar asks for every project's rows at once on a refresh, and
-// each list runs up to six rows' probes at a time in the CLI (five git
+// each list runs up to six rows' probes at a time in the engine (five git
 // processes a row), so a couple of lists at a time keeps a refresh from
 // forking hundreds of gits at once.
 const rowLists = Semaphore.makeUnsafe(2);

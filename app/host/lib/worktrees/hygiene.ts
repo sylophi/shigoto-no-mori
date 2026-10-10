@@ -312,8 +312,8 @@ export const findWorktreeForDisk = Effect.fnUntraced(function* (
   return found;
 });
 
-// Three walks at a time. Each one is an `sm disk-usage` child running
-// its own pool of directory readers, so a wider window mostly makes the
+// Three walks at a time. Each one is the engine's Hygiene walk on a
+// darwin helper streaming a whole tree, so a wider window mostly makes the
 // first size land later. Any narrower and a fleet of forty crawls.
 const diskWalks = Semaphore.makeUnsafe(3);
 

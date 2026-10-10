@@ -8,13 +8,11 @@
 // sessions to a live roster and feeds that roster to the keeper.
 // Data is direct or nothing: the hub connection is handed to the
 // DIALER only, never to the bridge, and all it can do for the dialer
-// is ask a peer for its connect info. Both owners (the
-// Electron main process in main/ipc/register.ts and the web bridge in
-// web/ipc/register.ts) used to hand-assemble exactly this
-// and keep each other in step by comment. Now they differ only by the
-// deps here: identity facts, the fan-out sink, the dialable candidate
-// kinds, and the optional host half (a browser runs no direct
-// listener, no cloudflared).
+// is ask a peer for its connect info. Both owners (the host in
+// host/process/wires.ts and the web bridge in web/ipc/register.ts)
+// differ only by the deps here: identity facts, the fan-out sink, the
+// dialable candidate kinds, and the optional host half (a browser runs
+// no direct listener, no cloudflared).
 //
 // Pure aside from the injected deps (no electron, no node builtins),
 // like the pieces it composes.
@@ -66,13 +64,13 @@ export type DirectPlaneDeps = {
   // connection's own callbacks to the plane it creates first, so the
   // binding must resolve lazily.
   connection(): DirectPlaneConnection;
-  // Identity facts, as getters because main's deviceId and appVersion
+  // Identity facts, as getters because the host's deviceId and appVersion
   // are post-boot facts (getDeviceId, app.getVersion) read on first
   // dial, not at wiring time.
   localDeviceId(): string;
   localAppVersion(): string;
-  // The owner's fan-out sinks: every window on the Electron binding,
-  // the loopback wire in the browser.
+  // The owner's fan-out sinks: every window the host serves, the tab's
+  // own wire in the browser.
   broadcastStatus(status: HubStatus): void;
   broadcastPeerPush(push: HubPeerPush): void;
   // The candidate kinds THIS platform can dial (directDial.ts). The
@@ -81,8 +79,8 @@ export type DirectPlaneDeps = {
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
   // What this device is (directDial.ts): the web bridge says "web".
   deviceKind?: DeviceKind;
-  // The candidate sockets' constructor (directDial.ts). The Electron
-  // main process injects the `ws` package so a failed dial names its
+  // The candidate sockets' constructor (directDial.ts). The host
+  // injects the `ws` package so a failed dial names its
   // errno. The web bridge and the checks take the platform global.
   openSocket?: OpenClientSocket;
   // The dialer's overall attempt deadline. A check seam: the fixtures
@@ -112,7 +110,7 @@ export type DirectPlane = {
   // handler and every statusChanged fan-out report.
   status(): HubStatus;
   // Fan a fresh snapshot out, for owner-side transitions outside the
-  // connection (main's tunnel runner state changes).
+  // connection (the host's tunnel runner state changes).
   notifyStatusChanged(): void;
   // Wire this to the connection's onChange: it fans the fresh snapshot
   // out AND reconciles direct-session presence (the sweeps and the
@@ -184,7 +182,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       socket: current.socket,
       onlineDeviceIds: current.onlineDeviceIds,
       // Folded into the snapshot so the renderer stops polling
-      // peerInfo per device on every reconcile (M3). Every data
+      // peerInfo per device on every reconcile. Every data
       // session is direct now, so the direct sessions'
       // welcome-confirmed versions are the whole surface, and
       // membership here IS the direct-session set (the renderer

@@ -22,9 +22,8 @@ export type AllChannelHandlers = Partial<ChannelHandlers<AllContractModule>>;
 
 // The api: one namespace per module above, named for it, each the
 // module's client on the transport its scope is wired to. The caller
-// wires one transport per scope: the Electron preload's bridge carries
-// both (host and client live in one process there), the web client
-// passes its loopback wires.
+// wires one transport per scope: a desktop window its shell port and
+// its loopback link, the web client its own registrar for both.
 export type RendererContractApi = Api<AllContractModule>;
 
 export function buildApi(
