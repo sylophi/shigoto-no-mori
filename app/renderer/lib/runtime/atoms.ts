@@ -10,10 +10,15 @@ import {
   type PayloadOf,
   payloadOf,
 } from "@shigomori/contracts/contract";
-import { isContractError } from "@shigomori/contracts/errors";
+import {
+  isCommandRefusedError,
+  isContractError,
+  isNotSharingError,
+} from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import * as Cause from "effect/Cause";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -41,14 +46,31 @@ const clientAtoms = Atom.runtime((get) => {
     : Layer.succeed(ClientLinks, links);
 });
 
-// A view that has ended or failed with its link (a peer's session going,
-// this machine's host restarting) is asked again, at this pace: a
-// peer's session landing shows within two seconds. Each ask that finds
-// no session fails at once on this machine, so it costs no network.
-const REDIAL = Schedule.min([
-  Schedule.exponential("250 millis", 2),
-  Schedule.spaced("2 seconds"),
-]);
+// A device's refusal is a switch that may flip back (its command access
+// off, its sharing off), so the view is asked again. The device's other
+// failures (an unknown project) end the view.
+const isRefusal = (error: unknown) =>
+  isCommandRefusedError(error) || isNotSharingError(error);
+
+// When a view is asked again, while anyone still reads it (its readers
+// gone, the stream ends with them, and a peer gone from the account has
+// none): after a dropped link (a peer's session going, this machine's
+// host restarting), from 250 ms doubling to 2 s, so a session landing
+// shows within two seconds, each ask finding no session failing at once
+// on this machine; after a refusal, a call to a peer that said no, from
+// 2 s doubling to 30 s.
+const REDIAL = Schedule.exponential("250 millis", 2).pipe(
+  Schedule.modifyDelay(({ input, attempt, duration }) =>
+    Effect.succeed(
+      isRefusal(input)
+        ? Duration.min(
+            Duration.times(Duration.seconds(2), 2 ** Math.max(attempt - 1, 0)),
+            Duration.seconds(30),
+          )
+        : Duration.min(duration, Duration.seconds(2)),
+    ),
+  ),
+);
 
 // One device's host modules: this machine's over its own link, a peer's
 // over the hub hop.
@@ -94,7 +116,10 @@ export function hostViewAtom<R extends ContractCall>(options: {
           ),
     ),
   ).pipe(
-    Stream.catchIf(isContractError, (error) => Stream.die(error)),
+    Stream.catchIf(
+      (error) => isContractError(error) && !isRefusal(error),
+      (error) => Stream.die(error),
+    ),
     Stream.retry(REDIAL),
     Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
     Stream.ensuring(Effect.sync(() => options.onStop?.())),

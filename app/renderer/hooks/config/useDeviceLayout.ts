@@ -12,7 +12,7 @@ export function useDeviceLayout(): DeviceLayout | null {
   const { data: runtime } = useRuntimeInfo();
   // Silent like the runtime read beside it: a peer that refuses reads
   // gets no path spelled, not a toast per label.
-  const { data: globalConfig } = useGlobalConfig({ silentError: true });
+  const { data: globalConfig } = useGlobalConfig();
   if (!runtime || !globalConfig) return null;
   return {
     dataDir: runtime.dataDir,

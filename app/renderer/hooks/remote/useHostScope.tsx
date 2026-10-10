@@ -34,10 +34,6 @@ import {
 // remote device.
 export type { HostApi };
 
-// The two halves of a scope a read needs, for the query option
-// factories a caller outside React shares with the hooks.
-export type HostReadScope = Pick<HostScope, "api" | "keys">;
-
 export interface HostScope {
   // The device whose data the subtree reads and mutates.
   deviceId: string;

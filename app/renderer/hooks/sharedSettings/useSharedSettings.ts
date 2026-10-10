@@ -1,54 +1,67 @@
 // The shared settings as this device holds them: one document, the
 // same on every device once they have talked
 // (lib/remote/sharedSettingsSync.ts keeps it level and owns the write
-// path). The read never refetches, because the local copy's every move
-// arrives on its broadcast and is merged into the cache there.
-import { useMutation, useQuery } from "@tanstack/react-query";
+// path), as the local copy streams it (sharedSettings:watch): this
+// machine's host's, or in the web client the tab's own.
+import { useAtomValue } from "@effect/atom-react";
+import { useMutation } from "@tanstack/react-query";
+import { useRef } from "react";
+import { callOf } from "@shigomori/contracts/contract";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import type {
   SharedSettingsDoc,
   SharedSettingValue,
 } from "@shigomori/contracts/schemas";
 import { sharedStringSetting } from "@shigomori/contracts/sharedSettings";
-import { queryKeys } from "@/lib/queryKeys";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { localDeviceId } from "@/lib/queryKeys";
 import { writeSharedSetting } from "@/lib/remote/sharedSettingsSync";
+import { hostViewAtom } from "@/lib/runtime/atoms";
 
-// The one read every observer shares.
-const sharedSettingsQuery = {
-  queryKey: queryKeys.sharedSettings(),
-  queryFn: () => window.api.sharedSettings.read(),
-  // Every move of the local copy arrives on its broadcast, which the
-  // sync module merges into this entry.
-  staleTime: Number.POSITIVE_INFINITY,
-  meta: { errorTitle: "Couldn't load shared settings" },
-};
+const sharedSettingsAtom = hostViewAtom({
+  deviceId: localDeviceId,
+  localDeviceId,
+  view: callOf(sharedSettingsContract, "watch"),
+  input: undefined,
+});
+
+const docOf = (
+  result: AsyncResult.AsyncResult<SharedSettingsDoc, unknown>,
+): SharedSettingsDoc | undefined =>
+  AsyncResult.isSuccess(result) ? result.value : undefined;
 
 // One string setting out of the document (undefined key: no setting to
-// read). Narrowed with `select`, so an observer re-renders when its own
-// setting moves and not on every pick made anywhere: the sidebar holds
-// one of these per project row, and the document moves on peer traffic.
+// read). Selected, so an observer re-renders when its own setting moves
+// and not on every pick made anywhere: the sidebar holds one of these
+// per project row, and the document moves on peer traffic.
 export function useSharedStringSetting(
   key: string | undefined,
 ): string | undefined {
-  const { data } = useQuery<SharedSettingsDoc, Error, string | null>({
-    ...sharedSettingsQuery,
-    select: (doc) =>
-      key === undefined ? null : (sharedStringSetting(doc, key) ?? null),
+  return useAtomValue(sharedSettingsAtom, (result) => {
+    const doc = docOf(result);
+    return doc === undefined || key === undefined
+      ? undefined
+      : sharedStringSetting(doc, key);
   });
-  return data ?? undefined;
 }
 
 // A reading over the whole document, for a setting spread over many
-// keys. Narrowed like the one above, so `select` should return a value
-// that compares equal when the reading hasn't moved (a sorted list,
-// not a set).
+// keys. Selected like the one above, and a reading equal to the last
+// (a sorted list read again) is handed back as the last one, so an
+// observer re-renders only when it moved.
 export function useSharedSettingsView<T>(
   select: (doc: SharedSettingsDoc) => T,
 ): T | undefined {
-  const { data } = useQuery<SharedSettingsDoc, Error, T>({
-    ...sharedSettingsQuery,
-    select,
+  const last = useRef<{ json: string; value: T } | null>(null);
+  return useAtomValue(sharedSettingsAtom, (result) => {
+    const doc = docOf(result);
+    if (doc === undefined) return undefined;
+    const value = select(doc);
+    const json = JSON.stringify(value);
+    if (last.current?.json === json) return last.current.value;
+    last.current = { json, value };
+    return value;
   });
-  return data;
 }
 
 // Whether the local copy has been read (or the read has failed, which
@@ -56,16 +69,14 @@ export function useSharedSettingsView<T>(
 // unread one look alike, and a surface that acts on the difference
 // holds off.
 export function useSharedSettingsSettled(): boolean {
-  const { isPending } = useQuery<SharedSettingsDoc, Error, null>({
-    ...sharedSettingsQuery,
-    select: () => null,
-  });
-  return !isPending;
+  return useAtomValue(
+    sharedSettingsAtom,
+    (result) => !AsyncResult.isInitial(result),
+  );
 }
 
 // The writer for one key (undefined: nothing to write to, a no-op).
-// Applies right away. The cache is not set from here: the local copy's
-// own broadcast is its one writer, and it lands before this resolves.
+// Applies right away, and the local copy's view follows it.
 export function useSetSharedSetting(
   key: string | undefined,
   errorTitle: string,

@@ -1,40 +1,28 @@
-import { useEffect, useState } from "react";
+import { callOf } from "@shigomori/contracts/contract";
+import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { Terminal } from "@shigomori/contracts/schemas";
+import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { localDeviceId } from "@/lib/queryKeys";
+import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useView } from "@/lib/runtime/viewHooks";
 
-// The waits between watches that ended with the link.
-const RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 5_000] as const;
+// A device's open terminals, as its host streams them (terminals:list).
+const terminalsAtom = Atom.family((deviceId: string) =>
+  hostViewAtom({
+    deviceId,
+    localDeviceId,
+    view: callOf(terminalsContract, "list"),
+    input: undefined,
+  }),
+);
 
-// The scoped device's open terminals, as terminals.list streams them.
-// Null until the first answer, and while the device gives none (a peer
-// that runs no commands from here).
+// The scoped device's open terminals. Null until the first answer, and
+// while the device gives none (a peer that runs no commands from here,
+// asked again as atoms.ts paces a refusal).
 export function useTerminals(): readonly Terminal[] | null {
-  const { api, hasHost } = useHostScope();
-  const [terminals, setTerminals] = useState<readonly Terminal[] | null>(null);
-  useEffect(() => {
-    if (!hasHost) return;
-    let attempt = 0;
-    let stop = () => {};
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const watch = () => {
-      stop = api.terminals.list(undefined, {
-        value: (value) => {
-          attempt = 0;
-          setTerminals(value.terminals);
-        },
-        end: () => {
-          const wait =
-            RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
-          attempt += 1;
-          timer = setTimeout(watch, wait);
-        },
-      });
-    };
-    watch();
-    return () => {
-      clearTimeout(timer);
-      stop();
-    };
-  }, [api, hasHost]);
-  return terminals;
+  const { deviceId, hasHost } = useHostScope();
+  return (
+    useView(hasHost ? terminalsAtom(deviceId) : null).data?.terminals ?? null
+  );
 }

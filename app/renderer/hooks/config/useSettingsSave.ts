@@ -145,14 +145,13 @@ interface SettingsSaveResult {
 // through window.api, so the caches it staled are exactly this
 // machine's), and useDeviceSettingsSave passes the scoped registry of
 // the peer it patched.
-// The projects and worktree lists are the host's views, which read the
-// device config again themselves (terrier's projects, Codex-style names,
-// the idle shelf).
+// The config itself, the projects and the worktree lists are the host's
+// views, which read the device config again themselves (terrier's
+// projects, Codex-style names, the idle shelf).
 export function invalidateDeviceSettingsQueries(
   queryClient: QueryClient,
   keys: QueryKeyRegistry,
 ): void {
-  void queryClient.invalidateQueries({ queryKey: keys.globalConfig() });
   // Launcher catalogs for every project depend on global custom launchers.
   void queryClient.invalidateQueries({ queryKey: keys.launchersAll() });
   // Toggling the GitHub CLI integration flips both readiness gating
