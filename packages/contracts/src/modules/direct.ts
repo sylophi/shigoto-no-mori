@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { HexId32Schema } from "../schemas/hexId.ts";
 
 // Brokering vocabulary for the direct data plane: a peer asks this
 // host, with the device hub's one ask (connectInfo, shared/hub/link.ts),
@@ -98,9 +99,13 @@ export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =
 // The caller's dial capability, carried in the connectInfo INPUT so
 // the host mints only tickets the caller can actually spend: a web
 // caller declaring ["tunnel"] does not burn and abandon one lan ticket
-// per interface address on every ask.
+// per interface address on every ask. And the connection the caller is
+// dialing for, which its hello names too: the host keeps a set of
+// tickets per connection, so a web device's tabs asking at once do not
+// void each other's.
 export const DirectConnectInfoInputSchema = Schema.Struct({
   dialableKinds: Schema.Array(DirectCandidateKindSchema),
+  connectionId: HexId32Schema,
 });
 export type DirectConnectInfoInput = typeof DirectConnectInfoInputSchema.Type;
 

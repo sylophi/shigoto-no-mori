@@ -50,8 +50,10 @@ import { credentialRevoked } from "@shared/remote/supervisor";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useHubBlock } from "@/hooks/remote/useHubStatus";
 import { toast } from "@/lib/toast";
+import { useFinishRedirectSignIn } from "@/hooks/account/useEnrollment";
 
 export function ClerkAccountSync() {
+  useFinishRedirectSignIn();
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
   const { data: status } = useAccountStatus();
   const enroll = useEnroll();

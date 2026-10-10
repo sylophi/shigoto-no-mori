@@ -65,8 +65,10 @@ import {
 } from "./account";
 import { hostBinaryPath, hostFacts } from "./facts";
 
-// The device link's listener. Its hello consumes the single-use connect
-// tickets connectInfo mints over the device hub, and its gates serve a
+// The device link's listener. A peer's socket opens with one of the
+// single-use connect tickets connectInfo mints over the device hub and
+// a handshake proving the key the hub's roster names for the device it
+// was minted for, and its gates serve a
 // peer nothing while the sharing switch is off (Sharing) and run every
 // call not annotated gated:false only under the command switch
 // (acceptsPeerCommands): every ticketed peer is a device of this
@@ -107,8 +109,17 @@ export const deviceLinkLayer = () =>
       DeviceLink.layer({
         registrar: linkRegistrar,
         auth: {
-          matchTicket: (deviceId, arrivedAs, matches) =>
-            directTickets.consumeProven(deviceId, arrivedAs, matches),
+          opens: {
+            admit: (ticket, arrivedAs) => {
+              const deviceId = directTickets.consume(ticket, arrivedAs);
+              const publicKey =
+                deviceId === null ? undefined : hubServer.peerKey(deviceId);
+              return deviceId === null || publicKey === undefined
+                ? null
+                : { deviceId, publicKey };
+            },
+            localKey: () => hubServer.localKey(),
+          },
           isCommandGranted: acceptsPeerCommands,
           // The switches' one exception: the mirrors this device asked for.
           isInvited: mirrorInviteAdmits,
@@ -244,7 +255,7 @@ const serveConnectInfo = makeConnectInfo({
     const current = directLink.status();
     return current.listening ? current.port : null;
   },
-  mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
+  mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
   // is healthy (probed routable).
   tunnelUrl: () => tunnel.tunnelUrl(),

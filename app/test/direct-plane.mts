@@ -141,12 +141,6 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import * as Rpc from "effect/rpc/Rpc";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import { callOf } from "@shigomori/contracts/contract";
-import { linkContract } from "@shigomori/contracts/modules/link";
 import * as Deferred from "effect/Deferred";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
@@ -209,8 +203,12 @@ import {
 } from "@host/direct/tickets";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
-import { newHandshakeNonce } from "@shigomori/contracts/proof";
-import { decodeRelayFrame } from "@shigomori/contracts/hubProtocol";
+import { CLOSE_HANDSHAKE_FAILED } from "@shared/remote/sealedSocket";
+import {
+  decodeRelayFrame,
+  encodeRelayFrame,
+  MAX_DEVICE_CONNECTIONS,
+} from "@shigomori/contracts/hubProtocol";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
@@ -230,12 +228,13 @@ import {
   makeDirectBridge,
   mintTicket,
   mintTickets,
+  ONE_CONNECTION,
   startDirectListener as startListenerFixture,
 } from "./lib/directBoot.mts";
 import { bootDevice } from "./lib/hubBoot.mts";
 import { delay } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
-import { sealAsk, startStubHub } from "./lib/hubStub.mts";
+import { sealAsk, startStubHub, testDeviceKey } from "./lib/hubStub.mts";
 
 // A blackholed candidate (TEST-NET-3, never routed): a dial to it
 // hangs or dies on its own, never reaching any listener.
@@ -280,12 +279,19 @@ function dialWith(
   ticket: string,
   overrides: Partial<DeviceLinkOptions> = {},
 ) {
+  const localDeviceId = overrides.localDeviceId ?? "A";
+  const expectedDeviceId = overrides.expectedDeviceId ?? "B";
   return openDevice({
     url: `ws://127.0.0.1:${port}`,
     ticket,
+    // Sealed with the test keys the stub hub's roster names.
+    seal: {
+      localKey: testDeviceKey(localDeviceId).pair,
+      remoteKey: testDeviceKey(expectedDeviceId).pair.publicKey,
+    },
     appVersion: "1.0.0",
-    localDeviceId: "A",
-    expectedDeviceId: "B",
+    localDeviceId,
+    expectedDeviceId,
     onClose: () => {},
     openSocket: (url) => new WsClient(url),
     deadlineMs: 800,
@@ -315,6 +321,8 @@ function fakeAskDialer(
       typeof answer === "function" ? answer() : answer,
     localDeviceId: "A",
     localAppVersion: "1.0.0",
+    localKey: () => testDeviceKey("A").pair,
+    peerKey: (deviceId) => testDeviceKey(deviceId).pair.publicKey,
     dialableKinds: opts.dialableKinds,
     // The production socket (main injects ws), so the errno path the
     // seam exists for is what the proof runs.
@@ -377,81 +385,16 @@ async function delayProxy(track: Track, targetPort: number, delayMs: number) {
   return proxy.port;
 }
 
-// The device link's frames, as both ends write them (shared/remote/
-// link.ts): Effect's binary layout, an envelope around each call's own
-// encoded payload or outcome.
-const linkFrames = Effect.runSync(
-  RpcSerialization.RpcSerialization.pipe(
-    Effect.provide(RpcSerialization.layerSchemaBinary()),
-  ),
-);
-const challengeCall = callOf(linkContract, "challenge");
-const helloCall = callOf(linkContract, "hello");
-const challengeRequest = () =>
-  linkFrames.makeUnsafe().encode({
-    _tag: "Request",
-    id: "0",
-    tag: "link:challenge",
-    payload: Schema.encodeUnknownSync(
-      linkFrames.codecFor(challengeCall.payloadSchema),
-    )(undefined),
-    headers: [],
-  }) as Uint8Array;
-
-// A stub host answers the link's challenge the way a real listener
-// does, so the client goes on to say hello. Every other message it
-// hands to `heard`, decoded: a request's tag, and its payload.
-function answerChallenges(
-  socket: WsClient,
-  heard: (request: { tag: string; payload: unknown; frame: Buffer }) => void,
-) {
-  const parser = linkFrames.makeUnsafe();
-  socket.on("message", (data) => {
-    const frame = Buffer.from(data as Buffer);
-    for (const message of parser.decode(frame) as Record<string, unknown>[]) {
-      if (message["_tag"] !== "Request") continue;
-      if (message["tag"] === "link:challenge") {
-        socket.send(
-          parser.encode({
-            _tag: "Exit",
-            requestId: message["id"],
-            exit: Schema.encodeUnknownSync(
-              linkFrames.codecFor(Rpc.exitSchema(challengeCall)),
-            )(Exit.succeed({ nonce: newHandshakeNonce() })),
-          }) as Uint8Array,
-        );
-        continue;
-      }
-      if (message["tag"] === "link:hello") {
-        heard({
-          tag: "link:hello",
-          payload: Schema.decodeUnknownSync(
-            linkFrames.codecFor(helloCall.payloadSchema),
-          )(message["payload"]),
-          frame,
-        });
-      }
-    }
-  });
-}
-
-// The store never takes a raw ticket back (the dialer proves
-// possession instead), so this keeps the checks below reading the way
-// they read before that change. A loopback dial with no
-// CF-Connecting-IP arrives as a "lan" candidate, which is what the
-// default matches.
+// Whether a ticket is still pending for `peer`, spending it. A
+// loopback dial with no CF-Connecting-IP arrives as a "lan" candidate,
+// which is what the default matches.
 async function consumeTicket(
   store: ConnectTicketStore,
   ticket: string,
   peer: string,
   kind: DirectCandidateKind = "lan",
 ) {
-  const matched = await store.consumeProven(
-    peer,
-    kind,
-    async (candidate) => candidate === ticket,
-  );
-  return matched !== null;
+  return store.consume(ticket, kind) === peer;
 }
 
 // One dial with the connector's CF-Connecting-IP header set, as a
@@ -533,7 +476,7 @@ it("brokering: connectInfo over the device hub carries fully dialable candidates
   const ask = () =>
     client.connection.askConnectInfo(
       "B",
-      { dialableKinds: ["lan", "tunnel"] },
+      { dialableKinds: ["lan", "tunnel"], connectionId: ONE_CONNECTION },
       3000,
     );
   const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(await ask());
@@ -561,7 +504,7 @@ it("brokering: connectInfo over the device hub carries fully dialable candidates
   assert.deepEqual(await ask(), { available: false });
 });
 
-it("brokering serves the roster only: an ask forged from outside the host's live roster and an ask with a malformed input mint nothing, and a real ask mints for the hub-stamped caller", async () => {
+it("brokering serves the roster only: an ask forged from outside the host's live roster, an ask with a malformed input and a replayed ask mint nothing, and a real ask mints for the hub-stamped caller", async () => {
   const stub = await startStubHub(trackTest);
   const listener = await startDirectListener(trackTest);
   const minted: string[] = [];
@@ -575,7 +518,8 @@ it("brokering serves the roster only: an ask forged from outside the host's live
     from: "ghost",
     frame: sealAsk("ghost", "B", 1, {
       ask: CONNECT_INFO_ASK,
-      input: { dialableKinds: ["lan"] },
+      expiresAt: Date.now() + 60_000,
+      input: { dialableKinds: ["lan"], connectionId: ONE_CONNECTION },
     }).frame,
   });
   await delay(100);
@@ -590,12 +534,26 @@ it("brokering serves the roster only: an ask forged from outside the host's live
   const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(
     await client.connection.askConnectInfo(
       "B",
-      { dialableKinds: ["lan"] },
+      { dialableKinds: ["lan"], connectionId: ONE_CONNECTION },
       3000,
     ),
   );
   assert.equal(info.available, true);
   assert.equal(minted.length, 1);
+  // The same sealed ask, replayed by a hub under another id, mints
+  // nothing, so the asker's tickets stand.
+  const sent = stub.received.findLast(
+    (entry) => entry.from === "A" && entry.to === "B",
+  );
+  const replayed = sent === undefined ? null : decodeRelayFrame(sent.frame);
+  assert.ok(replayed !== null && replayed.kind === "ask");
+  stub.injectTo("B", {
+    t: "relay",
+    from: "A",
+    frame: encodeRelayFrame({ ...replayed, id: replayed.id + 1 }),
+  });
+  await delay(100);
+  assert.equal(minted.length, 1, "a replayed ask minted again");
   // Bound to the caller the hub stamped, not to anything the ask
   // could claim.
   assert.equal(
@@ -704,7 +662,7 @@ it("a refusing candidate cannot deny the dial: a far end that refuses has proved
   assert.equal(connection.remoteDeviceId, "B");
 });
 
-it("serialized hellos: with two reachable candidates the slow one never hellos, the winner's session survives (no supersede) and the loser's ticket stays unspent", async () => {
+it("serialized hellos: with two reachable candidates the slow one never hellos, the winner's session survives (no supersede), and the winner's ticket is spent", async () => {
   const listener = await startDirectListener(trackTest);
   // The SAME listener behind a delayed route and a direct one. The
   // slow candidate's socket opens well after the fast one won: if
@@ -745,13 +703,9 @@ it("serialized hellos: with two reachable candidates the slow one never hellos, 
     "still the winner",
     "the slow candidate's late hello superseded the winning session",
   );
-  // The loser never sent a hello, so its ticket was never
-  // presented and is still consumable.
-  assert.equal(
-    await consumeTicket(listener.tickets, slowTicket, "A"),
-    true,
-    "the abandoned candidate spent its ticket",
-  );
+  // Each candidate's socket opens with its own ticket, so the loser
+  // spends at most its own, whether it opened before it was abandoned
+  // or not: what matters is that it never said hello.
   assert.equal(await consumeTicket(listener.tickets, fastTicket, "A"), false);
 });
 
@@ -943,78 +897,49 @@ it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema a
   );
 });
 
-it("the ticket never travels: a machine that answers at an advertised LAN address captures nothing it can spend, and the hello it did capture is worthless against the real listener", async () => {
+it("a machine that answers at an advertised LAN address learns the ticket and nothing it can use: the dial to it fails the handshake, and what it heard opens nothing at the real listener", async () => {
   const listener = await startDirectListener(trackTest);
   const ticket = mintTicket(listener.tickets, "A");
   // The impostor: whoever holds that private address on the network
-  // the dialer happens to be on. It challenges like a real host so
-  // the client will talk to it at all, then keeps what it is told.
-  const heard: { tag: string; payload: unknown; frame: Buffer }[] = [];
+  // the dialer happens to be on. It keeps what it is sent.
+  const heard: Buffer[] = [];
   const impostor = new WebSocketServer({ host: "127.0.0.1", port: 0 });
   impostor.on("connection", (socket) => {
-    answerChallenges(socket, (request) => heard.push(request));
+    socket.on("message", (data) => heard.push(Buffer.from(data as Buffer)));
   });
   await new Promise((resolve) => impostor.on("listening", resolve));
   trackTest(
     () => new Promise<void>((resolve) => impostor.close(() => resolve())),
   );
 
-  // The victim dials the impostor with a live ticket.
+  // It cannot answer a handshake sealed to B's key.
   await assert.rejects(
     () =>
       dialWith(boundPort(impostor), ticket, {
         deadlineMs: 600,
         expectedDeviceId: "B",
       }),
-    "the client accepted a host that never proved it holds the ticket",
+    "the client accepted a host that never proved it holds B's key",
   );
-  const captured = heard.find((request) => request.tag === "link:hello");
-  assert.ok(captured !== undefined, "the impostor saw no hello at all");
-  assert.equal(
-    (captured.payload as Record<string, unknown>)["ticket"],
-    undefined,
-    "the connect ticket was sent to whoever answered first",
-  );
-  assert.equal(
-    captured.frame.includes(ticket),
-    false,
-    "the connect ticket appeared on the wire",
-  );
+  const first = heard[0];
+  assert.ok(first !== undefined, "the impostor saw nothing");
+  assert.ok(first.includes(ticket), "the ticket opens the socket in clear");
 
-  // What the impostor did capture, replayed verbatim at the real
-  // listener after its own challenge, links nothing: the proof answers
-  // a nonce that listener never issued.
-  const replay = await new Promise<unknown>((resolve) => {
+  // Replayed at the real listener, the first frame spends the ticket
+  // and draws an answer only A can read: nothing the impostor sends
+  // after it authenticates, and the socket closes.
+  const closedWith = await new Promise<number>((resolve) => {
     const socket = new WsClient(`ws://127.0.0.1:${listener.port}`);
-    const parser = linkFrames.makeUnsafe();
-    socket.on("open", () => socket.send(challengeRequest()));
-    socket.on("message", (data) => {
-      for (const message of parser.decode(
-        Buffer.from(data as Buffer),
-      ) as Record<string, unknown>[]) {
-        if (message["_tag"] !== "Exit") continue;
-        if (message["requestId"] === "0") {
-          socket.send(captured.frame);
-          continue;
-        }
-        socket.close();
-        resolve(
-          Schema.decodeUnknownSync(
-            linkFrames.codecFor(Rpc.exitSchema(helloCall)),
-          )(message["exit"]),
-        );
-      }
-    });
+    socket.on("open", () => socket.send(first));
+    socket.once("message", () => socket.send(first));
+    socket.on("close", (code) => resolve(code));
     socket.on("error", () => {});
   });
-  assert.ok(Exit.isExit(replay) && Exit.isFailure(replay));
-  assert.ok(Cause.squash(replay.cause) instanceof LinkRefusedError);
-  // The ticket was never spent by any of that, so the honest dial
-  // it belongs to still works.
+  assert.equal(closedWith, CLOSE_HANDSHAKE_FAILED);
   assert.equal(
     await consumeTicket(listener.tickets, ticket, "A"),
-    true,
-    "the impostor burned a ticket it never held",
+    false,
+    "a replayed first frame left its ticket pending",
   );
 });
 
@@ -1170,7 +1095,7 @@ it("ticket single-use and expiry: a replayed ticket and an expired ticket are re
   );
 });
 
-it("per-peer ticket bookkeeping: one peer's mint replaces only its own set, siblings in a set stay independently consumable, and the backstop refuses instead of evicting", async () => {
+it("per-connection ticket bookkeeping: one connection's mint replaces only its own set, a device's sibling connections each keep theirs, siblings in a set stay independently consumable, a device's sets are capped, and the backstop refuses instead of evicting", async () => {
   const store = createConnectTicketStore();
   // Siblings of one candidate-set are independent: consuming one
   // must not spend the others (the old single-ticket design burned
@@ -1193,6 +1118,27 @@ it("per-peer ticket bookkeeping: one peer's mint replaces only its own set, sibl
     "a replaced ticket authed",
   );
   assert.equal(await consumeTicket(store, entryAt(a2, 0), "A"), true);
+  // Two tabs of one web device asking at once each keep their set.
+  const tab1 = "1".repeat(32);
+  const tab2 = "2".repeat(32);
+  const first = mintTickets(store, "W", 1, "tunnel", tab1);
+  const second = mintTickets(store, "W", 1, "tunnel", tab2);
+  assert.equal(
+    await consumeTicket(store, entryAt(first, 0), "W", "tunnel"),
+    true,
+  );
+  assert.equal(
+    await consumeTicket(store, entryAt(second, 0), "W", "tunnel"),
+    true,
+  );
+  // A device asking under ever new connections holds at most
+  // MAX_DEVICE_CONNECTIONS sets: its oldest gives way, and no one
+  // else's does.
+  const oldest = mintTickets(store, "F", 1, "lan", "0".repeat(32));
+  for (let i = 1; i <= MAX_DEVICE_CONNECTIONS; i += 1) {
+    mintTickets(store, "F", 1, "lan", i.toString(16).padStart(32, "0"));
+  }
+  assert.equal(await consumeTicket(store, entryAt(oldest, 0), "F"), false);
   // The global backstop refuses the overflowing mint outright and
   // never evicts another peer's pending tickets (an eviction would
   // feed the per-IP lockout against the innocent peer's dial).
@@ -1200,7 +1146,7 @@ it("per-peer ticket bookkeeping: one peer's mint replaces only its own set, sibl
   for (let i = 0; i < 200; i += 1) mintTickets(store, `peer-${i}`, 1);
   assert.equal(
     store.mint(
-      "overflow",
+      { deviceId: "overflow", connectionId: ONE_CONNECTION },
       Array.from({ length: 60 }, () => "lan"),
     ),
     null,
@@ -1218,16 +1164,14 @@ it("identity binding: a ticket minted for one device refuses another, and a wron
     refusedTicket,
     "a ticket bound to another device authenticated",
   );
-  // The welcome names B. A dial pinned to another identity must
-  // fail and close rather than cache the wrong machine.
+  // A dial pinned to another identity is sealed to that device's key,
+  // which B does not hold: it fails at the handshake and closes rather
+  // than cache the wrong machine.
   const ticket = mintTicket(listener.tickets, "A");
   await assert.rejects(
     () => dialWith(listener.port, ticket, { expectedDeviceId: "X" }),
-    (error) =>
-      error instanceof RemoteConnectError &&
-      error.blocked &&
-      /unexpected device/.test(error.message),
-    "a welcome from the wrong device passed the identity pin",
+    (error) => error instanceof RemoteConnectError && error.blocked,
+    "a dial pinned to another device linked to B",
   );
 });
 
@@ -1755,7 +1699,10 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
     acceptsCommands: () => false,
     sharesData: () => true,
   });
-  const all = { dialableKinds: ["lan", "tunnel"] };
+  const all = {
+    dialableKinds: ["lan", "tunnel"],
+    connectionId: ONE_CONNECTION,
+  };
   // Unhealthy tunnel: lan candidates only, with IPv6 literals
   // bracketed into dialable URLs.
   const without = connectInfo("A", all);
@@ -1806,7 +1753,10 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   // and a tunnel-only caller against a tunnel-less host gets
   // available:false with nothing minted at all.
   const before = minted.length;
-  const tunnelOnly = connectInfo("A", { dialableKinds: ["tunnel"] });
+  const tunnelOnly = connectInfo("A", {
+    dialableKinds: ["tunnel"],
+    connectionId: ONE_CONNECTION,
+  });
   assert.equal(tunnelOnly.available, true);
   assert.deepEqual(
     tunnelOnly.candidates.map(({ kind }) => kind),
@@ -1814,14 +1764,20 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   );
   assert.equal(minted.length, before + 1);
   assert.equal(minted.at(-1)?.length, 1, "a lan ticket was minted anyway");
-  const lanOnly = connectInfo("A", { dialableKinds: ["lan"] });
+  const lanOnly = connectInfo("A", {
+    dialableKinds: ["lan"],
+    connectionId: ONE_CONNECTION,
+  });
   assert.equal(lanOnly.available, true);
   assert.deepEqual(
     lanOnly.candidates.map(({ kind }) => kind),
     ["lan", "lan"],
   );
   tunnel = null;
-  const nothing = connectInfo("A", { dialableKinds: ["tunnel"] });
+  const nothing = connectInfo("A", {
+    dialableKinds: ["tunnel"],
+    connectionId: ONE_CONNECTION,
+  });
   const mintsSoFar = minted.length;
   assert.deepEqual(nothing, { available: false });
   assert.equal(
