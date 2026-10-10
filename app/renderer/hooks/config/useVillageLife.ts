@@ -6,7 +6,7 @@ import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
 import { useClientConfig } from "./useClientConfig";
 
 // Whether villager extras show: true only while this window has Village
-// life on (villageLifeEnabled in shared/villageLife.ts) and this device
+// life on (villageLifeEnabled in ui's lib/villageLife.ts) and this device
 // holds the villager data, downloaded from Settings. Every villager
 // extra (faces, catchphrases, birthdays, anything purely visual that
 // dresses up a worktree named after a character) MUST gate on this

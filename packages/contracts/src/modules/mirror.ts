@@ -27,7 +27,6 @@ import { strict } from "../schemas/strict.ts";
 // channels on the device link (openStream below, the link's channels in
 // modules/link.ts), and serves `file-sync serve` for peers mirroring
 // FROM here.
-
 //
 // Host-scoped: a device's mirrors are facts about that device, and a
 // remote viewer sees them (list is a read). A mirror always runs on

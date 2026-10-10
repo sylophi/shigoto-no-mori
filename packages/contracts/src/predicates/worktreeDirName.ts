@@ -1,7 +1,6 @@
 // Branch-name sanitization shared between the engine (naming the
 // worktree directory) and the renderer (previewing the destination path
 // in the new-worktree form).
-
 //
 // Unicode (CJK, emoji, accents) passes through untouched; we only mangle
 // what genuinely breaks as a single-segment directory name: path

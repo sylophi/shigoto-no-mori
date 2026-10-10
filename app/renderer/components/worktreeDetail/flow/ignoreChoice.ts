@@ -36,7 +36,7 @@ import type { PullChoice } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
 // The rule itself (the selection, its mode, the setup default and the
-// patterns it resolves to) lives in shared/leaveOutRule.ts, which the
+// patterns it resolves to) lives in contracts' leaveOutRule.ts, which the
 // CLI's control ops read too. Re-exported for the dialogs.
 export {
   type IgnoreSelection,

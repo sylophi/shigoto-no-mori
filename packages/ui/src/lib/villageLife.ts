@@ -1,7 +1,7 @@
 // Doubutsu names and Village life, read off the config that holds each.
 //
-// doubutsuNames is a device setting (config.json), read by the CLI's
-// name pick. It reads as off when unset, which is what an install from
+// doubutsuNames is a device setting, read by the engine's name pick.
+// It reads as off when unset, which is what an install from
 // before it defaulted on has, so an upgrade never changes its names. A
 // fresh install is seeded with it on instead (the store's first open,
 // the engine's migrations/importJson.ts). It picks worktree names from

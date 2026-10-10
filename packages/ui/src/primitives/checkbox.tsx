@@ -6,7 +6,7 @@ import { Check, Minus } from "lucide-react";
 import { cn } from "../lib/utils.ts";
 import type { WithoutTitle } from "./tooltip.tsx";
 
-// The app's checkbox, on the same Base UI footing as `ui/switch.tsx`.
+// The app's checkbox, on the same Base UI footing as `primitives/switch.tsx`.
 // Base UI renders a real hidden input underneath, so native semantics,
 // keyboard handling and label association all survive, and the
 // `label:has(input[type="checkbox"])` row-hover hook doubutsu.css hangs

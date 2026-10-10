@@ -1,6 +1,6 @@
 // Renderer registry of remote devices: the account's devices,
 // deviceId-keyed. There is no per-device supervisor in the renderer.
-// The one hub socket lives in main and a device's status DERIVES from
+// The one hub socket lives in the host and a device's status DERIVES from
 // the bridge (remoteDeviceSync.ts rebuilds the list wholesale on boot, on
 // account changes and on every hub status change). The registry is
 // the external store a React binding reads through useSyncExternalStore,
@@ -43,14 +43,14 @@ export type RemoteDevice = {
   acceptsCommands?: boolean;
   // Present while the peer is online in the roster, whether or not a
   // direct session exists yet. Nothing here ever opens one: sessions
-  // are supervised desired state owned by main's keeper
+  // are supervised desired state owned by the host's keeper
   // (shared/hub/directKeeper.ts), which dials every rostered peer
   // eagerly and redials forever. The api ships early anyway so a view
   // can stand ready through the dial window -- a call landing on the
   // in-flight dial joins it, one landing on no session rejects, and
   // the online-to-connected transition refetches it
   // (remoteDeviceSync.ts). Host calls route over the hub bridge onto
-  // the direct wire. Client-scoped calls reject (lib/runtime/Api.ts,
+  // the device link. Client-scoped calls reject (lib/runtime/Api.ts,
   // peerApi).
   api?: RemoteDeviceApi;
 };

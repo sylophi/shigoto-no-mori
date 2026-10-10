@@ -38,7 +38,7 @@ interface SwitchToPrimaryInput {
 
 // Post-merge cleanup on the repo root: switch it back onto the primary
 // branch (fast-forwarding the local primary onto its remote tip) and delete
-// the now-merged branch it was sitting on. This is a SINGLE main-side
+// the now-merged branch it was sitting on. This is a SINGLE host-side
 // operation on purpose: the switch flips the root's branch to the primary,
 // which unmounts the cleanup box, and React Query drops a `mutate()`
 // callback once its component has unmounted, so chaining the delete in
