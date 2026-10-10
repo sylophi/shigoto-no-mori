@@ -29,6 +29,9 @@ import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
+import * as Terminals from "@host/lib/terminals/Terminals";
+import { closeMissingTerminals } from "@host/lib/terminals/Terminals";
+import { terminalStart } from "@host/ipc/scriptRun";
 import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
@@ -126,6 +129,8 @@ function onExternalStateChange() {
   void refreshProjects()
     .catch(() => undefined)
     .then(reconcileGitWatchers);
+  // A worktree or project gone takes its terminals with it.
+  void closeMissingTerminals();
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and
   // holding its port.
@@ -274,6 +279,10 @@ const scriptsAndFoundation = (options: {
     Layer.provideMerge(
       starts("the orphan script sweep", startOrphanScriptSweep),
     ),
+    // Every terminal, each saved for the next start as it closes with
+    // the quit.
+    Layer.provideMerge(Terminals.adapter),
+    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.adapter),

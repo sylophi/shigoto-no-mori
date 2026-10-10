@@ -37,6 +37,7 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
+import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import { controlContract } from "@shigomori/contracts/modules/control";
 import { terrierContract } from "@shigomori/contracts/modules/terrier";
@@ -101,6 +102,7 @@ import {
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
+import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
 import { setControlImpl } from "@host/lib/control/peers";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
@@ -660,6 +662,8 @@ export function registerHostHandlers(): void {
   registerContract(hygieneContract, hygieneHandlers);
   registerContract(scriptsContract, scriptsHandlers);
   registerViews(scriptsContract, scriptsViews);
+  registerContract(terminalsContract, terminalsHandlers);
+  registerViews(terminalsContract, terminalsViews);
   // A burst (a lifecycle starting setup and port-pool together, a
   // project's scripts stopped at once) goes out as one ping.
   onRunningScriptsChanged(

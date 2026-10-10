@@ -3,7 +3,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 // The tables a view is read from. The two caches (icon_cache,
 // clone_verified) are left out: nothing shows them, and a clone checkout
-// writes a row per file.
+// writes a row per file. So are the saved terminals, which only the
+// host's next start reads.
 const firstTables = [
   "projects",
   "project_order",
