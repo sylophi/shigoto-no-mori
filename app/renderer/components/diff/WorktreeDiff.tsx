@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
@@ -25,12 +24,10 @@ import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { isOverlayOpen } from "@/lib/dom";
-import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { worktreeSyncView } from "@/lib/syncState";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
-import { Kbd } from "@/components/ui/kbd";
 import {
   changeKey,
   isUntracked,
@@ -44,9 +41,11 @@ import {
   includedFiles,
   type DiffChangesControls,
 } from "./changesControls";
-import { CommitComposer } from "./CommitComposer";
-import { DiffView } from "./DiffView";
-import { LastCommitStrip } from "./LastCommitStrip";
+import { CommitComposerView } from "./CommitComposerView";
+import { DiffPage } from "./DiffPage";
+import { WorktreeDiffSubtitleView } from "./DiffTitlesView";
+import { ChangesFooterView, CleanTreeMessageView } from "./WorktreeDiffView";
+import { LastCommitStripView } from "./LastCommitStripView";
 import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 
 export function WorktreeDiff() {
@@ -64,7 +63,7 @@ export function WorktreeDiff() {
   }
 
   return (
-    <ChangesView
+    <WorktreeChanges
       worktree={worktree}
       onBack={goBack}
       amendRequested={amend === true}
@@ -79,7 +78,7 @@ export function WorktreeDiff() {
 // component so the change hooks only mount once the worktree resolved.
 // On a peer that takes no commands from here, the list only reads and
 // the composer gives way to the read-only note.
-function ChangesView({
+function WorktreeChanges({
   worktree,
   onBack,
   amendRequested,
@@ -283,73 +282,68 @@ function ChangesView({
   };
 
   const footer = (
-    <div
-      data-slot="changes-footer"
-      className={cn(
-        // One rhythm down the foot: rows of one height at one inset,
-        // and the commit box a field's gap under them.
-        "flex flex-col border-t border-border pt-1 pb-2.5",
-      )}
-    >
-      <BranchBar worktree={worktree} />
-      {lastCommit && rewrite.canAmend && (
-        <LastCommitStrip
-          commit={lastCommit}
-          amending={amending}
-          canUndo={rewrite.undo !== null}
-          busy={busy}
-          onAmend={() => setAmending(true)}
-          onUndo={() => {
-            const u = rewrite.undo;
-            if (u) undo.undoTo(u);
-          }}
-        />
-      )}
-      {showComposer && (
-        <CommitComposer
-          files={list}
-          draft={draft}
-          onDraftChange={setDraft}
-          pending={commit.isPending}
-          error={commit.error}
-          amend={
-            amending && lastCommit
-              ? {
-                  hash: lastCommit.hash,
-                  onCancel: () => setAmending(false),
-                }
-              : null
-          }
-          onCommit={onCommit}
-        />
-      )}
-      {!canCommand && (
-        <p className="px-3 pt-1 text-xs text-muted-foreground">
-          {peerReadOnlyNote()}
-        </p>
-      )}
-    </div>
+    <ChangesFooterView
+      branchBar={<BranchBar worktree={worktree} />}
+      lastCommit={
+        lastCommit &&
+        rewrite.canAmend && (
+          <LastCommitStripView
+            commit={lastCommit}
+            amending={amending}
+            canUndo={rewrite.undo !== null}
+            busy={busy}
+            onAmend={() => setAmending(true)}
+            onUndo={() => {
+              const u = rewrite.undo;
+              if (u) undo.undoTo(u);
+            }}
+          />
+        )
+      }
+      composer={
+        showComposer && (
+          <CommitComposerView
+            files={list}
+            draft={draft}
+            onDraftChange={setDraft}
+            pending={commit.isPending}
+            error={commit.error}
+            amend={
+              amending && lastCommit
+                ? {
+                    hash: lastCommit.hash,
+                    onCancel: () => setAmending(false),
+                  }
+                : null
+            }
+            onCommit={onCommit}
+          />
+        )
+      }
+      readOnlyNote={canCommand ? null : peerReadOnlyNote()}
+    />
   );
 
   return (
-    <DiffView
+    <DiffPage
       diff={diff}
       onBack={onBack}
       worktree={worktree}
       title="Uncommitted changes"
       subtitle={
-        <>
-          {changedCount > 0
-            ? `${pluralize(changedCount, "file")} changed`
-            : "No changes"}{" "}
-          in <span className="font-mono">{worktree.name}</span>
-        </>
+        <WorktreeDiffSubtitleView
+          changedCount={changedCount}
+          worktreeName={worktree.name}
+        />
       }
       emptyMessage={
         failed ? (
           "Couldn't read the changes."
         ) : (
-          <CleanTreeMessage worktree={worktree} shortcut={sendShortcut} />
+          <CleanTreeMessageView
+            owed={worktreeSyncView(worktree).owed}
+            shortcut={sendShortcut}
+          />
         )
       }
       changes={controls}
@@ -359,33 +353,6 @@ function ChangesView({
       )}
       footer={footer}
     />
-  );
-}
-
-// What the pane says once everything is committed: that the tree is
-// clean, and what the branch still owes the remote, the next thing to
-// do, which the branch bar below has the button for.
-function CleanTreeMessage({
-  worktree,
-  shortcut,
-}: {
-  worktree: Worktree;
-  // What ⌘↵ runs here, when it runs anything.
-  shortcut: string | null;
-}) {
-  const next = worktreeSyncView(worktree).owed;
-  return (
-    <span className="flex flex-col items-center gap-2">
-      <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
-      <span className="text-foreground">No uncommitted changes</span>
-      {next && <span className="text-xs">{next}</span>}
-      {shortcut && (
-        <span className="flex items-center gap-1.5 text-xs">
-          <Kbd>⌘↵</Kbd>
-          {shortcut}
-        </span>
-      )}
-    </span>
   );
 }
 

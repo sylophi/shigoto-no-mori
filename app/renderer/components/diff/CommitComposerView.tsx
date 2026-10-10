@@ -29,7 +29,7 @@ const SUMMARY_SOFT_LIMIT = 72;
 //
 // Amending: the button turns into "Amend with ...", the file rules stay
 // the same, and a message-only amend on a clean tree is allowed too.
-export function CommitComposer({
+export function CommitComposerView({
   files,
   draft,
   onDraftChange,

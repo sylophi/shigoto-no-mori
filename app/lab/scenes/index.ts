@@ -48,6 +48,7 @@ import {
   NewWorktreeBranchScene,
   NewWorktreeScene,
 } from "./newCheckouts";
+import { ChangesPageScene, CommitPageScene, DiffPartsScene } from "./diffPages";
 import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
 import {
@@ -102,6 +103,9 @@ export const scenes = {
   newWorktreeBranch: { Scene: NewWorktreeBranchScene, ...DESKTOP },
   addProject: { Scene: AddProjectScene, ...DESKTOP },
   addProjectParts: { Scene: AddProjectPartsScene, size: [1300, 1500] },
+  changesPage: { Scene: ChangesPageScene, ...DESKTOP },
+  commitPage: { Scene: CommitPageScene, ...DESKTOP },
+  diffParts: { Scene: DiffPartsScene, size: [1300, 900] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

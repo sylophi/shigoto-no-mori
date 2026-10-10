@@ -2,10 +2,10 @@ import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { pluralize } from "@/lib/pluralize";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
-import { DiffView } from "./DiffView";
+import { DiffPage } from "./DiffPage";
+import { BranchDiffSubtitleView } from "./DiffTitlesView";
 
 // Everything the branch's commits change against where it left the
 // primary branch: what a pull request of it would show, with or without
@@ -25,18 +25,16 @@ export function BranchDiff() {
 
   const commits = history?.commits.length;
   return (
-    <DiffView
+    <DiffPage
       diff={diff}
       onBack={goBack}
       worktree={worktree}
       title="All branch changes"
       subtitle={
-        <>
-          {commits !== undefined && `${pluralize(commits, "commit")} since `}
-          <span className="font-mono">
-            {history?.base?.ref ?? worktree.primaryRef}
-          </span>
-        </>
+        <BranchDiffSubtitleView
+          commits={commits}
+          base={history?.base?.ref ?? worktree.primaryRef}
+        />
       }
       sidebarActions={<MergeButton worktree={worktree} />}
       renderSidebar={() => (
