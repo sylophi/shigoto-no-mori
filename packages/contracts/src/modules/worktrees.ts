@@ -34,6 +34,7 @@ import {
   MergePreviewSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
+  RenameWorktreePayloadSchema,
   RenameBranchPayloadSchema,
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
@@ -105,6 +106,12 @@ export const worktreesContract = defineContract(
     },
   ),
   invoke("relocate", RelocateWorktreePayloadSchema, WorktreeSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  invoke("rename", RenameWorktreePayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,

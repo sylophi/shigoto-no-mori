@@ -999,3 +999,94 @@ describe("projects relocate", () => {
     assert.equal(doc.project.path, moved);
   });
 });
+
+describe("worktrees rename", () => {
+  it("moves the folder to its new name, and refuses what create would", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    const base = join(box.side("cli"), "wt", "alpha");
+    for (const name of ["fox", "owl"]) {
+      box.git(alpha, "worktree", "add", "-q", "-b", name, join(base, name));
+    }
+    const usage = await runAt(box.home, "worktrees", "rename");
+    assert.equal(usage.code, 2);
+    assert.equal(
+      usage.stderr,
+      "smd: Usage: smd worktrees rename [<name>] <new-name>\n",
+    );
+    const renamed = await runAt(
+      box.home,
+      "wt",
+      "rename",
+      "-p",
+      "alpha",
+      "fox",
+      "otter",
+    );
+    assert.equal(renamed.code, 0, renamed.stderr);
+    assert.equal(renamed.stdout, `${join(base, "otter")}\n`);
+    const again = await runAt(
+      box.home,
+      "--json",
+      "worktrees",
+      "rename",
+      "-p",
+      "alpha",
+      "otter",
+      "badger",
+    );
+    const doc = again.doc as {
+      ok: boolean;
+      worktree: { id: string; name: string; path: string };
+      previousId: string;
+    };
+    assert.equal(doc.ok, true);
+    assert.equal(doc.worktree.name, "badger");
+    assert.equal(doc.worktree.path, join(base, "badger"));
+    assert.notEqual(doc.previousId, doc.worktree.id);
+    const taken = await runAt(
+      box.home,
+      "worktrees",
+      "rename",
+      "-p",
+      "alpha",
+      "badger",
+      "OWL",
+    );
+    assert.equal(taken.code, 1);
+    assert.equal(
+      taken.stderr,
+      'smd: A worktree folder named "OWL" already exists in this project.\n',
+    );
+    const primary = await runAt(
+      box.home,
+      "worktrees",
+      "rename",
+      "-p",
+      "alpha",
+      "root",
+      "x",
+    );
+    assert.equal(primary.code, 1);
+    assert.equal(
+      primary.stderr,
+      "smd: The primary checkout keeps its folder's name\n",
+    );
+    assert.equal(
+      (
+        await runAt(
+          box.home,
+          "worktrees",
+          "rename",
+          "-p",
+          "alpha",
+          "owl",
+          "a/b",
+        )
+      ).code,
+      2,
+    );
+  });
+});

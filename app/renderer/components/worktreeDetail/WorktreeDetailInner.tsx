@@ -50,6 +50,7 @@ import { WorktreeDetailView } from "./WorktreeDetailView";
 import { TerminalButton } from "./TerminalButton";
 import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { WorktreeHeader } from "./WorktreeHeader";
+import { WorktreeLocation } from "./WorktreeLocation";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { GitSection } from "./git/GitSection";
 import { DescriptionSection } from "./DescriptionSection";
@@ -230,8 +231,7 @@ export function WorktreeDetailInner({
       copyTabs={mirrorCopies && <MirrorCopyTabs copies={mirrorCopies} />}
       projectName={project.name}
       onConfigure={() => toProjectPage("configure", worktree.projectId)}
-      path={worktree.path}
-      home={home}
+      location={<WorktreeLocation worktree={worktree} home={home} />}
       marks={
         <>
           <WorktreeActivityIndicator worktree={worktree} />

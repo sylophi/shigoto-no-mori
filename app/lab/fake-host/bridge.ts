@@ -509,6 +509,33 @@ function hostHandlersFor(
       forest.worktrees[projectId] = rows.filter((w) => !removed.includes(w.id));
       return { ok: true, removed };
     },
+    // A rename moves the folder, so the row comes back under a new id,
+    // as the host's does, and what the fixtures keep by the old id
+    // stays there.
+    "worktrees:rename": ({ projectId, worktreeId, name }) => {
+      const rows = forest.worktrees[projectId] ?? [];
+      const row = rows.find((w) => w.id === worktreeId);
+      if (!row) throw new Error("That worktree is gone.");
+      if (rows.some((w) => w.id !== worktreeId && w.name === name)) {
+        throw new Error(
+          `A worktree folder named "${name}" already exists in this project.`,
+        );
+      }
+      const renamed = {
+        ...row,
+        // A 12-hex id of the new path, as the host's is.
+        id: [...`${worktreeId}/${name}`]
+          .reduce((hash, c) => (hash * 31 + c.charCodeAt(0)) >>> 0, 7)
+          .toString(16)
+          .padStart(12, "0"),
+        name,
+        path: `${row.path.slice(0, row.path.lastIndexOf("/"))}/${name}`,
+      };
+      forest.worktrees[projectId] = rows.map((w) =>
+        w.id === worktreeId ? renamed : w,
+      );
+      return renamed;
+    },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:fileDiff": ({ worktreeId, paths }) =>
