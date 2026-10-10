@@ -47,7 +47,6 @@ import { PortNumberSchema } from "./schemas/ports.ts";
 // connectInfo ask and answer, and presence, all small control frames, so this is a
 // control-frame budget rather than a data budget. Contract data rides
 // the device links and never this wire. An oversize forward is
-
 // answered with a `too-large` nack to the sender. The worst legitimate
 // frame is a connectInfo answer (a handful of URLs and tickets), far
 // under this, and the worst-case presence roster fits too (asserted in
@@ -416,9 +415,12 @@ export function decodeRelayFrame(text: string): RelayFrame | null {
 }
 
 // What the sealed messages carry, as JSON. An undefined input or result
-// rides as an absent field.
+// rides as an absent field. An ask names when it expires, in epoch
+// milliseconds on the asker's clock: an IK first message can be
+// replayed, so the answering device turns away one it has read before
+// until then, and any past it.
 //
-//   ask:    { ask, input? }
+//   ask:    { ask, expiresAt, input? }
 //   answer: { ok: true, result? } | { ok: false, message, code? }
 //
 // Bounded like every string a hostile peer could inflate.
@@ -426,6 +428,7 @@ const AskNameSchema = Schema.String.check(Schema.isMaxLength(64));
 
 export const AskPayloadSchema = Schema.Struct({
   ask: AskNameSchema,
+  expiresAt: Schema.Int,
   input: Schema.optional(Schema.Unknown),
 });
 export type AskPayload = typeof AskPayloadSchema.Type;

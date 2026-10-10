@@ -66,7 +66,6 @@ export function projectNamed(deviceId: string, name: string): Project {
   return project;
 }
 
-// A worktree of a project, by name.
 export function worktreeNamed(project: Project, name: string): Worktree {
   for (const forest of Object.values(forests)) {
     const worktree = forest.worktrees[project.id]?.find((w) => w.name === name);

@@ -10,7 +10,10 @@
 // DIAL STRATEGY: one overall deadline around the WHOLE attempt (the ask
 // included: it gets the deadline as its timeout, so a wedged peer that
 // never answers cannot hang the bridge's cached promise forever). All
-// candidate SOCKETS open concurrently, but the HELLOS are serialized:
+// candidate SOCKETS open concurrently, each sealed with its own ticket
+// to the key the hub's roster names for the peer (shared/remote/
+// sealedSocket.ts), so whoever answers a candidate address, only the
+// peer completes the handshake. The HELLOS are serialized:
 // at most one hello is in flight, the next candidate's hello goes out
 // only after the previous handshake failed, and losers whose hello
 // was never sent are closed pre-auth. Serialization is what makes a
@@ -18,22 +21,21 @@
 // one-authed-socket-per-device supersede rule: with concurrent hellos
 // the SLOWER candidate's hello would land after the winner was cached
 // and supersede-kill the fresh session, so the first invoke on it
-// would reject. An abandoned pre-auth socket is
-// harmless to the host (no ticket spent, nothing superseded), so a
-// junk candidate opening first (Docker bridges, VPN interfaces) costs
-// only its own open, never the race.
+// would reject. An abandoned pre-auth socket costs the host only its
+// own candidate's ticket and supersedes nothing, so a junk candidate
+// opening first (Docker bridges, VPN interfaces) costs only its own
+// open, never the race.
 //
 // BLOCKED VERDICTS: what makes a verdict terminal is the host's answer,
 // because this side has no other honest source. The host refuses a bad
-// ticket's hello with LinkRefusedError (blocked) and closes on a
-// locked-out client before its hello (retryable), and only the host can
-// tell those apart: the lockout keys on client IP, and benches whoever
+// ticket or key by closing the handshake with its own code (read as
+// LinkRefusedError, blocked) and closes on a locked-out client before
+// it (retryable), and only the host can tell those apart: the lockout keys on client IP, and benches whoever
 // dials next even with a perfect ticket.
 //
 // A blocked verdict is terminal, but it does NOT end the race: a
-// refusing far end has proved nothing, and a plaintext LAN address may
-// be held by a squatter, which must not deny a dial the tunnel can
-// still win. The refusal is remembered and decides the attempt only if
+// refusing far end has proved nothing, and a LAN address may be held by
+// a squatter, which must not deny a dial the tunnel can still win. The refusal is remembered and decides the attempt only if
 // no candidate wins (at exhaustion or at the deadline).
 //
 // STRUCTURAL VERDICTS: two answers to the ask are facts about the peer
@@ -62,6 +64,7 @@
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
 // global WebSocket serves openDevice).
+import type { KeyPair } from "@shared/crypto/noise";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import * as Schema from "effect/Schema";
 import {
@@ -74,6 +77,7 @@ import {
 } from "@shigomori/contracts/modules/direct";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
+  newConnectionId,
   openDevice,
   type OpenClientSocket,
   RemoteConnectError,
@@ -120,15 +124,14 @@ export class NoDialableCandidateError extends Error {
   }
 }
 
-// True when redialing cannot change the outcome until the peer's own
-// state changes: a blocked verdict (a ticket the host read and refused,
-// or the wrong machine answered) or a peer with no direct listener.
-// The keeper PARKS on these instead of retrying on the ladder, which
-// is what keeps eager supervision from feeding the host's per-identity
-// failed-auth lockout a steady diet of refused tickets: a parked peer
-// redials only when presence says its state changed (offline to
-// online), never on a timer. Every other failure (unreachable,
-// deadline, no listener yet) is transient and retries forever.
+// True when redialing at once cannot change the outcome: a blocked
+// verdict (a ticket the host read and refused, or the wrong machine
+// answered) or a peer with no direct listener. The keeper parks on the
+// second, and asks again after the first only on its slow refusal
+// ladder, which keeps eager supervision from feeding the host's
+// per-identity failed-auth lockout a steady diet of refused tickets.
+// Every other failure (unreachable, deadline, no listener yet) is
+// transient and retries forever on the shared ladder.
 export function isTerminalDialError(error: unknown): boolean {
   return (
     (error instanceof RemoteConnectError && error.blocked) ||
@@ -146,9 +149,13 @@ export type DirectDialerDeps = {
     input: DirectConnectInfoInput,
     timeoutMs: number,
   ): Promise<unknown>;
-  // This device's identity, carried in the direct hello alongside the
-  // ticket.
+  // This device's identity, carried in the direct hello.
   localDeviceId: string;
+  // What a link's sealed socket is made of (shared/remote/sealedSocket.ts):
+  // this device's key pair, and the key the hub's roster names for the
+  // peer. Read at each dial, so a key enrolled since is the one used.
+  localKey(): KeyPair | null;
+  peerKey(deviceId: string): Uint8Array | undefined;
   localAppVersion: string;
   // Every push received on a direct connection, tagged with the peer's
   // deviceId, so the owner can feed the same peerPush path the device
@@ -263,6 +270,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     opts: ConnectPeerOpts | undefined,
     candidates: DirectCandidate[],
     remainingMs: number,
+    seal: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array },
+    connectionId: string,
   ): Promise<DeviceConnection> {
     return new Promise<DeviceConnection>((resolvePromise, rejectPromise) => {
       let done = false;
@@ -308,11 +317,13 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           openDevice({
             url: candidate.url,
             openSocket: deps.openSocket ?? openGlobalSocket,
-            // This candidate's own single-use ticket. It never reaches
-            // the wire: a candidate address is answered by whoever
-            // holds it on the network we happen to be on, so both ends
-            // prove possession instead (shared/remote/proof.ts).
+            // This candidate's own single-use ticket, which opens its
+            // socket, sealed to the key the roster names for the peer:
+            // whoever answers a candidate address, only the peer can
+            // complete the handshake.
             ticket: candidate.ticket,
+            seal,
+            connectionId,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
             deviceKind: deps.deviceKind,
@@ -422,13 +433,16 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     opts?: ConnectPeerOpts,
   ): Promise<PeerConnection> {
     const deadlineAt = now() + deadlineMs;
+    // This dial's connection: its tickets are minted for it, and its
+    // hello names it.
+    const connectionId = newConnectionId();
     let answer: unknown;
     try {
       // The input declares this platform's dialable kinds so the host
       // mints no ticket we cannot spend.
       answer = await deps.askConnectInfo(
         deviceId,
-        { dialableKinds },
+        { dialableKinds, connectionId },
         deadlineMs,
       );
     } catch (error) {
@@ -454,6 +468,11 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       // transient error and the keeper keeps it on the ladder.
       throw new Error(`peer ${deviceId} offers no direct listener`);
     }
+    const localKey = deps.localKey();
+    const remoteKey = deps.peerKey(deviceId);
+    if (localKey === null || remoteKey === undefined) {
+      throw new Error(`peer ${deviceId} has no key on the roster`);
+    }
     // The fan-out cap keeps a hostile or buggy answer from dialing an
     // unbounded burst.
     const connection = await raceCandidates(
@@ -461,6 +480,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       opts,
       info.candidates.slice(0, MAX_DIAL_CANDIDATES),
       Math.max(1, deadlineAt - now()),
+      { localKey, remoteKey },
+      connectionId,
     );
     return {
       ...connection,

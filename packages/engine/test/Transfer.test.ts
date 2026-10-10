@@ -725,7 +725,7 @@ describe("the loopback", () => {
     assert.deepEqual(await mirrors(), notRunning);
     // A listener that refuses the token.
     app = await fakeApp(() => []);
-    publish(app.file("stale-token"));
+    publish(app.file("57a1e000000000000000000000000000"));
     assert.deepEqual(await mirrors(), notRunning);
     assert.deepEqual(app.received(), []);
   });

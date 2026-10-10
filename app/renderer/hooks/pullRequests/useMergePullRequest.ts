@@ -29,7 +29,7 @@ export function useMergePullRequest() {
     mutationKey: pullRequestMutationKey(keys),
     mutationFn: ({ projectId, number, method, stack }) =>
       api.githubCli.mergePullRequest({ projectId, number, method, stack }),
-    // Write what the CLI reported before the refetches below land, so
+    // Write what the engine reported before the refetches below land, so
     // the box flips as the spinner stops: the PR merged, or auto-merge
     // is armed with the method. A PR a merge queue took reads as it
     // did until the queue lands it. Not written ahead of the result:

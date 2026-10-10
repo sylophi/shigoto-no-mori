@@ -6,10 +6,13 @@
 // boot whether or not the device is enrolled, so signing in later only
 // starts the listener.
 //
-// A connection opens with the handshake (modules/link.ts): the ticket a
-// peer proves was minted for it over the hub, bound to its deviceId, and
-// its protocol version must be this build's. Until then every other
-// call is refused (PeerAuth). Then a call annotated gated:false runs for
+// A peer's socket opens sealed (shared/remote/sealedSocket.ts): the
+// ticket minted for it over the hub, spent before any crypto runs, then
+// a Noise handshake proving it holds the key the hub's roster names for
+// the device the ticket was minted for, and every frame after that
+// encrypted. Its hello must name that device and this build's protocol
+// version (modules/link.ts). Until then every other call is refused
+// (PeerAuth). Then a call annotated gated:false runs for
 // the peer, and any other only under the host's live command switch, or
 // as a call the host itself invited (CommandGate). Above both sits the
 // sharing switch: off, every call is refused that was not invited, reads
@@ -79,11 +82,8 @@ import {
   PeerAuth,
   SharingGate,
 } from "@shigomori/contracts/link";
-import {
-  handshakeProof,
-  newHandshakeNonce,
-  proofsMatch,
-} from "@shigomori/contracts/proof";
+import type { KeyPair } from "@shared/crypto/noise";
+import { sealListener } from "@shared/remote/sealedSocket";
 import {
   HELLO_TIMEOUT_MS,
   HOST_LIVENESS_TIMEOUT_MS,
@@ -94,19 +94,24 @@ import * as Sharing from "@host/lib/sharing";
 import type { HostServices } from "@host/process/services";
 import { type HostChannels, makeHostChannels } from "./channels";
 
-// The listener's auth: the single-use connect tickets minted over the
-// hub, and the host's command switch. Injected so this module stays
-// free of the ticket store and the account layer alike.
+// The listener's auth: what opens a socket, and the host's command
+// switch. Injected so this module stays free of the ticket store and the
+// account layer alike.
 export type WsServerTicketAuth = {
-  // Consumes the ticket the peer proved it holds (it never travels,
-  // shared/remote/proof.ts), for the claimed deviceId and the path the
-  // connection arrived on, and hands it back so the host can prove it
-  // too. Null when nothing matches.
-  matchTicket(
-    deviceId: string,
-    arrivedAs: DirectCandidateKind,
-    matches: (ticket: string) => Promise<boolean>,
-  ): Promise<string | null>;
+  // What opens a socket. A peer's is sealed: `admit` spends the ticket
+  // it opened with, for the path the connection arrived on, and names
+  // the device the ticket was minted for with the key the hub's roster
+  // holds for it, or null; `localKey` is this device's own pair. The
+  // loopback's is its token, which the hello carries.
+  readonly opens:
+    | {
+        readonly admit: (
+          ticket: string,
+          arrivedAs: DirectCandidateKind,
+        ) => { deviceId: string; publicKey: Uint8Array } | null;
+        readonly localKey: () => KeyPair | null;
+      }
+    | { readonly token: string };
   // Whether this host runs gated calls from its peers at all: every
   // ticketed peer is a device of the same account, so this one switch
   // is the whole verdict. Read at every call and every channel write,
@@ -304,15 +309,22 @@ export function createLinkRegistrar(): LinkRegistrar {
   };
 }
 
+// The graph's services, once the root has them: a call or a view that
+// comes first waits for them, and is refused if the graph failed.
+export type LateServices = Effect.Effect<
+  Context.Context<HostServices>,
+  CallFailure
+>;
+
 // A contract call: the registered handler, run with the graph's
 // services, interrupted when the peer cancels it or its link drops, its
 // failure crossing as the contract error it is, or as RemoteCallError
 // with its message and code.
 const serve =
-  (channel: string, fn: Served, services: Context.Context<HostServices>) =>
-  (payload: unknown) =>
+  (channel: string, fn: Served, services: LateServices) => (payload: unknown) =>
     Effect.gen(function* () {
       const peer = yield* LinkPeer;
+      const context = yield* services;
       return yield* fn(
         {
           connection: peer.closed,
@@ -321,7 +333,7 @@ const serve =
           notifier: (module, key) => (push) => peer.notify(module, key, push),
         },
         payload,
-      ).pipe(Effect.provideContext(services));
+      ).pipe(Effect.provideContext(context));
     }).pipe(Effect.annotateSpans({ channel }));
 
 // A frame's messages. One malformed frame is dropped rather than taking
@@ -345,6 +357,9 @@ const unserved = (tag: string) =>
 // One socket, from its accept to its close.
 type Connection = {
   readonly ws: WebSocket;
+  // What the link's frames go through: the socket itself on the
+  // loopback, sealed on a peer's.
+  readonly wire: Socket.WebSocketLike;
   readonly parser: RpcSerialization.Parser;
   readonly ip: string;
   readonly arrivalKind: DirectCandidateKind;
@@ -352,7 +367,8 @@ type Connection = {
   // The pushes for this peer alone (a move's progress).
   readonly pushes: PubSub.PubSub<Push>;
   readonly closed: AbortController;
-  hostNonce: string | null;
+  // The device the ticket this socket opened with was minted for.
+  ticketDeviceId: string | null;
   helloSeen: boolean;
   deviceId: string | null;
   connectionId: string | null;
@@ -390,15 +406,15 @@ export const make = (options: {
   readonly group?: typeof LinkGroup | typeof LoopbackGroup;
   readonly local?: boolean;
   readonly sharing?: LinkSharing;
+  readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
-    const { registrar, auth, sharing } = options;
+    const { registrar, auth, sharing, services } = options;
     const group = (options.group ?? LinkGroup) as typeof LinkGroup;
     const local = options.local === true;
     const sharingNow =
       sharing === undefined ? Effect.succeed(true) : sharing.current;
-    // What the views read, and the pushes every peer hears.
-    const services = yield* Effect.context<HostServices>();
+    // The pushes every peer hears.
     const hostPushes = yield* HostPushes.HostPushes;
     const runFork = yield* FiberSet.makeRuntime<never>();
     const lifecycle = yield* Semaphore.make(1);
@@ -468,9 +484,9 @@ export const make = (options: {
                 const encoded = connection.parser.encode(response);
                 if (
                   encoded !== undefined &&
-                  connection.ws.readyState === WebSocket.OPEN
+                  connection.wire.readyState === WebSocket.OPEN
                 ) {
-                  connection.ws.send(encoded);
+                  connection.wire.send(encoded as Uint8Array<ArrayBuffer>);
                 }
               }),
             end: () => Effect.void,
@@ -510,8 +526,7 @@ export const make = (options: {
             readonly connectionId: string;
             readonly appVersion: string;
             readonly protocolVersion: number;
-            readonly nonce: string;
-            readonly proof: string;
+            readonly token?: string;
           },
           clientId: number,
         ) =>
@@ -524,35 +539,21 @@ export const make = (options: {
                 clientVersion: payload.protocolVersion,
               });
             }
-            const hostNonce = connection.hostNonce;
-            if (connection.helloSeen || hostNonce === null) {
+            if (connection.helloSeen) {
               yield* killSoon(connection, "hello out of turn");
               return yield* new LinkRefusedError();
             }
             connection.helloSeen = true;
-            const ticket = yield* Effect.promise(() =>
-              auth.matchTicket(
-                payload.deviceId,
-                connection.arrivalKind,
-                async (candidate) =>
-                  proofsMatch(
-                    payload.proof,
-                    await handshakeProof(
-                      candidate,
-                      "client",
-                      hostNonce,
-                      payload.nonce,
-                    ),
-                  ),
-              ),
-            );
-            if (connection.dead) return yield* new LinkRefusedError();
-            if (ticket === null) {
+            // A peer's hello names the device its ticket was minted for,
+            // whose key the handshake proved. The loopback's carries the
+            // token.
+            const admitted =
+              "token" in auth.opens
+                ? payload.token === auth.opens.token
+                : payload.deviceId === connection.ticketDeviceId;
+            if (!admitted) {
               recordAuthFailure(connection.ip);
-              // The owner gets a real signal under a brute force attempt.
-              log.warn(
-                `[link] refused a hello with a bad proof from ${connection.ip}`,
-              );
+              log.warn(`[link] refused a hello from ${connection.ip}`);
               yield* killSoon(connection, "auth failed");
               return yield* new LinkRefusedError();
             }
@@ -578,13 +579,7 @@ export const make = (options: {
             }
             connection.deviceId = payload.deviceId;
             connection.connectionId = payload.connectionId;
-            return {
-              deviceId: opts.deviceId,
-              appVersion: opts.appVersion,
-              proof: yield* Effect.promise(() =>
-                handshakeProof(ticket, "host", hostNonce, payload.nonce),
-              ),
-            };
+            return { deviceId: opts.deviceId, appVersion: opts.appVersion };
           });
 
         // The bytes the switches gave: gone the moment either is off,
@@ -602,11 +597,6 @@ export const make = (options: {
           string,
           (payload: never, options: Options) => unknown
         > = {
-          "link:challenge": (_: undefined, { client }: Options) =>
-            Effect.map(connectionOf(client.id), (connection) => {
-              connection.hostNonce ??= newHandshakeNonce();
-              return { nonce: connection.hostNonce };
-            }),
           "link:hello": (
             payload: Parameters<typeof hello>[0],
             { client }: Options,
@@ -690,10 +680,11 @@ export const make = (options: {
         // A view, failing as an invoke does: the contract error it is,
         // or RemoteCallError with its message and code.
         const watch = (view: View) => (payload: unknown) =>
-          view(payload).pipe(
-            Stream.provideContext(services),
-            Stream.mapError(callFailureOf),
-          );
+          Stream.unwrap(
+            Effect.map(services, (context) =>
+              view(payload).pipe(Stream.provideContext(context)),
+            ),
+          ).pipe(Stream.mapError(callFailureOf));
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
         for (const call of group.requests.values()) {
@@ -847,7 +838,7 @@ export const make = (options: {
         const serveSocket = (clientId: number, connection: Connection) =>
           Effect.gen(function* () {
             const socket = yield* Socket.fromWebSocket(
-              Effect.succeed(connection.ws),
+              Effect.succeed(connection.wire),
             );
             const { pull } = yield* socket.reader;
             while (true) {
@@ -938,23 +929,53 @@ export const make = (options: {
           preAuth += 1;
           const clientId = nextClientId++;
           const closed = new AbortController();
+          const arrivalKind: DirectCandidateKind = tunnelBorne(
+            req.socket.remoteAddress,
+            cfConnectingIp,
+          )
+            ? "tunnel"
+            : "lan";
+          const opens = auth.opens;
+          const localKey = "token" in opens ? null : opens.localKey();
+          if (!("token" in opens) && localKey === null) {
+            closeThenTerminate(ws, CLOSE_HELLO_FAILED, "signed out", 50);
+            preAuth -= 1;
+            return;
+          }
           runFork(
             Effect.gen(function* () {
               const pushes = yield* PubSub.sliding<Push>(1024);
               const connection: Connection = {
                 ws,
+                wire:
+                  "token" in opens || localKey === null
+                    ? ws
+                    : sealListener(ws, {
+                        localKey,
+                        admit: async (ticket) => {
+                          const peer = opens.admit(ticket, arrivalKind);
+                          if (peer === null) return null;
+                          connection.ticketDeviceId = peer.deviceId;
+                          return peer.publicKey;
+                        },
+                        // Only a ticket or a key that did not hold counts
+                        // toward the lockout: a device on another version
+                        // dialing in the middle of an upgrade is refused
+                        // without benching its address.
+                        refused: (reason, guessed) => {
+                          if (guessed) recordAuthFailure(ip);
+                          log.warn(
+                            `[link] refused a socket from ${ip}: ${reason}`,
+                          );
+                        },
+                      }),
                 ip,
-                arrivalKind: tunnelBorne(
-                  req.socket.remoteAddress,
-                  cfConnectingIp,
-                )
-                  ? "tunnel"
-                  : "lan",
+                arrivalKind,
                 channels: makeHostChannels(),
                 pushes,
                 closed,
                 parser: serialization.makeUnsafe(),
-                hostNonce: null,
+                ticketDeviceId: null,
                 helloSeen: false,
                 deviceId: null,
                 connectionId: null,
@@ -1127,6 +1148,7 @@ export const layer = (options: {
   readonly registrar: LinkRegistrar;
   readonly auth: WsServerTicketAuth;
   readonly seesPush: LinkSharing["seesPush"];
+  readonly services: LateServices;
 }) =>
   Layer.effect(
     DeviceLink,
@@ -1135,6 +1157,7 @@ export const layer = (options: {
       return yield* make({
         registrar: options.registrar,
         auth: options.auth,
+        services: options.services,
         sharing: {
           current: sharing.current,
           changes: sharing.changes,

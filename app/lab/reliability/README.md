@@ -84,7 +84,8 @@ again on the next run.
 | `desk-host-kill` | A's own host process is killed; its windows and the terminal have to find it once its shell forks it again. | 30 s |
 | `reload-and-second-tab` | The tab is reloaded, a second tab of the profile opened, then closed, each step recovering. | 30 s each |
 | `reload-and-third-window` | A's first window is reloaded, a third window opened (New Window), then closed, each step recovering. | 30 s each |
-| `token-expiry` | Every page's wall clock jumps two hours ahead, past the Clerk session token's and a hub ticket's minute, the network drops and returns so everything is dialed again on the moved clock, then each page mints a fresh Clerk token and reads the device list. The hub credential itself never expires. | 30 s |
+| `two-tabs-redial` | A second tab is opened and both tabs' flows are cut at once, three times, so both dial the host together; each tab recovers each time. A host minting a device's direct tickets as one set refuses one of the two, which has to ask again. | 30 s each |
+| `token-expiry` | Every page's wall clock jumps two hours ahead (and stays there, as after a sleep, until the next reload), past the Clerk session token's and a hub ticket's minute, the network drops and returns so everything is dialed again on the moved clock, then each page mints a fresh Clerk token and reads the device list. The hub credential itself never expires. | 30 s |
 | `sign-out-with-sibling` | A second tab is opened, and the first signs out of the account while the browser's Clerk session stays (what the Sign out button does when the tab's Clerk holds no session): both read signed out within the bound and stay so, nothing enrolls again, and the host no longer lists the browser. Leaves the profile signed out, so it runs only when named, and last. | 20 s |
 
 A scenario runs only when a client it acts on runs. Every scenario

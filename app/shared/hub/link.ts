@@ -82,6 +82,45 @@ export function relayPrologue(askerId: string, askedId: string): Uint8Array {
 // and its tag.
 const ANSWER_OVERHEAD_BYTES = 32 + 16;
 
+// How long an ask is good for, past any timeout an asker waits it out
+// with, and how far two devices' clocks may disagree.
+const ASK_LIFETIME_MS = 60_000;
+const CLOCK_SKEW_MS = 120_000;
+
+// The asks a device has read, by their handshake hash, each until it
+// expires: what turns a replayed ask away. Kept by the hub connection,
+// so it outlives the link a socket redial replaces. Bounded: an ask
+// past the cap pushes out the oldest.
+const MAX_SEEN_ASKS = 4096;
+
+export type SeenAsks = Map<string, number>;
+
+// Whether an ask with this hash and expiry is one to answer, noting it
+// if so.
+function freshAsk(
+  seen: SeenAsks,
+  hash: string,
+  expiresAt: number,
+  now: number,
+): boolean {
+  for (const [key, until] of seen) {
+    if (until < now) seen.delete(key);
+  }
+  if (
+    seen.has(hash) ||
+    expiresAt < now - CLOCK_SKEW_MS ||
+    expiresAt > now + ASK_LIFETIME_MS + CLOCK_SKEW_MS
+  ) {
+    return false;
+  }
+  if (seen.size >= MAX_SEEN_ASKS) {
+    const oldest = seen.keys().next();
+    if (!oldest.done) seen.delete(oldest.value);
+  }
+  seen.set(hash, expiresAt + CLOCK_SKEW_MS);
+  return true;
+}
+
 // The addressed peer has no socket on the device hub (an offline nack,
 // or a presence list it vanished from). A pending ask to it rejects
 // with this so a caller sees "that device is offline" distinctly from a
@@ -148,6 +187,8 @@ type HubLinkDeps = {
   localDeviceId: string;
   // This device's static key pair, the one it enrolled with.
   localKey: KeyPair;
+  // The asks this device has read (SeenAsks above).
+  seenAsks: SeenAsks;
   // Writes one text message to the raw hub socket. May throw when the
   // socket is unusable, and the caller of the failed operation sees it.
   send(text: string): void;
@@ -169,6 +210,8 @@ export type HubLink = {
     timeoutMs: number,
   ): Promise<unknown>;
   onlineDeviceIds(): readonly string[];
+  // The key the latest roster names for an online device.
+  publicKeyOf(deviceId: string): Uint8Array | undefined;
   // The socket is gone: every pending ask rejects.
   teardown(): void;
 };
@@ -336,6 +379,21 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       );
       return;
     }
+    // A replayed ask opens like the original, so it is told apart by
+    // its handshake, which no other ask shares, and its expiry.
+    if (
+      !freshAsk(
+        deps.seenAsks,
+        toBase64Url(handshake.handshakeHash()),
+        ask.expiresAt,
+        Date.now(),
+      )
+    ) {
+      warnDrop(
+        () => `dropping a replayed or expired ask from ${truncateId(from)}`,
+      );
+      return;
+    }
     let payload = utf8Encoder.encode(JSON.stringify(answerFor(from, ask)));
     // An oversize result would be nacked and leave the asker waiting
     // out its timeout, so it becomes a refusal the asker rejects on at
@@ -384,7 +442,11 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         }, timeoutMs),
       });
       try {
-        const ask: AskPayload = { ask: CONNECT_INFO_ASK, input };
+        const ask: AskPayload = {
+          ask: CONNECT_INFO_ASK,
+          expiresAt: Date.now() + ASK_LIFETIME_MS,
+          input,
+        };
         const payload = utf8Encoder.encode(JSON.stringify(ask));
         // Sealed, it only grows, so an ask over the limit already is
         // refused before the handshake's own bound would be.
@@ -508,6 +570,10 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
 
     onlineDeviceIds(): readonly string[] {
       return [...online.keys()].toSorted();
+    },
+
+    publicKeyOf(deviceId: string): Uint8Array | undefined {
+      return online.get(deviceId);
     },
 
     teardown(): void {

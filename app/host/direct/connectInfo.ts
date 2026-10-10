@@ -17,6 +17,7 @@ import {
   DirectConnectInfoInputSchema,
 } from "@shigomori/contracts/modules/direct";
 import { candidateAddresses } from "@host/direct/addresses";
+import type { TicketPeer } from "@host/direct/tickets";
 
 const decodeConnectInfoInput = Schema.decodeUnknownSync(
   DirectConnectInfoInputSchema,
@@ -27,13 +28,13 @@ type ConnectInfoDeps = {
   // (not enrolled, bind failed, or the platform cannot listen).
   listenerPort(): number | null;
   // Mints one single-use connect ticket per candidate, in the order the
-  // kinds are given, all bound to the named peer and replacing that
-  // peer's previous pending set. Each ticket carries the kind it was
+  // kinds are given, all bound to the named peer and replacing the
+  // pending set of the connection it asked for. Each ticket carries the kind it was
   // minted for, so it can only be redeemed on a connection that
   // actually arrived that way. Null means the store refused (global
   // backstop cap).
   mintTickets(
-    peerDeviceId: string,
+    peer: TicketPeer,
     kinds: readonly DirectCandidateKind[],
   ): string[] | null;
   // The wss URL of this host's tunnel endpoint while the cloudflared
@@ -95,7 +96,7 @@ export function makeConnectInfo(
     // burns at most one ticket per candidate that actually reached
     // us.
     const tickets = deps.mintTickets(
-      callerDeviceId,
+      { deviceId: callerDeviceId, connectionId: input.connectionId },
       dialable.map((candidate) => candidate.kind),
     );
     if (tickets === null) return { available: false };

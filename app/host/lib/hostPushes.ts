@@ -30,12 +30,8 @@ export class HostPushes extends Context.Service<
   }
 >()("sm/host/HostPushes") {}
 
-const make = Effect.gen(function* () {
-  const pubsub = yield* Effect.acquireRelease(
-    PubSub.unbounded<Push>(),
-    PubSub.shutdown,
-  );
-  return HostPushes.of({
+const over = (pubsub: PubSub.PubSub<Push>) =>
+  HostPushes.of({
     publish: (push) => PubSub.publish(pubsub, push).pipe(Effect.asVoid),
     subscribe: PubSub.subscribe(pubsub).pipe(
       Effect.map(Stream.fromSubscription),
@@ -46,6 +42,16 @@ const make = Effect.gen(function* () {
         Stream.map((push) => push.payload),
       ),
   });
-});
 
-export const layer = Layer.effect(HostPushes, make);
+export const layer = Layer.effect(
+  HostPushes,
+  Effect.map(
+    Effect.acquireRelease(PubSub.unbounded<Push>(), PubSub.shutdown),
+    over,
+  ),
+);
+
+// The pushes on a hub its owner publishes on from outside any effect
+// (the host's root, whose broadcasts must not wait for the graph).
+export const layerOn = (pubsub: PubSub.PubSub<Push>) =>
+  Layer.succeed(HostPushes, over(pubsub));

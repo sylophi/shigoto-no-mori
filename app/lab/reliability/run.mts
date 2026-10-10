@@ -266,7 +266,6 @@ async function heal(): Promise<void> {
     await tab.setFrozen(false).catch(() => {});
     await tab.setOffline(false).catch(() => {});
     await tab.setHidden(false).catch(() => {});
-    await tab.shiftClock(0).catch(() => {});
   }
   for (const extra of lab.tabs.slice(1)) await lab.closeTab(extra);
   const deskWindows = lab.windows.filter((each) => each.app === lab.desk);
@@ -301,7 +300,14 @@ try {
   }
   for (const page of lab.pages()) await showProject(lab, page).catch(() => {});
   lab.note("waiting for the clients to reach the host");
-  await recovered(lab, Date.now(), 180_000);
+  await recovered(lab, Date.now(), 180_000).catch(async (error: unknown) => {
+    for (const page of lab.pages()) {
+      await page.page
+        .screenshot({ path: join(out, `setup-${page.name}.png`) })
+        .catch(() => {});
+    }
+    throw error;
+  });
   if (soakMs === null) {
     for (const scenario of chosen) await runOne(scenario);
   } else {

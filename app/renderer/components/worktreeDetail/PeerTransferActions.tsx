@@ -77,7 +77,7 @@ function TransferButtons({
     <TransferActionsView
       part={part}
       here={false}
-      // App only, like "Mirror here": the daemon lives in main.
+      // App only, like "Mirror here": the daemon lives in the host.
       mirror={
         canOpen && canForwardPorts && !mirrored
           ? { blocker: mirrorBlocker }

@@ -4,7 +4,7 @@
 // variables are baked in at build time through Vite's import.meta.env
 // (vite.web.config.ts passes their names to envPrefix). Everything
 // here is a public endpoint or a public Clerk publishable key, never a
-// secret (serviceConfig.ts), so inlining the values into the shipped
+// secret (accountServiceConfig.ts), so inlining the values into the shipped
 // bundle is safe by design.
 // import.meta.env exists in every Vite context but not under plain node,
 // where the headless bridge check imports this module and injects its

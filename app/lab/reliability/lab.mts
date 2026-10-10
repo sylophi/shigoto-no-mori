@@ -87,7 +87,7 @@ const PAGE_HOOKS = `(() => {
   }
   window.Date = ShiftedDate;
   window.harnessShiftClock = (ms) => {
-    offset = ms;
+    offset += ms;
   };
   const seen = new WeakSet();
   new MutationObserver(() => {
@@ -172,7 +172,10 @@ export class Tab {
     }
   }
 
-  async shiftClock(ms: number): Promise<void> {
+  // Moves the page's wall clock ahead, as a sleep does. Only ahead: a
+  // clock that goes back is nothing a machine does, and Effect's
+  // schedules read it. A reload puts it right.
+  async advanceClock(ms: number): Promise<void> {
     await this.page.evaluate((offset) => window.harnessShiftClock(offset), ms);
   }
 }
@@ -313,7 +316,7 @@ export class Lab {
     return JSON.parse(
       execFileSync(this.smd, ["--json", ...args], {
         env: app.smdEnv(),
-        cwd: join(app.profileDir, "repos", "shared"),
+        cwd: app.repo,
         encoding: "utf8",
       }),
     ) as T;
@@ -322,7 +325,7 @@ export class Lab {
   smdRun(args: string[], app: DevApp = this.hostApp): void {
     execFileSync(this.smd, args, {
       env: app.smdEnv(),
-      cwd: join(app.profileDir, "repos", "shared"),
+      cwd: app.repo,
       stdio: "ignore",
     });
   }
@@ -336,7 +339,7 @@ export class Lab {
     return new Promise((done) => {
       const child = spawn(this.smd, args, {
         env: app.smdEnv(),
-        cwd: join(app.profileDir, "repos", "shared"),
+        cwd: app.repo,
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";
@@ -371,7 +374,7 @@ export class Lab {
       git(app.profileDir, "init", "-q", "-b", "main", from);
       git(from, "commit", "-q", "--allow-empty", "-m", "Initial");
     }
-    git(app.profileDir, "clone", "-q", from, join("repos", "shared"));
+    git(app.profileDir, "clone", "-q", from, app.repo);
     execFileSync(
       this.smd,
       ["projects", "add", join(app.profileDir, "repos"), "--all", "--yes"],
@@ -407,7 +410,7 @@ export class Lab {
     const [status, projects] = await this.hostApp.eval(() =>
       Promise.all([window.api.account.status(), window.api.projects.list()]),
     );
-    const project = projects.find((p) => p.name === "shared");
+    const project = projects.find((p) => p.name === this.hostApp.profile);
     if (project === undefined) throw new Error("the host lists no project");
     this.host = {
       deviceId: await this.hostApp.eval(() => window.api.deviceId),
@@ -594,7 +597,7 @@ export class Lab {
     await waitFor(
       "Clerk to load",
       () => tab.page.evaluate(() => Boolean(window.Clerk?.loaded)),
-      30_000,
+      120_000,
     );
     if (await signedIn()) return;
     const command = process.env.RELIABILITY_SIGN_IN;

@@ -605,7 +605,7 @@ const laptopSleep: Scenario = {
     lab.network.restore({ cut: true });
     for (const [app, pids] of frozen) app.thaw(pids);
     await Promise.all(
-      lab.windows.map((tab) => tab.shiftClock(ms).catch(() => {})),
+      lab.windows.map((tab) => tab.advanceClock(ms).catch(() => {})),
     );
     await Promise.all(
       lab.tabs.map(async (tab) => {
@@ -687,7 +687,7 @@ const reloadAndSecondTab: Scenario = {
   name: "reload-and-second-tab",
   does: "The first tab is reloaded and has to recover, then a second tab of the profile is opened and both have to hold, then the second closes and the first has to stay.",
   boundMs: 30_000,
-  applies: (lab) => lab.tabs.length > 0,
+  applies: (lab) => lab.has("web"),
   async run(lab) {
     const [first] = lab.tabs;
     if (first === undefined) throw new Error("no tab");
@@ -729,12 +729,36 @@ const reloadAndThirdWindow: Scenario = {
   },
 };
 
+const twoTabsRedial: Scenario = {
+  name: "two-tabs-redial",
+  does: "A second tab of the profile is opened, and both tabs' flows are cut at once, three times, so both dial the host together each time; every tab has to recover each time. A host that mints a device's direct tickets as one set refuses one of two tabs dialing together, and that tab has to ask again.",
+  boundMs: 30_000,
+  applies: (lab) => lab.has("web"),
+  async run(lab) {
+    const second = await lab.openTab();
+    await recovered(lab, Date.now(), this.boundMs);
+    for (let round = 1; round <= 3; round++) {
+      // Past the supervisors' stable threshold, so each round's redial
+      // starts at the bottom of their ladders rather than climbing it.
+      await sleep(35_000);
+      changeHost(lab);
+      lab.network.down();
+      lab.network.restore({ cut: true });
+      lab.note(`every flow cut, round ${round}`);
+      const took = await recovered(lab, Date.now(), this.boundMs);
+      lab.note(`round ${round} recovered in ${took} ms`);
+    }
+    await lab.closeTab(second);
+    return Date.now();
+  },
+};
+
 const tokenExpiry: Scenario = {
   name: "token-expiry",
-  does: "Every page's wall clock jumps two hours ahead, past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock; then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
+  does: "Every page's wall clock jumps two hours ahead (and stays there, as after a sleep, until the next reload), past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock; then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
   boundMs: 30_000,
   async run(lab) {
-    await forEachPage(lab, (tab) => tab.shiftClock(2 * 60 * 60 * 1000));
+    await forEachPage(lab, (tab) => tab.advanceClock(2 * 60 * 60 * 1000));
     lab.note("clocks moved two hours ahead");
     lab.network.down();
     await forEachPage(lab, (tab) => tab.setOffline(true));
@@ -754,7 +778,6 @@ const tokenExpiry: Scenario = {
       if (!fresh) throw new Error(`${tab.name} could not mint a fresh token`);
     });
     lab.note("fresh Clerk tokens minted and the device list read");
-    await forEachPage(lab, (tab) => tab.shiftClock(0));
     return restored;
   },
 };
@@ -764,7 +787,7 @@ const signOutWithSibling: Scenario = {
   does: "A second tab of the profile is opened, and the first signs out of the account while the browser's Clerk session stays (the account layer's sign-out, which the Sign out button runs when the tab's Clerk holds no session): within the bound both tabs read signed out and stay so for 30 s with no enrollment sent from either, and the host's device list no longer names the browser.",
   boundMs: 20_000,
   destructive: true,
-  applies: (lab) => lab.tabs.length > 0,
+  applies: (lab) => lab.has("web"),
   async run(lab) {
     const [first] = lab.tabs;
     if (first === undefined) throw new Error("no tab");
@@ -844,6 +867,7 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   deskHostKill,
   reloadAndSecondTab,
   reloadAndThirdWindow,
+  twoTabsRedial,
   tokenExpiry,
 ];
 

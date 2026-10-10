@@ -6,7 +6,6 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { engineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
-import * as Migration from "@shigomori/engine/Migration";
 import * as Store from "@shigomori/engine/Store";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
@@ -52,8 +51,6 @@ export const layer = (options: {
     Layer.provide(
       ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
     ),
-    // The v3 migration the store and the move into `wt/` report to.
-    Layer.provideMerge(Migration.layer),
     // The scope a run outlives its caller in (EngineRuns, below).
     Layer.merge(runsLayer),
   );

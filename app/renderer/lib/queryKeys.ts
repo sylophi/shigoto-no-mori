@@ -6,7 +6,7 @@
 //
 // Two scopes. Host-scoped keys describe a machine's git, fs,
 // processes, worktrees or config (including preferences that persist
-// in the host's per-data-dir state.json) and open with a constant "host"
+// in the host's store) and open with a constant "host"
 // sentinel followed by a device id, so a second device's data can
 // enter the cache without colliding and scope stays decidable from the
 // tuple alone. Client-scoped keys belong to this app instance alone
@@ -16,9 +16,9 @@ import type { QueryClient } from "@tanstack/react-query";
 const PR_BRANCH_SCOPE = "branch";
 const HOST_SCOPE = "host";
 
-// The local device's id, delivered synchronously by the preload bridge
-// (main passes it via additionalArguments), so it is a constant before
-// any module can build a key.
+// The local device's id, on window.api before the renderer's modules
+// load (it comes with the host's address, renderer/index.tsx), so it is
+// a constant before any module can build a key.
 export const localDeviceId: string = window.api.deviceId;
 
 // A host-scoped key builder for an ARBITRARY device id, the tuple body
@@ -253,6 +253,9 @@ function buildQueryKeys(deviceId: string) {
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
 
+    // Client-scoped: the v3 migration as the shell serves it.
+    migration: () => ["migration"] as const,
+
     // Client-scoped: the code highlighter holding a language, loaded in
     // this window whichever device the code came from.
     codeHighlighter: (lang: string) => ["codeHighlighter", lang] as const,
@@ -282,7 +285,7 @@ function buildQueryKeys(deviceId: string) {
     mirrorHistory: (worktreeId: string) => host("mirrorHistory", worktreeId),
 
     // Client-scoped: the port-forward engine (its listeners and conns)
-    // lives in this app instance's main process, whichever device a
+    // lives in this machine's host process, whichever device a
     // forward targets, so no host sentinel and no device id. One key
     // for the whole list, and the UI filters per device.
     portForwards: () => ["portForwards"] as const,
@@ -345,8 +348,8 @@ export const queryKeys = queryKeysFor(localDeviceId);
 //   ping, refetching forever.
 const externalChangeExempt = new Set([
   "account",
-  // CLI links and rc hooks are not forest state, and re-reading them
-  // spawns the CLI on the host, so a git-state ping never re-asks.
+  // CLI links and rc hooks are not forest state, so a git-state ping
+  // never re-asks.
   "cli",
   "cliShell",
   // The agents' hooks files, likewise: and an agent's turn changes

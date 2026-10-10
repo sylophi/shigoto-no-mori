@@ -19,7 +19,10 @@ import {
 } from "@shigomori/ui/views/PhoneTabBarView.tsx";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
-import { useWatchAccountChanges } from "@/hooks/account/useAccount";
+import {
+  useAccountStatus,
+  useWatchAccountChanges,
+} from "@/hooks/account/useAccount";
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useOpenProject } from "@/components/sidebar/openProject";
@@ -38,8 +41,14 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
-import { MIGRATION_PATH } from "@/lib/routePaths";
+import { MIGRATION_PATH, WELCOME_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { useMigration } from "@/hooks/useMigration";
+import { useMarkWelcomed } from "@/hooks/config/useWelcomed";
+import {
+  migrationOwed,
+  migrationShows,
+} from "@shigomori/contracts/schemas/migration";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -72,11 +81,31 @@ export function AppShell() {
       }),
     [navigate],
   );
+  // The v3 migration's page until the app opens past it, whatever the
+  // window showed: while a step isn't done, or this device's key is due
+  // on a device that migrated now.
+  const migration = useMigration();
+  const { data: account } = useAccountStatus();
+  const migrating =
+    migration != null &&
+    (migrationShows(migration) ||
+      (migrationOwed(migration) && account?.needsDeviceKey === true));
+  // A device that migrates from v2 is past its first run.
+  const migrated = migration != null && migrationOwed(migration);
+  const markWelcomed = useMarkWelcomed();
+  useEffect(() => {
+    if (migrated) markWelcomed();
+  }, [migrated, markWelcomed]);
+  useEffect(() => {
+    if (migrating && pathname !== MIGRATION_PATH) {
+      void navigate({ to: MIGRATION_PATH, replace: true });
+    }
+  }, [migrating, pathname, navigate]);
 
   useDeepLinks();
 
   // A page in place of the app, with none of its ways elsewhere.
-  if (pathname === MIGRATION_PATH) {
+  if (pathname === MIGRATION_PATH || pathname === WELCOME_PATH) {
     return (
       <AppShellView phone={phone} hasLocalHost={hasLocalHost} sidebar={null}>
         <Outlet />

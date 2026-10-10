@@ -275,7 +275,6 @@ export type ShigomoriWorktreeData = typeof ShigomoriWorktreeDataSchema.Type;
 // Reads use the loose Stored variant below: an imported v2 document can
 // still carry client keys (and a newer build's keys) in the stored
 // settings, and those have to pass through unrejected.
-
 const GlobalConfigSchema = Schema.Struct({
   launchers: Schema.optional(Schema.Array(LauncherCommandSchema)),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
@@ -472,6 +471,10 @@ export const ClientConfigSchema = Schema.Struct({
   // the picks. Mirrored to localStorage with the switch.
   lightTheme: Schema.optional(LightThemeSchema),
   darkTheme: Schema.optional(DarkThemeSchema),
+  // Past the first run's page (renderer/components/welcome): a project
+  // was added there, or this install moved from v2 or had projects
+  // before. Absent = not yet, which the shell's first window opens on.
+  welcomed: Schema.optional(Schema.Boolean),
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir
@@ -573,7 +576,7 @@ export type ClientConfig = typeof ClientConfigSchema.Type;
 // The group key of a peer's project with no repo identity: it can only
 // group with itself, so it is named by its device and its id. The
 // prefix sets it apart from a repo identity (`root:` or `remote:`,
-// shared/git/repoIdentity.mts) and from a local project id (a folder
+// the engine's Identity.ts) and from a local project id (a folder
 // name, never holding a `/`).
 export const peerProjectKey = (deviceId: string, projectId: string) =>
   `device:${deviceId}/${projectId}`;

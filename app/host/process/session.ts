@@ -3,11 +3,15 @@
 // shell's session (packages/contracts/src/modules/session.ts) on the
 // loopback.
 import { sessionContract } from "@shigomori/contracts/modules/session";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
 import { getBusyOperations } from "@host/lib/scripts";
-import { busyTerminals, setWindowFocused } from "./captures";
+import * as Graph from "./graph";
+import * as Terminals from "@host/lib/terminals/Terminals";
+import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { type HostFacts, setHostFacts } from "./facts";
 import {
   applyAccount,
@@ -22,6 +26,16 @@ import {
   registerLoopbackContract,
 } from "./wires";
 
+// What a quit asks about: the terminals busy right now.
+const busyTerminals = () =>
+  Graph.run(Effect.flatMap(Terminals.Terminals, (it) => it.busy)).catch(
+    () => 0,
+  );
+
+// The root's own Promise work, for the session's calls.
+const onRoot = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: callFailureOf });
+
 export function startHost(options: {
   readonly facts: HostFacts;
   readonly shell: ShellCalls;
@@ -33,20 +47,32 @@ export function startHost(options: {
   setShellCalls(options.shell);
   installHostImpls();
   registerHostHandlers();
-  const session: Handlers<typeof sessionContract, HandlerContext> = {
-    account: (facts) => applyAccount(facts),
-    accountDevices: (deviceIds) => noteAccountDevices(deviceIds),
-    windowFocused: (focused) => setWindowFocused(focused),
-    wake: () => probeRemoteConnections(),
-    busy: async () => ({
-      ...getBusyOperations(),
-      busyTerminals: await busyTerminals(),
-    }),
-    updaterState: (state) => {
-      noteUpdaterState(state);
-      broadcastAll(updaterContract, "state", state);
-    },
-    quit: ({ hurried }) => options.quit(hurried),
+  const session: EffectHandlers<typeof sessionContract, HandlerContext> = {
+    account: (facts) => onRoot(() => applyAccount(facts)),
+    accountDevices: (deviceIds) =>
+      Effect.sync(() => noteAccountDevices(deviceIds)),
+    // One sent before the graph is up lands once it is.
+    windowFocused: (focused) =>
+      Effect.sync(
+        () =>
+          void Graph.run(
+            Effect.map(BackgroundFetch.BackgroundFetch, (fetch) =>
+              fetch.setWindowFocused(focused),
+            ),
+          ).catch(() => {}),
+      ),
+    wake: () => Effect.sync(probeRemoteConnections),
+    busy: () =>
+      Effect.map(onRoot(busyTerminals), (terminals) => ({
+        ...getBusyOperations(),
+        busyTerminals: terminals,
+      })),
+    updaterState: (state) =>
+      Effect.sync(() => {
+        noteUpdaterState(state);
+        broadcastAll(updaterContract, "state", state);
+      }),
+    quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
   };
   registerLoopbackContract(sessionContract, session);
 }

@@ -1,7 +1,8 @@
 import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -274,4 +275,4 @@ export const projectsHandlers = {
 
   // The engine resolves icons through its shared cache (Icons.ts).
   icon: ({ projectId }) => Ops.projectIcon(projectId),
-} satisfies Handlers<typeof projectsContract, unknown, HostServices>;
+} satisfies EffectHandlers<typeof projectsContract, unknown, HostServices>;

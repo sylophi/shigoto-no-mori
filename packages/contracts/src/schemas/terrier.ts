@@ -8,3 +8,10 @@ export const TerrierReadinessSchema = Schema.Struct({
   readable: Schema.Boolean,
 });
 export type TerrierReadiness = typeof TerrierReadinessSchema.Type;
+
+// The repos terrier lists, for the first run's project step, which
+// offers them whether or not this device lists them as projects yet.
+export const TerrierReposSchema = Schema.Array(
+  Schema.Struct({ name: Schema.String, path: Schema.String }),
+);
+export type TerrierRepos = typeof TerrierReposSchema.Type;

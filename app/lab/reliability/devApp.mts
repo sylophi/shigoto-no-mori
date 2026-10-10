@@ -51,6 +51,13 @@ export class DevApp {
     );
   }
 
+  // Its one project, named for the profile, so two labs on one account
+  // never show a project of the same name. Every device's is a clone of
+  // the host's seed, the same repo by its root commit.
+  get repo(): string {
+    return join(this.profileDir, "repos", this.profile);
+  }
+
   get dataDir(): string {
     return join(this.profileDir, "data");
   }

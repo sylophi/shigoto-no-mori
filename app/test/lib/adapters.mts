@@ -20,6 +20,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Migration from "@shigomori/engine/Migration";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
@@ -33,12 +34,12 @@ import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
 import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
 import * as Views from "../../host/lib/views.ts";
+import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
 import * as Villagers from "../../host/lib/villagers.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
-import * as Processes from "../../host/lib/util/processes.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -88,15 +89,18 @@ function builtMacfs(): string {
 // is built (host/lib/engine.ts). Set here, so a proof never writes to
 // the dev app's, or to one the shell exported.
 process.env.SHIGOMORI_DATA_DIR = engineDataDir;
-const engine = Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" });
+const engine = Engine.layer({
+  flavor: "dev",
+  macfs: builtMacfs(),
+  sm: "smd",
+}).pipe(Layer.provideMerge(Migration.layer));
 
 // No file-sync engine: a proof that runs one brings its own
 // (mirror.mts). The services the host's handlers answer on
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
-  Processes.adapter.pipe(
-    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
+  Terminals.layer({ start: terminalStart }).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Ports.layer,
@@ -125,6 +129,8 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       Layer.mergeAll(HostPushes.layer, EngineStoreChanges.layer),
     ),
+    // The copy of the shared settings, read from the store.
+    Layer.provideMerge(SharedSettingsStore.layer),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),

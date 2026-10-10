@@ -25,7 +25,6 @@ import { ShellGroup } from "@shared/ipc/shell";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { portSocket } from "@shared/remote/portSocket";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 
 type Push = { readonly channel: string; readonly payload: unknown };
 type Served = (ctx: HandlerContext, input: unknown) => Promise<unknown>;
@@ -303,16 +302,3 @@ export const layer = (registrar: ShellRegistrar) =>
     ShellLink,
     Effect.map(makePortServer(registrar, ShellGroup), ShellLink.of),
   );
-
-const promiseAdapter = PromiseAdapter.forService(ShellLink, "The shell link");
-export const adapter = promiseAdapter.layer;
-
-// The Promise face, for main/ipc/register.ts and the window's creation.
-export const shellLink = {
-  attach: (port: MessagePortMain, webContents: WebContents) =>
-    promiseAdapter.call((link) => link.attach(port, webContents)),
-  pushTo: (webContents: WebContents, push: Push) =>
-    promiseAdapter.runIfOpen(
-      Effect.flatMap(ShellLink, (link) => link.pushTo(webContents, push)),
-    ),
-};

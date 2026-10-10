@@ -12,11 +12,6 @@ import {
   PeerAuth,
 } from "@shigomori/contracts/link";
 import { channelOf, isInvoke } from "@shigomori/contracts/contract";
-import {
-  handshakeProof,
-  newHandshakeNonce,
-  proofsMatch,
-} from "@shigomori/contracts/proof";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -34,7 +29,7 @@ type Received = {
   readonly request: { readonly channel: string; readonly input?: unknown };
 };
 
-export const TOKEN = "good-token";
+export const TOKEN = "600d0000000000000000000000000000";
 
 export type FakeApp = {
   readonly port: number;
@@ -79,13 +74,11 @@ export const fakeApp = async (
 ): Promise<FakeApp> => {
   let seen: Received[] = [];
   const scope = Effect.runSync(Scope.make());
-  const nonces = new Map<number, string>();
   // Ends the listener and every connection, as an app that went away.
   const dropAll = Effect.suspend(() =>
     Effect.forkDetach(Scope.close(scope, Exit.void)),
   );
 
-  type Options = { readonly client: { readonly id: number } };
   const handlers: Record<string, unknown> = {};
   for (const call of LoopbackGroup.requests.values()) {
     const tag = channelOf(call);
@@ -94,32 +87,10 @@ export const fakeApp = async (
       ? () => Effect.fail(unserved)
       : () => Stream.fail(unserved);
   }
-  handlers["link:challenge"] = (_: undefined, { client }: Options) =>
-    Effect.sync(() => {
-      const nonce = newHandshakeNonce();
-      nonces.set(client.id, nonce);
-      return { nonce };
-    });
-  handlers["link:hello"] = (
-    hello: { readonly nonce: string; readonly proof: string },
-    { client }: Options,
-  ) =>
-    Effect.gen(function* () {
-      const hostNonce = nonces.get(client.id) ?? "";
-      const want = yield* Effect.promise(() =>
-        handshakeProof(TOKEN, "client", hostNonce, hello.nonce),
-      );
-      if (!proofsMatch(hello.proof, want)) {
-        return yield* new LinkRefusedError();
-      }
-      return {
-        deviceId: "app-device",
-        appVersion: "1.2.3",
-        proof: yield* Effect.promise(() =>
-          handshakeProof(TOKEN, "host", hostNonce, hello.nonce),
-        ),
-      };
-    });
+  handlers["link:hello"] = (hello: { readonly token?: string }) =>
+    hello.token === TOKEN
+      ? Effect.succeed({ deviceId: "app-device", appVersion: "1.2.3" })
+      : Effect.fail(new LinkRefusedError());
   handlers["link:ping"] = () => Effect.void;
 
   // The scripted answer, as the frames `reply` returns for the call.

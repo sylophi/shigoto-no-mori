@@ -1,6 +1,5 @@
 // The clone checkout against a fixture with everything it has to tell
 // apart.
-
 import assert from "node:assert/strict";
 import {
   chmodSync,

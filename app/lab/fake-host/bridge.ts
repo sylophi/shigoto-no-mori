@@ -108,6 +108,7 @@ import {
 } from "@shigomori/ui/fixtures/fixtures.ts";
 import { endpointState } from "@shigomori/ui/fixtures/mirrorFixtures.ts";
 import {
+  TERRIER_REPOS,
   MIGRATION_POSES,
   type MigrationPose,
 } from "@shigomori/ui/fixtures/stepsFixtures.ts";
@@ -818,6 +819,7 @@ function hostHandlersFor(
       };
     },
     "terrier:readiness": () => ({ installed: true, readable: true }),
+    "terrier:repos": () => TERRIER_REPOS,
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
@@ -1460,6 +1462,7 @@ const downloadingUpdates = new Set<string>();
 // ?migration=waiting|moving|stuck|done: the v3 migration in that state
 // (stepsFixtures.ts), for its page (?to=/migration). Without it there is
 // nothing to migrate.
+let migrationContinued = false;
 function posedMigration(): MigrationProgress {
   const pose = new URLSearchParams(location.search).get("migration");
   return pose !== null && pose in MIGRATION_POSES
@@ -1541,6 +1544,16 @@ const CROWD_NAMES = [
 ];
 const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
 const CROWD_OWNERS = ["sylophi", "rin", "kaiju-labs"];
+
+// ?fresh=1: Studio Mac a fresh install, with no project yet, for the
+// first run's page (?to=/welcome).
+function initFresh(): void {
+  const local = forests[LOCAL_DEVICE_ID];
+  if (new URLSearchParams(location.search).get("fresh") !== "1") return;
+  if (local === undefined) return;
+  local.projects.length = 0;
+  for (const key of Object.keys(local.worktrees)) delete local.worktrees[key];
+}
 
 function initCrowd(): void {
   const pose = new URLSearchParams(location.search);
@@ -1684,6 +1697,7 @@ export function installFakeHostBridge(
     new URLSearchParams(location.search).get("villageLife") === "1";
   initPresence();
   initCrowd();
+  initFresh();
   initMissing();
   // Remote hosts: one fixture wire per device, reached only through
   // hub:invokePeer exactly like the real hub bridge, and broadcasting
@@ -1713,15 +1727,11 @@ export function installFakeHostBridge(
   // matching the real browser bridge's shape.
   const localForest = forests[LOCAL_DEVICE_ID];
   if (localForest === undefined) throw new Error("[fake-host] no local forest");
-  const localHost = createFixtureWire(
-    "host",
-    (emit) =>
-      WEB_SHELL
-        ? // A browser still keeps its own copy of the shared settings.
-          sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
-        : hostHandlersFor(localForest, emit),
-    (channel) =>
-      channel === "migration:watch" ? Stream.make(posedMigration()) : undefined,
+  const localHost = createFixtureWire("host", (emit) =>
+    WEB_SHELL
+      ? // A browser still keeps its own copy of the shared settings.
+        sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
+      : hostHandlersFor(localForest, emit),
   );
 
   const webDevice: DeviceInfo = {
@@ -1836,6 +1846,11 @@ export function installFakeHostBridge(
       }
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
+    },
+    "migration:read": () => (migrationContinued ? null : posedMigration()),
+    "migration:continue": () => {
+      migrationContinued = true;
+      client.emit("migration:changed", null);
     },
     "account:enroll": async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));

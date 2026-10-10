@@ -7,8 +7,10 @@
 // window focused last, or a new one if none is open. At a quit each
 // window's route and bounds are remembered (windows.json in userData)
 // and the next start opens them again, one window on the home route
-// when there is nothing to bring back. The app quits with its last
-// window (main/index.ts).
+// when there is nothing to bring back, or on the first run's page until
+// the install is past it (ClientConfig.welcomed). Until the app opens
+// past the v3 migration, a window opened meanwhile shows its page in
+// place of the app. The app quits with its last window (main/index.ts).
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, type Rectangle, screen } from "electron";
 import * as Schema from "effect/Schema";
@@ -40,6 +42,10 @@ import {
 } from "./restartVisibility";
 
 const HOME_ROUTE = "/";
+// A fresh install's first run (renderer/lib/routePaths.ts).
+const WELCOME_ROUTE = "/welcome";
+// The v3 migration's page (renderer/lib/routePaths.ts).
+const MIGRATION_ROUTE = "/migration";
 
 // How far a new window sits from the one it opened from, so it does
 // not cover it exactly.
@@ -90,6 +96,9 @@ let started = false;
 let launchLink: string | null = null;
 
 let isShuttingDown: () => boolean = () => false;
+
+// Whether the host is running the v3 migration (noteMigrating).
+let migrating = false;
 
 function rememberedPath(): string {
   return join(app.getPath("userData"), "windows.json");
@@ -158,6 +167,7 @@ function create(
     };
   } = {},
 ): Held {
+  if (migrating) route = MIGRATION_ROUTE;
   // Drive the native appearance from the saved theme before constructing
   // the window so the macOS vibrancy material picks the right light/dark
   // variant on first paint. Absent or "system" delegates back to the OS.
@@ -298,6 +308,12 @@ function showCrashGiveUpDialog(): void {
   );
 }
 
+// Whether the v3 migration's page shows: a window opened meanwhile
+// opens on it. Open ones follow it themselves (AppShell).
+export function noteMigrating(on: boolean): void {
+  migrating = on;
+}
+
 // A new window on `route`, cascaded off the window focused last.
 export function openWindow(route: string): void {
   const from = frontmost()?.window.getNormalBounds();
@@ -329,7 +345,12 @@ export function openWindowsAtStart(options: {
     options.restart === null
       ? {}
       : { restart: { visibility: options.restart, minimized } };
-  if (remembered.length === 0) create(HOME_ROUTE, restartOf(false));
+  if (remembered.length === 0) {
+    create(
+      readClientConfigSync().welcomed === true ? HOME_ROUTE : WELCOME_ROUTE,
+      restartOf(false),
+    );
+  }
   for (const record of remembered) {
     create(record.route, {
       bounds: record.bounds,
