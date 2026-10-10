@@ -19,6 +19,7 @@ import { AppShell } from "@/components/AppShell";
 import { ErrorFallbackView } from "@shigomori/ui/views/ErrorFallbackView.tsx";
 import { EmptyState } from "@/components/EmptyState";
 import { ForestPage } from "@/components/ForestPage";
+import { MigrationPage } from "@/components/migration/MigrationPage";
 import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { SettingsPages } from "@/components/settings/SettingsSidebarNav";
@@ -29,6 +30,7 @@ import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
 import {
   DEVICE_TERMINALS_PATH,
+  MIGRATION_PATH,
   PROJECT_ROUTE_PATHS,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
@@ -63,6 +65,14 @@ const indexRoute = createRoute({
     }
   },
   component: EmptyState,
+});
+
+// The v3 migration, which a window shows in place of the app while it
+// runs: no sidebar, no palette (AppShell).
+const migrationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: MIGRATION_PATH,
+  component: MigrationPage,
 });
 
 // The phone layout's two forest tabs, the inbox and the project tree,
@@ -327,6 +337,7 @@ const projectRoutes = [
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  migrationRoute,
   forestRoute,
   liveRoute,
   // Where accountRoute hangs, as its getParentRoute says.

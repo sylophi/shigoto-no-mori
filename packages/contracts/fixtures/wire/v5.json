@@ -708,6 +708,19 @@
       "enabled": false
     }
   },
+  "migration:watch": {
+    "success": {
+      "planned": false,
+      "import": {
+        "state": "done"
+      },
+      "worktrees": null,
+      "signIn": {
+        "state": "running",
+        "lapsed": true
+      }
+    }
+  },
   "mirror:applyGitState": {
     "payload": {
       "projectId": "\ud800",

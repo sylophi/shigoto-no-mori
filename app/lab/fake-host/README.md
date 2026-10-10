@@ -101,6 +101,10 @@ Poses ride the URL:
   2.1.0, so the others count as behind it (the update toast, Update
   all).
 - `?downloading=sm,tp,mini`: the devices downloading the update.
+- `?migration=waiting|moving|stuck|signIn|done`: the v3 migration in
+  that state (`MIGRATION_POSES` in the fixtures' `stepsFixtures.ts`),
+  for its page (`?to=/migration`). Without it there is nothing to
+  migrate, and the page opens the app.
 - `?notSharing=tp,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
 - `?hubBlocked=update-required`: this device's hub socket blocked, for

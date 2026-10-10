@@ -27,4 +27,5 @@ export * from "./sharedSettings.ts";
 export * from "./villagers.ts";
 export * from "./releases.ts";
 export * from "./agents.ts";
+export * from "./migration.ts";
 export * from "./void.ts";
