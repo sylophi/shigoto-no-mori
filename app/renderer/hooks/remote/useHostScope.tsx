@@ -57,8 +57,8 @@ export interface HostScope {
   keys: QueryKeyRegistry;
 }
 
-// Default is the local device, read synchronously off the preload
-// bridge, so every hook works unchanged with no provider mounted.
+// Default is the local device, read synchronously off window.api, so
+// every hook works unchanged with no provider mounted.
 const localHostScope: HostScope = {
   deviceId: localDeviceId,
   remote: false,

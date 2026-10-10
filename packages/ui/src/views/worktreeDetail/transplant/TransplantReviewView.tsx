@@ -93,7 +93,7 @@ export function ChangedFilesView({
   );
 }
 
-// The landing project's carry-over (../flow/createPlan.ts), as the
+// The landing project's carry-over (the app's flow/createPlan.ts), as the
 // review's card.
 export function CarryOverListView({
   projectName,

@@ -33,7 +33,7 @@ export const clerkAppearance: ClerkProviderProps["appearance"] = {
     colorWarning: "var(--color-amber-500)",
     // Clerk's default backdrop is colorNeutral at 73%, a near-white
     // scrim in dark modes. A dark scrim is the app's own overlay
-    // convention (ui/sheet.tsx's bg-black/10), mode-independent, so a
+    // convention (primitives/sheet.tsx's bg-black/10), mode-independent, so a
     // literal is right here.
     colorModalBackdrop: "rgb(0 0 0 / 0.4)",
     borderRadius: "var(--radius)",
