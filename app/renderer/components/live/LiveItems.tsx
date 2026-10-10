@@ -11,7 +11,6 @@
 import type React from "react";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import {
   Cable,
   ExternalLink as ExternalLinkIcon,
@@ -46,14 +45,14 @@ import {
   useDeviceProperName,
 } from "@/hooks/remote/useRemoteDevices";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useNow } from "@/hooks/ui/useNow";
 import { openExternalUrl } from "@/lib/openExternal";
 import { needView } from "@/lib/agentNeeds";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
-import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { cn } from "@/lib/utils";
-import { slotLabel, slotToParam } from "@/store/scriptRuns";
+import { slotLabel } from "@/store/scriptRuns";
 
 // How long something has been up, coarse like the app's relative
 // times: "up 12m", "up 3h 5m", "up 2d", or "just started".
@@ -131,7 +130,7 @@ export function ScriptItem({
   deviceId: string;
   run: RunningScript;
 }) {
-  const navigate = useNavigate();
+  const { toScriptOn } = useWorktreeNav();
   const { state, canRun, start, stop } = useScriptRunner(
     { projectId: run.projectId, id: run.worktreeId },
     run.slot,
@@ -186,15 +185,7 @@ export function ScriptItem({
               variant="ghost"
               className={ON_FILL}
               onClick={() =>
-                void navigate({
-                  to: WORKTREE_ROUTE_PATHS.script,
-                  params: {
-                    deviceId,
-                    projectId: run.projectId,
-                    worktreeId: run.worktreeId,
-                    scriptKey: slotToParam(run.slot),
-                  },
-                })
+                toScriptOn(deviceId, run.projectId, run.worktreeId, run.slot)
               }
             >
               <SquareTerminal />

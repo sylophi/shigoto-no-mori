@@ -26,8 +26,6 @@ export const WORKTREE_ROUTE_PATHS = {
   commit:
     "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
   files: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/files",
-  script:
-    "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
 } as const;
 
 export const PROJECT_ROUTE_PATHS = {

@@ -1,6 +1,6 @@
-// Script slot codec + key builder. Lives here so router params and store
-// keys agree on one shape: parsing `/scripts/:scriptKey` (paramToSlot)
-// and minting a sidebar/store key (scriptKey) both go through this file.
+// Script slot codec + key builder. Lives here so a console's tab and the
+// store's keys agree on one shape: a slot as a param and back
+// (slotToParam, paramToSlot), and a sidebar/store key (scriptKey).
 
 import type { ScriptRunSlot } from "@shigomori/contracts/schemas";
 import { assertNever } from "@/lib/utils";
