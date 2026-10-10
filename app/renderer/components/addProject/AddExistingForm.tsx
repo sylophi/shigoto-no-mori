@@ -193,8 +193,8 @@ export function AddExistingForm({
     let firstAddedId: string | null = null;
     for (const path of toAdd) {
       try {
-        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the registry.json write
-        const project = await addProject.mutateAsync({ path, terrier }); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the registry.json write
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the registry write
+        const project = await addProject.mutateAsync({ path, terrier }); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the registry write
         // Plain if, not ??=: React Compiler can't lower logical assignment and
         // bails out the whole component.
         if (firstAddedId === null) firstAddedId = project.id;

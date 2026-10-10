@@ -20,8 +20,8 @@
 //     it there would strand the local port bound until the app quit,
 //     with nothing left in the UI to release it.
 // Both halves are app-only, since the engine binds a real TCP listener
-// in the desktop main process and the web loopback rejects the
-// portForward channels. The caller gates that.
+// in this machine's host process and the web client's local registrar
+// rejects the portForward channels. The caller gates that.
 import { useState } from "react";
 import {
   Cable,

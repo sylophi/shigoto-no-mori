@@ -101,7 +101,6 @@ export type UpdateRequest = typeof UpdateRequestSchema.Type;
 // (<dataDir>/updates/staged/manifest.json). The app reads it to seed
 // "ready" at boot and to know whether "restart to update" has anything
 // to restart into.
-
 export const StagedManifestSchema = Schema.Struct({
   version: Schema.NonEmptyString,
   bundleName: Schema.NonEmptyString,

@@ -46,7 +46,6 @@ const UseLogSchema = Schema.Array(Schema.Int);
 
 // state.json: use logs and the package scripts' arrangement, by project
 // id.
-
 export const StateFileSchema = Schema.Struct({
   projectUseLog: Schema.Record(Schema.String, UseLogSchema),
   launcherUseLog: Schema.Record(Schema.String, UseLogSchema),

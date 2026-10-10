@@ -8,7 +8,7 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {
   cachedIgnoredPaths,
@@ -88,9 +88,8 @@ export const syncHandlers = {
   // The cancel, of a move this device runs (a pull, a send, a mirror
   // start) or lands for the calling peer. Keyed like the progress the
   // caller is watching. False once there is nothing left to cancel.
-  cancelMove: ({ sourceWorktreeId }, ctx) => ({
-    cancelled: cancelMove(ctx, sourceWorktreeId),
-  }),
+  cancelMove: ({ sourceWorktreeId }, ctx) =>
+    Effect.sync(() => ({ cancelled: cancelMove(ctx, sourceWorktreeId) })),
 
   // The git follower's push: the peer opened the link, and this host
   // asks it for the one bundle and unpacks it under refs/shigomori/.
@@ -116,4 +115,4 @@ export const syncHandlers = {
   // A send's source is this device's own, removed by the ordinary delete.
   teardownSource: (move, ctx: HandlerContext) =>
     teardownSource(move, (removal) => worktreesHandlers.delete(removal, ctx)),
-} satisfies Handlers<typeof syncContract, HandlerContext, HostServices>;
+} satisfies EffectHandlers<typeof syncContract, HandlerContext, HostServices>;

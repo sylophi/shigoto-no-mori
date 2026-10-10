@@ -12,7 +12,7 @@
 // MirrorDialog, which sends the copy here, this device for
 // MirrorToDialog. Its Mirror button sits on both worktrees' pages. A
 // primary checkout takes the same flow, its copy on a branch of its
-// own (contracts/git/branches.ts), which the words below say when the
+// own (contracts' git/branches.ts), which the words below say when the
 // two names differ.
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";

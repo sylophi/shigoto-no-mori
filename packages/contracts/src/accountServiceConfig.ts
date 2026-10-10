@@ -23,7 +23,6 @@ export type AccountServiceConfig = {
   // exactly this origin, so a web client can dial wss tunnel URLs.
   // Empty means no web origin is admitted. Not part of isConfigured:
   // the account layer works without it.
-
   webOrigin: string;
 };
 

@@ -1,7 +1,9 @@
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fsContract } from "@shigomori/contracts/modules/fs";
-import type { Handlers } from "@shigomori/contracts/types";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
+import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { isGitRepo } from "@host/lib/git/core";
 import { toAbsolute } from "@host/lib/util/paths";
@@ -62,37 +64,44 @@ async function scanForGitRepos(rootPath: string): Promise<string[]> {
   return results.toSorted();
 }
 
+async function listDirectory(path: string) {
+  const absolute = toAbsolute(path);
+
+  const entries = await readdir(absolute, { withFileTypes: true });
+  const dirs = entries.filter(
+    (e) => e.isDirectory() && !e.name.startsWith("."),
+  );
+  // Async check in parallel beats `existsSync` per entry: same logic,
+  // doesn't block the event loop on slow filesystems.
+  const checked = await Promise.all(
+    dirs.map(async (e) => {
+      try {
+        await access(join(absolute, e.name, ".git"));
+        return { name: e.name, isGitRepo: true };
+      } catch {
+        return { name: e.name, isGitRepo: false };
+      }
+    }),
+  );
+  const result = checked.toSorted((a, b) => a.name.localeCompare(b.name));
+
+  return { path: absolute, entries: result };
+}
+
+// Node's file system, its failure as it crosses a wire.
+const onDisk = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: callFailureOf });
+
 export const fsHandlers = {
-  listDirectory: async ({ path }) => {
-    const absolute = toAbsolute(path);
-
-    const entries = await readdir(absolute, { withFileTypes: true });
-    const dirs = entries.filter(
-      (e) => e.isDirectory() && !e.name.startsWith("."),
-    );
-    // Async check in parallel beats `existsSync` per entry: same logic,
-    // doesn't block the event loop on slow filesystems.
-    const checked = await Promise.all(
-      dirs.map(async (e) => {
-        try {
-          await access(join(absolute, e.name, ".git"));
-          return { name: e.name, isGitRepo: true };
-        } catch {
-          return { name: e.name, isGitRepo: false };
-        }
-      }),
-    );
-    const result = checked.toSorted((a, b) => a.name.localeCompare(b.name));
-
-    return { path: absolute, entries: result };
-  },
+  listDirectory: ({ path }) => onDisk(() => listDirectory(path)),
 
   // `git rev-parse --git-dir` validates a real working repo: catches
   // missing/corrupted .git, bare repos, and linked worktrees alike.
   isGitRepo: ({ path }) => isGitRepo(toAbsolute(path)),
 
-  scanForGitRepos: ({ path }) => scanForGitRepos(toAbsolute(path)),
-} satisfies Handlers<
+  scanForGitRepos: ({ path }) =>
+    onDisk(() => scanForGitRepos(toAbsolute(path))),
+} satisfies EffectHandlers<
   typeof fsContract,
   unknown,
   ChildProcessSpawner.ChildProcessSpawner
