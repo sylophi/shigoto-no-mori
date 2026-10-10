@@ -1,35 +1,48 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
-import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
-import { run } from "./core";
+import { GitError, run } from "./core";
+
+// A place a checkout cannot land.
+class DestinationError extends Schema.TaggedError<DestinationError>()(
+  "DestinationError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 // Where a clone lands: `parentDir/name`, with the parent a folder and
 // the destination not yet there. Both checks are for the message: git
 // would refuse either, in words about its own argv. The clone from a
 // peer (host/lib/sync/cloneFromPeer.ts) and a new repository
 // (./init.ts) land the same way.
-export async function checkNewCheckoutDestination(
+export const checkNewCheckoutDestination = Effect.fnUntraced(function* (
   parentDir: string,
   name: string,
-): Promise<string> {
-  const parent = await stat(parentDir).catch((error: unknown) => {
-    if (isENOENT(error)) return null;
-    throw error;
-  });
+) {
+  const parent = yield* Effect.promise(() =>
+    stat(parentDir).catch((error: unknown) => {
+      if (isENOENT(error)) return null;
+      throw error;
+    }),
+  );
   if (!parent?.isDirectory()) {
-    throw new Error(`${parentDir} is not a folder`);
+    return yield* new DestinationError({
+      reason: `${parentDir} is not a folder`,
+    });
   }
   const dest = join(parentDir, name);
-  if (await pathExists(dest)) {
-    throw new Error(`${dest} already exists`);
+  if (yield* Effect.promise(() => pathExists(dest))) {
+    return yield* new DestinationError({ reason: `${dest} already exists` });
   }
   return dest;
-}
+});
 
 // Clones `source` into `parentDir/name` and returns the new checkout's
 // path. The payload schema has already held the source to a real remote
@@ -40,9 +53,7 @@ export const cloneRepo = Effect.fn("clone")(function* (
   parentDir: string,
   name: string,
 ) {
-  const dest = yield* fromPromise(() =>
-    checkNewCheckoutDestination(parentDir, name),
-  );
+  const dest = yield* checkNewCheckoutDestination(parentDir, name);
   const url = cloneUrlOf(source);
   // Over https to a GitHub host, with the device's gh signed in, gh is
   // git's credential helper, so a private repository clones without
@@ -70,23 +81,19 @@ export const cloneRepo = Effect.fn("clone")(function* (
   // packaged app has no terminal for ssh to ask on, so it fails there
   // too, and the clone has no timeout beyond that.
   // `--` ends the options: the URL and name come from the caller.
-  yield* Effect.tryPromise({
-    try: () =>
-      run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
-        env: { GIT_TERMINAL_PROMPT: "0" },
-      }),
+  yield* run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
+    env: { GIT_TERMINAL_PROMPT: "0" },
+  }).pipe(
     // Refusing to prompt, git names the URL it wanted a password for,
     // userinfo and all, and a pasted token sits there. The message goes
     // to a toast, so that part is dropped.
-    catch: (error) => {
-      if (error instanceof Error) {
-        error.message = error.message.replace(
-          /(https?:\/\/)[^/\s'"]*@/gi,
-          "$1",
-        );
-      }
-      return callFailureOf(error);
-    },
-  });
+    Effect.mapError(
+      (error) =>
+        new GitError({
+          ...error,
+          reason: error.reason.replace(/(https?:\/\/)[^/\s'"]*@/gi, "$1"),
+        }),
+    ),
+  );
   return dest;
 });

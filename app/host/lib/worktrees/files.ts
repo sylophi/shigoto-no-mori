@@ -4,7 +4,9 @@
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { errorCodeOf } from "@shigomori/contracts/errors";
+import { errorCodeOf, errorMessageOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import {
   WORKTREE_FILE_MAX_BYTES,
   type WorktreeFile,
@@ -18,7 +20,23 @@ const BINARY_SNIFF_BYTES = 8000;
 // command grant (the contract's note), and a peer holding it can
 // already run anything on this machine, so fencing either off would
 // guard nothing. The path itself is held to the worktree by the schema.
-export async function readWorktreeFile(
+export const readWorktreeFile = (worktreePath: string, relative: string) =>
+  Effect.tryPromise({
+    try: () => readFileAt(worktreePath, relative),
+    catch: (error) => new WorktreeFileError({ reason: errorMessageOf(error) }),
+  });
+
+// A file that could not be read for a reason other than its being gone.
+class WorktreeFileError extends Schema.TaggedError<WorktreeFileError>()(
+  "WorktreeFileError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+async function readFileAt(
   worktreePath: string,
   relative: string,
 ): Promise<WorktreeFile> {

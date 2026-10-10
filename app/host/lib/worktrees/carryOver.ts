@@ -7,7 +7,6 @@
 // worktree, then the primary, then the rest). Checkouts are listed
 // primary first: when checkouts disagree on whether a name is a file
 // or a folder, the first one holding it decides.
-import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -21,10 +20,12 @@ import type {
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { listIgnoredPaths } from "../git/branches";
 import { chunked, runLenient } from "../git/core";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Ops from "../engineOps";
 import type { WorktreeIdentity } from "../git/worktrees";
-import { ttlMapCache } from "../util/ttlCache";
+import { ttlEffectCache } from "../util/ttlCache";
 
 export type CarryOverCheckout = Pick<
   WorktreeIdentity,
@@ -62,10 +63,7 @@ function primaryFirst(
 // The picker re-lists on every folder step while the ignored set of a
 // checkout barely changes. One walk per checkout every few seconds is
 // plenty.
-const ignoredPathsCache = ttlMapCache<string, string[]>(
-  10_000,
-  listIgnoredPaths,
-);
+const ignoredPathsCache = ttlEffectCache(10_000, listIgnoredPaths);
 
 // The same walk for the sync handler's ignored-paths read, so a
 // dialog listing a worktree and its picker browsing it share one.
@@ -81,18 +79,35 @@ function pathOf(relative: string, name: string): string {
 // root-relative path: the ignored walk, plus (with `ruleIgnored`) the
 // folders a rule names that the walk passes over (ruleIgnoredFolders
 // below). Throws when the folder can't be read.
-async function readFolderVerdicts(
+class FolderReadError extends Schema.TaggedError<FolderReadError>()(
+  "FolderReadError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+const readFolderVerdicts = Effect.fnUntraced(function* (
   checkoutPath: string,
   relative: string,
   ruleIgnored: boolean,
-): Promise<{ entries: Dirent[]; isIgnored: (path: string) => boolean }> {
-  const [entries, ignored] = await Promise.all([
-    readdir(join(checkoutPath, relative), { withFileTypes: true }),
-    ignoredPathsCache.get(checkoutPath),
-  ]);
+) {
+  const [entries, ignored] = yield* Effect.all(
+    [
+      Effect.tryPromise({
+        try: () =>
+          readdir(join(checkoutPath, relative), { withFileTypes: true }),
+        catch: (error) =>
+          new FolderReadError({ reason: errorMessageOf(error) }),
+      }),
+      ignoredPathsCache.get(checkoutPath),
+    ],
+    { concurrency: 2 },
+  );
   const byWalk = makeIgnoreMatcher(ignored);
   if (!ruleIgnored) return { entries, isIgnored: byWalk };
-  const byRule = await ruleIgnoredFolders(
+  const byRule = yield* ruleIgnoredFolders(
     checkoutPath,
     entries
       .filter((entry) => entry.isDirectory() && entry.name !== ".git")
@@ -103,7 +118,7 @@ async function readFolderVerdicts(
     entries,
     isIgnored: (path: string) => byWalk(path) || byRule.has(path),
   };
-}
+});
 
 // Folders before files, then alphabetical within each group.
 function foldersFirst(
@@ -122,27 +137,28 @@ function foldersFirst(
 // tracking it always copies it. `ruleIgnored` adds the verdict of
 // ruleIgnoredFolders below, for the leave-out picker: carry-over must
 // not take it, since such a folder holds a file git tracks.
-export async function listCarryOverCandidates(
+export const listCarryOverCandidates = Effect.fnUntraced(function* (
   checkouts: readonly CarryOverCheckout[],
   relative: string,
   { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
-): Promise<CarryOverCandidate[]> {
-  const listed = await Promise.all(
-    checkouts.map(async (checkout) => {
-      try {
-        const { entries, isIgnored } = await readFolderVerdicts(
-          checkout.path,
-          relative,
-          ruleIgnored,
-        );
-        return { checkout, entries, isIgnored };
-      } catch {
-        return null;
-      }
-    }),
+) {
+  const listed = yield* Effect.forEach(
+    checkouts,
+    (checkout) =>
+      readFolderVerdicts(checkout.path, relative, ruleIgnored).pipe(
+        Effect.map(({ entries, isIgnored }) => ({
+          checkout,
+          entries,
+          isIgnored,
+        })),
+        Effect.orElseSucceed(() => null),
+      ),
+    { concurrency: "unbounded" },
   );
   if (listed.every((r) => r === null)) {
-    throw new Error(`Couldn't read ${relative || "the project root"}`);
+    return yield* new FolderReadError({
+      reason: `Couldn't read ${relative || "the project root"}`,
+    });
   }
   // Built up checkout by checkout, so mutable until it is returned.
   const byName = new Map<
@@ -177,8 +193,8 @@ export async function listCarryOverCandidates(
       else candidate.worktrees.push(result.checkout.name);
     }
   }
-  return [...byName.values()].toSorted(foldersFirst);
-}
+  return [...byName.values()].toSorted(foldersFirst) as CarryOverCandidate[];
+});
 
 // The folders among `folders` (root-relative) that a rule names even
 // though git's ignored walk passes over them: the walk lists untracked
@@ -189,41 +205,41 @@ export async function listCarryOverCandidates(
 // `--no-index` asks the rules without the index's say. Exit 1 (none
 // match) reads as none, and an oddly named folder git quotes drops out
 // the same way.
-async function ruleIgnoredFolders(
-  worktreePath: string,
-  folders: readonly string[],
-): Promise<Set<string>> {
-  const found = await Promise.all(
-    chunked(folders).map((chunk) =>
-      runLenient(worktreePath, [
-        "-c",
-        "core.quotePath=false",
-        "check-ignore",
-        "--no-index",
-        "--",
-        // The slash tells a directory-only rule (build/) what it is.
-        ...chunk.map((folder) => `${folder}/`),
-      ]),
+const ruleIgnoredFolders = (worktreePath: string, folders: readonly string[]) =>
+  Effect.map(
+    Effect.forEach(
+      chunked(folders),
+      (chunk) =>
+        runLenient(worktreePath, [
+          "-c",
+          "core.quotePath=false",
+          "check-ignore",
+          "--no-index",
+          "--",
+          // The slash tells a directory-only rule (build/) what it is.
+          ...chunk.map((folder) => `${folder}/`),
+        ]),
+      { concurrency: "unbounded" },
     ),
+    (found) =>
+      new Set(
+        found.flatMap((out) =>
+          out.split("\n").filter(Boolean).map(normalizeRelPath),
+        ),
+      ),
   );
-  return new Set(
-    found.flatMap((out) =>
-      out.split("\n").filter(Boolean).map(normalizeRelPath),
-    ),
-  );
-}
 
 // One folder of one checkout, with git's ignore verdict per entry: the
 // mirror dialog's picker of what stays behind and the files page's tree
 // (packages/contracts/src/modules/sync.ts worktreeFolder). Folders
 // first, then alphabetical, like the carry-over listing, and .git left
 // out for the same reason.
-export async function listWorktreeFolder(
+export const listWorktreeFolder = Effect.fnUntraced(function* (
   worktreePath: string,
   relative: string,
   ruleIgnored: boolean,
-): Promise<SyncWorktreeFolderEntry[]> {
-  const { entries, isIgnored } = await readFolderVerdicts(
+) {
+  const { entries, isIgnored } = yield* readFolderVerdicts(
     worktreePath,
     relative,
     ruleIgnored,
@@ -233,31 +249,42 @@ export async function listWorktreeFolder(
   // verdicts above are asked of real folders only: git refuses a
   // pathspec at or past a symlink, and a link's own verdict is in the
   // ignored walk already, which names it like a file.
-  const listed = await Promise.all(
-    entries
-      .filter((entry) => entry.name !== ".git")
-      .map(async (entry) => ({
-        name: entry.name,
-        isDirectory:
-          entry.isDirectory() ||
-          (entry.isSymbolicLink() &&
-            (await stat(join(worktreePath, pathOf(relative, entry.name))).then(
-              (target) => target.isDirectory(),
-              () => false,
-            ))),
-      })),
+  const listed = yield* Effect.promise(() =>
+    Promise.all(
+      entries
+        .filter((entry) => entry.name !== ".git")
+        .map(async (entry) => ({
+          name: entry.name,
+          isDirectory:
+            entry.isDirectory() ||
+            (entry.isSymbolicLink() &&
+              (await stat(
+                join(worktreePath, pathOf(relative, entry.name)),
+              ).then(
+                (target) => target.isDirectory(),
+                () => false,
+              ))),
+        })),
+    ),
   );
   return listed
-    .map(({ name, isDirectory }) => ({
-      name,
-      isDirectory,
-      ignored: isIgnored(pathOf(relative, name)),
-    }))
+    .map(
+      ({ name, isDirectory }): SyncWorktreeFolderEntry => ({
+        name,
+        isDirectory,
+        ignored: isIgnored(pathOf(relative, name)),
+      }),
+    )
     .toSorted(foldersFirst);
-}
+});
 
 // Where each configured path currently exists.
-export async function statCarryOverPaths(
+export const statCarryOverPaths = (
+  checkouts: readonly CarryOverCheckout[],
+  paths: readonly string[],
+) => Effect.promise(() => statPaths(checkouts, paths));
+
+async function statPaths(
   checkouts: readonly CarryOverCheckout[],
   paths: readonly string[],
 ): Promise<Record<string, CarryOverStat>> {

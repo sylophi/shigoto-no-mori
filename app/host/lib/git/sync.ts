@@ -1,36 +1,31 @@
 // Remote sync mutations. Each operates on a single worktree's checkout
 // and lets `git` surface any failure as a non-zero exit (which `run`
-// turns into a thrown Error, whose message the IPC layer relays
-// verbatim into the renderer's toast).
+// fails with git's own words, which the IPC layer relays verbatim into
+// the renderer's toast).
 import { SyncConflictsError } from "@shigomori/contracts/errors";
-import { chunked, run, runLenient, splitZ } from "./core";
+import * as Effect from "effect/Effect";
+import { chunked, GitRefusal, run, runLenient, splitZ } from "./core";
 import { mergeKeepingConflicts } from "./merge";
 import { conflictedPaths } from "./operation";
 import { ownCommitCounts, upstreamName } from "./refs";
 import { fetchAllRemotes, listRemotes } from "./remotes";
 
-export async function pushFastForward(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["push"]);
-}
+export const pushFastForward = (worktreePath: string) =>
+  Effect.asVoid(run(worktreePath, ["push"]));
 
-export async function pullFastForward(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["pull", "--ff-only"]);
-}
+export const pullFastForward = (worktreePath: string) =>
+  Effect.asVoid(run(worktreePath, ["pull", "--ff-only"]));
 
-export async function pushForceWithLease(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["push", "--force-with-lease"]);
-}
+export const pushForceWithLease = (worktreePath: string) =>
+  Effect.asVoid(run(worktreePath, ["push", "--force-with-lease"]));
 
 // Fast-forward onto the already-fetched upstream, no network. What the
 // auto-pull sweep runs right after the app's own fetch, where a `pull`
 // would fetch a second time. `--ff-only` refuses anything but a plain
 // fast-forward, so a commit that raced the caller's checks fails the
 // merge rather than producing a merge commit nobody asked for.
-export async function fastForwardToUpstream(
-  worktreePath: string,
-): Promise<void> {
-  await run(worktreePath, ["merge", "--ff-only", "@{u}"]);
-}
+export const fastForwardToUpstream = (worktreePath: string) =>
+  Effect.asVoid(run(worktreePath, ["merge", "--ff-only", "@{u}"]));
 
 // Uncommitted changes, untracked files included. Pinned to
 // `--untracked-files=normal` against a user-level
@@ -43,16 +38,11 @@ export async function fastForwardToUpstream(
 // setting people choose to make exactly that scan cheap. The only cost
 // of the mismatch is a button showing when the guard will refuse, and
 // the guard still refuses.
-export async function hasUncommittedOrUntracked(
-  worktreePath: string,
-): Promise<boolean> {
-  const status = await run(worktreePath, [
-    "status",
-    "--porcelain=v1",
-    "--untracked-files=normal",
-  ]);
-  return status.trim().length > 0;
-}
+export const hasUncommittedOrUntracked = (worktreePath: string) =>
+  Effect.map(
+    run(worktreePath, ["status", "--porcelain=v1", "--untracked-files=normal"]),
+    (status) => status.trim().length > 0,
+  );
 
 // "Overwrite": throw away the local divergence and snap to the upstream.
 // Fetch first so `@{u}` reflects the current remote tip, then re-check
@@ -82,17 +72,18 @@ export async function hasUncommittedOrUntracked(
 // upstream case-only rename "exists" locally as the tracked file under
 // its old casing. That is a state `reset --hard` handles fine, and this
 // guard must not turn into a dead end.
-export async function overwriteFromUpstream(
+export const overwriteFromUpstream = Effect.fnUntraced(function* (
   worktreePath: string,
-): Promise<void> {
-  await run(worktreePath, ["fetch"]);
-  if (await hasUncommittedOrUntracked(worktreePath)) {
-    throw new Error(
-      "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
-    );
+) {
+  yield* run(worktreePath, ["fetch"]);
+  if (yield* hasUncommittedOrUntracked(worktreePath)) {
+    return yield* new GitRefusal({
+      reason:
+        "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
+    });
   }
   const addedUpstream = splitZ(
-    await run(worktreePath, [
+    yield* run(worktreePath, [
       "diff",
       "--name-only",
       "--no-renames",
@@ -104,63 +95,61 @@ export async function overwriteFromUpstream(
   );
   // Chunked: a badly-behind branch can carry enough added files to
   // brush the OS arg-length limit.
-  const collisions = (
-    await Promise.all(
-      chunked(addedUpstream).map((chunk) =>
-        run(worktreePath, [
-          "ls-files",
-          "-z",
-          "--others",
-          "--ignored",
-          "--exclude-standard",
-          "--",
-          ...chunk,
-        ]),
-      ),
-    )
-  ).flatMap(splitZ);
+  const collisions = (yield* Effect.forEach(
+    chunked(addedUpstream),
+    (chunk) =>
+      run(worktreePath, [
+        "ls-files",
+        "-z",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--",
+        ...chunk,
+      ]),
+    { concurrency: "unbounded" },
+  )).flatMap(splitZ);
   if (collisions.length > 0) {
     const shown = collisions.slice(0, 3).join(", ");
     const rest =
       collisions.length > 3 ? ` (+${collisions.length - 3} more)` : "";
-    throw new Error(
-      `Overwriting would replace ignored local file(s) the upstream branch tracks: ${shown}${rest}. Move them aside first.`,
-    );
+    return yield* new GitRefusal({
+      reason: `Overwriting would replace ignored local file(s) the upstream branch tracks: ${shown}${rest}. Move them aside first.`,
+    });
   }
-  await run(worktreePath, ["reset", "--hard", "@{u}"]);
-}
+  yield* run(worktreePath, ["reset", "--hard", "@{u}"]);
+});
 
 // Publish: push the current branch to the first configured remote with
 // upstream tracking. `HEAD` resolves to whatever's checked out, and `-u`
 // wires up `branch.<name>.{remote,merge}` so subsequent pulls/pushes
 // don't need an explicit remote.
-export async function publishCurrentBranch(
+export const publishCurrentBranch = Effect.fnUntraced(function* (
   worktreePath: string,
   projectPath: string,
-): Promise<void> {
-  const remotes = await listRemotes(projectPath);
+) {
+  const remotes = yield* listRemotes(projectPath);
   const first = remotes[0];
-  if (!first) throw new Error("No git remote configured");
-  await run(worktreePath, ["push", "-u", first, "HEAD"]);
-}
+  if (!first) {
+    return yield* new GitRefusal({ reason: "No git remote configured" });
+  }
+  yield* run(worktreePath, ["push", "-u", first, "HEAD"]);
+});
 
 // Whether a rebase onto `ref` only replays commits that exist nowhere
 // else, in one line: none of them a merge (a rebase would flatten it)
 // or on a remote already (replayed, the branch would split from its
 // pushed copy).
-async function rebaseIsSafe(
-  worktreePath: string,
-  ref: string,
-): Promise<boolean> {
-  const { own, merges, unpushed } = await ownCommitCounts(worktreePath, ref);
-  return merges === 0 && unpushed === own;
-}
+const rebaseIsSafe = (worktreePath: string, ref: string) =>
+  Effect.map(
+    ownCommitCounts(worktreePath, ref),
+    ({ own, merges, unpushed }) => merges === 0 && unpushed === own,
+  );
 
 // The upstream by its name ("origin/feature"), for a merge to say it
 // by in its message and its conflict markers rather than as "@{u}".
-async function upstreamRef(worktreePath: string): Promise<string> {
-  return (await upstreamName(worktreePath)) ?? "@{u}";
-}
+const upstreamRef = (worktreePath: string) =>
+  Effect.map(upstreamName(worktreePath), (name) => name ?? "@{u}");
 
 // A rebase for linear history where that is safe (rebaseIsSafe), and a
 // whole-tree merge otherwise or on a per-commit conflict. Each merge
@@ -170,71 +159,82 @@ async function upstreamRef(worktreePath: string): Promise<string> {
 // propagates an error. `--end-of-options` keeps the ref out of the flag
 // slot. Neither command accepts a
 // trailing `--`, which they would read as a second revision argument.
-async function rebaseOrMergeAgainst(
+const rebaseOrMergeAgainst = Effect.fnUntraced(function* (
   worktreePath: string,
   ref: string,
-): Promise<void> {
-  if (await rebaseIsSafe(worktreePath, ref)) {
-    try {
-      await run(worktreePath, ["rebase", "--end-of-options", ref]);
-      return;
-    } catch {
-      await runLenient(worktreePath, ["rebase", "--abort"]);
-    }
+) {
+  if (yield* rebaseIsSafe(worktreePath, ref)) {
+    const rebased = yield* run(worktreePath, [
+      "rebase",
+      "--end-of-options",
+      ref,
+    ]).pipe(
+      Effect.as(true),
+      Effect.catch(() =>
+        Effect.as(runLenient(worktreePath, ["rebase", "--abort"]), false),
+      ),
+    );
+    if (rebased) return;
   }
-  try {
-    await run(worktreePath, ["merge", "--ff", "--end-of-options", ref]);
-  } catch (err) {
-    // Git reports conflicts on stdout, so the files say it instead.
-    const conflicted = (await conflictedPaths(worktreePath)).length > 0;
-    await runLenient(worktreePath, ["merge", "--abort"]);
-    throw conflicted ? new SyncConflictsError({ ref }) : err;
-  }
-}
+  yield* run(worktreePath, ["merge", "--ff", "--end-of-options", ref]).pipe(
+    Effect.catch((err) =>
+      Effect.gen(function* () {
+        // Git reports conflicts on stdout, so the files say it instead.
+        const conflicted = (yield* conflictedPaths(worktreePath)).length > 0;
+        yield* runLenient(worktreePath, ["merge", "--abort"]);
+        return yield* conflicted ? new SyncConflictsError({ ref }) : err;
+      }),
+    ),
+  );
+});
 
 // Combined resolution for the "diverged but mergeable" state. The
 // `merge-tree --write-tree` probe (gating this state) already validated
 // the whole-tree merge as clean, which is what makes the merge fallback
-// safe.
-export async function pullRebaseOrMergeAndPush(
+// safe. Fetch, then rebase or merge, then push, in that order.
+export const pullRebaseOrMergeAndPush = Effect.fnUntraced(function* (
   worktreePath: string,
-): Promise<void> {
-  // react-doctor-disable-next-line react-doctor/async-parallel -- fetch → rebase/merge → push is a sequential domain operation
-  await run(worktreePath, ["fetch"]);
-  await rebaseOrMergeAgainst(worktreePath, await upstreamRef(worktreePath));
-  await run(worktreePath, ["push"]);
-}
+) {
+  yield* run(worktreePath, ["fetch"]);
+  yield* rebaseOrMergeAgainst(worktreePath, yield* upstreamRef(worktreePath));
+  yield* run(worktreePath, ["push"]);
+});
 
 // Fetch *all* remotes from the project root, not the worktree's tracked
 // upstream: primaryRef can live on a different remote than the branch
 // tracks (e.g. branch tracks fork/feat while primary is origin/main), so
 // `git fetch` from the worktree would leave the rebase target stale.
 // The coalescing helper also dedupes against the focus-driven sweep.
-export async function syncWithPrimary(
+export const syncWithPrimary = (
   worktreePath: string,
   projectPath: string,
   primaryRef: string,
-): Promise<void> {
-  await fetchAllRemotes(projectPath);
-  await rebaseOrMergeAgainst(worktreePath, primaryRef);
-}
+) =>
+  Effect.andThen(
+    fetchAllRemotes(projectPath),
+    rebaseOrMergeAgainst(worktreePath, primaryRef),
+  );
 
 // The ways on from a sync that conflicts, from the upstream or from
 // the primary branch: the merge, left stopped on its conflicts for the
 // Changes tab to settle and the banner to continue or abort. Any other
-// refusal (local edits in the way) still throws. Whether it stopped.
-export async function mergeUpstreamKeepingConflicts(
+// refusal (local edits in the way) still fails. Whether it stopped.
+export const mergeUpstreamKeepingConflicts = Effect.fnUntraced(function* (
   worktreePath: string,
-): Promise<boolean> {
-  await run(worktreePath, ["fetch"]);
-  return mergeKeepingConflicts(worktreePath, await upstreamRef(worktreePath));
-}
+) {
+  yield* run(worktreePath, ["fetch"]);
+  return yield* mergeKeepingConflicts(
+    worktreePath,
+    yield* upstreamRef(worktreePath),
+  );
+});
 
-export async function mergePrimaryKeepingConflicts(
+export const mergePrimaryKeepingConflicts = (
   worktreePath: string,
   projectPath: string,
   primaryRef: string,
-): Promise<boolean> {
-  await fetchAllRemotes(projectPath);
-  return mergeKeepingConflicts(worktreePath, primaryRef);
-}
+) =>
+  Effect.andThen(
+    fetchAllRemotes(projectPath),
+    mergeKeepingConflicts(worktreePath, primaryRef),
+  );

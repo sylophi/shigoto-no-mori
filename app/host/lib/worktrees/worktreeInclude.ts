@@ -6,6 +6,7 @@
 // backs the Configure view's read.
 
 import { join } from "node:path";
+import * as Effect from "effect/Effect";
 import {
   makeIgnoreMatcher,
   normalizeRelPath,
@@ -27,17 +28,23 @@ const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 // pattern side but appears as individual files on the ignored side, so the
 // intersection drops it entirely: conservative, and avoids enumerating
 // node_modules-scale trees.
-async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
-  const [candidates, ignored] = await Promise.all([
-    listUntrackedMatchingExcludeFile(
-      projectPath,
-      join(projectPath, WORKTREE_INCLUDE_FILE),
+const resolveMatchedPaths = (projectPath: string) =>
+  Effect.map(
+    Effect.all(
+      [
+        listUntrackedMatchingExcludeFile(
+          projectPath,
+          join(projectPath, WORKTREE_INCLUDE_FILE),
+        ),
+        listIgnoredPaths(projectPath),
+      ],
+      { concurrency: 2 },
     ),
-    listIgnoredPaths(projectPath),
-  ]);
-  const isIgnored = makeIgnoreMatcher(ignored);
-  return candidates.filter((c) => isIgnored(normalizeRelPath(c)));
-}
+    ([candidates, ignored]) => {
+      const isIgnored = makeIgnoreMatcher(ignored);
+      return candidates.filter((c) => isIgnored(normalizeRelPath(c)));
+    },
+  );
 
 // Pure read for the Configure view. Never throws: a broken file or git
 // failure degrades to an empty resolution so the UI can still render.
@@ -50,29 +57,28 @@ async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
 // creation (the engine's CarryOver.ts). So a
 // pattern that only exists on a feature branch's worktree still shows
 // up as covered here.
-export async function readWorktreeIncludeStatus(
+export const readWorktreeIncludeStatus = (
   checkouts: readonly CarryOverCheckout[],
-): Promise<WorktreeIncludeStatus> {
-  const perCheckout = await Promise.all(
-    checkouts.map((checkout) => readOneStatus(checkout.path)),
+) =>
+  Effect.map(
+    Effect.forEach(checkouts, (checkout) => readOneStatus(checkout.path), {
+      concurrency: "unbounded",
+    }),
+    (perCheckout): WorktreeIncludeStatus => ({
+      fileExists: perCheckout.some((status) => status.fileExists),
+      matchedPaths: [...new Set(perCheckout.flatMap((s) => s.matchedPaths))],
+    }),
   );
-  return {
-    fileExists: perCheckout.some((status) => status.fileExists),
-    matchedPaths: [...new Set(perCheckout.flatMap((s) => s.matchedPaths))],
-  };
-}
 
-async function readOneStatus(
-  checkoutPath: string,
-): Promise<WorktreeIncludeStatus> {
-  if (!(await pathExists(join(checkoutPath, WORKTREE_INCLUDE_FILE)))) {
-    return { fileExists: false, matchedPaths: [] };
-  }
-  let matchedPaths: string[] = [];
-  try {
-    matchedPaths = await resolveMatchedPaths(checkoutPath);
-  } catch {
-    // Leave empty; creation-time resolution surfaces the real error.
-  }
+const readOneStatus = Effect.fnUntraced(function* (checkoutPath: string) {
+  const exists = yield* Effect.promise(() =>
+    pathExists(join(checkoutPath, WORKTREE_INCLUDE_FILE)),
+  );
+  if (!exists) return { fileExists: false, matchedPaths: [] as string[] };
+  // A failure leaves it empty; creation-time resolution surfaces the
+  // real error.
+  const matchedPaths = yield* resolveMatchedPaths(checkoutPath).pipe(
+    Effect.orElseSucceed((): string[] => []),
+  );
   return { fileExists: true, matchedPaths };
-}
+});

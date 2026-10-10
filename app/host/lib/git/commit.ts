@@ -6,13 +6,14 @@
 // terminal's `git add`) goes in only if it is ticked.
 import { readFile, rm, writeFile } from "node:fs/promises";
 import type { CommitPicks } from "@shigomori/contracts/schemas";
+import * as Effect from "effect/Effect";
 import { onIndex, runChunked } from "./changes";
-import { run, splitZ } from "./core";
+import { GitRefusal, run, splitZ } from "./core";
 import { stageHunks, staleCommit } from "./hunks";
 
 // Two `-m` flags give git the summary and body as separate paragraphs.
 // Hooks run as they would in a terminal, and their output rides along
-// in the thrown error for the page to show. `amend` folds the picks
+// in the failure for the page to show. `amend` folds the picks
 // into HEAD under the new message instead of adding a commit, with no
 // summary keeps HEAD's message, and with nothing picked rewrites only
 // the message. A commit git refuses (a
@@ -24,68 +25,69 @@ type CommitRequest = CommitPicks & {
   amend?: boolean;
 };
 
-export function commitPicks(
-  worktreePath: string,
-  message: CommitRequest,
-): Promise<string> {
-  return onIndex(worktreePath, async () => {
-    const indexFile = (
-      await run(worktreePath, [
+export const commitPicks = (worktreePath: string, message: CommitRequest) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      const indexFile = (yield* run(worktreePath, [
         "rev-parse",
         "--path-format=absolute",
         "--git-path",
         "index",
-      ])
-    ).trim();
-    // A repository nothing was ever added to has no index yet.
-    const saved = await readFile(indexFile).catch(() => null);
-    try {
-      await commitWith(worktreePath, message);
-    } catch (err) {
-      if (saved) await writeFile(indexFile, saved);
-      else await rm(indexFile, { force: true });
-      throw err;
-    }
-    const hash = await run(worktreePath, ["rev-parse", "--short", "HEAD"]);
-    return hash.trim();
-  });
-}
+      ])).trim();
+      // A repository nothing was ever added to has no index yet.
+      const saved = yield* Effect.promise(() =>
+        readFile(indexFile).catch(() => null),
+      );
+      yield* commitWith(worktreePath, message).pipe(
+        Effect.tapError(() =>
+          Effect.promise(() =>
+            saved
+              ? writeFile(indexFile, saved)
+              : rm(indexFile, { force: true }),
+          ),
+        ),
+      );
+      const hash = yield* run(worktreePath, ["rev-parse", "--short", "HEAD"]);
+      return hash.trim();
+    }),
+  );
 
-async function commitWith(
+const commitWith = Effect.fnUntraced(function* (
   worktreePath: string,
   message: CommitRequest,
-): Promise<void> {
+) {
   // A hunk is placed by its lines in HEAD, so picks from before a new
   // HEAD (a commit from a terminal) could name other changes now.
   if (message.hunks.length > 0) {
-    const head = (await run(worktreePath, ["rev-parse", "HEAD"])).trim();
+    const head = (yield* run(worktreePath, ["rev-parse", "HEAD"])).trim();
     const stale = message.hunks.find((pick) => pick.base !== head);
-    if (stale) throw new Error(staleCommit(stale.path));
+    if (stale) {
+      return yield* new GitRefusal({ reason: staleCommit(stale.path) });
+    }
   }
   // By path, not a bare `reset`: that one also drops MERGE_HEAD, and a
   // merge's resolution would commit as an ordinary commit.
-  await run(worktreePath, ["reset", "-q", "--", "."]);
+  yield* run(worktreePath, ["reset", "-q", "--", "."]);
   // A file listed and then deleted before the commit (an agent's
   // scratch file) is one git no longer knows, and `add` would refuse
   // the whole lot over it.
   const known = new Set(
-    (
-      await runChunked(
-        worktreePath,
-        ["ls-files", "-z", "--cached", "--others"],
-        message.paths,
-      )
-    ).flatMap(splitZ),
+    (yield* runChunked(
+      worktreePath,
+      ["ls-files", "-z", "--cached", "--others"],
+      message.paths,
+    )).flatMap(splitZ),
   );
   const paths = message.paths.filter((path) => known.has(path));
   // `--force` for a file staged past .gitignore (`git add -f`), which
   // the reset just unstaged.
   if (paths.length > 0) {
-    await runChunked(worktreePath, ["add", "-A", "--force"], paths);
+    yield* runChunked(worktreePath, ["add", "-A", "--force"], paths);
   }
+  // Index writes take index.lock, so files go one after another.
   for (const { path, changes } of message.hunks) {
-    // oxlint-disable-next-line no-await-in-loop -- index writes take index.lock, so files have to go one after another
-    await stageHunks(worktreePath, path, changes);
+    yield* stageHunks(worktreePath, path, changes);
   }
   const args = ["commit", "--quiet"];
   if (message.amend) args.push("--amend");
@@ -96,5 +98,5 @@ async function commitWith(
     const body = message.description?.trim();
     if (body) args.push("-m", body);
   }
-  await run(worktreePath, args);
-}
+  yield* run(worktreePath, args);
+});

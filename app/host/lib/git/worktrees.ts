@@ -57,22 +57,19 @@ export function worktreeIdFromPath(path: string): string {
 // pushed, its remote branch is gone, or HEAD is detached. The auto-pull
 // sweep asks right before it pulls, never trusting a row that can be a
 // focus old.
-export async function getUpstreamCounts(
-  worktreePath: string,
-): Promise<{ ahead: number; behind: number } | null> {
-  try {
-    const stdout = await run(worktreePath, [
-      "rev-list",
-      "--left-right",
-      "--count",
-      "HEAD...@{u}",
-    ]);
-    const [a, b] = stdout.trim().split(/\s+/);
-    return { ahead: Number(a) || 0, behind: Number(b) || 0 };
-  } catch {
-    return null;
-  }
-}
+export const getUpstreamCounts = (worktreePath: string) =>
+  run(worktreePath, [
+    "rev-list",
+    "--left-right",
+    "--count",
+    "HEAD...@{u}",
+  ]).pipe(
+    Effect.map((stdout): { ahead: number; behind: number } | null => {
+      const [a, b] = stdout.trim().split(/\s+/);
+      return { ahead: Number(a) || 0, behind: Number(b) || 0 };
+    }),
+    Effect.orElseSucceed(() => null),
+  );
 
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
 // on its own line after each commit's formatted output. A SOH (\x01)
@@ -126,34 +123,32 @@ export function parseLog(stdout: string): CommitSummary[] {
 // in the detail page passes skip=0 with a small count. Returns [] on
 // any git failure (empty repo, detached state mid-rebase) so callers
 // don't have to fork on error.
-export async function listCommits(
+export const listCommits = (
   worktreePath: string,
   opts: { skip: number; count: number; query?: string; from?: string },
-): Promise<CommitSummary[]> {
-  try {
-    const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
-    // A search of the messages, literal and case blind.
-    if (opts.query) {
-      args.push(
-        "--fixed-strings",
-        "--regexp-ignore-case",
-        `--grep=${opts.query}`,
-      );
-    }
+) => {
+  const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
+  // A search of the messages, literal and case blind.
+  if (opts.query) {
     args.push(
-      `--pretty=format:${LOG_FORMAT}`,
-      "--shortstat",
-      "--diff-merges=first-parent",
+      "--fixed-strings",
+      "--regexp-ignore-case",
+      `--grep=${opts.query}`,
     );
-    // History from a commit other than HEAD: where a branch left its base,
-    // for the history before the branch's own commits.
-    if (opts.from) args.push("--end-of-options", opts.from, "--");
-    const stdout = await run(worktreePath, args);
-    return parseLog(stdout);
-  } catch {
-    return [];
   }
-}
+  args.push(
+    `--pretty=format:${LOG_FORMAT}`,
+    "--shortstat",
+    "--diff-merges=first-parent",
+  );
+  // History from a commit other than HEAD: where a branch left its base,
+  // for the history before the branch's own commits.
+  if (opts.from) args.push("--end-of-options", opts.from, "--");
+  return run(worktreePath, args).pipe(
+    Effect.map(parseLog),
+    Effect.orElseSucceed((): CommitSummary[] => []),
+  );
+};
 
 // What the Git page's History tab draws: the branch's own commits,
 // newest first (children before parents, so a merge never lists its
@@ -172,21 +167,22 @@ export async function listCommits(
 // first: the commit menu won't rewrite across one, and a merge on top
 // is undone back to its first parent. Every commit's counts are against its
 // first parent, so a merge's are what it brought in.
-export async function readBranchHistory(
+export const readBranchHistory = Effect.fnUntraced(function* (
   worktreePath: string,
   opts: { base: string | undefined; count: number },
-): Promise<BranchHistory> {
-  const short = async (rev: string) =>
-    (
-      await runLenient(worktreePath, [
+) {
+  const short = (rev: string) =>
+    Effect.map(
+      runLenient(worktreePath, [
         "log",
         "-1",
         "--format=%h",
         "--end-of-options",
         rev,
         "--",
-      ])
-    ).trim();
+      ]),
+      (out) => out.trim(),
+    );
   const log = (range: string) =>
     runLenient(worktreePath, [
       "log",
@@ -203,41 +199,50 @@ export async function readBranchHistory(
   // what reads past where the branch left its base. Without an upstream
   // the reads against it fail and come back empty.
   const [upstream, mergeBase, unpushedOut, incoming, forkOut] =
-    await Promise.all([
-      upstreamName(worktreePath),
-      opts.base
-        ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
-        : Promise.resolve(""),
-      runLenient(worktreePath, [
-        "log",
-        "--format=%h",
-        "--max-count=1000",
-        "--end-of-options",
-        "@{u}..HEAD",
-        "--",
-      ]),
-      log("HEAD..@{u}").then(parseLog),
-      runLenient(worktreePath, ["merge-base", "HEAD", "@{u}"]),
-    ]);
+    yield* Effect.all(
+      [
+        upstreamName(worktreePath),
+        opts.base
+          ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
+          : Effect.succeed(""),
+        runLenient(worktreePath, [
+          "log",
+          "--format=%h",
+          "--max-count=1000",
+          "--end-of-options",
+          "@{u}..HEAD",
+          "--",
+        ]),
+        Effect.map(log("HEAD..@{u}"), parseLog),
+        runLenient(worktreePath, ["merge-base", "HEAD", "@{u}"]),
+      ],
+      { concurrency: "unbounded" },
+    );
   const baseHash = mergeBase.trim();
   const forkHash = forkOut.trim();
   const range = baseHash ? `${baseHash}..HEAD` : "HEAD";
-  const [base, own, merges, upstreamFork] = await Promise.all([
-    opts.base && baseHash
-      ? short(baseHash).then((hash) => ({ ref: opts.base ?? "", hash }))
-      : Promise.resolve(null),
-    log(range).then(parseLog),
-    runLenient(worktreePath, [
-      "log",
-      "--merges",
-      "--format=%h %p",
-      `-${opts.count}`,
-      "--end-of-options",
-      range,
-      "--",
-    ]),
-    forkHash ? short(forkHash) : Promise.resolve(""),
-  ]);
+  const [base, own, merges, upstreamFork] = yield* Effect.all(
+    [
+      opts.base && baseHash
+        ? Effect.map(short(baseHash), (hash) => ({
+            ref: opts.base ?? "",
+            hash,
+          }))
+        : Effect.succeed(null),
+      Effect.map(log(range), parseLog),
+      runLenient(worktreePath, [
+        "log",
+        "--merges",
+        "--format=%h %p",
+        `-${opts.count}`,
+        "--end-of-options",
+        range,
+        "--",
+      ]),
+      forkHash ? short(forkHash) : Effect.succeed(""),
+    ],
+    { concurrency: "unbounded" },
+  );
   return {
     commits: own.slice(0, opts.count),
     more: own.length > opts.count,
@@ -253,30 +258,33 @@ export async function readBranchHistory(
         ? [{ hash, firstParent }]
         : [];
     }),
-  };
-}
+  } satisfies BranchHistory;
+});
 
 // Every checkout of the repo and the branch it has out (null when
 // detached), as git lists them.
-export async function listCheckouts(
-  repoPath: string,
-): Promise<{ path: string; branch: string | null }[]> {
-  const stdout = await run(repoPath, ["worktree", "list", "--porcelain", "-z"]);
-  const checkouts: { path: string; branch: string | null }[] = [];
-  for (const field of stdout.split("\0")) {
-    if (field.startsWith("worktree ")) {
-      checkouts.push({ path: field.slice("worktree ".length), branch: null });
-    } else if (field.startsWith("branch refs/heads/")) {
-      const open = checkouts.at(-1);
-      if (open) open.branch = field.slice("branch refs/heads/".length);
-    }
-  }
-  return checkouts;
-}
+export const listCheckouts = (repoPath: string) =>
+  Effect.map(
+    run(repoPath, ["worktree", "list", "--porcelain", "-z"]),
+    (stdout) => {
+      const checkouts: { path: string; branch: string | null }[] = [];
+      for (const field of stdout.split("\0")) {
+        if (field.startsWith("worktree ")) {
+          checkouts.push({
+            path: field.slice("worktree ".length),
+            branch: null,
+          });
+        } else if (field.startsWith("branch refs/heads/")) {
+          const open = checkouts.at(-1);
+          if (open) open.branch = field.slice("branch refs/heads/".length);
+        }
+      }
+      return checkouts;
+    },
+  );
 
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
 // gone. Used after the nuke-everything root wipe to keep `git worktree
 // list` honest.
-export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
-  await run(projectPath, ["worktree", "prune"]);
-}
+export const pruneStaleWorktrees = (projectPath: string) =>
+  Effect.asVoid(run(projectPath, ["worktree", "prune"]));
