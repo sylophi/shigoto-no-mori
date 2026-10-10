@@ -9,7 +9,7 @@ import {
   villagerProfilesQueryOptions,
 } from "@/hooks/villagers/useVillagers";
 import { type Speaker, speakerFor } from "@shigomori/ui/lib/villagerVoice.ts";
-import { faceColor } from "./faceColor";
+import { faceColor } from "@shigomori/ui/lib/villagers/faceColor.ts";
 
 // Who speaks for which worktrees, for a toast fired outside render.
 // Same gate as useVillageLife, this window's Village life and villager

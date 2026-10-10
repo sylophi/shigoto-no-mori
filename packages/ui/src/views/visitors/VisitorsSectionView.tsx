@@ -1,20 +1,20 @@
 import { type ReactNode, useRef } from "react";
 import { FoldVertical, RotateCcw } from "lucide-react";
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { DialogueFrameView } from "@/components/villagers/VillagerDialogueView";
-import { TypedWordsView } from "@/components/villagers/TypedWordsView";
-import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
-import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destructive-button.tsx";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import { DialogueFrameView } from "../villagers/VillagerDialogueView.tsx";
+import { TypedWordsView } from "../villagers/TypedWordsView.tsx";
+import { ChipButton } from "../../primitives/chip-button.tsx";
+import { ConfirmDestructiveButton } from "../../primitives/confirm-destructive-button.tsx";
 import {
   SectionHeading,
   SectionIntro,
-} from "@shigomori/ui/primitives/section-heading.tsx";
-import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
-import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { VisitorSort } from "@/lib/villagers/visitors";
-import { AlbumProgressView } from "./AlbumProgressView";
-import { ALBUM_GRID, ALBUM_SLOT } from "./VisitorStickerView";
+} from "../../primitives/section-heading.tsx";
+import { SegmentedControl } from "../../primitives/segmented-control.tsx";
+import { Skeleton } from "../../primitives/skeleton.tsx";
+import { cn } from "../../lib/utils.ts";
+import type { VisitorSort } from "../../lib/villagers/visitors.ts";
+import { AlbumProgressView } from "./AlbumProgressView.tsx";
+import { ALBUM_GRID, ALBUM_SLOT } from "./VisitorStickerView.tsx";
 
 const SORT_OPTIONS = [
   { value: "visits", label: "Most visits" },

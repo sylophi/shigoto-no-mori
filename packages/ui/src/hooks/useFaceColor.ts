@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { faceColor } from "@/lib/villagers/faceColor";
+import { faceColor } from "../lib/villagers/faceColor.ts";
 
 // A character's own color, read off their face (lib/villagers/
 // faceColor.ts), or null until it is, or without a clear one.

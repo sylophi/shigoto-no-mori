@@ -14,7 +14,7 @@ import {
   buildAlbum,
   sortAlbum,
   type VisitorSort,
-} from "@/lib/villagers/visitors";
+} from "@shigomori/ui/lib/villagers/visitors.ts";
 import type { VillagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
 import { GuestBook } from "./GuestBook";
 import { VisitorSlot } from "./VisitorSlot";
@@ -24,7 +24,7 @@ import {
   NobodyYetView,
   StartOverView,
   VisitorsSectionView,
-} from "./VisitorsSectionView";
+} from "@shigomori/ui/views/visitors/VisitorsSectionView.tsx";
 
 const SECTIONS: {
   rarity: VillagerRarity;
