@@ -19,7 +19,8 @@
       "deviceName": "c@",
       "deviceIcon": "pine",
       "detectedDeviceIcon": "bird",
-      "sharedSignIn": false
+      "sharedSignIn": false,
+      "needsDeviceKey": false
     }
   },
   "account:listDevices": {
@@ -43,7 +44,8 @@
       "deviceName": "",
       "deviceIcon": "tablet",
       "detectedDeviceIcon": "flower",
-      "sharedSignIn": false
+      "sharedSignIn": false,
+      "needsDeviceKey": false
     }
   },
   "account:setDeviceName": {
@@ -58,7 +60,8 @@
       "deviceName": ",(",
       "deviceIcon": "gamepad",
       "detectedDeviceIcon": "pine",
-      "sharedSignIn": false
+      "sharedSignIn": false,
+      "needsDeviceKey": false
     }
   },
   "account:signOut": {},
@@ -70,7 +73,8 @@
       "deviceName": "\n",
       "deviceIcon": "flower",
       "detectedDeviceIcon": "coffee",
-      "sharedSignIn": false
+      "sharedSignIn": false,
+      "needsDeviceKey": false
     }
   },
   "agents:setHooks": {
@@ -1712,6 +1716,7 @@
       "hubUrl": "C'",
       "accountId": "",
       "credential": "",
+      "deviceKey": "",
       "webOrigin": "\u0000",
       "acceptsCommands": false
     }

@@ -175,7 +175,10 @@ const protocolFloor = Layer.succeed(ProtocolFloor, (effect) =>
 // One row as the API reports it, for the list and the enroll response
 // alike, so the two cannot disagree about a device.
 function toDeviceInfo(
-  row: Omit<Registry.DeviceRow, "account_id" | "credential_hash">,
+  row: Omit<
+    Registry.DeviceRow,
+    "account_id" | "credential_hash" | "public_key"
+  >,
   online: ReadonlySet<string>,
 ): DeviceInfoWire {
   return {
@@ -243,7 +246,7 @@ const handlers = Effect.gen(function* () {
     handle.handle("enroll", ({ payload }) =>
       Effect.gen(function* () {
         const { accountId } = yield* HubLogin;
-        const { deviceId, name, platform, icon } = payload;
+        const { deviceId, name, platform, icon, publicKey } = payload;
         const existing = yield* registry.byId(deviceId);
         if (existing !== null && existing.account_id !== accountId) {
           return yield* new HubDeviceEnrolledElsewhereError();
@@ -277,9 +280,10 @@ const handlers = Effect.gen(function* () {
             yield* revokeAccountDevice(accountId, evict);
           }
         }
-        // Enrolling again rotates the credential: exactly one credential
-        // per device is valid at any time, because only one hash is
-        // stored.
+        // Enrolling again rotates the credential and the key: exactly
+        // one credential per device is valid at any time, because only
+        // one hash is stored, and the roster hands peers the key the
+        // device enrolled with last.
         const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
         const createdAt =
           existing?.created_at ?? (yield* Clock.currentTimeMillis);
@@ -294,6 +298,7 @@ const handlers = Effect.gen(function* () {
                   name,
                   platform,
                   icon,
+                  publicKey,
                   credentialHash,
                   createdAt,
                 }),

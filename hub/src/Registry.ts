@@ -28,13 +28,17 @@ export interface DeviceRow {
   // sent with every enrollment, so never NULL
   // (hub/migrations/0004_device_kind_required.sql).
   icon: string;
+  // The device's static X25519 public key, base64url, sent with every
+  // enrollment. NULL on a row enrolled before keys
+  // (hub/migrations/0006_device_public_key.sql).
+  public_key: string | null;
   credential_hash: string;
   created_at: number;
   last_seen_at: number | null;
 }
 
 const DEVICE_COLUMNS =
-  "device_id, account_id, name, platform, icon, credential_hash, created_at, last_seen_at";
+  "device_id, account_id, name, platform, icon, public_key, credential_hash, created_at, last_seen_at";
 
 // How long a revoked credential's tombstone answers
 // (hub/migrations/0002_revoked_credentials.sql): long enough for a
@@ -65,7 +69,7 @@ export class Registry extends Context.Service<
       accountId: string,
     ) => Effect.Effect<ReadonlyArray<string>, RegistryError>;
     // Inserts the device or, under the same account, rotates its
-    // credential and refreshes name, platform and icon. False when the
+    // credential and key and refreshes name, platform and icon. False when the
     // device id is another account's: the guard in the statement holds
     // whatever a concurrent read saw.
     readonly upsert: (row: {
@@ -74,6 +78,7 @@ export class Registry extends Context.Service<
       readonly name: string;
       readonly platform: string;
       readonly icon: string;
+      readonly publicKey: string;
       readonly credentialHash: string;
       readonly createdAt: number;
     }) => Effect.Effect<boolean, RegistryError>;
@@ -167,18 +172,20 @@ const make = Effect.gen(function* () {
     readonly name: string;
     readonly platform: string;
     readonly icon: string;
+    readonly publicKey: string;
     readonly credentialHash: string;
     readonly createdAt: number;
   }) {
     const result = yield* query("enroll a device", () =>
       db
         .prepare(
-          `INSERT INTO devices (device_id, account_id, name, platform, icon, credential_hash, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO devices (device_id, account_id, name, platform, icon, public_key, credential_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (device_id) DO UPDATE
            SET name = excluded.name,
                platform = excluded.platform,
                icon = excluded.icon,
+               public_key = excluded.public_key,
                credential_hash = excluded.credential_hash
            WHERE device_id = excluded.device_id
              AND account_id = excluded.account_id`,
@@ -189,6 +196,7 @@ const make = Effect.gen(function* () {
           row.name,
           row.platform,
           row.icon,
+          row.publicKey,
           row.credentialHash,
           row.createdAt,
         )

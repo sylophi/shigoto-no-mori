@@ -24,6 +24,7 @@ import {
 import { deriveAccountId } from "./token";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { log } from "@shared/log";
+import { newDeviceKey } from "@shared/crypto/deviceKey";
 
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;
@@ -56,7 +57,8 @@ export function effectiveDeviceIcon(
 
 // Exchanges a fresh Clerk session token (minted by the renderer's
 // ClerkAccountSync off the live session) for the hub device
-// credential and persists it with the token's account id.
+// credential, registering a fresh key pair's public half with it, and
+// persists both with the token's account id.
 export async function enrollDevice(
   deps: EnrollDeviceDeps,
   token: string,
@@ -71,11 +73,13 @@ export async function enrollDevice(
     deps.fallbackDeviceName;
   // The pick alone, for the store: the wire gets the effective icon.
   const deviceIcon = stored?.deviceIcon ?? deps.store.rememberedDeviceIcon();
+  const deviceKey = newDeviceKey();
   const fields = {
     deviceId: deps.deviceId,
     name: deviceName,
     platform: deps.platform,
     icon: effectiveDeviceIcon(stored, deps.store, deps.detectedIcon),
+    publicKey: deviceKey.publicKey,
   };
   let enrollment: EnrollResponse;
   try {
@@ -98,6 +102,7 @@ export async function enrollDevice(
   const accountId = deriveAccountId(token);
   deps.store.write({
     credential: enrollment.credential,
+    deviceKey: deviceKey.privateKey,
     accountId,
     deviceName,
     ...(deviceIcon === null ? {} : { deviceIcon }),

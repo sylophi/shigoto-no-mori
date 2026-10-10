@@ -8,9 +8,11 @@
 // an in-memory backing and the desktop adapter wraps it around fs.
 //
 // The credential is the long-lived device secret the enroll response
-// returned. It is encrypted at rest by the OS keychain when the platform
-// offers one (enc:true), and stored as plaintext with enc:false when it
-// does not, so sign-in still works on a machine without a keychain.
+// returned, and the device key the private half of the key pair the
+// device enrolled with (shared/crypto/deviceKey.ts). Both are encrypted
+// at rest by the OS keychain when the platform offers one (enc:true),
+// and stored as plaintext with enc:false when it does not, so sign-in
+// still works on a machine without a keychain.
 
 import { isDeviceIcon, type DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
@@ -39,6 +41,8 @@ export type StoreCipher = {
 // account's enrollment writes a record without it. Absent is off.
 export type StoredAccount = {
   credential: string;
+  // The private key this device enrolled with, base64url.
+  deviceKey: string;
   accountId: string;
   deviceName: string;
   deviceIcon?: DeviceIcon;
@@ -53,6 +57,7 @@ type StoredShape = {
   v: 1;
   enc: boolean;
   credential: string;
+  deviceKey?: string;
   accountId: string;
   deviceName: string;
   deviceIcon?: DeviceIcon;
@@ -77,7 +82,14 @@ type SignedOutShape = {
 };
 
 export type AccountStore = {
+  // Null for a record with no device key, one enrolled before keys,
+  // which reads as signed out so the device enrolls again: on its own
+  // where the Clerk session lives (ClerkAccountSync), once the user
+  // signs in where it does not.
   read(): StoredAccount | null;
+  // Whether the store holds a record enrolled before device keys, the
+  // one read() refuses: the device enrolls again to make its key.
+  enrolledWithoutKey(): boolean;
   // read() !== null, for callers that only need the verdict.
   signedIn(): boolean;
   write(account: StoredAccount): void;
@@ -90,7 +102,7 @@ export type AccountStore = {
   rememberedDeviceIcon(): DeviceIcon | null;
   // Parks a credential whose revoke did not land, signing out.
   park(account: StoredAccount): void;
-  readParked(): StoredAccount | null;
+  readParked(): Omit<StoredAccount, "deviceKey"> | null;
   clearParked(): void;
 };
 
@@ -125,7 +137,7 @@ function iconOf(
 function withIdentity(
   doc: StoredShape | SignedOutShape,
   opened: { credential: string; accountId: string },
-): StoredAccount {
+): Omit<StoredAccount, "deviceKey"> {
   const icon = iconOf(doc);
   const hub: Partial<StoredShape> = "signedOut" in doc ? {} : doc;
   return {
@@ -184,6 +196,15 @@ export function createAccountStore(opts: {
     }
   }
 
+  // One secret as stored, or null when it cannot be opened.
+  function open(enc: boolean, stored: string): string | null {
+    try {
+      return enc ? cipher.decrypt(stored) : stored;
+    } catch {
+      return null;
+    }
+  }
+
   function encrypt(credential: string): { enc: boolean; credential: string } {
     return {
       enc: cipher.available,
@@ -219,13 +240,21 @@ export function createAccountStore(opts: {
         return null;
       }
       const opened = decrypt(doc);
-      return opened === null ? null : withIdentity(doc, opened);
+      if (opened === null || typeof doc.deviceKey !== "string") return null;
+      const deviceKey = open(doc.enc, doc.deviceKey);
+      return deviceKey === null
+        ? null
+        : { ...withIdentity(doc, opened), deviceKey };
     },
 
     write(account) {
+      const sealed = encrypt(account.credential);
       const doc: StoredShape = {
         v: 1,
-        ...encrypt(account.credential),
+        ...sealed,
+        deviceKey: sealed.enc
+          ? cipher.encrypt(account.deviceKey)
+          : account.deviceKey,
         accountId: account.accountId,
         deviceName: account.deviceName,
       };
@@ -238,6 +267,16 @@ export function createAccountStore(opts: {
 
     signedIn() {
       return this.read() !== null;
+    },
+
+    enrolledWithoutKey() {
+      const doc = readDoc();
+      return (
+        doc !== null &&
+        !("signedOut" in doc) &&
+        typeof doc.credential === "string" &&
+        doc.deviceKey === undefined
+      );
     },
 
     clear() {

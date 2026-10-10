@@ -5,23 +5,27 @@
 // sockets the answer brokers (shared/hub/directDial.ts).
 //
 // The question is a single ask/answer pair keyed by an id, riding the
-// hub's relay envelope as its opaque `frame` (AskFrameSchema and
-// AnswerFrameSchema in packages/contracts/src/hubProtocol.ts).
+// hub's relay envelope as its opaque `frame` (RelayFrame in
+// packages/contracts/src/hubProtocol.ts), sealed as one Noise IK
+// handshake (shared/crypto/noise.ts): the ask is its first message,
+// sealed to the key the roster names for the device asked, and the
+// answer its second, which only the asker can read. The hub sees the
+// two device ids and the ask's id, nothing else.
 //
-// There is no session: no handshake before the ask, nothing to close
-// after the answer, so a dial costs one round trip. An undefined input
+// There is no session: each ask is a handshake of its own, nothing is
+// kept after the answer, so a dial costs one round trip. An undefined input
 // or result rides as an absent field, the same framing invariant as
 // the direct wire (frames.ts). There is no version negotiation either:
 // a peer speaking another shape of this wire parses as nothing, its
 // asks are dropped and ours to it time out, which the keeper retries
 // on its ladder like any other unreachable peer.
 //
-// TRUST MODEL (see also protocol.ts): the device hub is our own managed
-// service. Enrollment is Clerk-verified and every deliverable peer is
-// by construction a device of the same account, so an ask carries no
-// credential. The one serving rule is that an ask is answered only for
-// a sender in the latest presence roster, which keeps a misrouted
-// `from` from minting tickets. The size guard is a sanity bound.
+// TRUST MODEL (see also hubProtocol.ts): the device hub is our own
+// managed service and the roster of every device's key. An ask is
+// answered only for a sender in the latest presence roster whose
+// handshake proves the key the roster names for it, so neither a
+// misrouted `from` nor a party in the middle mints tickets. The size
+// guard is a sanity bound.
 //
 // Pure on purpose: the shared frame and envelope schemas and an
 // injected send function. No node builtins, no ws, no electron, so the
@@ -31,17 +35,23 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
-  type AnswerFrame,
-  AnswerFrameSchema,
-  type AskFrame,
-  AskFrameSchema,
+  type AnswerPayload,
+  AnswerPayloadSchema,
+  type AskPayload,
+  AskPayloadSchema,
   decodeEnvelope,
+  decodeRelayFrame,
   encodeEnvelope,
+  encodeRelayFrame,
   MAX_HUB_MESSAGE_BYTES,
   hubTextWithinLimit,
+  type OnlineDevice,
+  type RelayFrame,
   ServerEnvelopeSchema,
   utf8ByteLength,
 } from "@shigomori/contracts/hubProtocol";
+import { fromBase64Url, toBase64Url } from "@shared/crypto/deviceKey";
+import { HandshakeState, type KeyPair } from "@shared/crypto/noise";
 import { log } from "@shared/log";
 
 // The one ask this wire serves.
@@ -52,8 +62,25 @@ export const CONNECT_INFO_ASK = "connectInfo";
 // device, not a failed call, so the dialer parks instead of retrying.
 export const NO_LISTENER_CODE = "no-listener";
 
-const decodeAsk = Schema.decodeUnknownOption(AskFrameSchema);
-const decodeAnswer = Schema.decodeUnknownOption(AnswerFrameSchema);
+const decodeAsk = Schema.decodeUnknownOption(
+  Schema.fromJsonString(AskPayloadSchema),
+);
+const decodeAnswer = Schema.decodeUnknownOption(
+  Schema.fromJsonString(AnswerPayloadSchema),
+);
+
+const utf8Encoder = new TextEncoder();
+const utf8Decoder = new TextDecoder();
+
+// What both sides of one ask mix into its handshake, so a sealed ask
+// relayed to any other device, or the other way round, does not read.
+export function relayPrologue(askerId: string, askedId: string): Uint8Array {
+  return utf8Encoder.encode(`sm-relay-v1:${askerId}>${askedId}`);
+}
+
+// IK's second message: the responder's ephemeral key, then the payload
+// and its tag.
+const ANSWER_OVERHEAD_BYTES = 32 + 16;
 
 // The addressed peer has no socket on the device hub (an offline nack,
 // or a presence list it vanished from). A pending ask to it rejects
@@ -119,6 +146,8 @@ export type ServeConnectInfo = (
 
 type HubLinkDeps = {
   localDeviceId: string;
+  // This device's static key pair, the one it enrolled with.
+  localKey: KeyPair;
   // Writes one text message to the raw hub socket. May throw when the
   // socket is unusable, and the caller of the failed operation sees it.
   send(text: string): void;
@@ -146,6 +175,8 @@ export type HubLink = {
 
 type PendingAsk = {
   deviceId: string;
+  // The handshake the ask opened, which reads the answer.
+  handshake: HandshakeState;
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -157,14 +188,15 @@ function truncateId(id: string): string {
   return id.length > 64 ? `${id.slice(0, 64)}...` : id;
 }
 
-function refusal(frame: AskFrame, message: string, code?: string): AnswerFrame {
-  return {
-    answer: frame.ask,
-    id: frame.id,
-    ok: false,
-    message,
-    ...(code === undefined ? {} : { code }),
-  };
+// Public keys, so no constant-time compare is needed.
+function sameKey(a: Uint8Array | null, b: Uint8Array): boolean {
+  return (
+    a !== null && a.length === b.length && a.every((byte, i) => byte === b[i])
+  );
+}
+
+function refusal(message: string, code?: string): AnswerPayload {
+  return { ok: false, message, ...(code === undefined ? {} : { code }) };
 }
 
 export function createHubLink(deps: HubLinkDeps): HubLink {
@@ -174,7 +206,8 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
   // starts at random because an answer reaches every tab of a web
   // device, and a sibling tab's ask must not share its id.
   let nextId = Math.floor(Math.random() * 2 ** 40);
-  let online = new Set<string>();
+  // The latest roster: each online device and its public key.
+  let online = new Map<string, Uint8Array>();
   let closed = false;
   let droppedInbound = 0;
 
@@ -202,10 +235,22 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
   // fits the limit, so nothing stringifies twice.
   function encodeFor(
     to: string,
-    frame: object,
+    frame: RelayFrame,
   ): { text: string; fits: boolean } {
-    const text = encodeEnvelope({ t: "relay", to, frame });
+    const text = encodeEnvelope({
+      t: "relay",
+      to,
+      frame: encodeRelayFrame(frame),
+    });
     return { text, fits: hubTextWithinLimit(text, routingDelta(to)) };
+  }
+
+  // Whether an answer of this many payload bytes, once sealed, fits the
+  // limit: measured before sealing, since the handshake seals once.
+  function answerFits(to: string, id: number, payloadBytes: number): boolean {
+    const sealedBytes = ANSWER_OVERHEAD_BYTES + payloadBytes;
+    const sealed = "x".repeat(Math.ceil((sealedBytes * 4) / 3));
+    return encodeFor(to, { kind: "answer", id, sealed }).fits;
   }
 
   // The send path for answers nobody here awaits. A failure is logged,
@@ -237,47 +282,73 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
 
   // ---- Answering ----
 
-  function answerFor(from: string, frame: AskFrame): AnswerFrame {
-    if (frame.ask !== CONNECT_INFO_ASK) {
-      return refusal(frame, `unknown ask "${frame.ask}"`);
+  function answerFor(from: string, ask: AskPayload): AnswerPayload {
+    if (ask.ask !== CONNECT_INFO_ASK) {
+      return refusal(`unknown ask "${ask.ask}"`);
     }
     if (deps.serveConnectInfo === undefined) {
       return refusal(
-        frame,
         `peer ${deps.localDeviceId} serves no direct listener`,
         NO_LISTENER_CODE,
       );
     }
     try {
-      const result = deps.serveConnectInfo(from, frame.input);
-      return { answer: frame.ask, id: frame.id, ok: true, result };
+      return { ok: true, result: deps.serveConnectInfo(from, ask.input) };
     } catch (error) {
       // The message only: connectInfo fails with no contract error.
-      return refusal(frame, errorMessageOf(error));
+      return refusal(errorMessageOf(error));
     }
   }
 
-  function handleAsk(from: string, frame: AskFrame): void {
+  function handleAsk(from: string, frame: RelayFrame): void {
     // The DO always names real peers in presence, and a real peer must
     // be online to reach us, so an off-roster `from` is misrouted or
     // forged and gets nothing, not even a refusal.
-    if (!online.has(from)) {
+    const fromKey = online.get(from);
+    if (fromKey === undefined) {
       warnDrop(() => `dropping ask from off-roster peer ${truncateId(from)}`);
       return;
     }
-    const answer = answerFor(from, frame);
-    const encoded = encodeFor(from, answer);
-    if (encoded.fits) {
-      sendAnswerText(from, encoded.text);
+    // An ask that does not open, or opens under a key other than the one
+    // the roster names for its sender, came from someone else.
+    const handshake = new HandshakeState({
+      initiator: false,
+      prologue: relayPrologue(from, deps.localDeviceId),
+      s: deps.localKey,
+    });
+    let ask: AskPayload;
+    try {
+      const opened = decodeAsk(
+        utf8Decoder.decode(
+          handshake.readMessage(fromBase64Url(frame.sealed)).payload,
+        ),
+      );
+      if (
+        Option.isNone(opened) ||
+        !sameKey(handshake.remoteStaticKey(), fromKey)
+      ) {
+        throw new Error("not this peer's ask");
+      }
+      ask = opened.value;
+    } catch {
+      warnDrop(
+        () => `dropping an ask that does not open from ${truncateId(from)}`,
+      );
       return;
     }
+    let payload = utf8Encoder.encode(JSON.stringify(answerFor(from, ask)));
     // An oversize result would be nacked and leave the asker waiting
     // out its timeout, so it becomes a refusal the asker rejects on at
     // once. A refusal is tiny and always fits.
+    if (!answerFits(from, frame.id, payload.length)) {
+      payload = utf8Encoder.encode(
+        JSON.stringify(refusal("answer too large for the device hub")),
+      );
+    }
+    const sealed = toBase64Url(handshake.writeMessage(payload).message);
     sendAnswerText(
       from,
-      encodeFor(from, refusal(frame, "answer too large for the device hub"))
-        .text,
+      encodeFor(from, { kind: "answer", id: frame.id, sealed }).text,
     );
   }
 
@@ -289,22 +360,39 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     timeoutMs: number,
   ): Promise<unknown> {
     if (closed) return Promise.reject(new HubLinkDownError());
+    // Sealing needs the key the roster names, so a device off the
+    // roster is offline as far as this link can tell.
+    const deviceKey = online.get(deviceId);
+    if (deviceKey === undefined) {
+      return Promise.reject(new HubPeerOfflineError(deviceId));
+    }
     const id = nextId++;
+    const handshake = new HandshakeState({
+      initiator: true,
+      prologue: relayPrologue(deps.localDeviceId, deviceId),
+      s: deps.localKey,
+      rs: deviceKey,
+    });
     return new Promise<unknown>((resolve, reject) => {
       pending.set(id, {
         deviceId,
+        handshake,
         resolve,
         reject,
         timer: setTimeout(() => {
           takePending(id)?.reject(new HubAskTimeoutError(deviceId, timeoutMs));
         }, timeoutMs),
       });
-      const { text, fits } = encodeFor(deviceId, {
-        ask: CONNECT_INFO_ASK,
-        id,
-        input,
-      });
       try {
+        const ask: AskPayload = { ask: CONNECT_INFO_ASK, input };
+        const payload = utf8Encoder.encode(JSON.stringify(ask));
+        // Sealed, it only grows, so an ask over the limit already is
+        // refused before the handshake's own bound would be.
+        if (payload.length > MAX_HUB_MESSAGE_BYTES) {
+          throw new HubMessageTooLargeError();
+        }
+        const sealed = toBase64Url(handshake.writeMessage(payload).message);
+        const { text, fits } = encodeFor(deviceId, { kind: "ask", id, sealed });
         if (!fits) throw new HubMessageTooLargeError();
         deps.send(text);
       } catch (error) {
@@ -313,29 +401,60 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     });
   }
 
-  function handleAnswer(from: string, frame: AnswerFrame): void {
+  function handleAnswer(from: string, frame: RelayFrame): void {
     const entry = pending.get(frame.id);
-    // A late answer (the ask already timed out) or one from a device
-    // other than the one asked: nothing to route it to.
+    // A late answer (the ask already timed out), a replayed one, or one
+    // from a device other than the one asked: nothing to route it to.
     if (entry === undefined || entry.deviceId !== from) return;
     takePending(frame.id);
-    if (frame.ok) {
-      entry.resolve(frame.result);
+    let answer: AnswerPayload;
+    try {
+      const opened = decodeAnswer(
+        utf8Decoder.decode(
+          entry.handshake.readMessage(fromBase64Url(frame.sealed)).payload,
+        ),
+      );
+      if (Option.isNone(opened)) throw new Error("not an answer");
+      answer = opened.value;
+    } catch {
+      // The ask's handshake is spent, so a genuine answer could not be
+      // read after this one either.
+      entry.reject(
+        new HubAskRefusedError(
+          `the answer from ${truncateId(from)} did not open`,
+          undefined,
+        ),
+      );
+      return;
+    }
+    if (answer.ok) {
+      entry.resolve(answer.result);
     } else {
-      entry.reject(new HubAskRefusedError(frame.message, frame.code));
+      entry.reject(new HubAskRefusedError(answer.message, answer.code));
     }
   }
 
   // ---- Envelope routing ----
 
-  function applyPresence(list: readonly string[]): void {
-    online = new Set(list);
+  function applyPresence(roster: readonly OnlineDevice[]): void {
+    const previous = online;
+    online = new Map();
+    for (const device of roster) {
+      const key = fromBase64Url(device.publicKey);
+      const before = previous.get(device.deviceId);
+      // No pinning: the roster is the trust root, and a device that
+      // enrolled again holds a new key. The change is only noted.
+      if (before !== undefined && !sameKey(before, key)) {
+        log.info(`[hub] device ${truncateId(device.deviceId)} has a new key`);
+      }
+      online.set(device.deviceId, key);
+    }
     for (const [id, entry] of pending) {
       if (!online.has(entry.deviceId)) {
         takePending(id)?.reject(new HubPeerOfflineError(entry.deviceId));
       }
     }
-    notifyPresence([...list]);
+    notifyPresence(roster.map((device) => device.deviceId));
   }
 
   // The presence notice, with the callback's own failure logged rather
@@ -349,18 +468,15 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     }
   }
 
-  function handleFrame(from: string, frame: unknown): void {
-    const ask = decodeAsk(frame);
-    if (Option.isSome(ask)) {
-      handleAsk(from, ask.value);
-      return;
+  function handleFrame(from: string, text: string): void {
+    const frame = decodeRelayFrame(text);
+    if (frame === null) {
+      warnDrop(() => `dropping unparseable frame from ${truncateId(from)}`);
+    } else if (frame.kind === "ask") {
+      handleAsk(from, frame);
+    } else {
+      handleAnswer(from, frame);
     }
-    const answer = decodeAnswer(frame);
-    if (Option.isSome(answer)) {
-      handleAnswer(from, answer.value);
-      return;
-    }
-    warnDrop(() => `dropping unparseable frame from ${truncateId(from)}`);
   }
 
   return {
@@ -391,7 +507,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     askConnectInfo,
 
     onlineDeviceIds(): readonly string[] {
-      return [...online].toSorted();
+      return [...online.keys()].toSorted();
     },
 
     teardown(): void {
@@ -400,7 +516,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         takePending(id)?.reject(new HubLinkDownError());
       }
       if (online.size > 0) {
-        online = new Set();
+        online = new Map();
         notifyPresence([]);
       }
     },

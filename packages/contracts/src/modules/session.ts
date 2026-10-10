@@ -13,13 +13,16 @@ import { strict } from "../schemas/strict.ts";
 // allContractModules, so no window's api carries it.
 
 // The account as the host is to know it. The shell keeps the credential
-// in the keychain and hands it over after every change: a bearer
-// secret the host holds in memory only.
+// and the device key in the keychain and hands them over after every
+// change: secrets the host holds in memory only.
 const AccountFactsSchema = strict(
   Schema.Struct({
     hubUrl: Schema.String,
     accountId: Schema.String,
     credential: Schema.String,
+    // The private key this device enrolled with, base64url: what the
+    // relay and the device link's handshakes prove this device by.
+    deviceKey: Schema.String,
     // The web client's origin, the one extra origin the device link's
     // listener admits. Empty when none is configured.
     webOrigin: Schema.String,

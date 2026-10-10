@@ -146,6 +146,22 @@ describe("POST /devices/enroll", () => {
     expect(response.status).toBe(400);
   });
 
+  it("rejects an enroll that names no public key, or a malformed one, with 400", async () => {
+    for (const publicKey of [undefined, "too-short", "=".repeat(43)]) {
+      // oxlint-disable-next-line no-await-in-loop -- one request per case, in turn
+      const response = await call(
+        enrollRequest(`${TEST_TOKEN_PREFIX}acct-nokey`, {
+          deviceId: "dev-nokey",
+          name: "Keyless",
+          platform: "darwin",
+          icon: "laptop",
+          publicKey,
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+  });
+
   it("re-enrolling rotates the credential and invalidates the old one", async () => {
     const first = await enroll("acct-rotate", "dev-rotate");
     const second = await enroll(
