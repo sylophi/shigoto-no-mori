@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Command } from "cmdk";
 import { GitBranch } from "lucide-react";
 import { cloneFolderName, stripUrlCredentials } from "@shared/cloneUrl";
 import {
@@ -8,32 +7,20 @@ import {
   isGithubShorthand,
   normalizeRemoteUrl,
 } from "@shigomori/contracts/predicates/remoteUrl";
-import {
-  ITEM_CLASS,
-  keepFocusInInput,
-  MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { GithubMark } from "@/components/ui/svgs/github-mark";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useGithubRepos } from "@/hooks/githubCli/useGithubRepos";
 import { useCloneProject } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { cn } from "@/lib/utils";
-import {
-  ActionInputRow,
-  DestinationRow,
-  FormFooter,
-  ProgressPanel,
-} from "./DialogParts";
+import { CloneFormView } from "./CloneFormView";
+import { ProgressPanelView } from "./DialogPartsView";
 import { useNewCheckout } from "./useNewCheckout";
 
 // Clones a remote onto the scoped device and opens it as a project.
 // Where the device's gh is signed in, its GitHub repositories are
 // listed under the input to pick from, narrowed by what is typed.
 // react-doctor-disable-next-line react-doctor/no-giant-component -- one form and its progress stage, with the parts that stand alone in DialogParts and useNewCheckout
-export function CloneView({
+export function CloneForm({
   url,
   setUrl,
   addToTerrier,
@@ -103,7 +90,7 @@ export function CloneView({
 
   if (cloning) {
     return (
-      <ProgressPanel
+      <ProgressPanelView
         icon={
           <GitBranch className="size-4 shrink-0 text-muted-foreground/80" />
         }
@@ -115,75 +102,21 @@ export function CloneView({
   }
 
   return (
-    <>
-      {/* The Command holds the input and its list alone: around the
-          rest, its keys would take ↩ from the buttons below. */}
-      <Command
-        label="Clone"
-        loop
-        shouldFilter={false}
-        // Only a click or ↑↓ picks a row: a pointer passing over the
-        // list on its way to the button would otherwise pick for it.
-        disablePointerSelection
-        // Ctrl+N/P move the caret in a text field on macOS.
-        vimBindings={false}
-        value={highlighted}
-        onValueChange={setHighlighted}
-        className={MODAL_COMMAND_CLASS}
-      >
-        <ActionInputRow
-          value={url}
-          onChange={setUrl}
-          placeholder="Git URL or GitHub owner/repo"
-          inputRef={checkout.inputRef}
-          icon={<GitBranch className="size-3.5" />}
-          label="Clone"
-          canSubmit={name !== null}
-          onSubmit={() => void cloneAndOpen()}
-          combobox
-        />
-        {rows.length > 0 && (
-          <Command.List
-            onMouseDown={keepFocusInInput}
-            className="max-h-64 overflow-y-auto border-b border-border p-2"
-          >
-            {rows.map((row, index) => (
-              <Command.Item
-                key={row}
-                value={row}
-                className={cn(ITEM_CLASS, "hover:bg-accent/50")}
-              >
-                {typedRow && index === 0 ? (
-                  <GitBranch className="size-4 shrink-0 text-muted-foreground/80" />
-                ) : (
-                  <GithubMark className="size-4 shrink-0 text-muted-foreground/80" />
-                )}
-                <SimpleTooltip whenTruncated lazy tip={row}>
-                  <span className="min-w-0 flex-1 truncate font-mono">
-                    {row}
-                  </span>
-                </SimpleTooltip>
-              </Command.Item>
-            ))}
-          </Command.List>
-        )}
-      </Command>
-      <div className="flex flex-col gap-3 p-4 text-sm">
-        {rows.length === 0 && name !== null && (
-          <div className="flex items-center gap-2.5">
-            <GitBranch className="size-4 shrink-0 text-muted-foreground/80" />
-            <SimpleTooltip whenTruncated tip={repo}>
-              <span className="min-w-0 flex-1 truncate font-mono">{repo}</span>
-            </SimpleTooltip>
-          </div>
-        )}
-        <DestinationRow
-          dest={checkout.dest}
-          onChangeParent={checkout.openPicker}
-        />
-      </div>
-      <FormFooter label="Clone">{checkout.terrierOptIn}</FormFooter>
-      {checkout.picker}
-    </>
+    <CloneFormView
+      url={url}
+      onUrl={setUrl}
+      inputRef={checkout.inputRef}
+      highlighted={highlighted}
+      onHighlight={setHighlighted}
+      rows={rows}
+      typedRow={typedRow}
+      repo={repo}
+      canClone={name !== null}
+      onClone={() => void cloneAndOpen()}
+      dest={checkout.dest}
+      onChangeParent={checkout.openPicker}
+      terrierOptIn={checkout.terrierOptIn}
+      picker={checkout.picker}
+    />
   );
 }

@@ -20,7 +20,7 @@ interface ResultRowProps {
   onToggle: () => void;
 }
 
-export function ResultRow({
+export function ResultRowView({
   path,
   scanRoot,
   home,
