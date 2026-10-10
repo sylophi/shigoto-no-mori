@@ -17,6 +17,8 @@
         // The proofs, which vitest runs, and the bench, a script run by hand.
         "test/*.mts",
         "test/bench/*.mts",
+        // The host the terminals proof spawns and kills.
+        "test/lib/terminalsHost.mts",
         // Run through package.json scripts or by hand (their headers say how).
         "scripts/*.{mts,cts}",
       ],

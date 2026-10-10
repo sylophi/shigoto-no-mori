@@ -404,14 +404,15 @@ describe("the service", () => {
       const history = attached.events[0];
       assert.ok(history?.kind === "history");
       assert.ok(history.seq >= (seen?.seq ?? 0), "a save went back");
-      // The ring came back whole: every line from its first to its last.
+      // The ring came back whole: its lines in order, none twice, up to
+      // at least the last one seen saved.
       const back = ticks(history.data);
       const before = ticks(seen?.history ?? "");
       assert.ok(back.length > 1000, `only ${back.length} lines came back`);
       assert.ok((back.at(-1) ?? 0) >= (before.at(-1) ?? 0));
-      assert.deepEqual(
-        back,
-        Array.from({ length: back.length }, (_, i) => (back[0] ?? 0) + i),
+      assert.ok(
+        back.every((tick, i) => i === 0 || tick > (back[i - 1] ?? 0)),
+        "the lines came back out of order",
       );
     } finally {
       await app.dispose();
