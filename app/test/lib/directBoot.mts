@@ -251,17 +251,23 @@ export async function startDirectListener(
   };
 }
 
-// Mints `count` connect tickets of one candidate kind for `peer`,
-// failing the check when the store refuses. A loopback dial with no
-// CF-Connecting-IP arrives as a "lan" candidate, hence the default.
+// The connection a check's tickets are minted for, unless it names
+// another.
+export const ONE_CONNECTION = "c".repeat(32);
+
+// Mints `count` connect tickets of one candidate kind for `peer`'s
+// `connectionId`, failing the check when the store refuses. A loopback
+// dial with no CF-Connecting-IP arrives as a "lan" candidate, hence the
+// default.
 export function mintTickets(
   store: Pick<ConnectTicketStore, "mint">,
   peer: string,
   count: number,
   kind: DirectCandidateKind = "lan",
+  connectionId = ONE_CONNECTION,
 ): string[] {
   const tickets = store.mint(
-    peer,
+    { deviceId: peer, connectionId },
     Array.from({ length: count }, () => kind),
   );
   assert.ok(tickets !== null, `the store refused to mint for ${peer}`);

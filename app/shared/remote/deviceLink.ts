@@ -73,6 +73,10 @@ export type DeviceLinkOptions = {
   // The single-use connect ticket the socket opens with, or on the
   // loopback the host's token, which the hello carries.
   ticket: string;
+  // This connection's id, which the host tells it apart by: the one
+  // its ticket was asked for (shared/hub/directDial.ts). A fresh one
+  // when not given.
+  connectionId?: string;
   // A peer's link is sealed (sealedSocket.ts): this device's key pair,
   // and the key the hub's roster names for the peer. The loopback's is
   // not.
@@ -196,6 +200,10 @@ export const dialDevice = (
         ? ws
         : sealDialer(ws, { ticket: options.ticket, ...options.seal });
     // Open once the socket is, its handshake done where it is sealed.
+    let socketOpened = false;
+    ws.addEventListener("open", () => {
+      socketOpened = true;
+    });
     const open = yield* Deferred.make<void>();
     if (wire.readyState === 1) Deferred.doneUnsafe(open, Exit.void);
     else {
@@ -267,7 +275,7 @@ export const dialDevice = (
               new LinkRefusedError(),
             )
           : connectError(
-              options.seal === undefined
+              options.seal === undefined || !socketOpened
                 ? "the socket did not open"
                 : "the peer did not complete the handshake",
             ),
@@ -281,7 +289,7 @@ export const dialDevice = (
     const welcome = (yield* call("link:hello", {
       deviceId: options.localDeviceId,
       deviceKind: options.deviceKind ?? "desktop",
-      connectionId: newConnectionId(),
+      connectionId: options.connectionId ?? newConnectionId(),
       appVersion: options.appVersion,
       protocolVersion: options.protocolVersion ?? PROTOCOL_VERSION,
       ...(options.seal === undefined ? { token: options.ticket } : {}),

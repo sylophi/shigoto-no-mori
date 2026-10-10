@@ -77,6 +77,7 @@ import {
 } from "@shigomori/contracts/modules/direct";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
+  newConnectionId,
   openDevice,
   type OpenClientSocket,
   RemoteConnectError,
@@ -271,6 +272,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     candidates: DirectCandidate[],
     remainingMs: number,
     seal: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array },
+    connectionId: string,
   ): Promise<DeviceConnection> {
     return new Promise<DeviceConnection>((resolvePromise, rejectPromise) => {
       let done = false;
@@ -322,6 +324,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             // complete the handshake.
             ticket: candidate.ticket,
             seal,
+            connectionId,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
             deviceKind: deps.deviceKind,
@@ -431,13 +434,16 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     opts?: ConnectPeerOpts,
   ): Promise<PeerConnection> {
     const deadlineAt = now() + deadlineMs;
+    // This dial's connection: its tickets are minted for it, and its
+    // hello names it.
+    const connectionId = newConnectionId();
     let answer: unknown;
     try {
       // The input declares this platform's dialable kinds so the host
       // mints no ticket we cannot spend.
       answer = await deps.askConnectInfo(
         deviceId,
-        { dialableKinds },
+        { dialableKinds, connectionId },
         deadlineMs,
       );
     } catch (error) {
@@ -476,6 +482,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       info.candidates.slice(0, MAX_DIAL_CANDIDATES),
       Math.max(1, deadlineAt - now()),
       { localKey, remoteKey },
+      connectionId,
     );
     return {
       ...connection,

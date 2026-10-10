@@ -203,7 +203,10 @@ import {
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
 import { CLOSE_HANDSHAKE_FAILED } from "@shared/remote/sealedSocket";
-import { decodeRelayFrame } from "@shigomori/contracts/hubProtocol";
+import {
+  decodeRelayFrame,
+  MAX_DEVICE_CONNECTIONS,
+} from "@shigomori/contracts/hubProtocol";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
@@ -223,6 +226,7 @@ import {
   makeDirectBridge,
   mintTicket,
   mintTickets,
+  ONE_CONNECTION,
   startDirectListener as startListenerFixture,
 } from "./lib/directBoot.mts";
 import { bootDevice } from "./lib/hubBoot.mts";
@@ -470,7 +474,7 @@ it("brokering: connectInfo over the device hub carries fully dialable candidates
   const ask = () =>
     client.connection.askConnectInfo(
       "B",
-      { dialableKinds: ["lan", "tunnel"] },
+      { dialableKinds: ["lan", "tunnel"], connectionId: ONE_CONNECTION },
       3000,
     );
   const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(await ask());
@@ -512,7 +516,7 @@ it("brokering serves the roster only: an ask forged from outside the host's live
     from: "ghost",
     frame: sealAsk("ghost", "B", 1, {
       ask: CONNECT_INFO_ASK,
-      input: { dialableKinds: ["lan"] },
+      input: { dialableKinds: ["lan"], connectionId: ONE_CONNECTION },
     }).frame,
   });
   await delay(100);
@@ -527,7 +531,7 @@ it("brokering serves the roster only: an ask forged from outside the host's live
   const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(
     await client.connection.askConnectInfo(
       "B",
-      { dialableKinds: ["lan"] },
+      { dialableKinds: ["lan"], connectionId: ONE_CONNECTION },
       3000,
     ),
   );
@@ -1058,7 +1062,7 @@ it("ticket single-use and expiry: a replayed ticket and an expired ticket are re
   );
 });
 
-it("per-peer ticket bookkeeping: one peer's mint replaces only its own set, siblings in a set stay independently consumable, and the backstop refuses instead of evicting", async () => {
+it("per-connection ticket bookkeeping: one connection's mint replaces only its own set, a device's sibling connections each keep theirs, siblings in a set stay independently consumable, a device's sets are capped, and the backstop refuses instead of evicting", async () => {
   const store = createConnectTicketStore();
   // Siblings of one candidate-set are independent: consuming one
   // must not spend the others (the old single-ticket design burned
@@ -1081,6 +1085,27 @@ it("per-peer ticket bookkeeping: one peer's mint replaces only its own set, sibl
     "a replaced ticket authed",
   );
   assert.equal(await consumeTicket(store, entryAt(a2, 0), "A"), true);
+  // Two tabs of one web device asking at once each keep their set.
+  const tab1 = "1".repeat(32);
+  const tab2 = "2".repeat(32);
+  const first = mintTickets(store, "W", 1, "tunnel", tab1);
+  const second = mintTickets(store, "W", 1, "tunnel", tab2);
+  assert.equal(
+    await consumeTicket(store, entryAt(first, 0), "W", "tunnel"),
+    true,
+  );
+  assert.equal(
+    await consumeTicket(store, entryAt(second, 0), "W", "tunnel"),
+    true,
+  );
+  // A device asking under ever new connections holds at most
+  // MAX_DEVICE_CONNECTIONS sets: its oldest gives way, and no one
+  // else's does.
+  const oldest = mintTickets(store, "F", 1, "lan", "0".repeat(32));
+  for (let i = 1; i <= MAX_DEVICE_CONNECTIONS; i += 1) {
+    mintTickets(store, "F", 1, "lan", i.toString(16).padStart(32, "0"));
+  }
+  assert.equal(await consumeTicket(store, entryAt(oldest, 0), "F"), false);
   // The global backstop refuses the overflowing mint outright and
   // never evicts another peer's pending tickets (an eviction would
   // feed the per-IP lockout against the innocent peer's dial).
@@ -1088,7 +1113,7 @@ it("per-peer ticket bookkeeping: one peer's mint replaces only its own set, sibl
   for (let i = 0; i < 200; i += 1) mintTickets(store, `peer-${i}`, 1);
   assert.equal(
     store.mint(
-      "overflow",
+      { deviceId: "overflow", connectionId: ONE_CONNECTION },
       Array.from({ length: 60 }, () => "lan"),
     ),
     null,
@@ -1641,7 +1666,10 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
     acceptsCommands: () => false,
     sharesData: () => true,
   });
-  const all = { dialableKinds: ["lan", "tunnel"] };
+  const all = {
+    dialableKinds: ["lan", "tunnel"],
+    connectionId: ONE_CONNECTION,
+  };
   // Unhealthy tunnel: lan candidates only, with IPv6 literals
   // bracketed into dialable URLs.
   const without = connectInfo("A", all);
@@ -1692,7 +1720,10 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   // and a tunnel-only caller against a tunnel-less host gets
   // available:false with nothing minted at all.
   const before = minted.length;
-  const tunnelOnly = connectInfo("A", { dialableKinds: ["tunnel"] });
+  const tunnelOnly = connectInfo("A", {
+    dialableKinds: ["tunnel"],
+    connectionId: ONE_CONNECTION,
+  });
   assert.equal(tunnelOnly.available, true);
   assert.deepEqual(
     tunnelOnly.candidates.map(({ kind }) => kind),
@@ -1700,14 +1731,20 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   );
   assert.equal(minted.length, before + 1);
   assert.equal(minted.at(-1)?.length, 1, "a lan ticket was minted anyway");
-  const lanOnly = connectInfo("A", { dialableKinds: ["lan"] });
+  const lanOnly = connectInfo("A", {
+    dialableKinds: ["lan"],
+    connectionId: ONE_CONNECTION,
+  });
   assert.equal(lanOnly.available, true);
   assert.deepEqual(
     lanOnly.candidates.map(({ kind }) => kind),
     ["lan", "lan"],
   );
   tunnel = null;
-  const nothing = connectInfo("A", { dialableKinds: ["tunnel"] });
+  const nothing = connectInfo("A", {
+    dialableKinds: ["tunnel"],
+    connectionId: ONE_CONNECTION,
+  });
   const mintsSoFar = minted.length;
   assert.deepEqual(nothing, { available: false });
   assert.equal(

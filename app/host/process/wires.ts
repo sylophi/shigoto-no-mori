@@ -224,7 +224,7 @@ const serveConnectInfo = makeConnectInfo({
     const current = directLink.status();
     return current.listening ? current.port : null;
   },
-  mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
+  mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
   // is healthy (probed routable).
   tunnelUrl: () => tunnel.tunnelUrl(),
