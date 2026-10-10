@@ -189,6 +189,26 @@ const fakeSession = (
 // "child gone" are facts about real processes.
 const serveChildren = new Set<number>();
 
+// B's daemon and A's serve children, on the freshly built binary
+// (built in beforeAll).
+const fileSync = Layer.effect(
+  FileSync.FileSync,
+  Effect.gen(function* () {
+    const real = yield* FileSync.FileSync;
+    return FileSync.FileSync.of({
+      ...real,
+      serve: (env, until) =>
+        real
+          .serve(env, until)
+          .pipe(
+            Effect.tap((child) =>
+              Effect.sync(() => serveChildren.add(child.pid)),
+            ),
+          ),
+    });
+  }),
+).pipe(Layer.provide(FileSync.layer(() => fileSyncBinary)));
+
 // B's daemon, the way host/process/handlers.ts reads it.
 const daemon = {
   status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
@@ -206,7 +226,7 @@ const daemon = {
 // mirror:stop called the way a caller on this device would, its
 // context unread by the handler.
 const stop = async (input: Parameters<typeof mirrorHandlers.stop>[0]) =>
-  mirrorHandlers.stop(input, {} as Parameters<typeof mirrorHandlers.stop>[1]);
+  mirrorHandlers.stop(input);
 
 let repoA: string;
 let worktreeA: string;
@@ -304,6 +324,7 @@ beforeAll(async () => {
   // ---- The direct wire: A serves the byte wire and its worktree list,
   // B dials through the real bridge cache. ----
   ({ stub, listener, peerA } = await bootDirectWire(track, {
+    provide: fileSync.pipe(Layer.provide(NodeServices.layer)),
     contracts: [
       [forwardContract, forwardHandlers],
       [worktreesContract, worktreesHandlers],
@@ -333,24 +354,6 @@ afterAll(async () => {
 it("gateway bound and the real mirror daemon reported ready", async () => {
   await gateway.start();
   assert.match(listening(gateway.address()), /^127\.0\.0\.1:\d+$/);
-  // B's daemon and A's serve children, on the freshly built binary.
-  const fileSync = Layer.effect(
-    FileSync.FileSync,
-    Effect.gen(function* () {
-      const real = yield* FileSync.FileSync;
-      return FileSync.FileSync.of({
-        ...real,
-        serve: (env) =>
-          real
-            .serve(env)
-            .pipe(
-              Effect.tap((child) =>
-                Effect.sync(() => serveChildren.add(child.pid)),
-              ),
-            ),
-      });
-    }),
-  ).pipe(Layer.provide(FileSync.layer(() => fileSyncBinary)));
   runtime = ManagedRuntime.make(
     MirrorDaemon.layer({
       gatewayAddress: () => listening(gateway.address()),
@@ -360,11 +363,7 @@ it("gateway bound and the real mirror daemon reported ready", async () => {
         changes++;
         onSnapshot?.();
       },
-    }).pipe(
-      Layer.provideMerge(FileSync.adapter),
-      Layer.provideMerge(fileSync),
-      Layer.provide(NodeServices.layer),
-    ),
+    }).pipe(Layer.provideMerge(fileSync), Layer.provide(NodeServices.layer)),
   );
   track(() => runtime.dispose());
   await waitFor(
@@ -1412,10 +1411,11 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     put(sessionOf("paused", { paused: true }));
     await assert.rejects(
       async () =>
-        mirrorHandlers.setIgnores(
-          { session: "paused", ignoreMode: "gitignored", ignores: [] },
-          {} as Parameters<typeof mirrorHandlers.setIgnores>[1],
-        ),
+        mirrorHandlers.setIgnores({
+          session: "paused",
+          ignoreMode: "gitignored",
+          ignores: [],
+        }),
       /in step/,
     );
     live.clear();

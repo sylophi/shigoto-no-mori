@@ -12,7 +12,12 @@ import type {
   MirrorWorktreePayload,
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
-import * as FileSync from "@host/fileSync/FileSync";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import { FileSync } from "@host/fileSync/FileSync";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import { dataDir } from "@host/lib/util/paths";
 import {
   findProjectAndWorktreeOrThrow,
@@ -89,45 +94,48 @@ function forgetServing(key: string): void {
 // kill it, and a child that exits on its own ends the channel the
 // ordinary way. The root path the peer's Mutagen side names travels
 // inside the protocol, which this does not read.
-export async function serveStream(
+export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   { projectId, worktreeId, channelId, peerWorktreeId }: MirrorOpenStreamPayload,
   ctx: HandlerContext,
-): Promise<void> {
+) {
   requireChannels(ctx, channelId);
-  const worktreePath = await findWorktreePathOrThrow({
-    projectId,
-    worktreeId,
-  });
+  const worktreePath = yield* fromPromise(() =>
+    findWorktreePathOrThrow({ projectId, worktreeId }),
+  );
+  // The child ends when its channel does.
+  const closed = yield* Deferred.make<void>();
   // Its own data directory under this host's: unset, the engine's
   // caches and staging land in ~/.mutagen, shared with any real
   // Mutagen install and with every other build and profile here.
-  const child = await FileSync.serve({
-    MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve"),
-  });
+  const child = yield* (yield* FileSync).serve(
+    { MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve") },
+    Deferred.await(closed),
+  );
   child.stderr?.on("data", (chunk: Buffer) => {
     const text = chunk.toString("utf8").trim();
     if (text !== "") log.warn(`[mirror] serve ${worktreeId}: ${text}`);
   });
   const key = servingKey(ctx, channelId);
   const stopChild = () => {
-    // At quit the scope has closed already.
-    child.close().catch(() => {});
+    Deferred.doneUnsafe(closed, Exit.void);
     child.stream.destroy();
   };
-  try {
-    attachFarEnd(ctx, channelId, child.stream, {
-      onClosed: () => {
-        stopChild();
-        forgetServing(key);
-      },
-    });
-  } catch (error) {
+  yield* Effect.try({
+    try: () =>
+      attachFarEnd(ctx, channelId, child.stream, {
+        onClosed: () => {
+          stopChild();
+          forgetServing(key);
+        },
+      }),
     // The connection died or the id was claimed during the lookup
     // above: the child is in its own process group, so the destroyed
     // stdio alone would not end it.
-    stopChild();
-    throw error;
-  }
+    catch: (error) => {
+      stopChild();
+      return callFailureOf(error);
+    },
+  });
   const served: Served = {
     entry: {
       channelId,
@@ -150,7 +158,7 @@ export async function serveStream(
     () => {},
   );
   onServingChange?.();
-}
+});
 
 // The git half, read or applied in place.
 export async function servedGitState({

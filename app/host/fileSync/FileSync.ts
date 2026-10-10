@@ -21,7 +21,6 @@ import type * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { Duplex, PassThrough, type Readable } from "node:stream";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 
 // No engine binary here (a dev run before `pnpm file-sync:build`).
 export class FileSyncUnavailableError extends Schema.TaggedError<FileSyncUnavailableError>()(
@@ -36,12 +35,11 @@ export class FileSyncUnavailableError extends Schema.TaggedError<FileSyncUnavail
 export const isFileSyncUnavailable = Schema.is(FileSyncUnavailableError);
 
 // A `serve` child: its stdin and stdout as one duplex stream, stderr
-// apart for diagnostics. `close` ends the child.
+// apart for diagnostics.
 export interface ServeChild {
   readonly pid: number;
   readonly stream: Duplex;
   readonly stderr: Readable;
-  readonly close: Effect.Effect<void>;
 }
 
 // `env` is added to the app's environment.
@@ -62,9 +60,11 @@ export class FileSync extends Context.Service<
       FileSyncUnavailableError | PlatformError.PlatformError,
       Scope.Scope
     >;
-    // A `serve` child in a scope of its own under the service's.
+    // A `serve` child in a scope of its own under the service's, ended
+    // when `until` completes.
     readonly serve: (
       env: Record<string, string | undefined>,
+      until: Effect.Effect<void>,
     ) => Effect.Effect<
       ServeChild,
       FileSyncUnavailableError | PlatformError.PlatformError
@@ -97,6 +97,7 @@ const make = (binaryPath: () => string | null) =>
 
     const serve = Effect.fn("FileSync.serve")(function* (
       env: Record<string, string | undefined>,
+      until: Effect.Effect<void>,
     ) {
       const child = yield* Scope.fork(scope);
       const close = Scope.close(child, Exit.void);
@@ -119,11 +120,11 @@ const make = (binaryPath: () => string | null) =>
       );
       const output = yield* NodeStream.toReadable(handle.stdout);
       const stderr = yield* NodeStream.toReadable(handle.stderr);
+      yield* until.pipe(Effect.andThen(close), Effect.forkIn(scope));
       return {
         pid: handle.pid,
         stream: Duplex.from({ readable: output, writable: input }),
         stderr,
-        close,
       };
     });
 
@@ -134,16 +135,3 @@ export const layer = (binaryPath: () => string | null) =>
   Layer.effect(FileSync, make(binaryPath));
 
 // For the callers that are not Effect yet.
-const { layer: adapterLayer, run } = PromiseAdapter.make<FileSync>(
-  "The file-sync engine",
-);
-export const adapter = adapterLayer;
-
-// A `serve` child for a Promise caller, closed with `close()`.
-export const serve = (env: Record<string, string | undefined>) =>
-  run(
-    Effect.gen(function* () {
-      const child = yield* (yield* FileSync).serve(env);
-      return { ...child, close: () => run(child.close) };
-    }),
-  );

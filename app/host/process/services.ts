@@ -2,6 +2,7 @@
 // layer graph (layer.ts) below the wires that serve them, and the
 // platform the graph runs on.
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type * as FileSync from "@host/fileSync/FileSync";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import type * as Ports from "@host/lib/ports";
 import type * as OrphanSweep from "@host/lib/scripts/persistence";
@@ -14,6 +15,7 @@ import type * as Villagers from "@host/lib/villagers";
 
 export type HostServices =
   | ChildProcessSpawner.ChildProcessSpawner
+  | FileSync.FileSync
   | GithubCli.GithubCli
   | Views.Services
   | Ports.Ports

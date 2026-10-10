@@ -6,6 +6,7 @@ import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
+import type { HostServices } from "@host/process/services";
 import { forgetMirrorInvitesOf } from "@host/mirror/invites";
 import { engine } from "@host/mirror/registry";
 import {
@@ -32,7 +33,7 @@ export const mirrorViews: ViewHandlers<typeof mirrorContract, Views.Services> =
       ),
   };
 
-export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
+export const mirrorHandlers = {
   list: () => mirrorList(),
   startTo: (input, ctx) => startMirrorTo(input, ctx),
   startFrom: (input, ctx) => startMirrorFrom(input, ctx),
@@ -49,7 +50,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   history: ({ localWorktreeId }) => ({
     events: engine().history(localWorktreeId),
   }),
-  openStream: (input, ctx) => serveStream(input, ctx),
+  openStream: (input, ctx: HandlerContext) => serveStream(input, ctx),
   gitState: (input) => servedGitState(input),
   applyGitState: (input) => applyServedGitState(input),
-};
+} satisfies Handlers<typeof mirrorContract, HandlerContext, HostServices>;
