@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Migration from "@shigomori/engine/Migration";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { setSandboxEngine } from "./sandboxEngine.mts";
@@ -128,6 +129,7 @@ export async function hostEngine(dataDir: string, macfs = "macfs") {
   process.env["SHIGOMORI_DATA_DIR"] = dataDir;
   const runtime = ManagedRuntime.make(
     Engine.layer({ flavor: "prod", macfs, sm: "sm" }).pipe(
+      Layer.provideMerge(Migration.layer),
       Layer.provideMerge(NodeServices.layer),
     ),
   );
@@ -159,6 +161,7 @@ export async function secondEngine(dataDir: string) {
   const Engine = await import("@host/lib/engine");
   const runtime = ManagedRuntime.make(
     Engine.layer({ flavor: "prod", macfs: builtMacfs(), sm: "sm" }).pipe(
+      Layer.provideMerge(Migration.layer),
       Layer.provideMerge(NodeServices.layer),
     ),
   );

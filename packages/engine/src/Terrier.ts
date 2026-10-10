@@ -178,10 +178,6 @@ const make = Effect.gen(function* () {
     ).pipe(Effect.timeout("10 seconds"));
 
   const read = Effect.gen(function* () {
-    const enabled = yield* config.get({ kind: "device" }, "terrier");
-    if (enabled.value !== true) {
-      return { paths: [], trouble: Option.none() };
-    }
     const listed = yield* output(["ls", "--json"]).pipe(
       Effect.flatMap(parseListing),
       Effect.map((paths) => ({ kind: "listed" as const, paths })),
@@ -231,10 +227,19 @@ const make = Effect.gen(function* () {
     return { paths, trouble: Option.none() };
   }).pipe(Effect.orDie, Effect.withSpan("Terrier.listing"));
 
-  // Kept briefly, so a listing's several asks share one answer and a
-  // long-lived host still sees the setting or terrier change.
+  // terrier's answer is kept briefly, so a listing's several asks share
+  // one spawn and a long-lived host still sees terrier change. The switch
+  // is read on every ask, so a view re-read as it flips lists the
+  // projects it brings or takes.
+  const listed = yield* Effect.cachedWithTTL(read, "10 seconds");
   return Terrier.of({
-    listing: yield* Effect.cachedWithTTL(read, "10 seconds"),
+    listing: Effect.gen(function* () {
+      const enabled = yield* config.get({ kind: "device" }, "terrier");
+      if (enabled.value !== true) {
+        return { paths: [], trouble: Option.none() };
+      }
+      return yield* listed;
+    }).pipe(Effect.orDie),
   });
 });
 
