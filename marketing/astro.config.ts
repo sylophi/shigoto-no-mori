@@ -1,9 +1,10 @@
-import { dirname, resolve } from "node:path";
+import { cpSync, createReadStream, existsSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
-import { defineConfig } from "astro/config";
+import { type AstroIntegration, defineConfig } from "astro/config";
 import type { Plugin } from "vite";
 import {
   fixtureAliases,
@@ -36,14 +37,48 @@ function resolveSharedFromApp(): Plugin {
   };
 }
 
+// The file icons the live frames' file lists draw, from the URL the
+// app asks for them at (/material-icons/<name>.svg, @shigomori/ui's
+// materialIcons.ts): served in dev, copied into the build. A file each,
+// fetched only when a frame shows it.
+function materialIcons(): AstroIntegration {
+  const icons = resolve(
+    app,
+    "../packages/ui/node_modules/material-icon-theme/icons",
+  );
+  return {
+    name: "material-icons",
+    hooks: {
+      "astro:server:setup": ({ server }) => {
+        server.middlewares.use("/material-icons", (req, res, next) => {
+          const file = join(
+            icons,
+            basename((req.url ?? "").split("?")[0] ?? ""),
+          );
+          if (!file.endsWith(".svg") || !existsSync(file)) return next();
+          res.setHeader("Content-Type", "image/svg+xml");
+          createReadStream(file).pipe(res);
+        });
+      },
+      "astro:build:done": ({ dir }) => {
+        cpSync(icons, join(fileURLToPath(dir), "material-icons"), {
+          recursive: true,
+        });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   site: "https://shigomori.com",
   devToolbar: { enabled: false },
   // Astro's default ("jsx") follows React's whitespace rules, which join
   // "like\n<code>" into "like<code>". Plain collapsing keeps the space.
   compressHTML: true,
-  // The frames draw the app's views at build time (src/frames).
-  integrations: [react()],
+  // The frames draw the app's views at build time (src/frames). The page
+  // has no island for Fast Refresh to hook into in dev, so the app's
+  // modules go without it.
+  integrations: [react({ exclude: /\/(app|packages)\// }), materialIcons()],
   vite: {
     // Keep every asset and script a real file. Inlined data: URLs and
     // inline scripts would each need their own CSP exception, and files
@@ -53,10 +88,7 @@ export default defineConfig({
     define: fixtureDefine,
     // The app's stylesheet stops at the frames' roots.
     css: { postcss: { plugins: [insideTheRoot()] } },
-    // Bundled into the build-time render rather than loaded from
-    // node_modules at its run, so they resolve through the plugin above
-    // to the app's one copy.
-    ssr: { noExternal: true },
+
     plugins: [resolveSharedFromApp(), tailwindcss(), reactCompiler()],
   },
 });

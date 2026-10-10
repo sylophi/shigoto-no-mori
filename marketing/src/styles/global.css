@@ -199,13 +199,14 @@
 }
 
 /* The page's own rules stop at a frame's root, where the app's
-   stylesheet takes over (Frame.astro). */
+   stylesheet takes over (Frame.astro). A rule inside matches under the
+   page's <html>, so a rule on <html> itself names it :scope. */
 @scope (:root) to ([data-theme-scope]) {
   * {
     box-sizing: border-box;
   }
 
-  html {
+  :scope {
     scroll-behavior: smooth;
     scroll-padding-top: 4.5rem;
   }
@@ -439,7 +440,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html {
+    :scope {
       scroll-behavior: auto;
     }
     [data-wall] > .wall::before {
@@ -529,12 +530,12 @@
     height: 1.1rem;
   }
   /* The toggle needs theme.js, which always sets data-theme. */
-  :root:not([data-theme]) .theme-toggle,
+  :scope:not([data-theme]) .theme-toggle,
   .icon-sun,
-  [data-theme="dark"] .icon-moon {
+  :scope[data-theme="dark"] .icon-moon {
     display: none;
   }
-  [data-theme="dark"] .icon-sun {
+  :scope[data-theme="dark"] .icon-sun {
     display: block;
   }
   /* The hero links GitHub and the footer links the changelog, so a
