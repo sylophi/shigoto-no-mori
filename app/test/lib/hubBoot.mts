@@ -9,7 +9,7 @@ import {
 } from "@host/hub/connection";
 
 import { type Track, waitFor } from "./checkKit.mts";
-import type { StubHub } from "./hubStub.mts";
+import { type StubHub, testDeviceKey } from "./hubStub.mts";
 
 export type BootDeviceOpts = HubConnectionOpts & {
   createConnection?: (opts: HubConnectionOpts) => HubConnectionBinding;
@@ -58,6 +58,7 @@ export async function bootDevice(
       return `t:${deviceId}:${opts.kind ?? "desktop"}:${connectionId}`;
     },
     deviceId,
+    deviceKey: testDeviceKey(deviceId).privateKey,
   }));
   await waitFor(
     () => connection.status().socket.phase === "connected",

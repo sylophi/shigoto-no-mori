@@ -30,6 +30,7 @@ import {
   revoke,
   sleep,
   newConnectionId,
+  testPublicKey,
   ticketRequest,
 } from "./helpers.ts";
 
@@ -45,6 +46,29 @@ describe("GET /connect", () => {
   it("accepts a fresh ticket and sends the presence list", async () => {
     const { socket } = await enrollAndConnect("acct-conn", "dev-conn");
     await socket.untilPresence(["dev-conn"]);
+  });
+
+  it("names each online device with the key it enrolled with", async () => {
+    const a = await enrollAndConnect("acct-keys", "dev-keys-a");
+    const b = await enrollAndConnect("acct-keys", "dev-keys-b");
+    const roster = await b.socket.untilPresence(["dev-keys-a", "dev-keys-b"]);
+    expect(roster).toEqual([
+      { deviceId: "dev-keys-a", publicKey: testPublicKey("dev-keys-a") },
+      { deviceId: "dev-keys-b", publicKey: testPublicKey("dev-keys-b") },
+    ]);
+    await a.socket.untilPresence(["dev-keys-a", "dev-keys-b"]);
+  });
+
+  it("refuses the socket of a device enrolled before keys", async () => {
+    const { credential } = await enroll("acct-keyless", "dev-keyless");
+    await env.DB.prepare(
+      "UPDATE devices SET public_key = NULL WHERE device_id = ?",
+    )
+      .bind("dev-keyless")
+      .run();
+    const { ticket } = await mintTicket(credential);
+    const socket = await openSocket(ticket);
+    expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });
 
   it("rejects a structurally malformed ticket before the upgrade", async () => {
@@ -166,10 +190,10 @@ describe("a web device's tabs", () => {
     await tabB.untilPresence(["dev-tabs-web"]);
     const peer = await enrollAndConnect("acct-tabs", "dev-tabs-peer");
     await peer.socket.untilPresence(["dev-tabs-peer", "dev-tabs-web"]);
-    peer.socket.send({ t: "relay", to: "dev-tabs-web", frame: { n: 1 } });
+    peer.socket.send({ t: "relay", to: "dev-tabs-web", frame: "one" });
     for (const tab of [tabA, tabB]) {
       // oxlint-disable-next-line no-await-in-loop -- two tabs, each reads its own queue
-      await tab.untilRelay({ n: 1 });
+      await tab.untilRelay("one");
     }
     // One tab closing leaves the device online through the other.
     tabA.close();
@@ -197,8 +221,8 @@ describe("a web device's tabs", () => {
     );
     expect((await stale.closed).code).toBe(CLOSE_SUPERSEDED);
     await redial.untilPresence(["dev-redial-web"]);
-    other.send({ t: "relay", to: "dev-redial-web", frame: { still: "here" } });
-    await redial.untilRelay({ still: "here" });
+    other.send({ t: "relay", to: "dev-redial-web", frame: "still here" });
+    await redial.untilRelay("still here");
   });
 });
 
@@ -273,29 +297,19 @@ describe("rotation", () => {
 });
 
 describe("relaying", () => {
-  it("relays an opaque frame between two devices, byte for byte", async () => {
+  it("relays an opaque frame between two devices, unchanged", async () => {
     const a = await enrollAndConnect("acct-hub", "dev-hub-a");
     const b = await enrollAndConnect("acct-hub", "dev-hub-b");
     await a.socket.untilPresence(["dev-hub-a", "dev-hub-b"]);
     await b.socket.untilPresence(["dev-hub-a", "dev-hub-b"]);
-    // Deliberately gnarly: nested, unicode, null and undefined-adjacent
-    // shapes, exactly what future sm frames may contain.
-    const frame = {
-      t: "res",
-      id: 7,
-      ok: true,
-      result: {
-        text: "木漏れ日   line-sep",
-        list: [1, null, { deep: true }],
-        empty: {},
-      },
-    };
+    // Deliberately gnarly: the hub must not care what the string holds.
+    const frame = 'ask:7:{"木漏れ日"}\u2028 "quoted" \\ end';
     a.socket.send({ t: "relay", to: "dev-hub-b", frame });
     const delivered = await b.socket.next();
     expect(delivered.t).toBe("relay");
     if (delivered.t !== "relay") return;
     expect(delivered.from).toBe("dev-hub-a");
-    expect(JSON.stringify(delivered.frame)).toBe(JSON.stringify(frame));
+    expect(delivered.frame).toBe(frame);
     // Relaying is symmetric in both directions.
     b.socket.send({ t: "relay", to: "dev-hub-a", frame: "pong" });
     const back = await a.socket.next();
@@ -309,7 +323,7 @@ describe("relaying", () => {
   it("nacks a send to an offline device", async () => {
     const { socket } = await enrollAndConnect("acct-nack", "dev-nack-sender");
     await socket.untilPresence(["dev-nack-sender"]);
-    socket.send({ t: "relay", to: "dev-nack-nobody", frame: 1 });
+    socket.send({ t: "relay", to: "dev-nack-nobody", frame: "1" });
     expect(await socket.next()).toEqual({
       t: "nack",
       to: "dev-nack-nobody",
@@ -352,6 +366,10 @@ describe("relaying", () => {
     await b.socket.untilPresence(["dev-malformed-a", "dev-malformed-b"]);
     a.socket.ws.send("not json at all");
     a.socket.ws.send(JSON.stringify({ t: "mystery" }));
+    // A frame is a string: anything else is not relayed.
+    a.socket.ws.send(
+      JSON.stringify({ t: "relay", to: "dev-malformed-b", frame: { a: 1 } }),
+    );
     a.socket.send({ t: "relay", to: "dev-malformed-b", frame: "still alive" });
     const delivered = await b.socket.next();
     expect(delivered).toMatchObject({ t: "relay", frame: "still alive" });
@@ -421,9 +439,9 @@ describe("what a socket may send", () => {
     await socket.untilPresence(["dev-storm", "dev-storm-peer"]);
     // Two messages per peer of an account at its device cap.
     for (let i = 0; i < 2 * (MAX_ACCOUNT_DEVICES - 1); i++) {
-      socket.send({ t: "relay", to: "dev-storm-peer", frame: { i } });
+      socket.send({ t: "relay", to: "dev-storm-peer", frame: `ask:${i}:x` });
     }
-    socket.send({ t: "relay", to: "dev-gone", frame: {} });
+    socket.send({ t: "relay", to: "dev-gone", frame: "x" });
     expect(await socket.next()).toMatchObject({ t: "nack", to: "dev-gone" });
   });
 });
@@ -525,13 +543,16 @@ describe("orchestration-only caps", () => {
     // one cost more than the bound is worth, see hubObject.ts), so
     // this arithmetic plus the client's presence schema cap IS the
     // bound. Worst case: MAX_ONLINE_DEVICES ids, each at the
-    // DeviceIdSchema ceiling of 200 characters (a deviceId is
+    // DeviceIdSchema ceiling of 200 characters with its key (a deviceId is
     // schema-bounded on enroll, so no real id exceeds it). Built with
     // the real encodeEnvelope so growth in the envelope shape cannot
     // silently outgrow this guard.
     const worstCase = encodeEnvelope({
       t: "presence",
-      online: Array.from({ length: MAX_ONLINE_DEVICES }, () => "x".repeat(200)),
+      online: Array.from({ length: MAX_ONLINE_DEVICES }, () => ({
+        deviceId: "x".repeat(200),
+        publicKey: "k".repeat(43),
+      })),
     });
     expect(hubTextWithinLimit(worstCase)).toBe(true);
     // Headroom, not a squeeze: the arithmetic should not sit within a

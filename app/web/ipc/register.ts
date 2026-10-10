@@ -182,6 +182,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           hubUrl: config.hubUrl,
           accountId: record.accountId,
           deviceId,
+          deviceKey: record.deviceKey,
           mintTicket: async (connectionId, signal) => {
             const fresh = store.read();
             if (fresh === null) {
@@ -236,6 +237,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
       detectedDeviceIcon: detectedIcon,
       sharedSignIn: false,
+      needsDeviceKey: store.readWithoutKey() !== null,
     };
   }
 

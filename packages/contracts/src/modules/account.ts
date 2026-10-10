@@ -33,6 +33,10 @@ export const AccountStatusSchema = Schema.Struct({
   // (a dev profile launched with --clone-login), so ending the Clerk
   // session here ends it there as well. Always false outside dev.
   sharedSignIn: Schema.Boolean,
+  // The device enrolled before device keys and must enroll again to
+  // make one (a step of the move to v3): it reads as signed out until
+  // it has. The renderer drives it with useDeviceKeyStep.
+  needsDeviceKey: Schema.Boolean,
 });
 export type AccountStatus = typeof AccountStatusSchema.Type;
 

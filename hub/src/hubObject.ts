@@ -11,9 +11,9 @@
 // method call.
 //
 // Sockets use the WebSocket Hibernation API: each is tagged with its
-// device id and its connection (connectionTag), and tags survive
-// hibernation, so the handlers still know the socket after the object
-// was evicted from memory. A web device holds a connection per tab and
+// device id, its connection (connectionTag) and the public key its
+// device enrolled with, and tags survive hibernation, so the handlers
+// still know the socket after the object was evicted from memory. A web device holds a connection per tab and
 // the object relays to each. A desktop device holds one.
 import * as SqliteClient from "@effect/sql-sqlite-do/SqliteClient";
 import { DurableObject } from "cloudflare:workers";
@@ -36,6 +36,7 @@ import {
   hubTextWithinLimit,
   MAX_ACCOUNT_DEVICES,
   MAX_DEVICE_CONNECTIONS,
+  type OnlineDevice,
 } from "@shigomori/contracts/hubProtocol";
 import { type Env, WorkerEnv } from "./env.ts";
 import * as Registry from "./Registry.ts";
@@ -47,6 +48,9 @@ export const CONNECT_RANDOM_PARAM = "random";
 // The tag naming one connection of a device.
 const connectionTag = (deviceId: string, connectionId: string) =>
   `${deviceId}#${connectionId}`;
+
+// The tag carrying the device's public key into the roster.
+const KEY_TAG_PREFIX = "key:";
 
 // What a socket may send, as a token bucket per socket: a burst of
 // RELAY_BURST messages, refilled at RELAY_PER_SECOND. Measured on the
@@ -71,6 +75,7 @@ export interface EnrollRequest {
   readonly name: string;
   readonly platform: string;
   readonly icon: string;
+  readonly publicKey: string;
   readonly credentialHash: string;
 }
 
@@ -219,10 +224,12 @@ export class DeviceHub extends DurableObject<Env> {
               // this read catches what the drop missed. It holds the
               // admission permit, so an enrollment's rotation lands
               // before it or after the socket is accepted, which the
-              // rotation then closes.
+              // rotation then closes. A row with no key predates keys:
+              // its device enrolls again first.
               const device = yield* registry.byId(holder.deviceId);
-              return device?.credential_hash === holder.credentialHash
-                ? holder
+              return device?.credential_hash === holder.credentialHash &&
+                device.public_key !== null
+                ? { ...holder, publicKey: device.public_key }
                 : null;
             }).pipe(
               this.admission.withPermits(1),
@@ -245,14 +252,18 @@ export class DeviceHub extends DurableObject<Env> {
     // means two app instances on one root. A web device's tabs stand
     // side by side, up to MAX_DEVICE_CONNECTIONS, past which the oldest
     // gives way.
-    const { deviceId, kind, connectionId } = admitted;
+    const { deviceId, kind, connectionId, publicKey } = admitted;
     const tag = connectionTag(deviceId, connectionId);
     const superseded =
       kind === "desktop"
         ? this.ctx.getWebSockets(deviceId)
         : this.overCap(deviceId, tag);
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1], [deviceId, tag]);
+    this.ctx.acceptWebSocket(pair[1], [
+      deviceId,
+      tag,
+      `${KEY_TAG_PREFIX}${publicKey}`,
+    ]);
     pair[1].serializeAttachment({
       connectedAt: Date.now(),
     } satisfies SocketAttachment);
@@ -388,12 +399,21 @@ export class DeviceHub extends DurableObject<Env> {
   }
 
   private onlineIds(sockets: WebSocket[]): string[] {
-    const ids = new Set<string>();
+    return this.onlineDevices(sockets).map((device) => device.deviceId);
+  }
+
+  // Each device once, with the key its sockets were admitted under,
+  // sorted by id.
+  private onlineDevices(sockets: WebSocket[]): OnlineDevice[] {
+    const keys = new Map<string, string>();
     for (const ws of sockets) {
-      const deviceId = this.deviceIdOf(ws);
-      if (deviceId !== undefined) ids.add(deviceId);
+      const [deviceId, , keyTag] = this.ctx.getTags(ws);
+      if (deviceId === undefined || keyTag === undefined) continue;
+      keys.set(deviceId, keyTag.slice(KEY_TAG_PREFIX.length));
     }
-    return [...ids].toSorted();
+    return [...keys]
+      .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([deviceId, publicKey]) => ({ deviceId, publicKey }));
   }
 
   // Closes the given sockets, then broadcasts the presence list
@@ -416,7 +436,7 @@ export class DeviceHub extends DurableObject<Env> {
     const sockets = this.ctx.getWebSockets().filter((ws) => !exclude.has(ws));
     const text = encodeEnvelope({
       t: "presence",
-      online: this.onlineIds(sockets),
+      online: this.onlineDevices(sockets),
     });
     for (const ws of sockets) this.safeSend(ws, text);
   }

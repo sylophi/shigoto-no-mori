@@ -47,6 +47,7 @@ import {
 } from "@shared/remote/supervisor";
 import { createLimiter } from "@shared/util/limit";
 import { log } from "@shared/log";
+import { deviceKeyPair } from "@shared/crypto/deviceKey";
 
 // The deadline for one dial phase: the ticket mint, and separately the
 // socket accept (the first presence envelope). Named rather than a bare
@@ -152,11 +153,13 @@ function connectUrlFor(hubUrl: string, ticket: string): string {
 
 function sameOpts(a: HubConnectOpts, b: HubConnectOpts): boolean {
   // mintTicket is a closure and deliberately not compared: it reads
-  // the stored credential fresh on every attempt.
+  // the stored credential fresh on every attempt. A new device key (an
+  // enrollment again) redials, so the roster hands peers the new one.
   return (
     a.hubUrl === b.hubUrl &&
     a.accountId === b.accountId &&
-    a.deviceId === b.deviceId
+    a.deviceId === b.deviceId &&
+    a.deviceKey === b.deviceKey
   );
 }
 
@@ -317,6 +320,7 @@ export function createHubConnectionCore(
 
         const nextLink = createHubLink({
           localDeviceId: opts.deviceId,
+          localKey: deviceKeyPair(opts.deviceKey),
           send: (text) => socket.send(text),
           serveConnectInfo: deps.serveConnectInfo,
           onPresence: () => {

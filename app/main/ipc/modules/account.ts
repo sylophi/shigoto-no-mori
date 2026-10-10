@@ -264,6 +264,7 @@ function statusOf(
     sharedSignIn: existsSync(
       join(app.getPath("userData"), CLONED_LOGIN_MARKER),
     ),
+    needsDeviceKey: store().readWithoutKey() !== null,
   };
 }
 
@@ -304,6 +305,7 @@ export function accountFactsForHost(): AccountFacts | null {
     hubUrl: config.hubUrl,
     accountId: signedIn.record.accountId,
     credential: signedIn.record.credential,
+    deviceKey: signedIn.record.deviceKey,
     webOrigin: config.webOrigin,
     acceptsCommands: acceptsPeerCommands(),
   };

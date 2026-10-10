@@ -12,12 +12,39 @@ import {
   DeviceEnvelopeSchema,
   encodeEnvelope,
   HUB_PING,
+  encodeRelayFrame,
   HUB_PONG,
   hubTextWithinLimit,
   type ServerEnvelope,
 } from "@shigomori/contracts/hubProtocol";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { toText } from "@host/hub/rawData";
+import { toBase64Url } from "@shared/crypto/deviceKey";
+import {
+  HandshakeState,
+  type KeyPair,
+  keyPairFromPrivateKey,
+} from "@shared/crypto/noise";
+import { relayPrologue } from "@shared/hub/link";
 import { boundPort, type Track } from "./checkKit.mts";
+
+// The key a test device enrolled with, the same for its id in every
+// file: the stub's roster names it, and a booted or raw device seals
+// with it.
+export function testDeviceKey(deviceId: string): {
+  pair: KeyPair;
+  privateKey: string;
+  publicKey: string;
+} {
+  const pair = keyPairFromPrivateKey(
+    sha256(new TextEncoder().encode(`test-device-key:${deviceId}`)),
+  );
+  return {
+    pair,
+    privateKey: toBase64Url(pair.privateKey),
+    publicKey: toBase64Url(pair.publicKey),
+  };
+}
 
 // Tickets are "t:<deviceId>:<kind>:<connectionId>", or "t:<deviceId>:<n>"
 // for a desktop device whose every dial is a new connection. The real DO
@@ -32,7 +59,33 @@ function holderOfTicket(ticket: string): Holder | null {
     : { deviceId, kind: "desktop", connection: second ?? "" };
 }
 
-type StubSend = { from: string; to: string; frame: unknown };
+// An ask from `from` to `to`, sealed to `to`'s roster key with
+// `from`'s (or the given) static key. The payload defaults to a
+// connectInfo ask with `input`.
+export function sealAsk(
+  from: string,
+  to: string,
+  id: number,
+  payload: unknown,
+  key: KeyPair = testDeviceKey(from).pair,
+): { frame: string; handshake: HandshakeState } {
+  const handshake = new HandshakeState({
+    initiator: true,
+    prologue: relayPrologue(from, to),
+    s: key,
+    rs: testDeviceKey(to).pair.publicKey,
+  });
+  const sealed = toBase64Url(
+    handshake.writeMessage(new TextEncoder().encode(JSON.stringify(payload)))
+      .message,
+  );
+  return {
+    frame: encodeRelayFrame({ kind: "ask", id, sealed }),
+    handshake,
+  };
+}
+
+type StubSend = { from: string; to: string; frame: string };
 
 export type StubHub = {
   port: number;
@@ -51,7 +104,13 @@ export type StubHub = {
 
 // `track`, when passed, registers the stub's close on the caller's
 // tracker as soon as it listens, the way startDirectListener does.
-export function startStubHub(track?: Track): Promise<StubHub> {
+// `publicKeyOf` names a device's key in the roster where the device's
+// key is not its test key (a web profile's, from its stored envelope).
+export function startStubHub(
+  track?: Track,
+  publicKeyOf: (deviceId: string) => string = (deviceId) =>
+    testDeviceKey(deviceId).publicKey,
+): Promise<StubHub> {
   return new Promise((resolve) => {
     const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
     // Each device's sockets by connection id.
@@ -72,9 +131,15 @@ export function startStubHub(track?: Track): Promise<StubHub> {
     const pings = new Map<string, number>();
 
     function broadcastPresence() {
-      const online = [...sockets.keys()].toSorted();
-      const text = encodeEnvelope({ t: "presence", online });
-      for (const deviceId of online) {
+      const ids = [...sockets.keys()].toSorted();
+      const text = encodeEnvelope({
+        t: "presence",
+        online: ids.map((deviceId) => ({
+          deviceId,
+          publicKey: publicKeyOf(deviceId),
+        })),
+      });
+      for (const deviceId of ids) {
         for (const ws of openSocketsOf(deviceId)) ws.send(text);
       }
     }

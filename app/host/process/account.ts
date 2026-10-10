@@ -60,6 +60,7 @@ function signedIn(): { facts: AccountFacts; service: AccountService } {
 export function hubConnectInputs(): {
   hubUrl: string;
   accountId: string;
+  deviceKey: string;
   mintTicket: (connectionId: string, signal: AbortSignal) => Promise<string>;
 } | null {
   if (facts === null) return null;
@@ -68,6 +69,7 @@ export function hubConnectInputs(): {
     // A different account forces the hub socket onto the new account's
     // object instead of leaving the old socket live.
     accountId: facts.accountId,
+    deviceKey: facts.deviceKey,
     mintTicket: async (connectionId, signal) => {
       const current = signedIn();
       return (
