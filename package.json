@@ -19,6 +19,7 @@
     "fake-host": "pnpm -F ./app fake-host",
     "fake-host:web": "pnpm -F ./app fake-host:web",
     "scenes:compare": "pnpm -F ./app scenes:compare",
+    "reliability": "pnpm -F ./app reliability",
     "package": "pnpm -F ./app package",
     "make": "pnpm -F ./app make",
     "check": "pnpm run check:typecheck && pnpm run check:lint && pnpm run check:lint-rules && pnpm run check:format && pnpm run check:knip && pnpm run check:licenses && pnpm run check:contracts && pnpm run check:engine && pnpm run check:ui && pnpm run check:cli && pnpm run check:proofs && pnpm run check:hub && pnpm run check:go",

@@ -54,6 +54,7 @@ import {
   type DeviceFields,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
+import { createHubTrace } from "../hub/trace";
 import {
   isConfigured,
   resolveServiceConfig,
@@ -145,12 +146,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // and mint no lan ticket for this caller), no connectInfo server
   // (web/hub/connection.ts), and no host half (no direct listener, no cloudflared, so the
   // status snapshot carries no tunnel state).
+  const traceHub = createHubTrace();
   const directPlane = createDirectPlane({
     connection: () => connection,
     localDeviceId: () => deviceId,
     localAppVersion: () => deps.appVersion,
-    broadcastStatus: (status) =>
-      broadcastAll(hubContract, "statusChanged", status, tab.server),
+    broadcastStatus: (status) => {
+      traceHub(status);
+      broadcastAll(hubContract, "statusChanged", status, tab.server);
+    },
     broadcastPeerPush: (push) =>
       broadcastAll(hubContract, "peerPush", push, tab.server),
     dialableKinds: deps.dialableKinds ?? ["tunnel"],

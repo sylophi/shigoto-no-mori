@@ -59,3 +59,5 @@ macfs/macfs
 
 # The scene comparison's report (app/lab/scene-compare)
 app/lab/scene-compare/report/
+# The reliability harness's report (app/lab/reliability)
+app/lab/reliability/report/
