@@ -1,6 +1,6 @@
 // The worktree reads the host makes. The rows and identities come from
 // the engine, which owns the data model (Worktrees.list, see
-// host/lib/engineCalls.ts). What stays here is plain git the engine
+// host/lib/engineOps.ts). What stays here is plain git the engine
 // has no service for: the paged commit history, the upstream counts the
 // auto-pull sweep decides on right before it pulls, and the prune
 // after a data dir wipe.
@@ -10,11 +10,12 @@ import {
   type BranchHistory,
   type CommitSummary,
   isCommitHash,
-  type Worktree,
   type WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
-import * as EngineCalls from "@host/lib/engineCalls";
-import { createLimiter } from "@shared/util/limit";
+import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
+import { face } from "@host/lib/engineCalls";
+import * as Ops from "@host/lib/engineOps";
 import { run, runLenient } from "./core";
 import { upstreamName } from "./refs";
 
@@ -24,43 +25,36 @@ export type { WorktreeIdentity };
 // each list runs up to six rows' probes at a time in the CLI (five git
 // processes a row), so a couple of lists at a time keeps a refresh from
 // forking hundreds of gits at once.
-const rowLists = createLimiter(2);
+const rowLists = Semaphore.makeUnsafe(2);
 
 // A project's rows, primary first.
-export function listWorktrees(projectId: string): Promise<readonly Worktree[]> {
-  return rowLists(() => EngineCalls.listWorktrees(projectId));
-}
-
-// One row, freshly probed.
-export function describeWorktree(
-  projectId: string,
-  worktreeId: string,
-): Promise<Worktree> {
-  return EngineCalls.describeWorktree(projectId, worktreeId);
-}
-
-// A project's checkouts without git probes. `primaryRef` also resolves
-// the project's primary ref onto each.
-export function listWorktreeIdentities(
-  projectId: string,
-  opts: { primaryRef?: boolean } = {},
-): Promise<readonly WorktreeIdentity[]> {
-  return EngineCalls.listWorktreeIdentities({ projectId }, opts);
-}
+export const listWorktrees = (projectId: string) =>
+  Ops.listWorktrees(projectId).pipe(rowLists.withPermits(1));
 
 // The checkout `worktreeId` names, or the entity-gone error.
-export async function findWorktreeIdentityOrThrow(
+export const findWorktreeIdentity = Effect.fnUntraced(function* (
   projectId: string,
   worktreeId: string,
   opts: { primaryRef?: boolean } = {},
-): Promise<WorktreeIdentity> {
-  const [identity] = await EngineCalls.listWorktreeIdentities(
+) {
+  const [identity] = yield* Ops.listWorktreeIdentities(
     { projectId, worktreeId },
     opts,
   );
-  if (!identity) throw new UnknownWorktreeError({ worktreeId });
+  if (!identity) return yield* new UnknownWorktreeError({ worktreeId });
   return identity;
-}
+});
+
+// The Promise forms, for the host code not converted yet: removed with
+// the narrowed engine face (engineCalls.ts) in step 7's B4c PR.
+
+// A project's checkouts without git probes. `primaryRef` also resolves
+// the project's primary ref onto each.
+export const listWorktreeIdentities = face(
+  (projectId: string, opts: { primaryRef?: boolean } = {}) =>
+    Ops.listWorktreeIdentities({ projectId }, opts),
+);
+export const findWorktreeIdentityOrThrow = face(findWorktreeIdentity);
 
 // The engine's id rule (worktreeIdFromPath in worktreeLayout.ts), for the few
 // places that key something by a checkout path rather than by a listed
