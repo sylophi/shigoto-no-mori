@@ -3,9 +3,9 @@
 import { powerMonitor } from "electron";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { lifetime, starts } from "@host/lib/util/lifetimes";
+import { lifetime } from "@host/lib/util/lifetimes";
 import { host } from "./hostProcess";
-import { startUpdater } from "./electron/updater";
+import * as Updater from "./electron/updater";
 import { shellLinkLayer } from "./ipc/register";
 
 // Sleep is the one event that reliably kills every remote socket
@@ -20,7 +20,7 @@ const resumeProbe = lifetime(
 );
 
 export const layer = Layer.mergeAll(
-  starts("the updater", startUpdater),
+  Updater.layer,
   resumeProbe,
   // The windows' links to the shell (ipc/shellLink.ts).
   shellLinkLayer,

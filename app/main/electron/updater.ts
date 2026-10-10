@@ -41,10 +41,12 @@ import { requireCliBinary } from "./cliBinary";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 import { updateEndpoints } from "./updateEndpoints";
-import * as UpdaterEngine from "./updaterEngine";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import { spawn } from "node:child_process";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -164,8 +166,14 @@ function readyStateFrom(manifest: {
   };
 }
 
+// A check, started from outside the updater's layer (the host's call,
+// updateNow, a staged arm): on the layer's own runtime, nothing while
+// it is down.
+let fork:
+  | ((effect: Effect.Effect<void, never, Updater.Updater>) => void)
+  | null = null;
 function checkForUpdates(): void {
-  void runCheck();
+  fork?.(runCheck);
 }
 
 // One check at a time. The engine holds a cross-process staging lock,
@@ -182,91 +190,88 @@ function checkForUpdates(): void {
 // release or a confirmed up-to-date answer (the release was pulled,
 // and the stage cleared it) replaces it. A failure keeps it while its
 // bundle is still on disk, and still backs off.
-async function runCheck(): Promise<void> {
-  if (!started || checkInFlight) return;
-  if (state.kind === "downloading") return;
-  checkInFlight = true;
-  const shown = state.kind === "ready" ? state : null;
-  if (shown === null) setState({ kind: "checking" });
-  let failed = false;
-  try {
+const stage = (shown: UpdaterState | null) =>
+  Effect.flatMap(Updater.Updater, (updater) =>
+    updater.stage({
+      running: runningApp(),
+      ...updateEndpoints(),
+      // "verifying" arrives too, and the renderer's machine collapses
+      // everything between "found one" and "staged" into downloading,
+      // which names the release from the first event.
+      progress: (progress) =>
+        Effect.sync(() => {
+          if (
+            shown === null &&
+            (progress.phase === "downloading" ||
+              progress.phase === "verifying") &&
+            state.kind !== "downloading"
+          ) {
+            setState({ kind: "downloading", version: progress.version });
+          }
+        }),
+    }),
+  ).pipe(Effect.timeout(STAGE_TIMEOUT_MS));
+
+const runCheck: Effect.Effect<void, never, Updater.Updater> = Effect.gen(
+  function* () {
+    if (!started || checkInFlight) return;
+    if (state.kind === "downloading") return;
+    checkInFlight = true;
+    const shown = state.kind === "ready" ? state : null;
+    if (shown === null) setState({ kind: "checking" });
+    const staged = yield* Effect.result(stage(shown));
     let next: UpdaterState;
-    try {
-      const result = await UpdaterEngine.run(
-        Effect.gen(function* () {
-          return yield* (yield* Updater.Updater).stage({
-            running: runningApp(),
-            ...updateEndpoints(),
-            // "verifying" arrives too, and the renderer's machine
-            // collapses everything between "found one" and "staged"
-            // into downloading, which names the release from the first
-            // event.
-            progress: (progress) =>
-              Effect.sync(() => {
-                if (
-                  shown === null &&
-                  (progress.phase === "downloading" ||
-                    progress.phase === "verifying") &&
-                  state.kind !== "downloading"
-                ) {
-                  setState({ kind: "downloading", version: progress.version });
-                }
-              }),
-          });
-        }).pipe(Effect.timeout(STAGE_TIMEOUT_MS)),
-      ).then(
-        (staged) => ({ staged }),
-        (error: unknown) => ({ error }),
-      );
-      if ("staged" in result) {
-        const parsed = decodeStageResult(result.staged);
-        next =
-          Option.isSome(parsed) && parsed.value.status === "staged"
-            ? readyStateFrom(parsed.value)
-            : { kind: "idle" };
-      } else if (codeOf(result.error) === "update-in-progress") {
-        // A terminal `sm update` holding the staging lock is its turn,
-        // not an error.
-        next = shown ?? { kind: "idle" };
-      } else {
-        next = { kind: "error", message: messageOf(result.error) };
-      }
-    } catch (err) {
-      next = { kind: "error", message: errorMessageOf(err) };
+    if (Result.isSuccess(staged)) {
+      const parsed = decodeStageResult(staged.success);
+      next =
+        Option.isSome(parsed) && parsed.value.status === "staged"
+          ? readyStateFrom(parsed.value)
+          : { kind: "idle" };
+    } else if (codeOf(staged.failure) === "update-in-progress") {
+      // A terminal `sm update` holding the staging lock is its turn,
+      // not an error.
+      next = shown ?? { kind: "idle" };
+    } else {
+      next = { kind: "error", message: messageOf(staged.failure) };
     }
-    failed = next.kind === "error";
+    const failed = next.kind === "error";
     if (
       failed &&
       shown !== null &&
-      (await readInstallableStaged())?.version === shown.version
+      (yield* Effect.promise(readInstallableStaged))?.version === shown.version
     ) {
       next = shown;
     }
     setState(next);
-  } finally {
-    checkInFlight = false;
     failedChecks = failed ? failedChecks + 1 : 0;
     nextAutoCheckAt = failed
       ? Date.now() +
         Math.min(failedChecks + 1, MAX_BACKOFF_TICKS) * CHECK_INTERVAL_MS
       : 0;
-  }
-  // updateNow's arm (see there). One that landed mid-check gets one
-  // check of its own before a miss drops it.
-  const unattended = installWhenStaged;
-  if (unattended !== null && state.kind !== "ready" && armedMidCheck) {
+    // updateNow's arm (see there). One that landed mid-check gets one
+    // check of its own before a miss drops it.
+    const unattended = installWhenStaged;
+    if (unattended !== null && state.kind !== "ready" && armedMidCheck) {
+      armedMidCheck = false;
+      checkInFlight = false;
+      yield* Effect.suspend(() => runCheck);
+      return;
+    }
+    installWhenStaged = null;
     armedMidCheck = false;
-    void runCheck();
-    return;
-  }
-  installWhenStaged = null;
-  armedMidCheck = false;
-  if (unattended !== null && state.kind === "ready") {
-    // Nobody waits on this call to hear a busy host's refusal, and the
-    // update stays staged behind the usual restart button.
-    installUpdate(unattended).catch(() => undefined);
-  }
-}
+    if (unattended !== null && state.kind === "ready") {
+      // Nobody waits on this call to hear a busy host's refusal, and the
+      // update stays staged behind the usual restart button.
+      installUpdate(unattended).catch(() => undefined);
+    }
+  },
+).pipe(
+  Effect.ensuring(
+    Effect.sync(() => {
+      checkInFlight = false;
+    }),
+  ),
+);
 
 // True when the staged update is actually installable: manifest
 // present, bundle on disk, and a different version than this build (a
@@ -357,7 +362,7 @@ async function updateNow(unattended: boolean): Promise<void> {
   }
   installWhenStaged = unattended;
   if (checkInFlight) armedMidCheck = true;
-  else void runCheck();
+  else checkForUpdates();
 }
 
 // The state as it stands, for a host that starts after it moved.
@@ -374,30 +379,48 @@ export const updaterCalls = {
   update: updateNow,
 };
 
-export function startUpdater(): void {
-  if (started) return;
-  if (!app.isPackaged) {
-    // Publishes the state file too, so `sm update` reads "unsupported"
-    // instead of waiting on a bridge that will never start.
-    setState({ kind: "unsupported" });
-    return;
-  }
-  started = true;
-  // The only bridge request is "install" (UpdateRequestSchema). The
-  // CLI runs at this machine's own terminal, so it is attended.
-  startUpdaterBridge(() => void installUpdate(false));
-  void (async () => {
-    // Seed from disk before any network work: an update staged earlier
-    // (a previous run, or `sm update --stage` in a terminal) is ready
-    // immediately, before any check. The first check still runs, in
-    // case a newer release has shipped since.
-    const staged = await readInstallableStaged();
-    if (staged !== null) setState(readyStateFrom(staged));
-    setTimeout(checkForUpdates, FIRST_CHECK_DELAY_MS);
-  })();
-  // Runs for the app's lifetime. Quit tears the interval down with the
-  // process, so there's no stop path.
-  setInterval(() => {
-    if (Date.now() >= nextAutoCheckAt) checkForUpdates();
-  }, CHECK_INTERVAL_MS);
-}
+// The updater, for the length of the shell's graph: the staged update
+// seeded from disk, then a check a minute in and every interval after
+// (backed off after failures). A dev build reports "unsupported", and
+// publishes it too, so `sm update` reads that instead of waiting on a
+// bridge that will never start.
+export const layer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    if (!app.isPackaged) {
+      setState({ kind: "unsupported" });
+      return;
+    }
+    const runFork = yield* FiberSet.makeRuntime<Updater.Updater>();
+    fork = (effect) => void runFork(effect);
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        fork = null;
+      }),
+    );
+    started = true;
+    // The only bridge request is "install" (UpdateRequestSchema). The
+    // CLI runs at this machine's own terminal, so it is attended.
+    startUpdaterBridge(() => void installUpdate(false));
+    yield* Effect.forkScoped(
+      Effect.gen(function* () {
+        // Seed from disk before any network work: an update staged
+        // earlier (a previous run, or `sm update --stage` in a
+        // terminal) is ready immediately, before any check. The first
+        // check still runs, in case a newer release has shipped since.
+        const staged = yield* Effect.promise(readInstallableStaged);
+        if (staged !== null) setState(readyStateFrom(staged));
+        yield* Effect.sleep(FIRST_CHECK_DELAY_MS);
+        yield* runCheck;
+        return yield* Effect.forever(
+          Effect.sleep(CHECK_INTERVAL_MS).pipe(
+            Effect.andThen(
+              Effect.suspend(() =>
+                Date.now() >= nextAutoCheckAt ? runCheck : Effect.void,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }),
+);

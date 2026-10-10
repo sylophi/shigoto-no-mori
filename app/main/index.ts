@@ -31,7 +31,6 @@ import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "@host/lib/util/shellEnv";
 import { cliBinaryName } from "@shared/packaging/cliDist.mts";
 import * as Observability from "@host/lib/util/observability";
-import * as Processes from "@host/lib/util/processes";
 import * as UpdaterEngine from "./electron/updaterEngine";
 import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
@@ -184,10 +183,7 @@ const runtime = ManagedRuntime.make(
   ShellLayer.layer.pipe(
     // The renderer asks for its Clerk session as soon as it loads.
     Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
-    Layer.provideMerge(UpdaterEngine.adapter),
     Layer.provideMerge(UpdaterEngine.layer(flavor)),
-    // The account's probes (the device's default name and icon).
-    Layer.provideMerge(Processes.adapter),
     Layer.provideMerge(
       Observability.layer({ packaged: app.isPackaged, writeTraceLine }),
     ),

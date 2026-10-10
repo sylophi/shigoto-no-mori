@@ -11,7 +11,10 @@ import {
   fallbackDeviceIcon,
   type DeviceShape,
 } from "@shigomori/contracts/deviceIcon";
-import * as Processes from "@host/lib/util/processes";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileP = promisify(execFile);
 
 // Apple's product name ("Mac mini (2024)", "MacBook Pro") or model
 // identifier ("MacBookPro18,3", "Macmini9,1"), as ioreg and sysctl
@@ -118,9 +121,7 @@ export function appleProductNameOf(ioregOutput: string): string | null {
 }
 
 async function run(file: string, args: readonly string[]): Promise<string> {
-  const { stdout } = await Processes.run(
-    Processes.exec(file, args, { timeout: 2000 }),
-  );
+  const { stdout } = await execFileP(file, args, { timeout: 2000 });
   return stdout;
 }
 

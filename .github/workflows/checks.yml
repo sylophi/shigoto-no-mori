@@ -3,7 +3,10 @@ name: Checks
 on:
   pull_request:
   push:
-    branches: [main]
+    # release/v3 so every landing checks the combined tip, a squash
+    # against an older base included. It goes when the branch merges
+    # into main.
+    branches: [main, release/v3]
 
 permissions:
   contents: read

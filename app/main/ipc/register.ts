@@ -3,7 +3,10 @@
 // there, and the pushes to one window or every one. The host's modules
 // ride the host's own wires (host/process/wires.ts).
 import { app, ipcMain, MessageChannelMain, type WebContents } from "electron";
+import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import { layerLatch } from "@host/lib/util/layerLatch";
 import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { isHostSide } from "@shigomori/contracts/link";
 import type {
@@ -24,9 +27,25 @@ import * as ShellLink from "./shellLink";
 // process owns, registered here and served on the port each window's
 // preload asks for (installShellPorts).
 const shellRegistrar = ShellLink.createShellRegistrar();
-export const shellLinkLayer = ShellLink.adapter.pipe(
-  Layer.provideMerge(ShellLink.layer(shellRegistrar)),
-);
+
+// The link, once its layer is up, with the runtime its work runs in
+// for as long as the layer does.
+const link = layerLatch<{
+  readonly service: ShellLink.ShellLink["Service"];
+  readonly run: (effect: Effect.Effect<void>) => void;
+}>("The shell link");
+export const shellLinkLayer = Layer.effectDiscard(
+  link.provide(
+    Effect.gen(function* () {
+      const service = yield* ShellLink.ShellLink;
+      const runFork = yield* FiberSet.makeRuntime<never>();
+      return {
+        service,
+        run: (effect: Effect.Effect<void>) => void runFork(effect),
+      };
+    }),
+  ),
+).pipe(Layer.provide(ShellLink.layer(shellRegistrar)));
 
 // Hands each page that loads a port of its own to the shell: the
 // preload asks once its window's document runs, and the page takes the
@@ -34,7 +53,11 @@ export const shellLinkLayer = ShellLink.adapter.pipe(
 export function installShellPorts(): void {
   ipcMain.on(SHELL_PORT_CHANNEL, (event) => {
     const { port1, port2 } = new MessageChannelMain();
-    void ShellLink.shellLink.attach(port1, event.sender);
+    // A page that asks before the link is up waits for it.
+    void Effect.runPromise(link.get).then(
+      ({ service, run }) => run(service.attach(port1, event.sender)),
+      () => {},
+    );
     event.sender.postMessage(SHELL_PORT_CHANNEL, null, [port2]);
   });
 }
@@ -63,7 +86,10 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
   webContents: WebContents,
 ): void {
   const { channel, parsed } = resolveBroadcast(module, key, payload);
-  void ShellLink.shellLink.pushTo(webContents, { channel, payload: parsed });
+  // Before the link is up no window is listening, and the push goes
+  // nowhere.
+  const up = link.now();
+  up?.run(up.service.pushTo(webContents, { channel, payload: parsed }));
 }
 
 // A push to every window, on every window's shell port. One annotated

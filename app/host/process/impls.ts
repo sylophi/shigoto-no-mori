@@ -10,7 +10,9 @@ import { setRuntimeImpl } from "@host/ipc/modules/runtime";
 import { onGlobalConfigChange } from "@host/lib/config/global";
 import { getBusyOperations } from "@host/lib/scripts";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
-import { publishLoopback, releaseStore, unpublishLoopback } from "./captures";
+import * as Graph from "./graph";
+import * as Loopback from "@host/socket/loopback";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { shellCalls } from "./shell";
 import { broadcastAll, refreshDirectHost } from "./wires";
 
@@ -26,12 +28,19 @@ export function installHostImpls(): void {
     void refreshDirectHost();
   });
   setRuntimeImpl({
-    releaseStore: Effect.promise(releaseStore),
+    releaseStore: Effect.promise(() =>
+      Graph.runIfUp(
+        Effect.flatMap(StoreChanges.StoreChanges, (it) => it.release),
+      ),
+    ),
     stopUpdaterBridge: () => void shellCalls().stopUpdaterBridge(),
-    unpublishLoopback: Effect.promise(unpublishLoopback),
+    unpublishLoopback: Effect.promise(() =>
+      Graph.runIfUp(Effect.flatMap(Loopback.Loopback, (it) => it.unpublish)),
+    ),
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
-    afterDataWipe: () => void publishLoopback(),
+    afterDataWipe: () =>
+      void Graph.runIfUp(Effect.flatMap(Loopback.Loopback, (it) => it.publish)),
     relaunchAppUnattended: () => void shellCalls().relaunch(),
     unattendedMoveRefusal: () => busyRemoteRefusal(getBusyOperations(), "move"),
   });

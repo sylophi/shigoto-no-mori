@@ -11,7 +11,6 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as PromiseAdapter from "./promiseAdapter";
 
 // A command that did not answer. `cause` holds what it said on stderr,
 // or the spawn failure. `command` is the binary's name, never its
@@ -186,11 +185,4 @@ export const resolveOnPath = (name: string) =>
   exec("which", [name]).pipe(
     Effect.map(({ stdout }) => stdout.trim() || null),
     Effect.orElseSucceed(() => null),
-  );
-
-// For the callers that are not Effect yet. Its layer goes at the bottom
-// of the host graph, over the platform's.
-export const { layer: adapter, run } =
-  PromiseAdapter.make<ChildProcessSpawner.ChildProcessSpawner>(
-    "The host's child processes",
   );
