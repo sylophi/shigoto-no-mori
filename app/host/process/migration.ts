@@ -5,8 +5,7 @@ import * as Migration from "@shigomori/engine/Migration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { fromPromise } from "@host/lib/util/fromPromise";
-import { shellCalls } from "./shell";
+import { onShell, shellCalls } from "./shell";
 
 const running = (migration: MigrationProgress) =>
   (migration.import !== null || migration.worktrees !== null) &&
@@ -18,7 +17,7 @@ export const tellShell = Layer.effectDiscard(
       Stream.map(running),
       Stream.changes,
       Stream.runForEach((on) =>
-        fromPromise(() => shellCalls().migrating(on)).pipe(Effect.ignore),
+        onShell(() => shellCalls().migrating(on)).pipe(Effect.ignore),
       ),
       Effect.forkScoped,
     ),
