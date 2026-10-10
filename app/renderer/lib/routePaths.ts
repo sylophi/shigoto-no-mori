@@ -37,6 +37,10 @@ export const PROJECT_ROUTE_PATHS = {
     "/devices/$deviceId/projects/$projectId/configure/worktree-location",
 } as const;
 
+// The v3 migration's page (components/migration/MigrationPage.tsx),
+// which a window shows in place of the app.
+export const MIGRATION_PATH = "/migration";
+
 // A device's own terminals (components/terminal/DeviceTerminals.tsx).
 export const DEVICE_TERMINALS_PATH = "/devices/$deviceId/terminals";
 

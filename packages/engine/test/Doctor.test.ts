@@ -40,6 +40,7 @@ import {
   scriptFileTokens,
 } from "../src/doctorParse.ts";
 import { engineLayer } from "../src/layer.ts";
+import * as Migration from "../src/Migration.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { nodeStore } from "./lib/nodeStore.ts";
@@ -770,6 +771,7 @@ describe("the data dir found by pointer", () => {
         macfs: macfs(),
         sm: "smd",
       }).pipe(
+        Layer.provide(Migration.layer),
         Layer.provide(NodeServices.layer),
         Layer.provide(
           ConfigProvider.layer(

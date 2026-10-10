@@ -22,6 +22,7 @@ import * as Launchers from "./Launchers.ts";
 import * as Landing from "./Landing.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
+import * as Migration from "./Migration.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
@@ -127,8 +128,9 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
   );
 
 // The terminal's `sm doctor`, which answers when the store can't open:
-// the store is opened inside each run (`Doctor.standalone`). Paths comes
-// along for the checklist's header.
+// the store is opened inside each run (`Doctor.standalone`), with a
+// migration of its own that nothing shows. Paths comes along for the
+// checklist's header.
 export const doctorLayer = (options: {
   readonly flavor: Flavor;
   readonly open: Store.OpenDatabase;
@@ -138,6 +140,8 @@ export const doctorLayer = (options: {
     doctorStore(Store.layer(options.open)),
     doctorStore(Store.fromFiles(options.open)),
   ).pipe(
-    Layer.provide(Layer.merge(Git.layer, Darwin.layer(options.macfs))),
+    Layer.provide(
+      Layer.mergeAll(Git.layer, Darwin.layer(options.macfs), Migration.layer),
+    ),
     Layer.provideMerge(Paths.layer(options.flavor)),
   );

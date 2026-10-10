@@ -6,7 +6,10 @@
 // starting together don't both take it. One that can't be moved keeps
 // its folder and records why, for the doctor to report and retry. A
 // crash between git's move and the carry-over finds the worktree at its
-// new path on the next start and carries it then.
+// new path on the next start and carries it then. The first start's
+// moves are reported to the migration as they go (Migration.ts), and
+// a start that resumes them counts the ones made before.
+import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -18,6 +21,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Git from "./Git.ts";
+import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import { externalVolumeRoot } from "./worktreeLayout.ts";
@@ -70,6 +74,17 @@ const why = (error: { readonly message: string }) =>
     ? Git.stderrOf(error).trim() || error.message
     : error.message;
 
+// git's first line, without its "fatal:" and trailing punctuation.
+const oneLine = (error: string) =>
+  (
+    error
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line !== "") ?? error
+  )
+    .replace(/^(fatal|error): /, "")
+    .replace(/[;:,.]$/, "");
+
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
@@ -79,6 +94,7 @@ const make = Effect.gen(function* () {
   const worktrees = yield* Worktrees.Worktrees;
   const { dataDir, dataDirName } = yield* Paths.Paths;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const migration = yield* Migration.Migration;
 
   // One recorded move, made or failed, inside a transaction that holds
   // the store's write lock, which another process waits on.
@@ -136,8 +152,13 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => false),
     );
 
-  // The project's moves, the failed ones too with `again`.
-  const moveProject = (projectId: string, again: boolean) =>
+  // The project's moves, the failed ones too with `again`. `report`
+  // hears each move before and after it is tried.
+  const moveProject = (
+    projectId: string,
+    again: boolean,
+    report?: (fromPath: string, tried: boolean) => Effect.Effect<void>,
+  ) =>
     Effect.gen(function* () {
       const project = (yield* registry.listed).find(
         ({ id }) => id === projectId,
@@ -148,7 +169,11 @@ const make = Effect.gen(function* () {
         (row) => again || row.error === null,
       );
       if (project === undefined || rows.length === 0) return;
-      for (const row of rows) yield* moveOne(project, row.from_path);
+      for (const row of rows) {
+        yield* report?.(row.from_path, false) ?? Effect.void;
+        yield* moveOne(project, row.from_path);
+        yield* report?.(row.from_path, true) ?? Effect.void;
+      }
       yield* git.run(project.path, ["worktree", "repair"]).pipe(Effect.ignore);
       // The emptied v2 roots, and the `worktrees` folder above one.
       const roots = new Set(rows.map((row) => path.dirname(row.from_path)));
@@ -217,14 +242,99 @@ const make = Effect.gen(function* () {
     }),
   );
 
+  // A row's outcome as the step counts it: moved, stuck with git's
+  // first line, or gone (a stray folder git doesn't list).
+  const outcomeOf = (fromPath: string) =>
+    sql<{ moved: number; error: string | null }>`
+      SELECT moved, error FROM wt_moves WHERE from_path = ${fromPath}`.pipe(
+      Effect.map(([row]) => row),
+      Effect.orDie,
+    );
+  const stuckOf = (fromPath: string, error: string) => ({
+    name: path.basename(fromPath),
+    reason: oneLine(error),
+  });
+
+  // The migration's moves: the rows the scan recorded under a v2 root,
+  // made or not, as git spells the root.
+  const migrationRows = Effect.gen(function* () {
+    const roots = new Set<string>();
+    for (const project of yield* registry.listed) {
+      for (const [from] of rootsOf(project.path)) {
+        roots.add(from);
+        roots.add(
+          yield* fs.realPath(from).pipe(Effect.orElseSucceed(() => from)),
+        );
+      }
+    }
+    const rows = yield* sql<Row & { readonly moved: number }>`
+      SELECT from_path, to_path, project_id, error, moved FROM wt_moves`;
+    return rows.filter((row) => roots.has(path.dirname(row.from_path)));
+  });
+
+  const moving = (f: (step: WorktreeMoveStep) => WorktreeMoveStep) =>
+    migration.update((current) =>
+      current.worktrees === null
+        ? current
+        : { ...current, worktrees: f(current.worktrees) },
+    );
+
+  const report = (fromPath: string, tried: boolean) =>
+    Effect.gen(function* () {
+      if (!tried) {
+        return yield* moving((step) => ({
+          ...step,
+          current: path.basename(fromPath),
+        }));
+      }
+      const row = yield* outcomeOf(fromPath);
+      yield* moving((step) =>
+        row === undefined
+          ? { ...step, total: step.total - 1 }
+          : row.moved === 1
+            ? { ...step, moved: step.moved + 1 }
+            : {
+                ...step,
+                stuck: [...step.stuck, stuckOf(fromPath, row.error ?? "")],
+              },
+      );
+    });
+
   const drain = Effect.gen(function* () {
     yield* scan.pipe(Effect.orDie);
-    const pending = yield* sql<{ project_id: string }>`
+    const rows = yield* migrationRows.pipe(Effect.orDie);
+    const pending = rows.filter((row) => row.moved === 0 && row.error === null);
+    const begun = yield* migration.current;
+    if (pending.length > 0 || begun.worktrees !== null) {
+      // Owed by the import this start made, or resumed from a start
+      // that stopped partway.
+      yield* migration.update((current) => ({
+        planned: true,
+        import: current.import ?? { state: "done" },
+        worktrees: {
+          state: "running",
+          moved: rows.filter((row) => row.moved === 1).length,
+          total: rows.length,
+          current: null,
+          stuck: rows.flatMap((row) =>
+            row.error === null ? [] : [stuckOf(row.from_path, row.error)],
+          ),
+        },
+      }));
+    } else {
+      yield* migration.update((current) => ({ ...current, planned: true }));
+    }
+    const owed = yield* sql<{ project_id: string }>`
       SELECT DISTINCT project_id FROM wt_moves
       WHERE moved = 0 AND error IS NULL`.pipe(Effect.orDie);
-    for (const { project_id } of pending) {
-      yield* moveProject(project_id, false);
+    for (const { project_id } of owed) {
+      yield* moveProject(project_id, false, report);
     }
+    yield* moving((step) => ({
+      ...step,
+      state: step.stuck.length > 0 ? "stuck" : "done",
+      current: null,
+    }));
   }).pipe(Effect.withSpan("WtFolder.drain"));
 
   const retry = Effect.fn("WtFolder.retry")(function* (projectId: string) {

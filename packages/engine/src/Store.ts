@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import type * as Path from "effect/Path";
+import * as Path from "effect/Path";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -20,6 +20,7 @@ import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
 import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
+import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
@@ -45,27 +46,60 @@ export type OpenDatabase = (
 
 const migrate = Migrator.make({});
 
+// Whether the store has yet to import a 2.x data dir's files: the
+// registry is there, and the import hasn't run (the migrations commit
+// together, so one cut short by a crash runs again).
+const owesImport = (registryFile: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const sql = yield* SqlClient.SqlClient;
+    if (!(yield* fs.exists(registryFile))) return false;
+    const [table] = yield* sql`SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name = 'effect_sql_migrations'`;
+    if (table === undefined) return true;
+    const [imported] = yield* sql`SELECT migration_id
+      FROM effect_sql_migrations WHERE migration_id = 2`;
+    return imported === undefined;
+  });
+
 // The data dir's database, migrated to this build's schema before
 // anything reads it. Every engine service reaches the store through the
-// SqlClient this provides.
+// SqlClient this provides. An import of a 2.x data dir is reported to
+// the migration as it runs, and with it the move into `wt/` it brings.
 export const layer = (
   open: OpenDatabase,
 ): Layer.Layer<
   SqlClient.SqlClient,
   StoreOpenError | StoreImportError,
-  Paths.Paths | FileSystem.FileSystem | Path.Path
+  Paths.Paths | FileSystem.FileSystem | Path.Path | Migration.Migration
 > =>
   Layer.effectContext(
     Effect.gen(function* () {
       const { dataDir, store } = yield* Paths.Paths;
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migration = yield* Migration.Migration;
       const platform = yield* Effect.context<
         Paths.Paths | FileSystem.FileSystem | Path.Path
       >();
+      const importing = (state: "running" | "done" | "stuck") =>
+        migration.update((current) =>
+          current.import === null ? current : { ...current, import: { state } },
+        );
       const sql = yield* Effect.gen(function* () {
         // A fresh device has no data dir until its first command.
         yield* fs.makeDirectory(dataDir, { recursive: true });
         const client = yield* open(store);
+        const owed = yield* owesImport(
+          path.join(dataDir, "registry.json"),
+        ).pipe(Effect.provideService(SqlClient.SqlClient, client));
+        if (owed) {
+          yield* migration.update(() => ({
+            planned: true,
+            import: { state: "running" },
+            worktrees: Migration.WAITING_MOVE,
+          }));
+        }
         // The schema's history, applied in order. A released migration is
         // never edited. A change is a new one.
         yield* migrate({
@@ -79,6 +113,7 @@ export const layer = (
             "7_wt_folder": wtFolder,
           }),
         }).pipe(Effect.provideService(SqlClient.SqlClient, client));
+        yield* importing("done");
         return client;
       }).pipe(
         Effect.mapError((cause) => new StoreOpenError({ path: store, cause })),
@@ -95,6 +130,7 @@ export const layer = (
                     new StoreOpenError({ path: store, cause: defect }),
                   ),
         ),
+        Effect.tapError(() => importing("stuck")),
       );
       return Context.make(SqlClient.SqlClient, sql);
     }),

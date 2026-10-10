@@ -54,6 +54,17 @@ import {
   DiffPartsScene,
 } from "./diffPages.tsx";
 import { FilesPageScene, FilesPartsScene } from "./files.tsx";
+import {
+  MigrationDoneScene,
+  MigrationMovingScene,
+  MigrationSignInScene,
+  MigrationStuckScene,
+  MigrationWaitingScene,
+  OnboardingCliScene,
+  OnboardingDoneScene,
+  OnboardingProjectScene,
+  OnboardingSignInScene,
+} from "./steps.tsx";
 import { LivePageScene, LiveQuietScene } from "./live.tsx";
 import { PalettePickedScene, PaletteScene } from "./palette.tsx";
 import { PullRequestPartsScene } from "./pullRequests.tsx";
@@ -81,6 +92,15 @@ const PHONE = { size: [390, 844], window: "phone" } as const;
 
 export const scenes = {
   firstRun: { Scene: FirstRunScene, ...DESKTOP },
+  migrationWaiting: { Scene: MigrationWaitingScene, ...DESKTOP },
+  migrationMoving: { Scene: MigrationMovingScene, ...DESKTOP },
+  migrationStuck: { Scene: MigrationStuckScene, ...DESKTOP },
+  migrationSignIn: { Scene: MigrationSignInScene, ...DESKTOP },
+  migrationDone: { Scene: MigrationDoneScene, ...DESKTOP },
+  onboardingSignIn: { Scene: OnboardingSignInScene, ...DESKTOP },
+  onboardingCli: { Scene: OnboardingCliScene, ...DESKTOP },
+  onboardingProject: { Scene: OnboardingProjectScene, ...DESKTOP },
+  onboardingDone: { Scene: OnboardingDoneScene, ...DESKTOP },
   forestPage: { Scene: ForestPageScene, ...DESKTOP },
   phoneNotFound: { Scene: PhoneNotFoundScene, ...PHONE },
   phoneInbox: { Scene: PhoneInboxScene, ...PHONE },

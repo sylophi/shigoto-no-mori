@@ -18,7 +18,8 @@ interface AppShellViewProps {
   // root background of its own (the sidebar's material shows through).
   hasLocalHost: boolean;
   // The sidebar, beside the page on a wide viewport. The phone layout
-  // has none: the forest is a page there (ForestPageView).
+  // has none: the forest is a page there (ForestPageView). Null for a
+  // page in place of the app, which takes the whole window.
   sidebar?: ReactNode;
   sidebarWidth?: number;
   // The resize handle's drag (useResizableWidth).
@@ -65,7 +66,7 @@ export function AppShellView({
         className,
       )}
     >
-      {!phone && (
+      {!phone && sidebar !== null && (
         <>
           <div style={{ width: sidebarWidth }} className="shrink-0">
             {sidebar}

@@ -712,6 +712,15 @@
       "enabled": false
     }
   },
+  "migration:watch": {
+    "success": {
+      "planned": false,
+      "import": {
+        "state": "done"
+      },
+      "worktrees": null
+    }
+  },
   "mirror:applyGitState": {
     "payload": {
       "projectId": "\ud800",
