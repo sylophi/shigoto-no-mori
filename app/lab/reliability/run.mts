@@ -1,14 +1,22 @@
-// pnpm reliability [--scenarios a,b] [--soak <duration>] [--gap <min>-<max>]
-//   [--seed <n>] [--headed] [--keep] [--deploy-local-hub]
+// pnpm reliability [--clients web,desktop,tunnel,terminal]
+//   [--scenarios a,b] [--soak <duration>] [--gap <min>-<max>] [--seed <n>]
+//   [--headed] [--keep] [--deploy-local-hub]
 //
-// The web client's reliability scenarios against the dev hub, once each
+// The clients' reliability scenarios against the dev hub, once each
 // or looped for a soak, with a report of every recovery and failure and
 // the trace each one left (README.md beside this file).
 /* oxlint-disable no-await-in-loop -- the harness steps through time on purpose: each wait, poll and scenario follows the one before */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { Lab, sleep, within, type TraceLine } from "./lab.mts";
+import {
+  CLIENT_KINDS,
+  Lab,
+  sleep,
+  within,
+  type ClientKind,
+  type TraceLine,
+} from "./lab.mts";
 import {
   ALL_SCENARIOS,
   hubMatchesRelease,
@@ -16,11 +24,13 @@ import {
   SOAK_SCENARIOS,
   showProject,
   silentFailures,
+  terminalRoundTrip,
   type Scenario,
 } from "./scenarios.mts";
 
 const { values } = parseArgs({
   options: {
+    clients: { type: "string", default: CLIENT_KINDS.join(",") },
     scenarios: { type: "string" },
     soak: { type: "string" },
     gap: { type: "string", default: "30s-3m" },
@@ -56,6 +66,15 @@ const soakMs = values.soak === undefined ? null : durationMs(values.soak);
 const [gapLow = "30s", gapHigh = "3m"] = values.gap.split("-");
 const gap = [durationMs(gapLow), durationMs(gapHigh)] as const;
 
+const clients = new Set(
+  values.clients.split(",").map((kind) => {
+    if (!(CLIENT_KINDS as readonly string[]).includes(kind)) {
+      throw new Error(`no client ${kind} (${CLIENT_KINDS.join(", ")})`);
+    }
+    return kind as ClientKind;
+  }),
+);
+
 let chosen: readonly Scenario[] =
   values.scenarios === undefined
     ? soakMs === null
@@ -82,7 +101,17 @@ if (
 }
 
 const out = join(import.meta.dirname, "report");
-const lab = new Lab({ headed: values.headed, out, keep: values.keep });
+const lab = new Lab({
+  headed: values.headed,
+  out,
+  keep: values.keep,
+  clients,
+});
+chosen = chosen.filter((scenario) => {
+  const applies = scenario.applies?.(lab) ?? true;
+  if (!applies) lab.note(`skipping ${scenario.name}: no client it applies to`);
+  return applies;
+});
 
 type Outcome = {
   readonly scenario: string;
@@ -116,7 +145,7 @@ function writeReport(): void {
     "# Reliability report",
     "",
     `Started ${new Date(startedAt).toISOString()}, ran ${((Date.now() - startedAt) / 60_000).toFixed(1)} min, seed ${seed}.`,
-    `Host ${lab.host?.label ?? "?"} (${lab.host?.deviceId ?? "?"}), web client ${lab.origin}.`,
+    `Host ${lab.host?.label ?? "?"} (${lab.host?.deviceId ?? "?"}), clients ${[...clients].join(", ")}${clients.has("web") ? `, web client ${lab.origin}` : ""}.`,
     "",
     `${outcomes.length} scenarios, ${recoveries.length} recovered, ${outcomes.length - recoveries.length} failed.` +
       (longest === null
@@ -186,12 +215,13 @@ async function runOne(scenario: Scenario): Promise<void> {
     recoveryMs = scenario.destructive
       ? 0
       : await recovered(lab, ended, scenario.boundMs);
+    if (!scenario.destructive) await terminalRoundTrip(lab);
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   }
   const trace = [
     ...lab.trace.filter((line) => line.at >= at),
-    ...lab.hostLogSince(at),
+    ...lab.devicesLogSince(at),
   ].toSorted((a, b) => a.at - b.at);
   const silent = silentFailures(trace);
   if (failure === null && silent.length > 0) failure = silent.join("; ");
@@ -209,7 +239,7 @@ async function runOne(scenario: Scenario): Promise<void> {
     failure === null ? "info" : "error",
   );
   if (failure !== null) {
-    for (const tab of lab.tabs) {
+    for (const tab of lab.pages()) {
       await tab.page
         .screenshot({
           path: join(
@@ -225,26 +255,33 @@ async function runOne(scenario: Scenario): Promise<void> {
 }
 
 // After a failure, puts the lab back the way a scenario expects it: the
-// network up, the host running, one awake tab on the host's project.
+// network up, every app going and its host running, one awake tab on
+// the host's project.
 async function heal(): Promise<void> {
   lab.network.restore({ cut: true });
-  for (const tab of lab.tabs) {
+  for (const app of [lab.hostApp, lab.desk, lab.remote]) {
+    app?.thaw(app.appPids());
+  }
+  for (const tab of lab.pages()) {
     await tab.setFrozen(false).catch(() => {});
     await tab.setOffline(false).catch(() => {});
     await tab.setHidden(false).catch(() => {});
   }
   for (const extra of lab.tabs.slice(1)) await lab.closeTab(extra);
+  const deskWindows = lab.windows.filter((each) => each.app === lab.desk);
+  for (const extra of deskWindows.slice(2)) {
+    await lab.closeWindow(extra).catch(() => {});
+  }
   if (lab.hostPid() === null) {
     await lab.stopHostApp();
     await lab.launchHost(false);
   }
-  const [tab] = lab.tabs;
-  if (tab !== undefined) {
-    await within(60_000, "the reload", tab.page.reload()).catch(() => {});
-    await recovered(lab, Date.now(), 120_000).catch((error) =>
-      lab.note(`still not healed: ${String(error)}`, "error"),
-    );
+  for (const page of lab.pages()) {
+    await within(60_000, "the reload", page.page.reload()).catch(() => {});
   }
+  await recovered(lab, Date.now(), 120_000).catch((error) =>
+    lab.note(`still not healed: ${String(error)}`, "error"),
+  );
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -255,15 +292,22 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 try {
-  await lab.startWeb();
-  await lab.startHost();
-  await lab.startBrowser();
-  const tab = await lab.openTab();
-  await lab.ensureSignedIn(tab);
-  await showProject(lab, tab).catch(() => {});
-  lab.note("waiting for the web client to reach the host");
+  await lab.startNetwork();
+  if (clients.has("web")) await lab.startWeb();
+  await lab.startDevices();
+  if (clients.has("web")) {
+    await lab.startBrowser();
+    const tab = await lab.openTab();
+    await lab.ensureSignedIn(tab);
+  }
+  for (const page of lab.pages()) await showProject(lab, page).catch(() => {});
+  lab.note("waiting for the clients to reach the host");
   await recovered(lab, Date.now(), 180_000).catch(async (error: unknown) => {
-    await tab.page.screenshot({ path: join(out, "setup-tab1.png") });
+    for (const page of lab.pages()) {
+      await page.page
+        .screenshot({ path: join(out, `setup-${page.name}.png`) })
+        .catch(() => {});
+    }
     throw error;
   });
   if (soakMs === null) {
