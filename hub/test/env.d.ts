@@ -8,6 +8,10 @@ declare global {
   namespace Cloudflare {
     interface Env extends HubEnv {
       TEST_MIGRATIONS: D1Migration[];
+      TEST_OBSERVABILITY: Record<
+        "production" | "dev",
+        { logs?: { invocation_logs?: boolean } } | null
+      >;
     }
   }
 }
