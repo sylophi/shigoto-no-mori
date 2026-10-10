@@ -61,6 +61,7 @@ import {
   tunnelLayer,
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
+import * as RootContext from "./rootContext";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -293,6 +294,8 @@ export const layer = (options: {
   readonly engine: Parameters<typeof Engine.layer>[0];
 }) =>
   scriptGate.pipe(
+    // What the root's callbacks read the graph through, gone first.
+    Layer.provideMerge(RootContext.layer),
     Layer.provideMerge(portForwards),
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit

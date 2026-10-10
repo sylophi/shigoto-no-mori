@@ -32,7 +32,6 @@ import * as Engine from "../host/lib/engine.ts";
 import { setAutoPull, writeGlobalConfig } from "../host/lib/engineCalls.ts";
 import { writeWorktreeData } from "../host/lib/config/project.ts";
 import { readDeviceId } from "../host/lib/config/deviceId.ts";
-import type { HostServices } from "@host/process/services";
 import { hostServices } from "./lib/hostServices.mts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
 import * as Sharing from "../host/lib/sharing.ts";
@@ -75,7 +74,7 @@ afterAll(async () => {
 type Services =
   | StoreChanges.StoreChanges
   | HostPushes.HostPushes
-  | HostServices;
+  | Layer.Success<typeof hostServices>;
 
 // A view watched: `next` is its next value, `push` makes a host push as
 // the broadcast seam would, `tick` moves the clock past the store's

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { invokeInCallSpan } from "@host/lib/util/trace";
 import type { HostServices } from "./services";
+import * as RootContext from "./rootContext";
 import type * as Stream from "effect/Stream";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
@@ -92,13 +93,9 @@ export const deviceLinkLayer = () =>
 
 // The sharing switch the link's gate reads. Its changes go to this
 // device's windows and, the push being remote, to every peer.
-export const sharingLayer = Sharing.adapter.pipe(
-  Layer.provideMerge(
-    Sharing.layer({
-      announce: (on) => broadcastAll(sharingContract, "changed", on),
-    }),
-  ),
-);
+export const sharingLayer = Sharing.layer({
+  announce: (on) => broadcastAll(sharingContract, "changed", on),
+});
 const directLink = DeviceLink.deviceLink;
 
 // The tunnel endpoint: a supervised cloudflared child fronting the
@@ -215,7 +212,12 @@ const serveConnectInfo = makeConnectInfo({
   // is healthy (probed routable).
   tunnelUrl: () => TunnelService.tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
-  sharesData: Sharing.sharing.current,
+  // Before the graph is up the link serves nobody, so it reads as off.
+  sharesData: () =>
+    RootContext.readNow(
+      Effect.flatMap(Sharing.Sharing, (it) => it.current),
+      () => false,
+    ),
 });
 
 // The hub connection: connecting itself is gated in
