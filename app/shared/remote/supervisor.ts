@@ -107,7 +107,54 @@ type SupervisorOptions = {
 export type Supervisor = {
   start(): void;
   stop(): void;
+  // The network is back, or the machine awake: a backoff wait ends now
+  // and the next attempt starts, instead of after the rest of its rung.
+  // Does nothing outside a backoff.
+  dialNow(): void;
 };
+
+// A backoff wait that can be cut short, for a loop that should try
+// again the moment the platform says the network is back. `now` ends
+// the wait in progress, if any.
+export type Wake = {
+  readonly wait: (delay: Duration.Duration) => Effect.Effect<void>;
+  readonly now: () => void;
+};
+
+export function makeWake(): Wake {
+  let waiting: Deferred.Deferred<void> | null = null;
+  return {
+    wait: (delay) =>
+      Effect.suspend(() => {
+        const cut = Deferred.makeUnsafe<void>();
+        waiting = cut;
+        return Effect.raceFirst(Effect.sleep(delay), Deferred.await(cut)).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (waiting === cut) waiting = null;
+            }),
+          ),
+        );
+      }),
+    now: () => {
+      if (waiting !== null) Deferred.doneUnsafe(waiting, Effect.void);
+    },
+  };
+}
+
+// A schedule whose waits are `wake` waits: the wait runs in the step,
+// which answers no delay of its own. Last in a pipe, so what comes
+// before it (a status tap, another ladder) sees the delay it waits.
+export const wakeable =
+  (wake: Wake) =>
+  <Out, In, E, R>(
+    schedule: Schedule.Schedule<Out, In, E, R>,
+  ): Schedule.Schedule<Out, In, E, R> =>
+    schedule.pipe(
+      Schedule.modifyDelay(({ duration }) =>
+        Effect.as(wake.wait(duration), Duration.zero),
+      ),
+    );
 
 // A restart ladder as a Schedule, for a supervised run
 // that is repeated whenever it ends. Its input is how long the run
@@ -241,6 +288,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     }),
   );
 
+  const wake = makeWake();
   const supervise = attempt.pipe(
     Effect.repeat(
       restartSchedule(BACKOFF_LADDER_MS).pipe(
@@ -251,6 +299,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
             delayMs: Duration.toMillis(duration),
           }),
         ),
+        wakeable(wake),
       ),
     ),
     Effect.andThen(Effect.never),
@@ -270,5 +319,6 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       status = { phase: "stopped" };
       options.onStatus?.(status);
     },
+    dialNow: wake.now,
   };
 }

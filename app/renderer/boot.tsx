@@ -231,6 +231,14 @@ export function mountWindow(
   return router;
 }
 
+// The host probes its hub socket and every direct session, and dials at
+// once what was waiting out a backoff, as on the shell's resume. Gone, a
+// dead link reads as reconnecting within the probe's window rather than
+// as connected until the heartbeat gives up.
+function networkChanged(): void {
+  void window.api.window.networkChanged().catch(() => undefined);
+}
+
 // The boot-scope subscriptions about THIS machine's projects. Single
 // global subscriptions: events arrive whether or not any component is
 // mounted (e.g. the carry-over failure toast must fire even if the user
@@ -259,6 +267,10 @@ function startLocalHost(queryClient: QueryClient): void {
       );
     })
     .catch(() => undefined);
+
+  // The network gone or back, as this window's Chromium sees it.
+  window.addEventListener("online", networkChanged);
+  window.addEventListener("offline", networkChanged);
 
   // React Query's default focus listener subscribes to `window.focus`
   // and `visibilitychange`, but those don't fire on every Electron
