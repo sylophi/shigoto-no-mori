@@ -7,8 +7,8 @@
 // The app serves the device link a second time on loopback for the
 // processes on this machine, and publishes it in <dataDir>/loopback.json:
 // the port, and a token minted as the app starts, in an owner-only
-// file. The token stands in for a peer's connect ticket in the link's
-// handshake (@shigomori/contracts/proof), so it never travels either.
+// file. The hello carries the token: loopback traffic never leaves the
+// machine, and the port comes from the same file.
 import {
   CommandRefusedError,
   errorMessageOf,
@@ -23,11 +23,6 @@ import {
   type ControlTransferEvent,
   isControlErrorCode,
 } from "@shigomori/contracts/modules/control";
-import {
-  handshakeProof,
-  newHandshakeNonce,
-  proofsMatch,
-} from "@shigomori/contracts/proof";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -223,37 +218,25 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         ? new AppBusy({ binary: paths.binaryName })
         : notRunning;
 
-    const { nonce: hostNonce } = (yield* call("link:challenge", undefined).pipe(
-      Effect.mapError(turnedAway),
-    )) as { readonly nonce: string };
-    const clientNonce = newHandshakeNonce();
     const deviceId = yield* registry.deviceId;
-    const welcome = (yield* Effect.flatMap(
-      Effect.promise(() =>
-        handshakeProof(file.token, "client", hostNonce, clientNonce),
-      ),
-      (proof) =>
-        call("link:hello", {
-          deviceId,
-          // The loopback holds every caller apart, whatever it says.
-          deviceKind: "desktop",
-          connectionId: newHandshakeNonce().slice(0, 32),
-          appVersion: paths.binaryName,
-          protocolVersion: PROTOCOL_VERSION,
-          nonce: clientNonce,
-          proof,
-        }),
-    ).pipe(
+    yield* call("link:hello", {
+      deviceId,
+      // The loopback holds every caller apart, whatever it says.
+      deviceKind: "desktop",
+      connectionId: Array.from(
+        crypto.getRandomValues(new Uint8Array(16)),
+        (byte) => byte.toString(16).padStart(2, "0"),
+      ).join(""),
+      appVersion: paths.binaryName,
+      protocolVersion: PROTOCOL_VERSION,
+      token: file.token,
+    }).pipe(
       Effect.mapError((error) =>
         isProtocolVersionMismatchError(error)
           ? new ControlRefused({ channel: "link:hello", said: error.message })
           : turnedAway(),
       ),
-    )) as { readonly proof: string };
-    const expected = yield* Effect.promise(() =>
-      handshakeProof(file.token, "host", hostNonce, clientNonce),
     );
-    if (!proofsMatch(welcome.proof, expected)) return yield* notRunning;
     return { client, call };
   });
 

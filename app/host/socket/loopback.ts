@@ -4,12 +4,17 @@
 // LoopbackGroup (@shigomori/contracts/link): every host call, its pushes
 // and views, and the control contract's ops.
 //
-// Other accounts on this machine can reach loopback, so its handshake
-// asks for a token minted as the host starts, standing in for a peer's
-// connect ticket in the same proof, so the token never travels. The
-// host publishes the port and the token in <dataDir>/loopback.json,
-// owner-only, which is what names an app instance (flavor and dev
-// profile) to the terminal, and hands them to whoever asks (address).
+// Other accounts on this machine can reach loopback, so its hello
+// carries a token minted as the host starts. The host publishes the
+// port and the token in <dataDir>/loopback.json, owner-only, which is
+// what names an app instance (flavor and dev profile) to the terminal,
+// and hands them to whoever asks (address).
+//
+// A token in the clear is enough here, where a peer's link needs a
+// sealed socket: loopback traffic never leaves the machine, so only
+// this machine's own processes see it, and a dialer learns the port
+// from the same owner-only file as the token, so nothing else can stand
+// in for the listener it dials.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -67,8 +72,7 @@ const make = (options: {
       group: LoopbackGroup,
       local: true,
       auth: {
-        matchTicket: async (_deviceId, _arrivedAs, matches) =>
-          (await matches(token)) ? token : null,
+        opens: { token },
         // Its callers command this machine as its owner.
         isCommandGranted: () => true,
       },

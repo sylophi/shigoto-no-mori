@@ -25,9 +25,16 @@ import {
   type TransportCiphers,
 } from "@shared/crypto/noise";
 
-// The close code of a handshake that failed: a ticket refused, a key
-// other than the roster's, a frame that did not authenticate.
+// The listener's close when it refuses a socket: a ticket it does not
+// hold, a key other than the roster's, a frame that did not
+// authenticate. A dialer that hears it was refused by the host it
+// dialed (deviceLink.ts reads it as the blocked verdict).
 export const CLOSE_HANDSHAKE_FAILED = 4004;
+
+// The dialer's own close when the far end failed it: an answer that did
+// not open or a frame that did not authenticate. Whoever answered at
+// that address proved nothing, so another candidate may still win.
+const CLOSE_PROTOCOL_ERROR = 1002;
 
 const EMPTY = new Uint8Array(0);
 const utf8 = new TextEncoder();
@@ -79,7 +86,11 @@ type EventType = "open" | "message" | "error" | "close";
 
 // The wrapper both ends share: events from the platform socket, opened
 // once `established` is called, sealed and opened through `transport`.
-function sealedSocket(ws: Socket.WebSocketLike): {
+function sealedSocket(
+  ws: Socket.WebSocketLike,
+  // The code this end closes with when the far end fails it.
+  failCode: number,
+): {
   socket: Socket.WebSocketLike;
   // Handshake frames, until the transport is set.
   onHandshakeFrame: (handler: (frame: Uint8Array) => void) => void;
@@ -107,7 +118,7 @@ function sealedSocket(ws: Socket.WebSocketLike): {
     if (failed) return;
     failed = true;
     try {
-      ws.close(CLOSE_HANDSHAKE_FAILED, reason);
+      ws.close(failCode, reason);
     } catch {
       // Already closing.
     }
@@ -179,7 +190,7 @@ export function sealDialer(
     readonly remoteKey: Uint8Array;
   },
 ): Socket.WebSocketLike {
-  const sealed = sealedSocket(ws);
+  const sealed = sealedSocket(ws, CLOSE_PROTOCOL_ERROR);
   const handshake = new HandshakeState({
     initiator: true,
     prologue: prologueOf(options.ticket),
@@ -218,7 +229,7 @@ export function sealListener(
     readonly refused: (reason: string) => void;
   },
 ): Socket.WebSocketLike {
-  const sealed = sealedSocket(ws);
+  const sealed = sealedSocket(ws, CLOSE_HANDSHAKE_FAILED);
   const refuse = (reason: string) => {
     options.refused(reason);
     sealed.fail(reason);

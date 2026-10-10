@@ -51,7 +51,7 @@ import type {
 import type { Handlers } from "@shigomori/contracts/types";
 import { WebSocket as WsClient } from "ws";
 import { type DeviceConnection, openDevice } from "@shared/remote/deviceLink";
-import { startStubHub, type StubHub } from "./hubStub.mts";
+import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
 
@@ -78,6 +78,9 @@ type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;
   deviceId?: string;
+  // The key the roster names for a dialing device, where it is not
+  // its test key (a web profile's, from its stored envelope).
+  peerKey?: (deviceId: string) => Uint8Array;
   registerHandlers?: (binding: WsServerBinding) => void;
   start?: Partial<WsServerStartOpts>;
   // The switch's one exception (WsServerTicketAuth.isInvited): the
@@ -130,8 +133,22 @@ export async function startDirectListener(
       DeviceLink.layer({
         registrar,
         auth: {
-          matchTicket: (deviceId, arrivedAs, matches) =>
-            tickets.consumeProven(deviceId, arrivedAs, matches),
+          // The roster's keys are the test keys (hubStub.mts), the
+          // listener's its device id's.
+          opens: {
+            admit: (ticket, arrivedAs) => {
+              const deviceId = tickets.consume(ticket, arrivedAs);
+              return deviceId === null
+                ? null
+                : {
+                    deviceId,
+                    publicKey:
+                      opts.peerKey?.(deviceId) ??
+                      testDeviceKey(deviceId).pair.publicKey,
+                  };
+            },
+            localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
+          },
           isCommandGranted: () => accepts,
           ...(opts.isInvited === undefined
             ? {}
@@ -494,6 +511,10 @@ export async function dialListener(
   const connection = await openDevice({
     url: `ws://127.0.0.1:${listener.port}`,
     ticket: mintTicket(listener.tickets, deviceId),
+    seal: {
+      localKey: testDeviceKey(deviceId).pair,
+      remoteKey: testDeviceKey(opts.hostDeviceId ?? "B").pair.publicKey,
+    },
     appVersion: "1.0.0",
     localDeviceId: deviceId,
     expectedDeviceId: opts.hostDeviceId ?? "B",

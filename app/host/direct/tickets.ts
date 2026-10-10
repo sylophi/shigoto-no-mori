@@ -44,23 +44,15 @@ export type ConnectTicketStore = {
     peerDeviceId: string,
     kinds: readonly DirectCandidateKind[],
   ): string[] | null;
-  // Consumes the pending ticket the dialer proved possession of and
-  // hands it back, so the caller can compute the host's half of the
-  // proof. Null when none matches. The ticket never arrives (see
-  // shared/remote/proof.ts), so the caller's predicate is tried
-  // against this peer's few pending tickets in turn.
+  // Spends the ticket a dialer opened its socket with, answering the
+  // peer it was minted for, or null when no pending ticket matches.
+  // Single use: a ticket opens one socket.
   //
   // `arrivedAs` is the path the connection came in on, and must equal
-  // the kind the ticket was minted for. That stops a RELAY: a machine
-  // squatting an advertised LAN address could shuttle the nonces and
-  // proofs through to the real listener over the public tunnel without
-  // ever holding the ticket. A relay within one kind needs an attacker
-  // on that network already, and only TLS on the LAN candidate stops it.
-  consumeProven(
-    peerDeviceId: string,
-    arrivedAs: DirectCandidateKind,
-    matches: (ticket: string) => Promise<boolean>,
-  ): Promise<string | null>;
+  // the kind the ticket was minted for, so a ticket handed out for one
+  // path opens nothing on another, and stays pending for the path it
+  // belongs to.
+  consume(ticket: string, arrivedAs: DirectCandidateKind): string | null;
   // Drops every pending ticket. For an account change: a ticket is
   // minted for a peer of the account this host is on, and a peer of
   // the account it just left must not be able to spend one on the
@@ -143,26 +135,11 @@ export function createConnectTicketStore(
       return tickets;
     },
 
-    async consumeProven(peerDeviceId, arrivedAs, matches) {
-      // Snapshot before awaiting: the predicate yields, and a
-      // concurrent mint or sweep must not be walked mid-mutation.
-      const candidates = [...(byPeer.get(peerDeviceId) ?? [])];
-      const cutoff = now();
-      for (const ticket of candidates) {
-        const entry = pending.get(ticket);
-        if (entry === undefined) continue;
-        if (entry.expiresAt <= cutoff) continue;
-        if (entry.kind !== arrivedAs) continue;
-        // oxlint-disable-next-line no-await-in-loop -- stop at the ticket that matches, rather than computing every candidate's proof
-        if (!(await matches(ticket))) continue;
-        // Single use. The delete's own answer is the claim: two dials
-        // racing one ticket across the await above would otherwise
-        // both see it pending and both be admitted.
-        if (!pending.delete(ticket)) continue;
-        forget(ticket, entry.peerDeviceId);
-        return ticket;
-      }
-      return null;
+    consume(ticket, arrivedAs) {
+      const entry = pending.get(ticket);
+      if (entry === undefined || entry.kind !== arrivedAs) return null;
+      forget(ticket, entry.peerDeviceId);
+      return entry.expiresAt > now() ? entry.peerDeviceId : null;
     },
   };
 }

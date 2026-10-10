@@ -46,6 +46,7 @@ async function boot() {
   );
   const listener = await startDirectListener(track, {
     deviceId: "A",
+    peerKey: () => PROFILE_KEY.pair.publicKey,
     registerHandlers: (binding) => {
       binding.handle(
         ECHO,

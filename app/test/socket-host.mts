@@ -102,7 +102,7 @@ import {
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
 import { LinkGroup } from "@shigomori/contracts/link";
-import { handshakeProof, newHandshakeNonce } from "@shigomori/contracts/proof";
+import { sealDialer } from "@shared/remote/sealedSocket";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import {
   inviteMirror,
@@ -121,6 +121,7 @@ import {
   mintTicket,
   startDirectListener,
 } from "./lib/directBoot.mts";
+import { testDeviceKey } from "./lib/hubStub.mts";
 
 // The dialing peer every ticket below is minted for.
 const CLIENT = "client";
@@ -222,6 +223,10 @@ function dialing(listener: DirectListener, opts: DialOpts = {}) {
   return openDevice({
     url: `ws://127.0.0.1:${listener.port}`,
     ticket: opts.ticket ?? mintTicket(listener.tickets, deviceId),
+    seal: {
+      localKey: testDeviceKey(deviceId).pair,
+      remoteKey: testDeviceKey(HOST).pair.publicKey,
+    },
     appVersion: "1.0.0",
     localDeviceId: deviceId,
     expectedDeviceId: HOST,
@@ -286,9 +291,16 @@ async function rawLink(
   const closed = new Promise<number>((resolve) =>
     ws.on("close", (code) => resolve(code)),
   );
+  // Sealed like the dialer's, with a ticket minted for CLIENT.
+  // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
+  const sealed = sealDialer(ws as unknown as Socket.WebSocketLike, {
+    ticket: mintTicket(listener.tickets, CLIENT),
+    localKey: testDeviceKey(CLIENT).pair,
+    remoteKey: testDeviceKey(HOST).pair.publicKey,
+  });
   const client = await Effect.runPromise(
     Effect.gen(function* () {
-      const socket = yield* Socket.fromWebSocket(Effect.succeed(ws));
+      const socket = yield* Socket.fromWebSocket(Effect.succeed(sealed));
       const protocol = yield* RpcClient.makeProtocolSocket({
         pingInterval: opts.pingInterval ?? 5_000,
         retryPolicy: Schedule.recurs(0),
@@ -311,28 +323,20 @@ async function rawLink(
     // oxlint-disable-next-line shigomori/no-double-cast -- a streaming call answers a Stream, which the flat type above does not say
     flat(tag, payload) as unknown as Stream.Stream<unknown, unknown>;
   const hello = async (
-    ticket: string,
     protocolVersion = PROTOCOL_VERSION,
     as: { deviceKind: "desktop" | "web"; connectionId: string } = {
       deviceKind: "desktop",
-      connectionId: newHandshakeNonce().slice(0, 32),
+      connectionId: "c".repeat(32),
     },
-  ) => {
-    const { nonce: hostNonce } = (await Effect.runPromise(
-      call("link:challenge"),
-    )) as { nonce: string };
-    const nonce = newHandshakeNonce();
-    return Effect.runPromiseExit(
+  ) =>
+    Effect.runPromiseExit(
       call("link:hello", {
         deviceId: CLIENT,
         ...as,
         appVersion: "1.0.0",
         protocolVersion,
-        nonce,
-        proof: await handshakeProof(ticket, "client", hostNonce, nonce),
       }),
     );
-  };
   return { call, watch, hello, closed };
 }
 
@@ -425,12 +429,10 @@ it("version: a hello on another protocol version is refused with ProtocolVersion
   assert.ok(mismatched.refusal instanceof ProtocolVersionMismatchError);
   assert.equal(mismatched.refusal.hostVersion, PROTOCOL_VERSION);
   assert.equal(mismatched.refusal.clientVersion, PROTOCOL_VERSION + 1);
-  // The ticket was not spent: the same one links on this version.
-  const ticket = mintTicket(listener.tickets, CLIENT);
   const raw = await rawLink(track, listener);
-  const exit = await raw.hello(ticket, PROTOCOL_VERSION + 1);
+  const exit = await raw.hello(PROTOCOL_VERSION + 1);
   assert.ok(failureOf(exit) instanceof ProtocolVersionMismatchError);
-  await dial(track, listener, { ticket });
+  await dial(track, listener);
 });
 
 it("before the hello: a call is refused, and a hello after the timeout cannot link", async () => {
@@ -517,9 +519,7 @@ it("in-flight cap: streams a peer holds open take no place under it", async () =
   const track = trackTest;
   const { listener } = await listen(track);
   const raw = await rawLink(track, listener);
-  assert.ok(
-    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
-  );
+  assert.ok(Exit.isSuccess(await raw.hello()));
   const open = Array.from({ length: MAX_IN_FLIGHT_PER_PEER + 1 }, () =>
     Effect.runFork(
       Stream.runDrain(
@@ -691,9 +691,7 @@ it("sharing flipped under a linked peer: its calls and views under way end with 
     return has(fence, "up");
   }, "the peer's pushes to be up");
   const raw = await rawLink(track, listener);
-  assert.ok(
-    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
-  );
+  assert.ok(Exit.isSuccess(await raw.hello()));
   const view = Effect.runPromiseExit(
     Stream.runDrain(raw.watch("sharedSettings:watch")),
   );
@@ -830,30 +828,14 @@ it("tabs: a hello with a connection id already held replaces that link alone", a
   const { listener } = await listen(track);
   const tab = { deviceKind: "web" as const, connectionId: "a".repeat(32) };
   const stale = await rawLink(track, listener);
-  assert.ok(
-    Exit.isSuccess(
-      await stale.hello(
-        mintTicket(listener.tickets, CLIENT),
-        PROTOCOL_VERSION,
-        tab,
-      ),
-    ),
-  );
+  assert.ok(Exit.isSuccess(await stale.hello(PROTOCOL_VERSION, tab)));
   let siblingClosed = false;
   await dial(track, listener, {
     deviceKind: "web",
     onClose: () => (siblingClosed = true),
   });
   const redial = await rawLink(track, listener);
-  assert.ok(
-    Exit.isSuccess(
-      await redial.hello(
-        mintTicket(listener.tickets, CLIENT),
-        PROTOCOL_VERSION,
-        tab,
-      ),
-    ),
-  );
+  assert.ok(Exit.isSuccess(await redial.hello(PROTOCOL_VERSION, tab)));
   assert.equal(await stale.closed, 1001);
   assert.equal(siblingClosed, false);
 });
@@ -864,7 +846,7 @@ it("liveness: the host cuts a linked peer that falls silent past the timeout", a
     start: { livenessTimeoutMs: 300 },
   });
   const raw = await rawLink(track, listener, { pingInterval: 60_000 });
-  const exit = await raw.hello(mintTicket(listener.tickets, CLIENT));
+  const exit = await raw.hello();
   assert.ok(Exit.isSuccess(exit));
   assert.equal(await raw.closed, 1001);
 });
@@ -884,9 +866,7 @@ it("views: a view streams its values over the link, and one nothing serves fails
   const track = trackTest;
   const { listener } = await listen(track);
   const raw = await rawLink(track, listener);
-  assert.ok(
-    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
-  );
+  assert.ok(Exit.isSuccess(await raw.hello()));
   const values = await Effect.runPromise(
     Stream.runCollect(raw.watch("projects:watch")),
   );
@@ -911,9 +891,7 @@ it("tracing: the host's span for a call continues the caller's trace", async () 
     provide: Layer.succeed(Tracer.Tracer, tracer),
   });
   const raw = await rawLink(track, listener);
-  assert.ok(
-    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
-  );
+  assert.ok(Exit.isSuccess(await raw.hello()));
   const traceId = await Effect.runPromise(
     raw.call("git:sweep").pipe(
       Effect.andThen(Effect.currentSpan),
