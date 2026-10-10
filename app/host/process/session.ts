@@ -8,6 +8,7 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { setWindowFocused } from "@host/lib/git/backgroundFetch";
 import { getBusyOperations } from "@host/lib/scripts";
+import { busyTerminals } from "@host/lib/terminals/Terminals";
 import { type HostFacts, setHostFacts } from "./facts";
 import {
   applyAccount,
@@ -38,7 +39,10 @@ export function startHost(options: {
     accountDevices: (deviceIds) => noteAccountDevices(deviceIds),
     windowFocused: (focused) => setWindowFocused(focused),
     wake: () => probeRemoteConnections(),
-    busy: () => getBusyOperations(),
+    busy: async () => ({
+      ...getBusyOperations(),
+      busyTerminals: await busyTerminals(),
+    }),
     updaterState: (state) => {
       noteUpdaterState(state);
       broadcastAll(updaterContract, "state", state);

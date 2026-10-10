@@ -34,6 +34,11 @@ const BusyOperationsSchema = strict(
   Schema.Struct({
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    // Terminals whose shell runs something (a quit and a restart ask
+    // about them, a data-folder move does not count them).
+    busyTerminals: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    ),
   }),
 );
 

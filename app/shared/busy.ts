@@ -6,6 +6,8 @@
 export type BusyOperations = {
   readonly runningScripts: number;
   readonly inflightDeletes: number;
+  // Terminals whose shell runs something, for a quit or a restart.
+  readonly busyTerminals?: number;
 };
 
 export type BusyAction = "quit" | "restart";
@@ -31,7 +33,31 @@ function pluralize(n: number, singular: string, plural: string): string {
 }
 
 function isBusy(busy: BusyOperations): boolean {
-  return busy.runningScripts > 0 || busy.inflightDeletes > 0;
+  return (
+    busy.runningScripts > 0 ||
+    (busy.busyTerminals ?? 0) > 0 ||
+    busy.inflightDeletes > 0
+  );
+}
+
+// What is running, scripts and terminals both: "2 scripts and 1
+// terminal are", and the pronoun for them. Null with neither.
+function runningWords(
+  busy: BusyOperations,
+): { subject: string; obj: string } | null {
+  const parts = [
+    [busy.runningScripts, "script", "scripts"],
+    [busy.busyTerminals ?? 0, "terminal", "terminals"],
+  ] as const;
+  const named = parts
+    .filter(([n]) => n > 0)
+    .map(([n, one, many]) => `${n} ${pluralize(n, one, many)}`);
+  if (named.length === 0) return null;
+  const total = busy.runningScripts + (busy.busyTerminals ?? 0);
+  return {
+    subject: `${named.join(" and ")} ${pluralize(total, "is", "are")}`,
+    obj: pluralize(total, "it", "them"),
+  };
 }
 
 // The dialog's detail: what going ahead would do. Null when nothing is
@@ -45,11 +71,9 @@ export function busyDetail(
   // Lifecycle deletes spawn a teardown script that lands in
   // runningScripts, so prefer the script count to avoid double-counting
   // the same operation when both are non-zero.
-  if (busy.runningScripts > 0) {
-    const n = busy.runningScripts;
-    const subject = pluralize(n, `${n} script is`, `${n} scripts are`);
-    const obj = pluralize(n, "it", "them");
-    return `${subject} still running. ${gerund} now will stop ${obj}.`;
+  const running = runningWords(busy);
+  if (running !== null) {
+    return `${running.subject} still running. ${gerund} now will stop ${running.obj}.`;
   }
   const n = busy.inflightDeletes;
   const subject = pluralize(n, `${n} worktree is`, `${n} worktrees are`);
@@ -71,9 +95,9 @@ export function busyRemoteRefusal(
     quit: "quitting",
     move: "moving the data folder",
   }[action];
-  if (busy.runningScripts > 0) {
-    const n = busy.runningScripts;
-    return `${pluralize(n, `${n} script is`, `${n} scripts are`)} still running there. Stop ${pluralize(n, "it", "them")} before ${verb}.`;
+  const running = runningWords(busy);
+  if (running !== null) {
+    return `${running.subject} still running there. Stop ${running.obj} before ${verb}.`;
   }
   const n = busy.inflightDeletes;
   return `${pluralize(n, `${n} worktree is`, `${n} worktrees are`)} still being removed there. Wait for that to finish before ${verb}.`;
