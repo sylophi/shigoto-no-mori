@@ -13,6 +13,7 @@ import { promisify } from "node:util";
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { CAPTURE_TIMEOUT_MS, loginShell } from "@host/lib/util/shellEnv";
 import * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -79,14 +80,7 @@ const onShell = <A, E>(
     integration: ShellIntegration.ShellIntegration["Service"],
     shell: ShellIntegration.HookShell,
   ) => Effect.Effect<A, E>,
-): Promise<A> =>
-  hookShell().then((shell) =>
-    Engine.call(
-      Effect.gen(function* () {
-        return yield* f(yield* ShellIntegration.ShellIntegration, shell);
-      }),
-    ),
-  );
+): Promise<A> => hookShell().then((shell) => Engine.run(Ops.onShell(shell, f)));
 
 // `shells` enumerates exactly the kinds sm supports, so the login
 // shell is "supported" iff it appears there.
