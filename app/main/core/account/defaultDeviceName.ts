@@ -15,14 +15,6 @@ export function shortHostname(host: string): string {
   return short === "" ? host : short;
 }
 
-// Whether a stored name is the raw hostname, which was the default
-// before this module existed: a name nobody chose, so the default may
-// move it forward. Kept beside the default so the two rules cannot
-// drift.
-export function isLegacyDefaultName(name: string): boolean {
-  return name === hostname();
-}
-
 export type DefaultDeviceName = {
   name: string;
   // True when the OS's own answer could not be read this time (macOS

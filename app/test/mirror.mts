@@ -98,10 +98,8 @@ import {
   carriedLabels,
   COPY_GONE_DETAIL,
   createNoAccountSweep,
-  endLegacyMirrors,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
-  LEGACY_MIRROR_DETAIL,
   MIRROR_LABEL_LOCAL_WORKTREE,
   type MirrorImpl,
   mirrorSessions,
@@ -1141,82 +1139,6 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
     await endMirrorsWithPeers(() => false, "signed out");
     assert.deepEqual([...live.keys()], ["t-with-a"]);
     assert.deepEqual(noted.at(-1), ["wt-c", "stopped", "signed out"]);
-  }
-});
-
-it("a mirror started from the copy's device by an older build is hidden, ended once on sight with a halted note, and nothing is deleted", async () => {
-  // (6d) A mirror an older build started from the copy's device (no
-  // copySide label, host/mirror/registry.ts isLegacyMirror) is hidden
-  // from every mirror surface and ended the first time it is seen,
-  // once, its thread saying why. Nothing is deleted: the fake daemon
-  // offers terminate and nothing else that removes. A labelled mirror
-  // and a transfer session stay.
-  {
-    const legacy = fakeSession({
-      session: "s-legacy",
-      deviceId: "A",
-      status: "watching",
-      labels: { [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-copy" },
-    });
-    const current = fakeSession({
-      session: "s-current",
-      deviceId: "A",
-      status: "watching",
-      labels: {
-        [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-original",
-        [MIRROR_LABEL_MODE]: "mirror",
-      },
-    });
-    const transfer = fakeSession({
-      session: "t-legacy",
-      deviceId: "A",
-      status: "watching",
-      labels: { [MIRROR_LABEL_MODE]: "transfer-token" },
-    });
-    const live = new Map(
-      [legacy, current, transfer].map((raw): [string, MirrorSessionRaw] => [
-        raw.session,
-        raw,
-      ]),
-    );
-    const noted: Parameters<MirrorImpl["noteEvent"]>[] = [];
-    const terminated: string[] = [];
-    const impl: MirrorImpl = {
-      ...daemon,
-      status: () => "running",
-      sessions: () => [...live.values()],
-      terminate: async (id) => {
-        terminated.push(id);
-        live.delete(id);
-      },
-      recreate: () => Promise.reject(new Error("not in this check")),
-      gitStatus: () => undefined,
-      refreshGit: async () => undefined,
-      history: () => [],
-      noteEvent: (worktreeId, kind, detail) =>
-        noted.push([worktreeId, kind, detail]),
-      forgetHistory: () => {},
-      moveHistory: () => {},
-    };
-    setMirrorImpl(impl);
-    assert.deepEqual(
-      mirrorSessions(impl).map((raw) => raw.session),
-      ["s-current"],
-      "a legacy mirror reached the mirror surfaces",
-    );
-    await endLegacyMirrors();
-    assert.deepEqual(terminated, ["s-legacy"]);
-    assert.deepEqual(noted, [["wt-copy", "halted", LEGACY_MIRROR_DETAIL]]);
-    assert.match(LEGACY_MIRROR_DETAIL, /start it again from the original/i);
-    // Seen again (a snapshot that still names it), it is not asked twice.
-    live.set(legacy.session, legacy);
-    await endLegacyMirrors();
-    assert.deepEqual(terminated, ["s-legacy"]);
-    assert.deepEqual([...live.keys()].toSorted(), [
-      "s-current",
-      "s-legacy",
-      "t-legacy",
-    ]);
   }
 });
 
