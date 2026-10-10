@@ -1,4 +1,3 @@
-import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useResetSoft } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { pluralize } from "@/lib/pluralize";
@@ -15,7 +14,6 @@ import type { Worktree } from "@shared/schemas";
 // staged, or for a merge to the commit the branch is back on.
 export function useUndoCommits(worktree: Worktree) {
   const { mutate: reset, isPending } = useResetSoft();
-  const say = useWorktreeSuccessToast();
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
 
@@ -41,23 +39,12 @@ export function useUndoCommits(worktree: Worktree) {
               action: {
                 label: "Redo",
                 onClick: () =>
-                  reset(
-                    {
-                      projectId,
-                      worktreeId,
-                      target: previousHead,
-                      expectHead: target,
-                    },
-                    {
-                      onSuccess: () =>
-                        say(
-                          worktree,
-                          merge
-                            ? "Restored the merge"
-                            : `Restored ${pluralize(count, "commit")}`,
-                        ),
-                    },
-                  ),
+                  reset({
+                    projectId,
+                    worktreeId,
+                    target: previousHead,
+                    expectHead: target,
+                  }),
               },
             },
           );
