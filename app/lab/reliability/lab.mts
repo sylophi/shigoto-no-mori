@@ -29,13 +29,13 @@ import {
 } from "playwright-core";
 import { NetworkSwitch } from "./networkSwitch.mts";
 
-export const appDir = resolve(import.meta.dirname, "../..");
+const appDir = resolve(import.meta.dirname, "../..");
 export const repoDir = resolve(appDir, "..");
 
 export const sleep = (ms: number) =>
   new Promise<void>((done) => setTimeout(done, ms));
 
-export function freePort(): Promise<number> {
+function freePort(): Promise<number> {
   return new Promise((done) => {
     const server = createServer().listen(0, "127.0.0.1", () => {
       const { port } = server.address() as AddressInfo;
@@ -64,7 +64,7 @@ export function within<T>(
 
 // Polls until `check` answers something truthy, or throws `what` once
 // `ms` have gone by.
-export async function waitFor<T>(
+async function waitFor<T>(
   what: string,
   check: () => Promise<T | null | undefined | false>,
   ms: number,

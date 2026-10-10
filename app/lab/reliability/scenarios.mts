@@ -40,7 +40,7 @@ type TabState = {
   shown: string[] | null;
 };
 
-export async function stateOf(lab: Lab, tab: Tab): Promise<TabState> {
+async function stateOf(lab: Lab, tab: Tab): Promise<TabState> {
   const { host } = lab;
   const inPage = await within(
     10_000,
