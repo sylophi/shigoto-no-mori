@@ -61,7 +61,7 @@ export function hunkAnnotations(
   });
 }
 
-export function HunkBar({
+export function HunkBarView({
   group,
   controls,
   busy,

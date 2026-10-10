@@ -1,5 +1,5 @@
 import type { ChangedFile } from "@shigomori/contracts/schemas";
-import type { HunkControls } from "./HunkBar";
+import type { HunkControls } from "./HunkBarView";
 
 // What turns the read-only diff view into the changes page: the status
 // rows the file list draws, which of them is in the pane, and the actions
