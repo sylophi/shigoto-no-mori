@@ -1,6 +1,6 @@
 // The node hub connection: the shared lifecycle
 // core in shared/hub/connection.ts bound to the node `ws` client,
-// owned by the main process, asking peers for their connect info and
+// owned by the host process, asking peers for their connect info and
 // answering theirs. Deliberately NOT a ServerTransport: the wire
 // answers one question, handed in at creation as a function, so
 // re-adding the hub to a wire loop that expects a ServerTransport is a
@@ -9,7 +9,7 @@
 // This file must stay Electron free (pnpm test host-boundary).
 // Everything Electron or account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts, which
-// main composes.
+// the host composes.
 import { WebSocket } from "ws";
 import { HubLinkDownError, type ServeConnectInfo } from "@shared/hub/link";
 import {
@@ -26,7 +26,7 @@ import type { KeyPair } from "@shared/crypto/noise";
 import { toText } from "./rawData";
 
 export type HubConnectionOpts = {
-  // Answers peers' connectInfo asks (main/ipc/register.ts wires the
+  // Answers peers' connectInfo asks (host/process/wires.ts wires the
   // direct listener's). Absent on a dial-only device (the check
   // fixtures'), whose link refuses every ask as serving no listener.
   serveConnectInfo?: ServeConnectInfo;
@@ -68,7 +68,7 @@ function openWsSocket(url: string): HubSocketAdapter {
   // Bound inbound buffering at the DO's own forwarding limit (nothing
   // it sends is larger: relays are measured against it and a full
   // presence roster fits under it), and disable perMessageDeflate so a
-  // compression bomb cannot inflate a tiny frame past the limit (S2).
+  // compression bomb cannot inflate a tiny frame past the limit.
   // An oversize frame past maxPayload closes the socket (1009), so
   // shrinking MAX_HUB_MESSAGE_BYTES means shipping devices that still
   // read the old size before the Worker enforces the new one

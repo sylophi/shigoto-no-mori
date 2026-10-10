@@ -200,15 +200,15 @@ export const projectsHandlers = {
         () =>
           Effect.gen(function* () {
             // Registry drop and per-project state deletion (the icon
-            // cache entry included) run in the CLI, same engine as `sm
-            // projects remove`.
+            // cache entry included) run in the engine, as `sm projects
+            // remove` runs them.
             yield* Ops.removeProject(id);
             // A path terrier also registers doesn't leave the sidebar:
             // dropping the registry entry just demotes it to a
             // terrier-sourced project, and when the id carries over
             // (registration minted the deterministic terrier id) nothing
             // is actually going away. Read from the list the removal
-            // left behind, so the answer is the CLI's own, not a guess
+            // left behind, so the answer is the engine's own, not a guess
             // at its rule.
             const survived = (yield* refresh).some((p) => p.id === id);
             // Reap scripts running in this project's worktrees: once the
@@ -221,14 +221,14 @@ export const projectsHandlers = {
       );
     }),
 
-  // Terrier-sourced projects are refused by the CLI, which says to
+  // Terrier-sourced projects are refused by the engine, which says to
   // update terrier instead.
   relocate: ({ id, path }) => relocateProject(id, expandHome(path)),
 
-  // Over the whole list, terrier-only projects included: the CLI stores
+  // Over the whole list, terrier-only projects included: the engine stores
   // the order apart from the registry entries, so any project can hold
   // any place. Each move goes over the list the previous one left (see
-  // reorders), and the CLI checks the ids against its own read (one
+  // reorders), and the engine checks the ids against its own read (one
   // added meanwhile lands last, a stale id is ignored).
   reorder: ({ draggedId, targetId, position }) =>
     Effect.gen(function* () {
@@ -239,7 +239,7 @@ export const projectsHandlers = {
       yield* refresh;
     }).pipe(reorders.withPermits(1)),
 
-  // The primary ref every row is measured against, which the CLI
+  // The primary ref every row is measured against, which the engine
   // resolves once per project (the configured override first).
   defaultBranch: ({ projectId }) =>
     Effect.flatMap(findProject(projectId), primaryRef),
@@ -254,7 +254,7 @@ export const projectsHandlers = {
       listBranches(project.path),
     ),
 
-  // The name the CLI would pick for a new worktree right now.
+  // The name the engine would pick for a new worktree right now.
   pickWorktreeName: ({ projectId }) =>
     Effect.map(Ops.worktreeDestination(projectId), ({ name }) => name),
 

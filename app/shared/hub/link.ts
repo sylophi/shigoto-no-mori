@@ -14,8 +14,8 @@
 //
 // There is no session: each ask is a handshake of its own, nothing is
 // kept after the answer, so a dial costs one round trip. An undefined input
-// or result rides as an absent field, the same framing invariant as
-// the direct wire (frames.ts). There is no version negotiation either:
+// or result rides as an absent field, the same invariant as the hub's
+// envelopes (encodeEnvelope). There is no version negotiation either:
 // a peer speaking another shape of this wire parses as nothing, its
 // asks are dropped and ours to it time out, which the keeper retries
 // on its ladder like any other unreachable peer.
@@ -29,7 +29,7 @@
 //
 // Pure on purpose: the shared frame and envelope schemas and an
 // injected send function. No node builtins, no ws, no electron, so the
-// hub-link check drives it headlessly and main wraps it around a
+// hub-link check drives it headlessly and the host wraps it around a
 // real socket.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";

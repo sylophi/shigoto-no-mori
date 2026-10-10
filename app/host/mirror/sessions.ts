@@ -1,8 +1,8 @@
 // The mirror sessions this device runs, the executor behind the mirror
 // handlers (host/ipc/modules/mirror.ts): starting one, stopping it with
 // its copy, pausing, re-opening it on a new rule, and the list. The
-// daemon that owns the sessions lives in main (host/mirror/
-// daemon.ts) and arrives through the registry's slot.
+// daemon that owns the sessions (host/mirror/daemon.ts) arrives
+// through the registry's slot.
 //
 // start = send, then mirror. The send (sync's, reused verbatim) lands
 // the worktree's branch, commits and uncommitted changes on the peer
@@ -22,7 +22,7 @@
 // never taken from the caller.
 //
 // A primary checkout is mirrored the same way, its copy on
-// mirror/<branch> in a mirror-<name> folder (contracts/git/branches.ts),
+// mirror/<branch> in a mirror-<name> folder (contracts' git/branches.ts),
 // and the session's mode says so, so the git follower reads the two
 // branch names as one. Both primaries keep what they had.
 import * as Effect from "effect/Effect";

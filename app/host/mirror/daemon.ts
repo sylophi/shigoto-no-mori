@@ -463,7 +463,7 @@ export const layer = (options: Options) =>
   Layer.effect(MirrorDaemon, make(options));
 
 // The daemon's own effect, for a caller holding a runtime of its own:
-// the root (process/captures.ts) and the proofs.
+// the root (process/handlers.ts) and the proofs.
 export const onDaemon = <A, E>(
   f: (daemon: MirrorDaemon["Service"]) => Effect.Effect<A, E>,
 ) =>

@@ -628,7 +628,7 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     channelsFor: () => peerA.channels,
     thisDeviceId: () => "B",
   });
-  // The delete's removal, as main fans it out to every window and
+  // The delete's removal, as the host fans it out to every window and
   // peer. Each record notes which sessions had ended by then: the
   // copy a stop removes is announced only once its session is gone,
   // since the delete follows the terminate.
@@ -1235,8 +1235,7 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
   // side needs a registry of its own, where the lone repo is
   // registered and the peer's (the shared one) has never seen it: a
   // second data dir behind a second control server, whose ops each
-  // run in an async context the CLI runner seam (process-wide)
-  // switches on.
+  // run on a second engine (asOther).
   // The peer answers on the direct wire, outside that context.
   const otherDataDir = join(sandbox, "data-other");
   mkdirSync(otherDataDir);

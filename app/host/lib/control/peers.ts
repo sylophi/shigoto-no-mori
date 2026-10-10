@@ -42,7 +42,7 @@ import {
   type Running,
 } from "./plan";
 
-// The Electron layer injects the account at boot (main/ipc/handlers.ts):
+// The root injects the account at boot (host/process/handlers.ts):
 // the device registry rides the stored credential, and which peers
 // have a direct session up is the hub status snapshot's. The peers
 // themselves are reached through host/ipc/peerSync.ts.

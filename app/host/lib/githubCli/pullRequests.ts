@@ -102,7 +102,7 @@ function checkedOutMark(pr: {
 }
 
 // Indexed by head branch name. The cache is repopulated by the background
-// sweep in fetch.ts. This read path just serves whatever's there.
+// sweep in git/backgroundFetch.ts. This read path just serves whatever's there.
 // Toggle + readiness checks gate the cache too, so flipping the
 // integration off takes effect immediately.
 export const listProjectPullRequests = Effect.fn("PullRequests.list")(

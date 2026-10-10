@@ -1,6 +1,6 @@
 // The root's one way into the layer graph: the services the listeners
 // serve calls on, and the runs of the root's own callbacks (the hub
-// connection's, the account fan-out's, the store watcher's). Its layer
+// connection's, the account fan-out's, the store changes'). Its layer
 // sits on top of the graph (host.ts), so it opens once every service
 // is up: a call or a run before then waits for it, one after the graph
 // failed is refused, and closing the graph turns new runs away and

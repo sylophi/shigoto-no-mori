@@ -2,7 +2,7 @@
 // nobody said: the add-project dialog's clone, and every move that
 // clones the repo on its destination first (the flows' review,
 // renderer/components/worktreeDetail/flow/cloneDestination.tsx, and the
-// CLI's send, host/ipc/modules/control.ts). Tildified, since the
+// CLI's send, host/lib/control/ops.ts). Tildified, since the
 // device that clones expands `~` itself.
 import type { Project } from "@shigomori/contracts/schemas";
 import {

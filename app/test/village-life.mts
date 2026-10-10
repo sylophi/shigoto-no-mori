@@ -1,6 +1,6 @@
 // Durable proof for Village life, a client setting (ClientConfig): the
 // renderer gates villager extras on villageLifeShows
-// (shared/villageLife.ts, read through useVillageLife), and no device
+// (ui's lib/villageLife.ts, read through useVillageLife), and no device
 // reads it. Doubutsu names, the device setting beside it in config.json,
 // is proven through the real sm binary by fresh-install.
 //

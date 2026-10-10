@@ -171,7 +171,7 @@ export type DirectDialerDeps = {
   // a desktop app one (deviceLink.ts).
   deviceKind?: DeviceKind;
   // The candidate sockets' constructor, defaulting to the platform
-  // global WebSocket. The Electron main process injects the `ws`
+  // global WebSocket. The host injects the `ws`
   // package so a failed candidate names its errno instead of a bare
   // 1006 (see OpenClientSocket in shared/remote/deviceLink.ts).
   openSocket?: OpenClientSocket;

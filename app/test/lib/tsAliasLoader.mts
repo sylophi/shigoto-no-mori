@@ -81,7 +81,7 @@ export const resolve: ResolveHook = async (specifier, context, nextResolve) => {
     : undefined;
   const file = resolveSource(specifier, parentPath);
   if (file !== null) {
-    // A bundler-style JSON import (host/lib/worktrees/names.ts): the
+    // A bundler-style JSON import (shared/villagers/manifest.ts): the
     // TS graph writes it bare, but Node's ESM loader refuses JSON
     // without the `type: "json"` attribute, so supply it here.
     if (file.endsWith(".json")) {

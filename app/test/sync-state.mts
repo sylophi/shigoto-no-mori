@@ -1,5 +1,5 @@
 // Durable proof for what a worktree's remote-sync state offers
-// (renderer/lib/syncState.ts), the view the sidebar badge, the sync
+// (ui's lib/syncState.ts), the view the sidebar badge, the sync
 // pill, the palette's git verb and the changes page all read. A dirty
 // tree's wait is what keeps the pill on its hint, never diverged's
 // overwrites.

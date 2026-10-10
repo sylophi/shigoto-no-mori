@@ -1,7 +1,7 @@
-// The host's view of the registered projects. The CLI owns the list
-// (registry.json, terrier's repos merged in, each decorated with its
+// The host's view of the registered projects. The engine owns the list
+// (its registry, terrier's repos merged in, each decorated with its
 // path check, repo identity, use stats and icon), so the host reads it
-// through `sm projects list` and keeps the last answer as a snapshot:
+// as `sm projects list` does and keeps the last answer as a snapshot:
 // the handful of sync callers (the git watcher, the fetch sweep) read
 // the snapshot, and every async lookup that misses it refreshes once
 // before calling the id unknown. The sidebar's projects:list refreshes
@@ -81,7 +81,7 @@ export const relocateProject = Effect.fnUntraced(function* (
 });
 
 // The last-read list, for the sync callers. Empty until the first
-// refresh (main awaits one at boot).
+// refresh (the host's graph awaits one at boot, process/layer.ts).
 export function loadProjects(): readonly Project[] {
   return snapshot.map(toProject);
 }
@@ -113,7 +113,7 @@ class NoLocalBranchesError extends Schema.TaggedError<NoLocalBranchesError>()(
 }
 
 // The primary ref every row of a project is measured against, which
-// the CLI resolves once per project (the configured override first):
+// the engine resolves once per project (the configured override first):
 // what projects:defaultBranch answers, and what a clone of the project
 // on another device is made of (host/lib/sync/cloneFromPeer.ts).
 export const primaryRef = Effect.fnUntraced(function* (project: Project) {
@@ -130,7 +130,7 @@ export const primaryRef = Effect.fnUntraced(function* (project: Project) {
 // Resolves which LOCAL project a peer's project corresponds to, by repo
 // identity (packages/engine/src/Identity.ts). First registry match wins: two
 // local clones of the same repo are both legitimate targets, so the
-// ambiguity is benign. Read fresh from disk through the CLI rather than
+// ambiguity is benign. Read fresh through the engine rather than
 // trusted from the caller, so a pull can never be aimed at a
 // non-matching repo.
 export const findProjectByIdentity = (identity: string) =>

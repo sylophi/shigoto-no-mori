@@ -1,7 +1,7 @@
 // Durable proof for the two reads behind the worktree page's PR
 // header: which PR, if any, names the page (titledByPullRequest,
-// lib/worktreeTitle.ts), and the merge box's one status
-// (describeMergeVerdict, lib/pullRequest.ts), which says what most
+// ui's lib/worktreeTitle.ts), and the merge box's one status
+// (describeMergeVerdict, ui's lib/pullRequest.ts), which says what most
 // stands between the PR and landing instead of a verdict beside its
 // cause.
 //

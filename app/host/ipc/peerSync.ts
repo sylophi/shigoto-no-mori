@@ -1,7 +1,7 @@
 // The one seam every reach into a peer device goes through: a client
 // for any contract on the peer's direct session, the byte channels of
-// that session, and this device's own id. main injects it at boot
-// (main/ipc/handlers.ts), since the remote plumbing lives there, and
+// that session, and this device's own id. The root injects it at boot
+// (host/process/handlers.ts), since the remote plumbing lives there, and
 // its transport must route through the bridge's SHARED direct-session
 // cache (makeHubHandlers), never a fresh dial: the host keeps exactly
 // one authed socket per deviceId, and a second dial silently supersedes

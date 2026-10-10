@@ -1,5 +1,5 @@
 // Durable proof for the launcher icons (packages/ui/src/app-icons), which the
-// launcher row finds by file name (components/shared/LauncherIcon.tsx).
+// launcher row finds by file name (ui's views/shared/LauncherIconView.tsx).
 //
 // Asserts:
 // - every icon is named for an app in the engine's launcher catalog

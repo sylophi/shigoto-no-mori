@@ -10,10 +10,10 @@
 // it.
 //
 // Two kinds of stored paths go stale and are carried along: worktree
-// ids are hashes of the worktree's absolute path, so everything the CLI
-// keys by the id of every managed worktree under the data dir (marks,
-// the per-worktree data file, a pending dirty capture) is re-keyed
-// through `sm worktrees rekey`, and git's own worktree links are
+// ids are hashes of the worktree's absolute path, so everything the
+// engine keys by the id of every managed worktree under the data dir
+// (marks, the worktree's data, a pending dirty capture) is re-keyed
+// (the engine's rekey, `sm worktrees rekey`), and git's own worktree links are
 // re-pointed by `git worktree repair`.
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
@@ -289,8 +289,8 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
 // Carries what the engine keys by each moved worktree's id from its old
 // id to the one its new path hashes to (or back, on `reverse`). The
 // relocate flow's `sm worktrees move` does the same for one worktree.
-// Each re-key is a locked read-modify-write of the same files, so they
-// run one at a time.
+// Each re-key is a read-modify-write of the same rows, so they run
+// one at a time.
 const rekeyWorktrees = (
   targets: readonly { project: { id: string }; moved: MovedWorktree[] }[],
   reverse: boolean,

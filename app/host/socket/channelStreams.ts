@@ -93,8 +93,8 @@ export function bridgeDuplexToChannel(
 
 // The two halves of a byte-stream open on the host (forward:open,
 // mirror:openStream). requireChannels runs BEFORE the handler does
-// any work: the connection must carry channels at all (a loopback or
-// the Electron bridge does not), the caller's id must be free on it,
+// any work: the connection must carry channels at all (the shell's
+// port does not), the caller's id must be free on it,
 // and the cap must hold. attachFarEnd runs after the handler's awaits
 // (a dial, a worktree lookup), re-checking everything that can have
 // changed meanwhile: the connection may have died, the id may have

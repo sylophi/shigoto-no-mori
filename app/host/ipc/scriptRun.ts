@@ -71,7 +71,7 @@ export const prepareScriptRun = Effect.fnUntraced(function* (
 });
 
 // Free text, and a spawn refuses an env value that holds a NUL, so one
-// stray byte would keep the script from starting (the CLI's scriptEnv
+// stray byte would keep the script from starting (the engine's scriptEnv
 // drops them too).
 function withoutNul(text: string | undefined): string {
   return (text ?? "").replaceAll("\0", "");

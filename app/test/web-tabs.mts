@@ -1,5 +1,5 @@
-// Durable proof for the web client's tabs (V3.md, "The web client's
-// tabs"): a browser profile is one device, and each of its tabs is a
+// Durable proof for the web client's tabs: a browser profile is one
+// device, and each of its tabs is a
 // connection of its own to a host. Two web bridges over the same
 // storage (two tabs of one profile) against the stub device hub and a
 // REAL direct listener: both link to the host, each calls it and hears

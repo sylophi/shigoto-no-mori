@@ -131,10 +131,10 @@ export function isRemoteCaller(
 //
 // `opts.gated` is the command-vs-read axis: the registrar passes each
 // call's Gated annotation here so a remote binding can gate commands. The
-// direct data-plane listener serves channels explicitly registered
-// gated:false to every peer and gates everything else on the host's
-// command-access switch (fail-closed). The Electron binding ignores
-// it: a local window commands its own machine.
+// device link serves channels explicitly registered gated:false to
+// every peer and holds everything else to the host's command-access
+// switch (CommandGate, fail-closed). The loopback and the shell's port
+// ignore it: a local window commands its own machine.
 type TransportCallOpts = { remote?: boolean; gated?: boolean };
 
 export type ServerTransport = {

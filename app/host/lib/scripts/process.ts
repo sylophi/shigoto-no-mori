@@ -1,5 +1,5 @@
 // POSIX process-group signaling for the scripts (./pty.ts) and the
-// children of the CLI runner.
+// lifecycle scripts the engine runs.
 //
 // Kill strategy:
 //   1. SIGTERM the process group (negative pgid), covering normal forks.
@@ -46,10 +46,10 @@ export const signalTree = (pid: number, signal: NodeJS.Signals) =>
   );
 
 // The same for a process that leads no group of its own: a lifecycle
-// script the CLI ran shares the CLI's group (a terminal's Ctrl-C must
-// reach the whole tree, and killAllCli takes the group down at quit),
-// so stopping it means the pid and its descendants, never the group,
-// which would take the CLI down mid-lifecycle.
+// script the engine ran shares the host's group (a terminal's Ctrl-C
+// must reach the whole tree), so stopping it means the pid and its
+// descendants, never the group, which would take the host down
+// mid-lifecycle.
 export const signalPidTree = (pid: number, signal: NodeJS.Signals) =>
   descendantPids(pid).pipe(
     Effect.map((descendants) => {

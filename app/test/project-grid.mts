@@ -1,5 +1,5 @@
 // Durable proof for the home page's grid of projects
-// (renderer/components/home/gridModel.ts), through the very call the
+// (ui's views/home/gridModel.ts), through the very call the
 // page makes (buildGrid).
 //
 // Asserts: the list's project rows file under their owners in the

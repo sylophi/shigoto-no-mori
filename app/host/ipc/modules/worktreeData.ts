@@ -6,8 +6,8 @@ import * as Ops from "@host/lib/engineOps";
 import { findProject } from "@host/lib/projects";
 
 export const worktreeDataHandlers = {
-  // Validate projectId against the project list before any path
-  // construction, so a bogus id can't read outside projects/.
+  // Validate projectId against the project list before any read, so a
+  // bogus id names nothing.
   read: ({ projectId, worktreeId }) =>
     Effect.andThen(
       findProject(projectId),
@@ -18,7 +18,7 @@ export const worktreeDataHandlers = {
   // and the primary checkout, so we don't re-verify here. Enforcing the
   // "no external state" rule would mean asking the engine for the
   // worktree list on every save. findProject + the WorktreeIdSchema
-  // regex keep the path-build safe against malformed input.
+  // regex keep the keys well formed against malformed input.
   write: ({ projectId, worktreeId, data }) =>
     Effect.andThen(
       findProject(projectId),

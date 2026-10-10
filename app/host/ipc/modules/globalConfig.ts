@@ -17,7 +17,7 @@ import * as Ops from "@host/lib/engineOps";
 import type { ClearingWrite } from "@host/lib/engineOps";
 
 // A patched value equal to the key's default is stored by omission, so
-// config.json stays tidy whichever device saved it. Values are plain
+// stored settings stay tidy whichever device saved them. Values are plain
 // JSON (booleans, string arrays, launcher objects), so their
 // serializations compare them.
 function isDefault(key: keyof DeviceSettingsPatch, value: unknown): boolean {
@@ -77,9 +77,8 @@ export const globalConfigHandlers = {
           else Object.assign(doc, { [key]: value });
         }
         yield* Ops.writeGlobalConfig(doc);
-        // The store watcher doesn't see the app's own writes, so the
-        // config-change subscribers hear it here: the direct listener
-        // reconciles with the just-written document.
+        // The config-change subscribers hear it here, at once: the direct
+        // listener reconciles with the just-written document.
         globalConfigChanged();
       }).pipe(globalConfigWrites.withPermits(1));
       // The terrier toggle may have flipped: re-probe its readiness on
