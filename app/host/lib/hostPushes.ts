@@ -7,7 +7,6 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as PromiseAdapter from "./util/promiseAdapter";
 
 export type Push = {
   // The push's Rpc tag, `<module>:<key>`.
@@ -50,18 +49,3 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(HostPushes, make);
-
-// For the broadcast seam (main/ipc/register.ts), which is not Effect
-// yet. Synchronous, so pushes keep their order. Before the graph is up
-// nobody can be listening, and the push goes nowhere.
-const promiseAdapter = PromiseAdapter.make<HostPushes>("The host pushes");
-export const adapter = promiseAdapter.layer;
-
-export function publishPush(push: Push): void {
-  promiseAdapter.runSyncOr(
-    Effect.gen(function* () {
-      yield* (yield* HostPushes).publish(push);
-    }),
-    () => undefined,
-  );
-}

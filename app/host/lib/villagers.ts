@@ -66,7 +66,6 @@ import {
   WIKI_API,
   WIKI_USER_AGENT,
 } from "@shared/villagers/wiki";
-import * as PromiseAdapter from "./util/promiseAdapter";
 import {
   atomicWriteJson,
   readJsonOrNull,
@@ -520,13 +519,6 @@ export const layer = (options: Options) =>
 export const deviceLayer = layer({
   dir: () => join(dataDir(), "villagers"),
 });
-
-// For the IPC handlers (ipc/modules/villagers.ts), which are not Effect
-// yet.
-export const { layer: adapter, call } = PromiseAdapter.forService(
-  VillagerData,
-  "The villager data",
-);
 
 // What a folder holds so far, or null when there is no such folder.
 async function readStored(folder: string): Promise<Stored | null> {

@@ -9,6 +9,7 @@
 // effect.
 import { AsyncLocalStorage } from "node:async_hooks";
 import type * as Context from "effect/Context";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
@@ -25,6 +26,15 @@ export function withParentSpan<A>(
 ): A {
   return Option.isNone(span) ? run() : ambient.run(span.value, run);
 }
+
+// Runs a step of a served call (registerHostContract's invoke) with the
+// call's span as the ambient parent, so a Promise handler's spans and
+// its calls on a peer continue the caller's trace. Scaffolding, like
+// the Promise handlers it serves: it goes with the last of them.
+export const invokeInCallSpan = <A>(run: () => A) =>
+  Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
+    Effect.try({ try: () => withParentSpan(span, run), catch: callFailureOf }),
+  );
 
 export function parentSpan(): Tracer.AnySpan | undefined {
   return ambient.getStore();

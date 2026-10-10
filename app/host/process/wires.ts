@@ -6,6 +6,9 @@
 // the peers. Every host-side module (`isHostSide`) registers here.
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { invokeInCallSpan } from "@host/lib/util/trace";
+import type { HostServices } from "./services";
+import * as Captures from "./captures";
 import type * as Stream from "effect/Stream";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
@@ -25,9 +28,12 @@ import type {
 } from "@shigomori/contracts/types";
 import {
   broadcastAll as broadcastAllCore,
-  registerContract as registerContractCore,
+  registerHostContract,
 } from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import type {
+  EffectServerTransport,
+  HandlerContext,
+} from "@shared/ipc/transport";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { logFailure } from "@shared/log";
 import {
@@ -41,10 +47,8 @@ import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import { readGlobalConfig } from "@host/lib/config/global";
-import { publishPush } from "@host/lib/hostPushes";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
-import type * as Views from "@host/lib/views";
 import * as Sharing from "@host/lib/sharing";
 import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
@@ -69,7 +73,7 @@ import { hostBinaryPath, hostFacts } from "./facts";
 const directTickets = createConnectTicketStore();
 const linkRegistrar = DeviceLink.createLinkRegistrar();
 export const deviceLinkLayer = () =>
-  DeviceLink.adapter.pipe(
+  Captures.deviceLink.layer.pipe(
     Layer.provideMerge(
       DeviceLink.layer({
         registrar: linkRegistrar,
@@ -88,14 +92,15 @@ export const deviceLinkLayer = () =>
 
 // The sharing switch the link's gate reads. Its changes go to this
 // device's windows and, the push being remote, to every peer.
-export const sharingLayer = Sharing.adapter.pipe(
+export const sharingLayer = Captures.sharing.layer.pipe(
   Layer.provideMerge(
     Sharing.layer({
       announce: (on) => broadcastAll(sharingContract, "changed", on),
     }),
   ),
 );
-const directLink = DeviceLink.deviceLink;
+
+const { directLink, tunnel } = Captures;
 
 // The tunnel endpoint: a supervised cloudflared child fronting the
 // listener's port through this device's named Cloudflare tunnel.
@@ -104,7 +109,7 @@ const directLink = DeviceLink.deviceLink;
 // as reconcile(null) through the same path. The connector token stays
 // inside the Tunnel.
 export const tunnelLayer = () =>
-  TunnelService.adapter.pipe(
+  Captures.tunnelCapture.layer.pipe(
     Layer.provideMerge(
       TunnelService.layer({
         // Resolved fresh per start attempt: the probe is one bounded
@@ -138,7 +143,7 @@ export const tunnelLayer = () =>
 // machine: the windows, the shell, and the terminal's control ops.
 const loopbackRegistrar = DeviceLink.createLinkRegistrar();
 export const loopbackLayer = () =>
-  Loopback.adapter.pipe(
+  Captures.loopback.layer.pipe(
     Layer.provideMerge(
       Loopback.layer({
         registrar: loopbackRegistrar,
@@ -190,7 +195,7 @@ const directPlane = () =>
     dialableKinds: devDialKinds(),
     host: {
       closeHostPeersNotIn: (online) => void directLink.closePeersNotIn(online),
-      tunnelState: () => TunnelService.tunnel.state(),
+      tunnelState: () => tunnel.state(),
     },
   }));
 
@@ -209,9 +214,10 @@ const serveConnectInfo = makeConnectInfo({
   mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
   // is healthy (probed routable).
-  tunnelUrl: () => TunnelService.tunnel.tunnelUrl(),
+  tunnelUrl: () => tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
-  sharesData: Sharing.sharing.current,
+  // Before the graph is up the link serves nobody, so it reads as off.
+  sharesData: Captures.sharesData,
 });
 
 // The hub connection: connecting itself is gated in
@@ -230,7 +236,7 @@ const hubServer = createHubConnection({
 // and a peer asking for it gets the same no-handler answer as for a
 // channel the host does not serve at all. The device hub is not a wire
 // here: it answers connectInfo and nothing else.
-const hostServer: ServerTransport = {
+const hostServer: EffectServerTransport<HostServices> = {
   handle(channel, fn, opts) {
     loopbackRegistrar.handle(channel, fn);
     // The link's gate reads each call's own annotations
@@ -240,7 +246,7 @@ const hostServer: ServerTransport = {
   broadcastAll(channel, payload, opts) {
     // The loopback serves every one off the host's pushes, and the
     // device link the remote ones.
-    publishPush({ channel, payload, remote: opts?.remote === true });
+    Captures.publishPush({ channel, payload, remote: opts?.remote === true });
   },
 };
 
@@ -252,10 +258,11 @@ function assertHostSide(module: ContractModule): void {
 
 export function registerContract<M extends ContractModule>(
   module: M,
-  handlers: Handlers<M, HandlerContext>,
+  handlers: Handlers<M, HandlerContext, HostServices>,
 ): void {
   assertHostSide(module);
-  registerContractCore(module, handlers, hostServer, {
+  registerHostContract(module, handlers, hostServer, {
+    invoke: invokeInCallSpan,
     // Handler results are parsed with their output schema in a dev
     // build, so drift surfaces here and not as a confusing failure in a
     // window. A packaged build skips the extra parse.
@@ -274,13 +281,13 @@ export function registerContract<M extends ContractModule>(
   });
 }
 
-type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
 
 // A module's views (contract.ts, view), served on the device link to
 // the peers its annotations admit, and on the loopback.
 export function registerViews<M extends ContractModule>(
   module: M,
-  views: ViewHandlers<M, Views.Services>,
+  views: ViewHandlers<M, HostServices>,
 ): void {
   for (const [key, view] of Object.entries(views)) {
     const channel = `${nameOf(module)}:${key}`;
@@ -293,17 +300,17 @@ export function registerViews<M extends ContractModule>(
 // shell's session with its host): its calls, and its streams.
 export function registerLoopbackContract<M extends ContractModule>(
   module: M,
-  handlers: Handlers<M, HandlerContext>,
+  handlers: Handlers<M, HandlerContext, HostServices>,
   streams: Readonly<Record<string, View>> = {},
 ): void {
-  registerContractCore(
+  registerHostContract(
     module,
     handlers,
     {
       handle: (channel, fn) => loopbackRegistrar.handle(channel, fn),
       broadcastAll: () => {},
     },
-    { validateOutputs: !hostFacts().packaged },
+    { validateOutputs: !hostFacts().packaged, invoke: invokeInCallSpan },
   );
   for (const [key, stream] of Object.entries(streams)) {
     loopbackRegistrar.view(`${nameOf(module)}:${key}`, stream);
@@ -413,7 +420,7 @@ export async function refreshDirectHost(): Promise<void> {
   // problem must not fail the change that triggered the refresh.
   await logFailure("[tunnel] reconcile failed", () => {
     const listener = directLink.status();
-    return TunnelService.tunnel.reconcile(
+    return tunnel.reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,

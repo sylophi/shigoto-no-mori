@@ -245,3 +245,14 @@ export const CallFailureSchema = Schema.Union([
 ]);
 
 export const isRemoteCallError = Schema.is(RemoteCallError);
+
+export type CallFailure = typeof CallFailureSchema.Type;
+
+// What a call's failure crosses a wire as.
+export const callFailureOf = (error: unknown): CallFailure =>
+  isContractError(error)
+    ? error
+    : new RemoteCallError({
+        text: errorMessageOf(error),
+        code: errorCodeOf(error),
+      });

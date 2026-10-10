@@ -526,43 +526,13 @@ const make = (options: {
 export const layer = (options: Parameters<typeof make>[0]) =>
   Layer.effect(Terminals, make(options));
 
-// For the link's handlers and the worktree removals, which are not
-// Effect yet.
-const promiseAdapter = PromiseAdapter.forService(Terminals, "The terminals");
-export const adapter = promiseAdapter.layer;
-
+// For the scripts' sweep of removed worktrees, which is not Effect yet.
 // Settles at once while the service is not up: there is nothing to
 // close then.
-// What a quit asks about.
-export const busyTerminals = (): Promise<number> =>
-  promiseAdapter
-    .run(Effect.flatMap(Terminals, (terminals) => terminals.busy))
-    .catch(() => 0);
+const promiseAdapter = PromiseAdapter.forService(Terminals, "The terminals");
+export const adapter = promiseAdapter.layer;
 
 export const closeMissingTerminals = () =>
   promiseAdapter.runIfOpen(
     Effect.flatMap(Terminals, (terminals) => terminals.closeMissing),
   );
-
-// A stream of the service's, for the views the link serves.
-export const stream = <A, E>(
-  f: (terminals: Terminals["Service"]) => Stream.Stream<A, E>,
-): Stream.Stream<A, E> =>
-  Stream.unwrap(
-    Effect.promise(() =>
-      promiseAdapter.call((terminals) => Effect.succeed(f(terminals))),
-    ),
-  );
-
-// One of the service's calls, for the handlers the link serves.
-export const call = promiseAdapter.call;
-
-// The terminals open now, none while the service is not up.
-export const openTerminals = (): Promise<ReadonlyArray<Terminal>> =>
-  promiseAdapter.runSyncOr(Effect.succeed(true), () => false)
-    ? promiseAdapter.call((terminals) =>
-        Stream.runHead(terminals.list).pipe(
-          Effect.map(Option.getOrElse((): ReadonlyArray<Terminal> => [])),
-        ),
-      )
-    : Promise.resolve([]);

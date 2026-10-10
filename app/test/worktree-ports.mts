@@ -16,7 +16,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { onPorts } from "@host/lib/ports";
+import * as Effect from "effect/Effect";
+import * as Ports from "@host/lib/ports";
+import { runHost } from "./lib/adapters.mts";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
 import { errorCodeOf } from "@shigomori/contracts/errors";
@@ -28,7 +30,8 @@ import {
 import { trackTest } from "./lib/vitestKit.mts";
 import { beforeAll, it } from "vitest";
 
-const poolPortsFor = (dir: string) => onPorts((ports) => ports.poolPorts(dir));
+const poolPortsFor = (dir: string) =>
+  runHost(Effect.flatMap(Ports.Ports, (ports) => ports.poolPorts(dir)));
 
 async function listenOn(host: string, track: Track): Promise<number> {
   const server = await startLoopbackServer((socket) => socket.end(), { host });

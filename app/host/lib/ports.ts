@@ -36,7 +36,6 @@ import { isLoopbackPortListening } from "./net";
 import { findProjectOrThrow, findWorktreePathOrThrow } from "./projects";
 import { answersFor } from "./util/cacheTtl";
 import * as Processes from "./util/processes";
-import * as PromiseAdapter from "./util/promiseAdapter";
 
 interface Worktree {
   readonly projectId: string;
@@ -239,8 +238,3 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(Ports, make);
-
-// The Promise face, for the ports and port-pool handlers.
-const promiseAdapter = PromiseAdapter.forService(Ports, "The ports");
-export const adapter = promiseAdapter.layer;
-export const onPorts = promiseAdapter.call;

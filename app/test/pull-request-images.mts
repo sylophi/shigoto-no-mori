@@ -12,12 +12,16 @@
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { getWorktreePullRequest } from "@host/lib/githubCli/pullRequests";
+import * as PullRequests from "@host/lib/githubCli/pullRequests";
+import { runHost } from "./lib/adapters.mts";
 import { it } from "vitest";
 import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const track = trackTest;
+
+const getWorktreePullRequest = (cwd: string, branch: string) =>
+  runHost(PullRequests.getWorktreePullRequest(cwd, branch));
 
 const PNG = "11111111-1111-4111-8111-111111111111";
 const TAG = "22222222-2222-4222-8222-222222222222";

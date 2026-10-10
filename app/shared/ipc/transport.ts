@@ -1,4 +1,5 @@
 import type { ContractModule } from "@shigomori/contracts/contract";
+import type { CallFailure } from "@shigomori/contracts/errors";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type * as Tracer from "effect/Tracer";
@@ -143,4 +144,24 @@ export type ServerTransport = {
     payload: unknown,
     opts?: TransportCallOpts,
   ): void;
+};
+
+// What a server built in a layer graph hands each call: the context
+// without the signal, since such a call is an effect, cancelled by
+// interruption. The registrar gives a Promise handler a signal of its
+// own that aborts with it (registerContract.ts, registerHostContract).
+export type CallContext = Omit<HandlerContext, "signal">;
+
+// The server side of a layer graph's wires: each call mounted as an
+// effect on the graph's `Services`.
+export type EffectServerTransport<Services> = {
+  handle(
+    channel: string,
+    fn: (
+      ctx: CallContext,
+      raw: unknown,
+    ) => Effect.Effect<unknown, CallFailure, Services>,
+    opts?: TransportCallOpts,
+  ): void;
+  broadcastAll: ServerTransport["broadcastAll"];
 };

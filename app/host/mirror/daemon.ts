@@ -27,7 +27,6 @@ import * as Stream from "effect/Stream";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as FileSync from "@host/fileSync/FileSync";
 import type { MirrorCreateInput } from "@host/mirror/registry";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 import {
   mirrorEngineBlocker,
   type MirrorDaemonStatus,
@@ -463,39 +462,11 @@ const make = (options: Options) =>
 export const layer = (options: Options) =>
   Layer.effect(MirrorDaemon, make(options));
 
-// The Promise face, for the mirror bookkeeping in main/ipc/handlers.ts.
-const {
-  layer: adapterLayer,
-  run,
-  runSyncOr,
-} = PromiseAdapter.make<MirrorDaemon>("The mirror daemon");
-export const adapter = adapterLayer;
-
-// The daemon's own effect, for a caller holding a runtime of its own
-// (the proofs) or the adapter below.
+// The daemon's own effect, for a caller holding a runtime of its own:
+// the root (process/captures.ts) and the proofs.
 export const onDaemon = <A, E>(
   f: (daemon: MirrorDaemon["Service"]) => Effect.Effect<A, E>,
 ) =>
   Effect.gen(function* () {
     return yield* f(yield* MirrorDaemon);
   });
-
-export const mirrorDaemon = {
-  status: (): MirrorDaemonStatus =>
-    runSyncOr(
-      onDaemon((daemon) => daemon.status),
-      () => "stopped",
-    ),
-  sessions: (): readonly MirrorSessionRaw[] =>
-    runSyncOr(
-      onDaemon((daemon) => daemon.sessions),
-      () => [],
-    ),
-  create: (input: MirrorCreateInput) =>
-    run(onDaemon((daemon) => daemon.create(input))),
-  terminate: (session: string) =>
-    run(onDaemon((daemon) => daemon.terminate(session))),
-  pause: (session: string) => run(onDaemon((daemon) => daemon.pause(session))),
-  resume: (session: string) =>
-    run(onDaemon((daemon) => daemon.resume(session))),
-};

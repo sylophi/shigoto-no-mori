@@ -30,17 +30,14 @@ import * as HostPushes from "@host/lib/hostPushes";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Terminals from "@host/lib/terminals/Terminals";
-import { closeMissingTerminals } from "@host/lib/terminals/Terminals";
 import { terminalStart } from "@host/ipc/scriptRun";
 import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
 import * as GitWatcher from "@host/lib/gitWatcher";
-import { reconcileGitWatchers } from "@host/lib/gitWatcher";
 import { startBackgroundFetch } from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
-import * as MirrorDaemon from "@host/mirror/daemon";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
@@ -61,6 +58,7 @@ import {
   tunnelLayer,
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
+import * as Captures from "./captures";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -118,7 +116,7 @@ function onExternalStateChange() {
   // mirror of the worktree carries it now (host/mirror/gitFollow.ts).
   // Which worktree it was is not told, so every mirrored project is.
   const mirrored = new Set(
-    MirrorDaemon.mirrorDaemon
+    Captures.mirrorDaemon
       .sessions()
       .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
       .filter((projectId) => projectId !== undefined),
@@ -128,9 +126,9 @@ function onExternalStateChange() {
   // then follow it with the git-directory watches.
   void refreshProjects()
     .catch(() => undefined)
-    .then(reconcileGitWatchers);
+    .then(Captures.reconcileGitWatchers);
   // A worktree or project gone takes its terminals with it.
-  void closeMissingTerminals();
+  void Captures.closeMissingTerminals();
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and
   // holding its port.
@@ -164,7 +162,7 @@ const logged = <R>(name: string, layer: Layer.Layer<never, never, R>) =>
 
 const storeChanges = logged(
   "the store's changes",
-  StoreChanges.adapter.pipe(
+  Captures.storeChanges.layer.pipe(
     Layer.provide(StoreChanges.layer(onExternalStateChange)),
   ),
 );
@@ -173,7 +171,7 @@ const storeChanges = logged(
 // any tool), as a project-scoped ping on every wire.
 const gitWatcher = logged(
   "the git watcher",
-  GitWatcher.adapter.pipe(
+  Captures.gitWatcher.layer.pipe(
     Layer.provide(
       GitWatcher.layer({
         onChange: announceProjectChanged,
@@ -206,7 +204,7 @@ const mirrorFollower = lifetime(
   Effect.sync(startGitFollower),
   stopGitFollower,
 );
-const mirrorDaemon = MirrorDaemon.adapter.pipe(
+const mirrorDaemon = Captures.daemon.layer.pipe(
   Layer.provideMerge(mirrorDaemonLayer),
 );
 const mirrorGateway = lifetime(
@@ -228,11 +226,7 @@ const portForwards = onQuit(
 
 // What the host answers from caches of other tools: gh, terrier and
 // port-pool.
-const toolAnswers = Layer.mergeAll(
-  GithubCli.adapter,
-  Terrier.adapter,
-  Ports.adapter,
-).pipe(
+const toolAnswers = Captures.github.layer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer),
   ),
@@ -242,11 +236,10 @@ const toolAnswers = Layer.mergeAll(
 const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
   toolAnswers.pipe(
     // A villager download under way stops here, and resumes next launch.
-    Layer.provideMerge(Villagers.adapter),
     Layer.provideMerge(Villagers.deviceLayer),
     // Every push the host makes and every store write, which the wires
     // and the views read.
-    Layer.provideMerge(HostPushes.adapter),
+    Layer.provideMerge(Captures.pushes.layer),
     Layer.provideMerge(HostPushes.layer),
     Layer.provideMerge(EngineStoreChanges.layer),
     // This device's id, which the wires above name themselves by, read
@@ -282,6 +275,7 @@ const scriptsAndFoundation = (options: {
     // Every terminal, each saved for the next start as it closes with
     // the quit.
     Layer.provideMerge(Terminals.adapter),
+    Layer.provideMerge(Captures.terminals.layer),
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
@@ -315,7 +309,13 @@ export const layer = (options: {
     Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
-    Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
+    Layer.provideMerge(
+      starts("the background fetch", () =>
+        startBackgroundFetch({
+          refreshPullRequests: Captures.refreshPullRequests,
+        }),
+      ),
+    ),
     // Installing the CLI link is a Settings action. A start only
     // repairs an installed link whose target moved (an app update,
     // another checkout).

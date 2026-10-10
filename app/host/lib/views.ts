@@ -31,11 +31,11 @@ export type Signal =
 // edited in the worktree, a server coming up on a port). Emits only
 // what differs from the last value. Signals that arrive during a read
 // make one more read, not one each.
-export const view = <A>(
-  read: () => A | Promise<A>,
+export const view = <A, R = never>(
+  read: () => Effect.Effect<A, unknown, R> | A | Promise<A>,
   when: (signal: Signal) => boolean,
   options: { readonly every?: Duration.Input } = {},
-): Stream.Stream<A, unknown, Services> =>
+): Stream.Stream<A, unknown, Services | R> =>
   Stream.unwrap(
     Effect.gen(function* () {
       // Subscribed before the first read, so nothing between is lost.
@@ -52,7 +52,14 @@ export const view = <A>(
       return Stream.succeed(undefined).pipe(
         Stream.concat(Stream.merge(signals, ticks)),
         Stream.buffer({ capacity: 1, strategy: "sliding" }),
-        Stream.mapEffect(() => Effect.tryPromise(async () => read())),
+        Stream.mapEffect(() =>
+          Effect.suspend(() => {
+            const answer = read();
+            return Effect.isEffect(answer)
+              ? (answer as Effect.Effect<A, unknown, R>)
+              : Effect.tryPromise(async () => answer);
+          }),
+        ),
         Stream.changes,
       );
     }),

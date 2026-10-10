@@ -203,7 +203,6 @@ async function stopMirror(run: () => unknown): Promise<string | undefined> {
 // running session and its copy, the session's remote side: the peer's
 // worktree for a session run here, this device's for one a peer runs.
 async function alreadyMirrored(
-  ctx: HandlerContext,
   running: Running,
   device: string | undefined,
 ): Promise<ControlTransferResult> {
@@ -230,9 +229,9 @@ async function alreadyMirrored(
         session.projectId,
         session.worktreeId,
       )
-    : (
-        await worktreesHandlers.list({ projectId: session.projectId }, ctx)
-      ).find((worktree) => worktree.id === session.worktreeId);
+    : (await worktreesHandlers.list({ projectId: session.projectId })).find(
+        (worktree) => worktree.id === session.worktreeId,
+      );
   if (copy === undefined) {
     // Not a reason to start a second session beside the first.
     throw new ControlError(
@@ -330,7 +329,7 @@ export const send: TransferOp<"send"> = async (
         ? await peerMirrorOf(input, registryOrEmpty())
         : { deviceId: thisDeviceId(), session: own };
     if (running !== undefined) {
-      return alreadyMirrored(ctx, running, input.device);
+      return alreadyMirrored(running, input.device);
     }
   }
   const { identity, target } = await pickDevice(project, input.device);
@@ -363,10 +362,11 @@ export const send: TransferOp<"send"> = async (
   const sent = await syncHandlers.sendWorktree(payload, ctx);
   const source = await settleSource(input.source ?? "keep", {
     shelve: async () =>
-      worktreesHandlers.setShelved(
-        { projectId: project.id, worktreeId: worktree.id, shelved: true },
-        ctx,
-      ),
+      worktreesHandlers.setShelved({
+        projectId: project.id,
+        worktreeId: worktree.id,
+        shelved: true,
+      }),
     teardown: async () =>
       syncHandlers.teardownSource(
         {
@@ -460,7 +460,7 @@ export const bring: TransferOp<"bring"> = async (
           )
         : { deviceId: thisDeviceId(), session: own };
     if (running !== undefined) {
-      return alreadyMirrored(ctx, running, undefined);
+      return alreadyMirrored(running, undefined);
     }
     const { session, ...pulled } = await startMirrorFrom(
       {

@@ -105,6 +105,11 @@ export const layer = Layer.effect(Registry, make);
   as it goes. Its calls, views and pushes run on it, so a view's fiber
   is interrupted when its subscriber stops, and nothing outlives the
   page.
+- A host handler answers with an effect on the services of the host's
+  graph (`app/host/process/services.ts`), run where the call is served
+  (`registerHostContract`), and a view reads with one (`Views.view`).
+  Its handler table `satisfies` the contract's `Handlers`, so each
+  method keeps its own type for a caller in the host.
 - During the migration a converted subsystem keeps its Promise
   interface for unconverted callers through one named adapter next to
   its layer. The adapter is deleted when the last caller moves.
@@ -114,17 +119,30 @@ export const layer = Layer.effect(Registry, make);
   is closed, and a `run` that the Promise functions callers already
   import go through. A call made before the graph is up waits for it.
   The proofs bring every adapter's layer up for each file
-  (`app/test/lib/adapters.mts`). A subsystem that is one service
+  (`app/test/lib/adapters.mts`), with the services the host's
+  handlers answer on (`runHost`). A subsystem that is one service
   takes `PromiseAdapter.forService`, whose `call` runs one of the
-  service's methods.
+  service's methods. The other way, an effect calls a Promise function
+  not converted yet through `fromPromise`
+  (`app/host/lib/util/fromPromise.ts`), and a handler not converted
+  yet still answers with a Promise. Both are scaffolding that goes with
+  the last Promise caller.
 
   ```ts
-  const promiseAdapter = PromiseAdapter.forService(Terrier, "terrier");
+  const promiseAdapter = PromiseAdapter.forService(Terminals, "The terminals");
   export const adapter = promiseAdapter.layer;
 
-  export const terrierReadiness = () =>
-    promiseAdapter.call((terrier) => terrier.readiness);
+  export const closeMissingTerminals = () =>
+    promiseAdapter.runIfOpen(
+      Effect.flatMap(Terminals, (terminals) => terminals.closeMissing),
+    );
   ```
+
+- The host's composition root reaches its services from the callbacks
+  it hands code that is not Effect yet (the broadcast seam, the hub
+  connection, the data-folder move) through its own captures
+  (`app/host/process/bridge.ts`, `captures.ts`), each beside its
+  service in the graph. Nothing outside `app/host/process/` uses them.
 
 ## 4. Errors
 

@@ -22,13 +22,6 @@ export const gh = (args: readonly string[], options: GhOptions = {}) =>
     maxOutputBytes: options.maxBuffer,
   });
 
-export function execGh(
-  args: string[],
-  options: GhOptions = {},
-): Promise<{ stdout: string; stderr: string }> {
-  return Processes.run(gh(args, options));
-}
-
 // gh's stderr tends to be one long line with a `gh:` prefix; the rest
 // is usable as-is. Trim noise so the renderer banner stays compact.
 export function trimGhError(raw: string): string {

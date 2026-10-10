@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
@@ -8,16 +9,28 @@ import {
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";
+import { fromPromise } from "../util/fromPromise";
 import { isCommandError, stderrOf } from "../util/processes";
-import { execGh, trimGhError } from "./exec";
+import { gh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
-import { evictGithubRepoInfo, ghReady } from "./GithubCli";
+import { GithubCli } from "./GithubCli";
 import { remoteNameForUrl } from "./remote";
 
-// Every action here shares one policy: gate on readiness, then rethrow
-// gh failures with a trimmed message the renderer can show inline.
-// `fallback` covers a gh that failed without a word.
-async function runGh(
+// A GitHub action that didn't go through, in words the renderer shows
+// inline: gh not ready, gone or slow, or its own last line of stderr.
+class GhActionError extends Schema.TaggedError<GhActionError>()(
+  "GhActionError",
+  { reason: Schema.String, cause: Schema.optional(Schema.Defect()) },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+// Every action here shares one policy: gate on readiness, then fail
+// with a trimmed message the renderer can show inline. `fallback`
+// covers a gh that failed without a word.
+const runGh = Effect.fnUntraced(function* (
   args: string[],
   opts: {
     cwd?: string;
@@ -25,72 +38,74 @@ async function runGh(
     maxBuffer?: number;
     timeout?: number;
   },
-): Promise<string> {
-  if (!(await ghReady())) {
-    throw new Error("GitHub CLI isn't ready");
+) {
+  if ((yield* (yield* GithubCli).unavailableReason) !== null) {
+    return yield* new GhActionError({ reason: "GitHub CLI isn't ready" });
   }
-  try {
-    const { stdout } = await execGh(args, {
-      cwd: opts.cwd,
-      maxBuffer: opts.maxBuffer,
-      timeout: opts.timeout,
-    });
-    return stdout;
-  } catch (err) {
-    if (!isCommandError(err)) throw err;
-    // gh vanished between the readiness probe (cached 30s) and this
-    // spawn. "Not installed" reads as a state rather than a bug.
-    if (err.reason === "not-found") {
-      throw new Error("GitHub CLI isn't installed", { cause: err });
-    }
-    if (err.reason === "timed-out") {
-      throw new Error("GitHub CLI timed out", { cause: err });
-    }
-    throw new Error(trimGhError(stderrOf(err)) || opts.fallback, {
-      cause: err,
-    });
-  }
-}
+  const { stdout } = yield* gh(args, {
+    cwd: opts.cwd,
+    maxBuffer: opts.maxBuffer,
+    timeout: opts.timeout,
+  }).pipe(
+    Effect.catchTags({
+      CommandError: (cause) =>
+        Effect.fail(
+          new GhActionError({
+            // gh vanished between the readiness probe (cached 30s) and
+            // this spawn. "Not installed" reads as a state rather than a
+            // bug.
+            reason:
+              cause.reason === "not-found"
+                ? "GitHub CLI isn't installed"
+                : cause.reason === "timed-out"
+                  ? "GitHub CLI timed out"
+                  : trimGhError(stderrOf(cause)) || opts.fallback,
+            cause,
+          }),
+        ),
+    }),
+  );
+  return stdout;
+});
 
 // Streams `gh pr diff <num>` as plain unified diff text, ready to hand
 // to DiffView. Throws on gh failure so the renderer can show the error
 // inline (vs. silently rendering an empty diff).
-export async function getPullRequestDiff(opts: {
-  cwd: string;
-  number: number;
-}): Promise<string> {
-  // PR diffs are usually small but can run into the MB range; bump the
-  // buffer so a sprawling PR doesn't ENOBUFS, and give the transfer
-  // more room than the default gh timeout.
-  try {
-    return await runGh(["pr", "diff", String(opts.number)], {
+export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
+  function* (opts: { cwd: string; number: number }) {
+    // PR diffs are usually small but can run into the MB range; bump the
+    // buffer so a sprawling PR doesn't ENOBUFS, and give the transfer
+    // more room than the default gh timeout.
+    return yield* runGh(["pr", "diff", String(opts.number)], {
       cwd: opts.cwd,
       fallback: "gh pr diff failed",
       maxBuffer: 32 * 1024 * 1024,
       timeout: 120_000,
-    });
-  } catch (err) {
-    if (!isDiffTooLarge(err)) throw err;
-    return getLocalPullRequestDiff(opts.cwd, opts.number);
-  }
-}
+    }).pipe(
+      Effect.catchIf(isDiffTooLarge, () =>
+        getLocalPullRequestDiff(opts.cwd, opts.number),
+      ),
+    );
+  },
+);
 
 // GitHub won't produce a diff past 300 files or 20,000 lines, and
 // answers with HTTP 406 and a `too_large` code instead. The code is what
 // is matched, since a proxy can answer 406 for its own reasons. runGh
 // keeps only the last line of gh's stderr in the message, so the whole
 // of it is read off the cause.
-function isDiffTooLarge(err: unknown): boolean {
-  const cause = err instanceof Error ? err.cause : undefined;
-  return isCommandError(cause) && /\btoo_large\b/.test(stderrOf(cause));
+function isDiffTooLarge(err: GhActionError): boolean {
+  return isCommandError(err.cause) && /\btoo_large\b/.test(stderrOf(err.cause));
 }
 
-const decodeGhPrCommits = Schema.decodeUnknownSync(
-  Schema.Struct({
-    url: PullRequestSchema.fields.url,
-    baseRefOid: CommitHashSchema,
-    headRefOid: CommitHashSchema,
-  }),
+const decodeGhPrCommits = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      url: PullRequestSchema.fields.url,
+      baseRefOid: CommitHashSchema,
+      headRefOid: CommitHashSchema,
+    }),
+  ),
 );
 
 // The same diff, computed by git from the two commits GitHub has on
@@ -99,70 +114,76 @@ const decodeGhPrCommits = Schema.decodeUnknownSync(
 // can be missing here (a base that moved since the last fetch, a fork's
 // head), and those are fetched by hash from the remote that holds the
 // PR, into the object store and no ref.
-async function getLocalPullRequestDiff(
+const getLocalPullRequestDiff = Effect.fnUntraced(function* (
   cwd: string,
   number: number,
-): Promise<string> {
-  const raw = await runGh(
+) {
+  const raw = yield* runGh(
     ["pr", "view", String(number), "--json", "url,baseRefOid,headRefOid"],
     { cwd, fallback: "gh pr view failed" },
   );
-  const pr = decodeGhPrCommits(JSON.parse(raw));
+  const pr = yield* decodeGhPrCommits(raw);
   const oids = [pr.baseRefOid, pr.headRefOid];
-  const present = await Promise.all(oids.map((oid) => hasCommit(cwd, oid)));
+  const present = yield* Effect.forEach(
+    oids,
+    (oid) => fromPromise(() => hasCommit(cwd, oid)),
+    { concurrency: "unbounded" },
+  );
   const missing = oids.filter((_, i) => !present[i]);
   if (missing.length > 0) {
-    const remote = await remoteNameForUrl(cwd, pr.url);
+    const remote = yield* fromPromise(() => remoteNameForUrl(cwd, pr.url));
     if (!remote) {
-      throw new Error(
-        `This pull request is too large for GitHub to diff, and no git ` +
+      return yield* new GhActionError({
+        reason:
+          `This pull request is too large for GitHub to diff, and no git ` +
           `remote points at ${pr.url} to fetch it from.`,
-      );
+      });
     }
-    await run(cwd, [
-      "fetch",
-      "--quiet",
-      "--no-tags",
-      "--no-write-fetch-head",
-      remote,
-      ...missing,
-    ]);
+    yield* fromPromise(() =>
+      run(cwd, [
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        "--no-write-fetch-head",
+        remote,
+        ...missing,
+      ]),
+    );
   }
-  return getMergeBaseDiff(cwd, pr.baseRefOid, pr.headRefOid);
-}
+  return yield* fromPromise(() =>
+    getMergeBaseDiff(cwd, pr.baseRefOid, pr.headRefOid),
+  );
+});
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles
 // to ready; `--undo` flips back to draft. Both call paths invalidate
 // the sidebar cache because isDraft is part of the slim PullRequest.
-export async function setPullRequestDraft(opts: {
-  cwd: string;
-  number: number;
-  draft: boolean;
-}): Promise<void> {
-  const { cwd, number, draft } = opts;
-  const args = ["pr", "ready", String(number)];
-  if (draft) args.push("--undo");
-  await runGh(args, { cwd, fallback: "gh pr ready failed" });
-  evictProjectPullRequests(cwd);
-}
+export const setPullRequestDraft = Effect.fn("GithubActions.setDraft")(
+  function* (opts: { cwd: string; number: number; draft: boolean }) {
+    const { cwd, number, draft } = opts;
+    const args = ["pr", "ready", String(number)];
+    if (draft) args.push("--undo");
+    yield* runGh(args, { cwd, fallback: "gh pr ready failed" });
+    evictProjectPullRequests(cwd);
+  },
+);
 
 // Turns an armed auto-merge off again, so the PR waits for a person.
 // The slim PullRequest doesn't carry the flag, so the sidebar cache
 // stays.
-export async function disablePullRequestAutoMerge(opts: {
-  cwd: string;
-  number: number;
-}): Promise<void> {
-  await runGh(["pr", "merge", String(opts.number), "--disable-auto"], {
+export const disablePullRequestAutoMerge = Effect.fn(
+  "GithubActions.disableAutoMerge",
+)(function* (opts: { cwd: string; number: number }) {
+  yield* runGh(["pr", "merge", String(opts.number), "--disable-auto"], {
     cwd: opts.cwd,
     fallback: "gh pr merge --disable-auto failed",
   });
-}
+});
 
 // Who a new repository can be published under: the signed-in user,
 // then the organizations they belong to, in one round trip.
-export async function listGithubOwners(): Promise<string[]> {
-  const stdout = await runGh(
+export const listGithubOwners = Effect.fn("GithubActions.owners")(function* () {
+  const stdout = yield* runGh(
     [
       "api",
       "graphql",
@@ -174,7 +195,7 @@ export async function listGithubOwners(): Promise<string[]> {
     { fallback: "Couldn't list your GitHub accounts" },
   );
   return stdout.split("\n").filter((line) => line.length > 0);
-}
+});
 
 const decodeViewerRepos = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -195,8 +216,8 @@ const decodeViewerRepos = Schema.decodeUnknownOption(
 // their organizations' and the ones they collaborate on, most recently
 // pushed first. The first hundred: one further back can still be typed
 // in as `owner/repo`.
-export async function listGithubRepos(): Promise<string[]> {
-  const stdout = await runGh(
+export const listGithubRepos = Effect.fn("GithubActions.repos")(function* () {
+  const stdout = yield* runGh(
     [
       "api",
       "graphql",
@@ -204,20 +225,30 @@ export async function listGithubRepos(): Promise<string[]> {
       "query=query { viewer { repositories(first: 100, ownerAffiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR], orderBy: {field: PUSHED_AT, direction: DESC}) { nodes { nameWithOwner } } } }",
     ],
     { fallback: "Couldn't list your GitHub repositories" },
-  ).catch((err: unknown) => {
-    // An organization whose SAML gh's token isn't authorized for answers
-    // with an error beside the rest of the list. gh exits non-zero on
-    // it, with the response on stdout, and the repositories that did
-    // come are still the ones to offer. Any other failure stands.
-    const cause = (err as { cause?: { stdout?: unknown } }).cause;
-    const partial = typeof cause?.stdout === "string" ? cause.stdout : "";
-    if (reposOf(partial) === null) throw err;
-    return partial;
-  });
+  ).pipe(
+    Effect.catchTags({
+      GhActionError: (err) => {
+        // An organization whose SAML gh's token isn't authorized for
+        // answers with an error beside the rest of the list. gh exits
+        // non-zero on it, with the response on stdout, and the
+        // repositories that did come are still the ones to offer. Any
+        // other failure stands.
+        const cause = err.cause as { stdout?: unknown } | undefined;
+        const partial = typeof cause?.stdout === "string" ? cause.stdout : "";
+        return reposOf(partial) === null
+          ? Effect.fail(err)
+          : Effect.succeed(partial);
+      },
+    }),
+  );
   const repos = reposOf(stdout);
-  if (repos === null) throw new Error("Couldn't list your GitHub repositories");
+  if (repos === null) {
+    return yield* new GhActionError({
+      reason: "Couldn't list your GitHub repositories",
+    });
+  }
   return repos;
-}
+});
 
 // The `owner/repo`s in a viewer-repositories response, or null when it
 // carries none (no data, or not JSON at all).
@@ -239,13 +270,13 @@ function reposOf(stdout: string): string[] | null {
 // owner is the signed-in user), adds it as origin and pushes the
 // current branch there. GitHub swaps the
 // characters a repo name can't hold for dashes on its own.
-export async function publishRepo(opts: {
+export const publishRepo = Effect.fn("GithubActions.publish")(function* (opts: {
   cwd: string;
   owner: string | undefined;
   visibility: "private" | "public";
-}): Promise<void> {
+}) {
   const name = basename(opts.cwd);
-  await runGh(
+  yield* runGh(
     [
       "repo",
       "create",
@@ -264,6 +295,6 @@ export async function publishRepo(opts: {
     { cwd: opts.cwd, fallback: "Couldn't publish to GitHub", timeout: 300_000 },
   );
   // A read since the create cached the repo as not on GitHub.
-  await evictGithubRepoInfo(opts.cwd);
+  yield* (yield* GithubCli).evictRepo(opts.cwd);
   evictProjectPullRequests(opts.cwd);
-}
+});

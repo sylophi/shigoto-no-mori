@@ -22,8 +22,14 @@ import { trackTest } from "./lib/vitestKit.mts";
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
-const { cloneRepo } = await import("../host/lib/git/clone.ts");
-const { githubHostOf } = await import("../host/lib/githubCli/GithubCli.ts");
+const { cloneRepo: cloneEffect } = await import("../host/lib/git/clone.ts");
+const { GithubCli } = await import("../host/lib/githubCli/GithubCli.ts");
+const { runHost } = await import("./lib/adapters.mts");
+const { flatMap } = await import("effect/Effect");
+const cloneRepo = (source: string, parentDir: string, name: string) =>
+  runHost(cloneEffect(source, parentDir, name));
+const githubHostOf = (url: string) =>
+  runHost(flatMap(GithubCli, (cli) => cli.hostOf(url)));
 const { cloneUrlOf } =
   await import("@shigomori/contracts/predicates/remoteUrl");
 const { cloneFolderName, pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =

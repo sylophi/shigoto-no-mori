@@ -12,7 +12,6 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as PromiseAdapter from "./util/promiseAdapter";
 
 export class Sharing extends Context.Service<
   Sharing,
@@ -77,19 +76,3 @@ const make = (options: {
 
 export const layer = (options: Parameters<typeof make>[0]) =>
   Layer.effect(Sharing, make(options));
-
-// For the callers that are not Effect yet: the connectInfo answer and
-// the contract's handlers and view.
-const promiseAdapter = PromiseAdapter.forService(Sharing, "The sharing switch");
-export const adapter = promiseAdapter.layer;
-
-export const sharing = {
-  // Before the graph is up the link serves nobody, so it reads as off.
-  current: (): boolean =>
-    promiseAdapter.runSyncOr(
-      Effect.flatMap(Sharing, (it) => it.current),
-      () => false,
-    ),
-  read: () => promiseAdapter.call((it) => it.current),
-  set: (on: boolean) => promiseAdapter.call((it) => it.set(on)),
-};
