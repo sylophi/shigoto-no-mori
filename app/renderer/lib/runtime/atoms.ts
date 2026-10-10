@@ -2,6 +2,14 @@
 // "Views and containers"): each on the client's runtime, over the links
 // window.api rides, which the boot seeds into the window's registry
 // (clientLinksAtom). A request stays a React Query query.
+import type { Decoded, Encoded } from "@shigomori/contracts/codec";
+import {
+  type ContractCall,
+  channelOf,
+  type InputOf,
+  type PayloadOf,
+  payloadOf,
+} from "@shigomori/contracts/contract";
 import { isContractError } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -57,24 +65,26 @@ const hostLinkOf = (deviceId: string, localDeviceId: string) =>
 // a refused call) is what the view ends with; a dropped link is asked
 // again. Kept a while after its last reader goes, so a page that comes
 // back finds it streaming.
-export function hostViewAtom<A, I>(options: {
+export function hostViewAtom<R extends ContractCall>(options: {
   readonly deviceId: string;
   readonly localDeviceId: string;
-  readonly channel: string;
-  readonly input: I;
-  readonly schema: Schema.Codec<A, unknown>;
+  // The view (contracts' callOf), whose values are decoded with its own
+  // schema.
+  readonly view: R;
+  readonly input: Encoded<InputOf<R>>;
   // Each value as it comes, and the stream going (its last reader gone,
   // or the device's own failure), for a watcher outside React.
-  readonly onValue?: (value: A) => void;
+  readonly onValue?: (value: Decoded<PayloadOf<R>>) => void;
   readonly onStop?: () => void;
-}): Atom.Atom<AsyncResult.AsyncResult<A, unknown>> {
-  const decode = Schema.decodeUnknownEffect(options.schema);
+}): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
+  type A = Decoded<PayloadOf<R>>;
+  const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
   const values = Stream.unwrap(
     Effect.map(
       hostLinkOf(options.deviceId, options.localDeviceId),
       (link: Link) =>
         link
-          .view(options.channel, options.input)
+          .view(channelOf(options.view), options.input)
           .pipe(
             Stream.mapEffect((value) =>
               link.local === true
