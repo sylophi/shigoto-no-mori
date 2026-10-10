@@ -74,7 +74,7 @@ again on the next run.
 
 | Name | What happens | Bound |
 | --- | --- | --- |
-| `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
+| `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. A tab has to stop reading the host as Connected within 10 s and a window within 15 s. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
 | `network-blip` | Every flow stalls for 5 to 15 s and resumes, with no offline event. | 30 s |
 | `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Skipped when this checkout's hub differs from `origin/release/v3`. | 60 s |
 | `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
