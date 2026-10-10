@@ -13,10 +13,26 @@ import {
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import { registerInflightContributor } from "./scripts";
 import * as PromiseAdapter from "./util/promiseAdapter";
+
+// The scope an engine run outlives its caller in: a create the app
+// navigates away from at "created" goes on to its setup here, and ends
+// with the graph.
+export class EngineRuns extends Context.Service<
+  EngineRuns,
+  { readonly scope: Scope.Scope }
+>()("sm/host/EngineRuns") {}
+
+const runsLayer = Layer.effect(
+  EngineRuns,
+  Effect.map(Effect.scope, (scope) => EngineRuns.of({ scope })),
+);
 
 export const layer = (options: {
   readonly flavor: Flavor;
@@ -36,11 +52,15 @@ export const layer = (options: {
     Layer.provide(
       ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
     ),
+    // The scope a run outlives its caller in (EngineRuns, below).
+    Layer.merge(runsLayer),
   );
 
 export type Services = Layer.Success<ReturnType<typeof layer>>;
 
-// The Promise face, for the host code that is not Effect yet.
+// The Promise face, for the host code that is not Effect yet: the
+// narrowed engine face (engineCalls.ts) and the config modules. Goes
+// with them in step 7's B4c PR (V3.md, the host's Promise adapters).
 export const {
   layer: adapter,
   run,
@@ -49,10 +69,23 @@ export const {
 
 type Ids = { readonly projectId?: string; readonly worktreeId?: string };
 
+// An engine failure in the words `sm` prints for it.
+export class EngineCallError extends Schema.TaggedError<EngineCallError>()(
+  "EngineCallError",
+  { reason: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 // An engine failure the way the host's callers branch on it: a project
 // or worktree that is gone as the contract's error, which the renderer
 // reads by tag, and anything else in the words `sm` prints for it.
-export function engineFailure(error: unknown, ids: Ids = {}): Error {
+export function engineFailure(
+  error: unknown,
+  ids: Ids = {},
+): UnknownProjectError | UnknownWorktreeError | EngineCallError {
   const code = codeOf(error);
   if (code === "unknown-project" && ids.projectId !== undefined) {
     return new UnknownProjectError({ projectId: ids.projectId });
@@ -60,18 +93,30 @@ export function engineFailure(error: unknown, ids: Ids = {}): Error {
   if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
     return new UnknownWorktreeError({ worktreeId: ids.worktreeId });
   }
-  return new Error(messageOf(error));
+  return new EngineCallError({ reason: messageOf(error), cause: error });
 }
 
-// Runs an engine effect for a Promise caller, its failure translated.
-export const call = <A, E>(
-  effect: Effect.Effect<A, E, Services>,
+// An engine effect, its failure translated.
+export const asCall = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
   ids: Ids = {},
-  options?: { readonly signal?: AbortSignal | undefined },
-): Promise<A> =>
-  run(
-    effect.pipe(Effect.mapError((error) => engineFailure(error, ids))),
-    options,
+) => effect.pipe(Effect.mapError((error) => engineFailure(error, ids)));
+
+// `asCall` for an operation that changes something, counted while it
+// runs.
+export const asChange = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  ids: Ids = {},
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      changing += 1;
+    }),
+    () => asCall(effect, ids),
+    () =>
+      Effect.sync(() => {
+        changing -= 1;
+      }),
   );
 
 // The engine operations under way that change something (a create, a
@@ -79,18 +124,6 @@ export const call = <A, E>(
 // left out: they finish in moments and a quit may cut them short.
 let changing = 0;
 registerInflightContributor(() => changing);
-
-// `call` for an operation that changes something.
-export const change = <A, E>(
-  effect: Effect.Effect<A, E, Services>,
-  ids: Ids = {},
-  options?: { readonly signal?: AbortSignal | undefined },
-): Promise<A> => {
-  changing += 1;
-  return call(effect, ids, options).finally(() => {
-    changing -= 1;
-  });
-};
 
 // The engine's view of where the host stands: nowhere, since a host
 // call names its project and worktree by id.
