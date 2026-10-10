@@ -46,7 +46,8 @@ import {
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
 } from "@shigomori/contracts/schemas/sharedSettings";
-import { readDeviceId } from "@host/lib/config/deviceId";
+import { setDeviceId } from "@host/lib/config/deviceId";
+import { deviceId as storedDeviceId } from "@host/lib/engineOps";
 import {
   layer as sharedSettingsStore,
   onSharedSettingsChange,
@@ -319,7 +320,7 @@ it("host copy: kept in the store, stamps with this device, announces only real c
   );
   const engine = await hostEngine(dir);
   trackTest(engine.close);
-  await onSandboxEngine(readDeviceId);
+  await onSandboxEngine(storedDeviceId).then(setDeviceId);
   // The store's read at launch, and its writer until the check ends.
   const scope = Scope.makeUnsafe();
   trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));

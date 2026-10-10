@@ -30,7 +30,8 @@ import { scriptsViews } from "../host/ipc/modules/scripts.ts";
 import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
 import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
-import { readDeviceId } from "../host/lib/config/deviceId.ts";
+import { setDeviceId } from "../host/lib/config/deviceId.ts";
+import { deviceId as storedDeviceId } from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
 import * as Views from "../host/lib/views.ts";
 import * as Sharing from "../host/lib/sharing.ts";
@@ -62,7 +63,7 @@ let repo: string;
 
 beforeAll(async () => {
   initDataDirAt(engineDataDir);
-  await runHost(readDeviceId);
+  await runHost(storedDeviceId).then(setDeviceId);
   repo = join(tempDir("sm-views-", track), "repo");
   mkdirSync(repo);
   git(repo, "init", "-q", "-b", "main");

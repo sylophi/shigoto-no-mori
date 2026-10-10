@@ -10,7 +10,7 @@ import { log } from "@shared/log";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { readDeviceId } from "@host/lib/config/deviceId";
+import { setDeviceId } from "@host/lib/config/deviceId";
 import * as Ops from "@host/lib/engineOps";
 import { refresh } from "@host/lib/projects";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
@@ -232,7 +232,13 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     Layer.provideMerge(EngineStoreChanges.layer),
     // This device's id, which the wires above name themselves by, read
     // from the store once.
-    Layer.provideMerge(Layer.effectDiscard(readDeviceId)),
+    Layer.provideMerge(
+      Layer.effectDiscard(
+        Effect.flatMap(Ops.deviceId, (id) =>
+          Effect.sync(() => setDeviceId(id)),
+        ),
+      ),
+    ),
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Captures.engine.layer),

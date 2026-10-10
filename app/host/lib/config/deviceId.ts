@@ -2,19 +2,12 @@
 // first use and durable for its lifetime. It is never derived from the
 // machine. Read once at launch, then answered from memory: the id flows
 // into every host-scoped query key, and some of its readers can't wait.
-import * as Effect from "effect/Effect";
-import * as Ops from "../engineOps";
+// Imports nothing: the shell holds it too.
 
 let cached = "";
 
-export const readDeviceId = Effect.tap(Ops.deviceId, (id) =>
-  Effect.sync(() => {
-    cached = id;
-  }),
-);
-
-// The shell learns it from its host (main/hostProcess.ts), whose store
-// holds it.
+// The host reads it from its store at launch (process/layer.ts), and
+// the shell learns it from its host (main/hostProcess.ts).
 export function setDeviceId(deviceId: string): void {
   cached = deviceId;
 }
