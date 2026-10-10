@@ -421,7 +421,7 @@ const landIncoming = (
     // Capture refs are keyed by worktree id, and ids are derived
     // from paths (sha256(path)[:12]), so the source's id names the
     // worktree just created only when both devices minted the SAME
-    // managed path (root/worktrees/<project>/<name> with the name from
+    // managed path (root/wt/<project>/<name> with the name from
     // a shared pool) -- rare, but real across same-username machines.
     // Re-key the ref to the local id, then apply and let the CLI
     // consume it. On that collision the re-key is a no-op and the

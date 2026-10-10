@@ -235,7 +235,7 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       // Its PR (#148) has taken this over, title and description both.
       title: "Remote UI flows",
       description: "The local description the PR replaced.",
-      path: "/Users/rin/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+      path: "/Users/rin/.sm/wt/shigoto-no-mori/happy-hummingbird",
       createdAt: now - 4 * DAY,
       ahead: 2,
       changedCount: 3,
@@ -262,7 +262,7 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "p_sm",
       name: "brave-badger",
       branch: "fix-stale-locks",
-      path: "/Users/rin/.sm/worktrees/shigoto-no-mori/brave-badger",
+      path: "/Users/rin/.sm/wt/shigoto-no-mori/brave-badger",
       createdAt: now - 1 * DAY,
       agentWorking: true,
       agentSessions: [
@@ -291,7 +291,7 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "p_sm",
       name: "quiet-quail",
       branch: "port-pool-retry",
-      path: "/Users/rin/.sm/worktrees/shigoto-no-mori/quiet-quail",
+      path: "/Users/rin/.sm/wt/shigoto-no-mori/quiet-quail",
       createdAt: now - 10 * DAY,
       agentSessions: [
         {
@@ -333,7 +333,7 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       branch: "exp/tray-menu",
       title: "A tray menu for the forest",
       description: "Sketching what a menu bar icon could open.",
-      path: "/Users/rin/.sm/worktrees/shigoto-no-mori/odd-owl",
+      path: "/Users/rin/.sm/wt/shigoto-no-mori/odd-owl",
       createdAt: now - 12 * DAY,
       shelved: true,
       ahead: 1,
@@ -360,7 +360,7 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "p_pp",
       name: "merry-marmot",
       branch: "lease-ttl",
-      path: "/Users/rin/.sm/worktrees/port-pool/merry-marmot",
+      path: "/Users/rin/.sm/wt/port-pool/merry-marmot",
       behind: 1,
       // A title and description from `sm describe`, and no PR yet: the
       // sidebar names it by the title, and the page's description is
@@ -448,7 +448,7 @@ const thinkpadWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "tp_sm",
       name: "gentle-gecko",
       branch: "exp/terrier-sync",
-      path: "/home/rin/.sm/worktrees/shigoto-no-mori/gentle-gecko",
+      path: "/home/rin/.sm/wt/shigoto-no-mori/gentle-gecko",
       createdAt: now - 2 * HOUR,
       ahead: 1,
       changedCount: 7,
@@ -468,7 +468,7 @@ const thinkpadWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "tp_sm",
       name: "patient-panda",
       branch: "exp/wayland-tray",
-      path: "/home/rin/.sm/worktrees/shigoto-no-mori/patient-panda",
+      path: "/home/rin/.sm/wt/shigoto-no-mori/patient-panda",
       createdAt: now - 8 * DAY,
       shelved: true,
       changedCount: 2,
@@ -526,7 +526,7 @@ const miniWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "mini_sm",
       name: "nimble-newt",
       branch: "quiet-quail/notes",
-      path: "/Users/rin/.sm/worktrees/shigoto-no-mori/nimble-newt",
+      path: "/Users/rin/.sm/wt/shigoto-no-mori/nimble-newt",
       changedCount: 7,
       ahead: 1,
       lastChangeAt: now - 3 * HOUR,

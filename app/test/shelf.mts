@@ -89,7 +89,7 @@ async function makeSandbox(track: Track) {
   // A basename of its own, so each sandbox gets its own managed base.
   const project = join(root, `project${sandboxes}`);
   await git(root, ["clone", "-q", origin, project]);
-  const worktree = join(dataDir, "worktrees", basename(project), "linked");
+  const worktree = join(dataDir, "wt", basename(project), "linked");
   track(() => rmSync(worktree, { recursive: true, force: true }));
   await git(project, ["worktree", "add", "-q", "-b", "feature", worktree]);
   await git(worktree, ["push", "-q", "-u", "origin", "feature"]);
