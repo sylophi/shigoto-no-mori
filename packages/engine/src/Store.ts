@@ -101,7 +101,7 @@ export const layer = (
   ).pipe(Layer.provide(Reactivity.layer));
 
 // The data dir's 2.x files in a database in memory, imported leniently:
-// what the store would refuse is skipped, as the Go sm reads around it.
+// what the store would refuse is skipped, as the Go sm read around it.
 // The doctor reads them this way while the store can't import them.
 export const fromFiles = (
   open: OpenDatabase,

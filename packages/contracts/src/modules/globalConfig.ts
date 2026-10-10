@@ -20,13 +20,14 @@ export const globalConfigContract = defineContract(
   }),
   // The one settings write, for this window's own device and for a
   // peer's: a patch of exactly the device-scoped settings the Settings
-  // form manages. remote:true, gated:true, so over the direct wire
+  // form manages. remote:true, gated:true, so over the device link
   // it only ever runs for a peer while this host accepts commands. The
   // STRICT patch schema (DeviceSettingsPatchSchema) rejects unknown keys
   // outright, so nothing the form does not manage is reachable from
   // this channel no matter who calls it. Only provided keys change. The
   // host handler applies them over the stored document and writes it
-  // through the CLI, whose cache invalidation reconciles the listeners.
+  // through the engine's Config, and the change reaches the config
+  // listeners as a terminal write does.
   invoke("writeDeviceSettings", WriteDeviceSettingsPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,

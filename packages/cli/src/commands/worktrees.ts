@@ -113,7 +113,7 @@ const list = Command.make(
       Flag.withDefault(false),
     ),
     from: Flag.String("from").pipe(Flag.optional),
-    // Go lets positionals be.
+    // Positionals are let be, as the Go sm did.
     rest: Argument.String("args").pipe(Argument.variadic()),
   },
   (input) =>
@@ -263,7 +263,7 @@ const path = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
-    // Go reads the first and lets the rest be.
+    // The first is read and the rest let be, as the Go sm did.
     rest: Argument.String("args").pipe(Argument.variadic()),
   },
   (input) =>

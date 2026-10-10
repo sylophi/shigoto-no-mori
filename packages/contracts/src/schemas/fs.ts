@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 // takes the shared PathPayloadSchema.
 
 // Optional copy for the native folder picker. Defaults to the
-// "Add a project" wording for backwards compatibility.
+// "Add a project" wording.
 export const PickFolderPayloadSchema = Schema.UndefinedOr(
   Schema.Struct({
     title: Schema.optional(Schema.NonEmptyString),

@@ -42,7 +42,8 @@ export type NukeProgress = typeof NukeProgressSchema.Type;
 // In-app updater state. The engine owns the update pipeline
 // (Updater.ts), and the app mirrors its progress into this machine.
 // `downloading` covers both "found an update" and "still pulling
-// bytes". The CLI streams no byte progress, so we collapse them.
+// bytes". The engine's Updater streams no byte progress, so we
+// collapse them.
 // `ready` carries the version we'll restart into. `unsupported` means
 // this build has no update channel at all (dev builds): the renderer
 // hides the check button rather than offering a dead one.
@@ -53,7 +54,7 @@ export const UpdaterStateSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("downloading"),
     // The release being fetched. Absent from a build older than the
-    // CLI event that names it.
+    // event that names it.
     version: Schema.optional(Schema.String),
   }),
   Schema.Struct({
@@ -96,10 +97,11 @@ export const UpdateRequestSchema = Schema.Struct({
 });
 export type UpdateRequest = typeof UpdateRequestSchema.Type;
 
-// Manifest the CLI writes beside a verified staged update
-// (<dataDir>/updates/staged/manifest.json). Mirrors the engine's
-// Updater.ts. The app reads it to seed "ready" at boot and to know
-// whether "restart to update" has anything to restart into.
+// Manifest the engine's Updater writes beside a verified staged update
+// (<dataDir>/updates/staged/manifest.json). The app reads it to seed
+// "ready" at boot and to know whether "restart to update" has anything
+// to restart into.
+
 export const StagedManifestSchema = Schema.Struct({
   version: Schema.NonEmptyString,
   bundleName: Schema.NonEmptyString,

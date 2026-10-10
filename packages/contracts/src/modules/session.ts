@@ -5,8 +5,9 @@ import { UpdaterStateSchema } from "../schemas/runtime.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// The shell's session with the host it started (decision 6 of V3.md):
-// what the Electron process tells its host and asks of it, beside the
+// The shell's session with the host it started: what the Electron
+// process tells its host and asks of it, beside the
+
 // calls every window makes. Served on the loopback only (contracts'
 // link.ts, LoopbackGroup), so no call is remote, and kept out of
 // allContractModules, so no window's api carries it.

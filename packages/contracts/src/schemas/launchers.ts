@@ -18,8 +18,8 @@ const CustomLauncherSchema = Schema.Struct({
   label: Schema.String,
 });
 
-// URL-based launcher. The id encodes which provider it is so the main
-// process can resolve the URL at launch time. Shared so both ends of
+// URL-based launcher. The id encodes which provider it is so the host
+// can resolve the URL at launch time. Shared so both ends of
 // the IPC compare against the same string.
 export const WEB_GITHUB_ID = "web:github";
 
@@ -42,7 +42,8 @@ export function parseLauncherId(
   return { kind, id: launcherId.slice(separator + 1) };
 }
 
-// The terminals terminal tools open in (config.json's terminal), as
+// The terminals terminal tools open in (the device setting `terminal`), as
+
 // launcher catalog ids, in the order Settings lists them.
 export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
 export type TerminalId = (typeof TERMINAL_IDS)[number];

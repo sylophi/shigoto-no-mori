@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 // Per-candidate tickets are what let the dialer race every candidate at
 // once: a candidate that reaches the host but loses the race burns only
 // its own ticket, never another candidate's. Knowing how to dial grants
-// nothing by itself: the direct wire gates every command on the host's
+// nothing by itself: the device link gates every command on the host's
 // command-access switch. The answer also reports that switch
 // (acceptsCommands), so the dialer knows up front whether this host
 // will run its commands, and the host's account:commandAccessChanged

@@ -26,7 +26,7 @@ export function isSameOrInside(path: string, ancestor: string): boolean {
   return folded === base || folded.startsWith(`${base}/`);
 }
 
-// Dependency-free join that works in both main and the renderer (no
+// Dependency-free join that works in both the host and the renderer (no
 // node:path).
 function joinPath(base: string, ...segments: string[]): string {
   let out = base.replace(/\/+$/, "");

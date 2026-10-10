@@ -2,7 +2,7 @@
 // account's devices as a group rather than to any one of them (which
 // device a project's + creates on). No server holds them. Every device
 // keeps its own full copy, and the copies converge by exchanging
-// entries over the direct sessions (shared/sharedSettings.ts has the
+// entries over the device links (sharedSettings.ts has the
 // merge, renderer/lib/remote/sharedSettingsSync.ts the exchange).
 //
 // One entry per setting, each carrying the stamp of the write that set
@@ -16,8 +16,9 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
-// Bounds that keep a whole document under the direct wire's frame cap
-// (MAX_INBOUND_FRAME_BYTES in shared/ipc/socket/frames.ts, 1 MiB),
+// Bounds that keep a whole document under the device link's frame cap
+// (MAX_INBOUND_FRAME_BYTES in host/socket/server.ts, 1 MiB),
+
 // since it rides pushes whole: 512 entries of at most 512 + 256
 // characters and a stamp come to well under half of it.
 const MAX_SHARED_SETTING_KEY_LENGTH = 512;

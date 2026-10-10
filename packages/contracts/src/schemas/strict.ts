@@ -4,8 +4,8 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
-// A struct that refuses a key it does not declare, as zod's
-// strictObject did. Only at its own level: a struct nested in it still
+// A struct that refuses a key it does not declare. Only at its own
+// level: a struct nested in it still
 // drops unknown keys. Extend one through the struct it wraps (`.struct`).
 export function strict<const Fields extends Schema.Struct.Fields>(
   struct: Schema.Struct<Fields>,

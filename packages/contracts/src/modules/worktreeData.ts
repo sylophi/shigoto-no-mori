@@ -8,8 +8,8 @@ import {
   WriteWorktreeDescriptionPayloadSchema,
 } from "../schemas/index.ts";
 
-// A worktree's own data in its project's .shigomori.json: its ports,
-// and its title and description.
+// A worktree's own data, in the engine's store (WorktreeData): its
+// ports, and its title and description.
 export const worktreeDataContract = defineContract(
   "worktreeData",
   "host",

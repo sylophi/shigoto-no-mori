@@ -67,8 +67,8 @@ export const githubCliContract = defineContract(
     { remote: true, gated: false },
   ),
   // Fetches the PR head and lands it on a local branch. Separate from
-  // worktrees.create so the create itself still runs through the bundled
-  // CLI, which knows nothing about PRs.
+  // worktrees.create so the create itself still runs through the
+  // engine's Worktrees, which knows nothing about PRs.
   invoke(
     "resolvePullRequestCheckout",
     ResolvePullRequestCheckoutPayloadSchema,

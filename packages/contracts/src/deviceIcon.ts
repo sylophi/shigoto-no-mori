@@ -4,8 +4,8 @@
 // the account page) and the hub stores it beside the name, so
 // every device draws every other one the same way. Shared by the hub
 // protocol, both enroll paths (desktop and web), the fake host and every
-// renderer surface, so the set cannot drift between them. Pure, like
-// the rest of shared/account/: no node, no DOM.
+// renderer surface, so the set cannot drift between them. Pure: no
+// node, no DOM.
 //
 // Two families. The shapes are what a device can detect itself to be,
 // and what it reads as until its owner picks. The marks are picked

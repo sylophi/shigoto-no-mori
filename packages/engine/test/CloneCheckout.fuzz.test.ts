@@ -1,6 +1,5 @@
 // Random repos and random states of the source checkout, each cloned and
-// checked out plainly from a random commit: the two must match. Ported
-// from the Go CLI's clonecheckout_fuzz_test.go, scenario for scenario.
+// checked out plainly from a random commit: the two must match.
 // CLONE_FUZZ_N sets how many (default 25), CLONE_FUZZ_SEED the first
 // seed, so a failure reruns alone with CLONE_FUZZ_N=1 and its seed.
 import assert from "node:assert/strict";

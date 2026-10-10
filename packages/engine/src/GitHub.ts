@@ -344,7 +344,7 @@ const rollupChecks = (nodes: unknown): PullRequestChecks => {
 
 type Row = { readonly [key: string]: unknown };
 
-// A `gh pr list` row as Go decodes it: a missing field reads as its zero
+// A `gh pr list` row as Go decoded it: a missing field reads as its zero
 // value, and the empty ones are left out of the document.
 const summaryOf = (row: Row): PullRequestSummary => {
   const autoMerge = row["autoMergeRequest"];
@@ -541,7 +541,7 @@ const make = Effect.gen(function* () {
       repo,
       lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
     );
-    // Not worth a word, as Go's describe takes them: no gh, a repository
+    // Not worth a word, as Go's describe took them: no gh, a repository
     // off GitHub, and output that can't be read.
     if (Result.isFailure(rows)) {
       const failure = rows.failure;

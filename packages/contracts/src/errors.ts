@@ -76,7 +76,7 @@ export const isNoDirectConnectionError = Schema.is(NoDirectConnectionError);
 
 // An unforced convert that `sm adopt`'s guard refused: uncommitted
 // changes (untracked files included) or a status it couldn't read. The
-// host builds it from the run's --json code (host/ipc/cliDelegate.ts
+// host builds it from the engine's refusal code (host/lib/engineOps.ts
 // guardRefusal) in the page's words, not the CLI's, and the convert
 // page forces on the next click.
 export class ConvertRefusedError extends Schema.TaggedError<ConvertRefusedError>()(
@@ -138,7 +138,7 @@ export class SyncConflictsError extends Schema.TaggedError<SyncConflictsError>()
 export const isSyncConflictsError = Schema.is(SyncConflictsError);
 
 // A peer's command-access gate refused the call: that machine does not
-// run commands from here (host/socket/server.ts's dispatch gate), as
+// run commands from here (the device link's CommandGate), as
 // distinct from a real handler failure.
 export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>()(
   "CommandRefusedError",

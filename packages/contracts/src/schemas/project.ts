@@ -43,7 +43,7 @@ export const ProjectSchema = Schema.Struct({
   lastUsed: Schema.optional(Schema.Natural),
   recentCount: Schema.optional(Schema.Natural),
   // "terrier" marks a project merged from the terrier registry rather
-  // than registry.json. Never persisted: the engine's merge decorates
+  // than the app's own registry. Never persisted: the engine's merge decorates
   // it at read time (Terrier.ts), and the id is minted
   // deterministically from the path. Terrier-sourced projects can't be
   // removed.
@@ -52,9 +52,10 @@ export const ProjectSchema = Schema.Struct({
 export type Project = typeof ProjectSchema.Type;
 
 // One row of `sm projects list --json`: the project decorated the way
-// ProjectsList serves it, plus the icon the CLI resolved (a file path
-// and its type) and that icon's accent hue. Host-internal: the icon
-// bytes reach the renderer through projects:icon, the hue nowhere yet.
+// ProjectsList serves it, plus the icon the engine resolved (a file
+// path and its type) and a hue that is always null, kept for the
+// JSON's shape. Host-internal: the icon bytes reach the renderer
+// through projects:icon.
 export const ProjectRowSchema = Schema.Struct({
   ...ProjectSchema.fields,
   pathExists: Schema.Boolean,

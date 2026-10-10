@@ -5,18 +5,17 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { PortNumberSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// Port forwarding over byte channels: a
-// forwarded TCP connection crosses the direct websocket as raw binary
-// channel frames (shared/ipc/socket/channels.ts), multiplexed beside
-// the JSON invokes. This contract is only the OPEN: the caller mints a
-// channel id, attaches its end of the channel on its own transport
-// first, then invokes open, and the host dials the loopback port and
-// attaches the socket under that id before answering. From then on
-// bytes, ends and resets ride the channel itself, with credit-based
-// backpressure end to end. The mirror stream is the other byte-stream
-// open (mirror:openStream), on the same channel layer. This is the HOST
-// side a remote peer drives. The client half is
-// host/portForward/bridge.ts.
+// Port forwarding over byte channels: a forwarded TCP connection
+// crosses the device link as raw bytes on one of the link's channels
+// (modules/link.ts), beside the calls. This contract is only the OPEN:
+// the caller mints a channel id, attaches its end of the channel on its
+// own transport first, then invokes open, and the host dials the
+// loopback port and attaches the socket under that id before
+// answering. From then on bytes, ends and resets ride the channel
+// itself, and a slow reader holds the far end back. The mirror stream
+// is the other byte-stream open (mirror:openStream), on the same
+// channel layer. This is the HOST side a remote peer drives. The client
+// half is host/portForward/bridge.ts.
 //
 // {remote:true, gated:true}: the surface rides the host's command
 // grant, fail-closed. open dials 127.0.0.1 only, because the feature IS

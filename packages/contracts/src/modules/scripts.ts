@@ -34,7 +34,7 @@ export const scriptsContract = defineContract(
   ),
   // Console input and viewport size for a run the app spawned. Both are
   // no-ops for a run with no PTY here (already exited, or a lifecycle
-  // script the CLI ran on the app's behalf). The renderer already
+  // script the engine ran). The renderer already
   // treats those runs as output-only. The output comes back over
   // `event`.
   invoke("write", WriteScriptPayloadSchema, VoidSchema, {

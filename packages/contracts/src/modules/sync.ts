@@ -19,7 +19,7 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
 
 // Moving a worktree between devices. Commits cross on a SOURCE LINK:
-// one byte channel (shared/ipc/socket/channels.ts) between the device
+// one byte channel (modules/link.ts) between the device
 // holding the worktree (the source) and the one landing it (the
 // destination), carrying the destination's questions and the source's
 // answers, bundles as raw bytes (host/lib/sync/sourceLink.ts has the
@@ -44,8 +44,8 @@ import { strict } from "../schemas/strict.ts";
 // own renderer (or the terminal's control ops) invokes: bring a peer's
 // worktree here, or send one of this device's to a peer. Tagged
 // {remote:false}, so they are never registered on any remote wire
-// (main/ipc/register.ts only forwards remote:true) and the web
-// loopback refuses them as mutations. teardownSource is a move's
+// (LinkGroup takes only remote:true) and the web client's local
+// registrar refuses them as mutations. teardownSource is a move's
 // second half, either way round: tearing the source down once the
 // copy is safe, which runs only when nothing can be lost (the dirty
 // state landed, or there was none) and rides the source device's
@@ -66,7 +66,7 @@ import { strict } from "../schemas/strict.ts";
 // device boundary into git argv on the host. This gate and the engine's
 // (Bundle.ts) are deliberately DIFFERENT, not a
 // mirror: this one pins the exact namespaces but still admits a
-// trailing "/" or ".lock", while the CLI admits any refs/* yet bans
+// trailing "/" or ".lock", while the engine admits any refs/* yet bans
 // those tails. Two complementary sieves, defense in depth -- their
 // intersection is fail-closed, so nothing that clears both is exotic.
 const BUNDLE_REF_RE =
@@ -84,7 +84,7 @@ export const SyncBundleRefSchema = Schema.String.check(
 );
 const isSyncBundleRef = Schema.is(SyncBundleRefSchema);
 
-// Where an unpacked ref may land (the CLI enforces the same prefix
+// Where an unpacked ref may land (the engine enforces the same prefix
 // fail-closed): the app-owned namespace, never a branch or a tag. Also
 // the refs a mirror apply may sweep afterwards.
 export const SyncLandingRefSchema = Schema.String.check(
@@ -374,7 +374,8 @@ export const SyncSendWorktreePayloadSchema = strict(
 );
 
 // The id of a source link's channel, minted by the device that opens
-// it (shared/ipc/socket/channels.ts).
+// it (modules/link.ts).
+
 const ChannelIdSchema = HexId32Schema;
 
 // A pull's source link: the source worktree on this host, which the
@@ -408,7 +409,7 @@ export type SyncReceipt = typeof SyncReceiptSchema.Type;
 // identity, the branch, the folder name) supplied by the source
 // itself, plus the link it opened. `landBranch` is the branch the copy
 // is created on when it is not the source's own (a primary's mirror
-// lands on mirror/<branch>, contracts/git/branches.ts). The commits still
+// lands on mirror/<branch>, git/branches.ts). The commits still
 // arrive under `branch`.
 const SyncReceiveWorktreePayloadSchema = strict(
   Schema.Struct({
@@ -591,7 +592,8 @@ export const syncContract = defineContract(
   }),
   // The local orchestrators (see the header note): remote:false keeps
   // them off every remote wire, gated:true documents intent and keeps
-  // the web loopback's fail-closed refusal.
+  // the web client's fail-closed refusal.
+
   invoke(
     "pullWorktree",
     SyncPullWorktreePayloadSchema,

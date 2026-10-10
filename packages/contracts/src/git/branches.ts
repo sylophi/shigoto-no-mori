@@ -25,7 +25,7 @@ export function sanitizeWorktreeNameInput(name: string): string {
 // The local branch a checkout of `ref` lands on: a remote-tracking ref
 // ("origin/main") resolves to its local branch ("main", created as a
 // tracking branch if missing), anything else is already local. The
-// renderer can't see the remote list, so this approximates main's
+// renderer can't see the remote list, so this approximates the host's
 // longest-configured-remote split by dropping the first path segment
 // of refs that appear in the project's remote-ref list.
 export function localBranchOf(

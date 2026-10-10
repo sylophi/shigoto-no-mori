@@ -14,7 +14,7 @@ export const interactive = Effect.map(
 export const confirm = (question: string) =>
   Effect.gen(function* () {
     const answer = yield* Effect.callback<string | undefined>((resume) => {
-      // A plain line, as Go reads it: the terminal stays cooked, so
+      // A plain line, as the Go sm read it: the terminal stays cooked, so
       // Ctrl-C stops the command rather than answering no.
       const lines = createInterface({
         input: process.stdin,

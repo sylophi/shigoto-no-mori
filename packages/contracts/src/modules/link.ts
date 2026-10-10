@@ -18,7 +18,7 @@ import { strict } from "../schemas/strict.ts";
 // network, so the dialer asks for the host's nonce (challenge), sends
 // its own with an HMAC of both under the ticket (hello), and trusts
 // the answer only once the host's HMAC of the same pair checks out
-// (app/shared/remote/proof.ts). A challenge spends nothing, so a dialer
+// (proof.ts). A challenge spends nothing, so a dialer
 // asks every candidate at once and says hello on one at a time.
 //
 // The hello carries the protocol version (protocol.ts). A host on

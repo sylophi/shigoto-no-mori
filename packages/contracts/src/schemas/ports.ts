@@ -14,7 +14,7 @@ export const MAX_CUSTOM_PORTS = 16;
 
 // A port the user added to a worktree beside what port-pool allocates
 // (an api the dev script starts on a fixed number, a storybook), kept
-// in the worktree's data file. The label is optional: an unlabeled
+// in the worktree's data. The label is optional: an unlabeled
 // entry shows as its number.
 export const CustomPortSchema = Schema.Struct({
   port: PortNumberSchema,
@@ -26,7 +26,7 @@ export type CustomPort = typeof CustomPortSchema.Type;
 
 // Where a listed port came from: port-pool's allocation for the
 // worktree directory (named after the entry in the project's
-// port-pool.config.json), or the worktree data file.
+// port-pool.config.json), or the worktree's data.
 const WorktreePortSourceSchema = Schema.Literals(["pool", "custom"]);
 
 // One row of a worktree's port list as the host reports it: the merged

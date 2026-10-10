@@ -83,12 +83,12 @@ const WorktreeLayoutSchema = Schema.Literals([
 ]);
 export type WorktreeLayout = typeof WorktreeLayoutSchema.Type;
 
-// Per-project config. Stored at <dataDir>/projects/<projectId>.json
-// and managed by the app, not committed to the user's repo.
+// Per-project config, kept in the store (the engine's Config) and
+// managed by the app, not committed to the user's repo.
 // Drops keys it does not model. It doubles as the shigomori:write IPC
 // input, so a key the renderer invents is dropped at the boundary
-// instead of being persisted into the user's file. Reads use the Stored
-// variant below.
+// instead of being persisted into the project's settings. Reads use the
+// Stored variant below.
 export const ShigomoriConfigSchema = Schema.Struct({
   scripts: Schema.optional(
     Schema.Struct({
@@ -168,11 +168,12 @@ function walkKeyFields(
   });
 }
 
-// The same document as read from disk, where a newer version may have
-// left keys this build doesn't model. Loose so the app doesn't strip
-// them out from under the user. They never have to ride back out in a
-// write payload: the CLI's `config write` merges into the file rather
-// than replacing it, so a key the payload doesn't mention stays put.
+// The same document as read from the store, where a newer version may
+// have left keys this build doesn't model. Loose so the app doesn't
+// strip them out from under the user. They never have to ride back out
+// in a write payload: the engine's config write merges into the stored
+// document rather than replacing it, so a key the payload doesn't
+// mention stays put.
 export const StoredShigomoriConfigSchema = loose(ShigomoriConfigSchema);
 
 // Snapshot of the repo's .worktreeinclude file (Claude Code convention:
@@ -191,7 +192,7 @@ export type WorktreeIncludeStatus = typeof WorktreeIncludeStatusSchema.Type;
 
 // The carry-over picker reads a union of the primary and every
 // worktree: entries are root-relative, so any checkout can hold them
-// and the CLI copies from whichever has the file at creation.
+// and the engine copies from whichever has the file at creation.
 const isCarryOverPath = Schema.is(CarryOverPathSchema);
 
 export const CarryOverListingPayloadSchema = Schema.Struct({
@@ -251,7 +252,7 @@ const WorktreeDescriptionSchema = Schema.Struct({
 export type WorktreeDescription = typeof WorktreeDescriptionSchema.Type;
 
 // Per-worktree persistent data. Only kept for shigomori-managed worktrees;
-// external worktrees deliberately have no on-disk state.
+// external worktrees deliberately have no stored state.
 export const ShigomoriWorktreeDataSchema = Schema.Struct({
   ...WorktreeDescriptionSchema.fields,
   // Ports the user added beside port-pool's (see schemas/ports.ts).
@@ -263,7 +264,7 @@ export const ShigomoriWorktreeDataSchema = Schema.Struct({
 });
 export type ShigomoriWorktreeData = typeof ShigomoriWorktreeDataSchema.Type;
 
-// Global, per-device config kept in <dataDir>/config.json. Holds
+// Global, per-device config, kept in the store (the engine's Config). Holds
 // preferences that span every project: custom launchers the user wants
 // everywhere (claude, tmux, an editor command, etc.), and room for future
 // settings.
@@ -271,9 +272,10 @@ export type ShigomoriWorktreeData = typeof ShigomoriWorktreeDataSchema.Type;
 // so both the host and the CLI read it. How the app instance looks
 // (theme, palettes) is client config and lives in ClientConfigSchema
 // below.
-// Reads use the loose Stored variant below: pre-split installs can
-// still carry legacy client keys (and keys from newer builds) in
-// config.json, and those have to pass through unrejected.
+// Reads use the loose Stored variant below: an imported v2 document can
+// still carry client keys (and a newer build's keys) in the stored
+// settings, and those have to pass through unrejected.
+
 const GlobalConfigSchema = Schema.Struct({
   launchers: Schema.optional(Schema.Array(LauncherCommandSchema)),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
@@ -365,7 +367,7 @@ const GlobalConfigSchema = Schema.Struct({
   // listener nor is advertised to peers, so it serves no peers at all
   // (its own dials to peers are unaffected). ON by default (absent =
   // enrolled, explicit `false` is the opt-out). Config-only (no
-  // Settings UI): toggle by editing config.json or `sm config edit`.
+  // Settings UI): toggle with `sm config`.
   directConnections: Schema.optional(Schema.Boolean),
   // Sharing with the account's other devices: when false, this
   // device's link refuses every call they make, reads included, and
@@ -424,11 +426,11 @@ export const WriteDeviceSettingsPayloadSchema = Schema.Struct({
 });
 
 // The value each device setting takes while its key is absent from
-// config.json. One table for both ends of the settings write: the form
+// the stored settings. One table for both ends of the settings write: the form
 // decodes a missing key with it (fromConfig in
 // renderer/hooks/config/useSettingsSave.ts), and the host's patch
-// handler stores a key equal to its default by deleting it, so the file
-// stays tidy whichever device saved it. The engine's Config
+// handler stores a key equal to its default by deleting it, so the
+// document stays tidy whichever device saved it. The engine's Config
 // reads its defaults from here.
 export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   launchers: [],
@@ -537,7 +539,7 @@ export const ClientConfigSchema = Schema.Struct({
     Schema.Record(Schema.String, PortNumberSchema),
   ),
   // Legacy: the create-device picks, from before they became a shared
-  // setting (shared/sharedSettings.ts, quickCreateDevice). Nothing
+  // setting (sharedSettings.ts, quickCreateDevice). Nothing
   // reads it but the one-time move in
   // renderer/lib/remote/sharedSettingsSync.ts, which clears it. Still
   // modeled so a doc that carries it parses and the move can see it.
@@ -561,7 +563,7 @@ export const ClientConfigSchema = Schema.Struct({
   // `false` is the opt-out (renderer/hooks/projects/useProjectSort.ts).
   groupProjectsByOwner: Schema.optional(Schema.Boolean),
   // The projects folded on the inline list, by group key
-  // (projectGroupKey in renderer/components/sidebar/buildSidebarRows.ts).
+  // (projectGroupKey in the ui package's views/sidebar/buildSidebarRows.ts).
   // Absence == expanded (renderer/hooks/projects/useCollapsedProjects.ts
   // is the only reader and writer).
   collapsedProjects: Schema.optional(Schema.Array(Schema.String)),
@@ -613,11 +615,10 @@ export const WriteShigomoriPayloadSchema = Schema.Struct({
   config: ShigomoriConfigSchema,
 });
 
-// Per-worktree data IPC payloads construct filesystem paths directly from
-// `worktreeId` (unlike other handlers, which route the id through git's
-// worktree list first). Constrain it to the exact 12-hex shape that
-// `worktreeIdFromPath` produces so a malformed id can't escape the
-// projects/<id>/worktrees/ directory. The derived worktree id
+// Per-worktree data payloads key the engine's rows by `worktreeId`
+// directly (unlike other handlers, which route the id through git's
+// worktree list first), so it is held to the exact 12-hex shape that
+// `worktreeIdFromPath` produces. The derived worktree id
 // (worktreeIdFromPath in the engine's worktreeLayout.ts): the first 12 hex
 // chars of the path's sha256. One schema for every payload that names one.
 export const WorktreeIdSchema = Schema.String.check(
@@ -629,8 +630,9 @@ export const ReadWorktreeDataPayloadSchema = Schema.Struct({
   worktreeId: WorktreeIdSchema,
 });
 
-// The renderer's write: the custom ports, the one part of the file it
-// owns (the title and description have writers of their own).
+// The renderer's write: the custom ports, the one part of the
+// worktree's data it owns (the title and description have writers of
+// their own).
 export const WriteWorktreeDataPayloadSchema = Schema.Struct({
   ...ReadWorktreeDataPayloadSchema.fields,
   data: Schema.Struct({ ports: ShigomoriWorktreeDataSchema.fields.ports }),

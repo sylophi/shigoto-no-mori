@@ -1,7 +1,7 @@
 // Holds the JSON the schemas read and write to the golden fixtures in
 // fixtures/, one file per schema family.
-// The Go CLI shares these shapes on disk and the hub and web client on
-// the wire, so a schema's rewrite must keep the JSON it accepts,
+// The terminal's --json prints these shapes and other builds read them
+// on the wire, so a schema's rewrite must keep the JSON it accepts,
 // produces and refuses exactly as it is.
 //
 // Each schema exported from the schemas barrel or the hub protocol, and

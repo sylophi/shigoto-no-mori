@@ -1,6 +1,7 @@
 // How the cross-device verbs reach the running app. Another device is
-// reached through the account, the hub socket and the one direct
-// session per peer, which the running app holds and a second process
+// reached through the account, the hub socket and the one device link
+// per peer, which the running app holds and a second process
+
 // must not dial beside it, so these verbs ask the app.
 //
 // The app serves the device link a second time on loopback for the

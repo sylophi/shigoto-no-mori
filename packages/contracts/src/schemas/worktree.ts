@@ -31,8 +31,8 @@ export const CommitSummarySchema = Schema.Struct({
   date: Schema.String,
   // Net additions/deletions across all files in this commit, parsed
   // from `git log --shortstat`. Zero for an empty commit, and for a
-  // merge from the CLI. The app's own reads count a merge against its
-  // first parent.
+  // merge in the engine's listing. The host's history reads count a
+  // merge against its first parent.
   additions: Schema.Natural,
   deletions: Schema.Natural,
 });
@@ -105,7 +105,7 @@ export const WorktreeSchema = Schema.Struct({
   primaryRef: Schema.optional(Schema.String),
   // The primary branch's local name ("main" for a primaryRef of
   // "origin/main"), the branch a stack of pull requests lands on
-  // (shared/pullRequestStack.ts). Resolved by the CLI with the remote
+  // (pullRequestStack.ts). Resolved by the engine with the remote
   // list in hand, so the renderer never has to split the ref, and left
   // out when it cannot be.
   primaryBranch: Schema.optional(Schema.String),
@@ -120,8 +120,8 @@ export const WorktreeSchema = Schema.Struct({
   // anything). Exists so "recently worked in" can account for edits that
   // were never committed, not just the commit log.
   lastChangeAt: Schema.optional(Schema.Natural),
-  // When the worktree was added, epoch ms (the CLI's
-  // worktreeCreatedAt). Absent for the primary checkout, which has no
+  // When the worktree was added, epoch ms (the engine's
+  // createdAtOf). Absent for the primary checkout, which has no
   // such record, and from builds older than the field.
   createdAt: Schema.optional(Schema.Natural),
   // Most-recent first. Empty when the worktree has no commits yet.
@@ -160,7 +160,7 @@ export const WorktreeSchema = Schema.Struct({
   agentSessions: Schema.optional(Schema.Array(AgentSessionSchema)),
   // What `sm describe` set (WorktreeDescriptionSchema): the work's
   // name and summary, until a pull request's take their place
-  // (renderer/lib/worktreeTitle.ts). Absent when unset.
+  // (the ui package's lib/worktreeTitle.ts). Absent when unset.
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
 });
@@ -193,7 +193,7 @@ export type WorktreeIdentity = typeof WorktreeIdentitySchema.Type;
 
 // A worktree's relationship to its upstream, derived from the raw counts
 // on Worktree. The renderer maps each kind to what it shows in one
-// place (renderer/lib/syncState.ts). The backend just reports facts so
+// place (the ui package's lib/syncState.ts). The backend just reports facts so
 // it stays dumb. "publish" covers both "no upstream / remote exists"
 // and "no upstream / no remote", distinguished by `canPublish` so the UI
 // can disable the button.
@@ -288,8 +288,8 @@ export function worktreeLastActivityAt(
 
 // A worktree this app created and owns, as opposed to the project's own
 // checkout or one the user made by hand elsewhere. The flags that only
-// apply to our own worktrees (shelving, relocating) key off this. Main
-// enforces the same rule, so offering them elsewhere produces a no-op
+// apply to our own worktrees (shelving, relocating) key off this. The
+// engine enforces the same rule, so offering them elsewhere produces a no-op
 // the UI then appears to ignore.
 export function isManagedWorktree(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
@@ -307,11 +307,11 @@ export function isAgentWorking(
   return allowAgentWorking && worktree.agentWorking === true;
 }
 
-// Whether the worktree has a data file (title, custom ports) of its own.
+// Whether the worktree has data (title, custom ports) of its own.
 // The primary checkout lives at the project path, which never sits under
 // a managed prefix, so it's flagged external. It's still ours to
 // annotate. Only genuinely external worktrees (manual checkouts
-// elsewhere) deliberately have no on-disk state.
+// elsewhere) deliberately have no stored state.
 export function hasWorktreeData(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
 ): boolean {
@@ -360,7 +360,7 @@ export const CarryOverReportSchema = Schema.Struct({
   // .worktreeinclude resolution errors. Not carry-over entries, so they
   // are reported separately from the per-entry failures above.
   includeFailures: Schema.optional(Schema.Array(CarryOverFailureSchema)),
-  // Entries taken from a worktree other than the primary (the CLI looks
+  // Entries taken from a worktree other than the primary (the engine looks
   // in the base ref's worktree first, then the primary, then the rest).
   // copiedInstead: a symlink entry copied because links only ever
   // target the primary. Absent when everything came from the primary.
@@ -439,7 +439,7 @@ export const RenameWorktreePayloadSchema = Schema.Struct({
   ),
 });
 
-// force false: run `sm adopt` unforced, so it refuses a worktree with
+// force false: adopt unforced (`sm adopt`), so it refuses a worktree with
 // uncommitted changes or untracked files (convertRefusedError), which
 // the row's count can miss (it honors `status.showUntrackedFiles no`).
 // The convert page always sends it. Missing means forced, what a
@@ -555,7 +555,7 @@ export const DeleteWorktreeResultSchema = Schema.Union([
 export type DeleteWorktreeResult = typeof DeleteWorktreeResultSchema.Type;
 
 // A stack cleanup: the merged layers' worktrees go together, through
-// `sm rm --stack` on the highest of them (shared/pullRequestStack.ts
+// `sm rm --stack` on the highest of them (pullRequestStack.ts
 // stackCleanupFor picks it). `worktreeId` is any worktree of the stack.
 export const DeleteStackPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,

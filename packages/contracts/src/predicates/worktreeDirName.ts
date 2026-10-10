@@ -1,6 +1,7 @@
-// Branch-name sanitization shared between main (used when creating the
-// worktree directory) and renderer (used to preview the destination path
+// Branch-name sanitization shared between the engine (naming the
+// worktree directory) and the renderer (previewing the destination path
 // in the new-worktree form).
+
 //
 // Unicode (CJK, emoji, accents) passes through untouched; we only mangle
 // what genuinely breaks as a single-segment directory name: path
@@ -22,7 +23,8 @@ export function sanitizeBranchForPath(branch: string): string {
   const slashed = branch
     .replace(PATH_SEPARATOR, "-")
     .replace(CONTROL_CHARS, "");
-  // Dots, dashes and ASCII whitespace (Go's \s, which the CLI trims).
+  // Dots, dashes and ASCII whitespace (the v2 Go sm's \s), so a name
+  // comes out as it did.
   const trimmed = slashed.replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
   if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
   return trimmed;
@@ -30,7 +32,7 @@ export function sanitizeBranchForPath(branch: string): string {
 
 // Submit-time check for user-typed worktree folder names: valid exactly
 // when sanitizing is a no-op. The live input filter
-// (sanitizeWorktreeNameInput in contracts/git/branches.ts) allows
+// (sanitizeWorktreeNameInput in git/branches.ts) allows
 // individually-legal characters that combine into names we refuse
 // ("..", "root", a trailing dot).
 export function isValidWorktreeDirName(name: string): boolean {

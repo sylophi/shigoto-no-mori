@@ -17,7 +17,7 @@ const shelf = (name: "shelve" | "unshelve") =>
     {
       ...worktreeFlags,
       ref: Argument.String("worktree").pipe(Argument.optional),
-      // Go reads the first and lets the rest be.
+      // The first is read and the rest let be, as the Go sm did.
       rest: Argument.String("args").pipe(Argument.variadic()),
     },
     (input) =>

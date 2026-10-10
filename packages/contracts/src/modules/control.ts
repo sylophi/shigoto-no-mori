@@ -78,7 +78,7 @@ const TransferOptionsSchema = Schema.Struct({
   // one-shot transplant.
   mirror: Schema.optional(Schema.Boolean),
   leaveOut: Schema.optional(ControlLeaveOutSchema),
-  // Absent follows the rule (shared/leaveOutRule.ts setupDefaultFor).
+  // Absent follows the rule (leaveOutRule.ts setupDefaultFor).
   setup: Schema.optional(Schema.Boolean),
   source: Schema.optional(ControlSourceFateSchema),
 });

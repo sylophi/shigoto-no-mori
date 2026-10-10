@@ -24,9 +24,10 @@ import { strict } from "../schemas/strict.ts";
 // both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
 // Mutagen). The app supervises this device's daemon
 // (host/mirror/daemon.ts), bridges its streams to peers as byte
-// channels on the direct socket (openStream below, the channel layer in
-// shared/ipc/socket/channels.ts), and serves `file-sync serve` for
-// peers mirroring FROM here.
+// channels on the device link (openStream below, the link's channels in
+// modules/link.ts), and serves `file-sync serve` for peers mirroring
+// FROM here.
+
 //
 // Host-scoped: a device's mirrors are facts about that device, and a
 // remote viewer sees them (list is a read). A mirror always runs on
@@ -69,7 +70,7 @@ export {
 // What kind of session it is, one label the host writes at the start
 // (host/mirror/registry.ts modeOf reads it): "mirror", "mirror-branch"
 // for a primary checkout's mirror (the copy sits on mirror/<branch> for
-// whatever branch the original is on, contracts/git/branches.ts, and the
+// whatever branch the original is on, git/branches.ts, and the
 // git follower reads the two names as one branch), or
 // "transfer-<token>" for the session a pull opens to carry a
 // transplant's ignored files across once (host/mirror/oneShot.ts),
@@ -571,8 +572,8 @@ export function isMirrorCopyStayed(error: unknown): boolean {
 }
 
 // The mirror stream's open: the caller has attached its end of a byte
-// channel under this id on the calling connection (shared/ipc/socket/
-// channels.ts), and the host attaches a fresh `file-sync serve` for
+// channel under this id on the calling connection (modules/link.ts),
+// and the host attaches a fresh `file-sync serve` for
 // the named worktree as the far end before answering.
 const MirrorOpenStreamPayloadSchema = strict(
   Schema.Struct({
@@ -731,7 +732,7 @@ export const mirrorContract = defineContract(
     { remote: true, gated: true, grant: "changeCode", invitable: "copy" },
   ),
   // Fired on every daemon snapshot and every serving-set change, so
-  // the list query refreshes without polling, locally and on the
+  // the list view re-reads without polling, locally and on the
   // devices viewing this one. It carries the list it announces: a busy
   // mirror fires this several times a second, and a viewer on another
   // device would otherwise answer each one with a list round trip.

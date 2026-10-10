@@ -3,13 +3,13 @@ import { DeviceIdSchema } from "../hubProtocol.ts";
 import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
-// The renderer's bridge onto the main-process hub socket. The single hub socket lives in main, because the Durable
-// Object supersedes a duplicate socket per deviceId, so the renderer
-// reaches remote peers by forwarding through main. Client-scoped on
-// purpose: these calls are about THIS instance's hub socket, and the
-// scope keeps every channel structurally off both remote wires
-// (main/ipc/register.ts mounts client contracts on the Electron
-// binding only), so the bridge can never be served back to a peer.
+// The renderer's bridge onto this machine's hub socket. The single hub
+// socket lives in the host, because the Durable Object supersedes a
+// duplicate socket per deviceId, so the renderer reaches remote peers
+// by forwarding through the host. Client-scoped on purpose: these calls
+// are about THIS instance's hub socket, and the scope keeps every
+// channel structurally off the device link (LinkGroup takes only
+// remote calls), so the bridge can never be served back to a peer.
 
 // A connection's status: the shared supervisor's SupervisorStatus is
 // this schema's type, and the bridge validates what crosses the
@@ -75,7 +75,7 @@ const HubStatusSchema = Schema.Struct({
   // command-access switch), keyed the same way: the peer's connectInfo
   // answer at dial time, then its account:commandAccessChanged push.
   // The renderer's read-only notes and the CLI's no-grant standing
-  // read it here instead of asking the peer. The peer's dispatch gate
+  // read it here instead of asking the peer. The peer's CommandGate
   // is still what enforces it.
   peerAcceptsCommands: Schema.Record(Schema.String, Schema.Boolean),
   // Whether each of those peers shares with THIS device at all (its
@@ -86,8 +86,9 @@ const HubStatusSchema = Schema.Struct({
   // The tunnel endpoint state, for the account page. Optional because
   // only a serving side with a host half sets it (the web bridge runs
   // no cloudflared). Not a skew concern: hub:status is
-  // client-scoped, main answering its own renderer, so both ends are
-  // always the same build. Never carries the hostname or any secret.
+  // client-scoped, this machine's host answering its own windows, so
+  // both ends are always the same build. Never carries the hostname or
+  // any secret.
   tunnel: Schema.optional(TunnelStateSchema),
 });
 // How long a freshly provisioned tunnel is probed before the host
@@ -99,7 +100,8 @@ export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 export type HubStatus = typeof HubStatusSchema.Type;
 
 // A push frame received from a peer, fanned out to every window. The
-// renderer filters by deviceId and channel, so main forwards every
+// renderer filters by deviceId and channel, so the host forwards every
+
 // push wholesale and needs no per-channel subscription bookkeeping.
 const HubPeerPushSchema = Schema.Struct({
   deviceId: Schema.String,
@@ -113,7 +115,7 @@ export const hubContract = defineContract(
   "client",
   // The remote-plane snapshot (HubStatusSchema above): the hub
   // socket's phase and roster plus the direct sessions and tunnel
-  // state. Cheap: main reads its in-memory snapshot, nothing touches
+  // state. Cheap: the host reads its in-memory snapshot, nothing touches
   // the network.
   invoke("status", VoidSchema, HubStatusSchema),
   // Forward one sm invoke to a peer device over its DIRECT session.
@@ -126,7 +128,7 @@ export const hubContract = defineContract(
   invoke(
     "invokePeer",
     Schema.Struct({
-      // Routed to a peer session keyed by this id (M6), so it carries the
+      // Routed to a peer session keyed by this id, so it carries the
       // shared device-id bound.
       deviceId: DeviceIdSchema,
       channel: Schema.NonEmptyString,

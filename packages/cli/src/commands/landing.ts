@@ -2,7 +2,7 @@
 // request, merge merges it (arming auto-merge, or letting a queue take
 // it, and waiting for GitHub to merge it), land merges and cleans up, done puts a checkout back on the primary branch,
 // and rm --stack cleans up a landed stack. The engine answers each with
-// Go's --json document, which a person's lines are read from.
+// the --json document the Go sm printed, which a person's lines are read from.
 import { execFile } from "node:child_process";
 import * as Landing from "@shigomori/engine/Landing";
 import type * as Worktrees from "@shigomori/engine/Worktrees";
@@ -89,7 +89,7 @@ const removeFlags = {
   ),
 };
 
-// Go reads the positionals it needs and lets the rest be.
+// The positionals it needs are read and the rest let be, as the Go sm did.
 const target = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
