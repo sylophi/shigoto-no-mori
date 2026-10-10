@@ -25,7 +25,9 @@
 // accepts commands, so it is best-effort and silent. It exists for the
 // one copy nobody can pull from: a browser serves no calls, so its
 // picks travel only by being offered. (A desktop always has a window
-// to do its pulling: the app quits with its last one.)
+// to do its pulling: the app quits with its last one.) The window reads
+// the local copy as its view streams it
+// (hooks/sharedSettings/useSharedSettings.ts).
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   SharedSettingsDoc,
@@ -33,7 +35,6 @@ import type {
 } from "@shigomori/contracts/schemas";
 import {
   exchangeSharedSettings,
-  mergeSharedSettings,
   sharedSettingKeys,
 } from "@shigomori/contracts/sharedSettings";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
@@ -75,21 +76,6 @@ function mergePeerSharedSettings(doc: SharedSettingsDoc): void {
   window.api.sharedSettings.merge({ doc }).catch(() => undefined);
 }
 
-// The one writer of the cached local copy. Merged in rather than set,
-// so a late arrival can never roll the cache back: the seeding read
-// resolving after a broadcast, or two broadcasts landing out of order,
-// both merge to nothing. The one exception is an EMPTY copy, which
-// only a clear announces (a device leaving its account): that is a
-// roll-back on purpose, and a merge would learn nothing from it.
-function noteLocalCopy(queryClient: QueryClient, doc: SharedSettingsDoc): void {
-  const key = queryKeys.sharedSettings();
-  void queryClient.cancelQueries({ queryKey: key, exact: true });
-  const cleared = Object.keys(doc.entries).length === 0;
-  queryClient.setQueryData<SharedSettingsDoc>(key, (held) =>
-    held === undefined || cleared ? doc : mergeSharedSettings(held, doc),
-  );
-}
-
 // The create-device picks lived in client config before they were
 // shared (clientConfig.quickCreateDevices). Moved across once: each
 // becomes an entry with the lowest stamp there is, so a pick made
@@ -125,11 +111,6 @@ async function migrateQuickCreateDevices(
 
 // Boot wiring, never unsubscribed.
 export function startSharedSettingsSync(queryClient: QueryClient): void {
-  // The local copy rides its broadcast whole, so the cache is written
-  // rather than re-asked, and useSharedSettings never refetches.
-  window.api.sharedSettings.onChanged((doc) => {
-    noteLocalCopy(queryClient, doc);
-  });
   // Each peer's pushes are followed from its first landing on, which
   // is also the first moment it can push at all, and the exchange that
   // runs on every landing covers whatever it sent while unfollowed.

@@ -106,19 +106,13 @@ function ReachablePeerSettings({
   offline: boolean;
   active: HostTab | undefined;
 }) {
-  const {
-    data: config,
-    isError,
-    error,
-  } = useGlobalConfig({
-    silentError: true,
-  });
+  const { data: config, isError, error } = useGlobalConfig();
 
   // Unlike the local form, never fall back to an empty config: a form
   // seeded from defaults would save those defaults over the device's
-  // real settings. Gate on data presence only, not isError, so a failed
-  // BACKGROUND refetch (focus refetch over a flaky socket) cannot
-  // unmount an already-seeded form and discard unsaved edits.
+  // real settings. Gate on data presence only, not isError, so a view
+  // that fails after its first value (a flaky socket) cannot unmount an
+  // already-seeded form and discard unsaved edits.
   if (config === undefined) {
     const status = offline ? (
       <OfflineNote device={device} />
