@@ -2,7 +2,7 @@
 // Worker PROVISIONS tunnels through the Cloudflare API but never
 // carries their traffic: data rides Cloudflare's tunnel edge directly
 // between the dialing client and the host's cloudflared connector,
-// which fronts the host's loopback direct listener only.
+// which fronts the host's device link listener on loopback only.
 //
 // One tunnel per device, under a DETERMINISTIC name derived from the
 // account and device ids, so provisioning is create-or-reuse with no
@@ -18,7 +18,7 @@ import { sha256Hex } from "./crypto.ts";
 
 // The tunnel env, present only when the owner configured all four
 // values. Anything missing means the tunnel routes answer the typed
-// "not configured" while the rest of the Worker works as before.
+// "not configured" while the rest of the Worker still works.
 export interface TunnelEnv {
   apiToken: string;
   accountId: string;

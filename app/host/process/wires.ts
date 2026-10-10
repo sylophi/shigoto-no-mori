@@ -43,7 +43,7 @@ import {
 } from "@shared/packaging/cloudflaredDist.mts";
 import * as TunnelService from "@host/direct/cloudflared";
 import { makeConnectInfo } from "@host/direct/connectInfo";
-import { devDialKinds } from "@host/direct/dialKinds";
+import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -237,7 +237,9 @@ export const hubHandlers = () => directPlane().handlers;
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = linkStatus();
-    return current.listening ? current.port : null;
+    return current.listening && current.port !== null
+      ? devFrontPort(current.port)
+      : null;
   },
   mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
@@ -471,7 +473,7 @@ export async function refreshDirectHost(): Promise<void> {
     const listener = linkStatus();
     const wanted =
       listener.listening && listener.port !== null
-        ? { port: listener.port }
+        ? { port: devFrontPort(listener.port) }
         : null;
     // Nothing to reconcile once the app is quitting: the layer's close
     // has stopped the child.
