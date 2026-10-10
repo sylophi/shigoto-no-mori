@@ -41,7 +41,7 @@ import {
   registerHostContract,
 } from "@shared/ipc/registerContract";
 import type { HostServices } from "@host/process/services";
-import { hostServices } from "./hostServices.mts";
+import { hostContext } from "./adapters.mts";
 import type {
   ClientTransport,
   HandlerContext,
@@ -122,6 +122,7 @@ export async function startDirectListener(
   let accepts = false;
   const sharing = Effect.runSync(SubscriptionRef.make(true));
   const registrar = DeviceLink.createLinkRegistrar();
+  const host = await hostContext();
   const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       DeviceLink.layer({
@@ -137,6 +138,8 @@ export async function startDirectListener(
         seesPush: opts.seesPush ?? (() => false),
       }),
       Layer.mergeAll(
+        // The host's services, beneath the stand-ins below.
+        Layer.succeedContext(host),
         HostPushes.layer,
         Layer.succeed(
           Sharing.Sharing,
@@ -152,7 +155,6 @@ export async function startDirectListener(
           subscribe: Effect.succeed(Stream.never),
           release: Effect.void,
         }),
-        hostServices,
         opts.provide ?? Layer.empty,
       ),
     ),

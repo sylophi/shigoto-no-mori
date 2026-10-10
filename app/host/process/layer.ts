@@ -30,7 +30,6 @@ import * as HostPushes from "@host/lib/hostPushes";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Terminals from "@host/lib/terminals/Terminals";
-import { closeMissingTerminals } from "@host/lib/terminals/Terminals";
 import { terminalStart } from "@host/ipc/scriptRun";
 import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
@@ -129,7 +128,7 @@ function onExternalStateChange() {
     .catch(() => undefined)
     .then(Captures.reconcileGitWatchers);
   // A worktree or project gone takes its terminals with it.
-  void closeMissingTerminals();
+  void Captures.closeMissingTerminals();
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and
   // holding its port.
@@ -276,6 +275,7 @@ const scriptsAndFoundation = (options: {
     // Every terminal, each saved for the next start as it closes with
     // the quit.
     Layer.provideMerge(Terminals.adapter),
+    Layer.provideMerge(Captures.terminals.layer),
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.

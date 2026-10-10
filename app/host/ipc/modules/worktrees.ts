@@ -1,4 +1,8 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
@@ -90,7 +94,8 @@ import {
 } from "@shigomori/contracts/pullRequestStack";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
-import { openTerminals } from "@host/lib/terminals/Terminals";
+import { Terminals } from "@host/lib/terminals/Terminals";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import {
   moveMirrorsOfWorktree,
@@ -147,34 +152,62 @@ const gitMoved = (projectId: string) =>
     }),
   );
 
+class PrimaryRelocateError extends Schema.TaggedError<PrimaryRelocateError>()(
+  "PrimaryRelocateError",
+  {},
+) {
+  override get message(): string {
+    return "The primary checkout can't be relocated";
+  }
+}
+
 const counted = (n: number, noun: string) =>
   n === 0 ? [] : [`${n} ${noun}${n === 1 ? "" : "s"}`];
 
+class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
+  "RunningWorkError",
+  {
+    verb: Schema.Literals(["move", "rename"]),
+    name: Schema.String,
+    scripts: Schema.Number,
+    terminals: Schema.Number,
+  },
+) {
+  override get message(): string {
+    const running = [
+      ...counted(this.scripts, "script"),
+      ...counted(this.terminals, "terminal"),
+    ];
+    const one = this.scripts + this.terminals === 1;
+    return `Can't ${this.verb} ${this.name} while ${running.join(" and ")} ${one ? "is" : "are"} running there. Stop ${one ? "it" : "them"} first.`;
+  }
+}
+
 // The scripts and terminals running in a worktree hold its folder, so a
 // move or a rename waits until they are stopped.
-async function refuseRunningWork(
+const refuseRunningWork = Effect.fn("worktrees.refuseRunningWork")(function* (
   worktree: { id: string; name: string; path: string },
   verb: "move" | "rename",
-): Promise<void> {
+) {
   const scripts =
     getRunningScriptWorktrees().find(
       (entry) => entry.worktreeId === worktree.id,
     )?.scriptCount ?? 0;
-  const terminals = (await openTerminals()).filter(({ owner, cwd }) =>
+  const open = yield* Stream.runHead((yield* Terminals).list);
+  const terminals = Option.getOrElse(open, () => []).filter(({ owner, cwd }) =>
     owner.kind === "worktree"
       ? owner.worktreeId === worktree.id
       : isSameOrInside(cwd, worktree.path),
   ).length;
-  const running = [
-    ...counted(scripts, "script"),
-    ...counted(terminals, "terminal"),
-  ];
-  if (running.length === 0) return;
-  const one = scripts + terminals === 1;
-  throw new Error(
-    `Can't ${verb} ${worktree.name} while ${running.join(" and ")} ${one ? "is" : "are"} running there. Stop ${one ? "it" : "them"} first.`,
-  );
-}
+  if (scripts + terminals > 0) {
+    return yield* new RunningWorkError({
+      verb,
+      name: worktree.name,
+      scripts,
+      terminals,
+    });
+  }
+});
 
 export const worktreesViews: ViewHandlers<
   typeof worktreesContract,
@@ -210,10 +243,7 @@ export const worktreesViews: ViewHandlers<
     ),
 };
 
-export const worktreesHandlers: Handlers<
-  typeof worktreesContract,
-  HandlerContext
-> = {
+export const worktreesHandlers = {
   // The rows are the CLI's (`sm worktrees list`), which also answers
   // an unknown project id with the entity-gone error.
   list: ({ projectId }) => listWorktrees(projectId),
@@ -246,42 +276,50 @@ export const worktreesHandlers: Handlers<
   // here: the running work it refuses, the tombstone that refuses a
   // concurrent delete or move, and the mirrors rooted in it, re-opened
   // on the new path.
-  relocate: async ({ projectId, worktreeId, destinationPath }) => {
-    const { project, worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    if (worktree.isPrimary) {
-      throw new Error("The primary checkout can't be relocated");
-    }
-    // Already where it should be: refresh the row.
-    if (worktree.path === destinationPath) {
-      return describeWorktree(project.id, worktreeId);
-    }
-    await refuseRunningWork(worktree, "move");
-    return withDeleteInflight(
-      worktreeId,
-      "This worktree is already being removed or moved.",
-      () => moveWorktree(project, worktreeId, destinationPath),
-      (moved) => moveMirrorsOfWorktree(worktreeId, moved),
-    );
-  },
+  relocate: ({ projectId, worktreeId, destinationPath }) =>
+    Effect.gen(function* () {
+      const { project, worktree } = yield* fromPromise(() =>
+        findProjectAndWorktreeOrThrow(projectId, worktreeId),
+      );
+      if (worktree.isPrimary) return yield* new PrimaryRelocateError();
+      // Already where it should be: refresh the row.
+      if (worktree.path === destinationPath) {
+        return yield* fromPromise(() =>
+          describeWorktree(project.id, worktreeId),
+        );
+      }
+      yield* refuseRunningWork(worktree, "move");
+      return yield* fromPromise(() =>
+        withDeleteInflight(
+          worktreeId,
+          "This worktree is already being removed or moved.",
+          () => moveWorktree(project, worktreeId, destinationPath),
+          (moved) => moveMirrorsOfWorktree(worktreeId, moved),
+        ),
+      );
+    }),
 
   // A move to the same parent under a new name, with a move's guards.
-  rename: async ({ projectId, worktreeId, name }) => {
-    const { project, worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    if (worktree.name === name) return describeWorktree(project.id, worktreeId);
-    await refuseRunningWork(worktree, "rename");
-    return withDeleteInflight(
-      worktreeId,
-      "This worktree is already being removed or moved.",
-      () => renameWorktree(project, worktreeId, name),
-      (renamed) => moveMirrorsOfWorktree(worktreeId, renamed),
-    );
-  },
+  rename: ({ projectId, worktreeId, name }) =>
+    Effect.gen(function* () {
+      const { project, worktree } = yield* fromPromise(() =>
+        findProjectAndWorktreeOrThrow(projectId, worktreeId),
+      );
+      if (worktree.name === name) {
+        return yield* fromPromise(() =>
+          describeWorktree(project.id, worktreeId),
+        );
+      }
+      yield* refuseRunningWork(worktree, "rename");
+      return yield* fromPromise(() =>
+        withDeleteInflight(
+          worktreeId,
+          "This worktree is already being removed or moved.",
+          () => renameWorktree(project, worktreeId, name),
+          (renamed) => moveMirrorsOfWorktree(worktreeId, renamed),
+        ),
+      );
+    }),
 
   delete: async (
     { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
@@ -640,7 +678,7 @@ export const worktreesHandlers: Handlers<
     const project = await findProjectOrThrow(input.projectId);
     return finishWorktree(project, input.worktreeId);
   },
-};
+} satisfies Handlers<typeof worktreesContract, HandlerContext, Terminals>;
 
 // How many of a branch's own commits the Git timeline is handed. A
 // branch rarely has more, and past this it says there are more.

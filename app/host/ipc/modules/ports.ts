@@ -13,13 +13,9 @@ const listPorts = (worktree: {
     Effect.map((ports) => ({ ports })),
   );
 
-export const portsHandlers: Handlers<
-  typeof portsContract,
-  unknown,
-  Ports.Ports
-> = {
+export const portsHandlers = {
   list: listPorts,
-};
+} satisfies Handlers<typeof portsContract, unknown, Ports.Ports>;
 
 export const portsViews: ViewHandlers<
   typeof portsContract,

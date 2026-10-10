@@ -36,11 +36,7 @@ export const globalConfigViews: ViewHandlers<
   watch: () => Views.view(readGlobalConfig, Views.wrote("device_config")),
 };
 
-export const globalConfigHandlers: Handlers<
-  typeof globalConfigContract,
-  unknown,
-  Terrier.Terrier
-> = {
+export const globalConfigHandlers = {
   // config.json as stored, read through the CLI (`sm config read`) and
   // cached for a few seconds (host/lib/config/global.ts).
   read: async () => readGlobalConfig(),
@@ -88,4 +84,4 @@ export const globalConfigHandlers: Handlers<
       // every project list.)
       yield* Effect.flatMap(Terrier.Terrier, (it) => it.invalidate);
     }),
-};
+} satisfies Handlers<typeof globalConfigContract, unknown, Terrier.Terrier>;

@@ -127,11 +127,7 @@ export const projectsViews: ViewHandlers<
     ),
 };
 
-export const projectsHandlers: Handlers<
-  typeof projectsContract,
-  unknown,
-  Terrier.Terrier
-> = {
+export const projectsHandlers = {
   list: () => listProjectsWithStatus(),
 
   add: ({ path: rawPath, terrier }) =>
@@ -259,4 +255,4 @@ export const projectsHandlers: Handlers<
 
   // The engine resolves icons through its shared cache (Icons.ts).
   icon: ({ projectId }) => projectIcon(projectId),
-};
+} satisfies Handlers<typeof projectsContract, unknown, Terrier.Terrier>;

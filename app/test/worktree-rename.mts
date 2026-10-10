@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
-import type { HandlerContext } from "@shared/ipc/transport";
+import { runHost } from "./lib/adapters.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 
 const fixture = cliSandbox("sm-rename-");
@@ -24,9 +24,6 @@ const { listWorktrees } = await import("../host/lib/engineCalls.ts");
 const { worktreesHandlers } = await import("../host/ipc/modules/worktrees.ts");
 const { killScriptsForWorktree, startScript } =
   await import("../host/lib/scripts/index.ts");
-
-// The handler reads nothing of its caller.
-const ctx = {} as HandlerContext;
 
 it("refuses while a script runs there, then renames under a new id", async () => {
   const project = join(sandbox, "project");
@@ -54,9 +51,12 @@ it("refuses while a script runs there, then renames under a new id", async () =>
   try {
     await assert.rejects(
       async () =>
-        worktreesHandlers.rename(
-          { projectId, worktreeId: row.id, name: "otter" },
-          ctx,
+        runHost(
+          worktreesHandlers.rename({
+            projectId,
+            worktreeId: row.id,
+            name: "otter",
+          }),
         ),
       /Can't rename fox while 1 script is running there\. Stop it first\./,
     );
@@ -65,9 +65,8 @@ it("refuses while a script runs there, then renames under a new id", async () =>
     await killScriptsForWorktree(row.id);
   }
 
-  const renamed = await worktreesHandlers.rename(
-    { projectId, worktreeId: row.id, name: "otter" },
-    ctx,
+  const renamed = await runHost(
+    worktreesHandlers.rename({ projectId, worktreeId: row.id, name: "otter" }),
   );
   assert.equal(renamed.path, join(dirname(worktree), "otter"));
   assert.equal(renamed.name, "otter");

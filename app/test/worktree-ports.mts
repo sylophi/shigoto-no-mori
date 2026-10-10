@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Ports from "@host/lib/ports";
-import { hostServices } from "./lib/hostServices.mts";
+import { runHost } from "./lib/adapters.mts";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
 import { errorCodeOf } from "@shigomori/contracts/errors";
@@ -31,11 +31,7 @@ import { trackTest } from "./lib/vitestKit.mts";
 import { beforeAll, it } from "vitest";
 
 const poolPortsFor = (dir: string) =>
-  Effect.runPromise(
-    Effect.flatMap(Ports.Ports, (ports) => ports.poolPorts(dir)).pipe(
-      Effect.provide(hostServices),
-    ),
-  );
+  runHost(Effect.flatMap(Ports.Ports, (ports) => ports.poolPorts(dir)));
 
 async function listenOn(host: string, track: Track): Promise<number> {
   const server = await startLoopbackServer((socket) => socket.end(), { host });

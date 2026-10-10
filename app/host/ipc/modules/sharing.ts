@@ -14,11 +14,7 @@ export const sharingViews: ViewHandlers<
     Views.view(() => current, Views.pushed(sharingContract, "changed")),
 };
 
-export const sharingHandlers: Handlers<
-  typeof sharingContract,
-  unknown,
-  Sharing.Sharing
-> = {
+export const sharingHandlers = {
   read: () => current,
   set: (on) => Effect.flatMap(Sharing.Sharing, (it) => it.set(on)),
-};
+} satisfies Handlers<typeof sharingContract, unknown, Sharing.Sharing>;

@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
@@ -24,6 +25,11 @@ import * as FileSync from "../../host/fileSync/FileSync.ts";
 import * as Engine from "../../host/lib/engine.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
+import * as Terminals from "../../host/lib/terminals/Terminals.ts";
+import * as Terrier from "../../host/lib/terrier.ts";
+import * as Ports from "../../host/lib/ports.ts";
+import * as Villagers from "../../host/lib/villagers.ts";
+import { terminalStart } from "../../host/ipc/scriptRun.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
@@ -81,9 +87,16 @@ const engine = Engine.adapter.pipe(
 );
 
 // No file-sync engine: a proof that runs one brings its own
-// (mirror.mts).
+// (mirror.mts). The services the host's handlers answer on
+// (host/process/services.ts) are here too, for a proof that runs a
+// handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
   Processes.adapter.pipe(
+    Layer.provideMerge(Terminals.adapter),
+    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
+    Layer.provideMerge(
+      Layer.mergeAll(Ports.layer, Terrier.layer, Villagers.deviceLayer),
+    ),
     Layer.provideMerge(ScriptRuns.adapter),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.adapter),
@@ -94,6 +107,12 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(NodeServices.layer),
   ),
 );
+
+export type Services = ManagedRuntime.ManagedRuntime.Services<typeof runtime>;
+
+export const hostContext = () => runtime.context();
+export const runHost = <A, E>(effect: Effect.Effect<A, E, Services>) =>
+  runtime.runPromise(effect);
 
 beforeAll(() => runtime.context());
 afterAll(async () => {

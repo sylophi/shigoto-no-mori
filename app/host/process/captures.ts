@@ -7,6 +7,7 @@ import * as Tunnel from "@host/direct/cloudflared";
 import * as GitWatcher from "@host/lib/gitWatcher";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Sharing from "@host/lib/sharing";
+import * as Terminals from "@host/lib/terminals/Terminals";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import * as Loopback from "@host/socket/loopback";
 import * as DeviceLink from "@host/socket/server";
@@ -123,3 +124,14 @@ export const mirrorDaemon = {
   pause: (session: string) => daemon.run(onDaemon((it) => it.pause(session))),
   resume: (session: string) => daemon.run(onDaemon((it) => it.resume(session))),
 };
+
+export const terminals = Bridge.capture<Terminals.Terminals>("The terminals");
+// What a quit asks about.
+export const busyTerminals = () =>
+  terminals
+    .run(Effect.flatMap(Terminals.Terminals, (it) => it.busy))
+    .catch(() => 0);
+export const closeMissingTerminals = () =>
+  terminals.runIfUp(
+    Effect.flatMap(Terminals.Terminals, (it) => it.closeMissing),
+  );
