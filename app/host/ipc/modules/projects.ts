@@ -31,6 +31,7 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
+import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Terrier from "@host/lib/terrier";
 import { fromPromise } from "@host/lib/util/fromPromise";
 import { expandHome } from "@host/lib/util/paths";
@@ -145,9 +146,7 @@ export const projectsHandlers = {
       // The payload schema has held the URL to a clone source already.
       // Not echoed: it may carry a token.
       if (folder === null) return yield* new NotGitRemoteError();
-      const path = yield* fromPromise(() =>
-        cloneRepo(url, expandHome(parentDir), folder),
-      );
+      const path = yield* cloneRepo(url, expandHome(parentDir), folder);
       return yield* registerNewCheckout(path, terrier, "Cloned into");
     }),
 
@@ -255,4 +254,8 @@ export const projectsHandlers = {
 
   // The engine resolves icons through its shared cache (Icons.ts).
   icon: ({ projectId }) => projectIcon(projectId),
-} satisfies Handlers<typeof projectsContract, unknown, Terrier.Terrier>;
+} satisfies Handlers<
+  typeof projectsContract,
+  unknown,
+  Terrier.Terrier | GithubCli
+>;

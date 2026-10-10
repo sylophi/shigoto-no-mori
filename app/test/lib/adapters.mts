@@ -101,7 +101,6 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.adapter),
     Layer.provideMerge(FileSync.layer(() => null)),
-    Layer.provideMerge(GithubCli.adapter),
     Layer.provideMerge(GithubCli.layer),
     Layer.provideMerge(engine),
     Layer.provideMerge(NodeServices.layer),

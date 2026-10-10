@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
@@ -151,6 +153,15 @@ const gitMoved = (projectId: string) =>
       return fetched.projectId === projectId;
     }),
   );
+
+class NoMergedLayerError extends Schema.TaggedError<NoMergedLayerError>()(
+  "NoMergedLayerError",
+  {},
+) {
+  override get message(): string {
+    return "No merged layer of this stack has a worktree to remove.";
+  }
+}
 
 class PrimaryRelocateError extends Schema.TaggedError<PrimaryRelocateError>()(
   "PrimaryRelocateError",
@@ -388,61 +399,66 @@ export const worktreesHandlers = {
   // single delete, since the one CLI run takes them all. One the CLI
   // took past the set (a layer that landed in the moment between) gets
   // its scripts reaped and its removal announced once it is gone.
-  deleteStack: async ({ projectId, worktreeId, force, skipCleanup }, ctx) => {
-    const project = await findProjectOrThrow(projectId);
-    const [identities, prs] = await Promise.all([
-      listWorktreeIdentities(projectId, { primaryRef: true }),
-      refreshProjectPullRequests(project.path),
-    ]);
-    const own = identities.find((identity) => identity.id === worktreeId);
-    if (!own) throw new UnknownWorktreeError({ worktreeId });
-    const stack = pullRequestStackFor(
-      Object.fromEntries(prs),
-      own.branch,
-      trunkOf(identities),
-    );
-    const cleanup = stack && stackCleanupFor(stack, identities);
-    if (!cleanup) {
-      throw new Error(
-        "No merged layer of this stack has a worktree to remove.",
-      );
-    }
-    const ids = cleanup.worktrees.map((identity) => identity.id);
-    const busy = "A worktree of this stack is already being removed.";
-    for (const id of ids) assertWorktreeMutable(id, busy);
-    for (const id of ids) {
-      broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
-    }
-    let removed: readonly string[] = [];
-    try {
-      const result = await withDeletesInflight(
-        ids,
-        busy,
-        () =>
-          deleteStack(
-            project,
-            { worktreeId: cleanup.target.id, force, skipCleanup },
-            notifierFor(ctx),
+  deleteStack: ({ projectId, worktreeId, force, skipCleanup }, ctx) =>
+    Effect.gen(function* () {
+      const project = yield* fromPromise(() => findProjectOrThrow(projectId));
+      const [identities, prs] = yield* Effect.all(
+        [
+          fromPromise(() =>
+            listWorktreeIdentities(projectId, { primaryRef: true }),
           ),
-        (outcome) => Promise.all(outcome.removed.map(stopMirrorsForWorktree)),
+          refreshProjectPullRequests(project.path),
+        ],
+        { concurrency: 2 },
       );
-      removed = result.removed;
-      await Promise.all(
-        removed
-          .filter((id) => !ids.includes(id))
-          .map((id) => killScriptsForWorktree(id)),
+      const own = identities.find((identity) => identity.id === worktreeId);
+      if (!own) return yield* new UnknownWorktreeError({ worktreeId });
+      const stack = pullRequestStackFor(
+        Object.fromEntries(prs),
+        own.branch,
+        trunkOf(identities),
       );
-      return result;
-    } finally {
-      for (const id of ids) {
-        broadcastRemoval?.({
-          projectId,
-          worktreeId: id,
-          state: removed.includes(id) ? "removed" : "kept",
-        });
-      }
-    }
-  },
+      const cleanup = stack && stackCleanupFor(stack, identities);
+      if (!cleanup) return yield* new NoMergedLayerError();
+      const ids = cleanup.worktrees.map((identity) => identity.id);
+      const busy = "A worktree of this stack is already being removed.";
+      return yield* fromPromise(async () => {
+        for (const id of ids) assertWorktreeMutable(id, busy);
+        for (const id of ids) {
+          broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
+        }
+        let removed: readonly string[] = [];
+        try {
+          const result = await withDeletesInflight(
+            ids,
+            busy,
+            () =>
+              deleteStack(
+                project,
+                { worktreeId: cleanup.target.id, force, skipCleanup },
+                notifierFor(ctx),
+              ),
+            (outcome) =>
+              Promise.all(outcome.removed.map(stopMirrorsForWorktree)),
+          );
+          removed = result.removed;
+          await Promise.all(
+            removed
+              .filter((id) => !ids.includes(id))
+              .map((id) => killScriptsForWorktree(id)),
+          );
+          return result;
+        } finally {
+          for (const id of ids) {
+            broadcastRemoval?.({
+              projectId,
+              worktreeId: id,
+              state: removed.includes(id) ? "removed" : "kept",
+            });
+          }
+        }
+      });
+    }),
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
     mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
@@ -678,7 +694,11 @@ export const worktreesHandlers = {
     const project = await findProjectOrThrow(input.projectId);
     return finishWorktree(project, input.worktreeId);
   },
-} satisfies Handlers<typeof worktreesContract, HandlerContext, Terminals>;
+} satisfies Handlers<
+  typeof worktreesContract,
+  HandlerContext,
+  Terminals | GithubCli | ChildProcessSpawner.ChildProcessSpawner
+>;
 
 // How many of a branch's own commits the Git timeline is handed. A
 // branch rarely has more, and past this it says there are more.

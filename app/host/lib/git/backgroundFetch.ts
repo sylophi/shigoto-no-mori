@@ -9,13 +9,13 @@
 // and projectPullRequestsRefreshed when a pass changed something so
 // the renderer, local or peer, can invalidate.
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
 import {
   pullRequestMapsEqual,
   readCachedProjectPullRequests,
-  refreshProjectPullRequests,
 } from "@host/lib/githubCli/pullRequests";
 import { loadProjects } from "@host/lib/projects";
 import { runningScriptWorktreeIds } from "@host/lib/scripts";
@@ -165,7 +165,7 @@ async function sweepProjectPullRequests(
   lastPullRequestSweepAt.set(projectId, Date.now());
   try {
     const before = readCachedProjectPullRequests(projectPath);
-    const after = await refreshProjectPullRequests(projectPath);
+    const after = await refreshPullRequests(projectPath);
     if (!pullRequestMapsEqual(before, after)) {
       broadcastAll(githubCliContract, "projectPullRequestsRefreshed", {
         projectId,
@@ -208,8 +208,19 @@ export function setWindowFocused(focused: boolean): void {
   if (focused) sweepProjects();
 }
 
-export function startBackgroundFetch(): void {
+let refreshPullRequests: (
+  projectPath: string,
+) => Promise<Map<string, PullRequest>> = async () => new Map();
+
+export function startBackgroundFetch(options: {
+  // A fresh read of a project's pull requests, which the sidebar's map
+  // is kept from (githubCli/pullRequests.ts).
+  readonly refreshPullRequests: (
+    projectPath: string,
+  ) => Promise<Map<string, PullRequest>>;
+}): void {
   if (sweepHandle) return;
+  refreshPullRequests = options.refreshPullRequests;
   sweepProjects();
   sweepHandle = setInterval(sweepIfAttended, SWEEP_INTERVAL_MS);
 }

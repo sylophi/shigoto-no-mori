@@ -226,7 +226,7 @@ const portForwards = onQuit(
 
 // What the host answers from caches of other tools: gh, terrier and
 // port-pool.
-const toolAnswers = GithubCli.adapter.pipe(
+const toolAnswers = Captures.github.layer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer),
   ),
@@ -309,7 +309,13 @@ export const layer = (options: {
     Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
-    Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
+    Layer.provideMerge(
+      starts("the background fetch", () =>
+        startBackgroundFetch({
+          refreshPullRequests: Captures.refreshPullRequests,
+        }),
+      ),
+    ),
     // Installing the CLI link is a Settings action. A start only
     // repairs an installed link whose target moved (an app update,
     // another checkout).

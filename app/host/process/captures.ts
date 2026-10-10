@@ -5,6 +5,9 @@
 import type { MirrorCreateInput } from "@host/mirror/registry";
 import * as Tunnel from "@host/direct/cloudflared";
 import * as GitWatcher from "@host/lib/gitWatcher";
+import type * as GithubCli from "@host/lib/githubCli/GithubCli";
+import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Sharing from "@host/lib/sharing";
 import * as Terminals from "@host/lib/terminals/Terminals";
@@ -135,3 +138,10 @@ export const closeMissingTerminals = () =>
   terminals.runIfUp(
     Effect.flatMap(Terminals.Terminals, (it) => it.closeMissing),
   );
+
+// gh, for the background fetch's sweep of each project's pull requests.
+export const github = Bridge.capture<
+  GithubCli.GithubCli | ChildProcessSpawner.ChildProcessSpawner
+>("gh");
+export const refreshPullRequests = (projectPath: string) =>
+  github.run(refreshProjectPullRequests(projectPath));
