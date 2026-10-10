@@ -7,7 +7,7 @@
 // bridge). This module only exchanges the resulting session token for
 // the hub device credential. The handlers stay thin, delegating to
 // the pure orchestration.
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
@@ -28,14 +28,12 @@ import {
 } from "../../core/account/credentialStore";
 import {
   defaultDesktopDeviceName,
-  isLegacyDefaultName,
   type DefaultDeviceName,
 } from "../../core/account/defaultDeviceName";
 import { detectDesktopDeviceShape } from "../../core/account/defaultDeviceIcon";
 import {
   effectiveDeviceIcon,
   enrollDevice,
-  renameLocally,
   retryParkedRevoke,
   signOutDevice,
   syncHubDevice,
@@ -129,38 +127,9 @@ let acceptsCache: boolean | null = null;
 // accepted.
 export function acceptsPeerCommands(): boolean {
   if (acceptsCache === null) {
-    adoptLegacyGrant();
     acceptsCache = store().read()?.acceptsCommands === true;
   }
   return acceptsCache;
-}
-
-// One-time carry-over from the switch's previous home, grants.json (a
-// {v, accountId, enabled} document kept beside the record until the
-// switch moved onto it): a machine that had commands on for the
-// account it is still signed into keeps them on, and the file goes,
-// so this runs once. An unreadable file carries nothing over.
-function adoptLegacyGrant(): void {
-  const path = join(app.getPath("userData"), "grants.json");
-  if (!existsSync(path)) return;
-  try {
-    const legacy = JSON.parse(readFileSync(path, "utf8")) as {
-      accountId?: unknown;
-      enabled?: unknown;
-    };
-    const record = store().read();
-    if (
-      record !== null &&
-      record.accountId === legacy.accountId &&
-      legacy.enabled === true &&
-      record.acceptsCommands === undefined
-    ) {
-      store().write({ ...record, acceptsCommands: true });
-    }
-  } catch {
-    // Unreadable: nothing to carry over.
-  }
-  rmSync(path, { force: true });
 }
 
 // Writes the switch onto the record and the mirror in one step.
@@ -369,46 +338,6 @@ export function makeAccountHandlers(
     acceptsCache = null;
     return Promise.resolve(emitChanged(store().read()?.accountId ?? null));
   };
-  // A device enrolled before the default learned to drop the hostname's
-  // domain (and to prefer the macOS computer name) still stores the raw
-  // hostname, "Name.local" on a Mac. A stored name that IS the raw
-  // hostname was never chosen by anyone, so it follows the default
-  // forward, once per process, the first time status is read while
-  // signed in with a SETTLED default (a provisional one would bake the
-  // hostname stand-in in for good) -- through the same fan-out a rename
-  // takes, so every window sees the new name. The next registry read
-  // finds the hub's copy stale and pushes it (syncHubDevice), so the
-  // other devices list it too. A name the user
-  // typed cannot match the raw hostname unless they typed exactly that,
-  // in which case the default is what they asked for. Returns the
-  // record status should report. A write that fails leaves the old
-  // name, since a cosmetic rename must never turn a status read into
-  // an error.
-  let defaultNameMigrated = false;
-  const migrateDefaultName = (
-    record: StoredAccount | null,
-    defaultName: DefaultDeviceName,
-  ): StoredAccount | null => {
-    if (defaultNameMigrated || record === null || defaultName.provisional) {
-      return record;
-    }
-    defaultNameMigrated = true;
-    if (
-      !isLegacyDefaultName(record.deviceName) ||
-      record.deviceName === defaultName.name
-    ) {
-      return record;
-    }
-    let renamed: StoredAccount;
-    try {
-      renamed = renameLocally(store(), record, defaultName.name);
-    } catch (error) {
-      log.warn("[account] could not rename the device to its default", error);
-      return record;
-    }
-    accountChanged();
-    return renamed;
-  };
   // A device's name or icon change, made on the hub (updateDevice).
   // Every window re-reads the registry after, a peer's change with it.
   const update = async (
@@ -437,7 +366,7 @@ export function makeAccountHandlers(
     status: async () => {
       const defaultName = await defaultDeviceName();
       return statusOf(
-        migrateDefaultName(store().read(), defaultName),
+        store().read(),
         defaultName.name,
         await detectedDeviceIcon(),
       );
