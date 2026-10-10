@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import { OnboardingView } from "@shigomori/ui/views/steps/OnboardingView.tsx";
 import type { StepState } from "@shigomori/ui/views/steps/StepsPageView.tsx";
 import { AddExistingForm } from "@/components/addProject/AddExistingForm";
 import { useOpenAddedProject } from "@/components/addProject/useOpenAddedProject";
 import { useSignInStep } from "@/components/steps/useSignInStep";
 import { useMarkWelcomed } from "@/hooks/config/useWelcomed";
-import { useProjects } from "@/hooks/projects/useProjects";
+import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 
 // A fresh install's first run (the /welcome route), in place of the
@@ -37,17 +39,23 @@ function Welcome() {
   const escapeRef = useRef<(() => void) | null>(null);
 
   const hasProject = projects !== undefined && projects.length > 0;
-  // Read once as the page opens: a project there already means the
-  // first run is behind this install. One added here opens itself.
-  const [hadProject] = useState(() => hasProject);
+  // The first list the page reads: a project there already means the
+  // first run is behind this install. The page draws meanwhile, since a
+  // fresh install is what opens on it. One added here opens itself.
+  const [firstList, setFirstList] = useState<"waiting" | "empty" | "some">(
+    "waiting",
+  );
+  if (firstList === "waiting" && projects !== undefined) {
+    setFirstList(hasProject ? "some" : "empty");
+  }
   useEffect(() => {
     if (hasProject) markWelcomed();
   }, [hasProject, markWelcomed]);
   useEffect(() => {
-    if (hadProject) void navigate({ to: "/", replace: true });
-  }, [hadProject, navigate]);
+    if (firstList === "some") void navigate({ to: "/", replace: true });
+  }, [firstList, navigate]);
 
-  if (projects === undefined || hadProject) return null;
+  if (firstList === "some") return null;
   return (
     <OnboardingView
       signIn={signIn}
@@ -121,7 +129,8 @@ function useCliStep(): {
 
 // terrier's repos beside the picker, whatever this device's terrier
 // switch says, those not added already. A pick turns the switch on,
-// which lists them all as projects, and opens the one picked.
+// which lists them all as projects, adds the one picked as the picker
+// adds one, and opens it.
 function useTerrierPick(
   projects: ReadonlyArray<{ id: string; path: string }> | undefined,
 ) {
@@ -133,28 +142,27 @@ function useTerrierPick(
     queryFn: () => api.terrier.repos(),
     enabled: readable,
   });
-  const [picked, setPicked] = useState<string | null>(null);
-  const turnOn = useMutation({
-    mutationFn: () =>
-      api.globalConfig.writeDeviceSettings({ patch: { terrier: true } }),
-    onError: () => setPicked(null),
-    meta: { errorTitle: "Couldn't turn terrier on" },
-  });
+  const { data: runtime } = useRuntimeInfo();
+  const home = runtime?.homedir ?? null;
+  const addProject = useAddProject();
   const openAdded = useOpenAddedProject();
-  const added = projects?.find((project) => project.path === picked);
-  const opened = useRef(false);
-  useEffect(() => {
-    if (added === undefined || opened.current) return;
-    opened.current = true;
-    void openAdded(added.id);
-  }, [added, openAdded]);
+  const pick = useMutation({
+    mutationFn: async (path: string) => {
+      await api.globalConfig.writeDeviceSettings({ patch: { terrier: true } });
+      const project = await addProject.mutateAsync({ path, terrier: false });
+      await openAdded(project.id);
+    },
+    meta: { errorTitle: "Couldn't add the project" },
+  });
   const taken = new Set(projects?.map((project) => project.path));
   return {
-    repos: listed.filter((repo) => !taken.has(repo.path)),
-    picked,
-    pick: (path: string) => {
-      setPicked(path);
-      turnOn.mutate();
+    repos: listed
+      .filter((repo) => !taken.has(repo.path))
+      .map((repo) => ({ name: repo.name, path: tildify(repo.path, home) })),
+    picked: pick.isPending ? (pick.variables ?? null) : null,
+    pick: (shown: string) => {
+      const repo = listed.find((it) => tildify(it.path, home) === shown);
+      if (repo !== undefined) pick.mutate(repo.path);
     },
   };
 }
