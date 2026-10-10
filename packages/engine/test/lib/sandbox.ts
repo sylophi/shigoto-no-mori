@@ -19,9 +19,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
+import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Stream from "effect/Stream";
 import * as Agents from "../../src/Agents.ts";
 import * as Config from "../../src/Config.ts";
 import * as Control from "../../src/Control.ts";
@@ -39,7 +42,9 @@ import * as Terrier from "../../src/Terrier.ts";
 import * as Transfer from "../../src/Transfer.ts";
 import * as Usage from "../../src/Usage.ts";
 import { doctorLayer, engineLayer } from "../../src/layer.ts";
-import { nodeStore, openNode } from "./nodeStore.ts";
+import * as Migration from "../../src/Migration.ts";
+import * as Store from "../../src/Store.ts";
+import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
 
@@ -61,7 +66,8 @@ export type Engine =
   | Doctor.Doctor
   | Control.Control
   | Transfer.Transfer
-  | WtFolder.WtFolder;
+  | WtFolder.WtFolder
+  | Migration.Migration;
 
 // What the agent hooks run, as the installed binary names itself.
 export const HOOK_BINARY =
@@ -179,6 +185,10 @@ export type Sandbox = {
   // git in `cwd` with the sandbox's identity, answering its stdout.
   readonly git: (cwd: string, ...args: string[]) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
+  // A start of the engine as a new process makes one, on a graph of its
+  // own, which closes once it is up: each value its migration takes,
+  // from before the store opens.
+  readonly start: () => Promise<ReadonlyArray<MigrationProgress>>;
   // A run of the doctor as the terminal builds it, which opens the
   // store inside the run.
   readonly doctor: (input: Doctor.RunInput) => Promise<Doctor.DoctorDocument>;
@@ -222,18 +232,47 @@ export function sandbox(
         }),
       ),
     );
+  const graph = () =>
+    engineLayer({
+      flavor: "dev",
+      store: Store.layer(openNode),
+      macfs: macfs(),
+      sm: HOOK_BINARY,
+    });
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
   const engineRuntime = () => {
     runtime ??= ManagedRuntime.make(
-      engineLayer({
-        flavor: "dev",
-        store: nodeStore,
-        macfs: macfs(),
-        sm: HOOK_BINARY,
-      }).pipe(Layer.provide(platform())),
+      graph().pipe(
+        Layer.provideMerge(Migration.layer),
+        Layer.provide(platform()),
+      ),
     );
     return runtime;
   };
+
+  const start = () =>
+    Effect.gen(function* () {
+      const seen: MigrationProgress[] = [];
+      const migration = yield* Migration.Migration;
+      const watching = yield* Deferred.make<void>();
+      yield* migration.changes.pipe(
+        Stream.runForEach((value) =>
+          Effect.sync(() => seen.push(value)).pipe(
+            Effect.andThen(Deferred.succeed(watching, undefined)),
+          ),
+        ),
+        Effect.forkScoped,
+      );
+      yield* Deferred.await(watching);
+      yield* Layer.build(graph());
+      // The last change, published as the graph came up.
+      yield* Effect.yieldNow;
+      return seen;
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.merge(Migration.layer, platform())),
+      Effect.runPromise,
+    );
 
   // Read when a command runs, so a test's PATH change reaches it.
   const gitEnv = () => ({
@@ -299,6 +338,7 @@ export function sandbox(
   return {
     home: root,
     side: sideDir,
+    start,
     write: (file, value) => {
       mkdirSync(dirname(join(seed, file)), { recursive: true });
       writeFileSync(join(seed, file), JSON.stringify(value));
