@@ -23,6 +23,9 @@ export type HubConnectOpts = {
   mintTicket(connectionId: string, signal: AbortSignal): Promise<string>;
   // This device's id, the `from` every peer sees on its asks.
   deviceId: string;
+  // The private key this device enrolled with, base64url, which seals
+  // and opens what it relays.
+  deviceKey: string;
 };
 
 export type HubConnectionStatus = {

@@ -7,9 +7,12 @@
 // sockets where a scenario needs to play a peer by hand.
 //
 // The device hub carries presence and ONE question between peers, the
-// connectInfo ask, as a single ask/answer pair keyed by an id. Asserted:
-// one exchange per ask, id correlation across concurrent asks, the
-// hub-stamped caller, the void-field framing invariant, error
+// connectInfo ask, as a single ask/answer pair keyed by an id and
+// sealed as a Noise IK handshake to the keys the roster names. Asserted:
+// one exchange per ask with nothing readable on the hub, id correlation
+// across concurrent asks, the hub-stamped caller, an ask sealed under a
+// key other than the roster's and a tampered answer refused, the
+// void-field framing invariant, error
 // serialization (message only), unknown asks refused, the no-listener
 // refusal of a device serving nothing, the local outbound size guard
 // at the control-frame budget, an oversize answer downgraded to a
@@ -24,18 +27,21 @@
 // Run: pnpm test hub-link.
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
-  AnswerFrameSchema,
-  AskFrameSchema,
+  decodeRelayFrame,
   encodeEnvelope,
+  encodeRelayFrame,
+  type RelayFrame,
   type ServerEnvelope,
 } from "@shigomori/contracts/hubProtocol";
+import { fromBase64Url, toBase64Url } from "@shared/crypto/deviceKey";
+import { generateKeyPair, HandshakeState } from "@shared/crypto/noise";
 import {
   CONNECT_INFO_ASK,
+  relayPrologue,
   HubAskRefusedError,
   HubAskTimeoutError,
   HubLinkDownError,
@@ -48,7 +54,12 @@ import { type Track, waitFor } from "./lib/checkKit.mts";
 import { bootDevice, type BootDeviceOpts } from "./lib/hubBoot.mts";
 import { delay } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
-import { startStubHub, type StubHub } from "./lib/hubStub.mts";
+import {
+  sealAsk,
+  startStubHub,
+  type StubHub,
+  testDeviceKey,
+} from "./lib/hubStub.mts";
 
 // Larger than MAX_HUB_MESSAGE_BYTES (64 KiB), for the size-guard and
 // oversize-answer scenarios.
@@ -128,7 +139,7 @@ function rawDevice(stub: StubHub, deviceId: string) {
       ws.once("open", resolve);
       ws.once("error", reject);
     }),
-    send: (to: string, frame: unknown) =>
+    send: (to: string, frame: string) =>
       ws.send(encodeEnvelope({ t: "relay", to, frame })),
     next,
     nextHub,
@@ -150,19 +161,60 @@ async function bootWithRawPeer(track: Track) {
   return { stub, a, rawB };
 }
 
-// An ask frame as a peer on this build sends it.
-const askFrame = (id: number, input?: unknown) => ({
+// Playing a peer by hand: what a device on this build seals and opens.
+const utf8 = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value));
+const json = (bytes: Uint8Array): unknown =>
+  JSON.parse(new TextDecoder().decode(bytes));
+
+function frameOf(text: string): RelayFrame {
+  const frame = decodeRelayFrame(text);
+  assert.ok(frame !== null, `not a relay frame: ${text.slice(0, 40)}`);
+  return frame;
+}
+
+const connectInfoAsk = (input?: unknown) => ({
   ask: CONNECT_INFO_ASK,
-  id,
   ...(input === undefined ? {} : { input }),
 });
+
+// Opens an ask `from` sent to `self`, answering its id, payload and the
+// handshake the answer is sealed with.
+function openAsk(from: string, self: string, text: string) {
+  const frame = frameOf(text);
+  assert.equal(frame.kind, "ask");
+  const handshake = new HandshakeState({
+    initiator: false,
+    prologue: relayPrologue(from, self),
+    s: testDeviceKey(self).pair,
+  });
+  const payload = json(
+    handshake.readMessage(fromBase64Url(frame.sealed)).payload,
+  );
+  return { id: frame.id, payload, handshake };
+}
+
+function sealAnswer(
+  handshake: HandshakeState,
+  id: number,
+  payload: unknown,
+): string {
+  const sealed = toBase64Url(handshake.writeMessage(utf8(payload)).message);
+  return encodeRelayFrame({ kind: "answer", id, sealed });
+}
+
+function openAnswer(handshake: HandshakeState, text: string): unknown {
+  const frame = frameOf(text);
+  assert.equal(frame.kind, "answer");
+  return json(handshake.readMessage(fromBase64Url(frame.sealed)).payload);
+}
 
 it("ask/answer: one ask is one exchange, ids correlate concurrent asks, and the caller is the device the hub stamped", async () => {
   const { stub, a } = await bootLinked(trackTest);
   const before = stub.receivedCount();
   const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
   assert.deepEqual(result, { hi: 1 });
-  // One frame each way, no handshake around it.
+  // One frame each way, and nothing in either the hub can read.
   const exchange = stub.received.slice(before);
   assert.deepEqual(
     exchange.map((entry) => `${entry.from}>${entry.to}`),
@@ -173,13 +225,14 @@ it("ask/answer: one ask is one exchange, ids correlate concurrent asks, and the 
     askEntry !== undefined && answerEntry !== undefined,
     "the ask and its answer were not both received",
   );
-  const askSent = Schema.decodeUnknownSync(AskFrameSchema)(askEntry.frame);
-  const answerSent = Schema.decodeUnknownSync(AnswerFrameSchema)(
-    answerEntry.frame,
-  );
-  assert.equal(askSent.ask, CONNECT_INFO_ASK);
-  assert.equal(answerSent.answer, CONNECT_INFO_ASK);
+  const askSent = frameOf(askEntry.frame);
+  const answerSent = frameOf(answerEntry.frame);
+  assert.equal(askSent.kind, "ask");
+  assert.equal(answerSent.kind, "answer");
   assert.equal(answerSent.id, askSent.id);
+  for (const entry of exchange) {
+    assert.doesNotMatch(entry.frame, /connectInfo|"hi"/);
+  }
   // Two concurrent asks prove the correlation is per id, not
   // first-come.
   const [first, second] = await Promise.all([
@@ -195,26 +248,55 @@ it("ask/answer: one ask is one exchange, ids correlate concurrent asks, and the 
 });
 
 it("framing: a void input and a void result ride as absent fields", async () => {
-  const { stub, a } = await bootLinked(trackTest);
-  const before = stub.receivedCount();
-  const result = await a.connection.askConnectInfo("B", undefined, ASK_MS);
-  assert.equal(result, undefined);
-  const [ask, answer] = stub.received.slice(before);
-  assert.ok(
-    ask !== undefined && answer !== undefined,
-    "the ask and its answer were not both received",
+  const { a, rawB } = await bootWithRawPeer(trackTest);
+  const pending = a.connection.askConnectInfo("B", undefined, ASK_MS);
+  const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
+  assert.deepEqual(ask.payload, { ask: CONNECT_INFO_ASK });
+  rawB.send("A", sealAnswer(ask.handshake, ask.id, { ok: true }));
+  assert.equal(await pending, undefined);
+});
+
+it("keys: an ask sealed with a key other than the roster's gets no answer, and a tampered answer is refused", async () => {
+  const stub = await startStubHub(trackTest);
+  await bootDevice(stub, "B", { serveConnectInfo: testServer }, trackTest);
+  const rawC = rawDevice(stub, "C");
+  trackTest(() => rawC.close());
+  await rawC.opened;
+  await delay(50);
+  // C is on the roster, but seals with a key it did not enroll with.
+  rawC.send(
+    "B",
+    sealAsk("C", "B", 1, connectInfoAsk("x"), generateKeyPair()).frame,
   );
-  const answerFrame = Schema.decodeUnknownSync(AnswerFrameSchema)(answer.frame);
-  assert.equal(
-    "input" in Schema.decodeUnknownSync(AskFrameSchema)(ask.frame),
-    false,
+  await delay(150);
+  assert.equal(stub.sentTo("B", "C"), false, "B answered a wrong key");
+  // Sealed for B but delivered as if from another device: the prologue
+  // names the asker, so it does not open either.
+  stub.injectTo("B", {
+    t: "relay",
+    from: "C",
+    frame: sealAsk("D", "B", 2, connectInfoAsk("x"), testDeviceKey("C").pair)
+      .frame,
+  });
+  await delay(150);
+  assert.equal(stub.sentTo("B", "C"), false, "B answered a misdirected ask");
+
+  const { a, rawB } = await bootWithRawPeer(trackTest);
+  const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+  const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
+  const answer = frameOf(sealAnswer(ask.handshake, ask.id, { ok: true }));
+  const flipped = fromBase64Url(answer.sealed);
+  flipped[flipped.length - 1] = (flipped[flipped.length - 1] ?? 0) ^ 1;
+  rawB.send("A", encodeRelayFrame({ ...answer, sealed: toBase64Url(flipped) }));
+  await assert.rejects(
+    () => pending,
+    (error) =>
+      error instanceof HubAskRefusedError && /did not open/.test(error.message),
   );
-  assert.equal(answerFrame.ok, true);
-  assert.equal("result" in answerFrame, false);
 });
 
 it("error path: a throwing server answers ok:false with the message only", async () => {
-  const { stub, a } = await bootLinked(trackTest);
+  const { a } = await bootLinked(trackTest);
   await assert.rejects(
     () => a.connection.askConnectInfo("B", { mode: "fail" }, ASK_MS),
     (error) =>
@@ -222,22 +304,16 @@ it("error path: a throwing server answers ok:false with the message only", async
       error.message === "boom" &&
       error.code === undefined,
   );
-  const answer = stub.received.find((entry) => {
-    const frame = Schema.decodeUnknownOption(AnswerFrameSchema)(entry.frame);
-    return (
-      entry.from === "B" &&
-      Option.isSome(frame) &&
-      !frame.value.ok &&
-      frame.value.message === "boom"
-    );
-  });
-  assert.ok(answer, "the refusal never reached the stub");
-  assert.deepEqual(Object.keys(fields(answer.frame)).toSorted(), [
-    "answer",
-    "id",
-    "message",
-    "ok",
-  ]);
+  const stub = await startStubHub(trackTest);
+  await bootDevice(stub, "B", { serveConnectInfo: testServer }, trackTest);
+  const raw = rawDevice(stub, "C");
+  trackTest(() => raw.close());
+  await raw.opened;
+  await delay(50);
+  const ask = sealAsk("C", "B", 1, connectInfoAsk({ mode: "fail" }));
+  raw.send("B", ask.frame);
+  const answer = openAnswer(ask.handshake, (await raw.nextHub()).frame);
+  assert.deepEqual(Object.keys(fields(answer)).toSorted(), ["message", "ok"]);
 });
 
 it("one ask only: an unknown ask is refused while connectInfo is answered for the same sender", async () => {
@@ -247,15 +323,17 @@ it("one ask only: an unknown ask is refused while connectInfo is answered for th
   trackTest(() => raw.close());
   await raw.opened;
   await delay(50);
-  raw.send("B", { ...askFrame(1), ask: "invokeAnything", input: "x" });
-  const refused = Schema.decodeUnknownSync(AnswerFrameSchema)(
-    (await raw.nextHub()).frame,
+  const unknown = sealAsk("C", "B", 1, { ask: "invokeAnything", input: "x" });
+  raw.send("B", unknown.frame);
+  const refused = fields(
+    openAnswer(unknown.handshake, (await raw.nextHub()).frame),
   );
   assert.equal(refused.ok, false);
-  assert.match(refused.message, /unknown ask/);
-  raw.send("B", askFrame(2, "served"));
-  const served = Schema.decodeUnknownSync(AnswerFrameSchema)(
-    (await raw.nextHub()).frame,
+  assert.match(String(refused.message), /unknown ask/);
+  const known = sealAsk("C", "B", 2, connectInfoAsk("served"));
+  raw.send("B", known.frame);
+  const served = fields(
+    openAnswer(known.handshake, (await raw.nextHub()).frame),
   );
   assert.equal(served.ok, true);
   assert.equal(served.result, "served");
@@ -311,32 +389,24 @@ it("offline nack: asking a deviceId with no socket rejects with the offline erro
 it("timeout: a peer that never answers fails the ask typed at its timeout, and the late answer is dropped", async () => {
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", "hello?", 200);
-  const ask = Schema.decodeUnknownSync(AskFrameSchema)(
-    (await rawB.nextHub()).frame,
-  );
+  const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
   await assert.rejects(
     () => pending,
     (error) => error instanceof HubAskTimeoutError,
   );
   // Answering after the timeout finds nothing to resolve and harms
   // nothing: the link still asks and answers.
-  rawB.send("A", {
-    answer: CONNECT_INFO_ASK,
-    id: ask.id,
-    ok: true,
-    result: "late",
-  });
+  rawB.send(
+    "A",
+    sealAnswer(ask.handshake, ask.id, { ok: true, result: "late" }),
+  );
   await delay(50);
   const again = a.connection.askConnectInfo("B", "again", ASK_MS);
-  const second = Schema.decodeUnknownSync(AskFrameSchema)(
-    (await rawB.nextHub()).frame,
+  const second = openAsk("A", "B", (await rawB.nextHub()).frame);
+  rawB.send(
+    "A",
+    sealAnswer(second.handshake, second.id, { ok: true, result: "fresh" }),
   );
-  rawB.send("A", {
-    answer: CONNECT_INFO_ASK,
-    id: second.id,
-    ok: true,
-    result: "fresh",
-  });
   assert.equal(await again, "fresh");
 });
 
@@ -372,18 +442,15 @@ it("misrouted answer: an answer from a device other than the one asked is droppe
   trackTest(() => rawC.close());
   await rawC.opened;
   const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
-  const ask = Schema.decodeUnknownSync(AskFrameSchema)(
-    (await rawB.nextHub()).frame,
-  );
-  const answer = (result: unknown) => ({
-    answer: CONNECT_INFO_ASK,
-    id: ask.id,
+  const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
+  // C copies the answer B is about to send, word for word.
+  const answer = sealAnswer(ask.handshake, ask.id, {
     ok: true,
-    result,
+    result: "from B",
   });
-  rawC.send("A", answer("from C"));
+  rawC.send("A", answer);
   await delay(50);
-  rawB.send("A", answer("from B"));
+  rawB.send("A", answer);
   assert.equal(await pending, "from B");
 });
 
@@ -392,7 +459,11 @@ it("off-roster ask: an ask whose from is not in the presence roster gets no answ
   await bootDevice(stub, "B", { serveConnectInfo: testServer }, trackTest);
   // Forge a deliver to B from a device that is not in B's roster (a
   // hostile hub can set any `from`). B must answer nothing.
-  stub.injectTo("B", { t: "relay", from: "ghost", frame: askFrame(1) });
+  stub.injectTo("B", {
+    t: "relay",
+    from: "ghost",
+    frame: sealAsk("ghost", "B", 1, connectInfoAsk()).frame,
+  });
   await delay(200);
   assert.equal(
     stub.sentTo("B", "ghost"),
@@ -404,27 +475,21 @@ it("off-roster ask: an ask whose from is not in the presence roster gets no answ
 it("unknown wire shape: a frame this link does not speak is dropped, so an ask to such a peer times out like any unreachable one and the link keeps serving", async () => {
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", "x", 200);
-  const ask = Schema.decodeUnknownSync(AskFrameSchema)(
-    (await rawB.nextHub()).frame,
-  );
+  const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
   // What a build speaking another wire would say: neither an ask
   // nor an answer, so nothing routes it to the pending ask.
-  rawB.send("A", { epoch: 0, sm: { t: "welcome", deviceId: "B" } });
+  rawB.send("A", JSON.stringify({ epoch: 0, sm: { t: "welcome" } }));
   await assert.rejects(
     () => pending,
     (error) => error instanceof HubAskTimeoutError,
   );
   const again = a.connection.askConnectInfo("B", "again", ASK_MS);
-  const second = Schema.decodeUnknownSync(AskFrameSchema)(
-    (await rawB.nextHub()).frame,
-  );
+  const second = openAsk("A", "B", (await rawB.nextHub()).frame);
   assert.notEqual(second.id, ask.id);
-  rawB.send("A", {
-    answer: CONNECT_INFO_ASK,
-    id: second.id,
-    ok: true,
-    result: "fresh",
-  });
+  rawB.send(
+    "A",
+    sealAnswer(second.handshake, second.id, { ok: true, result: "fresh" }),
+  );
   assert.equal(await again, "fresh");
 });
 
@@ -530,7 +595,8 @@ it("malformed inbound: garbage frames are dropped without killing the process", 
   // All must be dropped, not fatal.
   stub.injectTo("A", "this is not json at all");
   stub.injectTo("A", JSON.stringify({ t: "totally-unknown" }));
-  stub.injectTo("A", { t: "relay", from: "B", frame: { t: "bogus" } });
+  stub.injectTo("A", { t: "relay", from: "B", frame: "answer:1:bogus" });
+  stub.injectTo("A", { t: "relay", from: "B", frame: "neither" });
   await delay(150);
   // The link is still live: a real ask still works.
   assert.equal(

@@ -18,13 +18,15 @@
         "deviceId": "dev-enroll",
         "name": "Test Device",
         "platform": "darwin",
-        "icon": "laptop"
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
       },
       {
         "deviceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
         "platform": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
-        "icon": "toaster"
+        "icon": "toaster",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
       }
     ],
     "normalizes": [
@@ -34,13 +36,15 @@
           "name": "Test Device",
           "platform": "darwin",
           "icon": "laptop",
-          "credential": "c"
+          "credential": "c",
+          "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
         },
         "output": {
           "deviceId": "dev-enroll",
           "name": "Test Device",
           "platform": "darwin",
-          "icon": "laptop"
+          "icon": "laptop",
+          "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
         }
       }
     ],
@@ -49,48 +53,76 @@
         "deviceId": "",
         "name": "Test Device",
         "platform": "darwin",
-        "icon": "laptop"
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
       },
       {
         "deviceId": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "name": "Test Device",
         "platform": "darwin",
-        "icon": "laptop"
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
       },
       {
         "deviceId": "dev-enroll",
         "name": "",
         "platform": "darwin",
-        "icon": "laptop"
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
       },
       {
         "deviceId": "dev-enroll",
         "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
         "platform": "darwin",
-        "icon": "laptop"
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
       },
       {
         "deviceId": "dev-enroll",
         "name": "Test Device",
         "platform": "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
         "icon": "laptop"
       },
       {
         "deviceId": "dev-enroll",
         "name": "Test Device",
-        "platform": "darwin"
+        "platform": "darwin",
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwm"
       },
       {
         "deviceId": "dev-enroll",
         "name": "Test Device",
         "platform": "darwin",
-        "icon": ""
-      },
-      {
-        "deviceId": "dev-enroll",
-        "name": "Test Device",
-        "platform": "darwin",
-        "icon": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+        "icon": "laptop",
+        "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwm="
       }
     ]
   },
@@ -522,10 +554,7 @@
       {
         "t": "relay",
         "to": "dev-b",
-        "frame": {
-          "type": "connectInfo",
-          "id": 1
-        }
+        "frame": "ask:1:c2VhbGVk"
       },
       {
         "t": "relay",
@@ -535,7 +564,7 @@
       {
         "t": "relay",
         "to": "dev-b",
-        "frame": null
+        "frame": ""
       }
     ],
     "normalizes": [
@@ -544,12 +573,12 @@
           "t": "relay",
           "to": "dev-b",
           "from": "dev-a",
-          "frame": 1
+          "frame": "x"
         },
         "output": {
           "t": "relay",
           "to": "dev-b",
-          "frame": 1
+          "frame": "x"
         }
       }
     ],
@@ -557,12 +586,12 @@
       {
         "t": "relay",
         "to": "",
-        "frame": 1
+        "frame": "x"
       },
       {
         "t": "relay",
         "to": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "frame": 1
+        "frame": "x"
       },
       {
         "t": "presence",
@@ -570,12 +599,25 @@
       },
       {
         "to": "dev-b",
-        "frame": 1
+        "frame": "x"
       },
       "ping",
       {
         "t": "relay",
         "to": "dev-b"
+      },
+      {
+        "t": "relay",
+        "to": "dev-b",
+        "frame": {
+          "ask": "connectInfo",
+          "id": 1
+        }
+      },
+      {
+        "t": "relay",
+        "to": "dev-b",
+        "frame": null
       }
     ]
   },
@@ -584,10 +626,7 @@
       {
         "t": "relay",
         "from": "dev-a",
-        "frame": {
-          "type": "connectInfo",
-          "id": 1
-        }
+        "frame": "answer:1:c2VhbGVk"
       },
       {
         "t": "presence",
@@ -595,81 +634,285 @@
       },
       {
         "t": "presence",
-        "online": ["dev-a", "dev-b"]
-      },
-      {
-        "t": "presence",
         "online": [
-          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-b",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          }
         ]
       },
       {
         "t": "presence",
         "online": [
-          "dev-0",
-          "dev-1",
-          "dev-2",
-          "dev-3",
-          "dev-4",
-          "dev-5",
-          "dev-6",
-          "dev-7",
-          "dev-8",
-          "dev-9",
-          "dev-10",
-          "dev-11",
-          "dev-12",
-          "dev-13",
-          "dev-14",
-          "dev-15",
-          "dev-16",
-          "dev-17",
-          "dev-18",
-          "dev-19",
-          "dev-20",
-          "dev-21",
-          "dev-22",
-          "dev-23",
-          "dev-24",
-          "dev-25",
-          "dev-26",
-          "dev-27",
-          "dev-28",
-          "dev-29",
-          "dev-30",
-          "dev-31",
-          "dev-32",
-          "dev-33",
-          "dev-34",
-          "dev-35",
-          "dev-36",
-          "dev-37",
-          "dev-38",
-          "dev-39",
-          "dev-40",
-          "dev-41",
-          "dev-42",
-          "dev-43",
-          "dev-44",
-          "dev-45",
-          "dev-46",
-          "dev-47",
-          "dev-48",
-          "dev-49",
-          "dev-50",
-          "dev-51",
-          "dev-52",
-          "dev-53",
-          "dev-54",
-          "dev-55",
-          "dev-56",
-          "dev-57",
-          "dev-58",
-          "dev-59",
-          "dev-60",
-          "dev-61",
-          "dev-62",
-          "dev-63"
+          {
+            "deviceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          }
+        ]
+      },
+      {
+        "t": "presence",
+        "online": [
+          {
+            "deviceId": "dev-0",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-1",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-2",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-3",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-4",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-5",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-6",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-7",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-8",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-9",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-10",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-11",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-12",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-13",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-14",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-15",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-16",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-17",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-18",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-19",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-20",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-21",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-22",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-23",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-24",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-25",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-26",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-27",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-28",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-29",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-30",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-31",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-32",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-33",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-34",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-35",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-36",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-37",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-38",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-39",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-40",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-41",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-42",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-43",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-44",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-45",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-46",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-47",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-48",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-49",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-50",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-51",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-52",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-53",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-54",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-55",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-56",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-57",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-58",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-59",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-60",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-61",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-62",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-63",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          }
         ]
       },
       {
@@ -687,91 +930,294 @@
       {
         "t": "relay",
         "from": "",
-        "frame": 1
+        "frame": "x"
       },
       {
         "t": "relay",
         "from": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "frame": 1
+        "frame": "x"
       },
       {
         "t": "presence",
         "online": [
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a",
-          "dev-a"
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          },
+          {
+            "deviceId": "dev-a",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          }
         ]
       },
       {
         "t": "presence",
-        "online": [""]
+        "online": [
+          {
+            "deviceId": "",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          }
+        ]
       },
       {
         "t": "presence",
         "online": [
-          "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          {
+            "deviceId": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "publicKey": "Uj2iVdc3MPjRj5FjvYJ1mDrq0R0ce4pXF0P_uAgKwmM"
+          }
         ]
       },
       {
@@ -787,7 +1233,7 @@
       {
         "t": "relay",
         "to": "dev-b",
-        "frame": 1
+        "frame": "x"
       },
       {
         "t": "pong"
@@ -795,20 +1241,46 @@
       {
         "t": "relay",
         "from": "dev-a"
+      },
+      {
+        "t": "relay",
+        "from": "dev-a",
+        "frame": {
+          "ask": "connectInfo"
+        }
+      },
+      {
+        "t": "presence",
+        "online": ["dev-a"]
+      },
+      {
+        "t": "presence",
+        "online": [
+          {
+            "deviceId": "dev-a"
+          }
+        ]
+      },
+      {
+        "t": "presence",
+        "online": [
+          {
+            "deviceId": "dev-a",
+            "publicKey": "short"
+          }
+        ]
       }
     ]
   },
-  "AskFrameSchema": {
+  "AskPayloadSchema": {
     "accepts": [
       {
-        "ask": "connectInfo",
-        "id": 1
+        "ask": "connectInfo"
       },
       {
         "ask": "connectInfo",
-        "id": 7,
         "input": {
-          "wantsTunnel": true
+          "dialableKinds": ["lan"]
         }
       }
     ],
@@ -816,58 +1288,41 @@
       {
         "input": {
           "ask": "connectInfo",
-          "id": 2,
           "extra": "dropped"
         },
         "output": {
-          "ask": "connectInfo",
-          "id": 2
+          "ask": "connectInfo"
         }
       }
     ],
     "rejects": [
       {
-        "ask": "connectInfo"
+        "input": 1
       },
       {
-        "ask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        "id": 1
+        "ask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
       },
       {
-        "ask": "connectInfo",
-        "id": 1.5
-      },
-      {
-        "answer": "connectInfo",
-        "id": 1,
         "ok": true
       }
     ]
   },
-  "AnswerFrameSchema": {
+  "AnswerPayloadSchema": {
     "accepts": [
       {
-        "answer": "connectInfo",
-        "id": 1,
         "ok": true
       },
       {
-        "answer": "connectInfo",
-        "id": 2,
         "ok": true,
         "result": {
           "candidates": []
         }
       },
       {
-        "answer": "connectInfo",
-        "id": 3,
         "ok": false,
         "message": "no listener"
       },
       {
-        "answer": "connectInfo",
-        "id": 4,
         "ok": false,
         "message": "no listener",
         "code": "no-listener"
@@ -875,24 +1330,18 @@
     ],
     "rejects": [
       {
-        "answer": "connectInfo",
-        "id": 1
-      },
-      {
-        "answer": "connectInfo",
-        "id": 1,
         "ok": false
       },
       {
-        "answer": "connectInfo",
-        "id": 1,
         "ok": false,
         "message": "m",
         "code": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
       {
-        "ask": "connectInfo",
-        "id": 1
+        "ask": "connectInfo"
+      },
+      {
+        "message": "m"
       }
     ]
   }

@@ -1,6 +1,4 @@
-import { useAuth, useClerk } from "@clerk/react";
-import { useEnroll } from "@/hooks/account/useAccount";
-import { hasLocalHost } from "@/lib/localHost";
+import { useEnrollment } from "@/hooks/account/useEnrollment";
 import { SignInButtonView } from "@shigomori/ui/views/account/AccountButtonsView.tsx";
 
 // The shared sign-in affordance, beside ClerkSignOutButton for the
@@ -13,29 +11,15 @@ import { SignInButtonView } from "@shigomori/ui/views/account/AccountButtonsView
 // turns the resulting session into the enrollment. When Clerk is already
 // signed in but the device is not enrolled (the automatic attempt
 // failed: hub down, mint error), opening the modal again would do
-// nothing, so the button becomes the manual enrollment retry instead.
+// nothing, so the button becomes the manual enrollment retry instead
+// (useEnrollment).
 export function ClerkSignInButton() {
-  const clerk = useClerk();
-  const { isSignedIn, getToken } = useAuth();
-  const enroll = useEnroll();
-  if (isSignedIn) {
-    return (
-      <SignInButtonView
-        retry
-        pending={enroll.isPending}
-        onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
-      />
-    );
-  }
+  const enrollment = useEnrollment();
   return (
     <SignInButtonView
-      retry={false}
-      pending={false}
-      onClick={() =>
-        clerk.openSignIn(
-          hasLocalHost ? undefined : { forceRedirectUrl: location.href },
-        )
-      }
+      retry={enrollment.step !== "sign-in"}
+      pending={enrollment.step === "enrolling"}
+      onClick={enrollment.run}
     />
   );
 }

@@ -3,13 +3,33 @@
 Cloudflare Worker that keeps a Clerk account's sm devices in touch.
 Every device holds one outbound websocket to its account's `DeviceHub`
 Durable Object, which tells each device which others are online and
-forwards the small opaque envelopes they use to broker direct
-connections (a device asks a peer how to dial it, the peer answers
-with its addresses and one-time tickets). Data never passes through
-here: it flows over the direct sockets those answers set up. No sm
-logic runs here either: the Worker verifies Clerk tokens, keeps a
-device registry in D1, mints short-lived connection tickets and
-forwards envelopes it never parses. The HTTP routes are the shared
+the key each enrolled with, and forwards the small opaque envelopes
+they use to broker direct connections (a device asks a peer how to
+dial it, the peer answers with its addresses and one-time tickets).
+Data never passes through here: it flows over the direct sockets
+those answers set up. No sm logic runs here either: the Worker
+verifies Clerk tokens, keeps a device registry in D1, mints
+short-lived connection tickets and forwards envelopes it never
+parses.
+
+## Keys and sealed envelopes
+
+Each device makes an X25519 key pair at every enrollment and sends
+the public half with it (`publicKey` on the enroll body), which the
+registry keeps in the device's row, replacing the last. When a socket
+is admitted the object reads the row and tags the socket with the
+key, and the presence roster names every online device with its key.
+That roster is how a device knows its peers' keys: the hub is the
+trust root for them, as it is for which devices exist. A row without
+a key (enrolled before keys) has its socket refused, and the app
+enrolls again to make one.
+
+What a device relays to another is the connectInfo ask or its answer
+sealed as a Noise handshake message to the addressed device's key
+(`app/shared/hub/link.ts`), as the envelope's `frame`: a string the
+object copies without reading, under the same size limit. A frame
+that is not a string is dropped like any malformed envelope. So the
+hub reads only the addressing: who sent it, to whom, and the ask's id. The HTTP routes are the shared
 `HubApi` (`packages/contracts/src/hubApi.ts`), served on Effect's
 `http-api` and called by the app through the client derived from it,
 and the socket's envelopes are `packages/contracts/src/hubProtocol.ts`.
@@ -123,6 +143,12 @@ builds whose inbound socket bound (`maxPayload` in
 the Worker. A device reading a frame over its bound closes the socket,
 so a Worker still forwarding at the old size must never meet a device
 that already enforces the new one.
+
+Deploy order for device keys (`0006_device_public_key.sql`, protocol
+6): apply the migration, then deploy the Worker, whose floor of 6
+turns away every older build at once, then ship the app builds. A
+device whose row has no key enrolls again on its first start, on its
+own where its Clerk session lives.
 
 Deploy order for the device icon rename (`0005_device_icon.sql`, which
 renames the `devices.kind` column and the wire field to `icon`): apply

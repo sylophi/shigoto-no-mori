@@ -13,6 +13,7 @@ import {
   type DeviceEnvelope,
   type EnrollResponse,
   EnrollResponseSchema,
+  type OnlineDevice,
   type ServerEnvelope,
   ServerEnvelopeSchema,
   type TicketResponse,
@@ -73,14 +74,32 @@ export async function call(
 // Request builders for the endpoints the specs hit repeatedly, built
 // from the shared route table. They make no status assertion, the
 // callers do.
-export function enrollRequest(token: string, body: unknown): Request {
+// The public key a test device enrolls with, distinct per device id.
+// The hub stores and hands it on without using it, so any string of the
+// key's shape serves.
+export function testPublicKey(deviceId: string): string {
+  return `${deviceId.replace(/[^A-Za-z0-9_-]/g, "_")}${"k".repeat(43)}`.slice(
+    0,
+    43,
+  );
+}
+
+// The body gets a key unless it names its own (an explicit undefined
+// leaves it out).
+export function enrollRequest(
+  token: string,
+  body: Record<string, unknown>,
+): Request {
   return new Request(`${BASE}/devices/enroll`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      publicKey: testPublicKey(String(body.deviceId)),
+      ...body,
+    }),
   });
 }
 
@@ -238,11 +257,15 @@ export class TestSocket {
     });
   }
 
-  // Consumes envelopes until a presence message matches `expected`,
-  // under one overall deadline. Presence is a full list, so skipping
-  // intermediate broadcasts (for example the double broadcast around
-  // a supersede) is safe.
-  async untilPresence(expected: string[], timeoutMs = 2000): Promise<void> {
+  // Consumes envelopes until a presence message names exactly the
+  // `expected` device ids, under one overall deadline, and answers its
+  // roster. Presence is a full list, so skipping intermediate
+  // broadcasts (for example the double broadcast around a supersede)
+  // is safe.
+  async untilPresence(
+    expected: string[],
+    timeoutMs = 2000,
+  ): Promise<ReadonlyArray<OnlineDevice>> {
     const want = JSON.stringify(expected.toSorted());
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -250,24 +273,22 @@ export class TestSocket {
       const envelope = await this.next(Math.max(1, deadline - Date.now()));
       if (
         envelope.t === "presence" &&
-        JSON.stringify(envelope.online) === want
+        JSON.stringify(envelope.online.map((device) => device.deviceId)) ===
+          want
       ) {
-        return;
+        return envelope.online;
       }
     }
   }
 
   // Consumes envelopes until a relayed frame equals `frame`, under one
   // overall deadline.
-  async untilRelay(frame: unknown, timeoutMs = 2000): Promise<void> {
-    const want = JSON.stringify(frame);
+  async untilRelay(frame: string, timeoutMs = 2000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       // oxlint-disable-next-line no-await-in-loop -- envelopes arrive one at a time, waiting is the point
       const envelope = await this.next(Math.max(1, deadline - Date.now()));
-      if (envelope.t === "relay" && JSON.stringify(envelope.frame) === want) {
-        return;
-      }
+      if (envelope.t === "relay" && envelope.frame === frame) return;
     }
   }
 

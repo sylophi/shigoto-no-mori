@@ -1731,6 +1731,7 @@ export function installFakeHostBridge(
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
     sharedSignIn: false,
+    needsDeviceKey: false,
   });
 
   // The engine's forward table, mutated by start/stop so the switches

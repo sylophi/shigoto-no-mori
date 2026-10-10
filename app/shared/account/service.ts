@@ -85,6 +85,7 @@ type EnrollFields = {
   name: string;
   platform: string;
   icon: DeviceIcon;
+  publicKey: string;
 };
 
 export type AccountService = {

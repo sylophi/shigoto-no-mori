@@ -80,6 +80,7 @@ const STORED_ENVELOPE = JSON.stringify({
   v: 1,
   enc: false,
   credential: "cred-stored",
+  deviceKey: "device-key",
   accountId: "acct_stored",
   deviceName: "Stored browser",
 });
@@ -381,6 +382,7 @@ it('enroll: exchanges the Clerk session token for a credential with platform "we
     v: 1,
     enc: false,
     credential: "cred-1",
+    deviceKey: envelope.deviceKey,
     accountId: "acct_1",
     deviceName: defaultWebDeviceName(CHROME_MAC_UA),
     hubName: defaultWebDeviceName(CHROME_MAC_UA),
