@@ -167,6 +167,20 @@ it("every call's payload and outcome have a binary layout", () => {
   }
 });
 
+// A peer's answer crosses from the host to its window as the hop's own
+// (hub:invokePeer), where a void call answers undefined.
+it("the hub hop carries a void call's answer", () => {
+  const invokePeer = rpcs.find((call) => channelOf(call) === "hub:invokePeer");
+  assert.ok(invokePeer !== undefined && isInvoke(invokePeer));
+  const codec = SchemaBinary.toCodec(outputOf(invokePeer));
+  for (const answer of [undefined, null, { terminalId: "t" }]) {
+    assert.deepEqual(
+      Schema.decodeUnknownSync(codec)(Schema.encodeUnknownSync(codec)(answer)),
+      answer,
+    );
+  }
+});
+
 describe.each([...calls])("%s", (channel, parts) => {
   it("reads its samples back unchanged, decoded and encoded", () => {
     const sample = samples[channel] ?? {};
