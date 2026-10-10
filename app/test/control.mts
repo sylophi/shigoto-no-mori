@@ -128,6 +128,7 @@ import { listMirrorInvites } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
 import { createLinkRegistrar } from "@host/socket/server";
 import * as HostPushes from "@host/lib/hostPushes";
+import * as Views from "@host/lib/views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
 import { LoopbackGroup } from "@shigomori/contracts/link";
@@ -190,7 +191,9 @@ async function startLoopback(options: {
         appVersion: "9.9.9",
         file: () => options.file,
       }).pipe(
-        Layer.provide(Layer.mergeAll(StoreChanges.layer, HostPushes.layer)),
+        Layer.provide(
+          Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer),
+        ),
       ),
       scope,
     ) as Effect.Effect<Context.Context<Loopback.Loopback>, never, never>,

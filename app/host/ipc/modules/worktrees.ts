@@ -226,6 +226,7 @@ export const worktreesViews: ViewHandlers<
 > = {
   watch: ({ projectId }) =>
     Views.view(
+      `worktrees:watch:${projectId}`,
       () => listWorktrees(projectId),
       Views.either(
         Views.wrote(
@@ -245,6 +246,7 @@ export const worktreesViews: ViewHandlers<
   // list is also read again every few seconds.
   watchChangeStatus: (input) =>
     Views.view(
+      `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`,
       async () => listChangesForPage(await findWorktreePathOrThrow(input)),
       Views.either(
         gitMoved(input.projectId),

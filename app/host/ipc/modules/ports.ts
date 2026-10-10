@@ -25,6 +25,7 @@ export const portsViews: ViewHandlers<
   // probes run again every few seconds.
   watch: (worktree) =>
     Views.view(
+      `ports:watch:${worktree.projectId}:${worktree.worktreeId}`,
       () => listPorts(worktree),
       Views.either(
         Views.wrote("worktree_data"),

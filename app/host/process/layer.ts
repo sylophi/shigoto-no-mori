@@ -27,6 +27,7 @@ import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as HostPushes from "@host/lib/hostPushes";
+import * as Views from "@host/lib/views";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Terminals from "@host/lib/terminals/Terminals";
@@ -238,8 +239,9 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // A villager download under way stops here, and resumes next launch.
     Layer.provideMerge(Villagers.deviceLayer),
     // Every push the host makes and every store write, which the wires
-    // and the views read.
+    // and the views read, and the views' shared reads.
     Layer.provideMerge(Captures.pushes.layer),
+    Layer.provideMerge(Views.layer),
     Layer.provideMerge(HostPushes.layer),
     Layer.provideMerge(EngineStoreChanges.layer),
     // This device's id, which the wires above name themselves by, read

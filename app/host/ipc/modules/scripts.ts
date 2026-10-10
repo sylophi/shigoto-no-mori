@@ -44,6 +44,7 @@ export const scriptsViews: ViewHandlers<
 > = {
   watch: () =>
     Views.view(
+      "scripts:watch",
       () => ({ runs: listRunningScripts() }),
       Views.pushed(scriptsContract, "changed"),
     ),

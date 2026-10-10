@@ -33,7 +33,12 @@ export const globalConfigViews: ViewHandlers<
   typeof globalConfigContract,
   Views.Services
 > = {
-  watch: () => Views.view(readGlobalConfig, Views.wrote("device_config")),
+  watch: () =>
+    Views.view(
+      "globalConfig:watch",
+      readGlobalConfig,
+      Views.wrote("device_config"),
+    ),
 };
 
 export const globalConfigHandlers = {
