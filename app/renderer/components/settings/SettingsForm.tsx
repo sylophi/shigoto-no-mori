@@ -4,8 +4,8 @@ import {
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
-import { fromConfig } from "@/hooks/config/settingsForm";
-import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import {
   pickHostDevice,
   useDeviceRoster,

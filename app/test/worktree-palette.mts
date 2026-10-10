@@ -36,20 +36,20 @@ import {
   rankPaletteEntries,
   rankPalettePages,
   rankPaletteProjects,
-} from "@/components/palette/buildPaletteEntries";
+} from "@shigomori/ui/views/palette/buildPaletteEntries.ts";
 import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { Radio } from "lucide-react";
 import { matchPositions } from "@shigomori/ui/lib/fuzzyMatch.ts";
-import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
-import type { MirrorLink } from "@/hooks/remote/useMirrors";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import { worktreeRowKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import type {
   Project,
   PullRequest,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 
 const PEER = "peer-device";

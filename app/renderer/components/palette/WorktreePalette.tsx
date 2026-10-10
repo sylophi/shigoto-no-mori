@@ -4,7 +4,7 @@ import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useDeviceBadges } from "@/components/sidebar/deviceBadges";
-import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
+import { worktreeRowKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
@@ -36,7 +36,7 @@ import {
   rankPaletteEntries,
   rankPalettePages,
   rankPaletteProjects,
-} from "./buildPaletteEntries";
+} from "@shigomori/ui/views/palette/buildPaletteEntries.ts";
 import {
   PaletteGroupView,
   PaletteItemView,

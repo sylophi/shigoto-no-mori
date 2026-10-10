@@ -38,7 +38,7 @@ import {
   worktreeMoves,
   type Speaker,
 } from "@shigomori/ui/lib/villagerVoice.ts";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 import { lastOf } from "./lib/checkKit.mts";
 

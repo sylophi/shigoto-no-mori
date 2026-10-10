@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
 import type { RemoteSyncState, Worktree } from "@shigomori/contracts/schemas";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 
 // One posed worktree per state, and whether its move runs beside

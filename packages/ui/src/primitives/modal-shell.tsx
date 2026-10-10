@@ -160,7 +160,7 @@ export function ModalShell({
 }
 
 // The dialog's box, where ModalShell hangs it over the window. A scene
-// (lab/scenes) draws a dialog's view in it inline, since a portal draws
+// (src/scenes) draws a dialog's view in it inline, since a portal draws
 // nothing on a server.
 export function ModalBox({
   className,

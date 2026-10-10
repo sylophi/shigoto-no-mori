@@ -7,7 +7,7 @@
 // and so does the pre-flight: a branch that device already holds fails
 // the pull at step 2, so the review says so here and keeps Start off.
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { changeEntries } from "@/lib/patchFiles";
+import { changeEntries } from "@shigomori/ui/lib/patchFiles.ts";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useCarryOverRows } from "../flow/createPlan";

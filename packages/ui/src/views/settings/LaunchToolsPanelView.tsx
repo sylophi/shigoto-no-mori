@@ -15,7 +15,7 @@ import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { CustomLauncherInputView } from "../shared/CustomLauncherInputView.tsx";
 import { ScriptEnvPopoverView } from "../shared/ScriptEnvPopoverView.tsx";
-import type { SettingsFormState } from "./settingsForm.ts";
+import type { SettingsFormState } from "../../lib/settingsForm.ts";
 import { useLauncherListEditor } from "../../hooks/useLauncherListEditor.ts";
 import { DetectedToolsSectionView } from "./DetectedToolsSectionView.tsx";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";

@@ -10,6 +10,7 @@
 // ignore rule) go to the device RUNNING the session through the scope
 // they are mounted under, which is that device's: its own page, or the
 // far end's page re-scoped to it (useWorktreeMirrorLinks).
+import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   queryOptions,
@@ -128,17 +129,6 @@ export function writeMirrorList(
   void queryClient.cancelQueries({ queryKey, exact: true });
   queryClient.setQueryData(queryKey, list);
 }
-
-// A mirrored pair as the sidebar folds it: the peer's row (device,
-// worktree) that folds into a local row, and the peer device the local
-// row wears. A session pairs its local original with the peer's copy.
-// A served stream pairs the served copy with the peer's original, when
-// the peer named it.
-export type MirrorLink = {
-  peerDeviceId: string;
-  peerWorktreeId: string;
-  localWorktreeId: string;
-};
 
 function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
   const links: MirrorLink[] = [];

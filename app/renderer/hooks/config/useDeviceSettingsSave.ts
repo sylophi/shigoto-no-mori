@@ -6,7 +6,7 @@ import {
   invalidateDeviceSettingsQueries,
   toDeviceSettingsPatch,
 } from "./useSettingsSave";
-import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 
 // Save for the device-managed keys of whichever device the surrounding
 // HostScope names: one idempotent patch of every key it edits through

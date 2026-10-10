@@ -9,14 +9,17 @@
 // Run: pnpm test agents-need-you.
 import assert from "node:assert/strict";
 import { buildLive } from "@/components/live/liveModel";
-import { byInboxRank, inboxRank } from "@/components/sidebar/inbox/inboxRank";
+import {
+  byInboxRank,
+  inboxRank,
+} from "@shigomori/ui/views/sidebar/inbox/inboxRank.ts";
 import {
   type AgentSession,
   type RunningScript,
   type Worktree,
   worktreeLastActivityAt,
 } from "@shigomori/contracts/schemas";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 
 const session = (state: AgentSession["state"], at: number): AgentSession => ({
