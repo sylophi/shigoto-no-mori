@@ -570,6 +570,11 @@ export const ClientConfigSchema = Schema.Struct({
   // Absence == expanded (renderer/hooks/projects/useCollapsedProjects.ts
   // is the only reader and writer).
   collapsedProjects: Schema.optional(Schema.Array(Schema.String)),
+  // The keys each action is bound to on this device, by the action's id
+  // in the keymap (the ui package's lib/keymap.ts), as "Mod+Shift+N".
+  // Only a chord that differs from the action's default is stored; one
+  // that doesn't read, or an id the keymap doesn't know, is ignored.
+  keybindings: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type ClientConfig = typeof ClientConfigSchema.Type;
 

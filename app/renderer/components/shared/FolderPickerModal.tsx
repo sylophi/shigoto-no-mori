@@ -8,6 +8,7 @@ import {
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useBinding } from "@/hooks/ui/useKeymap";
 import { notifyError } from "@/lib/toast";
 import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
 
@@ -21,6 +22,7 @@ export function FolderPickerModal({
     initialPath?: string;
   }) {
   const { hint, onPick, onClose } = props;
+  const confirmKeys = useBinding("confirm");
   // Seed the input value with the caller's path; otherwise drop into ~/.
   // When an initialPath is provided we append a separator (matching the
   // path's own style) so the listing fires immediately rather than
@@ -66,6 +68,7 @@ export function FolderPickerModal({
         setHighlighted={setHighlighted}
         browse={browse}
         onOpenFinder={remote ? undefined : () => void openFinder()}
+        confirmKeys={confirmKeys}
       />
     </ModalShell>
   );

@@ -765,6 +765,12 @@
       {
         "theme": "light",
         "lightTheme": "sakura"
+      },
+      {
+        "keybindings": {
+          "palette": "Mod+P",
+          "terminal": "Ctrl+Alt+T"
+        }
       }
     ],
     "normalizes": [
@@ -811,6 +817,11 @@
         "forwardLocalPorts": {
           "dev_1c94b0da:5173": 5173.5
         }
+      },
+      {
+        "keybindings": {
+          "palette": 1
+        }
       }
     ]
   },
@@ -844,6 +855,12 @@
         "windowBounds": {
           "width": 1280,
           "height": 800
+        }
+      },
+      {
+        "keybindings": {
+          "palette": "Mod+P",
+          "terminal": "Ctrl+Alt+T"
         }
       }
     ],

@@ -40,7 +40,7 @@ export function OverlaysProvider({ children }: { children: ReactNode }) {
     setAddProjectOpen,
     addProjectTarget,
     addProjectRequest,
-    // Closing the palette first keeps ⌘N sane while it is open. The
+    // Closing the palette first keeps Add project sane while it is open. The
     // modal shouldn't stack on top of it.
     openAddProject: (target = NO_TARGET) => {
       setPaletteOpen(false);

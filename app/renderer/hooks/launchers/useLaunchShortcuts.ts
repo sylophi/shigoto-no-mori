@@ -7,10 +7,10 @@ interface LaunchTarget {
   id: string;
 }
 
-// ⌘1..⌘9 launch `target`'s tools while the caller holds them: the
-// worktree page's launch row, or the palette for the worktree it has
-// highlighted. The accelerators are the native menu's (main/electron/
-// menu.ts), so one holder at a time. The caller ships exactly the
+// The keymap's launch tools (⌘1..⌘9) launch `target`'s tools while the
+// caller holds them: the worktree page's launch row, or the palette for
+// the worktree it has highlighted. The accelerators are the native
+// menu's (main/electron/menu.ts), so one holder at a time. The caller ships exactly the
 // entries it shows, in order, so a digit can't land on a tool other
 // than the one drawn beside it. Undefined `target` lets go. Enabling
 // rides the entries and letting go its own effect, so a refetch

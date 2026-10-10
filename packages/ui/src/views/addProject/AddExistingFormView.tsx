@@ -45,6 +45,7 @@ export function AddExistingFormView({
   onAdd,
   terrierOptIn,
   onPickFolder,
+  confirmKeys,
 }: {
   // The input value IS the path.
   query: string;
@@ -77,10 +78,13 @@ export function AddExistingFormView({
   terrierOptIn: ReactNode;
   // The native folder dialog, this machine's alone: null on a peer.
   onPickFolder: (() => void) | null;
+  // The keys that add what is typed past a highlighted row (the
+  // keymap's).
+  confirmKeys: string;
 }) {
   const hasHighlighted = highlighted.startsWith("browse:");
   const submitLabel = targetIsGitRepo ? "Add" : "Scan for repos in folder";
-  const submitKbd = hasHighlighted ? "⌘↩" : "↩";
+  const submitKbd = hasHighlighted ? confirmKeys : "↩";
 
   return (
     <Command

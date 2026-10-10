@@ -3,6 +3,7 @@
 // worktrees on the move, a locked one stuck, a lapsed session's
 // sign-in, every step done), and a fresh install's first run (the
 // sign-in, the command line tool, the first project's pick).
+import { defaultBinding } from "../lib/keymap.ts";
 import { AddExistingFormView } from "../views/addProject/AddExistingFormView.tsx";
 import { MigrationView } from "../views/steps/MigrationView.tsx";
 import { OnboardingView } from "../views/steps/OnboardingView.tsx";
@@ -66,6 +67,7 @@ const picker = (
     onAdd={noop}
     terrierOptIn={null}
     onPickFolder={noop}
+    confirmKeys={defaultBinding("confirm").label}
   />
 );
 

@@ -3,6 +3,7 @@
 // the brand header, the device filter, the view's own controls and
 // rows, and the footer. The rows are the app's own (buildSidebarRows,
 // buildInboxRows) over the fixture forests.
+import { defaultBinding } from "../lib/keymap.ts";
 import { buildGrid } from "../views/home/gridModel.ts";
 import type { ReactNode } from "react";
 import type { SidebarView } from "@shigomori/contracts/schemas/index";
@@ -449,6 +450,9 @@ export function SceneSidebar({
   takeover?: ReactNode;
 }) {
   const hasLocalHost = shell === "desktop";
+  const addProjectKeys = hasLocalHost
+    ? defaultBinding("addProject").aria
+    : undefined;
   const inbox = view === "inbox";
   const model = inbox
     ? inboxModel(shell)
@@ -473,7 +477,7 @@ export function SceneSidebar({
               addProject={
                 <AddProjectButtonView
                   outline
-                  hasLocalHost={hasLocalHost}
+                  keys={addProjectKeys}
                   onClick={noop}
                 />
               }
@@ -492,10 +496,7 @@ export function SceneSidebar({
                 />
               }
               addProject={
-                <AddProjectButtonView
-                  hasLocalHost={hasLocalHost}
-                  onClick={noop}
-                />
+                <AddProjectButtonView keys={addProjectKeys} onClick={noop} />
               }
             />
           )}
@@ -517,7 +518,13 @@ export function SceneSidebar({
         </ViewPaneView>
         {footer && takeover === undefined && (
           <SidebarFooterView
-            toggle={<SidebarViewToggleView view={view} onChange={noop} />}
+            toggle={
+              <SidebarViewToggleView
+                view={view}
+                onChange={noop}
+                keys={defaultBinding("sidebarLayout").aria}
+              />
+            }
             actions={
               <SidebarNavActionsView
                 hasLocalHost={hasLocalHost}

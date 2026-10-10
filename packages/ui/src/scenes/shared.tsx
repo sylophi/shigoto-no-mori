@@ -1,6 +1,7 @@
 // The parts every page shares: a project page's frame with its device
 // tabs, the marks for devices, projects, worktrees, villagers and
 // tools, and the two folder pickers.
+import { defaultBinding } from "../lib/keymap.ts";
 import type { ReactNode } from "react";
 import { DEVICE_ICONS } from "@shigomori/contracts/deviceIcon";
 import type { Worktree } from "@shigomori/contracts/schemas/index";
@@ -304,6 +305,7 @@ export function FolderPickerScene() {
             title="Pick a folder"
             confirmLabel="Use this folder"
             hint="Where new worktrees of this project go."
+            confirmKeys={defaultBinding("confirm")}
             onPick={noop}
             onClose={noop}
             query={query}

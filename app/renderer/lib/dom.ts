@@ -1,7 +1,6 @@
 // True when a keydown originated in a text-entry context (input,
-// textarea, or contenteditable). Bare-key window shortcuts must stay
-// inert there. Shared by every global hotkey so the definition of
-// "the user is typing" can't drift between them.
+// textarea, or contenteditable), which keeps every key but a `Mod`
+// chord (hooks/ui/useKeymap.ts).
 export function isEditableTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
@@ -11,12 +10,10 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 // True when a keydown originated in a surface that consumes raw keys
-// itself: the script console's terminal, where Ctrl+D is EOF and Ctrl+C
-// an interrupt for the running program. Such surfaces are text fields
-// too (isEditableTarget covers them, so bare-key shortcuts stay inert),
-// but a hotkey whose key would otherwise be passed through as a control
-// byte can check this to claim it instead. Surfaces opt in with
-// data-keyboard-surface="raw".
+// itself: a terminal, where Ctrl+D is EOF and Ctrl+C an interrupt for
+// the running program. It keeps every key a shell can be sent, and the
+// keymap claims the few it gives up before it sees them. Surfaces opt in
+// with data-keyboard-surface="raw".
 export function isRawKeySurface(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
@@ -26,8 +23,8 @@ export function isRawKeySurface(target: EventTarget | null): boolean {
 
 // True while something is layered over the page and owns the keyboard:
 // a modal shell, a sheet, an open menu, popover or combobox popup, or
-// the blocking veil. A window-wide shortcut hears a key wherever focus
-// sits, a dialog's trapped focus included, so a bare-key one asks. One
+// the blocking veil. The keymap's listener hears a key wherever focus
+// sits, a dialog's trapped focus included, so it asks. One
 // still animating out (data-closed, on it or around it) has already
 // let go.
 const OVERLAY_SLOTS = [
@@ -43,17 +40,4 @@ const OVERLAY_SLOTS = [
 
 export function isOverlayOpen(): boolean {
   return Boolean(document.querySelector(OVERLAY_SLOTS));
-}
-
-// The full "may a bare-key shortcut act right now" test: no modifiers,
-// not a key-repeat or an IME composition, not typing, and no overlay
-// covering the page. Composed here rather than at each listener so the
-// guard set stays uniform. Adding a condition later is one edit, not an
-// audit of every hotkey. Shortcuts that deliberately want a narrower
-// rule keep their own check and say why.
-export function isBareKeyEvent(e: KeyboardEvent): boolean {
-  if (e.repeat || e.isComposing) return false;
-  if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return false;
-  if (isEditableTarget(e.target)) return false;
-  return !isOverlayOpen();
 }

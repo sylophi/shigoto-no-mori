@@ -22,6 +22,7 @@ import { ScanningPanelView } from "@shigomori/ui/views/addProject/ScanningPanelV
 import { ResultsPanelView } from "@shigomori/ui/views/addProject/ResultsPanelView.tsx";
 import { useTerrierOptIn } from "./TerrierOptIn";
 import { useBrowseState } from "./useBrowseState";
+import { useBinding } from "@/hooks/ui/useKeymap";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
@@ -53,6 +54,7 @@ export function AddExistingForm({
 }: AddExistingFormProps) {
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
+  const confirmKeys = useBinding("confirm");
   const queryClient = useQueryClient();
   const scope = useHostScope();
   const { data: existingProjects = [] } = useProjects();
@@ -230,7 +232,7 @@ export function AddExistingForm({
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && e.metaKey) {
+    if (confirmKeys.matches(e)) {
       e.preventDefault();
       e.stopPropagation();
       void primaryAction();
@@ -255,7 +257,7 @@ export function AddExistingForm({
   };
 
   const onResultsKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && e.metaKey) {
+    if (confirmKeys.matches(e)) {
       e.preventDefault();
       e.stopPropagation();
       void bulkAdd();
@@ -286,6 +288,7 @@ export function AddExistingForm({
         onAdd={bulkAdd}
         bulkAdding={bulkAdding}
         onKeyDown={onResultsKeyDown}
+        confirmKeys={confirmKeys.label}
         terrierOptIn={terrierOptIn}
       />
     );
@@ -328,6 +331,7 @@ export function AddExistingForm({
       onBrowseUp={browseUp}
       onBrowseTo={browseTo}
       onAdd={(path) => void submit(path)}
+      confirmKeys={confirmKeys.label}
       terrierOptIn={terrierOptIn}
       // The native dialog is this machine's, so it can't pick a folder
       // on a peer's disk.

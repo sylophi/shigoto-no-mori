@@ -31,6 +31,7 @@ export function PaletteDialogView({
   emptyList,
   verbs,
   current,
+  changesKeys,
 }: {
   // The verbs hold the keys, not the list.
   picked: boolean;
@@ -49,6 +50,8 @@ export function PaletteDialogView({
   verbs: ReactNode;
   // The highlighted row's kind, for what ↩ does.
   current: PaletteRow["kind"] | undefined;
+  // The keys that open a worktree's changes (the keymap's).
+  changesKeys: string;
 }) {
   // Keyed by stage: the pane holding the keys changes, and a fresh
   // mount keeps the highlight it is handed.
@@ -133,7 +136,7 @@ export function PaletteDialogView({
         ) : (
           <>
             {current === "worktree" && (
-              <KbdHint keys={["⌘↩"]} label="Changes" />
+              <KbdHint keys={[changesKeys]} label="Changes" />
             )}
             <KbdHint keys={["⇥"]} label="Actions" />
           </>

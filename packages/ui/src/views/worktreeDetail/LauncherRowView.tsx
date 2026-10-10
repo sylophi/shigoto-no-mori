@@ -4,12 +4,14 @@ import { Loader2 } from "lucide-react";
 import { LauncherIconView } from "../shared/LauncherIconView.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { Skeleton } from "../../primitives/skeleton.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { LauncherEntry } from "@shigomori/contracts/schemas/index";
 
 export function LauncherRowView({
   entries,
   allHidden = false,
   pendingId,
+  keys,
   onLaunch,
   onChooseTools,
   onConfigure,
@@ -20,6 +22,9 @@ export function LauncherRowView({
   allHidden?: boolean;
   // The tool a launch is under way in.
   pendingId?: string;
+  // The keys that launch each tool, in order (the keymap's ⌘1..⌘9),
+  // shown as its tip.
+  keys?: readonly (string | undefined)[];
   onLaunch: (entry: LauncherEntry) => void;
   onChooseTools: () => void;
   onConfigure: () => void;
@@ -67,20 +72,17 @@ export function LauncherRowView({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {entries.map((entry) => (
-        <Button
-          key={entry.id}
-          variant="outline"
-          size="sm"
-          onClick={() => onLaunch(entry)}
-        >
-          {entry.id === pendingId ? (
-            <Loader2 className="animate-spin" />
-          ) : (
-            <LauncherIconView entry={entry} />
-          )}
-          <span>{entry.label}</span>
-        </Button>
+      {entries.map((entry, i) => (
+        <SimpleTooltip key={entry.id} tip={keys?.[i]}>
+          <Button variant="outline" size="sm" onClick={() => onLaunch(entry)}>
+            {entry.id === pendingId ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <LauncherIconView entry={entry} />
+            )}
+            <span>{entry.label}</span>
+          </Button>
+        </SimpleTooltip>
       ))}
     </div>
   );

@@ -30,6 +30,7 @@ import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useDeepLinks } from "@/hooks/ui/useDeepLinks";
 import { useEscapeGoesBack } from "@/hooks/ui/useEscapeGoesBack";
+import { useKeymapListener } from "@/hooks/ui/useKeymap";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -59,6 +60,7 @@ export function AppShell() {
   const phone = usePhoneLayout();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  useKeymapListener();
   usePaletteVariantHotkey(!pathname.startsWith("/settings"));
   useEscapeGoesBack();
   // The forest tab a stacked page returns to on a phone.

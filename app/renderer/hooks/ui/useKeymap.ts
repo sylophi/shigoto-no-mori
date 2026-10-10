@@ -1,0 +1,152 @@
+// This window's keymap (V3.md, "The keymap"): the table in
+// @shigomori/ui's lib/keymap.ts under the device's bindings, and the one
+// listener that runs an action when its keys are pressed. A component
+// says what an action does with useKeymapAction while it is on screen,
+// and shows its keys with useBinding. The menu's actions are the
+// shell's: their keys go to its menu (useMenuChords), which runs them.
+import { useEffect, useRef } from "react";
+import {
+  type Binding,
+  chordAccelerator,
+  KEYMAP_ACTIONS,
+  resolveKeymap,
+} from "@shigomori/ui/lib/keymap.ts";
+import { useClientConfig } from "@/hooks/config/useClientConfig";
+import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
+import { hasLocalHost } from "@/lib/localHost";
+
+// ⌘ or Ctrl: which key `Mod` is here. A phone or tablet browser counts
+// as a Mac, whose glyphs its keyboards print.
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+
+export function useKeymap(): ReadonlyMap<string, Binding> {
+  const stored = useClientConfig().data?.keybindings;
+  return resolveKeymap(stored, { mac: isMac, desktop: hasLocalHost });
+}
+
+// An action's keys here. Every window has every action but the menu's,
+// which a web client lacks: those are read off useKeymap.
+export function useBinding(id: string): Binding {
+  const binding = useKeymap().get(id);
+  if (!binding) throw new Error(`No action ${id} in this window's keymap`);
+  return binding;
+}
+
+type Handler = {
+  // False when the press is not for it after all, which leaves the key
+  // to whatever else hears it.
+  readonly run: (e: KeyboardEvent) => boolean | void;
+  // Whether it acts while a dialog or a menu is open over the page.
+  readonly overOverlays: boolean;
+};
+
+// What each action does, as the components on screen say: the last to
+// mount wins, and an unmount hands it back.
+const handlers = new Map<string, Handler[]>();
+
+// What `id` does while the caller is on screen and `enabled`.
+export function useKeymapAction(
+  id: string,
+  run: (e: KeyboardEvent) => boolean | void,
+  { enabled = true, overOverlays = false } = {},
+): void {
+  // The latest closure, so a render does not re-register.
+  const latest = useRef(run);
+  latest.current = run;
+  useEffect(() => {
+    if (!enabled) return;
+    const handler: Handler = {
+      run: (e) => latest.current(e),
+      overOverlays,
+    };
+    handlers.set(id, [...(handlers.get(id) ?? []), handler]);
+    return () => {
+      const left = (handlers.get(id) ?? []).filter((h) => h !== handler);
+      if (left.length > 0) handlers.set(id, left);
+      else handlers.delete(id);
+    };
+  }, [id, enabled, overOverlays]);
+}
+
+// The actions whose keys `e` presses, with what they do.
+function pressedActions(
+  keymap: ReadonlyMap<string, Binding>,
+  e: KeyboardEvent,
+): { id: string; handler: Handler }[] {
+  const found: { id: string; handler: Handler }[] = [];
+  for (const [id, binding] of keymap) {
+    const handler = handlers.get(id)?.at(-1);
+    if (handler && binding.matches(e)) found.push({ id, handler });
+  }
+  return found;
+}
+
+const TERMINAL_ACTIONS = new Set(
+  KEYMAP_ACTIONS.filter((action) => action.terminal).map((action) => action.id),
+);
+
+// The window's listener, mounted once (AppShell). A text field keeps
+// every key but a `Mod` chord (Enter's, arrows' and the editing keys'
+// meanings are the field's), and a focused terminal every key a shell
+// can be sent: it gives up ⌘, which never reaches one, and the
+// terminal's own toggle. Those two are claimed in the capture phase,
+// before the terminal sees them; the rest wait for the bubble, so a
+// control that spent the key (an editor's Escape) keeps it.
+export function useKeymapListener(): void {
+  const keymap = useKeymap();
+  useEffect(() => {
+    const run = (
+      e: KeyboardEvent,
+      found: { id: string; handler: Handler }[],
+    ) => {
+      const overlay = isOverlayOpen();
+      for (const { handler } of found) {
+        if (overlay && !handler.overOverlays) continue;
+        if (handler.run(e) === false) continue;
+        e.preventDefault();
+        return true;
+      }
+      return false;
+    };
+    const fromTerminal = (e: KeyboardEvent) => {
+      if (e.repeat || e.isComposing || !isRawKeySurface(e.target)) return;
+      const found = pressedActions(keymap, e).filter(
+        ({ id }) => TERMINAL_ACTIONS.has(id) || (isMac && e.metaKey),
+      );
+      if (run(e, found)) e.stopPropagation();
+    };
+    const fromPage = (e: KeyboardEvent) => {
+      if (e.repeat || e.isComposing || e.defaultPrevented) return;
+      if (isRawKeySurface(e.target)) return;
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      const found = pressedActions(keymap, e).filter(
+        ({ id }) =>
+          mod || TERMINAL_ACTIONS.has(id) || !isEditableTarget(e.target),
+      );
+      run(e, found);
+    };
+    window.addEventListener("keydown", fromTerminal, true);
+    window.addEventListener("keydown", fromPage);
+    return () => {
+      window.removeEventListener("keydown", fromTerminal, true);
+      window.removeEventListener("keydown", fromPage);
+    };
+  }, [keymap]);
+  useMenuChords(keymap);
+}
+
+// The menu's actions' keys, handed to the shell's menu, which shows the
+// focused window's.
+function useMenuChords(keymap: ReadonlyMap<string, Binding>): void {
+  useEffect(() => {
+    if (!hasLocalHost) return;
+    const chords: Record<string, string> = {};
+    for (const action of KEYMAP_ACTIONS) {
+      const binding = keymap.get(action.id);
+      if (action.menu && binding) {
+        chords[action.id] = chordAccelerator(binding.chord);
+      }
+    }
+    void window.api.menu.setChords({ chords });
+  }, [keymap]);
+}
