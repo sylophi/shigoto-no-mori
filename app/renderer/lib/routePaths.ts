@@ -5,7 +5,7 @@
 // in places that must agree byte for byte: the route tree
 // (renderer/router.tsx), the scope-aware navigation helpers
 // (hooks/worktrees/useWorktreeNav.ts, hooks/projects/useProjectNav.ts)
-// and the sidebar's selected-row rule.
+// and the sidebar's matches (useMatch).
 //
 // The literal types are load-bearing: createRoute and navigate both
 // infer a route's params from the path's literal type, so these must
@@ -51,37 +51,15 @@ export function rowDeviceId(routeDevice: string): string | undefined {
   return routeDevice === localDeviceId ? undefined : routeDevice;
 }
 
-type RouteParams = Record<string, string>;
-
-// Fills a route template's `$param` segments with values, for the
-// places that compare against location.pathname rather than navigate
-// (the sidebar's selected-row rule). The pathname is already decoded,
-// so the values go in as they are.
-export function fillRoutePath(template: string, params: RouteParams): string {
+// Fills a route template's `$param` segments with values, for a route
+// handed to the shell as a string (a notification's, a new window's).
+export function fillRoutePath(
+  template: string,
+  params: Record<string, string>,
+): string {
   return template.replace(/\$([A-Za-z]+)/g, (_, name: string) => {
     const value = params[name];
     if (value === undefined) throw new Error(`route param ${name} missing`);
     return value;
   });
-}
-
-// Each template's pattern, built once: the sidebar matches on every
-// navigation, once per mirrored row.
-const routePatterns = new Map<string, RegExp>();
-
-// Matches a pathname against a route template, the `$param` segments
-// coming back keyed by name, so a caller never depends on their order.
-export function matchRoutePath(
-  template: string,
-  pathname: string,
-): Record<string, string> | null {
-  let pattern = routePatterns.get(template);
-  if (pattern === undefined) {
-    pattern = new RegExp(
-      `^${template.replace(/\$([A-Za-z]+)/g, "(?<$1>[^/]+)")}$`,
-    );
-    routePatterns.set(template, pattern);
-  }
-  const groups = pathname.match(pattern)?.groups;
-  return groups ? { ...groups } : null;
 }

@@ -188,8 +188,10 @@ export function PullFlowFrame({
 }) {
   const { stage, elapsed, progress, target } = flow;
   const running = stage === "running";
+  const title = `${titles[stage]}${running ? ` to ${thisDeviceLabel}` : ""}`;
   return (
     <ModalShell
+      label={title}
       // While the pull runs neither Escape nor the backdrop may close
       // the dialog: the mutation is quiet, so dismissing it would end
       // the flow with no report and no way back to the last step. The
@@ -201,7 +203,7 @@ export function PullFlowFrame({
       <PullFlowFrameView
         stage={stage}
         reviewIcon={reviewIcon}
-        title={`${titles[stage]}${running ? ` to ${thisDeviceLabel}` : ""}`}
+        title={title}
         elapsed={elapsed}
         headline={headline}
         steps={steps}

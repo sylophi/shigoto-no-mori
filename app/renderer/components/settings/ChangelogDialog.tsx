@@ -21,7 +21,11 @@ export function ChangelogDialog({
 }) {
   const releases = useReleases();
   return (
-    <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
+    <ModalShell
+      label="Changelog"
+      onClose={onClose}
+      popoverClassName="max-w-2xl"
+    >
       <ChangelogDialogView
         {...props}
         releases={{

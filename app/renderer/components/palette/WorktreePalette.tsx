@@ -438,6 +438,7 @@ function PaletteDialog({
 
   return (
     <ModalShell
+      label="Command palette"
       onClose={onClose}
       onEscape={onEscape}
       // As tall as the window allows, and never resized by what it

@@ -73,7 +73,11 @@ export function BranchRow({
       deletePending={del.isPending}
       deleteDialog={
         confirmingDelete && (
-          <ModalShell onClose={closeDelete} popoverClassName="max-w-md">
+          <ModalShell
+            label="Delete branch"
+            onClose={closeDelete}
+            popoverClassName="max-w-md"
+          >
             <BranchDeleteDialogView
               name={name}
               needsForce={needsForce}

@@ -90,7 +90,11 @@ export function MirrorManageDialog({
   // again, which is the way out of a halt whose cause was put right.
   const resumable = session.paused || isHaltedStatus(session.status);
   return (
-    <ModalShell onClose={onClose} popoverClassName="max-w-3xl">
+    <ModalShell
+      label={`Mirror with ${names.other}`}
+      onClose={onClose}
+      popoverClassName="max-w-3xl"
+    >
       <MirrorManageDialogView
         session={session}
         view={view}

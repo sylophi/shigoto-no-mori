@@ -30,7 +30,7 @@ export function PathPickerModal<E extends PickerEntry>({
   const listing = useListing(parents.map((parent) => parent.name).join("/"));
   const { data: runtime } = useRuntimeInfo();
   return (
-    <ModalShell onClose={props.onClose}>
+    <ModalShell label="Browse folders" onClose={props.onClose}>
       <PathPickerView
         {...props}
         home={runtime?.homedir ?? null}

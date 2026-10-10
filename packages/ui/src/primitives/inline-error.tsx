@@ -78,7 +78,11 @@ export function ErrorDetailsHost() {
   if (!current) return null;
   const close = () => details.publish(null);
   return (
-    <ModalShell onClose={close} popoverClassName="max-w-2xl">
+    <ModalShell
+      label={current.title}
+      onClose={close}
+      popoverClassName="max-w-2xl"
+    >
       <div className="flex min-h-0 flex-col gap-3 p-5">
         <div className="group/copy flex items-center gap-2">
           <h2 className="min-w-0 flex-1 text-base font-semibold">

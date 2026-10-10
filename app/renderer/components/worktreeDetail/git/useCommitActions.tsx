@@ -124,7 +124,11 @@ function RewordDialog({
     commitMessageQueryOptions(scope, worktree.projectId, worktree.id, hash),
   );
   return (
-    <ModalShell onClose={onClose} popoverClassName="max-w-lg">
+    <ModalShell
+      label={`Reword ${hash}`}
+      onClose={onClose}
+      popoverClassName="max-w-lg"
+    >
       <RewordDialogView
         hash={hash}
         form={

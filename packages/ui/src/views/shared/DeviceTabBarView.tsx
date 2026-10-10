@@ -9,13 +9,14 @@
 // to the devices as a group (Configure's shared settings) leads the row
 // with one tab for it, ahead of the machines it spans.
 import { Fragment, type ReactNode } from "react";
+import { Tabs } from "@base-ui/react/tabs";
 import { ArrowRight, MonitorSmartphone } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DEVICE_PILL_CLASS } from "./DeviceChipView.tsx";
 import { DeviceLeadView } from "./DeviceGlyphView.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { useRovingPick } from "../../hooks/useRovingPick.ts";
+import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
 import type { DeviceStatusView } from "../../lib/deviceStatus.ts";
 import { cn, dragRegion } from "../../lib/utils.ts";
 
@@ -63,8 +64,8 @@ export function DeviceTabBarView({
   // Overrides the page inset for a bar that sits in a dialog instead.
   className?: string;
 }) {
-  // One list for the row, so the roving order and the rendered order
-  // cannot disagree.
+  // One list for the row, so the order kept in view and the rendered
+  // order cannot disagree.
   const pills = [
     ...(allDevicesTab
       ? [
@@ -89,12 +90,10 @@ export function DeviceTabBarView({
       badge: tab.badge,
     })),
   ];
-  const { listRef, onKeyDown } = useRovingPick({
-    ids: pills.map((pill) => pill.id),
+  const listRef = useRevealPicked(
     selectedId,
-    onSelect,
-    pickedSelector: '[aria-selected="true"]',
-  });
+    pills.map((pill) => pill.id),
+  );
 
   // The row scrolls as one, a trailing action with it, while only the
   // tabs are the tablist. The page inset is padding rather than the
@@ -102,15 +101,17 @@ export function DeviceTabBarView({
   // cancels the inset with a matching negative margin) instead of
   // clipping.
   return (
-    <div
+    <Tabs.Root
       ref={listRef}
+      value={selectedId}
+      onValueChange={(id: string) => onSelect(id)}
       className={cn(
         "flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-6 phone:px-4",
         className,
       )}
     >
-      <div
-        role="tablist"
+      <Tabs.List
+        activateOnFocus
         aria-label="Device"
         className="flex items-center gap-1.5"
       >
@@ -124,14 +125,9 @@ export function DeviceTabBarView({
                   className="size-3.5 shrink-0 text-muted-foreground"
                 />
               )}
-              <button
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                tabIndex={selected ? 0 : -1}
+              <Tabs.Tab
+                value={pill.id}
                 data-slot="device-chip"
-                onClick={() => onSelect(pill.id)}
-                onKeyDown={onKeyDown}
                 // A page header puts the row under the window's drag strip
                 // (AppShell): each pill carves its own click out of it.
                 style={dragRegion("no-drag")}
@@ -158,11 +154,11 @@ export function DeviceTabBarView({
                   </span>
                 )}
                 {pill.badge}
-              </button>
+              </Tabs.Tab>
             </Fragment>
           );
         })}
-      </div>
+      </Tabs.List>
       {trailing !== undefined && (
         // Under the drag strip like the pills (AppShell).
         <div
@@ -172,7 +168,7 @@ export function DeviceTabBarView({
           {trailing}
         </div>
       )}
-    </div>
+    </Tabs.Root>
   );
 }
 

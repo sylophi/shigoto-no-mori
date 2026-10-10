@@ -1,8 +1,8 @@
-import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
 import { useDeviceTabs } from "@/components/shared/DeviceTabs";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useTerminals } from "@/hooks/terminals/useTerminals";
-import { DEVICE_TERMINALS_PATH, matchRoutePath } from "@/lib/routePaths";
+import { DEVICE_TERMINALS_PATH } from "@/lib/routePaths";
 import type { DeviceTab } from "@/components/shared/DeviceTabs";
 import {
   SidebarDeviceTerminalsView,
@@ -42,14 +42,15 @@ function DeviceTerminals({ device }: { device: DeviceTab }) {
     (terminal) => terminal.owner.kind === "device",
   );
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const onPage = useMatch({
+    from: DEVICE_TERMINALS_PATH,
+    shouldThrow: false,
+    select: (match) => match.params.deviceId === device.deviceId,
+  });
   const { terminal: picked } = useSearch({ strict: false }) as {
     terminal?: string;
   };
   if (terminals === undefined || terminals.length === 0) return null;
-  const onPage =
-    matchRoutePath(DEVICE_TERMINALS_PATH, pathname)?.["deviceId"] ===
-    device.deviceId;
   const selectedId = onPage
     ? (picked ?? terminals.at(-1)?.terminalId)
     : undefined;

@@ -1,5 +1,12 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { Dialog } from "@base-ui/react/dialog";
 import { cn } from "../lib/utils.ts";
 import { useThemeRoot } from "../root.tsx";
 
@@ -28,6 +35,8 @@ export const MODAL_BACKDROP =
   "inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]";
 
 interface ModalShellProps {
+  // The dialog's name for assistive tech, usually the title it draws.
+  label: string;
   // Called when the user clicks the backdrop or (default) presses Escape.
   onClose: () => void;
   // When true, Escape closes the shell. Off when a child view owns its
@@ -43,7 +52,12 @@ interface ModalShellProps {
   children: ReactNode;
 }
 
+// A dialog over the window: Base UI's, so focus stays inside while it
+// is open and goes back to where it was when it closes, and the page
+// under it is hidden from assistive tech. Callers open it by mounting
+// it and close it by unmounting it.
 export function ModalShell({
+  label,
   onClose,
   closeOnEscape = true,
   onEscape,
@@ -59,9 +73,11 @@ export function ModalShell({
   const closeOnEscapeRef = useRef(closeOnEscape);
   closeOnEscapeRef.current = closeOnEscape;
   const root = useThemeRoot();
-  const backdropRef = useRef<HTMLDivElement>(null);
+  // Base UI's portal mounts a render after the shell, so its backdrop
+  // arrives as state.
+  const [backdrop, setBackdrop] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    const doc = backdropRef.current?.ownerDocument;
+    const doc = backdrop?.ownerDocument;
     if (!doc) return;
     const id = Symbol("modal-shell");
     openShells.push(id);
@@ -86,13 +102,12 @@ export function ModalShell({
       doc.removeEventListener("keydown", onKey, true);
       openShells.splice(openShells.indexOf(id), 1);
     };
-  }, []);
+  }, [backdrop]);
   // The exit. Callers close a shell by unmounting it, so a copy is
   // left in its place to animate out, then removed. A copy doesn't
   // carry scroll offsets, so they're kept as the lists scroll: read on
   // close, they'd force a layout in the middle of React's commit.
   useLayoutEffect(() => {
-    const backdrop = backdropRef.current;
     if (!backdrop) return;
     const scrolls = new Map<Element, [number, number]>();
     const onScroll = (e: Event) => {
@@ -118,9 +133,9 @@ export function ModalShell({
       const ghost = backdrop.cloneNode(true) as HTMLElement;
       ghost.inert = true;
       ghost.dataset.closed = "";
-      // Where the shell was, so a dialog opening in the same commit
-      // lands on top of it.
-      backdrop.before(ghost);
+      // Where the shell's portal was, so a dialog opening in the same
+      // commit lands on top of it.
+      (backdrop.parentElement ?? backdrop).before(ghost);
       queueMicrotask(() => {
         // StrictMode's rehearsal unmount leaves the shell in place.
         if (backdrop.isConnected) return ghost.remove();
@@ -134,57 +149,61 @@ export function ModalShell({
         fadeOut(ghost);
       });
     };
-  }, []);
+  }, [backdrop]);
   // Portaled to the theme root: the shell is fixed and z-50, but under
   // doubutsu the main canvas is its own stacking context (isolation:
   // isolate in doubutsu.css), which would trap the shell beneath the
   // sidebar header's positioned title. Mounting at the root puts it
-  // above everything, in all four theme modes. With no root (a server
-  // render) it draws in place.
-  const shell = (
-    <div
-      ref={backdropRef}
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+  // above everything, in all four theme modes. A server render draws
+  // no portal: a scene draws the view in a ModalBox.
+  return (
+    <Dialog.Root
+      open
+      onOpenChange={(open, details) => {
+        // Escape is the listener's above; Base UI's own would close a
+        // shell under a picker, or one that owns its Escape.
+        if (!open && details.reason === "outside-press") onClose();
       }}
-      className={cn(
-        "group/modal fixed duration-200 ease-(--ease-out-quart) data-closed:animate-out data-closed:duration-150 data-closed:fade-out-0 data-closed:fill-mode-forwards motion-safe:animate-in motion-safe:fade-in-0",
-        MODAL_BACKDROP,
-      )}
     >
-      <ModalBox
-        className={cn(
-          "duration-200 ease-(--ease-out-quart) group-data-closed/modal:duration-150 group-data-closed/modal:fill-mode-forwards motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:slide-in-from-top-2 group-data-closed/modal:animate-out group-data-closed/modal:zoom-out-95",
-          popoverClassName,
-        )}
-      >
-        {children}
-      </ModalBox>
-    </div>
+      <Dialog.Portal container={root}>
+        <Dialog.Viewport
+          ref={setBackdrop}
+          className={cn(
+            "group/modal fixed duration-200 ease-(--ease-out-quart) data-closed:animate-out data-closed:duration-150 data-closed:fade-out-0 data-closed:fill-mode-forwards motion-safe:animate-in motion-safe:fade-in-0",
+            MODAL_BACKDROP,
+          )}
+        >
+          <Dialog.Popup
+            aria-label={label}
+            render={
+              <ModalBox
+                className={cn(
+                  "outline-none duration-200 ease-(--ease-out-quart) group-data-closed/modal:duration-150 group-data-closed/modal:fill-mode-forwards motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:slide-in-from-top-2 group-data-closed/modal:animate-out group-data-closed/modal:zoom-out-95",
+                  popoverClassName,
+                )}
+              />
+            }
+          >
+            {children}
+          </Dialog.Popup>
+        </Dialog.Viewport>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
-  return root ? createPortal(shell, root) : shell;
 }
 
 // The dialog's box, where ModalShell hangs it over the window. A scene
 // (src/scenes) draws a dialog's view in it inline, since a portal draws
 // nothing on a server.
-export function ModalBox({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
+export function ModalBox({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
+      {...props}
       data-slot="modal-shell"
       className={cn(
         "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
         className,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }

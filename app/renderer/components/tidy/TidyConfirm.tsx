@@ -27,7 +27,11 @@ export function TidyConfirm({
     ]),
   );
   return (
-    <ModalShell onClose={onCancel} popoverClassName="max-w-lg">
+    <ModalShell
+      label="Remove worktrees"
+      onClose={onCancel}
+      popoverClassName="max-w-lg"
+    >
       <TidyConfirmView
         summary={summary}
         deleteBranches={deleteBranches}

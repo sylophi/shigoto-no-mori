@@ -19,7 +19,11 @@ export function PortsDialog({
   const { remote, deviceLabel } = state;
 
   return (
-    <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
+    <ModalShell
+      label={remote ? `Ports on ${deviceLabel}` : "Ports"}
+      onClose={onClose}
+      popoverClassName="max-w-2xl"
+    >
       <PortsDialogView
         remote={remote}
         deviceLabel={deviceLabel}
