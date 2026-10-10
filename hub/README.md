@@ -207,7 +207,25 @@ authenticates), it only bounds what that traffic can cost.
 - Connection tickets are signed (`TICKET_SIGNING_KEY`), so
   `GET /connect` cannot be used to instantiate a Durable Object under
   a name of the caller's choosing. A forged ticket is a `403` from the
-  Worker.
+  Worker. A ticket is bound to the credential it was minted with:
+  enrolling a device again rotates its credential, drops its unspent
+  tickets and closes its sockets (`4104`), and each dials again with
+  the new credential.
+- A device holds at most `MAX_DEVICE_CONNECTIONS` (32) sockets,
+  whatever its kind. A desktop holds one and a browser profile one per
+  tab; past the cap the device's oldest socket gives way.
+- A socket may send a burst of 300 messages, refilled at 30 a second,
+  and nothing longer than `MAX_HUB_MESSAGE_BYTES`; past either it is
+  closed (`4105`, `1009`) and its device dials again. Measured on the
+  dev hub, a socket sends two messages a second at most (a dial's
+  connectInfo ask and answer, per peer), so an account at its device
+  cap asks 30 at once: the budget is ten times that. Terminal and file
+  traffic never ride this socket.
+- Enrollment is admitted in the account's Durable Object, one at a
+  time, so enrollments arriving together cannot pass the device cap.
+- Workers Logs keeps what the code logs, with invocation logs off:
+  they would record request URLs, and the connect route carries its
+  ticket in one.
 - The Worker's limiter runs inside the Worker, so a limited request is
   still a billed Worker invocation. Only a rule at the zone stops a
   flood before it is billed. Set one up once, in the Cloudflare
