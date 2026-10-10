@@ -2183,6 +2183,18 @@
       "readable": false
     }
   },
+  "terrier:repos": {
+    "success": [
+      {
+        "name": "😀",
+        "path": "-1"
+      },
+      {
+        "name": "g",
+        "path": "\udc00"
+      }
+    ]
+  },
   "updater:check": {},
   "updater:get": {
     "success": {

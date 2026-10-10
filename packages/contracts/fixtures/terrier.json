@@ -41,5 +41,27 @@
         "version": "0.4.2"
       }
     ]
+  },
+  "TerrierReposSchema": {
+    "accepts": [
+      [],
+      [
+        {
+          "name": "kawaii-cam",
+          "path": "/Users/rin/dev/kawaii-cam"
+        }
+      ]
+    ],
+    "rejects": [
+      [
+        {
+          "name": "kawaii-cam"
+        }
+      ],
+      {
+        "name": "x",
+        "path": "/x"
+      }
+    ]
   }
 }

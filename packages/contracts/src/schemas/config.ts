@@ -472,6 +472,10 @@ export const ClientConfigSchema = Schema.Struct({
   // the picks. Mirrored to localStorage with the switch.
   lightTheme: Schema.optional(LightThemeSchema),
   darkTheme: Schema.optional(DarkThemeSchema),
+  // Past the first run's page (renderer/components/welcome): a project
+  // was added there, or this install moved from v2 or had projects
+  // before. Absent = not yet, which the shell's first window opens on.
+  welcomed: Schema.optional(Schema.Boolean),
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir

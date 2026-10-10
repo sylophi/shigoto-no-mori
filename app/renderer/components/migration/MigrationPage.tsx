@@ -1,16 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { callOf } from "@shigomori/contracts/contract";
 import { migrationContract } from "@shigomori/contracts/modules/migration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
-import {
-  migrationEnded,
-  type SignInStep,
-} from "@shigomori/ui/views/steps/migrationEnded.ts";
-import {
-  type EnrollmentStep,
-  useEnrollment,
-} from "@/hooks/account/useEnrollment";
+import { migrationEnded } from "@shigomori/ui/views/steps/migrationEnded.ts";
+import { useSignInStep } from "@/components/steps/useSignInStep";
+import { useMarkWelcomed } from "@/hooks/config/useWelcomed";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { hostViewAtom } from "@/lib/runtime/atoms";
@@ -23,13 +18,6 @@ const migrationAtom = hostViewAtom({
   input: undefined,
 });
 
-const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
-  done: { state: "done", asks: false },
-  enrolling: { state: "running", asks: false },
-  enroll: { state: "running", asks: false },
-  "sign-in": { state: "waiting", asks: true },
-};
-
 // The v3 migration as this machine's host runs it, in place of the app
 // (the /migration route), with this device's enrollment for its key
 // (useEnrollment) as its sign-in: by itself while the session lives, a
@@ -37,30 +25,26 @@ const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
 // with nothing to migrate at once.
 export function MigrationPage() {
   const { data: migration } = useView(hasLocalHost ? migrationAtom : null);
-  const enrollment = useEnrollment();
-  // Shown from the moment it is due, and done once it no longer is.
+  // Shown from the moment the device key is due, and done once it no
+  // longer is.
   const [keyDue, setKeyDue] = useState(false);
-  if (enrollment.needsDeviceKey && !keyDue) setKeyDue(true);
-  // A failed enrollment waits on the button, which tries again.
-  const signIn = !keyDue
-    ? null
-    : enrollment.error !== null && enrollment.step === "enroll"
-      ? SIGN_IN["sign-in"]
-      : SIGN_IN[enrollment.step];
+  const { signIn, needsDeviceKey, run } = useSignInStep(keyDue);
+  if (needsDeviceKey && !keyDue) setKeyDue(true);
+  const shownSignIn = keyDue ? signIn : null;
   const navigate = useNavigate();
   const { open } =
     migration === undefined
       ? { open: false }
-      : migrationEnded(migration, signIn);
+      : migrationEnded(migration, shownSignIn);
 
-  // A live session enrolls once, by itself.
-  const { step, run } = enrollment;
-  const enrolled = useRef(false);
+  // A device that migrates from v2 is past its first run.
+  const migrated =
+    migration !== undefined &&
+    (migration.import !== null || migration.worktrees !== null);
+  const markWelcomed = useMarkWelcomed();
   useEffect(() => {
-    if (!keyDue || step !== "enroll" || enrolled.current) return;
-    enrolled.current = true;
-    run();
-  }, [keyDue, step, run]);
+    if (migrated) markWelcomed();
+  }, [migrated, markWelcomed]);
 
   useEffect(() => {
     if (open) void navigate({ to: "/", replace: true });
@@ -70,7 +54,7 @@ export function MigrationPage() {
   return (
     <MigrationView
       migration={migration}
-      signIn={signIn}
+      signIn={shownSignIn}
       onSignIn={run}
       onContinue={() => void navigate({ to: "/", replace: true })}
     />

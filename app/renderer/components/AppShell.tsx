@@ -38,7 +38,7 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
-import { MIGRATION_PATH } from "@/lib/routePaths";
+import { MIGRATION_PATH, WELCOME_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 
 export function AppShell() {
@@ -76,7 +76,7 @@ export function AppShell() {
   useDeepLinks();
 
   // A page in place of the app, with none of its ways elsewhere.
-  if (pathname === MIGRATION_PATH) {
+  if (pathname === MIGRATION_PATH || pathname === WELCOME_PATH) {
     return (
       <AppShellView phone={phone} hasLocalHost={hasLocalHost} sidebar={null}>
         <Outlet />

@@ -41,6 +41,10 @@ export const PROJECT_ROUTE_PATHS = {
 // which a window shows in place of the app.
 export const MIGRATION_PATH = "/migration";
 
+// A fresh install's first run (components/welcome/WelcomePage.tsx),
+// which its first window shows in place of the app.
+export const WELCOME_PATH = "/welcome";
+
 // A device's own terminals (components/terminal/DeviceTerminals.tsx).
 export const DEVICE_TERMINALS_PATH = "/devices/$deviceId/terminals";
 

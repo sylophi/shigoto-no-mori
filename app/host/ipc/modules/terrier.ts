@@ -5,4 +5,5 @@ import * as Terrier from "@host/lib/terrier";
 
 export const terrierHandlers = {
   readiness: () => Effect.flatMap(Terrier.Terrier, (it) => it.readiness),
+  repos: () => Effect.flatMap(Terrier.Terrier, (it) => it.repos),
 } satisfies Handlers<typeof terrierContract, unknown, Terrier.Terrier>;
