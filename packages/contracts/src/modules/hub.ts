@@ -132,7 +132,9 @@ export const hubContract = defineContract(
       channel: Schema.NonEmptyString,
       input: Schema.optional(Schema.Unknown),
     }),
-    Schema.Unknown,
+    // A void call's answer is undefined, which the binary layout carries
+    // only as its own arm: Unknown alone is JSON there.
+    Schema.UndefinedOr(Schema.Unknown),
   ),
   // A peer's view (a terminal's attach) through the same session, its
   // values as the peer sends them, which the caller decodes as the
