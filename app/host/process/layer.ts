@@ -292,7 +292,12 @@ export const layer = (options: {
     Layer.provideMerge(storeChanges),
     Layer.provideMerge(
       Captures.backgroundFetch.layer.pipe(
-        Layer.provideMerge(BackgroundFetch.layer),
+        Layer.provideMerge(
+          BackgroundFetch.layer({
+            broadcast: broadcastAll,
+            announceProjectChanged,
+          }),
+        ),
       ),
     ),
     // Installing the CLI link is a Settings action. A start only
