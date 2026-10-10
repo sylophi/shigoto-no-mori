@@ -18,7 +18,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
-import { only } from "@shared/util/only";
+import { only } from "@shigomori/contracts/util/only";
 import { it } from "vitest";
 import {
   sandboxGit,

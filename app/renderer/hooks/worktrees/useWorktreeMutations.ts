@@ -3,6 +3,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import type { StackCleanupFailure } from "@shigomori/ui/views/worktreeDetail/pullRequests/ClosedPullRequestBoxView.tsx";
 import type {
   CreateWorktreeResult,
   DeleteWorktreeResult,
@@ -323,15 +324,6 @@ export function useDeleteWorktree() {
 // so the host's removal broadcast for them is left to this mutation
 // (isOwnDeletePending), which forgets the rows and routes off the
 // page in one go.
-export interface StackCleanupFailure {
-  label: string;
-  message: string;
-  // cleanup: a cleanup script failed there and kept a worktree, which
-  // a retry or --skip-cleanup answers. refused: the device would not
-  // run the command from here. error: anything else, a dirty worktree
-  // above all, which force answers.
-  kind: "cleanup" | "refused" | "error";
-}
 
 export interface StackCleanupOutcome {
   // By device id: the worktree ids that went.

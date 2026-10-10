@@ -7,7 +7,7 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
-import type { PullRequestStack } from "@shared/pullRequestStack";
+import type { PullRequestStack } from "@shigomori/contracts/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   ClosedPullRequestBoxView,
@@ -15,7 +15,7 @@ import {
   STACK_ERROR_TITLE,
   type StackError,
   type StackRunOptions,
-} from "./ClosedPullRequestBoxView";
+} from "@shigomori/ui/views/worktreeDetail/pullRequests/ClosedPullRequestBoxView.tsx";
 
 // The cleanup after a PR closed: this worktree goes, or, for a stack
 // with landed layers, all of their worktrees together, on every device

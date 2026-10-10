@@ -4,7 +4,7 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { ScriptRowView } from "./ScriptRowView";
+import { ScriptRowView } from "@shigomori/ui/views/worktreeDetail/scripts/ScriptRowView.tsx";
 
 export function ScriptRow({
   worktree,

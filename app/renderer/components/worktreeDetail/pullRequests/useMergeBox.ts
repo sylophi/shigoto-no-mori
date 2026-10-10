@@ -11,14 +11,20 @@ import {
   MERGE_METHOD_LABEL,
   resolveMergeMethod,
 } from "@shigomori/ui/lib/pullRequest.ts";
-import { stackMergeSet, type PullRequestStack } from "@shared/pullRequestStack";
+import {
+  stackMergeSet,
+  type PullRequestStack,
+} from "@shigomori/contracts/pullRequestStack";
 import type {
   MergeMethod,
   PullRequestDetail,
   RepoMergeConfig,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import type { MergeBoxMode, StackReach } from "./mergeReach";
+import type {
+  MergeBoxMode,
+  StackReach,
+} from "@shigomori/ui/views/worktreeDetail/pullRequests/mergeReach.ts";
 
 interface UseMergeBoxArgs {
   worktree: Worktree;

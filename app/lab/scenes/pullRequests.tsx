@@ -4,17 +4,17 @@
 // PR closed or merged.
 import type { ReactNode } from "react";
 import { StaticPopover } from "@shigomori/ui/primitives/popover.tsx";
-import { CheckEntryView } from "@/components/worktreeDetail/pullRequests/CheckEntryView";
-import { ClosedPullRequestBoxView } from "@/components/worktreeDetail/pullRequests/ClosedPullRequestBoxView";
+import { CheckEntryView } from "@shigomori/ui/views/worktreeDetail/pullRequests/CheckEntryView.tsx";
+import { ClosedPullRequestBoxView } from "@shigomori/ui/views/worktreeDetail/pullRequests/ClosedPullRequestBoxView.tsx";
 import {
   type MergeControls,
   MergeBoxView,
-} from "@/components/worktreeDetail/pullRequests/MergeBoxView";
-import { MergedPrimaryBranchBoxView } from "@/components/worktreeDetail/pullRequests/MergedPrimaryBranchBoxView";
-import { PullRequestBodyView } from "@/components/worktreeDetail/pullRequests/PullRequestBodyView";
-import { PullRequestIdentityView } from "@/components/worktreeDetail/pullRequests/PullRequestIdentityView";
-import { PullRequestSectionView } from "@/components/worktreeDetail/pullRequests/PullRequestSectionView";
-import { StackListView } from "@/components/worktreeDetail/pullRequests/StackListView";
+} from "@shigomori/ui/views/worktreeDetail/pullRequests/MergeBoxView.tsx";
+import { MergedPrimaryBranchBoxView } from "@shigomori/ui/views/worktreeDetail/pullRequests/MergedPrimaryBranchBoxView.tsx";
+import { PullRequestBodyView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestBodyView.tsx";
+import { PullRequestIdentityView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestIdentityView.tsx";
+import { PullRequestSectionView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestSectionView.tsx";
+import { StackListView } from "@shigomori/ui/views/worktreeDetail/pullRequests/StackListView.tsx";
 import {
   armsAutoMerge,
   autoMergeButtonLabel,
@@ -23,7 +23,7 @@ import {
   describeMergeVerdict,
   sortChecksWorstFirst,
 } from "@shigomori/ui/lib/pullRequest.ts";
-import { pullRequestStackFor } from "@shared/pullRequestStack";
+import { pullRequestStackFor } from "@shigomori/contracts/pullRequestStack";
 import type {
   PullRequest,
   PullRequestDetail,

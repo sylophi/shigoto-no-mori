@@ -7,7 +7,11 @@ import {
 } from "@/hooks/git/useBranchCommits";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { NO_REWRITE, type CommitRewrite } from "@/lib/commitRewrite";
+import { NO_REWRITE } from "@/lib/commitRewrite";
+import type {
+  CommitActions,
+  CommitRewrite,
+} from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import {
   deriveRemoteSyncState,
@@ -18,7 +22,7 @@ import {
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { CommitRow } from "./CommitRow";
-import { HistorySelection } from "./CommitRowView";
+import { HistorySelection } from "@shigomori/ui/views/worktreeDetail/git/CommitRowView.tsx";
 import {
   BranchChangesRowView,
   EarlierToggleView,
@@ -28,8 +32,8 @@ import {
   ShowMoreView,
   SplitHeaderView,
   UpToDateView,
-} from "./HistoryListView";
-import { useCommitActions, type CommitActions } from "./useCommitActions";
+} from "@shigomori/ui/views/worktreeDetail/git/HistoryListView.tsx";
+import { useCommitActions } from "./useCommitActions";
 
 // The Git page's History tab (HistoryListView): a search field, the
 // branch's whole diff, then its commits, newest first, with the refs

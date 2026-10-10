@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { PullRequestDetail, Worktree } from "@shigomori/contracts/schemas";
-import { PullRequestIdentityView } from "./PullRequestIdentityView";
+import { PullRequestIdentityView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestIdentityView.tsx";
 
 export function PullRequestIdentity({
   worktree,

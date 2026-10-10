@@ -11,7 +11,7 @@ import type {
 import {
   sortEntries,
   type SortableEntry,
-} from "@/components/worktreeDetail/scripts/sortPackageScripts";
+} from "@shigomori/ui/views/worktreeDetail/scripts/sortPackageScripts.ts";
 import { withLaunchRowScript } from "@shared/launchRow";
 import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
 import { useHostScope } from "@/hooks/remote/useHostScope";

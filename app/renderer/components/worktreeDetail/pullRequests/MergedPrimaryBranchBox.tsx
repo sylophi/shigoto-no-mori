@@ -4,7 +4,7 @@ import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { localBranchOf } from "@shigomori/contracts/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
-import { MergedPrimaryBranchBoxView } from "./MergedPrimaryBranchBoxView";
+import { MergedPrimaryBranchBoxView } from "@shigomori/ui/views/worktreeDetail/pullRequests/MergedPrimaryBranchBoxView.tsx";
 
 // Primary-worktree analog of ClosedPullRequestBox's "Delete worktree":
 // the repo root can't be removed, so once its branch is merged we offer

@@ -8,7 +8,7 @@
 // dialog opens on it, with several it opens on none and Start waits
 // for the pick. The handlers re-verify the identity match on the peer,
 // so this gate is UX.
-import { only } from "@shared/util/only";
+import { only } from "@shigomori/contracts/util/only";
 import { useState } from "react";
 import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceTabs } from "@/components/shared/DeviceTabs";

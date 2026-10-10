@@ -2,11 +2,8 @@ import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeOperation } from "@/hooks/worktrees/useGitHistory";
-import {
-  commitRewriteAt,
-  NO_REWRITE,
-  type CommitRewrite,
-} from "@/lib/commitRewrite";
+import { commitRewriteAt, NO_REWRITE } from "@/lib/commitRewrite";
+import type { CommitRewrite } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
 
 // What each of `commits` (newest first, from HEAD) allows, with the
 // branch's merges from its history read. Nothing while a merge, rebase

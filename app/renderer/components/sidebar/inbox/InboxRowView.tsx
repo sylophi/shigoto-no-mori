@@ -10,7 +10,7 @@ import {
   type PullRequest,
   type Worktree,
 } from "@shigomori/contracts/schemas";
-import type { StackPosition } from "@shared/pullRequestStack";
+import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
 import { ActivityIconView } from "../ActivityIconView";
 import {
   DeviceBadgeView,

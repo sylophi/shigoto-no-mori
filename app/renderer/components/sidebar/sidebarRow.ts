@@ -1,4 +1,7 @@
-import type { StackPosition, StackRail } from "@shared/pullRequestStack";
+import type {
+  StackPosition,
+  StackRail,
+} from "@shigomori/contracts/pullRequestStack";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type {
   Project,

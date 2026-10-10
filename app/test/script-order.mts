@@ -27,7 +27,7 @@ import {
 import {
   pinnedEntries,
   type SortableEntry,
-} from "@/components/worktreeDetail/scripts/sortPackageScripts";
+} from "@shigomori/ui/views/worktreeDetail/scripts/sortPackageScripts.ts";
 import { afterAll, beforeAll, it } from "vitest";
 import { hostEngine } from "./lib/smBinary.mts";
 

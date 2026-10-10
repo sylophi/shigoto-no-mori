@@ -11,7 +11,7 @@ import { useQueries } from "@tanstack/react-query";
 import {
   type PullRequestStack,
   stackCleanupFor,
-} from "@shared/pullRequestStack";
+} from "@shigomori/contracts/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useProjects } from "@/hooks/projects/useProjects";

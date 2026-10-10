@@ -15,7 +15,7 @@ import {
   stackCleanupForWorktree,
   stackMergeSet,
   trunkOf,
-} from "@shared/pullRequestStack";
+} from "@shigomori/contracts/pullRequestStack";
 import type { PullRequest } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 

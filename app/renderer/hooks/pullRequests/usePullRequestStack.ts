@@ -7,7 +7,7 @@ import {
   pullRequestStackFor,
   trunkOf,
   type PullRequestStack,
-} from "@shared/pullRequestStack";
+} from "@shigomori/contracts/pullRequestStack";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 

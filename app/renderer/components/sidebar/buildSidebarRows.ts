@@ -2,7 +2,7 @@ import {
   placeByStack,
   pullRequestStackFor,
   trunkOf,
-} from "@shared/pullRequestStack";
+} from "@shigomori/contracts/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
 import { isAgentWorking } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";

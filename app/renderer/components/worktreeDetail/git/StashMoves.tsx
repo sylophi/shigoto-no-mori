@@ -7,7 +7,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { StashEntry, Worktree } from "@shigomori/contracts/schemas";
-import { StashMovesView } from "./StashMovesView";
+import { StashMovesView } from "@shigomori/ui/views/worktreeDetail/git/StashMovesView.tsx";
 
 // A stash's moves (StashMovesView): restore, keep or drop it.
 export function StashMoves({

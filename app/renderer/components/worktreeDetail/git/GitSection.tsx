@@ -8,7 +8,7 @@ import { canSyncFromPrimary } from "@/lib/syncState";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
-import { GitSectionView } from "./GitSectionView";
+import { GitSectionView } from "@shigomori/ui/views/worktreeDetail/git/GitSectionView.tsx";
 import { OperationBanner } from "./OperationBanner";
 
 // How many of the newest commits the History row lists.

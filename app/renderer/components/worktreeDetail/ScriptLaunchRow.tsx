@@ -9,7 +9,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   pinnedEntries,
   type SortableEntry,
-} from "./scripts/sortPackageScripts";
+} from "@shigomori/ui/views/worktreeDetail/scripts/sortPackageScripts.ts";
 import {
   ScriptLaunchButtonView,
   ScriptLaunchRowView,

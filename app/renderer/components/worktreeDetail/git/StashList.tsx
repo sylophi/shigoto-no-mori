@@ -8,7 +8,7 @@ import {
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { StashListView } from "./StashListView";
+import { StashListView } from "@shigomori/ui/views/worktreeDetail/git/StashListView.tsx";
 
 // The Git page's Stashes tab (StashListView), and the stash it makes.
 export function StashList({
