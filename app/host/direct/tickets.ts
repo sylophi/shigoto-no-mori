@@ -1,7 +1,8 @@
 // In-memory store of the direct data plane's connect tickets.
 // connectInfo (connectInfo.ts) mints one set per ask over the device hub
-// (one ticket per candidate address), and the direct listener spends
-// one as a dialer's socket opens (shared/remote/sealedSocket.ts).
+// (one ticket per candidate address). The direct listener checks one
+// as a dialer's socket opens (shared/remote/sealedSocket.ts) and spends
+// it on that socket's hello, once the handshake has proved the dialer.
 // Tickets are short-lived, single-use bearer strings bound to the peer
 // deviceId they were minted for, so a leaked ticket is useless to any
 // other device and goes stale in a minute. Nothing is persisted: a
@@ -55,15 +56,24 @@ export type ConnectTicketStore = {
     peer: TicketPeer,
     kinds: readonly DirectCandidateKind[],
   ): string[] | null;
-  // Spends the ticket a dialer opened its socket with, answering the
-  // peer device it was minted for, or null when no pending ticket
-  // matches. Single use: a ticket opens one socket.
+  // The peer device a pending ticket was minted for, or null when none
+  // matches, spending nothing: what lets a socket open. A socket that
+  // fails its handshake leaves the ticket for the dialer it belongs to.
   //
   // `arrivedAs` is the path the connection came in on, and must equal
   // the kind the ticket was minted for, so a ticket handed out for one
   // path opens nothing on another, and stays pending for the path it
   // belongs to.
+  check(ticket: string, arrivedAs: DirectCandidateKind): string | null;
+  // Spends the ticket, answering the peer device it was minted for, or
+  // null when it is not pending (spent by another socket meanwhile,
+  // expired, or dropped). Single use: a ticket links one socket, the
+  // one whose hello spends it first.
   consume(ticket: string, arrivedAs: DirectCandidateKind): string | null;
+  // Drops the pending tickets of every device not in `deviceIds`, the
+  // account's live roster: a device removed from the account spends
+  // nothing it was handed before.
+  keepDevices(deviceIds: readonly string[]): void;
   // Drops every pending ticket. For an account change: a ticket is
   // minted for a peer of the account this host is on, and a peer of
   // the account it just left must not be able to spend one on the
@@ -171,6 +181,22 @@ export function createConnectTicketStore(
       if (set.size > 0)
         sets.set(key, { deviceId: peer.deviceId, tickets: set });
       return tickets;
+    },
+
+    check(ticket, arrivedAs) {
+      const entry = pending.get(ticket);
+      return entry === undefined ||
+        entry.kind !== arrivedAs ||
+        entry.expiresAt <= now()
+        ? null
+        : entry.peerDeviceId;
+    },
+
+    keepDevices(deviceIds) {
+      const keep = new Set(deviceIds);
+      for (const [key, entry] of sets) {
+        if (!keep.has(entry.deviceId)) dropSet(key);
+      }
     },
 
     consume(ticket, arrivedAs) {

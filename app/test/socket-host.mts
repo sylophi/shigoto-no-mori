@@ -104,8 +104,10 @@ import {
 import { LinkGroup } from "@shigomori/contracts/link";
 import {
   CLOSE_HANDSHAKE_FAILED,
+  SEAL_OVERHEAD_BYTES,
   sealDialer,
 } from "@shared/remote/sealedSocket";
+import { generateKeyPair, type KeyPair } from "@shared/crypto/noise";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import {
   inviteMirror,
@@ -214,6 +216,9 @@ async function listen(
 
 type DialOpts = {
   deviceId?: string;
+  // The key the dialer seals with: the device's own unless a check
+  // names another.
+  localKey?: KeyPair;
   ticket?: string;
   headers?: Record<string, string>;
   onClose?: () => void;
@@ -227,7 +232,7 @@ function dialing(listener: DirectListener, opts: DialOpts = {}) {
     url: `ws://127.0.0.1:${listener.port}`,
     ticket: opts.ticket ?? mintTicket(listener.tickets, deviceId),
     seal: {
-      localKey: testDeviceKey(deviceId).pair,
+      localKey: opts.localKey ?? testDeviceKey(deviceId).pair,
       remoteKey: testDeviceKey(HOST).pair.publicKey,
     },
     appVersion: "1.0.0",
@@ -286,7 +291,7 @@ const rejection = (promise: Promise<unknown>) =>
 async function rawLink(
   track: Track,
   listener: DirectListener,
-  opts: { pingInterval?: number } = {},
+  opts: { pingInterval?: number; ticket?: string } = {},
 ) {
   const scope = Scope.makeUnsafe();
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
@@ -297,7 +302,7 @@ async function rawLink(
   // Sealed like the dialer's, with a ticket minted for CLIENT.
   // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
   const sealed = sealDialer(ws as unknown as Socket.WebSocketLike, {
-    ticket: mintTicket(listener.tickets, CLIENT),
+    ticket: opts.ticket ?? mintTicket(listener.tickets, CLIENT),
     localKey: testDeviceKey(CLIENT).pair,
     remoteKey: testDeviceKey(HOST).pair.publicKey,
   });
@@ -340,6 +345,12 @@ async function rawLink(
         protocolVersion,
       }),
     );
+  // Its handshake done, so the listener holds what the socket opened
+  // with.
+  await new Promise<void>((resolve) => {
+    if (sealed.readyState === 1) resolve();
+    else sealed.addEventListener("open", () => resolve(), { once: true });
+  });
   return { call, watch, hello, closed };
 }
 
@@ -514,15 +525,84 @@ it("Origin gate: origin-less, loopback and the configured web origin link, while
   }
 });
 
-it("frame cap: an inbound frame over 1 MiB closes the socket", async () => {
+it("frame cap: an inbound frame over 1 MiB and its tag closes the socket", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
   const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
   track(() => ws.terminate());
   await new Promise((resolve) => ws.once("open", resolve));
   const closed = new Promise<number>((resolve) => ws.on("close", resolve));
-  ws.send("x".repeat((1 << 20) + 1));
+  ws.send("x".repeat((1 << 20) + SEAL_OVERHEAD_BYTES + 1));
   assert.equal(await closed, 1009);
+});
+
+it("roster: a device dropped after its handshake links nothing: its hello is refused, the sweep closes its socket before any hello, and its pending tickets go", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  // Its handshake done, then the roster drops it, and neither the sweep
+  // nor the ticket drop has run: the hello itself refuses.
+  const unswept = await rawLink(track, listener);
+  await listener.rosterNow([HOST], { sweep: false, dropTickets: false });
+  assert.ok(failureOf(await unswept.hello()) instanceof LinkRefusedError);
+  // The sweep closes a socket still to say hello.
+  await listener.rosterNow([HOST, CLIENT]);
+  const waiting = await rawLink(track, listener);
+  const pending = mintTicket(listener.tickets, CLIENT);
+  await listener.rosterNow([HOST]);
+  assert.equal(await waiting.closed, 1001);
+  // And a ticket it was handed before opens nothing.
+  await listener.rosterNow([HOST, CLIENT]);
+  const refused = await dialFails(listener, { ticket: pending });
+  assert.ok(refused.refusal instanceof LinkRefusedError);
+});
+
+it("tickets: a ticket survives a socket whose handshake fails and one whose first message is replayed, and only the hello that links spends it", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const ticket = mintTicket(listener.tickets, CLIENT);
+  // A dialer holding the ticket but not the device's key.
+  const wrongKey = await dialFails(listener, {
+    ticket,
+    localKey: generateKeyPair(),
+  });
+  assert.ok(wrongKey.refusal instanceof LinkRefusedError);
+  // The real device's first message, sent once more by someone
+  // without the transport keys, who can then say nothing.
+  let first: Buffer | undefined;
+  const recorder = new WebSocket(`ws://127.0.0.1:${listener.port}`);
+  const send = recorder.send.bind(recorder);
+  recorder.send = ((data: Buffer) => {
+    first ??= Buffer.from(data);
+    send(data);
+  }) as typeof recorder.send;
+  const recorded = sealDialer(
+    // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
+    recorder as unknown as Socket.WebSocketLike,
+    {
+      ticket,
+      localKey: testDeviceKey(CLIENT).pair,
+      remoteKey: testDeviceKey(HOST).pair.publicKey,
+    },
+  );
+  await new Promise<void>((resolve) =>
+    recorded.addEventListener("open", () => resolve()),
+  );
+  recorder.close();
+  assert.ok(first !== undefined);
+  const replayClosed = await new Promise<number>((resolve) => {
+    const replay = new WebSocket(`ws://127.0.0.1:${listener.port}`);
+    replay.on("open", () => replay.send(first as Buffer));
+    replay.once("message", () =>
+      replay.send(Buffer.from("a frame it cannot seal")),
+    );
+    replay.on("close", (code) => resolve(code));
+    replay.on("error", () => {});
+  });
+  assert.equal(replayClosed, CLOSE_HANDSHAKE_FAILED);
+  // Still pending, so the device links with it, and then it is spent.
+  await dial(track, listener, { ticket });
+  const again = await dialFails(listener, { ticket });
+  assert.ok(again.refusal instanceof LinkRefusedError);
 });
 
 it("in-flight cap: one call past the per-peer cap is refused rather than run", async () => {
