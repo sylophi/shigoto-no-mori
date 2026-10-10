@@ -7,11 +7,11 @@ import {
 } from "@/hooks/git/useBranchCommits";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { NO_REWRITE } from "@/lib/commitRewrite";
+import { NO_REWRITE } from "@shigomori/ui/lib/commitRewrite.ts";
 import type {
   CommitActions,
   CommitRewrite,
-} from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
+} from "@shigomori/ui/lib/commitRewrite.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import {
   deriveRemoteSyncState,

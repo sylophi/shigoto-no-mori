@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
 import { LaunchToolsPanelView } from "@shigomori/ui/views/settings/LaunchToolsPanelView.tsx";
 

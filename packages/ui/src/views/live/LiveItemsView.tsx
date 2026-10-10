@@ -43,7 +43,7 @@ function uptime(since: number, now: number): string {
   return `up ${Math.floor(hours / 24)}d`;
 }
 
-export function UptimeView({ since }: { since: number }) {
+function UptimeView({ since }: { since: number }) {
   const now = useNow();
   return (
     <SimpleTooltip tip={`Started ${new Date(since).toLocaleString()}`}>
@@ -376,7 +376,7 @@ export function ForwardItemView({
 // and how it stands (its mark, its name, the status at the end), then
 // what can be done about it, as labelled buttons, with any further
 // detail at the end of that row.
-export function LiveBlockView({
+function LiveBlockView({
   mark,
   title,
   status,

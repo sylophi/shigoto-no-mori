@@ -11,10 +11,10 @@
 //
 // Run: pnpm test new-worktree-menu.
 import assert from "node:assert/strict";
-import { projectGroupOrder } from "@/components/sidebar/buildSidebarRows";
+import { projectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { buildCreateSections } from "@/components/sidebar/inbox/createTargets";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 

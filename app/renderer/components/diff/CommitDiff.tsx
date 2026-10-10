@@ -3,7 +3,7 @@ import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
-import { NO_REWRITE } from "@/lib/commitRewrite";
+import { NO_REWRITE } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { CommitDetails, CommitSteps } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";

@@ -14,10 +14,10 @@ import {
   groupShelfOf,
   projectGroupKey,
   projectGroupOrder,
-} from "@/components/sidebar/buildSidebarRows";
+} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 
 const project: Project = {

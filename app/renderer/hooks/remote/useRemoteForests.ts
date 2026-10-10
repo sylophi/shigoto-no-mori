@@ -25,16 +25,11 @@
 // push under backpressure would otherwise leave an always-mounted row
 // stale for good), gated by the stale window below so a quick alt-tab
 // does not re-list every peer.
-import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import { useQueries } from "@tanstack/react-query";
-import type {
-  Project,
-  PullRequest,
-  Worktree,
-} from "@shigomori/contracts/schemas";
-import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
+import type { Project } from "@shigomori/contracts/schemas";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
-import { showPrimaryInInbox } from "@/lib/showPrimaryInInbox";
+import { showPrimaryInInbox } from "@shigomori/ui/lib/showPrimaryInInbox.ts";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
@@ -59,35 +54,6 @@ function remoteProjectsQueryOptions(
     ...projectsQueryOptions({ deviceId, api }),
     meta: { silentError: true },
   };
-}
-
-// One remote project's slice, flat because that is exactly the unit
-// the row builder merges by repo identity.
-export interface RemoteForestItem {
-  deviceId: string;
-  deviceLabel: string;
-  // What the device looks like, for its badge on the rows.
-  deviceIcon: DeviceIcon;
-  // False when the device is not currently reachable: its rows are the
-  // cache's last known state, and the tree fades them rather than
-  // hiding work that still exists on that machine.
-  reachable: boolean;
-  // The device's connection tone, so a badge for it reads the same as
-  // its chip on the account page.
-  tone: StatusTone;
-  project: Project;
-  worktrees: readonly Worktree[];
-  // Branch -> PR on that device, what its own sidebar reads for the
-  // pills and the inbox's merged shelf. Empty until it lands.
-  pullRequests: Record<string, PullRequest>;
-  // That project's inbox opt-in for its primary checkout
-  // (ShigomoriConfigSchema.showPrimaryInInbox), read off the peer so a
-  // project shows its root the same way in every sidebar. Undefined
-  // until the config is read, which is only while the inbox shows.
-  showPrimaryInInbox: boolean | undefined;
-  // A failed worktree listing, folded into the sidebar's coalesced
-  // fan-out toast beside the local failures.
-  worktreesError: boolean;
 }
 
 export interface RemoteForests {

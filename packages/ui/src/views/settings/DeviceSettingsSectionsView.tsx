@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { digitsOnly } from "@shigomori/contracts/schemas/index";
-import type { SettingsFormState } from "./settingsForm.ts";
+import type { SettingsFormState } from "../../lib/settingsForm.ts";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";

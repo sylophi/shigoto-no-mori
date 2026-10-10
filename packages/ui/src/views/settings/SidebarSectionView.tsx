@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
-import type { SettingsFormState } from "./settingsForm.ts";
+import type { SettingsFormState } from "../../lib/settingsForm.ts";
 import { fieldSetter } from "../../hooks/useDirtyForm.ts";
 
 // How the sidebar dresses its rows, in Appearance: settings of this

@@ -41,7 +41,7 @@ import { IconButton } from "../../../primitives/icon-button.tsx";
 // "gitignored, except". The rest is an exception in the base's words:
 // the add button, the line over the picked rows, the picker row's
 // button, and a picked row's note.
-export const IGNORE_BASE_COPY = {
+const IGNORE_BASE_COPY = {
   everything: {
     label: "Nothing",
     tip: "Copy every file, gitignored ones included",

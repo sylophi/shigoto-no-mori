@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { localDeviceId } from "@/lib/queryKeys";
 import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";

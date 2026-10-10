@@ -132,7 +132,7 @@ export function SettingsSectionChipsView({
 // update, trails the sidebar Settings dot's own mark, so the dot that
 // brought the visitor here points at the row it meant (and the tab bar
 // there at the device).
-export function SectionLabelView({ section }: { section: SettingsSection }) {
+function SectionLabelView({ section }: { section: SettingsSection }) {
   const Icon = section.icon;
   return (
     <>

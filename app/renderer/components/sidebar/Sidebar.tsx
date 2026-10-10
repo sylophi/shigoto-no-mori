@@ -33,10 +33,10 @@ import {
   type GroupIdSet,
   projectGroupKey,
   remoteGroupKeyOf,
-} from "./buildSidebarRows";
+} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { useForestSources } from "./forestSources";
 import { DeviceFilterBar } from "./DeviceFilterBar";
-import { buildInboxRows } from "./inbox/buildInboxRows";
+import { buildInboxRows } from "@shigomori/ui/views/sidebar/inbox/buildInboxRows.ts";
 import { useShareInboxOrder } from "./inbox/inboxOrder";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { useLeaveInboxForPage } from "./inbox/useLeaveInboxForPage";

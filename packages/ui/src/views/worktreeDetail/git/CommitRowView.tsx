@@ -28,7 +28,10 @@ import {
 } from "../../../primitives/dropdown-menu.tsx";
 import { DiffStats } from "../../../primitives/diff-stats.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
-import type { CommitActions, CommitRewrite } from "./commitRewrite.ts";
+import type {
+  CommitActions,
+  CommitRewrite,
+} from "../../../lib/commitRewrite.ts";
 import { pluralize } from "../../../lib/pluralize.ts";
 import { cn } from "../../../lib/utils.ts";
 import type { CommitSummary } from "@shigomori/contracts/schemas/index";

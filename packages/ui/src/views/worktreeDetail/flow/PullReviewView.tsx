@@ -520,7 +520,7 @@ export function CloneLinesView({
 // A flow to a peer picks the peer in the destination card's header:
 // its name is the menu. A device that cannot take the worktree right
 // now is listed, held, with why.
-export function DevicePickView({
+function DevicePickView({
   toPeer,
   name,
   picked,

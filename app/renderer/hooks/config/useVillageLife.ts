@@ -1,4 +1,7 @@
-import { villageLifeEnabled, villageLifeShows } from "@shared/villageLife";
+import {
+  villageLifeEnabled,
+  villageLifeShows,
+} from "@shigomori/ui/lib/villageLife.ts";
 import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
 import { useClientConfig } from "./useClientConfig";
 

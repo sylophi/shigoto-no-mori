@@ -178,7 +178,7 @@ export function WorktreeSortSubmenuView({
 
 // The toolbar's menu of how a list shows: the trigger and its popup,
 // holding whatever the list offers.
-export function ListMenuView({
+function ListMenuView({
   label,
   children,
 }: {

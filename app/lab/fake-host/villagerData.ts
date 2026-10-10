@@ -14,7 +14,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
 import type { AllChannelHandlers } from "@shared/ipc/client";
-import { DAY, FAKE_VISITS } from "./villagerFixtures";
+import { DAY, FAKE_VISITS } from "@shigomori/ui/fixtures/villagerFixtures.ts";
 
 const faces = import.meta.glob<string>("./villager-data/ready/faces/*.png", {
   query: "?inline",

@@ -27,11 +27,11 @@ const stripComments = (code: string) =>
   code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 // The specifiers of import and export statements (which start a line,
-// or follow a semicolon, and end at theirs), side-effect imports
-// and `import("x")`. Matching statements rather than every `from "x"`
+// or follow a semicolon, end at theirs and hold no parentheses),
+// side-effect imports and `import("x")`. Matching statements rather than every `from "x"`
 // keeps JSX text like `Pre-fills "Branched from" when…` out.
 const IMPORT_SPECIFIERS = [
-  /(?:^|;)\s*(?:import|export)\s[^;]*?(?<![\w$."'`-])from\s*["']([^"']+)["']/gm,
+  /(?:^|;)\s*(?:import|export)\s[^;()]*?(?<![\w$."'`-])from\s*["']([^"']+)["']/gm,
   /^\s*import\s*["']([^"']+)["']/gm,
   /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
 ];

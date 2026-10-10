@@ -14,7 +14,7 @@ Commands and paths are relative to `app/`. The repo root's
 | Page | Reach for it to |
 | --- | --- |
 | [`fake-host/README.md`](fake-host/README.md) | See a screen in any state (a peer offline, a failing PR, the phone layout) or watch a flow play out, in a browser, with no hub, account or second machine |
-| [`scenes/`](scenes/index.ts) | Draw the app's views over the fixtures, with no app behind them: what the marketing site renders and `pnpm test scenes` proves. `/scenes.html` on the desktop fake host's port lists them and draws one |
+| [`scenes`](../../packages/ui/src/scenes/index.ts) | Draw the app's views over the fixtures, with no app behind them: what the marketing site renders and `@shigomori/ui`'s `scenes` proof renders in Node. They and the fixtures live in `packages/ui`; `/scenes.html` on the desktop fake host's port lists them and draws one |
 | [`devices.md`](devices.md) | Check the real thing: dev apps as devices on this machine, moving and mirroring worktrees between them for real |
 | [`bridge.md`](bridge.md) | Ask a device window what it knows (`window.api`), or run the same verbs from the CLI |
 | [`dev-app.md`](dev-app.md) | Look up how the dev app is built, where it keeps its state, and how dev profiles work |

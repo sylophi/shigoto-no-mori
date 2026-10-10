@@ -26,7 +26,7 @@ import {
   villageLifeEnabled,
   villageLifeShows,
   villageNewsEnabled,
-} from "@shared/villageLife";
+} from "@shigomori/ui/lib/villageLife.ts";
 import { it } from "vitest";
 
 // The settings encoders sit beside their React hook, whose imports read
@@ -36,7 +36,7 @@ import { it } from "vitest";
 globalThis.window = { api: { deviceId: "village-life-check" } };
 const { toClientConfig, toDeviceSettingsPatch } =
   await import("@/hooks/config/useSettingsSave");
-const { fromConfig } = await import("@/hooks/config/settingsForm");
+const { fromConfig } = await import("@shigomori/ui/lib/settingsForm.ts");
 
 it("unset, each setting reads off", () => {
   assert.equal(doubutsuNamesEnabled({}), false);

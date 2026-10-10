@@ -5,7 +5,7 @@
 // (fixtures.ts), so ClerkAccountSync sees "enrolled under this
 // user" and never fires an enroll or sign-out.
 import type { ReactNode } from "react";
-import { FAKE_ACCOUNT_ID } from "./fixtures";
+import { FAKE_ACCOUNT_ID } from "@shigomori/ui/fixtures/fixtures.ts";
 
 // Referenced by type-only imports (ClerkProviderProps in ClerkGate and
 // clerkAppearance). Loose on purpose: nothing reads it at runtime.
