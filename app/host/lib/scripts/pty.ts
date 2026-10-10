@@ -216,7 +216,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     onData: (listener) => void child.onData(listener),
     // A read error on the PTY master is rethrown by node-pty unless
     // someone else listens for it, and an uncaught throw here takes the
-    // whole main process down. This listener sits on the same socket as
+    // whole host process down. This listener sits on the same socket as
     // node-pty's own, so it sees the EAGAIN/EIO noise that one filters
     // as part of a normal PTY lifecycle and must skip it too. node-pty
     // closes the PTY first, so the exit event follows a real error.

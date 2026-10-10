@@ -1,6 +1,6 @@
 // What the host asks of the shell that started it: the few things only
-// Electron's process can do (decision 6 of V3.md keeps the updater and
-// the app's own lifetime there). Wired by the shell as the host starts
+// Electron's process can do (the updater and the app's own lifetime
+// stay there). Wired by the shell as the host starts
 // (main/hostProcess.ts).
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";

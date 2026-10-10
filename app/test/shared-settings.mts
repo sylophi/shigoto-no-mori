@@ -1,4 +1,4 @@
-// Durable proof for the shared settings (shared/sharedSettings.ts, the
+// Durable proof for the shared settings (contracts' sharedSettings.ts, the
 // host copy in host/lib/sharedSettings/store.ts, the browser copy in
 // web/ipc/register.ts). No server holds them, so everything rests on
 // the merge: copies exchange entries in whatever order the network

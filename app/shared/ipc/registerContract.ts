@@ -39,7 +39,7 @@ type RegisterContractOpts = {
   // confusing failure in the renderer.
   validateOutputs: boolean;
   // Runs after a handler whose call opts in via TracksProjectUsage
-  // resolves, with the parsed input. The Electron binding hooks the
+  // resolves, with the parsed input. The host's wires hook the
   // project usage bump here. Required whenever the module declares any
   // tracked call: registration throws otherwise, so a binding that
   // forgets the hook fails at startup instead of silently freezing the
@@ -273,10 +273,9 @@ export function resolveBroadcast<
 }
 
 // Fan-out broadcast: parses the payload once, then hands the wire shape
-// to the server transport for delivery to every connected peer. Living
-// on the seam keeps host-scoped broadcasts working when the host side
-// moves behind a socket. Window-targeted broadcasts stay in the
-// Electron binding, since a single window is an Electron concept.
+// to the server transport for delivery to every connected peer, on
+// whatever wire the side serves. Window-targeted pushes are the shell's
+// (main/ipc/register.ts), since a single window is an Electron concept.
 export function broadcastAll<
   M extends ContractModule,
   K extends BroadcastKeys<M>,

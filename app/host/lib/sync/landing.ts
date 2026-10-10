@@ -145,7 +145,7 @@ export const moveAttributes = (
 
 // What a landing is told: which repo (by identity, re-resolved here),
 // which branch the commits arrive under and which one the copy is
-// created on (they differ for a primary's mirror, shared/git/
+// created on (they differ for a primary's mirror, contracts' git/
 // branches.ts), the folder name, the setup switch, where to clone the
 // repo when this device has none, and the source worktree's id (the
 // key its capture ref arrives under).
@@ -164,10 +164,10 @@ export type Landing = {
 // source when this device has none and was told where) -> the
 // refusals, before a byte moves -> the tip, then the capture of the
 // source's dirty state -> the branch and the capture fetched under
-// refs/shigomori/ -> the worktree created through the ordinary CLI
+// refs/shigomori/ -> the worktree created through the engine's ordinary
 // create (carry-over and setup ride along) -> the capture re-keyed and
 // applied -> the incoming ref swept. The sweep is a finalizer that
-// opens BEFORE the fetch: the CLI's bundle unpack runs one non-atomic
+// opens BEFORE the fetch: the engine's bundle unpack runs one non-atomic
 // git fetch over several refspecs, so a partial fetch can land the
 // incoming ref and then fail, and a survivor is NOT harmless -- a stale
 // refs/shigomori/incoming/foo blocks any later ref named
@@ -178,7 +178,7 @@ export type Landing = {
 // and the dirty state is still safe on the source device.
 //
 // An interrupt (the move's cancel) fails whichever step is waiting
-// (the link's question, the create's CLI child, through `signal`), and
+// (the link's question, the engine's create, through `signal`), and
 // the worktree the create made is removed by its finalizer, registered
 // in `move` so a cancel at any later step of the move removes it too.
 // The destination is then as it was, bar a clone that got registered
@@ -456,7 +456,7 @@ const landIncoming = (
     // worktree just created only when both devices minted the SAME
     // managed path (root/wt/<project>/<name> with the name from
     // a shared pool) -- rare, but real across same-username machines.
-    // Re-key the ref to the local id, then apply and let the CLI
+    // Re-key the ref to the local id, then apply and let the engine
     // consume it. On that collision the re-key is a no-op and the
     // delete below is skipped, or it would discard the capture it just
     // parked. An apply refusal (a setup script left an untracked file,

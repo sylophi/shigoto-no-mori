@@ -10,7 +10,7 @@
 // down, the roster is not knowledge about the peers, it is knowledge
 // about us, so acting on it would sever perfectly working direct
 // connections during an device-hub outage. Extracted here (pure,
-// electron-free) so main's presence wiring and the direct-plane check
+// electron-free) so the host's presence wiring and the direct-plane check
 // drive the identical rule.
 import {
   credentialRevoked,

@@ -37,7 +37,7 @@
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos); what
 // separates them is the direct wire between them, which is exactly the
 // surface this proof pins. The one exception is the send into an
-// empty device: there the sending side's CLI runs against a registry
+// empty device: there the sending side's engine runs against a registry
 // of its own (see asOtherDevice). Run: pnpm test sync-transfer.
 import assert from "node:assert/strict";
 import * as Schema from "effect/Schema";
@@ -707,7 +707,7 @@ it("push: a >2.5 MB bundle crosses on a link the pusher opened and lands under r
 it("pull round trip (clean): the branch crosses the direct wire and the worktree lands on it, its title and description with it, with the incoming ref swept", async () => {
   // ---- The pull orchestration, end to end. The handler runs HERE
   // as device B (the registered surface above is A's), with its two
-  // real seams injected: the CLI runner (already set) and the peer
+  // real seams injected: the engine (already up) and the peer
   // reach, which is the SAME direct wire and channels the transfer
   // tests drove. Everything in between -- the tip, the
   // capture, the bundle, `sm create`, the capture re-key, `sm dirty
@@ -947,7 +947,7 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
 });
 
 it("transplant (clean): the worktree lands here and the source worktree, its sm data, and its branch are torn down", async () => {
-  // ---- The transplant (step 9): the pull above plus tearing the
+  // ---- The transplant: the pull above plus tearing the
   // source worktree down on A through its wire-served
   // worktrees:delete, gated by the pull's receipt. Fresh worktrees
   // per scenario, since the earlier tests consumed wt and wt2.
@@ -1692,9 +1692,9 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
   // clones it from here first, over the same link the branch then
   // crosses, and lands the copy in the clone. The two ends need
   // registries of their own for this, or the peer's identity scan
-  // finds the sender's own checkout: the sending side's CLI runs
-  // against a second data dir, chosen by an async context around the
-  // send (the runner seam is process-wide), where the lone repo is
+  // finds the sender's own checkout: the sending side's effects run
+  // on a second engine over a second data dir (asOtherDevice), where
+  // the lone repo is
   // registered. The landing side (A, the shared registry) has never
   // seen it.
   const otherDataDir = join(sandbox, "data-other");

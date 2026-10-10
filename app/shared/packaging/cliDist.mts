@@ -1,7 +1,7 @@
 // Single source of truth for the CLI's flavor system: what each
 // flavor's binary is called, which data dir it targets, where user
 // binaries get linked, and how links are (re)pointed. Every boundary
-// that needs the policy imports it: app main (cli.ts), the CLI itself,
+// that needs the policy imports it: the host (host/lib/cli), the CLI itself,
 // the build scripts, and forge.config.ts. A rename or relocation is
 // then a one-file change.
 //
@@ -41,8 +41,8 @@ export function cliAliasName(flavor: CliFlavor): string {
 }
 
 // The data dir: the directory under $HOME holding the flavor's on-disk
-// state (registry.json, state.json, config.json, projects/, managed
-// worktrees). Short and dot-hidden on purpose: every managed worktree
+// state (its store, projects/, managed worktrees). Short and
+// dot-hidden on purpose: every managed worktree
 // path starts with it, so it is in every prompt an agent sees.
 export function cliDataDirName(flavor: CliFlavor): string {
   return flavor === "prod" ? ".sm" : ".smd";
@@ -62,7 +62,7 @@ function configDir(flavor: CliFlavor): string {
 
 // The data dir pointer file: one line holding an absolute path that
 // relocates the flavor's data dir away from ~/<dataDirName>. Lives
-// outside the data dir (its own config.json can't say where it is).
+// outside the data dir (nothing inside it can say where it is).
 // Read at boot by the engine (Paths.ts), and written by the app when
 // the user moves the data folder. SHIGOMORI_DATA_DIR beats it.
 const DATA_DIR_POINTER_FILE = "data-dir";

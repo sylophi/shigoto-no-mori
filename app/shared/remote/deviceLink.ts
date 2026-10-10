@@ -1,7 +1,7 @@
 // The dialing side of the device link (link.ts): one socket to a peer's
 // listener, an RpcClient over it, the handshake, and then the peer's
 // calls as a ClientTransport, its pushes, and its byte channels. It
-// runs in main and, verbatim, in the web client, so its one platform
+// runs in the host and, verbatim, in the web client, so its one platform
 // dependency is the socket constructor it is handed.
 //
 // It owns exactly one socket. A link that drops stays dropped: the
@@ -63,7 +63,7 @@ export class RemoteConnectError extends Error {
 }
 
 // What a link is opened with: the browser's WebSocket, or the `ws`
-// package in main, which names the errno a failed dial died of where
+// package in the host, which names the errno a failed dial died of where
 // the platform global reports a bare 1006.
 export type OpenClientSocket = (url: string) => Socket.WebSocketLike;
 

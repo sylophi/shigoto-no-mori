@@ -45,7 +45,7 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
   // The kit's scrub (no inherited GIT_*, config pinned) applied to
   // process.env itself rather than a copy: the host modules under test
   // run git in THIS process (host/lib/git/core.ts reads process.env,
-  // and the slice-C pull orchestration drives the app's OWN git layer),
+  // and the pull orchestration drives the app's OWN git layer),
   // so a lefthook-exported GIT_DIR would otherwise point them at the
   // real repository. Plus the locale and the fixture identity, pinned
   // so commit-tree in `sm dirty capture` never depends on the

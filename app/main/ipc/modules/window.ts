@@ -25,7 +25,7 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   },
 
   // Where the window reaches its host, asked again on every redial
-  // (renderer/hostLink.ts), so a host that came back elsewhere is found.
+  // (shared/remote/hostLink.ts), so a host that came back elsewhere is found.
   hostAddress: () => hostAddress(),
 
   open: ({ route }) => {

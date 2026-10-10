@@ -1,6 +1,6 @@
 // Durable proof for the villager data download (host/lib/villagers.ts)
 // and the Settings control's words for it
-// (renderer/components/settings/villagerDataView.ts). The download runs
+// (ui's views/settings/villagerDataView.ts). The download runs
 // against a fake wiki injected as `fetch`: no real network.
 //
 // Asserts:

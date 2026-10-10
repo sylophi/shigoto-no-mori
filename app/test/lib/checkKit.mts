@@ -390,8 +390,7 @@ export function cliFailureMessage(result: CliResult, fallback: string): string {
 }
 
 // The kit runs under plain node as well as tsx, so the host's own
-// splitter (host/lib/util/ndjson.ts) is not importable here. This is
-// its standalone twin.
+// splitter is not importable here. This is its standalone twin.
 function lineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
   let buffer = "";
   return (chunk) => {

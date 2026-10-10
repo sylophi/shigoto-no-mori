@@ -30,7 +30,7 @@ const decodeReleaseList = Schema.decodeUnknownResult(
 );
 
 // The refusal for the hourly limit. It reaches the renderer as a
-// message (errors cross IPC as text), where a retry waits on it.
+// message (an untyped error crosses as its text), where a retry waits on it.
 export const RATE_LIMITED =
   "GitHub is rate-limiting requests from this network. Try again later.";
 

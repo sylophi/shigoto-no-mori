@@ -239,7 +239,7 @@ const settled =
     });
 
 // A stop's two refusals told apart, wherever it ran: the confirmation
-// rule is the CLI's typed error, and a copy that stayed comes back as
+// rule becomes the terminal's typed error, and a copy that stayed comes back as
 // the caveat (failed with the session already gone, so the stop is
 // the answer).
 const stopMirror = <A, E, R>(

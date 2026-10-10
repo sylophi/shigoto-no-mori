@@ -110,7 +110,7 @@ export function notifierFor(ctx: HandlerContext) {
   };
 }
 
-// A removal goes to everyone, not just the caller: main installs a
+// A removal goes to everyone, not just the caller: the root installs a
 // broadcaster at boot that fans it out to every window and remote
 // wire. Before that (and in checks that never mount one) the delete
 // is unannounced.
@@ -247,7 +247,7 @@ export const worktreesViews: ViewHandlers<
 };
 
 export const worktreesHandlers = {
-  // The rows are the CLI's (`sm worktrees list`), which also answers
+  // The rows are the engine's (`sm worktrees list`), which also answers
   // an unknown project id with the entity-gone error.
   list: ({ projectId }) => listWorktrees(projectId),
 
@@ -324,7 +324,7 @@ export const worktreesHandlers = {
       // Local delete kills scripts by design (withDeleteInflight reaps
       // them). The transplant orchestrator refuses instead, since its
       // teardown must never take down work still running on the source
-      // device. The lookup is app-registry-only, so the CLI stays
+      // device. The lookup is app-registry-only, so the engine stays
       // ignorant of the flag. "scripts-running" is a stable marker the
       // orchestrator and the UI match on, not prose.
       if (refuseRunningScripts) {
@@ -337,9 +337,9 @@ export const worktreesHandlers = {
           });
         }
       }
-      // The CLI can't see the app's script registry, so the delete runs
+      // The engine can't see the app's script registry, so the delete runs
       // under the shared tombstone protocol (see withDeleteInflight).
-      // The CLI drops the shelf and auto-pull marks with the worktree.
+      // The engine drops the shelf and auto-pull marks with the worktree.
       // The announcement brackets this call's run only. A second caller
       // is refused up front (withDeleteInflight would refuse it the
       // same way), so its "kept" cannot close the first one's removal
@@ -380,9 +380,9 @@ export const worktreesHandlers = {
   // The merged layers' worktrees of the stack `worktreeId` is in, as
   // one removal. The set is read the way the page reads it (the PR map
   // and the listing), off a fresh sweep of the PRs so it is what the
-  // CLI, which resolves the stack against GitHub itself, finds landed
+  // engine, which resolves the stack against GitHub itself, finds landed
   // too. Every worktree of the set is announced and guarded like a
-  // single delete, since the one CLI run takes them all. One the CLI
+  // single delete, since the one engine call takes them all. One the engine
   // took past the set (a layer that landed in the moment between) gets
   // its scripts reaped and its removal announced once it is gone.
   deleteStack: ({ projectId, worktreeId, force, skipCleanup }, ctx) =>
@@ -456,7 +456,7 @@ export const worktreesHandlers = {
 
   // A flag flip only, like setShelved, answered with the refreshed row.
   // The pull itself has one entry point, the fetch scheduler's sweep
-  // (main/electron/fetch.ts): the renderer follows a mark with
+  // (host/lib/git/backgroundFetch.ts): the renderer follows a mark with
   // git:refreshProject so the first pull happens right away, through
   // the same path as every later one.
   setAutoPull: ({ projectId, worktreeId, autoPull }) =>

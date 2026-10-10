@@ -62,7 +62,7 @@ type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
   Pick<ServerTransport, "handle"> & {
     // A call as the host serves it, an effect (registerHostContract).
     serve: DeviceLink.LinkRegistrar["handle"];
-    // A push from the host, as main's broadcastAll publishes it.
+    // A push from the host, as the host's broadcastAll publishes it.
     broadcastAll(
       channel: string,
       payload: unknown,
@@ -70,7 +70,7 @@ type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
     ): void;
     status(): { listening: boolean; port: number | null };
     closePeersNotIn(online: readonly string[]): Promise<void>;
-    // Brings the listener to `opts` (null stops it), as main's refresh
+    // Brings the listener to `opts` (null stops it), as the host's refresh
     // does.
     reconcile(opts: WsServerStartOpts | null): Promise<void>;
   };
@@ -92,7 +92,7 @@ export type DirectListenerOpts = {
     input: unknown,
   ) => boolean;
   // The pushes a peer still hears while sharing is off, beside
-  // sharing:changed (main's mirrorInviteSees). Absent, none.
+  // sharing:changed (the host's mirrorInviteSees). Absent, none.
   seesPush?: (peerDeviceId: string, payload: unknown) => boolean;
   // What the listener's graph runs on beyond its own (a tracer, a
   // file-sync engine), over the proof file's host services.
@@ -120,8 +120,8 @@ export type DirectListener = {
 // A REAL direct listener on an ephemeral loopback port, with its
 // ticket store and toggleable switches: command access (the host-wide
 // "accepts commands from its account's devices" answer the real
-// binding reads from main) and sharing (on, as a device starts).
-// Flipping either pushes it to every connected peer, as main does, so
+// binding reads from the account's facts) and sharing (on, as a device starts).
+// Flipping either pushes it to every connected peer, as the host does, so
 // a peer's bridge follows it live. `registerHandlers`, when
 // set, mounts the check's contracts or test channels on the binding
 // before it starts, and `start` overrides the start opts (the hello
@@ -333,7 +333,7 @@ export type BrokeredPairOpts = {
 export type BrokeredPair = { host: BootedDevice; client: BootedDevice };
 
 // Boots the hub pair: B answers connectInfo with the REAL server (the
-// ONLY thing the hub wire answers, wired as main wires it), A is the
+// ONLY thing the hub wire answers, wired as the host wires it), A is the
 // dialing client. The two devices are independent, so they boot
 // concurrently.
 export async function bootBrokeredPair(
@@ -407,7 +407,7 @@ export type DirectWire = {
 // Everything registers its teardown on the caller's tracker.
 // `opts.contracts` lists the [contract, handlers] pairs A serves, each
 // registered with output validation and a no-op usage hook: the hook is
-// the Electron binding's concern, and the registrar only calls it for
+// the host's concern, and the registrar only calls it for
 // defs marked tracksProjectUsage (and requires it for a module that has
 // one), so passing it everywhere satisfies the registrar and changes
 // nothing else.
@@ -442,7 +442,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     clientDeviceId: "B",
     clientOnChange: () => onPlaneChange?.(),
   });
-  // A's pushes on the session, as main's peer-push fan-out hands them
+  // A's pushes on the session, as the host's peer-push fan-out hands them
   // on (host/process/wires.ts onPeerPush), for the peer transport's
   // subscribe.
   const pushListeners = new Set<(push: HubPeerPush) => void>();
@@ -474,7 +474,7 @@ export type DirectBridgeOpts = {
 
 // The client-side composition under test: the REAL direct plane
 // (dialer over the connection's connectInfo ask, bridge cache over the
-// dialer) exactly as main and the web bridge assemble it. The fan-out
+// dialer) exactly as the host and the web bridge assemble it. The fan-out
 // sinks are observation seams the scenarios read, and the deadline
 // is shrunk so failure scenarios settle fast.
 export function makeDirectBridge(
@@ -488,7 +488,7 @@ export function makeDirectBridge(
     broadcastStatus: (status) => opts.onStatusChange?.(status),
     broadcastPeerPush: (push) => opts.onPeerPush?.(push),
     dialableKinds: opts.dialableKinds,
-    // The production socket (main injects ws), so the proof exercises
+    // The production socket (the host injects ws), so the proof exercises
     // the errno detail the seam exists for rather than the bare 1006
     // of Node's global.
     openSocket: (url) => new WsClient(url),
@@ -510,7 +510,7 @@ export type PeerTransport = {
 // per-channel invoke counter so a transfer check can pin poll-side
 // chunking as round trips (the hub stub sees none of them, which the
 // checks assert separately via forwardedCount). Its subscribe hears
-// the peer's pushes off the bridge's fan-out, the way main's peer
+// the peer's pushes off the bridge's fan-out, the way the host's peer
 // transport does.
 function bridgePeerTransport(
   bridge: HubHandlers,

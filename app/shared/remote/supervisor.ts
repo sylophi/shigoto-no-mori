@@ -1,5 +1,6 @@
-// Reconnect supervisor for one remote connection (in shared/ so the main-process hub socket reuses
-// it). It is the SINGLE owner of retry for a connection: nothing else
+// Reconnect supervisor for one remote connection (in shared/ so the
+// host's hub socket and the web client's reuse it). It is the SINGLE
+// owner of retry for a connection: nothing else
 // drives the connect function for it, so there is exactly one fiber
 // and one restart schedule per connection, never a fan of overlapping
 // reconnect loops.

@@ -55,13 +55,13 @@ import {
 import { log } from "@shared/log";
 
 // Built lazily on first handler use, never at import time. This module is
-// imported before app "ready" (registerIpcHandlers runs at the top of
-// main/index.ts), and safeStorage.isEncryptionAvailable, app.getPath and
-// the dev userData suffix are only reliable once the app is ready, which
-// is guaranteed by the time any renderer call lands. A main-process
-// caller can come earlier, so store() refuses before ready: a store
-// built then would keep a cipher that reads every credential as signed
-// out and writes plaintext for the rest of the run.
+// imported before app "ready" (registerShellHandlers runs before
+// main/index.ts's ready handler), and safeStorage.isEncryptionAvailable,
+// app.getPath and the dev userData suffix are only reliable once the app
+// is ready, which is guaranteed by the time any renderer call lands. A
+// main-process caller can come earlier, so store() refuses before ready:
+// a store built then would keep a cipher that reads every credential as
+// signed out and writes plaintext for the rest of the run.
 let cachedStore: AccountStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
@@ -109,19 +109,19 @@ function store(): AccountStore {
 }
 
 // In-memory mirror of the command-access switch, which lives on the
-// signed-in account's record (StoredAccount.acceptsCommands), so the
-// direct listener's synchronous dispatch predicate (acceptsPeerCommands)
-// never hits the disk or the OS keychain on the hot path. Null means
+// signed-in account's record (StoredAccount.acceptsCommands), so
+// acceptsPeerCommands, read for every report of the account's facts,
+// never hits the disk or the OS keychain. Null means
 // not yet built (false is a real built answer). Dropped on every event
 // that can change the answer: any account change (sign-in, sign-out,
 // rename), while the switch flipping writes it through, so a flip
 // takes effect immediately without a reconnect.
 let acceptsCache: boolean | null = null;
 
-// The predicate the direct listener's dispatch gate consults live to
-// decide whether a peer may run a gated call on this host, and the
+// The switch as the host is told it (the account's facts), which the
+// device link's CommandGate holds a peer's gated calls to, and the
 // verdict every connectInfo answer reports. Every peer that reaches
-// the direct listener is a device of this account (the connect ticket
+// the device link is a device of this account (the connect ticket
 // bound it to one), so the answer is the account-wide switch, not a
 // per-peer lookup. Signed out, there is no record and nothing is
 // accepted.
@@ -171,8 +171,9 @@ function serviceConfig(): AccountServiceConfig {
   }
   // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define. This
   // module only ever loads through that build, so a bare reference is
-  // safe, and it stays out of the pure shared module so serviceConfig.ts
-  // remains drivable under plain node (test/account.mts).
+  // safe, and it stays out of the pure contracts module so
+  // accountServiceConfig.ts remains drivable under plain node
+  // (test/account.mts).
   cachedConfig = resolveServiceConfig(
     mergeServiceEnv(fileEnv, __SM_ACCOUNT_BAKED_ENV__, process.env),
   );
@@ -386,10 +387,9 @@ export function makeAccountHandlers(
             config,
             service: createAccountService({ baseUrl: config.hubUrl }),
             store: store(),
-            // The hub device identity is tied to registry.json:
-            // getDeviceId mints and persists this data dir's UUID there, so
-            // a registry reset re-enrolls this app as a brand new hub
-            // device.
+            // The hub device identity is tied to the data dir's store:
+            // getDeviceId reads the UUID minted with it, so a fresh store
+            // re-enrolls this app as a brand new hub device.
             deviceId: getDeviceId(),
             fallbackDeviceName: (await defaultDeviceName()).name,
             // The device hub stores it as an opaque label.
@@ -459,8 +459,8 @@ export function makeAccountHandlers(
         store().clear();
       }
       // accountChanged also drops the switch's mirror, so a
-      // self-revoke's cleared record is what the direct listener's
-      // dispatch predicate reads next, without a reconnect.
+      // self-revoke's cleared record is what the host is told next,
+      // without a reconnect.
       accountChanged();
     },
 

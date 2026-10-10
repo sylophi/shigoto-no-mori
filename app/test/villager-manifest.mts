@@ -9,7 +9,7 @@
 // - each entry names a wiki page and a face file of a known game's
 //   kind, with its page, image URL, byte size and sha1
 // - a slug two characters share takes the one on the bare-name page
-// - every legendary character (shared/villagers/rarity.ts) is in the
+// - every legendary character (ui's lib/villagers/rarity.ts) is in the
 //   pool, once
 //
 // Run: pnpm test villager-manifest.

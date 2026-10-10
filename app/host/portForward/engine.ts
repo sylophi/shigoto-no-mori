@@ -6,8 +6,8 @@
 // packages/contracts/src/modules/forward.ts). Electron-free on purpose, node:net
 // plus injected dependencies, so the e2e check drives the real engine
 // over a real device wire (test/port-forward.mts) while
-// main/ipc wires the peer reach over the bridge's shared direct
-// sessions.
+// host/process/handlers.ts wires the peer reach over the bridge's
+// shared direct sessions.
 //
 // The per-socket bridging (attach, open, the adapter's backpressure and
 // teardown) lives in bridge.ts, shared with the mirror gateway. This

@@ -5,7 +5,7 @@
 // <dataDir>/updates/staged. Installing spawns a detached
 // `sm update --finish-install --pid <ours>` and quits. The installer
 // waits for this process to exit, swaps the bundle, and relaunches.
-// The renderer sees the same small state machine as before.
+// The renderer sees a small state machine.
 //
 // The staged manifest on disk is the source of truth for "there is an
 // update to restart into". A terminal `sm update` may have staged it

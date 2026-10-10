@@ -1,4 +1,4 @@
-// Durable proof for the villager voice (renderer/lib/villagerVoice.ts):
+// Durable proof for the villager voice (ui's lib/villagerVoice.ts):
 // what a villager says in a toast, and the news when villagers move in
 // or out, whoever moved them.
 //

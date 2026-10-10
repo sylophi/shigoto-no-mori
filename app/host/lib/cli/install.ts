@@ -1,7 +1,7 @@
 // Install of the CLI as a symlink into a PATH bin dir, pointing at the
 // binary the app itself runs. That's the VS Code / Docker Desktop
 // pattern. No copy means no version drift: when the binary updates,
-// the link stays current. Flavor-aware: the packaged app manages `CLI`
+// the link stays current. Flavor-aware: the packaged app manages `sm`
 // linking its Resources binary. A dev run manages `smd` linking the
 // checkout's dist-cli build (made by `pnpm dev`).
 //

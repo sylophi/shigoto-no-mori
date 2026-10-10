@@ -1,5 +1,5 @@
 // How a stored client config decodes into the doubutsu switch and the
-// two palette picks (shared/themes.ts): the switch defaults on, each
+// two palette picks (ui's lib/themes.ts): the switch defaults on, each
 // pick to its list's default, and a pick keeps while the switch is
 // off so it comes back with it.
 //

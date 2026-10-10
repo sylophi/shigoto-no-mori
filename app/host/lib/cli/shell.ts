@@ -21,7 +21,7 @@ import { envSetting } from "@shared/config";
 
 const execFileP = promisify(execFile);
 
-// The CLI resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
+// The engine resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
 // profile). Without them the hook could land in a file the user's
 // shell never reads while Settings reports success. Capture them from

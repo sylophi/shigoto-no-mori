@@ -38,8 +38,8 @@ let onServingGitChange:
   | ((change: { projectId: string; worktreeId: string }) => void)
   | null = null;
 // A peer's follower landed its side's git state on a worktree here: a
-// ref move by the app's own git, which the git-directory watcher skips
-// as the app's own, so main announces it like an outside one.
+// ref move by the app's own git, which the root announces at once,
+// beside the git-directory watcher's own ping.
 let onGitApplied: ((projectId: string) => void) | null = null;
 
 export function setMirrorGitAppliedListener(
@@ -48,7 +48,7 @@ export function setMirrorGitAppliedListener(
   onGitApplied = listener;
 }
 
-// main installs the two broadcast hooks at boot. Before that (and in
+// The root installs the two broadcast hooks at boot. Before that (and in
 // checks that never mount them) changes are simply unannounced.
 export function setMirrorServingListener(listener: (() => void) | null): void {
   onServingChange = listener;

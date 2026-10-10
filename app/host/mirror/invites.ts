@@ -75,7 +75,7 @@ export const MirrorInviteSchema = strict(
 export type MirrorInvite = typeof MirrorInviteSchema.Type;
 type Landed = MirrorInvite & { copy: MirrorWorktreePayload };
 
-// Where the landed invitations live, wired by main beside the
+// Where the landed invitations live, wired by the root beside the
 // follower's store. A store that fails to read starts empty (the
 // mirrors it named can be asked for again) and one that fails to
 // write is logged: neither may fail the landing or the boot. Unwired

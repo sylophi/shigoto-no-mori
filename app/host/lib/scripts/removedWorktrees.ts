@@ -4,9 +4,9 @@
 // withDeleteInflight), so it never leaves anything behind. An `sm rm`
 // run in a terminal cannot: the CLI is the engine and knows nothing
 // about a GUI being attached, so the dev server the app started keeps
-// running with its cwd deleted and its port still held. The state
-// watcher's refresh is where the app finds out, and this is what it
-// does about it.
+// running with its cwd deleted and its port still held. The store's
+// change (host/process/layer.ts) is where the app finds out, and this
+// is what it does about it.
 //
 // The diff needs a "worktrees that existed" side, and caching one here
 // would be a second copy of state that goes stale the moment anything

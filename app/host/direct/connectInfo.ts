@@ -3,8 +3,8 @@
 // to reach this device, whether it shares with the asker and whether
 // it runs the asker's commands. A
 // factory rather than a plain function because the deps are owned by
-// whoever assembled the direct listener: main wires the real listener
-// status, ticket store, tunnel runner and both switches in,
+// whoever assembled the direct listener: process/wires.ts wires the
+// real listener status, ticket store, tunnel runner and both switches in,
 // and the direct-plane check drives the same factory with its own
 // instances.
 //
@@ -41,9 +41,9 @@ type ConnectInfoDeps = {
   // child is currently healthy, else null. When present it is
   // advertised as one more candidate with its own ticket.
   tunnelUrl(): string | null;
-  // The command-access switch the direct listener's dispatch gate
-  // reads, reported to the asker so its UI and CLI know up front. The
-  // gate stays the only thing that enforces it.
+  // The command-access switch the link's CommandGate reads, reported to
+  // the asker so its UI and CLI know up front. The gate stays the only
+  // thing that enforces it.
   acceptsCommands(): boolean;
   // The sharing switch the link's SharingGate reads, reported the same
   // way.
