@@ -60,7 +60,6 @@ import {
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
 import * as Captures from "./captures";
-import { deleteAdapter } from "@host/ipc/modules/worktrees";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -282,8 +281,6 @@ export const layer = (options: {
   readonly engine: Parameters<typeof Engine.layer>[0];
 }) =>
   scriptGate.pipe(
-    // The worktree deletes' Promise face, for the sync teardown.
-    Layer.provideMerge(deleteAdapter),
     Layer.provideMerge(portForwards),
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit
