@@ -1,5 +1,6 @@
 // The clone checkout against a fixture with everything it has to tell
-// apart, ported from the Go CLI's clonecheckout_test.go.
+// apart.
+
 import assert from "node:assert/strict";
 import {
   chmodSync,

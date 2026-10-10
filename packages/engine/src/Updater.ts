@@ -1,5 +1,5 @@
 // The update pipeline behind `sm update`. It works on the same files
-// under the data dir as the Go sm and the app, so any of them picks up
+// under the data dir as the app and a v2 Go sm, so any of them picks up
 // where another left off:
 //   check  find the release to move to: read the repo's release list
 //          and pick for itself (updateFeed.ts pickRelease). When GitHub
@@ -95,7 +95,7 @@ const causeText = (cause: unknown): string => {
 // --- errors ------------------------------------------------------------------
 
 // The messages are the Go sm's, what failed underneath included where Go
-// includes it.
+// included it.
 
 export class UpdatesUnavailable extends Schema.TaggedError<UpdatesUnavailable>()(
   "UpdatesUnavailable",
@@ -586,7 +586,7 @@ const within = <A, E, R>(effect: Effect.Effect<A, E, R>, deadline: number) =>
 const isBadUrl = (error: HttpClientError.HttpClientError) =>
   Predicate.isTagged(error.reason, "InvalidUrlError");
 
-// An answer that won't be read, let go of as Go closes every body: a
+// An answer that won't be read, let go of as Go closed every body: a
 // first chunk at most, then the stream is cancelled.
 const discard = (
   response: HttpClientResponse.HttpClientResponse,
@@ -706,7 +706,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       ),
     );
 
-  // A file the Go sm, the app and the engine share, read leniently: one
+  // A file the terminal, the app and a v2 Go sm share, read leniently: one
   // that is missing, unreadable or malformed reads as absent.
   const readShared = <A>(
     file: string,
@@ -717,7 +717,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       Effect.orElseSucceed(() => Option.none<A>()),
     );
 
-  // Written whole through a temporary file beside it, as the Go sm writes.
+  // Written whole through a temporary file beside it, as the Go sm wrote.
   const writeShared = Effect.fn("Updater.writeShared")(function* (
     file: string,
     text: string,
@@ -789,7 +789,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // --- the feeds ---
 
   // A request's answer, or why there is none: `unreachable` for anything
-  // but a URL no request can be made to. It carries the headers Go's sm sends
+  // but a URL no request can be made to. It carries the headers Go's sm sent
   // and no trace ids, since it leaves for GitHub.
   const send = <E>(
     request: HttpClientRequest.HttpClientRequest,

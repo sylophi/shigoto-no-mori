@@ -3,10 +3,10 @@
 // without caring about the split.
 //
 // host/lib/** should `import type` from this barrel. Schemas are part of
-// the IPC contract: runtime parsing happens at the IPC boundary (input
-// in main/ipc/register.ts, payload in `broadcast`), not inside backend
-// logic. Renderer code, main/ipc/**, and host/ipc/** are free to
-// runtime-import.
+// the contract: runtime parsing happens at the contract boundary (input
+// in the registrar, shared/ipc/registerContract.ts, payload in
+// `broadcast`), not inside backend logic. Renderer code, main/ipc/**,
+// and host/ipc/** are free to runtime-import.
 export * from "./payloads.ts";
 export * from "./project.ts";
 export * from "./worktree.ts";

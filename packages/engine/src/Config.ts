@@ -107,7 +107,7 @@ export class InvalidConfigValue extends Schema.TaggedError<InvalidConfigValue>()
 }
 
 // A list-valued key, which `set` can't change: it has its own verbs, or
-// is edited in the file or the app.
+// is edited with `sm config edit` or in the app.
 export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>()(
   "StructuredConfigKey",
   {
@@ -241,7 +241,7 @@ const deviceKeys = settingKeys(
     hiddenLaunchers: { entryProblem: launcherIdProblem },
   },
 );
-// The Go sm names the terminals by id (terminalIDs), where Settings
+// The Go sm named the terminals by id (terminalIDs), where Settings
 // lists them in its own order.
 for (const key of deviceKeys) {
   if (key.name === "terminal") {

@@ -119,7 +119,7 @@ export const ResizeScriptPayloadSchema = Schema.Struct({
   rows: PositiveInt,
 });
 
-// The slots a lifecycle script the CLI runs on the app's behalf can
+// The slots a lifecycle script the engine runs on the app's behalf can
 // take.
 const LifecycleSlotSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("setup") }),
@@ -150,8 +150,8 @@ export const ScriptEventSchema = Schema.Union([
     kind: Schema.Literal("error"),
     data: Schema.String,
   }),
-  // Emitted by the CLI when it initiates a lifecycle script (forwarded
-  // by cliDelegate); lets the renderer bind runId -> slot before
+  // Emitted by the engine's Lifecycle when it starts a lifecycle
+  // script; lets the renderer bind runId -> slot before
   // data/exit arrive. `pid` is the script's process once it has one
   // (absent when the spawn itself failed), which is what the host
   // signals to stop the run.
@@ -207,7 +207,7 @@ export function scriptErrorLine(message: string): string {
 }
 
 // One script running on the host right now, whoever started it: the
-// app's own runs and the lifecycle scripts the CLI runs for it. What a
+// app's own runs and the lifecycle scripts the engine runs for it. What a
 // window that never saw the run start (a reload, another device) needs
 // to show it and bind its events. `interactive` is whether it owns a
 // PTY here that keystrokes can reach.

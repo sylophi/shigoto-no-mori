@@ -67,12 +67,13 @@ const configRows = (doc: Record<string, unknown>) =>
 const FRESH_INSTALL = { doubutsuNames: true };
 
 // The 2.x data dir's JSON files, copied into the store's tables. The
-// files stay where they are. What the CLI refuses to run without fails
+// files stay where they are. What the Go sm refused to run without fails
+
 // the import: a registry, config or project file that can't be read,
 // and a project list that doesn't parse. What it reads as a hint (use
 // logs, marks, a worktree's title) is skipped with a warning when it
 // doesn't parse. `lenient` refuses nothing: what can't be read strictly
-// is skipped, as the Go sm reads around a file it can't use, which is
+// is skipped, as the Go sm read around a file it can't use, which is
 // how the doctor reads a data dir the store refused.
 export const importFiles = (lenient: boolean) =>
   Effect.gen(function* () {

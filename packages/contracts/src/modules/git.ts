@@ -35,8 +35,8 @@ export const gitContract = defineContract(
     }),
     { remote: true },
   ),
-  // Something outside the app (the CLI) changed worktrees or state
-  // on disk. The renderer invalidates its queries. Refetch-on-focus
+  // A store write, the terminal's or the app's own. The renderer
+  // invalidates its requests. Refetch-on-focus
   // can't cover this, since the window may already be focused while an
   // agent works in a terminal beside it.
   broadcast("externalChange", VoidSchema, { remote: true }),
