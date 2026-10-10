@@ -91,7 +91,8 @@ export type DirectListenerOpts = {
   // The pushes a peer still hears while sharing is off, beside
   // sharing:changed (main's mirrorInviteSees). Absent, none.
   seesPush?: (peerDeviceId: string, payload: unknown) => boolean;
-  // What the listener's graph runs on beyond its own (a tracer).
+  // What the listener's graph runs on beyond its own (a tracer, a
+  // file-sync engine), over the proof file's host services.
   provide?: Layer.Layer<never>;
 };
 
@@ -353,11 +354,15 @@ export type DirectWire = {
 // nothing else.
 export async function bootDirectWire<const C extends readonly ContractModule[]>(
   track: Track,
-  opts: { contracts?: ServedContracts<C> } = {},
+  opts: {
+    contracts?: ServedContracts<C>;
+    provide?: DirectListenerOpts["provide"];
+  } = {},
 ): Promise<DirectWire> {
   const stub = await startStubHub(track);
   const listener = await startDirectListener(track, {
     deviceId: "A",
+    ...(opts.provide === undefined ? {} : { provide: opts.provide }),
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
         registerHostContract(

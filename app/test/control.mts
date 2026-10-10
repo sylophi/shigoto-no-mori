@@ -507,7 +507,11 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
       }
       return result.finally(() => setMirrorImpl(engine.impl));
     };
-  const mirrorOnA: Handlers<typeof mirrorContract, HandlerContext> = {
+  const mirrorOnA: Handlers<
+    typeof mirrorContract,
+    HandlerContext,
+    HostServices
+  > = {
     list: asA(mirrorHandlers.list),
     startTo: asA(mirrorHandlers.startTo),
     startFrom: asA(mirrorHandlers.startFrom),
@@ -517,7 +521,8 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     resume: asA(mirrorHandlers.resume),
     setIgnores: asA(mirrorHandlers.setIgnores),
     history: asA(mirrorHandlers.history),
-    openStream: asA(mirrorHandlers.openStream),
+    // The stream is served apart from the engine slot.
+    openStream: mirrorHandlers.openStream,
     gitState: asA(mirrorHandlers.gitState),
     applyGitState: asA(mirrorHandlers.applyGitState),
   };
