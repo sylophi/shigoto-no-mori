@@ -22,7 +22,7 @@ import {
 const HERO_SIZE = [1104, 690] as const;
 const HERO_ROUTE = "/devices/dev_8f3ac2e1/projects/p_sm/worktrees/a10000000002";
 const ROW = [8, 327, 224, 70] as const;
-const LAUNCH = [257, 313, 560, 124] as const;
+const LAUNCH = [257, 317, 831, 150] as const;
 
 // The numbered pins over the sidebar row, placed on it in percent, in
 // the order the legend lists them.
@@ -30,7 +30,7 @@ const PINS = [
   { x: "27.7%", y: "13%", part: "The project" },
   { x: "50.4%", y: "15.7%", part: "The Mac it lives on, when that's not this one" },
   { x: "88.2%", y: "13%", part: "Last activity" },
-  { x: "2%", y: "48.6%", part: "The branch" },
+  { x: "2%", y: "48.6%", part: "What it's called" },
   { x: "54.9%", y: "85.7%", part: "Files with uncommitted changes" },
   { x: "65.6%", y: "85.7%", part: "Commits not pushed yet" },
   { x: "88.4%", y: "85.7%", part: "Its pull request, and its place in a stack" },
@@ -198,10 +198,10 @@ const PINS = [
         <Frame
           Scene={StackScene}
           size={[1100, 1300]}
-          crop={[16, 40, 536, 384]}
+          crop={[0, 42, 548, 343]}
           shell="part"
-          frame="card-shot"
-          alt="A pull request second in a stack of three, with the other two listed around it, 'lands on main' below, and a button to squash and merge up to here."
+          frame="window"
+          alt="A pull request second in a stack of three, with the other two listed around it and 'lands on main' below, ready to merge."
         />
         <div class="points">
           <div class="point">

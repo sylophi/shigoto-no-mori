@@ -6,7 +6,8 @@
     "dev": "astro dev",
     "check": "astro check",
     "build": "astro check && astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "og": "node scripts/og.mts"
   },
   "dependencies": {
     "@astrojs/react": "7.0.0",
@@ -23,6 +24,7 @@
     "@astrojs/check": "^0.9.10",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "playwright-core": "^1.63.0",
     "typescript": "^6.0.3"
   }
 }

@@ -1,0 +1,73 @@
+name: Link preview
+
+# The site's link preview image (marketing/public/img/og.jpg), shot from
+# the built site's hero (marketing/scripts/og.mts) whenever what draws
+# the hero changes on main, the branch the site deploys from. A new
+# image comes as a pull request, so it lands like any other change and
+# keeps its fixed URL. marketing/README.md has why it is not shot at
+# deploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "marketing/**"
+      - "packages/ui/**"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: link-preview
+  cancel-in-progress: true
+
+jobs:
+  shoot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # The hero's window names the app in kanji, which falls back to a
+      # system face (Hiragino Maru Gothic on a Mac). The runner's is Noto
+      # CJK, installed when the image has none.
+      - name: Japanese face
+        run: fc-list :lang=ja | grep -q . || (sudo apt-get update -q && sudo apt-get install -yq fonts-noto-cjk)
+
+      # The runner's own Chrome shoots it.
+      - name: Shoot
+        run: pnpm -C marketing build && pnpm -C marketing og
+
+      - name: Open a pull request if it changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- marketing/public/img/og.jpg; then
+            echo "The link preview is up to date."
+            exit 0
+          fi
+          branch="link-preview/${GITHUB_SHA::12}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -m "Shoot the link preview from the hero" -- marketing/public/img/og.jpg
+          git push origin "$branch"
+          # Opening it needs the repository to let Actions create pull
+          # requests. Without that, the run's summary links the branch.
+          gh pr create --base "$GITHUB_REF_NAME" --head "$branch" \
+            --title "Shoot the link preview from the hero" \
+            --body "The site's hero changed in ${GITHUB_SHA::12}, so \`marketing/public/img/og.jpg\` is shot again from it (the Link preview workflow)." \
+          || echo "The link preview changed: [open a pull request for $branch]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$branch?expand=1)." >> "$GITHUB_STEP_SUMMARY"
