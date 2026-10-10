@@ -22,6 +22,13 @@ import {
 } from "./shell";
 import { DevicesPageScene, DevicesPartsScene } from "./devices";
 import {
+  SettingsAppearanceScene,
+  SettingsDialogsScene,
+  SettingsGeneralScene,
+  SettingsPartsScene,
+} from "./settings";
+import { VillagersPartsScene, VisitorsScene } from "./villagers";
+import {
   FlowPartsScene,
   FlowStepsScene,
   MirrorManageScene,
@@ -67,6 +74,12 @@ export const scenes = {
   flowParts: { Scene: FlowPartsScene, size: [1100, 800] },
   devicesPage: { Scene: DevicesPageScene, ...DESKTOP },
   devicesParts: { Scene: DevicesPartsScene, size: [1200, 1500] },
+  settingsGeneral: { Scene: SettingsGeneralScene, ...DESKTOP },
+  settingsAppearance: { Scene: SettingsAppearanceScene, ...DESKTOP },
+  settingsParts: { Scene: SettingsPartsScene, size: [1200, 2050] },
+  settingsDialogs: { Scene: SettingsDialogsScene, size: [1500, 900] },
+  visitors: { Scene: VisitorsScene, ...DESKTOP },
+  villagersParts: { Scene: VillagersPartsScene, size: [1200, 1100] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

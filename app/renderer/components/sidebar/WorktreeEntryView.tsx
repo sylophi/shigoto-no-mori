@@ -5,7 +5,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
-import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
+import { BirthdayBadgeView } from "@/components/villagers/BirthdayBadgeView";
 import type { SidebarMarks } from "@/hooks/config/useSidebarMarks";
 import type { Resident } from "@/hooks/villagers/useResident";
 import type { StackPosition } from "@shared/pullRequestStack";
@@ -227,7 +227,7 @@ function EntryName({
       <SimpleTooltip whenTruncated tip={worktree.name}>
         <span className="w-8 max-w-fit grow truncate">{worktree.name}</span>
       </SimpleTooltip>
-      <BirthdayBadge resident={resident} />
+      <BirthdayBadgeView resident={resident} />
     </>
   );
 }

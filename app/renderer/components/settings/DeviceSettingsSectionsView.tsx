@@ -1,0 +1,317 @@
+import { type Dispatch, type SetStateAction, useState } from "react";
+import { digitsOnly } from "@shigomori/contracts/schemas";
+import type { SettingsFormState } from "@/hooks/config/settingsForm";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { Input } from "@/components/ui/input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { ExternalLink } from "@/components/ui/external-link";
+import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+
+const PORT_POOL = {
+  href: "https://github.com/dittofleet/port-pool",
+  errorTitle: "Couldn't open port-pool",
+};
+
+const TERRIER = {
+  href: "https://github.com/dittofleet/terrier",
+  errorTitle: "Couldn't open terrier",
+};
+
+// The device-managed toggles, a view per host section (Worktrees,
+// Integrations), shared verbatim between this device's form and every
+// peer's on the Settings page. Everything here reads and writes only
+// device-managed keys on SettingsFormState, and every query it runs
+// (port-pool install check, gh and terrier readiness, runtime info)
+// goes through host-scoped hooks, so the same JSX answers for
+// whichever device the surrounding HostScope names. Client-scoped
+// concerns (appearance) and local-by-nature ones (the launch tools)
+// live on their own sections and must not move here. The page header
+// names the section, so neither repeats it as a heading.
+export type ToggleProps = {
+  form: SettingsFormState;
+  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+};
+
+export function WorktreeTogglesView({
+  form,
+  setForm,
+  driveBase,
+}: ToggleProps & {
+  // Where a project on a drive keeps its worktrees, undefined until
+  // the device's runtime info is read.
+  driveBase: string | null | undefined;
+}) {
+  const setField = fieldSetter(setForm);
+
+  return (
+    <section className="space-y-3">
+      <ToggleRowView
+        checked={form.deleteBranchOnRemove}
+        onCheckedChange={setField("deleteBranchOnRemove")}
+        label="Delete branch when removing worktree"
+        description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
+      />
+      <ToggleRowView
+        checked={form.autoPullNew}
+        onCheckedChange={setField("autoPullNew")}
+        label="Start new worktrees with auto-pull on"
+        description="Applies to worktrees you create from now on, and to the primary checkout of projects you add. Existing worktrees aren't changed, and each worktree's own auto-pull toggle still wins."
+      />
+      {/* A sub-option of the row above: indented past its switch so
+            the nesting reads without the disabled state doing the
+            talking. pl-11 is the switch width plus the row gap. */}
+      <div className="pl-11">
+        <ToggleRowView
+          checked={form.autoPullNew && form.autoPullPrimaryOnly}
+          onCheckedChange={setField("autoPullPrimaryOnly")}
+          disabled={!form.autoPullNew}
+          label="Primary checkouts only"
+          description="Only the primary checkout of a newly added project starts with auto-pull on. Other new worktrees start with it off."
+        />
+      </div>
+      <ToggleRowView
+        checked={form.autoShelveDays !== null}
+        onCheckedChange={(on) =>
+          setField("autoShelveDays")(on ? DEFAULT_AUTO_SHELVE_DAYS : null)
+        }
+        label="Shelve idle worktrees"
+        description="Shelves a worktree once nothing has happened in it for a while: no commits, edits or agent turns. Working in it brings it back."
+      />
+      {form.autoShelveDays !== null && (
+        <AutoShelveDaysField
+          days={form.autoShelveDays}
+          onChange={setField("autoShelveDays")}
+        />
+      )}
+      <ToggleRowView
+        checked={form.doubutsuNames}
+        onCheckedChange={setField("doubutsuNames")}
+        label="Doubutsu names"
+        description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
+      />
+      <ToggleRowView
+        checked={form.codexWorktreeNames}
+        onCheckedChange={setField("codexWorktreeNames")}
+        label="Name Codex-style worktrees by their parent folder"
+        description="Codex and some other tools create worktrees as worktree-name/repo-name. When an external worktree's folder is just the repo's name, show the folder above it instead."
+      />
+      <ToggleRowView
+        checked={form.managedOnProjectDrive}
+        onCheckedChange={setField("managedOnProjectDrive")}
+        label="Keep worktrees on the project's drive"
+        description={
+          <>
+            Projects on an external drive keep their Managed worktrees on that
+            drive instead of the data folder. Move existing ones from the
+            project's Worktree location page.
+            {/* The path is spelled like the Worktree location page's
+                  previews. */}
+            {driveBase && (
+              <span className="mt-1 block">
+                Location:{" "}
+                <span className="font-mono text-foreground/70 select-text">
+                  {driveBase}/
+                </span>
+              </span>
+            )}
+          </>
+        }
+      />
+    </section>
+  );
+}
+
+// The stand-in project the drive folder is spelled for, the way the
+// Worktree location page spells its previews.
+export const DRIVE_PROJECT_STANDIN = "/Volumes/<drive>/<project>";
+
+const DEFAULT_AUTO_SHELVE_DAYS = 14;
+
+const AUTO_SHELVE_PRESETS = [
+  { value: "1", label: "1 day" },
+  { value: "3", label: "3 days" },
+  { value: "7", label: "1 week" },
+  { value: "14", label: "2 weeks" },
+] as const;
+
+// The idle shelf's day count, a sub-option indented like the one under
+// auto-pull: a preset, or Custom with a field of its own. A count no
+// preset names reads as Custom. The field's draft holds what is typed
+// until it is a count, and the saved count shows again once the field
+// is left.
+function AutoShelveDaysField({
+  days,
+  onChange,
+}: {
+  days: number;
+  onChange: (days: number) => void;
+}) {
+  const isPreset = AUTO_SHELVE_PRESETS.some((p) => p.value === String(days));
+  const [customPicked, setCustomPicked] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const custom = customPicked || !isPreset;
+  return (
+    <div className="flex flex-wrap items-center gap-2 pl-11 text-sm">
+      <SegmentedControl
+        aria-label="Shelve after"
+        value={custom ? "custom" : String(days)}
+        onChange={(next) => {
+          setCustomPicked(next === "custom");
+          if (next !== "custom") onChange(Number(next));
+        }}
+        options={[...AUTO_SHELVE_PRESETS, { value: "custom", label: "Custom" }]}
+      />
+      {custom && (
+        <>
+          <Input
+            inputMode="numeric"
+            maxLength={3}
+            value={draft ?? String(days)}
+            aria-label="Days"
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => {
+              const next = digitsOnly(event.target.value);
+              setDraft(next);
+              if (Number(next) > 0) onChange(Number(next));
+            }}
+            onBlur={() => setDraft(null)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            className="tabular h-7 w-12 px-1.5 text-center"
+          />
+          {days === 1 ? "day" : "days"}
+        </>
+      )}
+    </div>
+  );
+}
+
+// What the integrations need on the device, each true until known
+// otherwise.
+export type IntegrationReadiness = {
+  portPoolInstalled: boolean;
+  terrierInstalled: boolean;
+  terrierReadable: boolean;
+  ghInstalled: boolean;
+  ghAuthed: boolean;
+};
+
+export function IntegrationTogglesView({
+  form,
+  setForm,
+  readiness: {
+    portPoolInstalled,
+    terrierInstalled,
+    terrierReadable,
+    ghInstalled,
+    ghAuthed,
+  },
+}: ToggleProps & { readiness: IntegrationReadiness }) {
+  const terrierReady = terrierInstalled && terrierReadable;
+  const ghReady = ghInstalled && ghAuthed;
+  const setField = fieldSetter(setForm);
+
+  return (
+    <section className="space-y-3">
+      <ToggleRowView
+        checked={form.githubCli && ghReady}
+        onCheckedChange={setField("githubCli")}
+        disabled={!ghReady}
+        label="Use GitHub CLI"
+        description={ghDescription(ghInstalled, ghAuthed)}
+      />
+      <ToggleRowView
+        checked={form.autoPopulateInstall}
+        onCheckedChange={setField("autoPopulateInstall")}
+        label="Auto-populate install command"
+        description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
+      />
+      <ToggleRowView
+        checked={form.portPool && portPoolInstalled}
+        onCheckedChange={setField("portPool")}
+        disabled={!portPoolInstalled}
+        label="Automatically use port-pool"
+        description={
+          <>
+            Allocates ports for new worktrees and releases them on delete.
+            Activates when a project has a{" "}
+            <span className="font-mono">port-pool.config.json</span>.{" "}
+            <ExternalLink {...PORT_POOL}>
+              {portPoolInstalled
+                ? "Learn more"
+                : "Install port-pool to enable this integration."}
+            </ExternalLink>
+          </>
+        }
+      />
+      <ToggleRowView
+        // Shows the persisted truth and stays operable while on:
+        // when terrier vanishes or its output stops parsing, the
+        // CLI warns "turn the toggle off in the
+        // app's Settings", so the off switch must keep working.
+        // Only turning it ON requires a ready binary.
+        checked={form.terrier}
+        onCheckedChange={setField("terrier")}
+        disabled={!terrierReady && !form.terrier}
+        label="Automatically use terrier"
+        description={terrierDescription(terrierInstalled, terrierReadable)}
+      />
+    </section>
+  );
+}
+
+function terrierDescription(
+  installed: boolean,
+  readable: boolean,
+): React.ReactNode {
+  if (!installed) {
+    return (
+      <>
+        <ExternalLink {...TERRIER}>Install terrier</ExternalLink> to enable this
+        integration.
+      </>
+    );
+  }
+  if (!readable) {
+    return (
+      <>
+        <span className="font-mono">terrier ls --json</span> failed or answered
+        in a shape this build doesn't read.{" "}
+        <ExternalLink {...TERRIER}>Learn more</ExternalLink>
+      </>
+    );
+  }
+  return (
+    <>
+      Shows every repo registered in terrier as a project. Removing one requires{" "}
+      <span className="font-mono">terrier rm</span>.{" "}
+      <ExternalLink {...TERRIER}>Learn more</ExternalLink>
+    </>
+  );
+}
+
+function ghDescription(installed: boolean, authed: boolean): React.ReactNode {
+  if (!installed) {
+    return (
+      <>
+        Install <span className="font-mono">gh</span> to enable this
+        integration.
+      </>
+    );
+  }
+  if (!authed) {
+    return (
+      <>
+        Run <span className="font-mono">gh auth login</span> to enable this
+        integration.
+      </>
+    );
+  }
+  return (
+    <>
+      Use your authenticated <span className="font-mono">gh</span> session for
+      GitHub-related actions.
+    </>
+  );
+}

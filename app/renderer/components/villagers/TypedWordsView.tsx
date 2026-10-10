@@ -6,7 +6,7 @@ import { useTypedText } from "@/hooks/ui/useTypedText";
 // for a screen reader from the start. An `onDone` fires once the last
 // letter is out. Its own component, so only the words re-render as they
 // type.
-export function TypedWords({
+export function TypedWordsView({
   words,
   delayMs,
   letterMs,

@@ -316,7 +316,7 @@ moment too, on every device's worktrees alike.
 - **The sidebar row** wears a cake, their face in a party hat in its
   tooltip.
 - **The worktree page** throws the party in its header, around the
-  face beside the branch title (`BirthdayParty`), with no words: the
+  face beside the branch title (`BirthdayPartyView`), with no words: the
   face in a party hat throwing confetti under bunting for a regular
   villager, the bunting and a wash in their own color for a rare one,
   and for a legend balloons (one carrying a present), a bigger burst

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 // How much of the album (or a section of it) is filled: an emerald fill
 // on a muted track, growing in from empty. Size the track with
 // `className`. A first sticker always shows a sliver.
-export function AlbumProgress({
+export function AlbumProgressView({
   met,
   total,
   label,
