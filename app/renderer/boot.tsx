@@ -27,7 +27,7 @@ import type { RouterHistory } from "@tanstack/react-router";
 import { RegistryContext } from "@effect/atom-react";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { App } from "./App";
-import { clientLinksAtom } from "./lib/runtime/atoms";
+import { clientLinksAtom, peerSessionAtom } from "./lib/runtime/atoms";
 import type { ClientLinks } from "./lib/runtime/ClientLinks";
 import { AppToaster } from "./components/AppChrome";
 import { UpdateNews } from "./components/UpdateNews";
@@ -42,7 +42,10 @@ import { watchPortForwards } from "./hooks/remote/usePortForwards";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { watchHost } from "./lib/hostWatch";
-import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
+import {
+  onSessionLanded,
+  startRemoteDeviceSync,
+} from "./lib/remote/remoteDeviceSync";
 import { startVillagerMoves } from "./lib/villagers/moves";
 import { startAgentWatch } from "./lib/agentWatch";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
@@ -92,6 +95,9 @@ export function startApp({
   window.addEventListener("pagehide", (event) => {
     if (!event.persisted) registry.dispose();
   });
+  onSessionLanded((deviceId) =>
+    registry.update(peerSessionAtom(deviceId), (count) => count + 1),
+  );
   // The shared config (defaults, global error toasts, the meta
   // opt-outs) lives in lib/queryClientOptions.ts.
   const queryClient = createAppQueryClient();
