@@ -55,6 +55,7 @@
 // holding two projects (source and target, one repo identity), as in
 // test/sync-transfer.mts: what separates them is the direct wire.
 // Run: pnpm test control.
+import { HubDeviceRevokedError } from "@shigomori/contracts/hubApi";
 import { callOf } from "@shigomori/contracts/contract";
 import assert from "node:assert/strict";
 import {
@@ -106,7 +107,7 @@ import {
   followTransfer,
 } from "@host/ipc/modules/control";
 import { bring, send } from "@host/lib/control/ops";
-import { setControlImpl } from "@host/lib/control/peers";
+import { listDevicesFailure, setControlImpl } from "@host/lib/control/peers";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
   isTransferSession,
@@ -450,6 +451,8 @@ let engineA: ReturnType<typeof fakeMirrorEngine>;
 let listener: Awaited<ReturnType<typeof bootDirectWire>>["listener"];
 let peerA: Awaited<ReturnType<typeof bootDirectWire>>["peerA"];
 let connected: string[];
+// What the hub's device list fails with, null while it answers.
+let registryFails: unknown = null;
 let peerOwns: string;
 let removalsOf: (
   worktreeId: string,
@@ -608,7 +611,11 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     },
   };
   setControlImpl({
-    listDevices: Effect.sync(() => registry),
+    listDevices: Effect.suspend(() =>
+      registryFails === null
+        ? Effect.succeed(registry)
+        : Effect.fail(listDevicesFailure(registryFails)),
+    ),
     directPeers: Effect.sync(() =>
       Object.fromEntries(
         connected.map((id) => [
@@ -1362,6 +1369,28 @@ it("a peer with no session is reported offline", async () => {
     "device-blocked",
     /not connected/,
   );
+});
+
+it("the hub out of reach says so with its cause, and a revoked credential reads as signed out", async () => {
+  // ---- (8b) The account's hub unreachable, as in a network outage.
+  registryFails = new TypeError("fetch failed");
+  try {
+    for (const args of [
+      ["devices"],
+      ["worktrees", "send", "wt-mirror", "-p", "source"],
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- one verb at a time
+      await refused(
+        args,
+        undefined,
+        /Couldn't reach your account.*fetch failed/,
+      );
+    }
+    registryFails = new HubDeviceRevokedError();
+    await refused(["devices"], "signed-out", /removed/);
+  } finally {
+    registryFails = null;
+  }
 });
 
 it("a loopback.json removed under the running app is republished", async () => {
