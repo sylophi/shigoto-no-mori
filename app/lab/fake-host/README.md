@@ -109,6 +109,9 @@ Poses ride the URL:
   which reads signed out until it enrolls again, with its Clerk session
   live (the enrollment goes by itself, in a second and a half) or
   lapsed (the sign-in waits on its button). Pairs with `?migration=`.
+- `?fresh=1`: Studio Mac a fresh install with no project, for the first
+  run's page (`?to=/welcome`), where terrier lists `TERRIER_REPOS` (the
+  fixtures' `stepsFixtures.ts`).
 - `?notSharing=tp,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
 - `?hubBlocked=update-required`: this device's hub socket blocked, for
