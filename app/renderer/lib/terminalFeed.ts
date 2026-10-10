@@ -15,7 +15,7 @@ const noop = (): void => {};
 const RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 5_000] as const;
 
 export function attachTerminal(
-  api: HostApi,
+  api: { readonly terminals: Pick<HostApi["terminals"], "attach"> },
   terminalId: string,
   screen: TerminalScreen,
   // The shell exited (its code, null for a signal or a close), or the
@@ -27,11 +27,17 @@ export function attachTerminal(
   let attempt = 0;
   let stop = noop;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Each attach's own, so one that a later attach replaced writes
+  // nothing more.
+  let current = 0;
   const watch = () => {
+    current += 1;
+    const mine = current;
     stop = api.terminals.attach(
       after === undefined ? { terminalId } : { terminalId, after },
       {
         value: (event) => {
+          if (mine !== current || stopped) return;
           attempt = 0;
           switch (event.kind) {
             case "history":
@@ -39,6 +45,7 @@ export function attachTerminal(
               after = event.seq;
               return;
             case "output":
+              if (after !== undefined && event.seq <= after) return;
               screen.write(event.data);
               after = event.seq;
               return;
@@ -52,7 +59,7 @@ export function attachTerminal(
           }
         },
         end: (failure) => {
-          if (stopped) return;
+          if (mine !== current || stopped) return;
           if (failure === undefined || isUnknownTerminalError(failure)) {
             stopped = true;
             onEnd(null);
