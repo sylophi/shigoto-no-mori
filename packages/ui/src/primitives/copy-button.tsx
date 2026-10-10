@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { IconButton } from "./icon-button.tsx";
 
 interface CopyButtonProps {
   value: string;
@@ -22,20 +23,17 @@ export function useCopied(value: string): [copied: boolean, copy: () => void] {
 export function CopyButton({ value, label = "Copy" }: CopyButtonProps) {
   const [copied, copy] = useCopied(value);
   return (
-    <button
-      type="button"
+    <IconButton
       onClick={copy}
       aria-label={label}
-      data-icon-button
-      // Always shown in the phone layout: nothing hovers on a touch
-      // screen, so a control that waits for the cursor never appears.
-      className="shrink-0 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
+      reveal
+      className="group-hover/copy:opacity-100"
     >
       {copied ? (
         <Check className="size-3.5 text-foreground" />
       ) : (
         <Copy className="size-3.5" />
       )}
-    </button>
+    </IconButton>
   );
 }

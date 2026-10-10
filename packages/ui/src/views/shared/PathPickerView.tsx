@@ -12,6 +12,7 @@ import { PathSpan } from "../../primitives/path-span.tsx";
 import { BrowseKeyHintsView } from "./BrowseListPartsView.tsx";
 import { type PickerEntry, PickerRowView } from "./PickerRowView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // The folder browser behind the carry-over picker and the "leave out"
 // pickers: a filter that owns the keyboard, folders to step into, and
@@ -212,12 +213,9 @@ export function PathPickerView<E extends PickerEntry>({
         )}
       </div>
 
-      <div
-        data-slot="footer-row"
-        className="flex items-center gap-3 border-t border-border px-4 py-2 text-xs text-muted-foreground"
-      >
+      <FooterRow className="py-2">
         <BrowseKeyHintsView enterFolder goUp={!atRoot} />
-      </div>
+      </FooterRow>
     </>
   );
 }

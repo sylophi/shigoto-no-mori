@@ -176,7 +176,8 @@ export function BranchMenuView({
           render={
             <IconButton
               aria-label="Branch actions"
-              className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
+              reveal
+              className="group-hover/branch:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
             >
               <ChevronDown aria-hidden className="size-3.5" />
             </IconButton>

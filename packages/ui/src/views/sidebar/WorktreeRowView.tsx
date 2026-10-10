@@ -1,6 +1,6 @@
 import { describePullRequest } from "../../lib/pullRequest.ts";
 import { cn } from "../../lib/utils.ts";
-import { TONE_TEXT } from "../worktreeDetail/pullRequests/pullRequestShared.ts";
+import { TONE_MARK } from "../../primitives/status-dot.tsx";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 import type { GroupShelf } from "./sidebarRow.ts";
 import type { PullRequest, Worktree } from "@shigomori/contracts/schemas/index";
@@ -76,7 +76,7 @@ function StackRailMark({
         className={cn(
           "absolute left-[0.5px] -mt-(--stop-r) -ml-(--stop-r) size-1.25 rounded-full bg-current [--stop-r:--spacing(0.625)]",
           RAIL_STOP_Y,
-          TONE_TEXT[tone],
+          TONE_MARK[tone],
         )}
       />
     </span>

@@ -10,6 +10,8 @@ import type { DiskUsageTotals } from "./tidyModel.ts";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { TIDY_SORT_OPTIONS, type TidySort } from "./tidyModel.ts";
 import { TidyStatView } from "./TidyStatView.tsx";
+import { pluralize } from "../../lib/pluralize.ts";
+import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 
 export function TidyPageView({
   tabs,
@@ -86,7 +88,7 @@ export function TidyBodyView({
     ? `measuring ${disk.measuredCount} of ${disk.totalCount}…`
     : disk.partial
       ? "approximate"
-      : `across ${rowProjects} ${rowProjects === 1 ? "project" : "projects"}`;
+      : `across ${pluralize(rowProjects, "project")}`;
 
   return (
     <>
@@ -128,11 +130,11 @@ export function TidyBodyView({
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : worktreeCount === 0 ? (
-            <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            <EmptyPanel>
               {noProjects
                 ? "No projects to tidy yet."
                 : "No worktrees in any project yet."}
-            </div>
+            </EmptyPanel>
           ) : (
             <>
               <div className="flex items-center justify-between gap-3 phone:flex-wrap">
@@ -184,7 +186,7 @@ export function TidyBodyView({
                   >
                     {batchRunning
                       ? "Removing…"
-                      : `Remove ${selectedCount} ${selectedCount === 1 ? "worktree" : "worktrees"}`}
+                      : `Remove ${pluralize(selectedCount, "worktree")}`}
                   </Button>
                 </div>
               </div>

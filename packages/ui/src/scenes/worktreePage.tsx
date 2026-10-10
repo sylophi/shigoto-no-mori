@@ -17,6 +17,7 @@ import { BranchSwitcherView } from "../views/worktreeDetail/branch/BranchSwitche
 import { DescriptionSectionView } from "../views/worktreeDetail/DescriptionSectionView.tsx";
 import { FooterActionButtonView } from "../views/worktreeDetail/FooterActionButtonView.tsx";
 import { LABEL_RANK } from "../views/worktreeDetail/FooterVerbView.tsx";
+import { TransferActionsView } from "../views/worktreeDetail/TransferActionsView.tsx";
 import { LaunchSectionView } from "../views/worktreeDetail/LaunchSectionView.tsx";
 import { LauncherRowView } from "../views/worktreeDetail/LauncherRowView.tsx";
 import { NoIdentityNoteView } from "../views/worktreeDetail/NoIdentityNoteView.tsx";
@@ -38,10 +39,7 @@ import {
 } from "../views/worktreeDetail/WorktreeDetailView.tsx";
 import { WorktreeHeaderView } from "../views/worktreeDetail/WorktreeHeaderView.tsx";
 import { WorktreeLocationView } from "../views/worktreeDetail/WorktreeLocationView.tsx";
-import {
-  OptionActionView,
-  WorktreeOptionsView,
-} from "../views/worktreeDetail/WorktreeOptionsView.tsx";
+import { WorktreeOptionsView } from "../views/worktreeDetail/WorktreeOptionsView.tsx";
 import type {
   LauncherEntry,
   PullRequest,
@@ -400,11 +398,13 @@ export function WorktreePagePartsScene() {
         </Part>
         <Part label="Options">
           <StaticPopover>
-            <OptionActionView
-              icon={null}
-              label="Transplant"
-              description="Move this worktree to another device."
-              onClick={noop}
+            <TransferActionsView
+              part="option"
+              here={false}
+              mirror={null}
+              transplant
+              dialog={null}
+              onOpen={noop}
             />
           </StaticPopover>
         </Part>

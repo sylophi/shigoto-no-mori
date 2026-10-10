@@ -26,6 +26,7 @@ import {
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { cn } from "../../../lib/utils.ts";
 import type { ProjectListRow, ProjectSection } from "../sidebarRow.ts";
+import { FooterRow } from "../../../primitives/footer-row.tsx";
 
 // The button itself: creating outright, or the list's trigger.
 export function NewWorktreeButtonView({
@@ -140,13 +141,10 @@ export function CreateMenuListView({
           No projects match.
         </Command.Empty>
       </Command.List>
-      <div
-        data-slot="footer-row"
-        className="flex items-center border-t border-border px-3 py-2 text-2xs text-muted-foreground phone:hidden"
-      >
+      <FooterRow className="px-3 py-2 text-2xs phone:hidden">
         {/* ↩ creating goes without saying. ⇧ is for a click too. */}
         <KbdHint keys={["⇧"]} label="Pick a base" />
-      </div>
+      </FooterRow>
     </Command>
   );
 }

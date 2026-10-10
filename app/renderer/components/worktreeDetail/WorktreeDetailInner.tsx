@@ -28,10 +28,8 @@ import { LaunchSection } from "./LaunchSection";
 import { MirrorPill } from "./MirrorPill";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
-import {
-  PeerTransferActions,
-  type TransferDialog,
-} from "./PeerTransferActions";
+import type { TransferDialog } from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
+import { PeerTransferActions } from "./PeerTransferActions";
 import { FilesButton } from "./FilesButton";
 import { PortsSection } from "./ports/PortsSection";
 import { RemoteTransferActions } from "./RemoteWorktreeActions";

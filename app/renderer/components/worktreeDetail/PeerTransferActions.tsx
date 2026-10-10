@@ -7,11 +7,8 @@
 // it first). Which peer is the dialog's question (flow/peerTargets.ts),
 // so the buttons only open it. The primary
 // checkout can be mirrored but not transplanted: it is the project
-// itself and cannot be torn down. The page renders this twice: the
-// footer part (Mirror and the open dialog) and the Options popover's
-// row (Transplant, used far less), sharing which dialog is open, so the
-// dialog outlives the popover that opened it.
-import { RefreshCw, Shovel } from "lucide-react";
+// itself and cannot be torn down. TransferActionsView draws them, and
+// a peer's (RemoteWorktreeActions.tsx).
 import {
   isRealBranch,
   type Project,
@@ -22,15 +19,13 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
-import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
-import { OptionActionView } from "@shigomori/ui/views/worktreeDetail/WorktreeOptionsView.tsx";
+import {
+  type TransferDialog,
+  TransferActionsView,
+} from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
-
-// Which transfer dialog is open, held by the page across both parts.
-export type TransferDialog = "mirror" | "transplant" | null;
 
 export interface TransferPartProps {
   worktree: Worktree;
@@ -71,22 +66,6 @@ function TransferButtons({
   // when the roster empties under it (a sign-out, a revoke), and says
   // what failed rather than vanishing mid-run.
   const canOpen = targets.length > 0;
-  if (part === "option") {
-    // Not while mirrored: moving one half of a live pair away is what
-    // the mirror's own stop is for.
-    return (
-      canOpen &&
-      !worktree.isPrimary &&
-      !mirrored && (
-        <OptionActionView
-          icon={<Shovel />}
-          label="Transplant"
-          description="Move this worktree to another device."
-          onClick={() => setOpen("transplant")}
-        />
-      )
-    );
-  }
   const dialog = {
     worktree,
     project,
@@ -95,20 +74,26 @@ function TransferButtons({
     onClose: () => setOpen(null),
   };
   return (
-    <>
-      {/* App only, like "Mirror here": the daemon lives in main. */}
-      {canOpen && canForwardPorts && !mirrored && (
-        <FooterActionButtonView
-          rank={LABEL_RANK.mirrorTo}
-          icon={<RefreshCw />}
-          label="Mirror"
-          tip="Keep a live copy of this worktree on another device"
-          disabledReason={mirrorBlocker}
-          onClick={() => setOpen("mirror")}
-        />
-      )}
-      {open === "mirror" && <MirrorToDialog {...dialog} />}
-      {open === "transplant" && <TransplantToDialog {...dialog} />}
-    </>
+    <TransferActionsView
+      part={part}
+      here={false}
+      // App only, like "Mirror here": the daemon lives in main.
+      mirror={
+        canOpen && canForwardPorts && !mirrored
+          ? { blocker: mirrorBlocker }
+          : null
+      }
+      // Not while mirrored: moving one half of a live pair away is what
+      // the mirror's own stop is for.
+      transplant={canOpen && !worktree.isPrimary && !mirrored}
+      dialog={
+        open === "mirror" ? (
+          <MirrorToDialog {...dialog} />
+        ) : open === "transplant" ? (
+          <TransplantToDialog {...dialog} />
+        ) : null
+      }
+      onOpen={setOpen}
+    />
   );
 }

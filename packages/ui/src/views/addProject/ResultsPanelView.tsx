@@ -6,6 +6,8 @@ import { KeyedButtonView } from "./DialogPartsView.tsx";
 import { ResultRowView } from "./ResultRowView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { MODAL_COMMAND_CLASS } from "../../primitives/cmdk-classes.ts";
+import { pluralize } from "../../lib/pluralize.ts";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 interface ResultsPanelProps {
   scanRoot: string;
@@ -53,7 +55,7 @@ export function ResultsPanelView(props: ResultsPanelProps) {
             <span className="text-sm text-foreground">
               {props.results.length === 0
                 ? "No new git repos found"
-                : `${props.results.length} new git repo${props.results.length === 1 ? "" : "s"}`}
+                : pluralize(props.results.length, "new git repo")}
             </span>
             <span className="flex font-mono text-xs text-muted-foreground/70">
               <span className="shrink-0">in&nbsp;</span>
@@ -94,22 +96,19 @@ export function ResultsPanelView(props: ResultsPanelProps) {
           )}
         </Command.List>
 
-        <div
-          data-slot="footer-row"
-          className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-        >
+        <FooterRow className="justify-end">
           {props.terrierOptIn}
           <KeyedButtonView
             label={
               props.bulkAdding
                 ? "Adding…"
-                : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`
+                : `Add ${pluralize(props.selected.size, "project")}`
             }
             keys="⌘↩"
             onClick={() => void props.onAdd()}
             disabled={props.selected.size === 0 || props.bulkAdding}
           />
-        </div>
+        </FooterRow>
       </Command>
     </div>
   );
