@@ -1,13 +1,13 @@
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Resident } from "@/hooks/villagers/useResident";
-import { PartyFace } from "./BirthdayFace";
+import { PartyFaceView } from "./BirthdayFaceView";
 
 // A worktree's resident (useResident) beside its branch title on the
 // worktree page: whose home this is. At their `party` it wears the hat
-// and throws confetti, the header's BirthdayParty around it. Nothing
+// and throws confetti, the header's BirthdayPartyView around it. Nothing
 // without a resident or a face.
-export function ResidentFace({
+export function ResidentFaceView({
   resident,
   party,
 }: {
@@ -23,7 +23,7 @@ export function ResidentFace({
     <SimpleTooltip tip={label}>
       <span role="img" aria-label={label} className="shrink-0">
         {party ? (
-          <PartyFace face={face} rarity={rarity} className="size-8" />
+          <PartyFaceView face={face} rarity={rarity} className="size-8" />
         ) : (
           <VillagerFaceView face={face} className="size-8" />
         )}

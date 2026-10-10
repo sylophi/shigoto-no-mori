@@ -3,26 +3,23 @@ import {
   errorMessageOf,
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
-import { Download, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { tildify } from "@shared/projectPaths";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type {
   CliStatus,
   ShellIntegrationStatus,
 } from "@shigomori/contracts/modules/cli";
+import {
+  CliSectionView,
+  PeerReadErrorView,
+  ShellIntegrationView,
+} from "./CliSectionView";
 
-// Install/uninstall of the CLI symlink lives here, not in a launch
-// prompt: the app runs its bundled binary directly and never needs the
-// link, so this is purely "do you want the command in your shell".
-//
-// Host-scoped: the links and rc files belong to whichever device the
-// section is mounted for, so a peer's section installs on the peer. A
-// peer refuses the status read without the command grant, and the
-// section then renders nothing rather than toasting a permission state.
+// The CLI's install (CliSectionView) on whichever device the section
+// is mounted for, so a peer's section installs on the peer. A peer
+// refuses the status read without the command grant, and the section
+// then renders nothing rather than toasting a permission state.
 export function CliSection() {
   const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
@@ -56,116 +53,15 @@ export function CliSection() {
     return <PeerReadError error={error} what="the CLI install" heading />;
   }
 
-  const { name, state, onPath } = status;
-  const busy = install.isPending || uninstall.isPending;
-  const home = runtime?.homedir ?? null;
-  // Older stored statuses may predate foreignPaths; the worst link is
-  // always a truthful fallback.
-  const foreignPaths = status.foreignPaths?.length
-    ? status.foreignPaths
-    : [status.linkPath];
-  const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
-
   return (
-    <section className="space-y-3">
-      <SectionIntro title="Command line tool">
-        The Shigoto no Mori CLI lets you (or a coding agent) create, list,
-        merge, and remove this app's worktrees from any shell. Installing links
-        the <span className="font-mono">{name}</span> and{" "}
-        <span className="font-mono">{status.aliasName}</span> commands into{" "}
-        <span className="font-mono">{tildify(status.binDir, home)}</span>.
-      </SectionIntro>
-
-      {state === "installed" && (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-sm">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Installed
-          </span>
-          <span className="font-mono text-sm text-muted-foreground select-text">
-            {tildify(status.linkPath, home)}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => uninstall.mutate()}
-          >
-            <Trash2 />
-            Uninstall
-          </Button>
-        </div>
-      )}
-
-      {state === "stale" && (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-sm">
-            <span className="size-1.5 rounded-full bg-amber-500" />
-            Installed, but pointing at another copy of the app
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => install.mutate({ force: false })}
-          >
-            Repair link
-          </Button>
-        </div>
-      )}
-
-      {state === "missing" && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => install.mutate({ force: false })}
-        >
-          <Download />
-          Install the CLI
-        </Button>
-      )}
-
-      {state === "foreign" && (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {foreignPaths.map((path, i) => (
-              <span key={path}>
-                {i > 0 && " and "}
-                <span className="font-mono">{tildify(path, home)}</span>
-              </span>
-            ))}{" "}
-            {foreignPaths.length > 1
-              ? "already exist and don't point at this app. Installing replaces both."
-              : "already exists and doesn't point at this app. Installing replaces it."}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => install.mutate({ force: true })}
-          >
-            <Download />
-            Replace and install
-          </Button>
-        </div>
-      )}
-
-      {state !== "missing" && state !== "foreign" && !onPath && (
-        <p className="text-xs text-muted-foreground">
-          <span className="text-amber-500">
-            That directory isn't on your PATH yet.
-          </span>{" "}
-          Add this to your shell profile:{" "}
-          <span className="font-mono select-text">{pathLine}</span>
-        </p>
-      )}
-
-      {/* onPath gates it: the hook's `command -v` guard can never fire
-          while the bin dir is off PATH, so offering Enable would
-          install something inert and report it green. */}
-      {state === "installed" && onPath && <ShellIntegrationBlock name={name} />}
-    </section>
+    <CliSectionView
+      status={status}
+      home={runtime?.homedir ?? null}
+      busy={install.isPending || uninstall.isPending}
+      onInstall={(force) => install.mutate({ force })}
+      onUninstall={() => uninstall.mutate()}
+      shell={<ShellIntegrationBlock name={status.name} />}
+    />
   );
 }
 
@@ -193,25 +89,17 @@ function PeerReadError({
 }) {
   const { remote } = useHostScope();
   if (!remote || !error || isCommandRefusedError(error)) return null;
-  const note = (
-    <p className="text-xs text-muted-foreground select-text">
-      Couldn&apos;t check {what} on that device: {errorMessageOf(error)}
-    </p>
-  );
-  if (!heading) return note;
   return (
-    <section className="space-y-3">
-      <SectionHeading className="mb-1">Command line tool</SectionHeading>
-      {note}
-    </section>
+    <PeerReadErrorView
+      what={what}
+      message={errorMessageOf(error)}
+      heading={heading}
+    />
   );
 }
 
-// Shell integration, the optional second step after the link install:
-// a hook in the user's shell config that makes cd/create move the
-// calling shell instead of opening a nested subshell. All rc-file
-// mechanics live in the CLI (`sm shell ...`), so the app only triggers
-// them, so a terminal user and this section always agree.
+// Shell integration's block (ShellIntegrationView), its rc-file
+// mechanics the CLI's own (`sm shell ...`).
 function ShellIntegrationBlock({ name }: { name: string }) {
   const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
@@ -242,79 +130,15 @@ function ShellIntegrationBlock({ name }: { name: string }) {
     return <PeerReadError error={error} what="shell integration" />;
   }
 
-  const busy = enable.isPending || remove.isPending;
-  const login = status.shells.find((s) => s.shell === status.loginShell);
-  const enabledAnywhere = status.shells.some((s) => s.state === "installed");
-
   return (
-    <div className="space-y-2 border-t border-border pt-3">
-      <p className="text-xs text-muted-foreground">
-        Shell integration makes <span className="font-mono">{name} cd</span> and{" "}
-        <span className="font-mono">{name} new</span> move your shell into the
-        worktree directly instead of opening a nested subshell. Enabling adds a
-        removable block to your shell&apos;s config file.
-      </p>
-
-      {status.loginShell === null ? (
-        <p className="text-xs text-muted-foreground">
-          Your login shell isn&apos;t one integration supports (
-          {status.shells.map((s) => s.shell).join(", ")}). Run{" "}
-          <span className="font-mono select-text">{name} shell install</span>{" "}
-          from the shell you use.
-        </p>
-      ) : login?.state === "installed" ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-sm">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Enabled for {login.shell}
-          </span>
-          <span className="font-mono text-sm text-muted-foreground select-text">
-            {tildify(login.path, home)}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => remove.mutate()}
-          >
-            <Trash2 />
-            Remove
-          </Button>
-        </div>
-      ) : login?.state === "modified" ? (
-        <p className="text-xs text-muted-foreground">
-          <span className="text-amber-500">
-            The integration block in{" "}
-            <span className="font-mono">{tildify(login.path, home)}</span> was
-            edited,
-          </span>{" "}
-          so it won&apos;t be touched from here. Restore or remove it, then
-          enable again.
-        </p>
-      ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => enable.mutate()}
-          >
-            <Download />
-            Enable for {status.loginShell}
-          </Button>
-          {enabledAnywhere && (
-            <span className="text-xs text-muted-foreground">
-              Enabled for another shell. This adds your login shell.
-            </span>
-          )}
-        </div>
-      )}
-
-      {(enable.isSuccess || remove.isSuccess) && (
-        <p className="text-xs text-muted-foreground">
-          Terminals already open keep the previous behavior until restarted.
-        </p>
-      )}
-    </div>
+    <ShellIntegrationView
+      name={name}
+      status={status}
+      home={home}
+      busy={enable.isPending || remove.isPending}
+      onEnable={() => enable.mutate()}
+      onRemove={() => remove.mutate()}
+      changed={enable.isSuccess || remove.isSuccess}
+    />
   );
 }

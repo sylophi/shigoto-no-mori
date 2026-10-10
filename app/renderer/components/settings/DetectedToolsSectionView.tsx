@@ -15,7 +15,7 @@ interface DetectedToolsSectionProps {
 // a toggle: filled (secondary) = shown, dimmed outline = hidden. Same
 // selected/unselected vocabulary as AppearanceSection, so doubutsu picks it
 // up through the existing button slots.
-export function DetectedToolsSection({
+export function DetectedToolsSectionView({
   tools,
   hidden,
   onToggle,

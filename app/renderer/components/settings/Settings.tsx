@@ -1,8 +1,7 @@
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { SettingsForm } from "./SettingsForm";
-import { SettingsSkeleton } from "./SettingsSkeleton";
+import { SettingsLoadingView } from "./SettingsSkeletonView";
 
 // The page picks its sections from the app sidebar, where its layout
 // route (SettingsPages) draws their list. A hostless client has no
@@ -13,16 +12,7 @@ export function Settings() {
   const { data: clientConfig, isLoading: isClientLoading } = useClientConfig();
 
   if (isLoading || isClientLoading) {
-    return (
-      <div data-doubutsu-page="settings" className="flex h-full flex-col">
-        <PageHeaderView
-          eyebrow="Shigoto no Mori"
-          title="Settings"
-          watermark="設定"
-        />
-        <SettingsSkeleton />
-      </div>
-    );
+    return <SettingsLoadingView />;
   }
 
   return (
