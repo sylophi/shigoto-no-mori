@@ -2,12 +2,10 @@
 // that is not Effect yet (bridge.ts), each with the few calls the root
 // makes on it. Each capture's layer sits beside its service in the
 // graph (layer.ts, wires.ts).
-import type { MirrorCreateInput } from "@host/mirror/registry";
 import * as Tunnel from "@host/direct/cloudflared";
 import * as Engine from "@host/lib/engine";
 import * as GitWatcher from "@host/lib/gitWatcher";
-import type * as GithubCli from "@host/lib/githubCli/GithubCli";
-import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Sharing from "@host/lib/sharing";
@@ -19,15 +17,11 @@ import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Effect from "effect/Effect";
 import * as Bridge from "./bridge";
 
-// The engine, for the root's callbacks into it and the engine handle
-// of the Promise subsystems it starts (the mirror's git follower, the
-// background fetch).
+// The engine, for the root's callbacks into it.
 export const engine = Bridge.capture<Engine.Services>("The engine");
 export const onEngine = <A, E>(
   effect: Effect.Effect<A, E, Engine.Services>,
 ): Promise<A> => engine.run(effect);
-export const engineHandle = (): Promise<Engine.Handle> =>
-  engine.run(Engine.handle);
 
 // Every broadcast publishes here. Synchronous, so pushes keep their
 // order. Before the graph is up nobody can be listening, and the push
@@ -116,28 +110,14 @@ export const tunnel = {
     ),
 };
 
-// The daemon the mirror registry's impl runs on (handlers.ts).
+// The mirror daemon's sessions, for the root's synchronous callbacks.
 export const daemon =
   Bridge.capture<MirrorDaemon.MirrorDaemon>("The mirror daemon");
-const onDaemon = MirrorDaemon.onDaemon;
-export const mirrorDaemon = {
-  status: () =>
-    daemon.readNow(
-      onDaemon((it) => it.status),
-      () => "stopped" as const,
-    ),
-  sessions: () =>
-    daemon.readNow(
-      onDaemon((it) => it.sessions),
-      () => [],
-    ),
-  create: (input: MirrorCreateInput) =>
-    daemon.run(onDaemon((it) => it.create(input))),
-  terminate: (session: string) =>
-    daemon.run(onDaemon((it) => it.terminate(session))),
-  pause: (session: string) => daemon.run(onDaemon((it) => it.pause(session))),
-  resume: (session: string) => daemon.run(onDaemon((it) => it.resume(session))),
-};
+export const mirrorSessionsNow = () =>
+  daemon.readNow(
+    MirrorDaemon.onDaemon((it) => it.sessions),
+    () => [],
+  );
 
 export const terminals = Bridge.capture<Terminals.Terminals>("The terminals");
 // What a quit asks about.
@@ -150,12 +130,19 @@ export const closeMissingTerminals = () =>
     Effect.flatMap(Terminals.Terminals, (it) => it.closeMissing),
   );
 
-// gh, for the background fetch's sweep of each project's pull requests.
-export const github = Bridge.capture<
-  GithubCli.GithubCli | ChildProcessSpawner.ChildProcessSpawner
->("gh");
-export const refreshPullRequests = (projectPath: string) =>
-  github.run(refreshProjectPullRequests(projectPath));
+// The shell's focus report, for the background fetch. One sent before
+// the graph is up lands once it is.
+export const backgroundFetch = Bridge.capture<BackgroundFetch.BackgroundFetch>(
+  "The background fetch",
+);
+export const setWindowFocused = (focused: boolean) =>
+  void backgroundFetch
+    .run(
+      Effect.map(BackgroundFetch.BackgroundFetch, (it) =>
+        it.setWindowFocused(focused),
+      ),
+    )
+    .catch(() => {});
 
 // The sweep of removed worktrees' scripts, for the store watcher's
 // callback.

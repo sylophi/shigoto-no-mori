@@ -14,53 +14,17 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { implSlot } from "@host/lib/util/implSlot";
-import { parentSpan } from "@host/lib/util/trace";
+import { parentSpan, withParentSpan } from "@host/lib/util/trace";
+import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
+import { nameOf } from "@shigomori/contracts/contract";
+import * as Effect from "effect/Effect";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { Client } from "@shigomori/contracts/types";
-import { type Worktree } from "@shigomori/contracts/schemas";
 
-// The remote verbs the orchestrations drive, and the byte channels of
-// the same cached session that their source links ride
-// (host/lib/sync/sourceLink.ts): resolving once the direct session
-// exists, rejecting when there is none.
+// The byte channels of a peer's cached session, which the source links
+// ride (host/lib/sync/sourceLink.ts): resolving once the direct
+// session exists, rejecting when there is none.
 export type PeerChannels = () => Promise<Pick<ChannelMux, "attach" | "has">>;
-export type PeerSyncApi = Pick<
-  Client<typeof syncContract>,
-  | "ignoredPaths"
-  | "hasCommits"
-  | "openSource"
-  | "receiveWorktree"
-  | "receiveBundle"
-  // The progress a start the peer runs for this device streams back
-  // (mirror:startFrom relays it to its caller).
-  | "onPullProgress"
-> & { channels: PeerChannels };
-
-// The reach into a peer's mirror surface: the git follower's (read the
-// git state of a served worktree and apply one there) and the mirror
-// start asked from the copy's side (the peer's startTo, with this
-// device as the target, mirror:startFrom), and the word that a copy
-// there is no longer mirrored (mirror:release).
-export type PeerMirrorApi = Pick<
-  Client<typeof mirrorContract>,
-  "gitState" | "applyGitState" | "startTo" | "release"
->;
-
-// The transplant orchestration's teardown reach (the peer's ordinary
-// worktrees:delete), the mirror start's path lookup (worktrees:list)
-// and the control ops' shelving of a brought worktree's source, riding
-// the same grant-gated wire as the sync verbs.
-export type PeerWorktreesApi = Pick<
-  Client<typeof worktreesContract>,
-  "delete" | "list" | "setShelved"
->;
-
-// A worktree's title and description, read off the source and written
-// onto the copy (host/lib/sync/worktreeDescription.ts).
-export type PeerWorktreeDataApi = Pick<
-  Client<typeof worktreeDataContract>,
-  "read" | "describe"
->;
 
 type PeerReach = {
   transportFor: (deviceId: string) => ClientTransport;
@@ -94,41 +58,71 @@ export function peerClient<M extends ContractModule>(
   });
 }
 
-export function peerSyncApiFor(deviceId: string): PeerSyncApi {
-  return {
-    ...peerClient(syncContract, deviceId),
-    channels: requireReach().channelsFor(deviceId),
-  };
-}
+// The same surfaces for effects: each call answers with an effect,
+// whose interruption cancels it on the peer and whose span the call
+// continues. A failure crosses as the contract's error or a
+// RemoteCallError (callFailureOf).
+export type PeerEffects<C> = {
+  readonly [K in keyof C]: C[K] extends (...args: infer A) => Promise<infer R>
+    ? (...args: A) => Effect.Effect<R, CallFailure>
+    : C[K];
+};
 
-export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
-  return peerClient(worktreesContract, deviceId);
-}
-
-export function peerMirrorApiFor(
+export const peerEffects = <M extends ContractModule>(
+  contract: M,
   deviceId: string,
-  options: { readonly signal?: AbortSignal } = {},
-): PeerMirrorApi {
-  return peerClient(mirrorContract, deviceId, options);
-}
+): PeerEffects<Client<M>> =>
+  new Proxy({} as PeerEffects<Client<M>>, {
+    get:
+      (_, method: string) =>
+      (...args: unknown[]) =>
+        Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
+          Effect.tryPromise({
+            try: (signal) =>
+              withParentSpan(span, () => {
+                const call: unknown = Reflect.get(
+                  peerClient(contract, deviceId, { signal }),
+                  method,
+                );
+                if (typeof call !== "function") {
+                  throw new Error(`${nameOf(contract)}:${method} is no call`);
+                }
+                return Promise.resolve(call(...args));
+              }),
+            catch: callFailureOf,
+          }),
+        ),
+  });
 
-export function peerWorktreeDataApiFor(deviceId: string): PeerWorktreeDataApi {
-  return peerClient(worktreeDataContract, deviceId);
-}
+export const peerSyncFor = (deviceId: string) =>
+  peerEffects(syncContract, deviceId);
+export const peerMirrorFor = (deviceId: string) =>
+  peerEffects(mirrorContract, deviceId);
+export const peerWorktreesFor = (deviceId: string) =>
+  peerEffects(worktreesContract, deviceId);
+export const peerWorktreeDataFor = (deviceId: string) =>
+  peerEffects(worktreeDataContract, deviceId);
 
-export function thisDeviceId(): string {
-  return requireReach().thisDeviceId();
-}
+// The byte channels of a peer's direct session.
+export const peerChannelsFor = (deviceId: string) =>
+  Effect.tryPromise({
+    try: () => requireReach().channelsFor(deviceId)(),
+    catch: callFailureOf,
+  });
 
 // One of a peer's worktrees, read off its own list (which the peer's
 // client decoded): its root path flows into a session this device
 // persists, so the caller's say-so is never the source of it.
 // undefined when the peer no longer lists it.
-export async function peerWorktreeOrUndefined(
+export const peerWorktree = (
   deviceId: string,
   projectId: string,
   worktreeId: string,
-): Promise<Worktree | undefined> {
-  const worktrees = await peerWorktreesApiFor(deviceId).list({ projectId });
-  return worktrees.find((worktree) => worktree.id === worktreeId);
+) =>
+  Effect.map(peerWorktreesFor(deviceId).list({ projectId }), (worktrees) =>
+    worktrees.find((worktree) => worktree.id === worktreeId),
+  );
+
+export function thisDeviceId(): string {
+  return requireReach().thisDeviceId();
 }

@@ -37,16 +37,15 @@ import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
 import * as GitWatcher from "@host/lib/gitWatcher";
-import { startBackgroundFetch } from "@host/lib/git/backgroundFetch";
+import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/persistence";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
   mirrorDaemonLayer,
-  startGitFollower,
+  mirrorLayer,
   startMirrorGateway,
-  stopGitFollower,
   stopMirrorGateway,
 } from "./handlers";
 import { stopAllPortForwards } from "@host/ipc/modules/portForward";
@@ -102,8 +101,7 @@ function onExternalStateChange() {
   // mirror of the worktree carries it now (host/mirror/gitFollow.ts).
   // Which worktree it was is not told, so every mirrored project is.
   const mirrored = new Set(
-    Captures.mirrorDaemon
-      .sessions()
+    Captures.mirrorSessionsNow()
       .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
       .filter((projectId) => projectId !== undefined),
   );
@@ -186,11 +184,7 @@ const remotePlanes = onQuit(
 // moment it is up, so it starts with the app. After app ready: the sessions it
 // resumes are swept for a device on no account, which reads the
 // credential, and safeStorage cannot decrypt it before ready.
-const mirrorFollower = lifetime(
-  "the mirror follower",
-  Effect.sync(startGitFollower),
-  stopGitFollower,
-);
+const mirrorFollower = logged("the mirror follower", mirrorLayer);
 const mirrorDaemon = Captures.daemon.layer.pipe(
   Layer.provideMerge(mirrorDaemonLayer),
 );
@@ -213,11 +207,7 @@ const portForwards = onQuit(
 
 // What the host answers from caches of other tools: gh, terrier and
 // port-pool.
-const toolAnswers = Captures.github.layer.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer),
-  ),
-);
+const toolAnswers = Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer);
 
 // The bottom of the graph, closed last.
 const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
@@ -301,12 +291,8 @@ export const layer = (options: {
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
     Layer.provideMerge(
-      starts("the background fetch", () =>
-        startBackgroundFetch({
-          refreshPullRequests: Captures.refreshPullRequests,
-          listIdentities: (projectId) =>
-            Captures.onEngine(Ops.listWorktreeIdentities({ projectId })),
-        }),
+      Captures.backgroundFetch.layer.pipe(
+        Layer.provideMerge(BackgroundFetch.layer),
       ),
     ),
     // Installing the CLI link is a Settings action. A start only

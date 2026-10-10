@@ -19,6 +19,7 @@ import { launchersContract } from "@shigomori/contracts/modules/launchers";
 import type { HubHandlers } from "@shared/hub/bridgeHandlers";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
@@ -79,6 +80,9 @@ import {
   isOrphanedTransfer,
   mirrorSessions,
   setMirrorImpl,
+  MirrorError,
+  type MirrorImpl,
+  type MirrorSessionRaw,
 } from "@host/mirror/registry";
 import {
   MirrorInviteSchema,
@@ -121,18 +125,12 @@ import {
   worktreesViews,
 } from "@host/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
-import {
-  peerClient,
-  peerMirrorApiFor,
-  peerSyncApiFor,
-  setPeerReach,
-} from "@host/ipc/peerSync";
-import { followDescription } from "@host/lib/sync/worktreeDescription";
+import { peerClient, setPeerReach } from "@host/ipc/peerSync";
 import { createPortForwardEngine } from "@host/portForward/engine";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import { createMirrorGateway } from "@host/mirror/gateway";
 import { createMirrorHistory } from "@host/mirror/history";
-import { createGitFollower } from "@host/mirror/gitFollow";
+import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
@@ -200,18 +198,22 @@ const mirrorGateway = createMirrorGateway({
 // follower reports every verdict. The renderer's ping is coalesced so
 // a busy mirror costs viewers one refetch per beat, not one per cycle.
 const broadcastMirrorChanged = coalesce(() => {
-  // Off a timer, so a throw here is the main process's uncaught
-  // exception. The list is validated against its strict schema on the
-  // way out, and one that fails it goes out as the bare signal (a
-  // reader then asks), as it did before the broadcast carried a list.
-  try {
-    broadcastAll(mirrorContract, "changed", currentMirrorList());
-  } catch (error) {
-    log.warn(
-      `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
-    );
-    broadcastAll(mirrorContract, "changed", undefined);
-  }
+  void Captures.onEngine(currentMirrorList).then(
+    (list) => {
+      // The list is validated against its strict schema on the way
+      // out, and one that fails it goes out as the bare signal (a
+      // reader then asks), as it did before the broadcast carried a list.
+      try {
+        broadcastAll(mirrorContract, "changed", list);
+      } catch (error) {
+        log.warn(
+          `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
+        );
+        broadcastAll(mirrorContract, "changed", undefined);
+      }
+    },
+    () => {},
+  );
 }, 150);
 const fileSyncDir = () => join(dataDir(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
@@ -249,38 +251,164 @@ const mirrorHistory = createMirrorHistory({
   },
   onChange: () => broadcastMirrorChanged(),
 });
-// The daemon's sessions that are mirrors: a transplant's one-shot file
-// transfer rides the same daemon under a label (host/mirror/oneShot.ts),
-// and neither the follower nor the history should treat it as one.
-const liveMirrorSessions = () => mirrorSessions(mirrorDaemon);
+// The daemon and the git follower the mirror impl below runs on, set
+// while the mirror layer is up (mirrorLayer). Before it, the impl
+// reads a stopped engine with no sessions.
+let mirrorParts: {
+  readonly daemon: MirrorDaemon.MirrorDaemon["Service"];
+  readonly follower: GitFollower;
+} | null = null;
+const notRunning = (op: string) =>
+  Effect.fail(
+    new MirrorError({ reason: `The mirror engine is not running (${op}).` }),
+  );
+const onDaemon = <A>(
+  op: string,
+  f: (
+    daemon: MirrorDaemon.MirrorDaemon["Service"],
+  ) => Effect.Effect<A, MirrorDaemon.MirrorDaemonError>,
+): Effect.Effect<A, MirrorError> =>
+  Effect.suspend(() =>
+    mirrorParts === null
+      ? notRunning(op)
+      : f(mirrorParts.daemon).pipe(
+          Effect.mapError(
+            (error) => new MirrorError({ reason: error.message }),
+          ),
+        ),
+  );
+const daemonSessions = Effect.suspend(() =>
+  mirrorParts === null
+    ? Effect.succeed<readonly MirrorSessionRaw[]>([])
+    : mirrorParts.daemon.sessions,
+);
+
+// The mirror surface's impl (host/mirror/registry.ts MirrorImpl).
+const mirrorImpl: MirrorImpl = {
+  status: Effect.suspend(() =>
+    mirrorParts === null
+      ? Effect.succeed("stopped" as const)
+      : mirrorParts.daemon.status,
+  ),
+  sessions: daemonSessions,
+  // A start's long leg (the copy across) can straddle a sign-out; the
+  // sweep that ran meanwhile found nothing, so this is the last gate
+  // before a session with a peer of no account.
+  create: (input) =>
+    hubConnectInputs() === null
+      ? Effect.fail(
+          new MirrorError({
+            reason: "This device is signed out, so it cannot mirror.",
+          }),
+        )
+      : onDaemon("create", (daemon) => daemon.create(input)),
+  // The old session is paused, not ended, until the new one is up: two
+  // running sessions on one root would fight, but a paused one holds
+  // nothing, and a create that fails (peer away) then leaves the
+  // mirror as it was instead of gone with no way to re-open it. The
+  // agreement moves to the new id, so the follower picks up where it
+  // was instead of starting from the no-agreement fallback. Held as
+  // recreating throughout, so the leftover sweep (registry.ts
+  // settleMirrorBookkeeping) does not end the old session under it. An
+  // old session already gone by the terminate was ended all the same.
+  recreate: (session, input) =>
+    whileRecreating(
+      session,
+      Effect.gen(function* () {
+        yield* onDaemon("pause", (daemon) => daemon.pause(session));
+        const next = yield* mirrorImpl
+          .create(input)
+          .pipe(
+            Effect.tapError(() =>
+              Effect.ignore(
+                onDaemon("resume", (daemon) => daemon.resume(session)),
+              ),
+            ),
+          );
+        yield* onDaemon("terminate", (daemon) =>
+          daemon.terminate(session),
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.flatMap(daemonSessions, (sessions) =>
+              sessions.some((raw) => raw.session === session)
+                ? Effect.fail(error)
+                : Effect.void,
+            ),
+          ),
+        );
+        mirrorParts?.follower.rename(session, next);
+        return next;
+      }),
+    ),
+  // An explicit stop ends the agreement too, or the git follower's
+  // store keeps one entry per session ever created. A terminate that
+  // failed still ends it: the session is doomed either way, and the
+  // entry would otherwise outlive the daemon that could ever match it.
+  terminate: (session) =>
+    onDaemon("terminate", (daemon) => daemon.terminate(session)).pipe(
+      Effect.asVoid,
+      Effect.ensuring(Effect.sync(() => mirrorParts?.follower.forget(session))),
+    ),
+  pause: (session) =>
+    Effect.asVoid(onDaemon("pause", (daemon) => daemon.pause(session))),
+  resume: (session) =>
+    Effect.asVoid(onDaemon("resume", (daemon) => daemon.resume(session))),
+  gitStatus: (session) => mirrorParts?.follower.statusOf(session),
+  refreshGit: (session) =>
+    Effect.suspend(() =>
+      mirrorParts === null
+        ? Effect.succeed(undefined)
+        : mirrorParts.follower.reconcileNow(session),
+    ),
+  history: (localWorktreeId) => mirrorHistory.eventsFor(localWorktreeId),
+  noteEvent: (localWorktreeId, kind, detail) =>
+    mirrorHistory.note(localWorktreeId, kind, detail),
+  forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
+  moveHistory: (from, to) => mirrorHistory.move(from, to),
+};
+
 // A transfer session no pull here is waiting on (registry.ts
 // isOrphanedTransfer: left by a quit or a crash mid-transfer, a
 // rejected create, a failed terminate). No mirror surface would ever
-// show it, so it is ended on sight. Each is asked once, and the engine drops it
-// from the next snapshot.
+// show it, so it is ended on sight. Each is asked once, and the engine
+// drops it from the next snapshot.
 const reaped = new Set<string>();
-const reapOrphanedTransfers = () => {
-  for (const session of mirrorDaemon.sessions()) {
-    if (!isOrphanedTransfer(session) || reaped.has(session.session)) continue;
-    reaped.add(session.session);
-    void mirrorDaemon.terminate(session.session).catch((error: unknown) => {
-      log.warn(
-        `[mirror] could not end an orphaned transfer session: ${errorMessageOf(error)}`,
-      );
-    });
-  }
-};
-const observeMirrorHistory = () =>
-  mirrorHistory.observe(liveMirrorSessions(), (session) =>
-    gitFollower.statusOf(session),
-  );
+const reapOrphanedTransfers = Effect.flatMap(daemonSessions, (sessions) =>
+  Effect.forEach(
+    sessions.filter(
+      (session) => isOrphanedTransfer(session) && !reaped.has(session.session),
+    ),
+    (session) => {
+      reaped.add(session.session);
+      return mirrorImpl
+        .terminate(session.session)
+        .pipe(
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              log.warn(
+                `[mirror] could not end an orphaned transfer session: ${error.message}`,
+              ),
+            ),
+          ),
+        );
+    },
+    { discard: true },
+  ),
+);
+// The daemon's sessions that are mirrors, into their threads.
+const observeMirrorHistory = Effect.map(
+  mirrorSessions(mirrorImpl),
+  (sessions) =>
+    mirrorHistory.observe(sessions, (session) =>
+      mirrorParts?.follower.statusOf(session),
+    ),
+);
 // The gateway's facts the daemon is handed, once it has them.
 function listening<T>(value: T | null): T {
   if (value === null) throw new Error("mirror gateway is not listening");
   return value;
 }
 
-const { mirrorDaemon } = Captures;
 export const mirrorDaemonLayer = MirrorDaemon.layer({
   dataDir: fileSyncDir,
   gatewayAddress: () => listening(mirrorGateway.address()),
@@ -289,31 +417,35 @@ export const mirrorDaemonLayer = MirrorDaemon.layer({
     broadcastMirrorChanged();
     // The follower compares the session set itself. A snapshot that
     // only moved a cycle count is a no-op there.
-    gitFollower.sessionsChanged();
-    observeMirrorHistory();
-    reapOrphanedTransfers();
+    mirrorParts?.follower.sessionsChanged();
     noAccountSweep.run();
-    // The stops that waited for the daemon, originals gone behind the
-    // app's back, sessions a re-open replaced (registry.ts).
-    void Captures.engineHandle()
-      .then(settleMirrorBookkeeping)
-      .catch(() => {});
+    // The history, the orphaned transfers, and the stops that waited
+    // for the daemon, originals gone behind the app's back, sessions a
+    // re-open replaced (registry.ts).
+    void Captures.onEngine(
+      Effect.all([
+        observeMirrorHistory,
+        reapOrphanedTransfers,
+        settleMirrorBookkeeping,
+      ]),
+    ).catch(() => {});
   },
 });
 const LEFT_ACCOUNT_DETAIL =
   "This device left the account. The copy stays as a worktree.";
-function endAllMirrors(): Promise<void> {
-  return endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
-    transfers: true,
-  });
-}
+const endAllMirrors = () =>
+  Captures.onEngine(
+    endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
+      transfers: true,
+    }),
+  );
 // The sessions the engine brings back for a device on no account
 // (registry.ts createNoAccountSweep). The account fan-out's own sweep
 // covers a sign-out with the daemon up, and resets this one.
 const noAccountSweep = createNoAccountSweep({
-  sessions: () => mirrorDaemon.sessions(),
+  sessions: () => Captures.mirrorSessionsNow(),
   signedIn: accountSignedIn,
-  end: () => void endAllMirrors(),
+  end: () => void endAllMirrors().catch(() => {}),
 });
 
 // The mirror sweep of a device leaving its account, bounded so a stuck
@@ -337,40 +469,52 @@ function broadcastCommandAccessChanged(): void {
 function teardownStep(what: string, run: () => unknown): Promise<void> {
   return logFailure(`[account] ${what} failed`, run);
 }
-// The git half of every session this device runs (host/mirror/
-// gitFollow.ts): reads the daemon's sessions, reaches the peer through
-// the same cached direct sessions, and reports through the same
-// changed signal. Its inputs are wired below: the local git watcher
-// (layer.ts, via announceProjectChanged), the peers' pushes
-// (onPeerPush) and the daemon's snapshots (above).
-const gitFollower = createGitFollower({
-  sessions: liveMirrorSessions,
-  peerSyncApiFor,
-  peerMirrorApiFor,
-  engine: Captures.engineHandle,
-  followDescription: (...args) => Captures.onEngine(followDescription(...args)),
-  // The states both sides last agreed on, beside the engine's own
-  // data so a restart resumes the follow rule rather than falling
-  // back to ancestry.
-  agreedStore: {
-    load: () =>
-      readJsonOrNullSync(gitFollowStorePath(), GitFollowStoreSchema)?.agreed ??
-      {},
-    save: (agreed) => atomicWriteJsonSync(gitFollowStorePath(), { agreed }),
-  },
-  onChange: () => {
-    broadcastMirrorChanged();
-    observeMirrorHistory();
-  },
-  // The peer says the session's copy is gone, behind this device's
-  // back: confirmed against the peer's own list (an answer while its
-  // registry loads, or mid-move, is no removal), the session ends and
-  // the original keeps its own.
-  onCopyGone: (session) => void endMirrorIfCopyGone(session),
-  // A pull it applied here is a ref move the git watcher skips as the
-  // app's own: announced like one, so the pages showing it refetch.
-  onLocalApplied: (projectId) => announceProjectChanged(projectId),
-});
+
+// The daemon's sessions with the git half of each (host/mirror/
+// gitFollow.ts), for the length of the graph: the follower reads the
+// daemon's sessions, reaches the peer through the same cached direct
+// sessions, and reports through the same changed signal. Its inputs
+// are wired below: the local git watcher (layer.ts, via
+// announceProjectChanged), the peers' pushes (onPeerPush) and the
+// daemon's snapshots (above).
+export const mirrorLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const daemon = yield* MirrorDaemon.MirrorDaemon;
+    const follower = yield* makeGitFollower({
+      sessions: mirrorSessions(mirrorImpl),
+      followDescription: true,
+      // The states both sides last agreed on, beside the engine's own
+      // data so a restart resumes the follow rule rather than falling
+      // back to ancestry.
+      agreedStore: {
+        load: () =>
+          readJsonOrNullSync(gitFollowStorePath(), GitFollowStoreSchema)
+            ?.agreed ?? {},
+        save: (agreed) => atomicWriteJsonSync(gitFollowStorePath(), { agreed }),
+      },
+      onChange: () => {
+        broadcastMirrorChanged();
+        void Captures.onEngine(observeMirrorHistory).catch(() => {});
+      },
+      // The peer says the session's copy is gone, behind this device's
+      // back: confirmed against the peer's own list (an answer while
+      // its registry loads, or mid-move, is no removal), the session
+      // ends and the original keeps its own.
+      onCopyGone: (session) =>
+        void Captures.onEngine(endMirrorIfCopyGone(session)).catch(() => {}),
+      // A pull it applied here is a ref move the git watcher skips as
+      // the app's own: announced like one, so the pages showing it
+      // refetch.
+      onLocalApplied: (projectId) => announceProjectChanged(projectId),
+    });
+    mirrorParts = { daemon, follower };
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        mirrorParts = null;
+      }),
+    );
+  }),
+);
 
 // "This project's git state moved on this machine": the project-scoped
 // ping on every wire (this window and every device viewing this host
@@ -381,7 +525,7 @@ const gitFollower = createGitFollower({
 // skips as the app's own when no renderer caller invalidates for them.
 export function announceProjectChanged(projectId: string): void {
   broadcastAll(gitContract, "projectChanged", { projectId });
-  gitFollower.onLocalProjectChanged(projectId);
+  mirrorParts?.follower.onLocalProjectChanged(projectId);
 }
 
 // A gateway that fails to bind (a loopback oddity) is retried on a
@@ -404,11 +548,9 @@ async function ensureMirrorGateway(): Promise<void> {
   }
 }
 
-// The mirror engine's pieces, for layer.ts.
+// The mirror engine's gateway, for layer.ts.
 export const startMirrorGateway = ensureMirrorGateway;
 export const stopMirrorGateway = () => mirrorGateway.stop();
-export const startGitFollower = () => gitFollower.start();
-export const stopGitFollower = () => gitFollower.stop();
 
 // The account the peer-facing state was built under, so a change can
 // tell a rename or a switch flip (same account, nothing to tear down)
@@ -479,11 +621,13 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
   if (same) return;
   lastMembership = onAccount;
   const stillOn = (deviceId: string) => onAccount.has(deviceId);
-  void endMirrorsWithPeers(
-    stillOn,
-    "The other device left the account. The copy stays as a worktree.",
-    { transfers: true },
-  );
+  void Captures.onEngine(
+    endMirrorsWithPeers(
+      stillOn,
+      "The other device left the account. The copy stays as a worktree.",
+      { transfers: true },
+    ),
+  ).catch(() => {});
   // A forward is standing intent across a peer being asleep, so it
   // follows the account's membership, never the roster.
   stopPortForwardsTo(stillOn);
@@ -559,69 +703,7 @@ export function registerHostHandlers(): void {
   // and peers read the list), its daemon injected from above. The
   // serving set (streams this host serves for peers) fans out on the
   // same changed signal.
-  setMirrorImpl({
-    status: () => mirrorDaemon.status(),
-    sessions: () => mirrorDaemon.sessions(),
-    create: (input) => {
-      // A start's long leg (the copy across) can straddle a sign-out;
-      // the sweep that ran meanwhile found nothing, so this is the
-      // last gate before a session with a peer of no account.
-      if (hubConnectInputs() === null) {
-        throw new Error("This device is signed out, so it cannot mirror.");
-      }
-      return mirrorDaemon.create(input);
-    },
-    // The old session is paused, not ended, until the new one is up:
-    // two running sessions on one root would fight, but a paused one
-    // holds nothing, and a create that fails (peer away) then leaves
-    // the mirror as it was instead of gone with no way to re-open it.
-    // The agreement moves to the new id, so the follower picks up
-    // where it was instead of starting from the no-agreement fallback.
-    // Held as recreating throughout, so the leftover sweep
-    // (registry.ts settleMirrorBookkeeping) does not end the old
-    // session under it. An old session already gone by the terminate
-    // was ended all the same.
-    recreate: (session, input) =>
-      whileRecreating(session, async () => {
-        await mirrorDaemon.pause(session);
-        let next: string;
-        try {
-          next = await mirrorDaemon.create(input);
-        } catch (error) {
-          await mirrorDaemon.resume(session).catch(() => {});
-          throw error;
-        }
-        await mirrorDaemon.terminate(session).catch((error: unknown) => {
-          const stillThere = mirrorDaemon
-            .sessions()
-            .some((raw) => raw.session === session);
-          if (stillThere) throw error;
-        });
-        gitFollower.rename(session, next);
-        return next;
-      }),
-    terminate: async (session) => {
-      try {
-        await mirrorDaemon.terminate(session);
-      } finally {
-        // An explicit stop ends the agreement too, or the git
-        // follower's store keeps one entry per session ever created.
-        // A terminate that failed still ends it: the session is
-        // doomed either way, and the entry would otherwise outlive
-        // the daemon that could ever match it.
-        gitFollower.forget(session);
-      }
-    },
-    pause: (session) => mirrorDaemon.pause(session),
-    resume: (session) => mirrorDaemon.resume(session),
-    gitStatus: (session) => gitFollower.statusOf(session),
-    refreshGit: (session) => gitFollower.reconcileNow(session),
-    history: (localWorktreeId) => mirrorHistory.eventsFor(localWorktreeId),
-    noteEvent: (localWorktreeId, kind, detail) =>
-      mirrorHistory.note(localWorktreeId, kind, detail),
-    forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
-    moveHistory: (from, to) => mirrorHistory.move(from, to),
-  });
+  setMirrorImpl(mirrorImpl);
   setMirrorServingListener(broadcastMirrorChanged);
   // A delete's removal, to every window and peer (remote:true by
   // contract): the row a mirror stop or a peer's teardown is taking
@@ -645,19 +727,24 @@ export function registerHostHandlers(): void {
     if (push.channel === "git:projectChanged") {
       const { payload } = push;
       if (Schema.is(ProjectScopedPayloadSchema)(payload)) {
-        gitFollower.onPeerProjectChanged(push.deviceId, payload.projectId);
+        mirrorParts?.follower.onPeerProjectChanged(
+          push.deviceId,
+          payload.projectId,
+        );
       }
     } else if (push.channel === "mirror:gitChanged") {
       const parsed = decodeMirrorWorktreePayload(push.payload);
       if (Option.isSome(parsed)) {
-        gitFollower.onPeerWorktreeChanged(
+        mirrorParts?.follower.onPeerWorktreeChanged(
           push.deviceId,
           parsed.value.projectId,
           parsed.value.worktreeId,
         );
       }
     } else if (push.channel === "worktrees:removal") {
-      void endMirrorsOnPeerRemoval(push.deviceId, push.payload);
+      void Captures.onEngine(
+        endMirrorsOnPeerRemoval(push.deviceId, push.payload),
+      ).catch(() => {});
     }
   });
   registerContract(mirrorContract, mirrorHandlers);
@@ -700,21 +787,22 @@ export function registerHostHandlers(): void {
   // stored credential, and the peers are reached through the seam
   // above.
   setControlImpl({
-    listDevices: listAccountDevices,
-    directPeers: async () => {
-      const status = await hubHandlers().status(undefined, undefined);
-      return Object.fromEntries(
-        Object.entries(status.peerAcceptsCommands).map(
-          ([deviceId, acceptsCommands]) => [
-            deviceId,
-            {
-              acceptsCommands,
-              sharesData: status.peerSharesData[deviceId] ?? true,
-            },
-          ],
+    listDevices: Effect.tryPromise(listAccountDevices),
+    directPeers: Effect.map(
+      Effect.promise(async () => hubHandlers().status(undefined, undefined)),
+      (status) =>
+        Object.fromEntries(
+          Object.entries(status.peerAcceptsCommands).map(
+            ([deviceId, acceptsCommands]) => [
+              deviceId,
+              {
+                acceptsCommands,
+                sharesData: status.peerSharesData[deviceId] ?? true,
+              },
+            ],
+          ),
         ),
-      );
-    },
+    ),
   });
   registerLoopbackContract(controlContract, controlHandlers, controlTransfers);
   registerContract(shigomoriContract, shigomoriHandlers);

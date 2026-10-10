@@ -25,20 +25,20 @@ import {
   transferFilesOnce,
 } from "@host/mirror/oneShot";
 import {
-  peerSyncApiFor,
-  peerWorktreeOrUndefined,
-  peerWorktreesApiFor,
+  peerSyncFor,
+  peerWorktree,
+  peerWorktreesFor,
 } from "@host/ipc/peerSync";
-import { getRepoIdentity } from "@host/lib/git/repoIdentity";
+import * as Ops from "@host/lib/engineOps";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
-import { runMove, step, unwrapStep } from "@host/lib/sync/moves";
+import { runMove } from "@host/lib/sync/moves";
 import {
   offer,
   peerSource,
   type ProgressFrame,
 } from "@host/lib/sync/sourceLink";
-import { log, logFailure } from "@shared/log";
+import { log } from "@shared/log";
 import { landWorktree, moveAttributes } from "./landing";
 import { remember } from "./receipts";
 
@@ -102,10 +102,10 @@ export const pullWorktree = (
     Effect.gen(function* () {
       const move = yield* Effect.scope;
       // The link to the source lives for the landing alone.
-      const { receipt, ...landed } = yield* peerSource(
-        peerSyncApiFor(sourceDeviceId),
-        { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
-      ).pipe(
+      const { receipt, ...landed } = yield* peerSource(sourceDeviceId, {
+        projectId: sourceProjectId,
+        worktreeId: sourceWorktreeId,
+      }).pipe(
         Effect.flatMap((source) =>
           landWorktree(
             source,
@@ -136,12 +136,10 @@ export const pullWorktree = (
       let files: TransferFilesResult | undefined;
       if (pullBringsIgnoredFiles(ignoreMode)) {
         progress({ step: "files" });
-        const source = yield* step(() =>
-          peerWorktreeOrUndefined(
-            sourceDeviceId,
-            sourceProjectId,
-            sourceWorktreeId,
-          ),
+        const source = yield* peerWorktree(
+          sourceDeviceId,
+          sourceProjectId,
+          sourceWorktreeId,
         );
         files =
           source === undefined
@@ -150,22 +148,19 @@ export const pullWorktree = (
                 conflicts: 0,
                 error: "the source worktree is no longer listed there",
               }
-            : yield* step((stepSignal) =>
-                transferFilesOnce(
-                  {
-                    localRoot: landed.worktree.path,
-                    localWorktreeId: landed.worktree.id,
-                    sourceDeviceId,
-                    sourceProjectId,
-                    sourceWorktreeId,
-                    remoteRoot: source.path,
-                    name: branch,
-                    ignores: ignores ?? [],
-                  },
-                  (bytes, totalBytes) =>
-                    progress({ step: "files", bytes, totalBytes }),
-                  stepSignal,
-                ),
+            : yield* transferFilesOnce(
+                {
+                  localRoot: landed.worktree.path,
+                  localWorktreeId: landed.worktree.id,
+                  sourceDeviceId,
+                  sourceProjectId,
+                  sourceWorktreeId,
+                  remoteRoot: source.path,
+                  name: branch,
+                  ignores: ignores ?? [],
+                },
+                (bytes, totalBytes) =>
+                  progress({ step: "files", bytes, totalBytes }),
               ).pipe(Effect.withSpan("Sync.files"));
       }
       yield* followDescription(
@@ -210,12 +205,23 @@ const describeFailureLogged = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 // the peer, so it is attributed before it reaches this device's user.
 // A contract error (the command refusal, an entity gone) passes as it
 // is, since surfaces branch on its class.
-function fromPeer<T>(answer: Promise<T>): Promise<T> {
-  return answer.catch((error: unknown) => {
-    if (isContractError(error)) throw error;
-    throw new Error(`The other device answered: ${errorMessageOf(error)}`);
-  });
+class PeerRefusedError extends Schema.TaggedError<PeerRefusedError>()(
+  "PeerRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return `The other device answered: ${this.reason}`;
+  }
 }
+
+const fromPeer = <A, E, R>(answer: Effect.Effect<A, E, R>) =>
+  answer.pipe(
+    Effect.mapError((error) =>
+      isContractError(error)
+        ? error
+        : new PeerRefusedError({ reason: errorMessageOf(error) }),
+    ),
+  );
 
 // The send: one of this device's worktrees lands on a peer.
 // Local-only by contract (remote:false). The landing is the pull's,
@@ -249,8 +255,6 @@ export const sendWorktree = (
   { mirror = false }: { mirror?: boolean } = {},
 ) => {
   const send = sendWorktreeEffect(input, ctx, mirror).pipe(
-    // A step's failure as it was thrown, as for any move (cancellable).
-    Effect.mapError(unwrapStep),
     Effect.scoped,
     Effect.withSpan("Sync.send", {
       attributes: {
@@ -266,20 +270,23 @@ export const sendWorktree = (
 // like a failed mirror start's rollback. The peer's ordinary delete,
 // so a peer set to keep branches keeps this one too, where the local
 // rollback (rollBackLanded) takes it: the wire has no verb for that.
-export function rollBackSent(
+export const rollBackSent = (
   targetDeviceId: string,
   copy: { projectId: string; id: string },
-): Promise<void> {
-  return logFailure(
-    "[sync] could not remove the peer's copy of a cancelled move",
-    () =>
-      peerWorktreesApiFor(targetDeviceId).delete({
-        projectId: copy.projectId,
-        worktreeId: copy.id,
-        force: true,
-      }),
-  );
-}
+) =>
+  peerWorktreesFor(targetDeviceId)
+    .delete({ projectId: copy.projectId, worktreeId: copy.id, force: true })
+    .pipe(
+      Effect.asVoid,
+      Effect.catch((error) =>
+        Effect.sync(() =>
+          log.warn(
+            "[sync] could not remove the peer's copy of a cancelled move:",
+            error,
+          ),
+        ),
+      ),
+    );
 
 const sendWorktreeEffect = (
   {
@@ -308,9 +315,7 @@ const sendWorktreeEffect = (
     if (worktree.isPrimary && !mirror) {
       return yield* new MoveRefusedError({ reason: "primary" });
     }
-    const identity = yield* step(() =>
-      getRepoIdentity(project.path).catch(() => null),
-    );
+    const identity = yield* Ops.repoIdentity(project.path);
     if (identity === null) {
       return yield* new MoveRefusedError({ reason: "no-identity" });
     }
@@ -319,7 +324,7 @@ const sendWorktreeEffect = (
 
     // The landing, on the peer, asking back over the link. An interrupt
     // resets the link, which the peer's landing runs under.
-    const peer = peerSyncApiFor(targetDeviceId);
+    const peer = peerSyncFor(targetDeviceId);
     // The copy's removal is registered the moment the answer is in, with
     // no interrupt between the two: a cancel from then on (the files
     // step) removes it over the peer's grant, the same removal a failed
@@ -328,7 +333,7 @@ const sendWorktreeEffect = (
       (restore) =>
         restore(
           offer(
-            peer,
+            targetDeviceId,
             project,
             worktreeId,
             (channelId) =>
@@ -358,9 +363,7 @@ const sendWorktreeEffect = (
           Effect.tap((answer) =>
             Effect.addFinalizer((exit) =>
               Exit.hasInterrupts(exit)
-                ? Effect.promise(() =>
-                    rollBackSent(targetDeviceId, answer.worktree),
-                  )
+                ? rollBackSent(targetDeviceId, answer.worktree)
                 : Effect.void,
             ),
           ),
@@ -372,22 +375,19 @@ const sendWorktreeEffect = (
     let files: TransferFilesResult | undefined;
     if (pullBringsIgnoredFiles(ignoreMode)) {
       progress({ step: "files" });
-      files = yield* step((stepSignal) =>
-        transferFilesOnce(
-          {
-            localRoot: worktree.path,
-            localWorktreeId: worktree.id,
-            sourceDeviceId: targetDeviceId,
-            sourceProjectId: landed.worktree.projectId,
-            sourceWorktreeId: landed.worktree.id,
-            remoteRoot: landed.worktree.path,
-            name: branch,
-            ignores: ignores ?? [],
-            direction: "push",
-          },
-          (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
-          stepSignal,
-        ),
+      files = yield* transferFilesOnce(
+        {
+          localRoot: worktree.path,
+          localWorktreeId: worktree.id,
+          sourceDeviceId: targetDeviceId,
+          sourceProjectId: landed.worktree.projectId,
+          sourceWorktreeId: landed.worktree.id,
+          remoteRoot: landed.worktree.path,
+          name: branch,
+          ignores: ignores ?? [],
+          direction: "push",
+        },
+        (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
       ).pipe(Effect.withSpan("Sync.files"));
     }
     yield* followDescription(

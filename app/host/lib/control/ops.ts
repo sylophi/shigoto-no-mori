@@ -12,9 +12,9 @@
 // and relays the peer's progress. Nothing here moves a byte or touches
 // git itself.
 import type { HostServices } from "@host/process/services";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { only } from "@shigomori/contracts/util/only";
 import {
   type ControlDevice,
@@ -39,19 +39,16 @@ import {
   selectionOfPreset,
   setupDefaultFor,
 } from "@shigomori/contracts/leaveOutRule";
-import {
-  type Project,
-  type WorktreeIdentity,
-} from "@shigomori/contracts/schemas";
+import { type Project } from "@shigomori/contracts/schemas";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
   sharedStringSetting,
 } from "@shigomori/contracts/sharedSettings";
 import {
-  peerSyncApiFor,
-  peerWorktreeOrUndefined,
-  peerWorktreesApiFor,
+  peerSyncFor,
+  peerWorktree,
+  peerWorktreesFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
 import { findProject, findProjectAndWorktree } from "@host/lib/projects";
@@ -64,8 +61,6 @@ import {
 } from "@host/mirror/sessions";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import * as Engine from "@host/lib/engine";
-import * as Processes from "@host/lib/util/processes";
 import * as Ops from "@host/lib/engineOps";
 import {
   BLOCK_REASON,
@@ -103,17 +98,27 @@ type TransferOp<K extends "send" | "bring"> = (
   ctx: HandlerContext,
 ) => Effect.Effect<ControlTransferResult, CallFailure, HostServices>;
 
+// A refusal of plan.ts's, which throws its ControlError.
+const planned = <A>(decide: () => A) =>
+  Effect.try({
+    try: decide,
+    catch: (error) =>
+      error instanceof ControlError
+        ? error
+        : new ControlError("device-blocked", errorMessageOf(error)),
+  });
+
 // The one device a send goes to, among the candidates (plan.ts
 // chooseTarget).
-async function pickDevice(
-  project: Project,
-  query: string | undefined,
-): Promise<{ identity: string | null; target: ControlDevice }> {
-  const { identity, standings } = await candidates(project, query, {
-    grant: true,
-  });
-  return { identity, target: chooseTarget(standings, query) };
-}
+const pickDevice = (project: Project, query: string | undefined) =>
+  Effect.flatMap(
+    candidates(project, query, { grant: true }),
+    ({ identity, standings }) =>
+      Effect.map(
+        planned(() => chooseTarget(standings, query)),
+        (target) => ({ identity, target }),
+      ),
+  );
 
 function presetSelection(identity: string | null): IgnoreSelection {
   return selectionOfPreset(
@@ -133,30 +138,31 @@ const NO_EXCEPTIONS: ReadonlySet<string> = new Set();
 // The rule and the setup switch, as the review step would hand them
 // to the mutation: the project's preset unless the caller named a
 // plain rule, resolved over the SOURCE worktree's ignored list.
-async function choiceFor(
+const choiceFor = <E, R>(
   identity: string | null,
   options: { leaveOut?: "nothing" | "gitignored"; setup?: boolean },
-  ignoredOfSource: () => Promise<Parameters<typeof resolveIgnores>[1]>,
-): Promise<MirrorIgnoreChoice & { runSetup: boolean }> {
-  const selection: IgnoreSelection =
-    options.leaveOut === undefined
-      ? presetSelection(identity)
-      : {
-          base: options.leaveOut === "nothing" ? "everything" : "gitignored",
-          leftOut: NO_EXCEPTIONS,
-          brought: NO_EXCEPTIONS,
-        };
-  // Without the list the gitignored rule would resolve to no patterns
-  // and leave nothing out, so a failed read fails the op (the dialog
-  // holds Start for the same reason).
-  const ignored = needsIgnoredList(selection)
-    ? await ignoredOfSource()
-    : undefined;
-  return {
-    ...resolveIgnores(selection, ignored),
-    runSetup: options.setup ?? setupDefaultFor(selection),
-  };
-}
+  ignoredOfSource: Effect.Effect<Parameters<typeof resolveIgnores>[1], E, R>,
+) =>
+  Effect.gen(function* () {
+    const selection: IgnoreSelection =
+      options.leaveOut === undefined
+        ? presetSelection(identity)
+        : {
+            base: options.leaveOut === "nothing" ? "everything" : "gitignored",
+            leftOut: NO_EXCEPTIONS,
+            brought: NO_EXCEPTIONS,
+          };
+    // Without the list the gitignored rule would resolve to no patterns
+    // and leave nothing out, so a failed read fails the op (the dialog
+    // holds Start for the same reason).
+    const ignored = needsIgnoredList(selection)
+      ? yield* ignoredOfSource
+      : undefined;
+    return {
+      ...resolveIgnores(selection, ignored),
+      runSetup: options.setup ?? setupDefaultFor(selection),
+    } as MirrorIgnoreChoice & { runSetup: boolean };
+  });
 
 // What became of the source, in the finish step's terms. A fate that
 // could not be carried out is an answer, never a throw: the transfer
@@ -229,32 +235,36 @@ const settled =
 
 // A stop's two refusals told apart, wherever it ran: the confirmation
 // rule is the CLI's typed error, and a copy that stayed comes back as
-// the caveat (thrown with the session already gone, so the stop is
+// the caveat (failed with the session already gone, so the stop is
 // the answer).
-async function stopMirror(run: () => unknown): Promise<string | undefined> {
-  try {
-    await run();
-    return undefined;
-  } catch (error) {
-    if (isMirrorStopUnconfirmed(error)) {
-      throw new ControlError("stop-unconfirmed", errorMessageOf(error));
-    }
-    if (!isMirrorCopyStayed(error)) throw error;
-    return errorMessageOf(error);
-  }
-}
+const stopMirror = <A, E, R>(
+  run: Effect.Effect<A, E, R>,
+): Effect.Effect<string | undefined, E | ControlError, R> =>
+  run.pipe(
+    Effect.as(undefined),
+    Effect.catch(
+      (error): Effect.Effect<string | undefined, E | ControlError> => {
+        if (isMirrorStopUnconfirmed(error)) {
+          return Effect.fail(
+            new ControlError("stop-unconfirmed", errorMessageOf(error)),
+          );
+        }
+        if (!isMirrorCopyStayed(error)) return Effect.fail(error);
+        return Effect.succeed(errorMessageOf(error));
+      },
+    ),
+  );
 
 // A second "mirror it" for a worktree already mirrored is a question
 // about the first, not a new copy: the transfer would only be refused
 // over the branch or the folder the copy holds. Answered with the
 // running session and its copy, the session's remote side: the peer's
 // worktree for a session run here, this device's for one a peer runs.
-async function alreadyMirrored(
+const alreadyMirrored = Effect.fnUntraced(function* (
   running: Running,
   device: string | undefined,
-  engine: Engine.Handle,
-): Promise<ControlTransferResult> {
-  const registry = await registryOrEmpty();
+) {
+  const registry = yield* registryOrEmpty;
   const names = namesOf(registry);
   const { session } = running;
   const ranHere = running.deviceId === thisDeviceId();
@@ -265,26 +275,30 @@ async function alreadyMirrored(
     // The same reading of a name a fresh start would make.
     const named = only(matchDevices(registry, device));
     if (named === undefined || named.deviceId !== view.device.deviceId) {
-      throw new ControlError(
-        "device-blocked",
-        `This worktree is already mirrored with "${view.device.name}", and a worktree holds one mirror. Stop that one first (sm worktrees unmirror).`,
+      return yield* Effect.fail(
+        new ControlError(
+          "device-blocked",
+          `This worktree is already mirrored with "${view.device.name}", and a worktree holds one mirror. Stop that one first (sm worktrees unmirror).`,
+        ),
       );
     }
   }
   const copy = ranHere
-    ? await peerWorktreeOrUndefined(
+    ? yield* peerWorktree(
         session.deviceId,
         session.projectId,
         session.worktreeId,
       )
-    : (await Engine.runWith(engine)(Ops.listWorktrees(session.projectId))).find(
+    : (yield* Ops.listWorktrees(session.projectId)).find(
         (worktree) => worktree.id === session.worktreeId,
       );
   if (copy === undefined) {
     // Not a reason to start a second session beside the first.
-    throw new ControlError(
-      "no-worktree",
-      `This worktree is mirrored with "${view.device.name}", but its copy is gone. Stop the mirror (sm worktrees unmirror -f) before starting another.`,
+    return yield* Effect.fail(
+      new ControlError(
+        "no-worktree",
+        `This worktree is mirrored with "${view.device.name}", but its copy is gone. Stop the mirror (sm worktrees unmirror -f) before starting another.`,
+      ),
     );
   }
   return {
@@ -295,8 +309,8 @@ async function alreadyMirrored(
     copySide: view.copySide,
     session: session.session,
     alreadyMirrored: true,
-  };
-}
+  } as ControlTransferResult;
+});
 
 // A device's block when no project was asked about.
 function blockOf(peer: DirectPeer | undefined): Pick<ControlDevice, "block"> {
@@ -306,64 +320,61 @@ function blockOf(peer: DirectPeer | undefined): Pick<ControlDevice, "block"> {
 
 export const devices: Handler["devices"] = ({ projectId }) =>
   Effect.gen(function* () {
-    const project =
-      projectId === undefined ? undefined : yield* findProject(projectId);
-    return yield* fromPromise(async () => {
-      const { here, peers } = await roster();
-      if (project === undefined) {
-        const direct = await directPeers();
-        return {
-          thisDevice: here,
-          devices: peers.map((device) => ({
-            deviceId: device.deviceId,
-            name: nameOf(device),
-            platform: device.platform,
-            ...blockOf(direct[device.deviceId]),
-          })),
-        };
-      }
-      const identity = await repoIdentityOf(project);
+    const { here, peers } = yield* roster;
+    if (projectId === undefined) {
+      const direct = yield* directPeers;
       return {
         thisDevice: here,
-        devices: await standingsOf(peers, identity, { grant: true }),
+        devices: peers.map((device) => ({
+          deviceId: device.deviceId,
+          name: nameOf(device),
+          platform: device.platform,
+          ...blockOf(direct[device.deviceId]),
+        })),
       };
-    });
+    }
+    const identity = yield* repoIdentityOf(yield* findProject(projectId));
+    return {
+      thisDevice: here,
+      devices: yield* standingsOf(peers, identity, { grant: true }),
+    };
   });
 
 export const peerWorktrees: Handler["peerWorktrees"] = ({
   projectId,
   device,
 }) =>
-  Effect.flatMap(findProject(projectId), (project) =>
-    fromPromise(() => peerWorktreesOf(project, device)),
-  );
-
-async function peerWorktreesOf(project: Project, device: string | undefined) {
-  const { standings } = await candidates(project, device, { grant: false });
-  const unreachable = standings.filter(
-    (standing) => standing.block === "offline",
-  );
-  // A device asked for by name and not there, or not sharing, is a
-  // refusal, not an empty list. Unnamed, one that isn't sharing lists
-  // nothing.
-  const blocked = standings.find(
-    (standing) =>
-      standing.block === "offline" || standing.block === "not-sharing",
-  );
-  if (device !== undefined && blocked?.block !== undefined) {
-    throw new ControlError(
-      "device-blocked",
-      `"${blocked.name}" ${BLOCK_REASON[blocked.block]}.`,
+  Effect.gen(function* () {
+    const project = yield* findProject(projectId);
+    const { standings } = yield* candidates(project, device, {
+      grant: false,
+    });
+    const unreachable = standings.filter(
+      (standing) => standing.block === "offline",
     );
-  }
-  const { worktrees, unanswered } = await worktreesOn(standings);
-  return {
-    worktrees,
-    unreachable: [...unreachable, ...unanswered].map(
-      (standing) => standing.name,
-    ),
-  };
-}
+    // A device asked for by name and not there, or not sharing, is a
+    // refusal, not an empty list. Unnamed, one that isn't sharing lists
+    // nothing.
+    const blocked = standings.find(
+      (standing) =>
+        standing.block === "offline" || standing.block === "not-sharing",
+    );
+    if (device !== undefined && blocked?.block !== undefined) {
+      return yield* Effect.fail(
+        new ControlError(
+          "device-blocked",
+          `"${blocked.name}" ${BLOCK_REASON[blocked.block]}.`,
+        ),
+      );
+    }
+    const { worktrees, unanswered } = yield* worktreesOn(standings);
+    return {
+      worktrees,
+      unreachable: [...unreachable, ...unanswered].map(
+        (standing) => standing.name,
+      ),
+    };
+  });
 
 export const send = settled<"send">((input, ctx) =>
   Effect.gen(function* () {
@@ -371,12 +382,44 @@ export const send = settled<"send">((input, ctx) =>
       input.projectId,
       input.worktreeId,
     );
-    const engine = yield* Engine.handle;
-    const first = yield* fromPromise(() =>
-      sendPlan(input, project, worktree, engine),
+    const mirror = input.mirror === true;
+    if (mirror) {
+      // Part of a mirror already: its original (a session run here)
+      // or its copy (a session a peer runs).
+      const own = yield* mirrorOf(input);
+      const running =
+        own === undefined
+          ? yield* peerMirrorOf(input, registryOrEmpty)
+          : { deviceId: thisDeviceId(), session: own };
+      if (running !== undefined) {
+        return { done: yield* alreadyMirrored(running, input.device) };
+      }
+    }
+    const { identity, target } = yield* pickDevice(project, input.device);
+    const choice = yield* choiceFor(
+      identity,
+      input,
+      syncHandlers.ignoredPaths({
+        projectId: project.id,
+        worktreeId: worktree.id,
+      }),
     );
-    if (first.kind === "done") return { done: first.done };
-    const { payload, device, mirror } = first;
+    const device = { deviceId: target.deviceId, name: target.name };
+    const payload = {
+      targetDeviceId: target.deviceId,
+      projectId: project.id,
+      worktreeId: worktree.id,
+      ...choice,
+      ...(target.projectId === undefined
+        ? {
+            cloneInto: yield* cloneIntoOn(
+              target.deviceId,
+              project,
+              input.cloneInto,
+            ),
+          }
+        : {}),
+    };
     if (mirror) {
       const { session, ...sent } = yield* startMirrorTo(payload, ctx);
       return {
@@ -406,69 +449,99 @@ export const send = settled<"send">((input, ctx) =>
   }),
 );
 
-// A send's choices, made before anything moves: the device, the rule
-// and where a clone would land, or the running mirror that answers it.
-async function sendPlan(
-  input: Parameters<TransferOp<"send">>[0],
-  project: Project,
-  worktree: WorktreeIdentity,
-  engine: Engine.Handle,
-) {
-  const mirror = input.mirror === true;
-  if (mirror) {
-    // Part of a mirror already: its original (a session run here)
-    // or its copy (a session a peer runs).
-    const own = mirrorOf(input);
-    const running =
-      own === undefined
-        ? await peerMirrorOf(input, registryOrEmpty())
-        : { deviceId: thisDeviceId(), session: own };
-    if (running !== undefined) {
-      return {
-        kind: "done" as const,
-        done: await alreadyMirrored(running, input.device, engine),
-      };
-    }
-  }
-  const { identity, target } = await pickDevice(project, input.device);
-  const choice = await choiceFor(identity, input, () =>
-    Processes.run(
-      Effect.provide(
-        syncHandlers.ignoredPaths({
-          projectId: project.id,
-          worktreeId: worktree.id,
-        }),
-        engine,
-      ),
-    ),
-  );
-  const device = { deviceId: target.deviceId, name: target.name };
-  const payload = {
-    targetDeviceId: target.deviceId,
-    projectId: project.id,
-    worktreeId: worktree.id,
-    ...choice,
-    ...(target.projectId === undefined
-      ? {
-          cloneInto: await cloneIntoOn(
-            target.deviceId,
-            project,
-            input.cloneInto,
-          ),
-        }
-      : {}),
-  };
-  return { kind: "plan" as const, payload, device, mirror };
-}
-
 export const bring = settled<"bring">((input, ctx) =>
   Effect.gen(function* () {
     const project = yield* findProject(input.projectId);
-    const engine = yield* Engine.handle;
-    const plan = yield* fromPromise(() => bringPlan(input, project, engine));
-    if (plan.kind === "done") return { done: plan.done };
-    const { found, identity, choice } = plan;
+    const { identity, standings } = yield* candidates(project, input.device, {
+      grant: true,
+    });
+    // A device named that holds no checkout has no worktree to bring
+    // (a send to it would clone the repo there, a bring cannot).
+    if (input.device !== undefined && standings[0]?.block === "no-project") {
+      return yield* Effect.fail(
+        new ControlError(
+          "device-blocked",
+          `"${standings[0].name}" ${BLOCK_REASON["no-project"]}, so it has nothing to bring.`,
+        ),
+      );
+    }
+    if (input.device !== undefined && standings[0]?.block === "not-sharing") {
+      return yield* Effect.fail(
+        new ControlError(
+          "device-blocked",
+          `"${standings[0].name}" ${BLOCK_REASON["not-sharing"]}.`,
+        ),
+      );
+    }
+    const { worktrees, unanswered } = yield* worktreesOn(standings);
+    const found = yield* planned(() =>
+      pickWorktree(worktrees, input.worktree, [
+        ...standings.filter((device) => device.block === "offline"),
+        ...unanswered,
+      ]),
+    );
+    const standing = standings.find(
+      (device) => device.deviceId === found.device.deviceId,
+    );
+    if (standing?.block !== undefined) {
+      return yield* Effect.fail(
+        new ControlError(
+          "device-blocked",
+          `"${found.device.name}" ${BLOCK_REASON[standing.block]}.`,
+        ),
+      );
+    }
+    // The primary is the project itself: a mirror can take it (as a
+    // worktree on mirror/<branch> here), a bring cannot.
+    if (found.worktree.isPrimary && input.mirror !== true) {
+      return yield* Effect.fail(
+        new ControlError(
+          "no-worktree",
+          `${found.worktree.name} is "${found.device.name}"'s primary checkout, which can be mirrored but not brought (sm worktrees mirror --from).`,
+        ),
+      );
+    }
+    if (identity === null) {
+      // Unreachable past pickWorktree (a null identity matches no
+      // peer, so none listed a worktree), kept so the payload below
+      // is typed honestly.
+      return yield* Effect.fail(
+        new ControlError(
+          "device-blocked",
+          "This repo has no shared identity, so it can't be matched with another device's.",
+        ),
+      );
+    }
+    const choice = yield* choiceFor(
+      identity,
+      input,
+      peerSyncFor(found.device.deviceId).ignoredPaths({
+        projectId: found.projectId,
+        worktreeId: found.worktree.id,
+      }),
+    );
     if (input.mirror === true) {
+      // Mirrored already: the peer's worktree is the copy of a
+      // session run here, or the original of one the peer runs.
+      const { sessions } = yield* mirrorList();
+      const own = sessions.find(
+        (candidate) =>
+          candidate.deviceId === found.device.deviceId &&
+          candidate.projectId === found.projectId &&
+          candidate.worktreeId === found.worktree.id,
+      );
+      const running =
+        own === undefined
+          ? (yield* Effect.flatMap(registryOrEmpty, peerMirrors)).find(
+              ({ deviceId, session }) =>
+                deviceId === found.device.deviceId &&
+                session.localProjectId === found.projectId &&
+                session.localWorktreeId === found.worktree.id,
+            )
+          : { deviceId: thisDeviceId(), session: own };
+      if (running !== undefined) {
+        return { done: yield* alreadyMirrored(running, undefined) };
+      }
       const { session, ...pulled } = yield* startMirrorFrom(
         {
           sourceDeviceId: found.device.deviceId,
@@ -509,127 +582,36 @@ export const bring = settled<"bring">((input, ctx) =>
     return {
       moved: { ...pulled, device: found.device, copySide: "local" as const },
       settle: {
-        shelve: fromPromise(() =>
-          peerWorktreesApiFor(found.device.deviceId).setShelved({
-            projectId: found.projectId,
-            worktreeId: found.worktree.id,
-            shelved: true,
-          }),
-        ),
+        shelve: peerWorktreesFor(found.device.deviceId).setShelved({
+          projectId: found.projectId,
+          worktreeId: found.worktree.id,
+          shelved: true,
+        }),
         teardown: syncHandlers.teardownSource(sourceRef, ctx),
       },
     };
   }),
 );
 
-// A bring's choices, made before anything moves: the peer's worktree
-// and the rule, or the running mirror that answers it.
-async function bringPlan(
-  input: Parameters<TransferOp<"bring">>[0],
-  project: Project,
-  engine: Engine.Handle,
-) {
-  const { identity, standings } = await candidates(project, input.device, {
-    grant: true,
-  });
-  // A device named that holds no checkout has no worktree to bring
-  // (a send to it would clone the repo there, a bring cannot).
-  if (input.device !== undefined && standings[0]?.block === "no-project") {
-    throw new ControlError(
-      "device-blocked",
-      `"${standings[0].name}" ${BLOCK_REASON["no-project"]}, so it has nothing to bring.`,
-    );
-  }
-  if (input.device !== undefined && standings[0]?.block === "not-sharing") {
-    throw new ControlError(
-      "device-blocked",
-      `"${standings[0].name}" ${BLOCK_REASON["not-sharing"]}.`,
-    );
-  }
-  const { worktrees, unanswered } = await worktreesOn(standings);
-  const found = pickWorktree(worktrees, input.worktree, [
-    ...standings.filter((device) => device.block === "offline"),
-    ...unanswered,
-  ]);
-  const standing = standings.find(
-    (device) => device.deviceId === found.device.deviceId,
-  );
-  if (standing?.block !== undefined) {
-    throw new ControlError(
-      "device-blocked",
-      `"${found.device.name}" ${BLOCK_REASON[standing.block]}.`,
-    );
-  }
-  // The primary is the project itself: a mirror can take it (as a
-  // worktree on mirror/<branch> here), a bring cannot.
-  if (found.worktree.isPrimary && input.mirror !== true) {
-    throw new ControlError(
-      "no-worktree",
-      `${found.worktree.name} is "${found.device.name}"'s primary checkout, which can be mirrored but not brought (sm worktrees mirror --from).`,
-    );
-  }
-  if (identity === null) {
-    // Unreachable past pickWorktree (a null identity matches no
-    // peer, so none listed a worktree), kept so the payload below
-    // is typed honestly.
-    throw new ControlError(
-      "device-blocked",
-      "This repo has no shared identity, so it can't be matched with another device's.",
-    );
-  }
-  const choice = await choiceFor(identity, input, () =>
-    peerSyncApiFor(found.device.deviceId).ignoredPaths({
-      projectId: found.projectId,
-      worktreeId: found.worktree.id,
-    }),
-  );
-  if (input.mirror === true) {
-    // Mirrored already: the peer's worktree is the copy of a
-    // session run here, or the original of one the peer runs.
-    const { sessions } = mirrorList();
-    const own = sessions.find(
-      (candidate) =>
-        candidate.deviceId === found.device.deviceId &&
-        candidate.projectId === found.projectId &&
-        candidate.worktreeId === found.worktree.id,
-    );
-    const running =
-      own === undefined
-        ? (await peerMirrors(await registryOrEmpty())).find(
-            ({ deviceId, session }) =>
-              deviceId === found.device.deviceId &&
-              session.localProjectId === found.projectId &&
-              session.localWorktreeId === found.worktree.id,
-          )
-        : { deviceId: thisDeviceId(), session: own };
-    if (running !== undefined) {
-      return {
-        kind: "done" as const,
-        done: await alreadyMirrored(running, undefined, engine),
-      };
-    }
-  }
-  return { kind: "plan" as const, found, identity, choice };
-}
-
 // The mirrors this device is part of: the ones it runs, and the
 // ones peers run against its worktrees, each seen from this side.
 // One registry read serves the peer scan and the names.
-export const mirrors: Handler["mirrors"] = async () => {
-  const registry = registryOrEmpty();
-  const [{ daemon, sessions }, afar, names] = await Promise.all([
-    mirrorList(),
-    registry.then(peerMirrors),
-    registry.then(namesOf),
-  ]);
-  return {
-    daemon,
-    mirrors: [
-      ...sessions.map((session) => mirrorView(session, names)),
-      ...afar.map((mirror) => peerMirrorView(mirror, names)),
-    ],
-  };
-};
+export const mirrors: Handler["mirrors"] = () =>
+  Effect.gen(function* () {
+    const [{ daemon, sessions }, registry] = yield* Effect.all(
+      [mirrorList(), registryOrEmpty],
+      { concurrency: 2 },
+    );
+    const afar = yield* peerMirrors(registry);
+    const names = namesOf(registry);
+    return {
+      daemon,
+      mirrors: [
+        ...sessions.map((session) => mirrorView(session, names)),
+        ...afar.map((mirror) => peerMirrorView(mirror, names)),
+      ],
+    };
+  });
 
 // Stops the mirror the worktree is part of, whichever device runs
 // it: a session this device runs is stopped here, one a peer runs
@@ -639,30 +621,30 @@ export const mirrors: Handler["mirrors"] = async () => {
 // after it, once for the peer scan too.
 export const mirrorStop = (({ force, ...target }, ctx) =>
   Effect.gen(function* () {
-    const registry = registryOrEmpty();
+    const registry = yield* Effect.forkChild(registryOrEmpty);
     const answer = (
       mirror: (names: Named[]) => ControlMirror,
       copyStayed: string | undefined,
     ) =>
-      fromPromise(async () => ({
-        mirror: mirror(namesOf(await registry)),
+      Effect.map(Fiber.join(registry), (registered) => ({
+        mirror: mirror(namesOf(registered)),
         ...(copyStayed === undefined ? {} : { copyStayed }),
       }));
-    const own = mirrorOf(target);
+    const own = yield* mirrorOf(target);
     if (own !== undefined) {
-      const copyStayed = yield* fromPromise(() =>
-        stopMirror(() => stopMirrorSession(own.session, force === true)),
+      const copyStayed = yield* stopMirror(
+        stopMirrorSession(own.session, force === true),
       );
       return yield* answer((names) => mirrorView(own, names), copyStayed);
     }
-    const afar = yield* fromPromise(() => peerMirrorOf(target, registry));
+    const afar = yield* peerMirrorOf(target, Fiber.join(registry));
     if (afar === undefined) {
       return yield* callFailureOf(
         new ControlError("no-mirror", "That worktree isn't mirrored."),
       );
     }
-    let copyStayed = yield* fromPromise(() =>
-      stopMirror(() => afar.api.stop({ session: afar.session.session, force })),
+    let copyStayed = yield* stopMirror(
+      afar.api.stop({ session: afar.session.session, force }),
     );
     // The copy the peer could not remove is the one HERE: the peer
     // removes it through this device's command-access switch, which

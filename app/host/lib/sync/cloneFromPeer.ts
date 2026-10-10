@@ -13,38 +13,34 @@
 // folder is this call's own, made here.
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import { mkdir, rm } from "node:fs/promises";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
-  type SyncCloneInto,
   SyncBundleRefSchema,
+  type SyncCloneInto,
 } from "@shigomori/contracts/modules/sync";
-import {
-  checkNewCheckoutDestination,
-  deleteRef,
-  run,
-  updateRef,
-} from "@host/lib/git/promises";
+import { checkNewCheckoutDestination } from "@host/lib/git/clone";
+import { GitRefusal, run } from "@host/lib/git/core";
+import { deleteRef, updateRef } from "@host/lib/git/refs";
 import { expandHome } from "@host/lib/util/paths";
-import { throwIfCancelled } from "./moves";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
 
-// A cancel (`signal`, the move's) between steps undoes the folder like
-// any failure. During the fetch the link's reset does the failing.
-// Answers the checkout, which the caller registers.
-export async function cloneCheckoutFromPeer(
+// An interrupt (the move's cancel) undoes the folder like any failure.
+// During the fetch the link's reset does the failing. Answers the
+// checkout, which the caller registers.
+export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
   // The branch the landing puts its copy on afterwards: the clone's own
   // branch cannot be it, and that is known before a byte moves.
   landing: string,
   onProgress?: (bytes: number, totalBytes: number) => void,
-  signal?: AbortSignal,
-): Promise<string> {
+) {
   // The source's default branch is what the checkout is made of, so the
   // clone reads as the repo (its identity is the root of that branch,
-  // shared/git/repoIdentity.mts) and not as one worktree of it. The
+  // packages/engine/src/Identity.ts) and not as one worktree of it. The
   // remote it was cloned from comes along when it has one, so the
   // clone is what a clone of that remote would be, and reads as the
   // same repo even when its default branch is only the remote's HEAD
@@ -54,59 +50,60 @@ export async function cloneCheckoutFromPeer(
   // that cannot be made (a file in its place) is the destination
   // check's to name.
   const parent = expandHome(parentDir);
-  await mkdir(parent, { recursive: true }).catch(() => {});
-  const [dest, { branch, remoteUrl }] = await Promise.all([
-    checkNewCheckoutDestination(parent, name),
-    source.cloneFacts(signal),
-  ]);
+  yield* Effect.promise(() =>
+    mkdir(parent, { recursive: true }).catch(() => {}),
+  );
+  const [dest, { branch, remoteUrl }] = yield* Effect.all(
+    [checkNewCheckoutDestination(parent, name), source.cloneFacts],
+    { concurrency: 2 },
+  );
   if (
     landing === branch ||
     landing.startsWith(`${branch}/`) ||
     branch.startsWith(`${landing}/`)
   ) {
-    throw new Error(
-      `The copy would land on ${landing}, which the clone here checks out as the repo's default branch. Bring a worktree on another branch, or mirror the primary checkout.`,
-    );
+    return yield* new GitRefusal({
+      reason: `The copy would land on ${landing}, which the clone here checks out as the repo's default branch. Bring a worktree on another branch, or mirror the primary checkout.`,
+    });
   }
   const branchRef = decodeBundleRef(`refs/heads/${branch}`);
   const incomingRef = incomingRefFor(branch);
 
-  throwIfCancelled(signal);
-  await mkdir(dest);
-  try {
-    await run(dest, ["init", "--quiet"]);
+  yield* Effect.promise(() => mkdir(dest));
+  yield* Effect.gen(function* () {
+    yield* run(dest, ["init", "--quiet"]);
     // HEAD names the branch before it exists, so the checkout below is
     // one reset, and a clone of a repo whose default branch is not
     // git's own default lands on the right one.
-    await run(dest, ["symbolic-ref", "HEAD", branchRef]);
-    const { fetched } = await source.fetch({
+    yield* run(dest, ["symbolic-ref", "HEAD", branchRef]);
+    const { fetched } = yield* source.fetch({
       refs: [branchRef],
       haves: [],
       into: { path: dest },
       onProgress,
-      signal,
     });
     const tip = fetched.find((entry) => entry.ref === incomingRef)?.commit;
     if (tip === undefined) {
-      throw new Error(`${branch} did not arrive whole from the other device.`);
+      return yield* new GitRefusal({
+        reason: `${branch} did not arrive whole from the other device.`,
+      });
     }
-    throwIfCancelled(signal);
-    await updateRef(dest, branchRef, tip);
-    await deleteRef(dest, incomingRef);
-    await run(dest, ["reset", "--quiet", "--hard"]);
+    yield* updateRef(dest, branchRef, tip);
+    yield* deleteRef(dest, incomingRef);
+    yield* run(dest, ["reset", "--quiet", "--hard"]);
     // The remote as `git clone` would leave it: origin, its HEAD on the
     // branch, the branch tracking it. The source answered the URL with
     // the clone payload's own rule (shared/cloneUrl.ts), re-checked
     // here before it reaches argv.
     if (remoteUrl !== null && isCloneableRemote(remoteUrl)) {
-      await run(dest, ["remote", "add", "origin", remoteUrl]);
-      await updateRef(dest, `refs/remotes/origin/${branch}`, tip);
-      await run(dest, [
+      yield* run(dest, ["remote", "add", "origin", remoteUrl]);
+      yield* updateRef(dest, `refs/remotes/origin/${branch}`, tip);
+      yield* run(dest, [
         "symbolic-ref",
         "refs/remotes/origin/HEAD",
         `refs/remotes/origin/${branch}`,
       ]);
-      await run(dest, [
+      yield* run(dest, [
         "branch",
         "--set-upstream-to",
         `origin/${branch}`,
@@ -114,10 +111,12 @@ export async function cloneCheckoutFromPeer(
         branch,
       ]);
     }
-    throwIfCancelled(signal);
-  } catch (error) {
-    await rm(dest, { recursive: true, force: true }).catch(() => {});
-    throw error;
-  }
+  }).pipe(
+    Effect.onError(() =>
+      Effect.promise(() =>
+        rm(dest, { recursive: true, force: true }).catch(() => {}),
+      ),
+    ),
+  );
   return dest;
-}
+});
