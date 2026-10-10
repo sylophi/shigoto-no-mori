@@ -26,10 +26,10 @@ export function isRawKeySurface(target: EventTarget | null): boolean {
 
 // True while something is layered over the page and owns the keyboard:
 // a modal shell, a sheet, an open menu, popover or combobox popup, or
-// the blocking veil. None of them trap focus (they mount as siblings of
-// the router, and the popups portal out), so a bare-key shortcut in the
-// page underneath still fires unless it asks. One still animating out
-// (data-closed, on it or around it) has already let go.
+// the blocking veil. A window-wide shortcut hears a key wherever focus
+// sits, a dialog's trapped focus included, so a bare-key one asks. One
+// still animating out (data-closed, on it or around it) has already
+// let go.
 const OVERLAY_SLOTS = [
   "modal-shell",
   "sheet-content",
