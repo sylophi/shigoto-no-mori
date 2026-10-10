@@ -5,6 +5,7 @@
 // dialed at the address the shell answers. A peer's host is reached
 // through the hub bridge (shared/hub/bridgeHandlers.ts), never by
 // swapping these.
+import { isHostSide } from "@shigomori/contracts/link";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
@@ -39,6 +40,9 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         openSocket: (url) => new WebSocket(url),
       });
       // The shell is this window's own build.
-      return ClientLinks.of({ shell: { ...shell, local: true }, host });
+      const ownShell = { ...shell, local: true };
+      return ClientLinks.of({
+        linkOf: (module) => (isHostSide(module) ? host : ownShell),
+      });
     }),
   );
