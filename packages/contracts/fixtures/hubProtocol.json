@@ -1275,12 +1275,15 @@
   "AskPayloadSchema": {
     "accepts": [
       {
-        "ask": "connectInfo"
+        "ask": "connectInfo",
+        "expiresAt": 1791650000000
       },
       {
         "ask": "connectInfo",
+        "expiresAt": 1791650000000,
         "input": {
-          "dialableKinds": ["lan"]
+          "dialableKinds": ["lan"],
+          "connectionId": "cccccccccccccccccccccccccccccccc"
         }
       }
     ],
@@ -1288,10 +1291,12 @@
       {
         "input": {
           "ask": "connectInfo",
+          "expiresAt": 1791650000000,
           "extra": "dropped"
         },
         "output": {
-          "ask": "connectInfo"
+          "ask": "connectInfo",
+          "expiresAt": 1791650000000
         }
       }
     ],
@@ -1304,6 +1309,13 @@
       },
       {
         "ok": true
+      },
+      {
+        "ask": "connectInfo"
+      },
+      {
+        "ask": "connectInfo",
+        "expiresAt": 1.5
       }
     ]
   },

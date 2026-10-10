@@ -9,8 +9,9 @@ import {
   TerminalOwnerSchema,
 } from "@shigomori/contracts/schemas";
 
-// A terminal as the host left it at a quit: where it was, and the tail
-// of what it showed, which the next start replays above a fresh shell.
+// A terminal as the host last saved it, while it ran or as it closed:
+// where it was, and the tail of what it showed, which the next start
+// replays above a fresh shell.
 export type SavedTerminal = {
   readonly terminalId: string;
   readonly owner: TerminalOwner;

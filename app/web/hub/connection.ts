@@ -13,6 +13,7 @@
 // host-boundary): everything platform specific arrives through browser
 // globals or the injected HubConnectOpts (deviceId, accountId, the
 // credential-backed ticket mint).
+import type { KeyPair } from "@shared/crypto/noise";
 import { HubLinkDownError } from "@shared/hub/link";
 import {
   createHubConnectionCore,
@@ -48,6 +49,10 @@ export type HubConnectionBinding = {
   status(): HubConnectionStatus;
   // The wake-time liveness probe (shared/hub/connection.ts).
   probe(): void;
+  // This device's key pair and a peer's roster key, for the device
+  // link's handshakes (shared/hub/connection.ts).
+  localKey(): KeyPair | null;
+  peerKey(deviceId: string): Uint8Array | undefined;
 };
 
 // The browser-global half of the shared socket adapter. A browser
