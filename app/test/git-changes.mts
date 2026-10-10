@@ -3,7 +3,7 @@
 // counts, a commit taking exactly the picked files whatever was staged
 // (a rename included, a file deleted since skipped, on an unborn branch,
 // and a merge still committing as one), amend with the message read
-// back, undo and redo along HEAD's line with every refusal
+// back or kept as it was, undo and redo along HEAD's line with every refusal
 // (moved HEAD, a commit off the line, a merge), and discard with its
 // snapshot ref, the way back through restoreDiscard, the nested-repo
 // refusal and the snapshot prune.
@@ -57,7 +57,7 @@ const { commitPicks } = await import("../host/lib/git/commit.ts");
 // ticked by hunk.
 const commitPaths = (
   repo: string,
-  message: { summary: string; description?: string; amend?: boolean },
+  message: { summary?: string; description?: string; amend?: boolean },
   paths: string[],
 ) => commitPicks(repo, { ...message, paths, hunks: [] });
 
@@ -325,7 +325,7 @@ async function main() {
   });
 
   await check(
-    "amend folds the picks into HEAD under the new message, or only the message",
+    "amend folds the picks into HEAD under a new message or the one it has, or rewrites only the message",
     async (track) => {
       const repo = seedRepo(track);
       const root = rev(repo, "HEAD");
@@ -359,6 +359,19 @@ async function main() {
         (await readCommitMessage(repo, "HEAD")).summary,
         "Third try",
       );
+
+      // No summary: the files go in under the message HEAD already has.
+      git(repo, "commit", "-q", "--amend", "-m", "Fourth try", "-m", "Body");
+      await commitPaths(repo, { amend: true }, ["dir/c.txt"]);
+      assert.equal(rev(repo, "HEAD~1"), root);
+      assert.equal(
+        git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
+        "a.txt\nb.txt\ndir/c.txt",
+      );
+      assert.deepEqual(await readCommitMessage(repo, "HEAD"), {
+        summary: "Fourth try",
+        description: "Body",
+      });
     },
   );
 

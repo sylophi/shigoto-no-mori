@@ -13,12 +13,13 @@ import { stageHunks, staleCommit } from "./hunks";
 // Two `-m` flags give git the summary and body as separate paragraphs.
 // Hooks run as they would in a terminal, and their output rides along
 // in the thrown error for the page to show. `amend` folds the picks
-// into HEAD under the new message instead of adding a commit, and with
-// nothing picked rewrites only the message. A commit git refuses (a
+// into HEAD under the new message instead of adding a commit, with no
+// summary keeps HEAD's message, and with nothing picked rewrites only
+// the message. A commit git refuses (a
 // hook, no identity) puts the index back the way it was, so what a
 // terminal or an agent had staged survives it.
 type CommitRequest = CommitPicks & {
-  summary: string;
+  summary?: string;
   description?: string;
   amend?: boolean;
 };
@@ -88,8 +89,12 @@ async function commitWith(
   }
   const args = ["commit", "--quiet"];
   if (message.amend) args.push("--amend");
-  args.push("-m", message.summary);
-  const body = message.description?.trim();
-  if (body) args.push("-m", body);
+  if (message.summary === undefined) {
+    args.push("--no-edit");
+  } else {
+    args.push("-m", message.summary);
+    const body = message.description?.trim();
+    if (body) args.push("-m", body);
+  }
   await run(worktreePath, args);
 }

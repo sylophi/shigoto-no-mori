@@ -290,12 +290,16 @@ export const CommitPicksSchema = z.object({
 });
 export type CommitPicks = z.infer<typeof CommitPicksSchema>;
 
+// An amend without a summary keeps HEAD's message as it is.
 export const CommitChangesPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  summary: z.string().trim().min(1),
+  summary: z.string().trim().min(1).optional(),
   description: z.string().optional(),
   ...CommitPicksSchema.shape,
   // Rewrite HEAD instead of adding a commit on top of it.
   amend: z.boolean().optional(),
+}).refine((payload) => payload.amend || payload.summary !== undefined, {
+  message: "A commit needs a summary",
+  path: ["summary"],
 });
 
 export const DiscardHunksPayloadSchema = FileHunksPayloadSchema.extend({
