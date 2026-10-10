@@ -29,7 +29,10 @@ import {
   deviceStatusView,
   type DeviceStatusView,
 } from "@/lib/remote/deviceStatus";
-import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 
 export interface DeviceRosterEntry {
   deviceId: string;

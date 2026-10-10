@@ -12,25 +12,25 @@ import {
   Search,
   Undo2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { DiffStats } from "@/components/ui/diff-stats";
+} from "@shigomori/ui/primitives/context-menu.tsx";
+import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
-import { getBrowseLeafSegment } from "@shared/projectPaths";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";
 import {
   changedFilePaths,

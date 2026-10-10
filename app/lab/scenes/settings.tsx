@@ -6,7 +6,7 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { EditorFooterView } from "@/components/shared/EditorFooterView";
 import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
-import { ModalBox } from "@/components/ui/modal-shell";
+import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { AgentsSectionView } from "@/components/settings/AgentsSectionView";
 import { AppearanceSectionView } from "@/components/settings/AppearanceSectionView";
 import { ChangelogDialogView } from "@/components/settings/ChangelogDialogView";

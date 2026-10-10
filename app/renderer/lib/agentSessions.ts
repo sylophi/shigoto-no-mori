@@ -1,4 +1,4 @@
-import type { StatusTone } from "@/components/ui/status-dot";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import type { AgentSession } from "@shigomori/contracts/schemas";
 
 // How the app names a harness and a session's state (engine Agents.ts).

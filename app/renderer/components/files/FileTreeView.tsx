@@ -1,8 +1,8 @@
 import { Fragment, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
-import { MaterialIcon } from "@/components/ui/material-icon";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { MaterialIcon } from "@shigomori/ui/primitives/material-icon.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { parentOf } from "./treePaths";
 
 // The files page's list: the worktree as a folder tree (FileTree.tsx

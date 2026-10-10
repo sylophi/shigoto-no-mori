@@ -3,7 +3,7 @@
 // toggles frozen while it doesn't take commands from here.
 import type { ReactNode } from "react";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // This window can't reach the peer: on but not connected yet (a tunnel
 // still routing, another network), or simply off.

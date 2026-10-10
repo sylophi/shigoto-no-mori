@@ -12,19 +12,19 @@ import {
 } from "lucide-react";
 import type { AgentSession } from "@shigomori/contracts/schemas";
 import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
-import { Button } from "@/components/ui/button";
-import { RelativeDate } from "@/components/ui/relative-date";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import {
   StatusDot,
   TONE_TEXT,
   type StatusTone,
-} from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { useNow } from "@/hooks/ui/useNow";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { needView } from "@/lib/agentNeeds";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The live things a card lists, each a block with its status and its
 // actions as labelled buttons (LiveBlockView, at the end). LiveItems.tsx

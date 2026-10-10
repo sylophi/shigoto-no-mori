@@ -2,8 +2,8 @@
 // worktree's ports, reached from the Live page.
 import type { ReactNode } from "react";
 import { Cable } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { TONE_PILL } from "@/components/ui/status-dot";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { TONE_PILL } from "@shigomori/ui/primitives/status-dot.tsx";
 import {
   FlowBodyView,
   FlowFooterView,

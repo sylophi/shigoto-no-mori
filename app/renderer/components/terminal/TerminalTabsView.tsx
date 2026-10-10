@@ -4,10 +4,10 @@
 // pick, as tabs do.
 import type { ReactNode } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 export type TerminalTab = {
   readonly id: string;

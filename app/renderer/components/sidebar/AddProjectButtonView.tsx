@@ -1,5 +1,5 @@
 import { FolderPlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { PROJECT_ACTION_HOOKS, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
 // Opens the add-project dialog. `outline` puts it on the button

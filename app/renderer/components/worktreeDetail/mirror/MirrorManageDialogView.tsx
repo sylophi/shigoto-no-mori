@@ -30,24 +30,27 @@ import type {
   MirrorEventKind,
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import {
   StatusDot,
   type StatusTone,
   TONE_PILL,
   TONE_TEXT,
-} from "@/components/ui/status-dot";
-import { InlineError } from "@/components/ui/inline-error";
+} from "@shigomori/ui/primitives/status-dot.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { MirrorConflictsChipView } from "@/components/worktreeDetail/MirrorConflictsView";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
-import { getBrowseLeafSegment, normalizeForSubmit } from "@shared/projectPaths";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import {
+  getBrowseLeafSegment,
+  normalizeForSubmit,
+} from "@shigomori/contracts/projectPaths";
 import {
   CARD,
   CARD_NOTE,

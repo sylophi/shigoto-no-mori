@@ -13,11 +13,11 @@ import { ArrowRight, MonitorSmartphone } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChipView";
 import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
-import { EmptyPanel } from "@/components/ui/empty-panel";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import type { DeviceStatusView } from "@/lib/remote/deviceStatus";
-import { cn, dragRegion } from "@/lib/utils";
+import { cn, dragRegion } from "@shigomori/ui/lib/utils.ts";
 
 // The id the all-devices tab is picked by. Not a device id (those are
 // UUIDs), so it can share onSelect with them.

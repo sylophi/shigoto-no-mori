@@ -9,7 +9,7 @@ import {
   useVillagerFace,
   useVillagerProfiles,
 } from "@/hooks/villagers/useVillagers";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { speakerFor, villagerLine } from "@/lib/villagerVoice";
 
 // The New Worktree form's hello while the folder it will create is a

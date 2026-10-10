@@ -2,10 +2,10 @@
 // SettingsSectionChips.tsx bind it): the sidebar's list and the phone
 // layout's chip row.
 import type { ReactNode } from "react";
-import { ChipButton } from "@/components/ui/chip-button";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { UpdateMark } from "@/components/ui/status-dot";
-import { cn } from "@/lib/utils";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { UpdateMark } from "@shigomori/ui/primitives/status-dot.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { SettingsSection } from "./settingsSections";
 
 export type SettingsSectionLists = {

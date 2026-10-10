@@ -6,6 +6,7 @@
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { reactCompiler } from "../../vite.reactCompiler";
+import { dedupe } from "../../vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
 import type { UserConfig } from "vite";
 import { fixedDevServerPort } from "../../scripts/lib/portsEnvFile.mts";
@@ -25,6 +26,7 @@ export function fakeHostBaseConfig(opts: {
     // script the HTML shell references.
     publicDir: resolve(appRoot, "web/public"),
     resolve: {
+      dedupe,
       alias: {
         "@clerk/electron/react": resolve(__dirname, "clerkStub.tsx"),
         "@clerk/react": resolve(__dirname, "clerkStub.tsx"),

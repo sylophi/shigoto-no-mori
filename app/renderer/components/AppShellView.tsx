@@ -3,8 +3,8 @@
 // doubutsu "main" zone on a wide viewport, and on a phone the page over
 // a bottom tab bar, with a back bar over a page stacked on the forest.
 import type { MouseEvent, ReactNode } from "react";
-import { BackButton } from "@/components/ui/back-button";
-import { cn, dragRegion } from "@/lib/utils";
+import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
+import { cn, dragRegion } from "@shigomori/ui/lib/utils.ts";
 
 export const SIDEBAR_MIN = 200;
 export const SIDEBAR_MAX = 400;

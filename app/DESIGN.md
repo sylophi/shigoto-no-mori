@@ -1,8 +1,9 @@
 # Shigoto no Mori: design notes
 
 Rules for the app's visual layer. They apply to every component in
-`renderer/`, which the desktop window and the web client (`web/`) both
-render.
+`renderer/` and in `@shigomori/ui` (`packages/ui`, the primitives and,
+as step 6 of `V3.md` moves them, the views), which the desktop window
+and the web client (`web/`) both render.
 
 ## Theming: two visual systems, one component tree
 
@@ -45,11 +46,11 @@ Rules that keep both themes cheap to maintain:
   doubutsu remaps via `--color-*`. A new raw family needs a matching
   remap entry in doubutsu.css.
 - **Interactive primitives carry `data-slot`** (and `data-variant` where
-  variants matter). Text fields use `ui/input.tsx` / `ui/textarea.tsx`,
-  chips use `ui/chip-button.tsx`, few-way toggles use
-  `ui/segmented-control.tsx`. Don't re-inline their class strings.
+  variants matter). Text fields use `primitives/input.tsx` / `primitives/textarea.tsx`,
+  chips use `primitives/chip-button.tsx`, few-way toggles use
+  `primitives/segmented-control.tsx`. Don't re-inline their class strings.
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
-  `ui/tooltip.tsx`, never a `title` attribute: the browser's tooltip
+  `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
   `title` on DOM elements, and the `ui/` wrappers leave `title` out of
   their props. The tooltip is visual only, so an icon-only control
@@ -154,7 +155,7 @@ Rules that keep that working:
 - **A button shows a fill at rest on a phone.** Nothing hovers there,
   so a hover-only fill never says "tap me". phone.css gives the ghost
   variants a resting fill, and a bare icon button joins them through
-  `data-icon-button`: use `ui/icon-button.tsx`, which carries it. A
+  `data-icon-button`: use `primitives/icon-button.tsx`, which carries it. A
   page's `<footer>` bar and the back button stay bare, since their
   place on the screen already says control.
 - **Raw `:hover` in CSS goes inside `@media (hover: hover)`.** A tap on

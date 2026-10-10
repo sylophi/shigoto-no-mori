@@ -1,0 +1,64 @@
+import type { ClipboardEvent } from "react";
+import { CopyButton } from "./copy-button.tsx";
+import { SimpleTooltip } from "./tooltip.tsx";
+import { cn } from "../lib/utils.ts";
+import { useShortPath } from "../hooks/useShortPath.ts";
+
+interface PathSpanProps {
+  path: string;
+  home: string | null | undefined;
+  className?: string;
+  copyable?: boolean;
+}
+
+// Renders a path as `~/...` (tildified) and progressively abbreviates
+// middle segments to a single character so it fits the element's measured
+// width. The host element should be a flex child with the styles you'd
+// normally apply to a truncating span (e.g. `min-w-0 truncate font-mono`)
+// so the layout still bounds the box and CSS truncate acts as the floor.
+//
+// With `copyable`, an inline copy button (revealed on hover via `group/copy`)
+// is rendered next to the text and copies the full absolute path. Without
+// it, selection-copy is intercepted to yield the full path instead of the
+// abbreviated rendering, so pasting into a terminal still works.
+export function PathSpan({
+  path,
+  home,
+  className,
+  copyable = false,
+}: PathSpanProps) {
+  // The full path shows on hover only once some of it is hidden: a
+  // segment abbreviated, or the text cut off.
+  const [ref, display, shortened] = useShortPath(path, home);
+  if (copyable) {
+    return (
+      <SimpleTooltip whenTruncated={!shortened} tip={path}>
+        <span
+          ref={ref}
+          className={cn(
+            "group/copy flex min-w-0 items-center gap-1 select-text",
+            className,
+          )}
+        >
+          <span className="min-w-0 truncate">{display}</span>
+          <CopyButton value={path} label="Copy path" />
+        </span>
+      </SimpleTooltip>
+    );
+  }
+  const handleCopy = (e: ClipboardEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", path);
+  };
+  return (
+    <SimpleTooltip whenTruncated={!shortened} tip={path}>
+      <span
+        ref={ref}
+        className={cn("select-text", className)}
+        onCopy={handleCopy}
+      >
+        {display}
+      </span>
+    </SimpleTooltip>
+  );
+}

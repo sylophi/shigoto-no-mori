@@ -1,14 +1,14 @@
 import { useRef, useState } from "react";
 import { GitCommitHorizontal, Loader2, PencilLine, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { Input } from "@/components/ui/input";
-import { Kbd } from "@/components/ui/kbd";
-import { Textarea } from "@/components/ui/textarea";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { Kbd } from "@shigomori/ui/primitives/kbd.tsx";
+import { Textarea } from "@shigomori/ui/primitives/textarea.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { CommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
 import { includedFiles } from "./changesControls";
 

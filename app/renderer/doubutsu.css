@@ -27,11 +27,11 @@
  *    When building new UI that doubutsu must restyle, add a slot here
  *    rather than targeting utility classes:
  *      button (+ data-variant)   ui/button.tsx
- *      input, textarea           ui/input.tsx, ui/textarea.tsx
+ *      input, textarea           primitives/input.tsx, primitives/textarea.tsx
  *      checkbox (+ data-variant) ui/checkbox.tsx
  *      switch                    ui/switch.tsx
- *      chip                      ui/chip-button.tsx
- *      segmented-control         ui/segmented-control.tsx
+ *      chip                      primitives/chip-button.tsx
+ *      segmented-control         primitives/segmented-control.tsx
  *      combobox-trigger/-popup   shared/BranchCombobox.tsx
  *      modal-shell               ui/modal-shell.tsx
  *      palette-verbs             palette/WorktreePalette.tsx
@@ -595,7 +595,7 @@
   background-color: var(--input);
 }
 /* A field under the pointer deepens its tray, where v1 tints its
-   border (ui/input.tsx). Not once focused: the focus ring says more. */
+   border (primitives/input.tsx). Not once focused: the focus ring says more. */
 @media (hover: hover) {
   .doubutsu
     :is([data-slot="input"], [data-slot="textarea"]):hover:not(

@@ -2,12 +2,15 @@
 // headline at each stage, and the live copy (MirrorDialog.tsx binds
 // them).
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip-button";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { type StatusTone, StatusDot } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Chip } from "@shigomori/ui/primitives/chip-button.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import {
+  type StatusTone,
+  StatusDot,
+} from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { CARD, FlowBodyView, FlowFooterView } from "../flow/FlowChromeView";
 import type { FlowStage } from "../flow/pullSteps";
 

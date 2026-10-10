@@ -51,8 +51,8 @@ import {
   StatusDot,
   TONE_PILL,
   type StatusTone,
-} from "@/components/ui/status-dot";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/status-dot.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A small box (a Mac mini, a NUC): lucide has no such glyph, so this is
 // one drawn in its style, a low slab with a status light and a

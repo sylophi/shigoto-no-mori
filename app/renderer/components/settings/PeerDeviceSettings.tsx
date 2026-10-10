@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import type { GlobalConfig } from "@shigomori/contracts/schemas";
-import { EmptyPanel } from "@/components/ui/empty-panel";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {

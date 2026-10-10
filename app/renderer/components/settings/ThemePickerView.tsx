@@ -5,7 +5,7 @@ import {
   optionHolds,
   type ThemeOption,
 } from "@shared/themes";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // One row of the doubutsu palettes for an appearance: a swatch per
 // palette with its name, the chosen one wearing a check in its

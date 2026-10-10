@@ -1,11 +1,11 @@
 import { type ReactNode, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { formatBytes } from "@/lib/formatBytes";
 import type { TidySummary } from "./tidyModel";
 import { TidyEntryTitleView } from "./TidyEntryTitleView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 interface TidyConfirmProps {
   summary: TidySummary;

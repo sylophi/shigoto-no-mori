@@ -7,8 +7,8 @@
 import { RefreshCw } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
-import type { StatusTone } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export interface SidebarDeviceBadge {
   deviceId: string;

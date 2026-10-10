@@ -1,7 +1,7 @@
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { tildify } from "@shared/projectPaths";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";

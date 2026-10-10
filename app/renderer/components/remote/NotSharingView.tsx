@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 
 // What a device's pages show while its sharing switch is off: there is
 // nothing of it to show.

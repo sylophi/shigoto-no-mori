@@ -1,9 +1,9 @@
 import { Download, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SectionIntro } from "@/components/ui/section-heading";
-import { StatusDot } from "@/components/ui/status-dot";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
+import { StatusDot } from "@shigomori/ui/primitives/status-dot.tsx";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
-import { tildify } from "@shared/projectPaths";
+import { tildify } from "@shigomori/contracts/projectPaths";
 
 // The hooks each agent harness runs to report its sessions (`sm agents
 // install`), which is what tells the app an agent is working in a

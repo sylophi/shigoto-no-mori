@@ -1,14 +1,17 @@
-import { BranchLabel } from "@/components/ui/branch-label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
-import { RowTag } from "@/components/ui/row-tag";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { InlineError } from "@/components/ui/inline-error";
-import { useNow } from "@/hooks/ui/useNow";
+import { BranchLabel } from "@shigomori/ui/primitives/branch-label.tsx";
+import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
+import {
+  RowStatusBadge,
+  type RowStatus,
+} from "@shigomori/ui/primitives/row-status.tsx";
+import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
+import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { formatBytes } from "@/lib/formatBytes";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { WorktreeDiskUsage } from "@shigomori/contracts/schemas";
 import type { TidyEntry } from "./tidyModel";
 import type { ReactNode } from "react";

@@ -10,7 +10,7 @@ import {
   PopoverClose,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@shigomori/ui/primitives/popover.tsx";
 import { FooterVerbView, LABEL_RANK } from "./FooterVerbView";
 
 type OptionSwitch = {

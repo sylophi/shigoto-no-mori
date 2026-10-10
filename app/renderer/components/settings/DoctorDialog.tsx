@@ -1,4 +1,4 @@
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import {
   useDoctorRepair,
   useDoctorRepairing,

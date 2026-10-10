@@ -7,8 +7,11 @@
 import type { ReactNode } from "react";
 import { AppShellView } from "@/components/AppShellView";
 import { PhoneTabBarView } from "@/components/PhoneTabBarView";
-import { MODAL_BACKDROP, ModalBox } from "@/components/ui/modal-shell";
-import { cn } from "@/lib/utils";
+import {
+  MODAL_BACKDROP,
+  ModalBox,
+} from "@shigomori/ui/primitives/modal-shell.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A whole window a scene can draw: the desktop app's, or the web app
 // on a phone.

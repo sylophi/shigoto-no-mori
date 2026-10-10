@@ -32,7 +32,7 @@ import type {
   PullRequest,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import type { StatusTone } from "@/components/ui/status-dot";
+import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { showPrimaryInInbox } from "@/lib/showPrimaryInInbox";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";

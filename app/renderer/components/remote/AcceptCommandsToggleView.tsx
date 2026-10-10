@@ -26,8 +26,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { TONE_PILL, TONE_TEXT } from "@/components/ui/status-dot";
-import { cn } from "@/lib/utils";
+import { TONE_PILL, TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { GRANTS, type GrantId } from "@shigomori/contracts/grants";
 
 // The consent lines are the contract's (packages/contracts/src/grants.ts),

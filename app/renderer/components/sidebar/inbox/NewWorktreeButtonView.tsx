@@ -9,22 +9,22 @@ import type {
 } from "react";
 import { Command } from "cmdk";
 import { Loader2, Plus, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import {
   EMPTY_CLASS,
   HEADING_CLASS,
   INPUT_CLASS,
   ITEM_CLASS,
   MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { KbdHint } from "@/components/ui/kbd";
+} from "@shigomori/ui/primitives/cmdk-classes.ts";
+import { KbdHint } from "@shigomori/ui/primitives/kbd.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@shigomori/ui/primitives/popover.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { ProjectListRow, ProjectSection } from "../projectListSections";
 
 // The button itself: creating outright, or the list's trigger.

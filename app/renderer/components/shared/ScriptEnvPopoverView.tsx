@@ -1,10 +1,10 @@
-import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { CopyButton } from "@shigomori/ui/primitives/copy-button.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@shigomori/ui/primitives/popover.tsx";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 
 // The SHIGOMORI_* variables every user-written command runs with

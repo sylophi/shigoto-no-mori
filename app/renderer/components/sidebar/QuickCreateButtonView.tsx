@@ -1,5 +1,5 @@
 import { Loader2, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { MouseEvent } from "react";
 import {
   PROJECT_ACTION_HOOKS,

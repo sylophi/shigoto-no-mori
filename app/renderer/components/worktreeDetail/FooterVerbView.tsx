@@ -6,8 +6,8 @@ import {
   type ReactNode,
   useContext,
 } from "react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // First to lose its label, first. The transfer to start a mirror goes
 // first. The verbs whose label carries state (a running mirror's peer,

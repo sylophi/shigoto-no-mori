@@ -3,7 +3,7 @@
 // (slotToParam, paramToSlot), and a sidebar/store key (scriptKey).
 
 import type { ScriptRunSlot } from "@shigomori/contracts/schemas";
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 
 // The slot a run takes on its worktree, as the host lists it too.
 export type ScriptSlot = ScriptRunSlot;

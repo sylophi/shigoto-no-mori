@@ -7,7 +7,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import type { PackageScriptSortMode } from "@shigomori/contracts/schemas";
 
 const SORT_OPTIONS: ReadonlyArray<{

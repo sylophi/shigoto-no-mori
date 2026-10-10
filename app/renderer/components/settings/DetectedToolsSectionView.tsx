@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { LauncherIconView } from "@/components/shared/LauncherIconView";
-import { SectionIntro } from "@/components/ui/section-heading";
-import { cn } from "@/lib/utils";
+import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { DetectedLauncher } from "@shigomori/contracts/schemas";
 
 interface DetectedToolsSectionProps {

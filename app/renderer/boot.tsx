@@ -25,7 +25,8 @@ import type { RouterHistory } from "@tanstack/react-router";
 import { App } from "./App";
 import { AppToaster } from "./components/AppChrome";
 import { UpdateNews } from "./components/UpdateNews";
-import { ErrorDetailsHost } from "./components/ui/inline-error";
+import { ErrorDetailsHost } from "@shigomori/ui/primitives/inline-error.tsx";
+import { OutsideProvider } from "@shigomori/ui/outside.tsx";
 import {
   ClerkGate,
   type ClerkProviderComponent,
@@ -38,6 +39,10 @@ import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startVillagerMoves } from "./lib/villagers/moves";
 import { startAgentWatch } from "./lib/agentWatch";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
+import { openExternalUrl, revealInFolder } from "./lib/openExternal";
+
+// What a view opens outside the app goes through the host.
+const outside = { openUrl: openExternalUrl, revealInFolder };
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import { localDeviceId, queryKeys, worktreeQueriesOn } from "./lib/queryKeys";
@@ -159,12 +164,14 @@ export function bootApp({
   createRoot(rootElement).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ClerkGate Provider={ClerkProvider}>
-          <App router={router} />
-        </ClerkGate>
-        <AppToaster />
-        <UpdateNews />
-        <ErrorDetailsHost />
+        <OutsideProvider value={outside}>
+          <ClerkGate Provider={ClerkProvider}>
+            <App router={router} />
+          </ClerkGate>
+          <AppToaster />
+          <UpdateNews />
+          <ErrorDetailsHost />
+        </OutsideProvider>
       </QueryClientProvider>
     </StrictMode>,
   );

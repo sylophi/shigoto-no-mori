@@ -7,9 +7,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { UpdaterStatusLineView } from "./UpdaterStatusLineView";
 

@@ -1,15 +1,15 @@
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { Check, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import type { StackCleanupFailure } from "@/hooks/worktrees/useWorktreeMutations";
-import { cn } from "@/lib/utils";
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
+import { cn } from "@shigomori/ui/lib/utils.ts";
+import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destructive-button.tsx";
 
 export const STACK_ERROR_TITLE = "Couldn't delete the stack's worktrees";
 

@@ -15,7 +15,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+} from "@shigomori/ui/primitives/context-menu.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,12 +25,12 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DiffStats } from "@/components/ui/diff-stats";
-import { RelativeDate } from "@/components/ui/relative-date";
+} from "@shigomori/ui/primitives/dropdown-menu.tsx";
+import { DiffStats } from "@shigomori/ui/primitives/diff-stats.tsx";
+import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import type { CommitActions } from "./useCommitActions";
 

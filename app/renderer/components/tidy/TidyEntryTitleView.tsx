@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { TidyEntry } from "./tidyModel";
 import { TidyVerdictBadgeView } from "./TidyVerdictBadgeView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 interface TidyEntryTitleProps {
   entry: TidyEntry;

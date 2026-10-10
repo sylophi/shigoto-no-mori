@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { defaultCloneParent } from "@shared/cloneDestination";
-import { ensureTrailingSep, tildify } from "@shared/projectPaths";
+import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
 import type { Project } from "@shigomori/contracts/schemas";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useProjects } from "@/hooks/projects/useProjects";

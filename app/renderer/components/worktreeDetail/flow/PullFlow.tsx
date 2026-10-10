@@ -10,7 +10,7 @@ import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { isMoveCancelledError } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { localDeviceId } from "@/lib/queryKeys";

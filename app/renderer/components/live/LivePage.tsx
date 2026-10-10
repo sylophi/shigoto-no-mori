@@ -9,7 +9,7 @@
 // kept live by its own broadcast (hooks/live/useLiveActivity.ts).
 import { useMutation } from "@tanstack/react-query";
 import { Square } from "lucide-react";
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
+import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destructive-button.tsx";
 import {
   type HostScripts,
   useLiveMirrors,

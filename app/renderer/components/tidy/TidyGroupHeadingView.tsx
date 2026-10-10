@@ -1,8 +1,8 @@
 import type { Project } from "@shigomori/contracts/schemas";
 import type { ReactNode } from "react";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { formatBytes } from "@/lib/formatBytes";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 interface TidyGroupHeadingProps {
   project: Project;

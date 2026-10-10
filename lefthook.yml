@@ -48,6 +48,10 @@ pre-commit:
           - name: engine
             glob: "{packages/engine/**,packages/contracts/**,macfs/**,app/shared/fixtures/git-log.json}"
             run: pnpm run check:engine
+          # The ui package's tests (packages/ui/README.md).
+          - name: ui
+            glob: "packages/ui/**"
+            run: pnpm run check:ui
           # The terminal binary, built as it ships (packages/cli/README.md).
           - name: cli
             glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,macfs/**}"

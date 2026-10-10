@@ -1,7 +1,7 @@
 import { ChevronRight, TriangleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { GitOperationState } from "@shigomori/contracts/schemas";
 
 const STOPPED: Record<string, string> = {

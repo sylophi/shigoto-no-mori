@@ -1,4 +1,4 @@
-import { assertNever } from "@/lib/utils";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import {
   type Worktree,
   type WorktreeSortMode,

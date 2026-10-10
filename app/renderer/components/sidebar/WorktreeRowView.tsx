@@ -1,5 +1,5 @@
 import { describePullRequest } from "@/lib/pullRequest";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { TONE_TEXT } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView";
 import type { GroupShelf } from "./sidebarRow";

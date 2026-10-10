@@ -7,9 +7,9 @@ import {
   villagerInk,
 } from "@/components/villagers/VillagerDialogueView";
 import { useFaceColor } from "@/hooks/villagers/useFaceColor";
-import { useNow } from "@/hooks/ui/useNow";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { cn } from "@/lib/utils";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
+import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { villagerCatchphrase } from "@/lib/villagerVoice";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import {

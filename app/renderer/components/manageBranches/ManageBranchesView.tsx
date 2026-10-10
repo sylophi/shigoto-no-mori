@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { ChevronRight, Plus, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 // A device's branch lists (ManageBranches.tsx binds them): the local

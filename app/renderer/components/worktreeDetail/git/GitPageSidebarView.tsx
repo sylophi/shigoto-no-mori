@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 
 export type GitTab = "changes" | "stashes" | "history";
 

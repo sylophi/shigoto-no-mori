@@ -1,17 +1,17 @@
 import { ChevronDown } from "lucide-react";
-import { ChipButton } from "@/components/ui/chip-button";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@shigomori/ui/primitives/popover.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import {
   checksBreakdown,
   describeChecks,
   sortChecksWorstFirst,
 } from "@/lib/pullRequest";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { CheckEntryView } from "./CheckEntryView";
 import { ChecksSummaryIconView } from "./ChecksSummaryIconView";

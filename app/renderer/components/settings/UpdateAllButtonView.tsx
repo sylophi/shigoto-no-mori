@@ -1,5 +1,5 @@
 import { Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@shigomori/ui/primitives/button.tsx";
 
 // Updates every device behind the newest release (useOutdatedDevices),
 // from the end of the Settings General section's tab bar, the chore of

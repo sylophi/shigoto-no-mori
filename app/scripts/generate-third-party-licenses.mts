@@ -312,7 +312,7 @@ const BUNDLED_DATA = [
         "https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1",
     },
   ]),
-  // tmux's launcher icon (renderer/app-icons/tmux.png), its 128px logo
+  // tmux's launcher icon (packages/ui/src/app-icons/tmux.png), its 128px logo
   // icon as published, unchanged.
   normalizeEntry([
     "tmux-logo@3b10392",

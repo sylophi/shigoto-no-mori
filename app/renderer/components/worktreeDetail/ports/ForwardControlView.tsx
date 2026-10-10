@@ -13,11 +13,11 @@
 import { useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { digitsOnly, parsePortNumber } from "@shigomori/contracts/schemas";
-import { Input } from "@/components/ui/input";
-import { TONE_TEXT } from "@/components/ui/status-dot";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
+import { Switch } from "@shigomori/ui/primitives/switch.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import { OpenLocalhostButtonView } from "./OpenLocalhostButtonView";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 

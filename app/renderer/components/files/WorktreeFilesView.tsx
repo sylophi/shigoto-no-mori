@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
 import { EyeOff, Files, RotateCw } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeaderView";
-import { BackButton } from "@/components/ui/back-button";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { ChipButton } from "@/components/ui/chip-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { BackButton } from "@shigomori/ui/primitives/back-button.tsx";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
+import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from "@shigomori/ui/primitives/sheet.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // A worktree's files, browsed read-only (WorktreeFiles.tsx binds it):
 // the folder tree taken over into the app sidebar, the header, the

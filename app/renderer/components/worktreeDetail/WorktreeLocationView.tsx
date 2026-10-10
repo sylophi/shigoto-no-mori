@@ -5,9 +5,9 @@
 // changes. A phone has no room for the path, so neither shows there.
 import { Pencil } from "lucide-react";
 import { InlineNameEditorView } from "@/components/shared/InlineNameEditorView";
-import { IconButton } from "@/components/ui/icon-button";
-import { PathSpan } from "@/components/ui/path-span";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
+import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 export function WorktreeLocationView({
   path,

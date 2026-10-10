@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { LoadFailure } from "@/components/ui/load-failure";
+import { LoadFailure } from "@shigomori/ui/primitives/load-failure.tsx";
 
 // The "All devices" tab's sections, the project's shared settings.
 export function ConfigureSharedView({ children }: { children: ReactNode }) {

@@ -1,7 +1,7 @@
 import type { Ref } from "react";
 import { ChevronDown } from "lucide-react";
-import { Markdown } from "@/components/ui/markdown";
-import { cn } from "@/lib/utils";
+import { Markdown } from "@shigomori/ui/primitives/markdown.tsx";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // What the worktree's work is, as its pull request's body says once it
 // has one, else as `sm describe` put it (useWorktreeTitle). Markdown,

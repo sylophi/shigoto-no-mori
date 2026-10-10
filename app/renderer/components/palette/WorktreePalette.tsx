@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useParams } from "@tanstack/react-router";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useDeviceBadges } from "@/components/sidebar/deviceBadges";
@@ -15,7 +15,7 @@ import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
-import { useNow } from "@/hooks/ui/useNow";
+import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";

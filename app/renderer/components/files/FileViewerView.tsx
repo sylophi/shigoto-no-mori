@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import { File } from "@pierre/diffs/react";
 import { FolderOpen, Loader2 } from "lucide-react";
 import { CODE_STYLE, CODE_THEME } from "@/components/diff/codeTheme";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { CopyButton } from "@/components/ui/copy-button";
-import { IconButton } from "@/components/ui/icon-button";
+import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
+import { CopyButton } from "@shigomori/ui/primitives/copy-button.tsx";
+import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 import { formatBytes } from "@/lib/formatBytes";
 
 // Past this many lines a file shows as plain text: highlighting it

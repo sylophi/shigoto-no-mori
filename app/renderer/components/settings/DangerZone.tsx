@@ -7,7 +7,7 @@ import {
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { tildify } from "@shared/projectPaths";
+import { tildify } from "@shigomori/contracts/projectPaths";
 import { notifyError } from "@/lib/toast";
 import { DangerZoneView } from "./DangerZoneView";
 

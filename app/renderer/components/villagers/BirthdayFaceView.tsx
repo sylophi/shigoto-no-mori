@@ -1,5 +1,5 @@
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
-import { cn } from "@/lib/utils";
+import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { VillagerRarity } from "@shared/villagers/rarity";
 import { ConfettiView } from "./CelebrationView";
 

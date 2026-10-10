@@ -7,7 +7,7 @@ import {
   usePickedDevice,
 } from "@/components/shared/DeviceTabs";
 import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { localDeviceId } from "@/lib/queryKeys";
 import { AddExistingForm } from "./addProject/AddExistingForm";
