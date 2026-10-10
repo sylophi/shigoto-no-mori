@@ -13,6 +13,7 @@ import { appDir, freePort, waitFor, type TraceLine } from "./util.mts";
 
 export type DevAppOptions = {
   readonly profile: string;
+  readonly repoName: string;
   // What the app is launched with besides its debugging port.
   readonly env: NodeJS.ProcessEnv;
   // Whether it is up only with its own tunnel (a host a browser
@@ -51,11 +52,12 @@ export class DevApp {
     );
   }
 
-  // Its one project, named for the profile, so two labs on one account
-  // never show a project of the same name. Every device's is a clone of
-  // the host's seed, the same repo by its root commit.
+  // Its one project: a clone of the host's seed, the same repo by its
+  // root commit, which every client shows as one project under one name.
+  // That is the host's profile's, so two labs on one account never show
+  // a project of the same name.
   get repo(): string {
-    return join(this.profileDir, "repos", this.profile);
+    return join(this.profileDir, "repos", this.options.repoName);
   }
 
   get dataDir(): string {

@@ -243,7 +243,13 @@ export class Lab {
     mkdirSync(options.out, { recursive: true });
     this.logs = createWriteStream(join(options.out, "processes.log"));
     const app = (profile: string, needsTunnel: boolean) =>
-      new DevApp({ profile, env: {}, needsTunnel, logs: this.logs });
+      new DevApp({
+        profile,
+        repoName: this.profile,
+        env: {},
+        needsTunnel,
+        logs: this.logs,
+      });
     this.hostApp = app(this.profile, true);
     this.desk =
       this.has("desktop") || this.has("terminal")
