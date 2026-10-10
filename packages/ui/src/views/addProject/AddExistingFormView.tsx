@@ -16,6 +16,7 @@ import {
   MODAL_COMMAND_CLASS,
 } from "../../primitives/cmdk-classes.ts";
 import { KeyedButtonView } from "./DialogPartsView.tsx";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // The add-existing tab's browse stage: the path as typed, the folders
 // it lists, each repo among them addable, and the way to scan the
@@ -186,10 +187,7 @@ export function AddExistingFormView({
         )}
       </Command.List>
 
-      <div
-        data-slot="footer-row"
-        className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-      >
+      <FooterRow className="justify-between">
         <div className="flex items-center gap-3">
           <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
         </div>
@@ -204,7 +202,7 @@ export function AddExistingFormView({
             </ChipButton>
           )}
         </div>
-      </div>
+      </FooterRow>
     </Command>
   );
 }

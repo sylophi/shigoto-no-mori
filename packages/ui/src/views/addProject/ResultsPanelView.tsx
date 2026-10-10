@@ -7,6 +7,7 @@ import { ResultRowView } from "./ResultRowView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { MODAL_COMMAND_CLASS } from "../../primitives/cmdk-classes.ts";
 import { pluralize } from "../../lib/pluralize.ts";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 interface ResultsPanelProps {
   scanRoot: string;
@@ -95,10 +96,7 @@ export function ResultsPanelView(props: ResultsPanelProps) {
           )}
         </Command.List>
 
-        <div
-          data-slot="footer-row"
-          className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-        >
+        <FooterRow className="justify-end">
           {props.terrierOptIn}
           <KeyedButtonView
             label={
@@ -110,7 +108,7 @@ export function ResultsPanelView(props: ResultsPanelProps) {
             onClick={() => void props.onAdd()}
             disabled={props.selected.size === 0 || props.bulkAdding}
           />
-        </div>
+        </FooterRow>
       </Command>
     </div>
   );

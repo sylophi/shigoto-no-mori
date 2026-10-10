@@ -10,8 +10,8 @@ import {
   HYGIENE_VERDICT_LABEL,
   type HygieneVerdictKind,
 } from "@shigomori/contracts/schemas/index";
-import { cn } from "../../lib/utils.ts";
-import { type StatusTone, TONE_PILL } from "../../primitives/status-dot.tsx";
+import { ToneTag } from "../../primitives/row-tag.tsx";
+import type { StatusTone } from "../../primitives/status-dot.tsx";
 
 const TONE: Record<HygieneVerdictKind, StatusTone> = {
   merged: "emerald",
@@ -36,14 +36,9 @@ const ICON: Record<HygieneVerdictKind, typeof Check> = {
 export function TidyVerdictBadgeView({ kind }: { kind: HygieneVerdictKind }) {
   const Icon = ICON[kind];
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-3xs font-medium",
-        TONE_PILL[TONE[kind]],
-      )}
-    >
+    <ToneTag tone={TONE[kind]}>
       <Icon aria-hidden className="size-3" />
       {HYGIENE_VERDICT_LABEL[kind]}
-    </span>
+    </ToneTag>
   );
 }
