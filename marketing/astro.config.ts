@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
-import { type AstroIntegration, defineConfig } from "astro/config";
+import type { AstroIntegration } from "astro";
+import { defineConfig } from "astro/config";
 import type { Plugin } from "vite";
 import {
   fixtureAliases,
@@ -33,6 +34,30 @@ function resolveSharedFromApp(): Plugin {
         return null;
       }
       return this.resolve(id, from, { ...options, skipSelf: true });
+    },
+  };
+}
+
+// The stylesheets the app's boot loads for itself, which the page already
+// has: the app's (the page links it, for the frames drawn at build time)
+// and Zen Maru Gothic's (the page has its own faces, and the rest falls
+// back to Hiragino Maru Gothic as the page's text does). Astro links
+// every stylesheet in a script's graph into the head, a lazy import's
+// too, so left in they would hold up the first paint.
+function pageHasAppStylesheets(): Plugin {
+  const boot = resolve(app, "renderer/boot.tsx");
+  const empty = "\0page-has-it";
+  return {
+    name: "page-has-app-stylesheets",
+    enforce: "pre",
+    resolveId(id, importer) {
+      if (importer !== boot) return null;
+      return id === "./app.css" || id === "@shigomori/ui/styles/fonts.css"
+        ? empty
+        : null;
+    },
+    load(id) {
+      return id === empty ? "" : null;
     },
   };
 }
@@ -89,6 +114,11 @@ export default defineConfig({
     // The app's stylesheet stops at the frames' roots.
     css: { postcss: { plugins: [insideTheRoot()] } },
 
-    plugins: [resolveSharedFromApp(), tailwindcss(), reactCompiler()],
+    plugins: [
+      resolveSharedFromApp(),
+      pageHasAppStylesheets(),
+      tailwindcss(),
+      reactCompiler(),
+    ],
   },
 });
