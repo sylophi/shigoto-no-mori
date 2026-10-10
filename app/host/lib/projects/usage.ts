@@ -3,9 +3,8 @@
 // app records the uses (they are the app's UI actions, not CLI verbs),
 // and the project list reads them back as lastUsed and recentCount,
 // which feed the sidebar's recency and frequency sorts.
-import * as Usage from "@shigomori/engine/Usage";
-import * as Effect from "effect/Effect";
 import * as Engine from "../engine";
+import * as Ops from "../engineOps";
 import { log } from "@shared/log";
 
 function hasStringProjectId(input: unknown): input is { projectId: string } {
@@ -32,11 +31,7 @@ export async function recordProjectActionUsage(
 ): Promise<string | null> {
   if (!hasStringProjectId(input)) return null;
   try {
-    await Engine.run(
-      Effect.gen(function* () {
-        yield* (yield* Usage.Usage).record("project", input.projectId, "");
-      }),
-    );
+    await Engine.run(Ops.recordProjectUse(input.projectId));
     return input.projectId;
   } catch (error) {
     if (!usageFailureLogged) {
