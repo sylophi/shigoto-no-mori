@@ -35,6 +35,13 @@ import {
   MirrorReviewScene,
   TransplantReviewScene,
 } from "./flows";
+import {
+  ConfigureScene,
+  HomeEmptyScene,
+  HomeScene,
+  ProjectPagesPartsScene,
+  TidyScene,
+} from "./projectPages";
 import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
 import {
@@ -80,6 +87,11 @@ export const scenes = {
   settingsDialogs: { Scene: SettingsDialogsScene, size: [1500, 900] },
   visitors: { Scene: VisitorsScene, ...DESKTOP },
   villagersParts: { Scene: VillagersPartsScene, size: [1200, 1100] },
+  configure: { Scene: ConfigureScene, ...DESKTOP },
+  projectPagesParts: { Scene: ProjectPagesPartsScene, size: [1300, 1700] },
+  tidy: { Scene: TidyScene, ...DESKTOP },
+  home: { Scene: HomeScene, ...DESKTOP },
+  homeEmpty: { Scene: HomeEmptyScene, size: [700, 300] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

@@ -26,7 +26,7 @@ import {
   selectionOfPreset,
 } from "../worktreeDetail/flow/ignoreChoice";
 import { LeaveOutPicker } from "../worktreeDetail/flow/LeaveOutPicker";
-import { FoundOnDevices } from "./OnlyInWorktrees";
+import { FoundOnDevicesView } from "./OnlyInWorktreesView";
 
 const NOTE =
   "The default when you mirror or transplant one of this project's worktrees.";
@@ -35,7 +35,7 @@ const NOTE =
 // checkout.
 function foundOn(entry: RepoListingEntry) {
   return entry.everywhere ? null : (
-    <FoundOnDevices holders={entry.holders} className="max-w-56" />
+    <FoundOnDevicesView holders={entry.holders} className="max-w-56" />
   );
 }
 

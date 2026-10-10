@@ -11,7 +11,7 @@ interface TidyStatProps {
   tone?: "neutral" | "positive";
 }
 
-export function TidyStat({
+export function TidyStatView({
   label,
   value,
   detail,

@@ -1,10 +1,10 @@
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { LoadFailure } from "@/components/ui/load-failure";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import type { Project } from "@shigomori/contracts/schemas";
 import { ConfigureForm } from "./ConfigureForm";
+import { ConfigureLoadFailureView } from "./ConfigureProjectView";
 import { ConfigureShared } from "./ConfigureShared";
-import { ConfigureSkeleton } from "./ConfigureSkeleton";
+import { ConfigureSkeletonView } from "./ConfigureSkeletonView";
 
 export function ConfigureProject() {
   return (
@@ -23,12 +23,10 @@ function ConfigureBody({ project }: { project: Project }) {
   const seed = useProjectConfigSeed(project.id);
   if (seed.state === "failed") {
     return (
-      <div className="p-6 phone:p-4">
-        <LoadFailure message={seed.message} onRetry={seed.retry} />
-      </div>
+      <ConfigureLoadFailureView message={seed.message} onRetry={seed.retry} />
     );
   }
-  if (seed.state === "loading") return <ConfigureSkeleton />;
+  if (seed.state === "loading") return <ConfigureSkeletonView />;
   return (
     <ConfigureForm
       key={project.id}

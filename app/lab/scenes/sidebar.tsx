@@ -3,6 +3,7 @@
 // the brand header, the device filter, the view's own controls and
 // rows, and the footer. The rows are the app's own (buildSidebarRows,
 // buildInboxRows) over the fixture forests.
+import { buildGrid } from "@/components/home/gridModel";
 import type { ReactNode } from "react";
 import type { SidebarView } from "@shigomori/contracts/schemas";
 import { AddProjectButtonView } from "@/components/sidebar/AddProjectButtonView";
@@ -249,6 +250,29 @@ export function projectRows() {
   return treeModel("desktop", null).rows.filter(
     (row) => row.kind === "project",
   );
+}
+
+// The home page's tiles over the desktop's forest (home/gridModel.ts),
+// none visited yet.
+export function sceneGrid() {
+  const local = localInputs("desktop");
+  const remote = remoteForests("desktop");
+  return buildGrid({
+    ...local,
+    order: projectGroupOrder({
+      projects: local.projects,
+      remote,
+      sortMode: "manual",
+      pinned: new Set(),
+    }),
+    hiddenPrefixes: [],
+    allowAgentWorking: MARKS.allowAgentWorking,
+    byOwner: true,
+    remote,
+    mirrors: [],
+    deviceBadges: deviceBadges("desktop"),
+    visits: {},
+  });
 }
 
 // The group key the open project goes by: shigoto-no-mori, this

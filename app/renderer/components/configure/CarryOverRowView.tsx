@@ -5,8 +5,8 @@ import type {
   CarryOverEntry,
   CarryOverStat,
 } from "@shigomori/contracts/schemas";
-import { ModePicker } from "./ModePicker";
-import { OnlyInWorktrees } from "./OnlyInWorktrees";
+import { ModePickerView } from "./ModePickerView";
+import { OnlyInWorktreesView } from "./OnlyInWorktreesView";
 import { ChipButton } from "@/components/ui/chip-button";
 import { IconButton } from "@/components/ui/icon-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -25,7 +25,7 @@ interface CarryOverRowProps {
   onRemove?: () => void;
 }
 
-export function CarryOverRow({
+export function CarryOverRowView({
   entry,
   stat,
   covered = false,
@@ -64,7 +64,7 @@ export function CarryOverRow({
           </SimpleTooltip>
         )}
         {stat && (
-          <OnlyInWorktrees
+          <OnlyInWorktreesView
             inPrimary={stat.inPrimary}
             worktrees={stat.worktrees}
             className="shrink-0"
@@ -102,7 +102,7 @@ export function CarryOverRow({
         </>
       ) : (
         <>
-          <ModePicker
+          <ModePickerView
             mode={entry.mode}
             onChange={(mode) => onChangeMode?.(mode)}
           />

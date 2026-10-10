@@ -7,15 +7,13 @@
 import type { Project } from "@shigomori/contracts/schemas";
 import { CreateOnSection } from "./CreateOnSection";
 import { LeaveOutSection } from "./LeaveOutSection";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { ConfigureSharedView } from "./ConfigureProjectView";
 
 export function ConfigureShared({ project }: { project: Project }) {
   return (
-    <div className={PAGE_BODY}>
-      <div className="flex flex-col gap-10">
-        <CreateOnSection project={project} />
-        <LeaveOutSection project={project} />
-      </div>
-    </div>
+    <ConfigureSharedView>
+      <CreateOnSection project={project} />
+      <LeaveOutSection project={project} />
+    </ConfigureSharedView>
   );
 }

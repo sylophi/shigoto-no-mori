@@ -36,7 +36,7 @@ const ICON: Record<HygieneVerdictKind, typeof Check> = {
   defaultBranch: Home,
 };
 
-export function TidyVerdictBadge({ kind }: { kind: HygieneVerdictKind }) {
+export function TidyVerdictBadgeView({ kind }: { kind: HygieneVerdictKind }) {
   const Icon = ICON[kind];
   return (
     <span

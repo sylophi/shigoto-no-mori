@@ -22,7 +22,7 @@ interface LayoutOptionItemProps {
   onOpenPicker: () => void;
 }
 
-export function LayoutOptionItem({
+export function LayoutOptionItemView({
   option,
   checked,
   projectPath,

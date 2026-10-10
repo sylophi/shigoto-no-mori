@@ -1,18 +1,11 @@
 import { useState } from "react";
-import { Check, Pencil, Trash2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { cn } from "@/lib/utils";
-import { sanitizeBranchName } from "@shared/git/branches";
 import { isBranchNotMergedError } from "@shigomori/contracts/errors";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { IconButton } from "@/components/ui/icon-button";
+import { BranchDeleteDialogView, BranchRowView } from "./BranchRowView";
 
 export function BranchRow({
   projectId,
@@ -33,8 +26,6 @@ export function BranchRow({
   // Folding "editing" and "draft" together avoids initializing local
   // state from the `name` prop.
   const [draft, setDraft] = useState<string | null>(null);
-  const editing = draft !== null;
-  const checkedOut = !!worktree;
 
   // A safe delete refused for unmerged commits swaps the modal into its
   // force-delete stage until it closes (sticky, so a transient force
@@ -66,157 +57,48 @@ export function BranchRow({
   };
 
   return (
-    <div className={cn("group flex items-center gap-3 px-3 py-2 text-sm")}>
-      {editing ? (
-        <Input
-          value={draft ?? ""}
-          onChange={(e) => setDraft(sanitizeBranchName(e.target.value))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitRename();
-            if (e.key === "Escape") setDraft(null);
-          }}
-          onBlur={commitRename}
-          disabled={rename.isPending}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- inline edit
-          autoFocus
-          className="flex-1 px-2 py-1 font-mono text-sm"
-        />
-      ) : (
-        <SimpleTooltip whenTruncated tip={name}>
-          <span className="min-w-0 flex-1 truncate font-mono select-text">
-            {name}
-          </span>
-        </SimpleTooltip>
-      )}
-
-      {checkedOut && !editing && (
-        <button
-          type="button"
-          onClick={() => toWorktree(projectId, worktree.id)}
-          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          {(worktree.isPrimary || worktree.isExternal) && (
-            <WorktreeKindIcon worktree={worktree} />
-          )}
-          <span className="truncate">{worktree.name}</span>
-        </button>
-      )}
-
-      {!editing && (
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 phone:opacity-100">
-          <IconButton
-            onClick={() => setDraft(name)}
-            aria-label={`Rename ${name}`}
-          >
-            <Pencil className="size-3.5" />
-          </IconButton>
-          <SimpleTooltip
-            tip={
-              checkedOut
-                ? "Switch to a different branch in this worktree first"
-                : undefined
-            }
-          >
-            <IconButton
-              onClick={() => setConfirmingDelete(true)}
-              disabled={checkedOut || del.isPending}
-              aria-label={`Delete ${name}`}
-              tone="destructive"
-              className="disabled:opacity-30"
-            >
-              <Trash2 className="size-3.5" />
-            </IconButton>
-          </SimpleTooltip>
-        </div>
-      )}
-
-      {editing && (
-        <IconButton
-          onMouseDown={(e) => {
-            // Prevent onBlur from firing before this click is processed.
-            e.preventDefault();
-            setDraft(null);
-          }}
-          aria-label="Cancel rename"
-        >
-          <X className="size-3.5" />
-        </IconButton>
-      )}
-      {editing && (
-        <IconButton
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={commitRename}
-          aria-label="Save rename"
-          disabled={rename.isPending}
-        >
-          <Check className="size-3.5" />
-        </IconButton>
-      )}
-
-      {confirmingDelete && (
-        <ModalShell onClose={closeDelete} popoverClassName="max-w-md">
-          <div className="p-5">
-            <h2 className="text-base font-semibold">Delete branch</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Delete the local branch{" "}
-              <span className="font-mono text-foreground">{name}</span>?{" "}
-              {needsForce
-                ? "Force deleting cannot be undone."
-                : "You'll be asked again if it has commits that aren't " +
-                  "merged elsewhere."}
-            </p>
-            {del.isError &&
-              (isBranchNotMergedError(del.error) ? (
-                <ErrorBanner className="mt-3">
-                  This branch has commits that aren&apos;t on any other branch.
-                  You can force delete it, but those commits are discarded
-                  permanently. If the branch was squash-merged, its changes
-                  already landed and nothing is lost.
-                </ErrorBanner>
-              ) : (
-                <ErrorBanner
-                  className="mt-3"
-                  message={del.error.message}
-                  title="Couldn't delete the branch"
-                />
-              ))}
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
-                autoFocus
-                onClick={closeDelete}
-                disabled={del.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={del.isPending}
-                onClick={() =>
-                  del.mutate(
-                    { projectId, name, force: needsForce },
-                    {
-                      onSuccess: closeDelete,
-                      onError: (err) => {
-                        if (isBranchNotMergedError(err)) setNeedsForce(true);
-                      },
+    <BranchRowView
+      name={name}
+      worktree={worktree}
+      kindIcon={worktree && <WorktreeKindIcon worktree={worktree} />}
+      draft={draft}
+      onDraft={setDraft}
+      renamePending={rename.isPending}
+      onCommitRename={commitRename}
+      onOpenWorktree={() => worktree && toWorktree(projectId, worktree.id)}
+      onDelete={() => setConfirmingDelete(true)}
+      deletePending={del.isPending}
+      deleteDialog={
+        confirmingDelete && (
+          <ModalShell onClose={closeDelete} popoverClassName="max-w-md">
+            <BranchDeleteDialogView
+              name={name}
+              needsForce={needsForce}
+              error={
+                del.isError
+                  ? {
+                      notMerged: isBranchNotMergedError(del.error),
+                      message: del.error.message,
+                    }
+                  : null
+              }
+              pending={del.isPending}
+              onCancel={closeDelete}
+              onDelete={() =>
+                del.mutate(
+                  { projectId, name, force: needsForce },
+                  {
+                    onSuccess: closeDelete,
+                    onError: (err) => {
+                      if (isBranchNotMergedError(err)) setNeedsForce(true);
                     },
-                  )
-                }
-              >
-                {del.isPending
-                  ? "Deleting…"
-                  : needsForce
-                    ? "Force delete"
-                    : "Delete"}
-              </Button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-    </div>
+                  },
+                )
+              }
+            />
+          </ModalShell>
+        )
+      }
+    />
   );
 }

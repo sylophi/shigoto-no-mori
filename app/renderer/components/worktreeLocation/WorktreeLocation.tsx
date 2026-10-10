@@ -1,13 +1,11 @@
-import type { ReactNode } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { LoadFailure } from "@/components/ui/load-failure";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Project } from "@shigomori/contracts/schemas";
 import { LocationForm } from "./LocationForm";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { LocationPaneView, LocationSkeletonView } from "./WorktreeLocationView";
 
 export function WorktreeLocation() {
   return (
@@ -29,20 +27,20 @@ function LocationBody({ project }: { project: Project }) {
   const seed = useProjectConfigSeed(projectId);
   if (seed.state === "failed") {
     return (
-      <LocationPane>
+      <LocationPaneView>
         <LoadFailure message={seed.message} onRetry={seed.retry} />
-      </LocationPane>
+      </LocationPaneView>
     );
   }
   if (seed.state === "loading" || device === null || worktreesLoading) {
     return (
-      <LocationPane>
-        <LocationSkeleton />
-      </LocationPane>
+      <LocationPaneView>
+        <LocationSkeletonView />
+      </LocationPaneView>
     );
   }
   return (
-    <LocationPane>
+    <LocationPaneView>
       <LocationForm
         projectId={projectId}
         projectPath={project.path}
@@ -51,28 +49,6 @@ function LocationBody({ project }: { project: Project }) {
         config={seed.config}
         resolvedDefaultBranch={seed.resolvedDefaultBranch}
       />
-    </LocationPane>
-  );
-}
-
-// The one scroll box every state of the page renders into.
-function LocationPane({ children }: { children: ReactNode }) {
-  return (
-    <div className={PAGE_BODY}>
-      <div className="flex flex-col gap-6">{children}</div>
-    </div>
-  );
-}
-
-function LocationSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-12 w-full" />
-      <div className="space-y-3">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-      </div>
-    </div>
+    </LocationPaneView>
   );
 }

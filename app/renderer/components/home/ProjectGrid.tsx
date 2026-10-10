@@ -10,30 +10,12 @@
 // and the sidebar follows the page into the project. Its line under the
 // name is the repo's GitHub About, and the one below says how much is
 // going on there.
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
-import { AlertTriangle, GitPullRequest } from "lucide-react";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useRepoDescription } from "@/hooks/projects/useRepoDescription";
-import { useNow } from "@/hooks/ui/useNow";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { pluralize } from "@/lib/pluralize";
 import { readWorktreeVisits } from "@/lib/recentWorktrees";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { cn } from "@/lib/utils";
-import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";
 import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
 import { useForestSources } from "@/components/sidebar/forestSources";
 import {
@@ -42,12 +24,16 @@ import {
   useIconMember,
 } from "@/components/sidebar/ProjectGroupActions";
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
-import { StatusPillView } from "@/components/sidebar/StatusPillView";
 import type {
   ProjectListRow,
   ProjectSection,
 } from "@/components/sidebar/projectListSections";
 import { buildGrid, type GroupWork } from "./gridModel";
+import {
+  ProjectGridLayoutView,
+  ProjectGridView,
+  ProjectTileView,
+} from "./ProjectGridView";
 
 export function ProjectGrid() {
   const sources = useForestSources({ warm: true });
@@ -67,20 +53,18 @@ export function ProjectGrid() {
   });
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeaderView title="Projects" watermark="森" />
-      <div className={PAGE_BODY}>
-        {sections.length > 0 ? (
-          <Grid sections={sections} work={work} />
-        ) : sources.loading ? null : (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            {sources.activeFilter
-              ? `No projects on ${sources.activeFilter.label}.`
-              : "No projects yet."}
-          </p>
-        )}
-      </div>
-    </div>
+    <ProjectGridView
+      grid={
+        sections.length > 0 ? <Grid sections={sections} work={work} /> : null
+      }
+      empty={
+        sources.loading
+          ? null
+          : sources.activeFilter
+            ? `No projects on ${sources.activeFilter.label}.`
+            : "No projects yet."
+      }
+    />
   );
 }
 
@@ -111,59 +95,29 @@ function Grid({
     }
   };
   return (
-    // Arrows move between the tiles, across the sections, as on a
-    // launcher.
-    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- the keys only move focus between the tiles, which are the controls
-    <div
-      ref={gridRef}
-      onKeyDown={(event) => moveFocus(event, gridRef.current)}
-      // As many columns as fit, stretched to fill the line, and every
-      // section on them, so the tiles line up from one owner to the
-      // next. The owners flow on together, so a run of owners with a
-      // project or two each shares a line rather than leaving most of
-      // one empty.
-      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-      className="grid gap-x-3 gap-y-6"
-    >
-      {sections.map((section) => (
-        <section
-          key={section.key}
-          style={{
-            // An unnamed section (the pinned projects, or the rest of
-            // a list that isn't split) has no heading to stand level
-            // with, so it takes lines of its own.
-            gridColumn:
-              section.label === null
-                ? "1 / -1"
-                : `span ${Math.min(section.rows.length, columns)}`,
-          }}
-          className="grid grid-cols-subgrid content-start gap-y-2"
-        >
-          {section.label !== null && (
-            // On one line however few columns the owner spans, so its
-            // tiles stay level with the tiles beside them.
-            <SimpleTooltip whenTruncated tip={section.label}>
-              <SectionHeading className="col-span-full truncate">
-                {section.label}
-              </SectionHeading>
-            </SimpleTooltip>
-          )}
-          <div className="col-span-full grid grid-cols-subgrid gap-y-3">
-            {section.rows.map((row) => {
+    <ProjectGridLayoutView
+      sections={sections}
+      columns={columns}
+      gridRef={gridRef}
+      tiles={
+        new Map(
+          sections.flatMap((section) =>
+            section.rows.map((row) => {
               const tileWork = work.get(row.groupKey);
-              return (
+              return [
+                row.key,
                 <ProjectTile
                   key={row.key}
                   row={row}
                   work={tileWork}
                   onOpen={() => open(row, tileWork?.lead)}
-                />
-              );
-            })}
-          </div>
-        </section>
-      ))}
-    </div>
+                />,
+              ] as const;
+            }),
+          ),
+        )
+      }
+    />
   );
 }
 
@@ -204,7 +158,7 @@ function ProjectTile({
   onOpen: () => void;
 }) {
   const showBadges = useShowDeviceBadges();
-  const { project, local, devices, members, branches, pinned } = row;
+  const { project, local, members, branches, pinned } = row;
   const [hovered, setHovered] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const group = useGroupMembers(members, local ? project : undefined);
@@ -214,7 +168,6 @@ function ProjectTile({
   const sourceDevice = iconMember?.deviceId;
   const missing = project.pathExists === false;
   const description = useRepoDescription(sourceId, sourceDevice, !missing);
-  const descriptionId = useId();
   // A missing project's tile locates it, as its sidebar row does.
   const { relocating, onLocate, picker } = useLocateProject(
     group,
@@ -222,116 +175,32 @@ function ProjectTile({
     missing,
   );
   const lead = work?.lead;
-  // This machine's listing is still loading (or failed): the list row
-  // has no count then either. Not a project with nothing in it, so the
-  // tile neither opens a worktree nor offers to make one until it knows.
-  const unlisted = !missing && lead === undefined && branches === undefined;
-  const worktrees =
-    branches !== undefined && branches > 0
-      ? pluralize(branches, "worktree")
-      : null;
-  const active = work !== undefined && work.lastActivity > 0;
   return (
-    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- hover only reveals the actions, which are buttons of their own
-    <div
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
-      // Right-click pops the actions' menu, as on the sidebar's row.
-      onContextMenu={(event) => {
-        if (triggerRef.current === null) return;
-        event.preventDefault();
-        triggerRef.current.click();
-      }}
-      className={cn(
-        "relative rounded-lg border border-border bg-card transition-colors",
-        (!missing || onLocate !== undefined) &&
-          "hover:bg-accent/60 has-[[aria-expanded=true]]:bg-accent/60",
-      )}
-    >
-      <button
-        type="button"
-        data-project-tile
-        disabled={missing ? onLocate === undefined : unlisted}
-        onClick={missing ? onLocate : onOpen}
-        aria-label={
-          missing
-            ? `${project.name}, locate`
-            : lead
-              ? `${project.name}, open ${lead.worktree.branch}`
-              : `${project.name}, new worktree`
-        }
-        aria-describedby={!missing && description ? descriptionId : undefined}
-        className="flex w-full flex-col gap-2.5 rounded-lg p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
-      >
-        <span className="flex min-w-0 items-center gap-2.5">
-          {missing ? (
-            <AlertTriangle className="size-8 shrink-0 p-1.5 text-destructive/70" />
-          ) : (
-            <ProjectIcon
-              projectId={sourceId}
-              name={project.name}
-              deviceId={sourceDevice}
-              className="size-8"
-            />
-          )}
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            {/* Clear of the `+` and `…` that come up over the corner,
-                which sit above the line under it. */}
-            <span className="flex min-w-0 items-center gap-1.5 pr-12">
-              <SimpleTooltip whenTruncated tip={project.name}>
-                <span
-                  className={cn(
-                    "min-w-0 truncate text-sm font-medium",
-                    missing && "text-muted-foreground line-through",
-                  )}
-                >
-                  {project.name}
-                </span>
-              </SimpleTooltip>
-              {pinned && <PinnedMarkView />}
-              {showBadges && <DeviceBadgeClusterView devices={devices} />}
-            </span>
-            {/* Two lines tall even when shorter or empty, so a repo
-                with a short About (or none) lines its stats up with
-                the tiles beside it, in other owners' sections too. */}
-            <SimpleTooltip whenTruncated tip={missing ? null : description}>
-              <span
-                id={descriptionId}
-                className="line-clamp-2 min-h-[2lh] min-w-0 text-2xs text-muted-foreground"
-              >
-                {missing
-                  ? relocating
-                    ? "Locating…"
-                    : "Missing on disk"
-                  : description}
-              </span>
-            </SimpleTooltip>
-          </span>
-        </span>
-        <span className="flex h-4 items-center gap-2 text-3xs text-muted-foreground tabular-nums">
-          {(worktrees !== null || active) && (
-            <span>
-              {worktrees}
-              {worktrees !== null && active && ", active "}
-              {worktrees === null && active && "Active "}
-              {active && <Ago at={work.lastActivity} />}
-            </span>
-          )}
-          {work !== undefined && work.openPullRequests > 0 && (
-            <StatusPillView
-              icon={GitPullRequest}
-              tone="emerald"
-              tip={pluralize(work.openPullRequests, "open pull request")}
-              aria-label={pluralize(work.openPullRequests, "open pull request")}
-            >
-              {work.openPullRequests}
-            </StatusPillView>
-          )}
-        </span>
-      </button>
-      {/* A missing project keeps them too, as its sidebar row does:
-          Remove is how it goes. */}
-      <div className="absolute top-2 right-2 flex items-center gap-0.5">
+    <ProjectTileView
+      row={row}
+      work={work}
+      showBadges={showBadges}
+      description={description}
+      missing={missing}
+      relocating={relocating}
+      onLocate={onLocate}
+      // This machine's listing is still loading (or failed): the list
+      // row has no count then either.
+      unlisted={!missing && lead === undefined && branches === undefined}
+      onOpen={onOpen}
+      onHover={setHovered}
+      triggerRef={triggerRef}
+      icon={
+        <ProjectIcon
+          projectId={sourceId}
+          name={project.name}
+          deviceId={sourceDevice}
+          className="size-8"
+        />
+      }
+      // A missing project keeps them too, as its sidebar row does:
+      // Remove is how it goes.
+      actions={
         <ProjectGroupActions
           name={project.name}
           identity={project.identity}
@@ -342,56 +211,8 @@ function ProjectTile({
           triggerRef={triggerRef}
           onLocate={onLocate}
         />
-      </div>
-      {picker}
-    </div>
+      }
+      picker={picker}
+    />
   );
-}
-
-// "3h ago", on a clock of its own, so the tick re-renders this alone.
-function Ago({ at }: { at: number }) {
-  const now = useNow();
-  return <>{formatRelativeTime(at, now)}</>;
-}
-
-// Arrow keys between the tiles: left and right along the reading
-// order, up and down to the nearest tile in the next line of tiles,
-// whichever section it is in, read off the laid-out grid so it holds
-// at any width.
-function moveFocus(event: KeyboardEvent, root: HTMLElement | null) {
-  const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: 0, ArrowDown: 0 }[
-    event.key
-  ];
-  if (!root || step === undefined) return;
-  const tiles = [
-    ...root.querySelectorAll<HTMLButtonElement>(
-      "button[data-project-tile]:not(:disabled)",
-    ),
-  ];
-  const from = tiles.indexOf(document.activeElement as HTMLButtonElement);
-  const current = tiles[from];
-  if (!current) return;
-  event.preventDefault();
-  if (step !== 0) {
-    tiles[from + step]?.focus();
-    return;
-  }
-  const boxes = tiles.map((tile) => ({
-    tile,
-    box: tile.getBoundingClientRect(),
-  }));
-  const here = current.getBoundingClientRect();
-  const down = event.key === "ArrowDown";
-  // The next line is the nearest by height, and in it the tile whose
-  // left edge is nearest.
-  const target = boxes
-    .filter(({ box }) =>
-      down ? box.top > here.bottom - 1 : box.bottom < here.top + 1,
-    )
-    .toSorted(
-      (a, b) =>
-        Math.abs(a.box.top - here.top) - Math.abs(b.box.top - here.top) ||
-        Math.abs(a.box.left - here.left) - Math.abs(b.box.left - here.left),
-    )[0];
-  target?.tile.focus();
 }

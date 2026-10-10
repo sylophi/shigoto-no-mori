@@ -1,16 +1,11 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SectionIntro } from "@/components/ui/section-heading";
-import { Switch } from "@/components/ui/switch";
-import { ExternalLink } from "@/components/ui/external-link";
 import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
 import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
-import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
+import { makeIgnoreMatcher } from "@shared/git/gitPaths";
 import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
-import { CarryOverRow } from "./CarryOverRow";
+import { CarryOverSectionView } from "./CarryOverSectionView";
 
 interface CarryOverSectionProps {
   projectId: string;
@@ -58,79 +53,32 @@ export function CarryOverSection({
   ]);
 
   return (
-    <section className="space-y-3">
-      <SectionIntro title="Carry over">
-        Files and folders to copy or symlink into every new worktree, taken from
-        the main checkout or, failing that, another worktree that has them
-        (symlinks only ever point at the main checkout). Useful for things git
-        ignores, like <span className="font-mono">.env</span>,{" "}
-        <span className="font-mono">node_modules</span>, or editor state.
-      </SectionIntro>
-
-      {(status?.fileExists || !useWorktreeInclude) && (
-        <div className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">
-              Use <span className="font-mono">.worktreeinclude</span>
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {useWorktreeInclude &&
-              status?.fileExists &&
-              status.matchedPaths.length === 0
-                ? "No gitignored files match its patterns."
-                : "Copies matching gitignored files into every new worktree."}{" "}
-              <ExternalLink
-                href="https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees"
-                errorTitle="Couldn't open docs"
-              />
-            </p>
-          </div>
-          <Switch
-            checked={useWorktreeInclude}
-            onCheckedChange={onToggleUseWorktreeInclude}
-            aria-label="Use .worktreeinclude"
+    <CarryOverSectionView
+      entries={entries}
+      includePaths={includePaths}
+      stats={stats}
+      isCovered={isCovered}
+      includeFileExists={status?.fileExists === true}
+      noMatches={
+        status?.fileExists === true && status.matchedPaths.length === 0
+      }
+      useWorktreeInclude={useWorktreeInclude}
+      onToggleUseWorktreeInclude={onToggleUseWorktreeInclude}
+      onChangeMode={onChangeMode}
+      onRemove={onRemove}
+      onPickPath={() => setPicking(true)}
+      picker={
+        picking && (
+          <CarryOverPickerModal
+            projectId={projectId}
+            projectPath={projectPath}
+            selectedPaths={selectedPaths}
+            isCovered={isCovered}
+            onPick={(entry) => onAdd(entry)}
+            onClose={() => setPicking(false)}
           />
-        </div>
-      )}
-
-      {(entries.length > 0 || includePaths.length > 0) && (
-        <div className="space-y-1.5">
-          {entries.map((entry) => (
-            <CarryOverRow
-              key={entry.path}
-              entry={entry}
-              stat={stats?.[entry.path]}
-              covered={isCovered(normalizeRelPath(entry.path))}
-              onChangeMode={(mode) => onChangeMode(entry.path, mode)}
-              onRemove={() => onRemove(entry.path)}
-            />
-          ))}
-          {includePaths.map((path) => (
-            <CarryOverRow
-              key={`worktreeinclude:${path}`}
-              entry={{ path, mode: "copy" }}
-              stat={stats?.[path]}
-              origin="worktreeinclude"
-            />
-          ))}
-        </div>
-      )}
-
-      <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
-        <Plus />
-        Add file or folder
-      </Button>
-
-      {picking && (
-        <CarryOverPickerModal
-          projectId={projectId}
-          projectPath={projectPath}
-          selectedPaths={selectedPaths}
-          isCovered={isCovered}
-          onPick={(entry) => onAdd(entry)}
-          onClose={() => setPicking(false)}
-        />
-      )}
-    </section>
+        )
+      }
+    />
   );
 }

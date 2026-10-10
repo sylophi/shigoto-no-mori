@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
@@ -16,10 +14,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { pluralize } from "@/lib/pluralize";
-import { LayoutOptionItem } from "./LayoutOptionItem";
-import { LAYOUT_OPTIONS } from "./layoutOptions";
-import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
-import { tildify } from "@shared/projectPaths";
+import { LocationFormView } from "./LocationFormView";
 
 interface LocationFormProps {
   projectId: string;
@@ -39,7 +34,6 @@ export function LocationForm({
   resolvedDefaultBranch,
   // react-doctor-disable-next-line react-doctor/prefer-useReducer -- per-field setters are simple; saved* mirrors track persisted state without coupling between fields
 }: LocationFormProps) {
-  const home = device.homedir;
   const { toProjectPage } = useProjectNav();
   const write = useShigomoriWrite();
   const relocate = useRelocateWorktree();
@@ -175,106 +169,40 @@ export function LocationForm({
       : "Save location";
 
   return (
-    <>
-      <fieldset className="space-y-2" disabled={batchRunning}>
-        <legend className="sr-only">Worktree location</legend>
-        {LAYOUT_OPTIONS.map((opt) => (
-          <LayoutOptionItem
-            key={opt.value}
-            option={opt}
-            checked={layout === opt.value}
-            projectPath={projectPath}
-            device={device}
-            customPath={customPath}
-            customPathError={customPathError}
-            onSelect={setLayout}
-            onOpenPicker={() => setPickerOpen(true)}
+    <LocationFormView
+      layout={layout}
+      onLayout={setLayout}
+      projectPath={projectPath}
+      device={device}
+      customPath={customPath}
+      customPathError={customPathError}
+      onOpenPicker={() => setPickerOpen(true)}
+      toMove={toMove.map((worktree) => ({
+        worktree,
+        destination: proposedFor(worktree),
+      }))}
+      status={status}
+      saveError={write.error?.message ?? null}
+      canSubmit={canSubmit}
+      batchRunning={batchRunning}
+      submitLabel={submitLabel}
+      onBack={() => toProjectPage("configure", projectId)}
+      onApply={() => void handleApply()}
+      picker={
+        pickerOpen && (
+          <FolderPickerModal
+            initialPath={customPath.trim() || undefined}
+            title="Filter folders…"
+            confirmLabel="Use this folder"
+            onPick={(path) => {
+              setCustomPath(path);
+              if (customPathError) setCustomPathError(null);
+              setPickerOpen(false);
+            }}
+            onClose={() => setPickerOpen(false)}
           />
-        ))}
-      </fieldset>
-
-      {toMove.length > 0 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-          <p className="text-2xs font-semibold tracking-wide uppercase">
-            Heads up
-          </p>
-          <p className="mt-2 leading-relaxed">
-            {`${pluralize(toMove.length, "worktree")} will move to the new location. `}
-            Uncommitted changes and untracked files are preserved. Repoint any
-            open editors, terminals, or IDE projects to the new paths.
-          </p>
-        </div>
-      )}
-
-      {toMove.length > 0 && (
-        <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-          {toMove.map((wt) => {
-            const destination = proposedFor(wt);
-            return (
-              <div
-                key={wt.id}
-                className="flex items-start gap-3 px-3 py-3 text-sm"
-              >
-                <WorktreeMoveDetailsView
-                  branch={wt.branch}
-                  detached={wt.detached}
-                  fromPath={tildify(wt.path, home)}
-                  fromTip={wt.path}
-                  toPath={tildify(destination, home)}
-                  toTip={destination}
-                  status={status.get(wt.id) ?? { kind: "idle" }}
-                  labels={{
-                    running: "Moving",
-                    done: "Moved",
-                    error: "Move failed",
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {write.error && (
-        <ErrorBanner
-          message={write.error.message}
-          title="Couldn't save the worktree location"
-        />
-      )}
-
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => toProjectPage("configure", projectId)}
-          disabled={batchRunning}
-        >
-          {canSubmit ? "Cancel" : "Back"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void handleApply()}
-          disabled={!canSubmit}
-        >
-          {submitLabel}
-        </Button>
-      </div>
-
-      {pickerOpen && (
-        <FolderPickerModal
-          initialPath={customPath.trim() || undefined}
-          title="Filter folders…"
-          confirmLabel="Use this folder"
-          onPick={(path) => {
-            setCustomPath(path);
-            if (customPathError) setCustomPathError(null);
-            setPickerOpen(false);
-          }}
-          onClose={() => setPickerOpen(false)}
-        />
-      )}
-    </>
+        )
+      }
+    />
   );
 }

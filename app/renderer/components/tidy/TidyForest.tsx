@@ -1,10 +1,8 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import type { RowStatus } from "@/components/ui/row-status";
-import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import {
   DeviceTabPanel,
   pickHostDevice,
@@ -24,7 +22,6 @@ import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { formatBytes } from "@/lib/formatBytes";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   buildTidyEntries,
@@ -34,16 +31,19 @@ import {
   sortTidyEntries,
   sumBytes,
   summarize,
-  TIDY_SORT_OPTIONS,
   type TidyEntry,
   type TidySort,
 } from "./tidyModel";
 import { TidyConfirm } from "./TidyConfirm";
-import { TidyGroupHeading } from "./TidyGroupHeading";
+import {
+  TidyBodyView,
+  TidyGroupView,
+  TidyListView,
+  TidyPageView,
+} from "./TidyForestView";
+import { TidyGroupHeadingView } from "./TidyGroupHeadingView";
 import { TidyRow } from "./TidyRow";
-import { TidyStat } from "./TidyStat";
 import { withToggled } from "@/lib/toggleSet";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 // One shared object for every un-started row: a fresh literal per render
 // would give all 40 rows a new `status` prop each time a disk walk
@@ -80,25 +80,21 @@ export function TidyForest() {
     block: undefined,
   };
   return (
-    <div data-doubutsu-page="tidy" className="flex h-full flex-col">
-      <PageHeaderView
-        eyebrow="Settings"
-        title="Tidy the forest"
-        watermark="掃除"
-        tabs={
-          tabbed ? (
-            <DeviceTabBarView
-              tabs={tabs}
-              selectedId={picked.deviceId}
-              onSelect={pickHostDevice}
-            />
-          ) : undefined
-        }
-      />
+    <TidyPageView
+      tabs={
+        tabbed ? (
+          <DeviceTabBarView
+            tabs={tabs}
+            selectedId={picked.deviceId}
+            onSelect={pickHostDevice}
+          />
+        ) : undefined
+      }
+    >
       <DeviceTabPanel tab={shown} subject="its forest">
         <TidyBody />
       </DeviceTabPanel>
-    </div>
+    </TidyPageView>
   );
 }
 
@@ -214,206 +210,95 @@ function TidyBody() {
     setPicked(new Set());
   };
 
-  // Counted off the rows, like every other figure here: with primary
-  // checkouts gone a repo you have never branched from contributes
-  // nothing, and naming it anyway pads the caption above rows it has
-  // none of.
-  const rowProjects = projectCount(entries);
-  const measuredLabel = disk.measuring
-    ? `measuring ${disk.measuredCount} of ${disk.totalCount}…`
-    : disk.partial
-      ? "approximate"
-      : `across ${rowProjects} ${rowProjects === 1 ? "project" : "projects"}`;
-
-  const dirtyCount = entries.filter(
-    (entry) => entry.worktree.changedCount > 0,
-  ).length;
-  const reclaimable = sumBytes(candidates);
-
-  return (
-    <>
-      <div className={PAGE_BODY}>
-        <div className="flex flex-col gap-6">
-          {/* A narrower gutter on a phone: three columns leave a card just
-              short of its longest word at the full one. */}
-          <div className="grid grid-cols-3 gap-3 phone:gap-2">
-            <TidyStat
-              label="Reclaimable"
-              value={`${disk.partial ? "~" : ""}${formatBytes(disk.measuredBytes)}`}
-              detail={measuredLabel}
-            />
-            <TidyStat
-              label="Worktrees"
-              value={String(entries.length)}
-              detail={
-                dirtyCount > 0
-                  ? `${dirtyCount} with uncommitted work`
-                  : loading
-                    ? "checking…"
-                    : "all clean"
-              }
-            />
-            <TidyStat
-              label="Safe to remove"
-              value={String(candidates.length)}
-              detail={
-                candidates.length > 0
-                  ? `frees about ${formatBytes(reclaimable)}`
-                  : hygiene.loading
-                    ? "still checking…"
-                    : "nothing to tidy"
-              }
-              tone={candidates.length > 0 ? "positive" : "neutral"}
-            />
-          </div>
-
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : entries.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              {projects.length === 0
-                ? "No projects to tidy yet."
-                : "No worktrees in any project yet."}
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between gap-3 phone:flex-wrap">
-                <SegmentedControl
-                  aria-label="Sort worktrees"
-                  value={sort}
-                  onChange={setSort}
-                  options={TIDY_SORT_OPTIONS}
-                  disabled={batchRunning}
-                />
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {selected.size} of {entries.length} selected
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    // Clearing is available whenever something is
-                    // ticked, even where nothing was safe enough to
-                    // offer in the first place.
-                    disabled={
-                      batchRunning ||
-                      (selected.size === 0 && candidates.length === 0)
-                    }
-                    onClick={() =>
-                      setPicked(selected.size > 0 ? new Set() : safeIds)
-                    }
-                  >
-                    {selected.size > 0 ? "Clear" : "Select safe"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                {sort === "project" ? (
-                  groupByProject(ordered).map((group) => (
-                    <div key={group.project.id} className="flex flex-col gap-2">
-                      <TidyGroupHeading
-                        project={group.project}
-                        count={group.entries.length}
-                        bytes={group.bytes}
-                      />
-                      <TidyList
-                        entries={group.entries}
-                        selected={selected}
-                        statusOf={statusOf}
-                        disabled={batchRunning}
-                        onToggle={toggle}
-                        showProject={false}
-                      />
-                    </div>
-                  ))
-                ) : (
-                  <TidyList
-                    entries={ordered}
-                    selected={selected}
-                    statusOf={statusOf}
-                    disabled={batchRunning}
-                    onToggle={toggle}
-                    showProject
-                  />
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Only merged worktrees with a clean tree are ticked for you.
-                  Anything else you pick yourself.
-                </p>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={goBack}
-                    disabled={batchRunning}
-                  >
-                    {batchRunning ? "Working…" : "Cancel"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={selected.size === 0 || batchRunning}
-                    onClick={() => setConfirming(true)}
-                  >
-                    {batchRunning
-                      ? "Removing…"
-                      : `Remove ${selected.size} ${selected.size === 1 ? "worktree" : "worktrees"}`}
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {confirming && (
-        <TidyConfirm
-          summary={summary}
-          deleteBranches={deleteBranches}
-          onCancel={() => setConfirming(false)}
-          onConfirm={() => void runRemovals()}
-        />
-      )}
-    </>
-  );
-}
-
-interface TidyListProps {
-  entries: TidyEntry[];
-  selected: ReadonlySet<string>;
-  statusOf: (worktreeId: string) => RowStatus;
-  disabled: boolean;
-  onToggle: (worktreeId: string) => void;
-  // Off inside a project group, where the heading already says it.
-  showProject: boolean;
-}
-
-// Bordered card of rows, rendered once flat or once per project group.
-function TidyList({
-  entries,
-  selected,
-  statusOf,
-  disabled,
-  onToggle,
-  showProject,
-}: TidyListProps) {
-  return (
-    <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-      {entries.map((entry) => (
+  const list = (rows: TidyEntry[], showProject: boolean) => (
+    <TidyListView>
+      {rows.map((entry) => (
         <TidyRow
           key={entry.worktree.id}
           entry={entry}
           checked={selected.has(entry.worktree.id)}
           status={statusOf(entry.worktree.id)}
-          disabled={disabled}
-          onToggle={() => onToggle(entry.worktree.id)}
+          disabled={batchRunning}
+          onToggle={() => toggle(entry.worktree.id)}
           showProject={showProject}
         />
       ))}
-    </div>
+    </TidyListView>
+  );
+
+  return (
+    <TidyBodyView
+      disk={disk}
+      projectCount={projectCount(entries)}
+      worktreeCount={entries.length}
+      dirtyCount={
+        entries.filter((entry) => entry.worktree.changedCount > 0).length
+      }
+      safeCount={candidates.length}
+      reclaimable={sumBytes(candidates)}
+      loading={loading}
+      hygieneLoading={hygiene.loading}
+      noProjects={projects.length === 0}
+      sort={sort}
+      onSort={setSort}
+      selectedCount={selected.size}
+      batchRunning={batchRunning}
+      // Clearing is available whenever something is ticked, even where
+      // nothing was safe enough to offer in the first place.
+      onToggleSelection={() =>
+        setPicked(selected.size > 0 ? new Set() : safeIds)
+      }
+      onBack={goBack}
+      onRemove={() => setConfirming(true)}
+      lists={
+        sort === "project"
+          ? groupByProject(ordered).map((group) => (
+              <TidyGroup key={group.project.id} group={group}>
+                {list(group.entries, false)}
+              </TidyGroup>
+            ))
+          : list(ordered, true)
+      }
+      confirm={
+        confirming && (
+          <TidyConfirm
+            summary={summary}
+            deleteBranches={deleteBranches}
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => void runRemovals()}
+          />
+        )
+      }
+    />
+  );
+}
+
+// One project's block of rows, under its heading with the project's icon.
+function TidyGroup({
+  group,
+  children,
+}: {
+  group: ReturnType<typeof groupByProject>[number];
+  children: ReactNode;
+}) {
+  return (
+    <TidyGroupView
+      heading={
+        <TidyGroupHeadingView
+          project={group.project}
+          count={group.entries.length}
+          bytes={group.bytes}
+          icon={
+            <ProjectIcon
+              projectId={group.project.id}
+              name={group.project.name}
+              className="size-3"
+            />
+          }
+        />
+      }
+    >
+      {children}
+    </TidyGroupView>
   );
 }
