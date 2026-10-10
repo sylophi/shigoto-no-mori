@@ -39,7 +39,6 @@ import * as Ports from "../../host/lib/ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
 import * as Villagers from "../../host/lib/villagers.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
-import * as Processes from "../../host/lib/util/processes.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -96,8 +95,7 @@ const engine = Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" });
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
-  Processes.adapter.pipe(
-    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
+  Terminals.layer({ start: terminalStart }).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Ports.layer,

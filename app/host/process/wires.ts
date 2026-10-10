@@ -4,15 +4,11 @@
 // (host/socket/loopback.ts) for this machine's windows, its shell and
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
-import type * as Context from "effect/Context";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import { callFailureOf } from "@shigomori/contracts/errors";
+import * as PubSub from "effect/PubSub";
+import * as HostPushes from "@host/lib/hostPushes";
 import type { HostServices } from "./services";
-import * as Captures from "./captures";
+import * as Graph from "./graph";
 import type * as Stream from "effect/Stream";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
@@ -78,70 +74,55 @@ import { hostBinaryPath, hostFacts } from "./facts";
 // listening follows enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 
-// The graph's services, which the root hands over once the graph is up
-// (host.ts): a call on either listener before then waits for them, and
-// a graph that failed to build refuses it.
-const graphServices = Deferred.makeUnsafe<
-  Context.Context<HostServices>,
-  GraphDownError
->();
-class GraphDownError extends Schema.TaggedError<GraphDownError>()(
-  "GraphDownError",
-  { reason: Schema.String },
-) {
-  override get message(): string {
-    return `The app failed to start: ${this.reason}`;
-  }
-}
-export const graphUp = (services: Context.Context<HostServices>): void => {
-  Deferred.doneUnsafe(graphServices, Exit.succeed(services));
-};
-export const graphFailed = (reason: string): void => {
-  Deferred.doneUnsafe(graphServices, Exit.fail(new GraphDownError({ reason })));
-};
-const lateServices = Deferred.await(graphServices).pipe(
-  Effect.mapError(callFailureOf),
-);
+// Every push the host makes, published synchronously so pushes keep
+// their order, and never waiting on the graph: the hub is the root's,
+// served into the graph by pushesLayer.
+const pushes = Effect.runSync(PubSub.unbounded<HostPushes.Push>());
+export const pushesLayer = HostPushes.layerOn(pushes);
+
 const linkRegistrar = DeviceLink.createLinkRegistrar();
 export const deviceLinkLayer = () =>
-  Captures.deviceLink.layer.pipe(
-    Layer.provideMerge(
-      DeviceLink.layer({
-        registrar: linkRegistrar,
-        auth: {
-          opens: {
-            admit: (ticket, arrivedAs) => {
-              const deviceId = directTickets.consume(ticket, arrivedAs);
-              const publicKey =
-                deviceId === null ? undefined : hubServer.peerKey(deviceId);
-              return deviceId === null || publicKey === undefined
-                ? null
-                : { deviceId, publicKey };
-            },
-            localKey: () => hubServer.localKey(),
-          },
-          isCommandGranted: acceptsPeerCommands,
-          // The switches' one exception: the mirrors this device asked for.
-          isInvited: mirrorInviteAdmits,
+  DeviceLink.layer({
+    registrar: linkRegistrar,
+    auth: {
+      opens: {
+        admit: (ticket, arrivedAs) => {
+          const deviceId = directTickets.consume(ticket, arrivedAs);
+          const publicKey =
+            deviceId === null ? undefined : hubServer.peerKey(deviceId);
+          return deviceId === null || publicKey === undefined
+            ? null
+            : { deviceId, publicKey };
         },
-        // Not sharing, a mirror it asked for still follows its copy here.
-        seesPush: mirrorInviteSees,
-        services: lateServices,
-      }),
-    ),
-  );
+        localKey: () => hubServer.localKey(),
+      },
+      isCommandGranted: acceptsPeerCommands,
+      // The switches' one exception: the mirrors this device asked for.
+      isInvited: mirrorInviteAdmits,
+    },
+    // Not sharing, a mirror it asked for still follows its copy here.
+    seesPush: mirrorInviteSees,
+    services: Graph.services,
+  });
 
 // The sharing switch the link's gate reads. Its changes go to this
 // device's windows and, the push being remote, to every peer.
-export const sharingLayer = Captures.sharing.layer.pipe(
-  Layer.provideMerge(
-    Sharing.layer({
-      announce: (on) => broadcastAll(sharingContract, "changed", on),
-    }),
-  ),
-);
+export const sharingLayer = Sharing.layer({
+  announce: (on) => broadcastAll(sharingContract, "changed", on),
+});
 
-const { directLink, tunnel } = Captures;
+// The listener and the tunnel, as the root's callbacks reach them.
+const onLink = <A, E>(
+  f: (link: DeviceLink.DeviceLink["Service"]) => Effect.Effect<A, E>,
+) => Effect.flatMap(DeviceLink.DeviceLink, f);
+const linkStatus = () =>
+  Graph.readNow(
+    onLink((link) => link.status),
+    () => ({ listening: false, port: null, bindAddress: null, error: null }),
+  );
+const onTunnel = <A, E>(
+  f: (tunnel: TunnelService.Tunnel["Service"]) => Effect.Effect<A, E>,
+) => Effect.flatMap(TunnelService.Tunnel, f);
 
 // The tunnel endpoint: a supervised cloudflared child fronting the
 // listener's port through this device's named Cloudflare tunnel.
@@ -150,55 +131,45 @@ const { directLink, tunnel } = Captures;
 // as reconcile(null) through the same path. The connector token stays
 // inside the Tunnel.
 export const tunnelLayer = () =>
-  Captures.tunnelCapture.layer.pipe(
-    Layer.provideMerge(
-      TunnelService.layer({
-        // Resolved fresh per start attempt: the probe is one bounded
-        // spawn, and any memo here would leave the install-cloudflared
-        // recovery path (any config write re-probes) dead for the PATH
-        // case.
-        resolveBinary: Effect.promise(() =>
-          Captures.onEngine(Ops.readGlobalConfig()),
-        ).pipe(
-          Effect.flatMap((config) =>
-            TunnelService.resolveCloudflaredBinary(
-              config.cloudflaredPath,
-              hostBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
-            ),
-          ),
+  TunnelService.layer({
+    // Resolved fresh per start attempt: the probe is one bounded
+    // spawn, and any memo here would leave the install-cloudflared
+    // recovery path (any config write re-probes) dead for the PATH
+    // case.
+    resolveBinary: Effect.promise(() => Graph.run(Ops.readGlobalConfig())).pipe(
+      Effect.flatMap((config) =>
+        TunnelService.resolveCloudflaredBinary(
+          config.cloudflaredPath,
+          hostBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
         ),
-        provision: (port) =>
-          Effect.tryPromise({
-            try: () => provisionDeviceTunnel(port),
-            catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
-          }),
-        // The live child's pid, so a crashed host's leftover connector
-        // is killed on the next start.
-        pidFilePath: () => join(hostFacts().userDataPath, "cloudflared.pid"),
-        // Tunnel state rides the hub status snapshot, so the account
-        // page updates live.
-        onChange: () => directPlane().notifyStatusChanged(),
-      }),
+      ),
     ),
-  );
+    provision: (port) =>
+      Effect.tryPromise({
+        try: () => provisionDeviceTunnel(port),
+        catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
+      }),
+    // The live child's pid, so a crashed host's leftover connector
+    // is killed on the next start.
+    pidFilePath: () => join(hostFacts().userDataPath, "cloudflared.pid"),
+    // Tunnel state rides the hub status snapshot, so the account
+    // page updates live.
+    onChange: () => directPlane().notifyStatusChanged(),
+  });
 
 // The device link again, on loopback, for the processes on this
 // machine: the windows, the shell, and the terminal's control ops.
 const loopbackRegistrar = DeviceLink.createLinkRegistrar();
 export const loopbackLayer = () =>
-  Captures.loopback.layer.pipe(
-    Layer.provideMerge(
-      Loopback.layer({
-        registrar: loopbackRegistrar,
-        deviceId: () => getDeviceId(),
-        appVersion: hostFacts().appVersion,
-        file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
-        // The window's own page dials it, from the renderer scheme.
-        allowedOrigin: hostFacts().rendererOrigin,
-        services: lateServices,
-      }),
-    ),
-  );
+  Loopback.layer({
+    registrar: loopbackRegistrar,
+    deviceId: () => getDeviceId(),
+    appVersion: hostFacts().appVersion,
+    file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
+    // The window's own page dials it, from the renderer scheme.
+    allowedOrigin: hostFacts().rendererOrigin,
+    services: Graph.services,
+  });
 
 // The host's own consumers of peer pushes (the mirror's git follower
 // reacts to a peer's git:projectChanged and mirror:gitChanged), beside
@@ -238,8 +209,13 @@ const directPlane = () =>
       new WsWebSocket(url, { perMessageDeflate: url.startsWith("wss:") }),
     dialableKinds: devDialKinds(),
     host: {
-      closeHostPeersNotIn: (online) => void directLink.closePeersNotIn(online),
-      tunnelState: () => tunnel.state(),
+      closeHostPeersNotIn: (online) =>
+        void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online))),
+      tunnelState: () =>
+        Graph.readNow(
+          onTunnel((tunnel) => tunnel.status),
+          () => ({ state: "off" as const, hostname: null }),
+        ).state,
     },
   }));
 
@@ -252,16 +228,24 @@ export const hubHandlers = () => directPlane().handlers;
 // listener's gates read.
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
-    const current = directLink.status();
+    const current = linkStatus();
     return current.listening ? current.port : null;
   },
   mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
   // is healthy (probed routable).
-  tunnelUrl: () => tunnel.tunnelUrl(),
+  tunnelUrl: () =>
+    Graph.readNow(
+      onTunnel((tunnel) => tunnel.tunnelUrl),
+      () => null,
+    ),
   acceptsCommands: acceptsPeerCommands,
   // Before the graph is up the link serves nobody, so it reads as off.
-  sharesData: Captures.sharesData,
+  sharesData: () =>
+    Graph.readNow(
+      Effect.flatMap(Sharing.Sharing, (sharing) => sharing.current),
+      () => false,
+    ),
 });
 
 // The hub connection: connecting itself is gated in
@@ -290,7 +274,11 @@ const hostServer: EffectServerTransport<HostServices> = {
   broadcastAll(channel, payload, opts) {
     // The loopback serves every one off the host's pushes, and the
     // device link the remote ones.
-    Captures.publishPush({ channel, payload, remote: opts?.remote === true });
+    PubSub.publishUnsafe(pushes, {
+      channel,
+      payload,
+      remote: opts?.remote === true,
+    });
   },
 };
 
@@ -313,7 +301,7 @@ export function registerContract<M extends ContractModule>(
     // Actions that opt in via `tracksProjectUsage` rank their project
     // for the sidebar's usage sorts, which reorder live on this push.
     onUsageTracked: (parsedInput) => {
-      void Captures.onEngine(recordProjectActionUsage(parsedInput)).then(
+      void Graph.run(recordProjectActionUsage(parsedInput)).then(
         (bumpedProjectId) => {
           if (bumpedProjectId) {
             broadcastAll(projectsContract, "usageBumped", {
@@ -442,35 +430,45 @@ export function stopDirectHost(): void {
 // every socket authed under the old account.
 export async function refreshDirectHost(): Promise<void> {
   await logFailure("[direct] listener refresh failed", () =>
-    directLink.refresh(async () => {
-      const inputs = hubConnectInputs();
-      if (inputs === null) return null;
-      // The device-scoped opt-out: absent means enrolled, explicit
-      // false stops the listener.
-      const config = await Captures.onEngine(Ops.readGlobalConfig());
-      if (config.directConnections === false) return null;
-      return {
-        port: 0,
-        bindAddress: "::",
-        deviceId: getDeviceId(),
-        appVersion: hostFacts().appVersion,
-        accountId: inputs.accountId,
-        // The web client's origin, so a browser can dial the wss tunnel
-        // candidate.
-        allowedOrigin: allowedWebOrigin(),
-      };
-    }),
+    Graph.run(
+      onLink((link) =>
+        link.reconcile(
+          Effect.promise(async () => {
+            const inputs = hubConnectInputs();
+            if (inputs === null) return null;
+            // The device-scoped opt-out: absent means enrolled, explicit
+            // false stops the listener.
+            const config = await Graph.run(Ops.readGlobalConfig());
+            if (config.directConnections === false) return null;
+            return {
+              port: 0,
+              bindAddress: "::",
+              deviceId: getDeviceId(),
+              appVersion: hostFacts().appVersion,
+              accountId: inputs.accountId,
+              // The web client's origin, so a browser can dial the wss tunnel
+              // candidate.
+              allowedOrigin: allowedWebOrigin(),
+            };
+          }),
+        ),
+      ),
+    ),
   );
   // The tunnel follows the listener: a running listener wants a tunnel
   // fronting its current port, and every condition that stopped the
   // listener stops the child through the same reconcile. A tunnel
   // problem must not fail the change that triggered the refresh.
   await logFailure("[tunnel] reconcile failed", () => {
-    const listener = directLink.status();
-    return tunnel.reconcile(
+    const listener = linkStatus();
+    const wanted =
       listener.listening && listener.port !== null
         ? { port: listener.port }
-        : null,
+        : null;
+    // Nothing to reconcile once the app is quitting: the layer's close
+    // has stopped the child.
+    return Graph.run(onTunnel((tunnel) => tunnel.reconcile(wanted))).catch(
+      () => undefined,
     );
   });
 }
