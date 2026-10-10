@@ -10,6 +10,7 @@ import {
   managedDriveBaseFor,
   worktreeBaseFor,
 } from "@shigomori/contracts/git/worktreeLayout";
+import { RowTag } from "../../primitives/row-tag.tsx";
 
 interface LayoutOptionItemProps {
   option: LayoutOption;
@@ -77,11 +78,7 @@ export function LayoutOptionItemView({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <span className="font-medium">{option.label}</span>
-          {option.recommended && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-3xs font-medium tracking-wide text-muted-foreground uppercase">
-              recommended
-            </span>
-          )}
+          {option.recommended && <RowTag>recommended</RowTag>}
         </div>
         {description && (
           <p className="text-xs leading-relaxed text-muted-foreground">

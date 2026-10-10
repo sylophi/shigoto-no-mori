@@ -2,7 +2,8 @@ import { ExternalLink } from "lucide-react";
 import { cn } from "../../../lib/utils.ts";
 import { useOutside } from "../../../outside.tsx";
 import type { PullRequestCheck } from "@shigomori/contracts/schemas/index";
-import { CHECK_BUCKET_ICON, TONE_TEXT } from "./pullRequestShared.ts";
+import { CHECK_BUCKET_ICON } from "./pullRequestShared.ts";
+import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 
 export function CheckEntryView({ check }: { check: PullRequestCheck }) {
@@ -16,7 +17,7 @@ export function CheckEntryView({ check }: { check: PullRequestCheck }) {
           aria-label={label}
           className={cn(
             "size-3 shrink-0",
-            TONE_TEXT[tone],
+            TONE_MARK[tone],
             isPending && "animate-spin",
           )}
         />

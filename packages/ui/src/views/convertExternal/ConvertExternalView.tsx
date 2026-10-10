@@ -4,6 +4,7 @@ import type { RowStatus } from "../../primitives/row-status.tsx";
 import { PAGE_BODY } from "../shared/PageShellView.tsx";
 import type { Worktree } from "@shigomori/contracts/schemas/index";
 import { ConvertRowView } from "./ConvertRowView.tsx";
+import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 
 // A device's external worktrees, picked to move under the project's
 // managed location (ConvertExternalWorktrees.tsx runs the moves).
@@ -57,10 +58,10 @@ export function ConvertExternalView({
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : externals.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          <EmptyPanel>
             No external worktrees to convert. Anything you create from Shigoto
             no Mori already lives in the managed tree.
-          </div>
+          </EmptyPanel>
         ) : (
           <>
             <div className="flex items-center justify-between">

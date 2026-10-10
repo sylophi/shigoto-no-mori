@@ -2,10 +2,22 @@ import type React from "react";
 import { SimpleTooltip, type WithoutTitle } from "./tooltip.tsx";
 import { cn } from "../lib/utils.ts";
 
-// The four raw families the doubutsu overlay remaps, plus slate for an
-// off or neutral state. A new tone needs a matching remap entry in
-// doubutsu.css, so the set stays closed here.
-export type StatusTone = "emerald" | "rose" | "amber" | "sky" | "slate";
+// The app's one tone table. A tone is a raw color family doubutsu.css
+// remaps (emerald, rose, amber, sky, and violet and indigo for a pull
+// request's and a sync's states), or slate, an off or neutral state on
+// the theme's muted tokens. A new tone needs its remap in doubutsu.css
+// and a row in each table below, so the set stays closed here.
+export type Tone =
+  | "emerald"
+  | "rose"
+  | "amber"
+  | "sky"
+  | "violet"
+  | "indigo"
+  | "slate";
+
+// The tones a status dot, a status word and a status pill take.
+export type StatusTone = Exclude<Tone, "violet" | "indigo">;
 
 const TONE_BG: Record<StatusTone, string> = {
   emerald: "bg-emerald-500",
@@ -16,10 +28,10 @@ const TONE_BG: Record<StatusTone, string> = {
   slate: "bg-muted-foreground",
 };
 
-// The same tones as plain text, for a status word set inline in a
-// metadata line (the status word opening a row on the account page),
-// where a pill would be one box too many. Kept beside TONE_BG so a new
-// tone can only be added in one place.
+// A status word set inline in a metadata line (the status word opening
+// a row on the account page), where a pill would be one box too many:
+// a step darker than a mark in light and lighter in dark, so text
+// reads.
 export const TONE_TEXT: Record<StatusTone, string> = {
   emerald: "text-emerald-600 dark:text-emerald-400",
   rose: "text-rose-600 dark:text-rose-400",
@@ -28,16 +40,38 @@ export const TONE_TEXT: Record<StatusTone, string> = {
   slate: "text-muted-foreground",
 };
 
-// The same tones as a tinted pill: the text above over a background
-// wash, for the badges that carry a status rather than dotting it (the
-// sidebar's device badges, the account page's device mark). Composed
-// from TONE_TEXT so the two can never disagree.
+// A mark in its tone: an icon, or the icon and count of a compact
+// status (a pull request's state and checks, a sync pill).
+export const TONE_MARK: Record<Tone, string> = {
+  emerald: "text-emerald-500",
+  rose: "text-rose-500",
+  amber: "text-amber-500",
+  sky: "text-sky-500",
+  violet: "text-violet-500",
+  indigo: "text-indigo-500",
+  slate: "text-muted-foreground",
+};
+
+// The wash behind a tone, for a pill.
+export const TONE_FILL: Record<Tone, string> = {
+  emerald: "bg-emerald-500/10",
+  rose: "bg-rose-500/10",
+  amber: "bg-amber-500/10",
+  sky: "bg-sky-500/10",
+  violet: "bg-violet-500/10",
+  indigo: "bg-indigo-500/10",
+  slate: "bg-muted",
+};
+
+// A status word on its wash, for the badges that carry a status rather
+// than dotting it (the sidebar's device badges, the account page's
+// device mark, a Tidy verdict).
 export const TONE_PILL: Record<StatusTone, string> = {
-  emerald: `bg-emerald-500/10 ${TONE_TEXT.emerald}`,
-  rose: `bg-rose-500/10 ${TONE_TEXT.rose}`,
-  amber: `bg-amber-500/10 ${TONE_TEXT.amber}`,
-  sky: `bg-sky-500/10 ${TONE_TEXT.sky}`,
-  slate: `bg-muted ${TONE_TEXT.slate}`,
+  emerald: `${TONE_FILL.emerald} ${TONE_TEXT.emerald}`,
+  rose: `${TONE_FILL.rose} ${TONE_TEXT.rose}`,
+  amber: `${TONE_FILL.amber} ${TONE_TEXT.amber}`,
+  sky: `${TONE_FILL.sky} ${TONE_TEXT.sky}`,
+  slate: `${TONE_FILL.slate} ${TONE_TEXT.slate}`,
 };
 
 // A tiny status indicator: a tinted dot with an optional inline label.

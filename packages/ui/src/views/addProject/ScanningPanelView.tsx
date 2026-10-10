@@ -2,6 +2,7 @@ import { ArrowLeft, FolderSearch, Loader2 } from "lucide-react";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { KbdHint } from "../../primitives/kbd.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 interface ScanningPanelProps {
   scanRoot: string;
@@ -31,12 +32,9 @@ export function ScanningPanelView({
         <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
         <span>Looking for git repos…</span>
       </div>
-      <div
-        data-slot="footer-row"
-        className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-      >
+      <FooterRow className="justify-end">
         <KbdHint keys={["Esc"]} label="Cancel" />
-      </div>
+      </FooterRow>
     </div>
   );
 }

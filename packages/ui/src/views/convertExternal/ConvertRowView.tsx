@@ -6,6 +6,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import type { Worktree } from "@shigomori/contracts/schemas/index";
+import { ToneTag } from "../../primitives/row-tag.tsx";
 
 interface ConvertRowProps {
   worktree: Worktree;
@@ -61,10 +62,10 @@ export function ConvertRowView({
         branchAdornment={
           dirty && (
             <SimpleTooltip tip="Uncommitted changes will be wiped">
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400">
+              <ToneTag tone="amber">
                 <FileDiff aria-hidden className="size-3" />
                 {worktree.changedCount} uncommitted
-              </span>
+              </ToneTag>
             </SimpleTooltip>
           )
         }

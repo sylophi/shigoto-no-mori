@@ -26,9 +26,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
-import { TONE_PILL, TONE_TEXT } from "../../primitives/status-dot.tsx";
+import { TONE_TEXT } from "../../primitives/status-dot.tsx";
 import { cn } from "../../lib/utils.ts";
 import { GRANTS, type GrantId } from "@shigomori/contracts/grants";
+import { ToneTag } from "../../primitives/row-tag.tsx";
 
 // The consent lines are the contract's (packages/contracts/src/grants.ts),
 // each the line a remote gated call names. The icons are this panel's.
@@ -142,14 +143,9 @@ export function AcceptCommandsToggleView({
 function AccessBadge({ on }: { on: boolean }) {
   const Icon = on ? ShieldAlert : Eye;
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-3xs font-medium",
-        TONE_PILL[on ? "amber" : "slate"],
-      )}
-    >
+    <ToneTag tone={on ? "amber" : "slate"}>
       <Icon aria-hidden className="size-3" />
       {on ? "Full control" : "Read-only"}
-    </span>
+    </ToneTag>
   );
 }

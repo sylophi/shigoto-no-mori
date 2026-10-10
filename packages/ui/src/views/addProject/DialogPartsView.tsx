@@ -10,6 +10,7 @@ import { Button } from "../../primitives/button.tsx";
 import { Kbd, KbdGroup, KbdHint } from "../../primitives/kbd.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { SimpleTooltip, type WithoutTitle } from "../../primitives/tooltip.tsx";
+import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // The clone's and the new repository's top row: what to make, and the
 // button that makes it, the way the folder browser's row reads. Inside
@@ -152,13 +153,10 @@ export function FormFooterView({
   children?: ReactNode;
 }) {
   return (
-    <div
-      data-slot="footer-row"
-      className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-    >
+    <FooterRow className="justify-between">
       <KbdHint keys={["↩"]} label={label} />
       <div className="flex items-center gap-3">{children}</div>
-    </div>
+    </FooterRow>
   );
 }
 

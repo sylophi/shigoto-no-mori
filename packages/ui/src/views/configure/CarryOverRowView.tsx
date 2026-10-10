@@ -10,6 +10,7 @@ import { OnlyInWorktreesView } from "./OnlyInWorktreesView.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { ToneTag } from "../../primitives/row-tag.tsx";
 
 interface CarryOverRowProps {
   entry: CarryOverEntry;
@@ -57,10 +58,10 @@ export function CarryOverRowView({
         </SimpleTooltip>
         {missing && (
           <SimpleTooltip tip="Source doesn't exist in the main checkout or any worktree. New worktrees will skip this entry.">
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 text-3xs font-medium text-destructive">
+            <ToneTag className="bg-destructive/10 text-destructive">
               <AlertTriangle className="size-3" />
               missing
-            </span>
+            </ToneTag>
           </SimpleTooltip>
         )}
         {stat && (
@@ -72,9 +73,7 @@ export function CarryOverRowView({
         )}
         {covered && (
           <SimpleTooltip tip=".worktreeinclude now covers this path; this entry will be removed the next time a worktree is created.">
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400">
-              covered
-            </span>
+            <ToneTag tone="amber">covered</ToneTag>
           </SimpleTooltip>
         )}
       </span>
