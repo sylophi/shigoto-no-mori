@@ -1,12 +1,8 @@
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { isBirthdayOn } from "@/lib/villagers/birthdays";
-import { useToday } from "@/hooks/ui/useToday";
-import { residentOf, type Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
+import { isBirthdayOn } from "@shigomori/ui/lib/villagers/birthdays.ts";
+import { useToday } from "@shigomori/ui/hooks/useToday.ts";
+import { residentOf, type Resident } from "@shigomori/ui/lib/villagerVoice.ts";
 import { useVillagerFace, useVillagerProfiles } from "./useVillagers";
-
-// The character whose home a worktree is (residentOf), with their face,
-// and whether today (local date) is their birthday.
-export type Resident = Omit<Speaker, "color"> & { birthday: boolean };
 
 // A worktree's resident, or null. For the worktree page and the
 // sidebar's rows, which show their face every day. Under this window's

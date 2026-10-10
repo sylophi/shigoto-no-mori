@@ -1,7 +1,7 @@
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { VillagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
-import { ConfettiView } from "./CelebrationView";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import { cn } from "../../lib/utils.ts";
+import type { VillagerRarity } from "../../lib/villagers/rarity.ts";
+import { ConfettiView } from "./CelebrationView.tsx";
 
 // A paper party hat, tipped on its side: a striped cone with a pom on
 // top, drawn flat in the palette doubutsu remaps.
