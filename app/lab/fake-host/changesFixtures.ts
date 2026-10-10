@@ -113,7 +113,7 @@ export function createFakeChanges(
         paths,
         hunks,
         amend,
-      }: CommitPicks & { summary: string; amend?: boolean },
+      }: CommitPicks & { summary?: string; amend?: boolean },
     ) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");
@@ -124,9 +124,11 @@ export function createFakeChanges(
       const hash = Math.random().toString(16).slice(2, 9);
       const total = (side: "additions" | "deletions") =>
         taken.reduce((n, f) => n + (f.counts?.[side] ?? 0), 0);
+      // An amend without a summary keeps the last commit's.
+      const subject = summary ?? worktree.recentCommits[0]?.subject ?? "";
       const made: CommitSummary = {
         hash,
-        subject: summary,
+        subject,
         author: "sylophi",
         date: new Date().toISOString(),
         additions: total("additions"),

@@ -1,5 +1,11 @@
 import { useRef, useState } from "react";
-import { GitCommitHorizontal, Loader2, PencilLine, X } from "lucide-react";
+import {
+  Combine,
+  GitCommitHorizontal,
+  Loader2,
+  PencilLine,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
@@ -25,6 +31,9 @@ const SUMMARY_SOFT_LIMIT = 72;
 //
 // Amending: the button turns into "Amend with ...", the file rules stay
 // the same, and a message-only amend on a clean tree is allowed too.
+//
+// Before the button, while the last commit can be amended, a second one
+// adds the ticked files to it in one click, its message left as it is.
 export function CommitComposer({
   files,
   included,
@@ -33,6 +42,7 @@ export function CommitComposer({
   pending,
   error,
   amend,
+  addToLast,
   onCommit,
 }: {
   files: ChangedFile[];
@@ -44,6 +54,8 @@ export function CommitComposer({
   error: Error | null;
   // The hash being rewritten, or null when this is a new commit.
   amend: { hash: string; onCancel: () => void } | null;
+  // The last commit's subject, when the ticked files can go into it.
+  addToLast: { subject: string; onAdd: () => void } | null;
   onCommit: () => void;
 }) {
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -212,27 +224,42 @@ export function CommitComposer({
           </pre>
         </ErrorBanner>
       )}
-      <SimpleTooltip tip={blocked}>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!canCommit}
-          onClick={submit}
-          className="w-full"
-        >
-          {pending ? (
-            <Loader2 aria-hidden className="animate-spin" />
-          ) : (
-            <GitCommitHorizontal aria-hidden />
-          )}
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          {canCommit && (
-            <Kbd className="bg-primary-foreground/20 text-primary-foreground">
-              ⌘↵
-            </Kbd>
-          )}
-        </Button>
-      </SimpleTooltip>
+      <div className="flex gap-1.5">
+        {addToLast && (
+          <SimpleTooltip tip={`Add to “${addToLast.subject}”`}>
+            <Button
+              type="button"
+              size="icon-sm"
+              disabled={pending || conflicted > 0 || included === 0}
+              onClick={addToLast.onAdd}
+              aria-label="Add to the last commit"
+            >
+              <Combine aria-hidden />
+            </Button>
+          </SimpleTooltip>
+        )}
+        <SimpleTooltip tip={blocked}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canCommit}
+            onClick={submit}
+            className="min-w-0 flex-1"
+          >
+            {pending ? (
+              <Loader2 aria-hidden className="animate-spin" />
+            ) : (
+              <GitCommitHorizontal aria-hidden />
+            )}
+            <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+            {canCommit && (
+              <Kbd className="bg-primary-foreground/20 text-primary-foreground">
+                ⌘↵
+              </Kbd>
+            )}
+          </Button>
+        </SimpleTooltip>
+      </div>
     </div>
   );
 }

@@ -187,6 +187,19 @@ function ChangesView({
     );
   };
 
+  // The ticked files into the last commit, its message kept. The draft
+  // is for the next commit, so it stays.
+  const onAddToLast = () =>
+    commit.mutate(
+      {
+        projectId,
+        worktreeId,
+        ...commitPicksOf(picks, files ?? []),
+        amend: true,
+      },
+      { onSuccess: () => setPicks(afterCommit) },
+    );
+
   const onDiscard = (paths: string[]) => {
     const count = paths.length;
     discardPaths(
@@ -308,6 +321,11 @@ function ChangesView({
                   hash: lastCommit.hash,
                   onCancel: () => setAmending(false),
                 }
+              : null
+          }
+          addToLast={
+            lastCommit && rewrite.canAmend && !amending
+              ? { subject: lastCommit.subject, onAdd: onAddToLast }
               : null
           }
           onCommit={onCommit}

@@ -138,7 +138,8 @@ export function useWorkingTreeMutation<
 interface CommitInput extends CommitPicks {
   projectId: string;
   worktreeId: string;
-  summary: string;
+  // Absent for an amend that keeps HEAD's message.
+  summary?: string;
   description?: string;
   amend?: boolean;
 }
@@ -150,8 +151,11 @@ export function useCommitChanges() {
     mutationFn: (input) => api.worktrees.commit(input),
     onSuccess: (data, vars) => {
       // The page empties its own draft state. This covers the stored
-      // copy when the page was left before the commit landed.
-      clearCommitDraft(vars.projectId, vars.worktreeId);
+      // copy when the page was left before the commit landed. A commit
+      // that kept HEAD's message never used the draft.
+      if (vars.summary !== undefined) {
+        clearCommitDraft(vars.projectId, vars.worktreeId);
+      }
       invalidateWorkingTree(queryClient, keys, vars, data.worktree);
     },
     // The index is set to the picks before git can refuse (a hook, no
