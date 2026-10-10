@@ -10,10 +10,16 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/mutagen-io/mutagen/pkg/encoding"
+	"github.com/mutagen-io/mutagen/pkg/filesystem"
+	"github.com/mutagen-io/mutagen/pkg/identifier"
 	"github.com/mutagen-io/mutagen/pkg/selection"
+	"github.com/mutagen-io/mutagen/pkg/synchronization"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -673,5 +679,113 @@ func TestMirrorSessionNameFolding(t *testing.T) {
 		if err := selection.EnsureNameValid(got); err != nil {
 			t.Errorf("mirrorSessionName(%q) = %q is still invalid: %v", in, got, err)
 		}
+	}
+}
+
+// A data dir v2 left: its sessions persisted with v2's labels. The
+// rewrite gives each its mode, keeps every other label, leaves a
+// session with a mode or no kind alone, and changes nothing on a
+// second pass.
+func TestRelabelV2Sessions(t *testing.T) {
+	dataDir := t.TempDir()
+	dir := filepath.Join(dataDir, filesystem.MutagenSynchronizationSessionsDirectoryName)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	persisted := map[string]map[string]string{
+		"mirror":   {"copySide": "remote", "localWorktreeId": "ba9876543210"},
+		"branch":   {"copySide": "remote", "mirrorBranch": "1", "ignoreMode": "gitignored"},
+		"transfer": {"transfer": "1", "localWorktreeId": "ba9876543210"},
+		"current":  {"mode": "mirror", "localWorktreeId": "ba9876543210"},
+		"kindless": {"localWorktreeId": "ba9876543210"},
+	}
+	ids := map[string]string{}
+	for name, labels := range persisted {
+		id, err := identifier.New(identifier.PrefixSynchronization)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[name] = id
+		session := &synchronization.Session{Identifier: id, Name: name, Labels: labels}
+		if err := encoding.MarshalAndSaveProtobuf(filepath.Join(dir, id), session); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := map[string]map[string]string{
+		"mirror":   {"mode": "mirror", "localWorktreeId": "ba9876543210"},
+		"branch":   {"mode": "mirror-branch", "ignoreMode": "gitignored"},
+		"transfer": {"mode": "transfer-1", "localWorktreeId": "ba9876543210"},
+		"current":  {"mode": "mirror", "localWorktreeId": "ba9876543210"},
+		"kindless": {"localWorktreeId": "ba9876543210"},
+	}
+	check := func() {
+		for name, id := range ids {
+			session := &synchronization.Session{}
+			if err := encoding.LoadAndUnmarshalProtobuf(filepath.Join(dir, id), session); err != nil {
+				t.Fatal(err)
+			}
+			if !maps.Equal(session.Labels, want[name]) {
+				t.Errorf("%s: labels %v, want %v", name, session.Labels, want[name])
+			}
+			if session.Name != name {
+				t.Errorf("%s: name became %q", name, session.Name)
+			}
+		}
+	}
+	var logs bytes.Buffer
+	relabelV2Sessions(dataDir, &logs)
+	check()
+	relabelV2Sessions(dataDir, &logs)
+	check()
+	if logs.Len() != 0 {
+		t.Errorf("relabel logged: %s", logs.String())
+	}
+}
+
+// A session a v2 daemon created, its kind in v2's labels, comes back
+// from a restart running, its labels rewritten into a mode.
+func TestMirrorV2SessionLoadsRelabelled(t *testing.T) {
+	gateway, _ := startTestGateway(t)
+	dataDir := filepath.Join(t.TempDir(), "mirror-data")
+	local := t.TempDir()
+	remote := t.TempDir()
+	writeFileT(t, filepath.Join(local, "a.txt"), "a\n")
+
+	first := startTestDaemon(t, gateway, dataDir)
+	created := first.call(mirrorRequest{
+		ID: "1", Op: "create",
+		LocalRoot:       local,
+		DeviceID:        "peer-1",
+		RemoteRoot:      remote,
+		Name:            "v2",
+		Labels:          map[string]string{"copySide": "remote", "mirrorBranch": "1", "localWorktreeId": "ba9876543210"},
+		LocalWorktreeID: "ba9876543210",
+	})
+	if created["ok"] != true {
+		t.Fatalf("create failed: %v", created["error"])
+	}
+	session, _ := created["session"].(string)
+	waitForT(t, 30*time.Second, "the first daemon to sync", func() bool {
+		return fileEquals(filepath.Join(remote, "a.txt"), "a\n")
+	})
+	first.requests.Close()
+	if err := <-first.done; err != nil {
+		t.Fatalf("first daemon exited with: %v", err)
+	}
+
+	second := startTestDaemon(t, gateway, dataDir)
+	var state map[string]any
+	waitForT(t, 45*time.Second, "the relabelled session watching", func() bool {
+		state = second.sessionState(session)
+		return state != nil && state["status"] == "watching"
+	})
+	labels, _ := state["labels"].(map[string]any)
+	want := map[string]any{"mode": "mirror-branch", "localWorktreeId": "ba9876543210"}
+	if !maps.Equal(labels, want) {
+		t.Fatalf("labels %v, want %v", labels, want)
+	}
+	second.requests.Close()
+	if err := <-second.done; err != nil {
+		t.Fatalf("second daemon exited with: %v", err)
 	}
 }

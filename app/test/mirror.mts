@@ -110,6 +110,7 @@ import {
   onMirrorBranch,
   ORIGINAL_GONE_DETAIL,
   settleMirrorBookkeeping,
+  transferModeFor,
   stopMirrorsForWorktree,
   whileRecreating,
 } from "@host/mirror/registry";
@@ -1100,11 +1101,9 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         fakeSession({
           session: "s-with-c",
           deviceId: "C",
-          // A session from before the mode label, which reads as a
-          // mirror through its old one.
           labels: {
             [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c",
-            copySide: "remote",
+            [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
       ],
@@ -1423,23 +1422,25 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
   }
 });
 
-const oldSession = (labels: Record<string, string>) =>
+const labelled = (labels: Record<string, string>) =>
   ({ session: "old", labels }) as MirrorSessionRaw;
 
-it("a session from before the mode label reads by its old labels, and a re-open writes them as a mode", () => {
+it("a session's mode says what it is, and a re-open carries it", () => {
   const token = beginTransfer();
-  const transfer = oldSession({ transfer: token });
+  const transfer = labelled({ [MIRROR_LABEL_MODE]: transferModeFor(token) });
   assert.ok(isTransferSession(transfer));
   assert.ok(!isOrphanedTransfer(transfer));
-  assert.ok(isOrphanedTransfer(oldSession({ transfer: "1" })));
-  const primary = oldSession({ copySide: "remote", mirrorBranch: "1" });
+  assert.ok(
+    isOrphanedTransfer(labelled({ [MIRROR_LABEL_MODE]: "transfer-1" })),
+  );
+  const primary = labelled({ [MIRROR_LABEL_MODE]: "mirror-branch" });
   assert.ok(onMirrorBranch(primary) && !isTransferSession(primary));
-  assert.ok(!onMirrorBranch(oldSession({ copySide: "remote" })));
-  // Neither a legacy mirror nor a mode this build does not know is a
+  assert.ok(!onMirrorBranch(labelled({ [MIRROR_LABEL_MODE]: "mirror" })));
+  // A session with no mode, or one this build does not know, is not a
   // mirror.
   assert.equal(
     mirrorSessions({
-      sessions: () => [oldSession({}), oldSession({ mode: "next" })],
+      sessions: () => [labelled({}), labelled({ [MIRROR_LABEL_MODE]: "next" })],
     }).length,
     0,
   );

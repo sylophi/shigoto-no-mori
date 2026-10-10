@@ -47,28 +47,19 @@ export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
 
 // What kind of session it is (MIRROR_LABEL_MODE), or null for a mode
-// this build does not know. A session
-// from before the mode label says so in three labels of its own: the
-// engine keeps a session's labels for its life, so they are read here
-// until step 7 of V3.md drops them with the legacy sweep. A recreate
-// rewrites them into a mode (carriedLabels).
+// this build does not know. A v2 session's labels are rewritten into a
+// mode when the daemon loads it (file-sync/engine.go relabelV2Sessions).
 type MirrorMode = "mirror" | "mirror-branch" | `transfer-${string}`;
 
 const TRANSFER_PREFIX = "transfer-";
 
 function modeOf(labels: Record<string, string>): MirrorMode | null {
   const mode = labels[MIRROR_LABEL_MODE];
-  if (mode !== undefined) {
-    return mode === "mirror" ||
-      mode === "mirror-branch" ||
-      mode.startsWith(TRANSFER_PREFIX)
-      ? (mode as MirrorMode)
-      : null;
-  }
-  const transfer = labels["transfer"];
-  if (transfer !== undefined) return `${TRANSFER_PREFIX}${transfer}`;
-  if (labels["copySide"] !== "remote") return null;
-  return labels["mirrorBranch"] === "1" ? "mirror-branch" : "mirror";
+  return mode === "mirror" ||
+    mode === "mirror-branch" ||
+    mode?.startsWith(TRANSFER_PREFIX) === true
+    ? (mode as MirrorMode)
+    : null;
 }
 
 export const transferModeFor = (token: string): MirrorMode =>
@@ -91,22 +82,14 @@ export const onMirrorBranch = (session: {
 }): boolean => modeOf(session.labels) === "mirror-branch";
 
 // The labels of the session that replaces `raw` on the same pair (a
-// re-open, a moved worktree): its own carried over, its kind as a mode,
-// and the session it replaces.
+// re-open, a moved worktree): its own carried over, and the session it
+// replaces.
 export function carriedLabels(
   raw: MirrorSessionRaw,
   changes: Record<string, string>,
 ): Record<string, string> {
-  const {
-    transfer: _transfer,
-    copySide: _copySide,
-    mirrorBranch: _mirrorBranch,
-    ...kept
-  } = raw.labels;
-  const mode = modeOf(raw.labels);
   return {
-    ...kept,
-    ...(mode === null ? {} : { [MIRROR_LABEL_MODE]: mode }),
+    ...raw.labels,
     [MIRROR_LABEL_REPLACES]: raw.session,
     ...changes,
   };
