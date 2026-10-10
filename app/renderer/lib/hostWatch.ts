@@ -1,5 +1,6 @@
-// Push-driven cache upkeep for ONE device, the same for this machine
-// and every peer: the host's broadcasts, received over whatever wire
+// Push-driven cache upkeep of the requests (React Query) for ONE device,
+// the same for this machine and every peer: the host's broadcasts,
+// received over whatever wire
 // the device's api rides (this machine's preload bridge, a peer's
 // direct session through the hub bridge's peerPush fan-out), land in
 // that device's cache the same way. The boot calls it for this machine
@@ -16,16 +17,17 @@
 // while a session was down, so this never needs to know a session's
 // lifecycle.
 //
-// Not here: the shared settings (a peer's copy is folded into this
-// device's own, lib/remote/sharedSettingsSync.ts), and the per-device
-// stores that keep a stream (store/scriptRuns.ts,
+// Not here: what the host serves as views (the lists of projects,
+// worktrees, mirrors and running scripts are atoms that stream, and
+// nothing invalidates them), the shared settings (a peer's copy is
+// folded into this device's own, lib/remote/sharedSettingsSync.ts), and
+// the per-device stores that keep a stream (store/scriptRuns.ts,
 // store/worktreeLifecycle.ts).
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import { noteGitFetchActive } from "@/hooks/git/useProjectGitFetching";
 import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import { writeMirrorList } from "@/hooks/remote/useMirrors";
 import { writeUpdaterState } from "@/hooks/system/useUpdater";
 import { invalidateWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import {
@@ -34,10 +36,7 @@ import {
   queryKeysFor,
 } from "@/lib/queryKeys";
 
-export type WatchedHostApi = Pick<
-  HostApi,
-  "git" | "githubCli" | "mirror" | "projects" | "scripts" | "updater"
->;
+export type WatchedHostApi = Pick<HostApi, "git" | "githubCli" | "updater">;
 
 // Subscribes for as long as the device's api lives: this machine's for
 // the life of the window, a peer's until the account is left (the
@@ -87,20 +86,6 @@ export function watchHost(
     // check that finishes with no Version section mounted.
     api.updater.onState((state) => {
       writeUpdaterState(queryClient, deviceId, state);
-    }),
-    // Its mirrors moved, the list riding the push whole (a host with
-    // no list to send omits it, and it is re-asked). Always on, so the
-    // sidebar's folds and a far end's page follow a device whose pages
-    // were never opened.
-    api.mirror.onChanged((list) => {
-      writeMirrorList(queryClient, deviceId, list);
-    }),
-    // A script started or ended there, whoever ran it: the Live page's
-    // list and the sidebar's Live mark re-read.
-    api.scripts.onChanged(() => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.runningScripts(),
-      });
     }),
   ];
   return () => {

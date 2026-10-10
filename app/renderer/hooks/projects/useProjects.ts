@@ -5,16 +5,16 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import {
-  type AddProjectPayload,
-  type CloneProjectPayload,
-  type CreateProjectPayload,
-  type Project,
-  ProjectSchema,
+import { callOf } from "@shigomori/contracts/contract";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import type {
+  AddProjectPayload,
+  CloneProjectPayload,
+  CreateProjectPayload,
+  Project,
 } from "@shigomori/contracts/schemas";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
-import * as Schema from "effect/Schema";
 import { reorderProjects } from "@shared/reorder";
 import {
   hostKeyDeviceId,
@@ -36,9 +36,8 @@ export const projectsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
     localDeviceId,
-    channel: "projects:watch",
+    view: callOf(projectsContract, "watch"),
     input: undefined,
-    schema: Schema.Array(ProjectSchema),
     onValue: (list) => noteProjects(deviceId, list),
     onStop: () => noteProjects(deviceId, null),
   }),

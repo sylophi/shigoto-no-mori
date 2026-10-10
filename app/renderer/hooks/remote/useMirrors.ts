@@ -1,8 +1,7 @@
 // Continuous worktree mirroring, renderer side. The list is
 // host-scoped (a device's mirrors and the streams it serves are its
-// own facts), read through the surrounding scope's api. Every device's
-// list is kept live by its own mirror:changed broadcast, through its
-// push watch (lib/hostWatch.ts), so nothing here subscribes. A mirror
+// own facts): each device's is its host's view (mirror:watch), streamed
+// as an atom, the scope's device's and every other host's alike. A mirror
 // runs on the device holding the original: the start is a send plus a
 // mirror on that device's daemon, this machine's for "Mirror to", the
 // peer's for "Mirror here" (asked through this device's startFrom,
@@ -11,19 +10,16 @@
 // they are mounted under, which is that device's: its own page, or the
 // far end's page re-scoped to it (useWorktreeMirrorLinks).
 import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
-import type { QueryClient } from "@tanstack/react-query";
 import { useRegistry } from "@/lib/runtime/viewHooks";
-import {
-  queryOptions,
-  skipToken,
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Atom from "effect/reactivity/Atom";
+import { callOf } from "@shigomori/contracts/contract";
+import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 import {
   isMirrorCopyStayed,
   isMirrorStopUnconfirmed,
+  mirrorContract,
   type MirrorDaemonStatus,
   mirrorEngineBlocker,
   type MirrorEvent,
@@ -44,12 +40,7 @@ import {
   useRemoteDeviceApi,
 } from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
-import {
-  invalidateHostDevice,
-  localDeviceId,
-  queryKeys,
-  queryKeysFor,
-} from "@/lib/queryKeys";
+import { invalidateHostDevice, localDeviceId } from "@/lib/queryKeys";
 import { forgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError, toast } from "@/lib/toast";
 
@@ -59,17 +50,26 @@ const EMPTY: MirrorListResult = {
   serving: [],
 };
 
-// The scoped device's mirror picture, kept fresh by its broadcast at
-// boot. The broadcast owns invalidation (the mutations below never
-// invalidate the list themselves), matching the port-forward hooks.
+// A device's mirror picture, as its host streams it.
+const mirrorsAtom = Atom.family((deviceId: string) =>
+  hostViewAtom({
+    deviceId,
+    localDeviceId,
+    view: callOf(mirrorContract, "watch"),
+    input: undefined,
+  }),
+);
+
+// One device's list: nothing is read for a device with no host behind
+// it (a peer never seen with a session, the web client's own scope).
+function useDeviceMirrors(deviceId: string, live: boolean) {
+  return useView(live ? mirrorsAtom(deviceId) : null).data;
+}
+
+// The scoped device's mirror picture.
 export function useMirrors(): MirrorListResult {
-  const { api, keys, hasHost } = useHostScope();
-  const query = useQuery({
-    queryKey: keys.mirrors(),
-    queryFn: () => api.mirror.list(),
-    enabled: hasHost,
-  });
-  return query.data ?? EMPTY;
+  const { deviceId, hasHost } = useHostScope();
+  return useDeviceMirrors(deviceId, hasHost) ?? EMPTY;
 }
 
 // Why this machine can't start a mirror of one of its worktrees right
@@ -77,18 +77,10 @@ export function useMirrors(): MirrorListResult {
 // the local daemon, so this reads this device's list whatever the
 // scope, and disables the button instead of letting the click end in
 // the host's refusal. A list not read yet blocks nothing: the refusal
-// still stands behind it. The broadcast keeps the list live, so a
-// mount need not re-ask (as in useOtherHostMirrors).
+// still stands behind it.
 export function useLocalMirrorBlocker(): string | undefined {
-  const query = useQuery({
-    queryKey: queryKeys.mirrors(),
-    queryFn: () => window.api.mirror.list(),
-    select: (list) => mirrorEngineBlocker(list.daemon),
-    enabled: hasLocalHost,
-    staleTime: 30_000,
-    meta: { silentError: true },
-  });
-  return query.data;
+  const list = useDeviceMirrors(localDeviceId, hasLocalHost);
+  return list === undefined ? undefined : mirrorEngineBlocker(list.daemon);
 }
 
 // The same for "Mirror here" on a peer's page, whose session runs on
@@ -96,39 +88,11 @@ export function useLocalMirrorBlocker(): string | undefined {
 // switch is not in the way: the ask invites the mirror, and the peer's
 // send lands here through the invitation (host/mirror/invites.ts).
 export function useMirrorHereBlocker(peerLabel: string): string | undefined {
-  const { api, keys } = useHostScope();
-  const engine = useQuery({
-    queryKey: keys.mirrors(),
-    queryFn: () => api.mirror.list(),
-    select: (list) => mirrorEngineBlocker(list.daemon, peerLabel),
-    staleTime: 30_000,
-    meta: { silentError: true },
-  });
-  return engine.data;
-}
-
-// One device's mirror:changed written into that device's list entry,
-// by the boot watchers. The broadcast carries the list, so it is
-// written with no round trip: a busy mirror fires several times a
-// second. An in-flight read is cancelled first, or its older answer
-// would land on top. A host sends none when it has no daemon yet or
-// its list failed to build or to validate (host/ipc/modules/mirror.ts
-// currentMirrorList, main/ipc/handlers.ts), and that one is re-asked.
-export function writeMirrorList(
-  queryClient: QueryClient,
-  deviceId: string,
-  list: MirrorListResult | undefined,
-): void {
-  const queryKey = queryKeysFor(deviceId).mirrors();
-  if (list === undefined) {
-    void queryClient.invalidateQueries({ queryKey, exact: true });
-    return;
-  }
-  // Exact: the history thread's key sits under the list's, and a
-  // cancel by prefix would cancel its read in flight too, leaving the
-  // panel on its skeleton.
-  void queryClient.cancelQueries({ queryKey, exact: true });
-  queryClient.setQueryData(queryKey, list);
+  const { deviceId, hasHost } = useHostScope();
+  const list = useDeviceMirrors(deviceId, hasHost);
+  return list === undefined
+    ? undefined
+    : mirrorEngineBlocker(list.daemon, peerLabel);
 }
 
 function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
@@ -176,25 +140,17 @@ function peerMirrorLinksOf(
 }
 
 // The pairs alone, for the always-mounted sidebar: the scoped device's
-// own projection and every other host's, merged. The lists move on
-// every cycle of a busy mirror (counts, status), and each projection
-// stays referentially the same through all of that (react-query
-// shares an unchanged select result structurally), so the merge, a
-// pure function of them the compiler memoizes, does too, and the rows
-// are not rebuilt for news they do not show. With nothing to add from
-// the others, the own projection is returned as is.
+// own projection and every other host's, merged, both pure functions of
+// the lists the compiler memoizes, so the rows are rebuilt only when a
+// list moves. With nothing to add from the others, the own projection
+// is returned as is.
 export function useMirrorLinks(): MirrorLink[] {
-  const { api, keys, hasHost, deviceId } = useHostScope();
-  const query = useQuery({
-    queryKey: keys.mirrors(),
-    queryFn: () => api.mirror.list(),
-    select: mirrorLinksOf,
-    enabled: hasHost,
-  });
+  const { hasHost, deviceId } = useHostScope();
+  const ownList = useDeviceMirrors(deviceId, hasHost);
   const others = useOtherHostMirrors(deviceId, (list, peerDeviceId) =>
     peerMirrorLinksOf(peerDeviceId, deviceId, list),
   );
-  const own = query.data ?? NO_LINKS;
+  const own = ownList === undefined ? NO_LINKS : mirrorLinksOf(ownList);
   if (others.every((other) => (other.data?.length ?? 0) === 0)) return own;
   const seen = new Set(own.map(linkKey));
   const links = [...own];
@@ -225,18 +181,15 @@ function useWorktreeMirror(worktree: Worktree): {
 
 // Every other host's mirror picture, projected by `select`: this
 // machine's (when the scope is a peer's) and every peer that hosts
-// projects. The scoped device's own list is useMirrors. Each list is
-// kept live by its device's broadcast at boot, so this only reads. A
-// peer with no session up (asleep, or still dialing) keeps its last
-// list, marked unreachable: the mirror it runs is still there as far
-// as anyone here can know, and dropping it would make its copy here
-// read as unmirrored exactly while its runner is away (the pair
-// unfolded, the start buttons back, no way to see the mirror). The
-// session's own state is the runner's last word, which the surfaces
-// say is stale. The projections come combined with their ids.
-// react-query shares an unchanged select result structurally, and the
-// combined array too, so both keep their references through cycles
-// that change nothing they show.
+// projects. The scoped device's own list is useMirrors. A peer with no
+// session up (asleep, or still dialing) keeps its last list while its
+// view is asked again: the mirror it runs is still there as far as
+// anyone here can know, and dropping it would make its copy here read
+// as unmirrored exactly while its runner is away (the pair unfolded,
+// the start buttons back, no way to see the mirror). The session's own
+// state is the runner's last word, which the surfaces say is stale.
+const hostsMirrorsAtom = viewsOf((deviceId) => mirrorsAtom(deviceId));
+
 function useOtherHostMirrors<T>(
   exceptDeviceId: string | undefined,
   select: (list: MirrorListResult, deviceId: string) => T,
@@ -248,31 +201,25 @@ function useOtherHostMirrors<T>(
   const candidates = useEveryHost().filter(
     (candidate) => candidate.deviceId !== exceptDeviceId,
   );
-  return useQueries({
-    queries: candidates.map(({ deviceId, api }) =>
-      queryOptions<MirrorListResult, Error, T>({
-        queryKey: queryKeysFor(deviceId).mirrors(),
-        queryFn: api === undefined ? skipToken : () => api.mirror.list(),
-        select: (list) => select(list, deviceId),
-        // The broadcast writes every change in, so a mount need not
-        // re-ask each peer. The session-landed sweep refetches after a
-        // blip (invalidateDeviceSession).
-        staleTime: 30_000,
-        meta: { silentError: true },
-      }),
+  const lists = useViews(
+    hostsMirrorsAtom,
+    candidates.map(({ deviceId, api }) =>
+      api === undefined ? null : deviceId,
     ),
-    combine: (results) =>
-      candidates.map(({ deviceId, api }, index) => ({
-        deviceId,
-        api,
-        data: results[index]?.data as T | undefined,
-      })),
+  );
+  return candidates.map(({ deviceId, api }, index) => {
+    const list = lists[index]?.data;
+    return {
+      deviceId,
+      api,
+      data: list === undefined ? undefined : select(list, deviceId),
+    };
   });
 }
 
 // Every host's mirror picture, this machine's included, for the Live
-// page and the sidebar's Live mark: the same reads as the others above
-// (the broadcasts keep each one live), with no device left out.
+// page and the sidebar's Live mark: the same views as the others above,
+// with no device left out.
 export function useEveryHostMirrors(): {
   deviceId: string;
   api: HostApi | undefined;
@@ -416,11 +363,8 @@ export function useStartMirror(move: Move) {
   });
 }
 
-// The mirror's thread of events (mirror:history), read through the
-// scope like the list and refreshed by the same broadcast: the key
-// sits under the mirrors prefix the list's invalidation sweeps.
-// The broadcast carries the list alone, so the thread is re-read on a
-// slow beat while it is on screen.
+// The mirror's thread of events (mirror:history), a request read
+// through the scope and re-read on a slow beat while it is on screen.
 export function useMirrorHistory(localWorktreeId: string) {
   const { api, keys } = useHostScope();
   return useQuery<readonly MirrorEvent[]>({

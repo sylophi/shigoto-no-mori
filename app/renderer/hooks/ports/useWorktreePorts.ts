@@ -1,36 +1,38 @@
 // The worktree's port list off the scoped host (packages/contracts/src/modules/
 // ports.ts): port-pool's allocation plus the user-added entries, each
-// with a loopback liveness probe. Polled while mounted so a dev server
-// starting or stopping on the host shows up on its own. The interval is
-// the whole cost, since the host read is one small file plus a handful
-// of instant loopback dials. The mounts are the worktree page's Ports
-// section, the Ports dialog and the Live page's cards of worktrees
-// running a script, so the timer lives as long as one of those is open.
-// A worktree with no ports (or none read yet) has nothing to probe, so
-// it polls slowly, enough to pick up a port-pool allocation or a peer
-// that answers again. Adding a port refetches at once
-// (useWorktreeDataWrite).
-import { useQuery } from "@tanstack/react-query";
+// with a loopback liveness probe. It is the host's view (ports:watch),
+// which probes again every few seconds while anyone reads it, so a dev
+// server starting or stopping on the host shows up on its own, and an
+// added port with the next write of the worktree's data. The readers are
+// the worktree page's Ports section, the Ports dialog and the Live page's
+// cards of worktrees running a script.
+import { callOf } from "@shigomori/contracts/contract";
+import { portsContract } from "@shigomori/contracts/modules/ports";
 import type { WorktreePortsResult } from "@shigomori/contracts/schemas";
+import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { localDeviceId } from "@/lib/queryKeys";
+import { hostViewAtom } from "@/lib/runtime/atoms";
+import { type LiveViewState, useView } from "@/lib/runtime/viewHooks";
 
-const PORTS_POLL_MS = 5_000;
-const EMPTY_POLL_MS = 20_000;
-
-export function useWorktreePorts(worktree: { projectId: string; id: string }) {
-  const { api, keys } = useHostScope();
-  return useQuery<WorktreePortsResult>({
-    queryKey: keys.worktreePorts(worktree.projectId, worktree.id),
-    queryFn: () =>
-      api.ports.list({
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-      }),
-    refetchInterval: (query) =>
-      query.state.data?.ports.length ? PORTS_POLL_MS : EMPTY_POLL_MS,
-    // An unreachable peer fails every poll: retrying three times per
-    // tick would only stack noise on a failure the next tick repeats.
-    retry: false,
-    meta: { silentError: true },
+const worktreePortsAtom = Atom.family((key: string) => {
+  const [deviceId = "", projectId = "", worktreeId = ""] = key.split("\n");
+  return hostViewAtom({
+    deviceId,
+    localDeviceId,
+    view: callOf(portsContract, "watch"),
+    input: { projectId, worktreeId },
   });
+});
+
+export function useWorktreePorts(worktree: {
+  projectId: string;
+  id: string;
+}): LiveViewState<WorktreePortsResult> {
+  const { deviceId, hasHost } = useHostScope();
+  return useView(
+    hasHost
+      ? worktreePortsAtom(`${deviceId}\n${worktree.projectId}\n${worktree.id}`)
+      : null,
+  );
 }

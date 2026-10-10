@@ -1,10 +1,7 @@
-import {
-  type Project,
-  type Worktree,
-  WorktreeSchema,
-} from "@shigomori/contracts/schemas";
+import { callOf } from "@shigomori/contracts/contract";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
-import * as Schema from "effect/Schema";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -36,9 +33,8 @@ export const worktreesAtom = Atom.family((key: string) => {
   return hostViewAtom({
     deviceId,
     localDeviceId,
-    channel: "worktrees:watch",
+    view: callOf(worktreesContract, "watch"),
     input: { projectId },
-    schema: Schema.Array(WorktreeSchema),
     onValue: (list) => noteWorktreeList({ key, deviceId, list }),
     onStop: () => noteWorktreeList({ key, deviceId, list: null }),
   });
