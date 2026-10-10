@@ -9,7 +9,6 @@
 // Durable Objects, Clerk). It cannot stop the Worker invocation itself
 // from being billed, only a WAF rule at the zone can, see README.md
 // (Abuse limits).
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -48,7 +47,7 @@ import {
 } from "@shigomori/contracts/hubProtocol";
 import { randomBase64url, sha256Hex } from "./crypto.ts";
 import { type Env, WaitUntil, WorkerEnv } from "./env.ts";
-import { CONNECT_RANDOM_PARAM } from "./hubObject.ts";
+import { CONNECT_RANDOM_PARAM, type EnrollOutcome } from "./hubObject.ts";
 import * as Registry from "./Registry.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
@@ -145,6 +144,7 @@ const deviceAuth = Layer.effect(
             // The web client enrolls every browser profile as platform
             // "web", which is what makes it a web device.
             kind: device.platform === "web" ? "web" : "desktop",
+            credentialHash: hash,
           });
         }).pipe(Effect.catchTags({ RegistryError: Effect.die })),
     });
@@ -205,26 +205,30 @@ const handlers = Effect.gen(function* () {
   const registry = yield* Registry.Registry;
   const cfFetch = yield* CfFetch;
 
-  // Who is online in the account, from its hub object.
-  const presence = (accountId: string) =>
-    Effect.tryPromise(() => accountHub(env, accountId).online()).pipe(
-      Effect.map((online) => new Set(online)),
-    );
-
-  // Presence is advisory in a device list, so a hub object hiccup reads
-  // as every device offline rather than failing the list. At enroll it
-  // matters most: the upsert has already committed the new credential,
-  // and a failure would strand the client without it.
+  // Who is online in the account, from its hub object. Presence is
+  // advisory in a device list, so a hub object hiccup reads as every
+  // device offline rather than failing the list.
   const presenceOrNone = (accountId: string) =>
-    presence(accountId).pipe(
+    Effect.tryPromise(() => accountHub(env, accountId).online()).pipe(
+      Effect.map((online): ReadonlySet<string> => new Set(online)),
       Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
     );
 
-  // The revocation itself, shared by the revoke route and the enroll
-  // cap's eviction. The object deletes the row scoped to the account,
-  // so a row concurrently re-enrolled under another account survives
-  // a stale revoke. The tunnel teardown is best-effort and finishes
-  // after the response.
+  // A removed device's tunnel, best-effort, finishing after the
+  // response.
+  const tearDownTunnel = Effect.fn("tearDownTunnel")(function* (
+    accountId: string,
+    deviceId: string,
+  ) {
+    const cf = tunnelEnvOf(env);
+    if (cf === null) return;
+    const waitUntil = yield* WaitUntil;
+    waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
+  });
+
+  // The revocation itself, for the revoke route. The object deletes the
+  // row scoped to the account, so a row concurrently re-enrolled under
+  // another account survives a stale revoke.
   const revokeAccountDevice = Effect.fn("revokeAccountDevice")(function* (
     accountId: string,
     deviceId: string,
@@ -232,11 +236,7 @@ const handlers = Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       accountHub(env, accountId).revoke(deviceId, accountId),
     );
-    const cf = tunnelEnvOf(env);
-    if (cf !== null) {
-      const waitUntil = yield* WaitUntil;
-      waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
-    }
+    yield* tearDownTunnel(accountId, deviceId);
   });
 
   const enrollment = HttpApiBuilder.group(HubApi, "enrollment", (handle) =>
@@ -244,68 +244,36 @@ const handlers = Effect.gen(function* () {
       Effect.gen(function* () {
         const { accountId } = yield* HubLogin;
         const { deviceId, name, platform, icon } = payload;
-        const existing = yield* registry.byId(deviceId);
-        if (existing !== null && existing.account_id !== accountId) {
-          return yield* new HubDeviceEnrolledElsewhereError();
-        }
-        // The cap counts new devices only, so a full account can still
-        // re-enroll the devices it has. A pre-read rather than a SQL
-        // guard: two racing enrolls can land one over, which a quota
-        // shrugs off.
-        //
-        // A full account makes room by dropping its stalest offline
-        // device rather than refusing. Removing a device takes a device
-        // credential, and a browser profile that cleared its storage has
-        // lost its own, so a refusal could lock an account out with
-        // nothing left to remove devices from. The login authorizing
-        // this enroll is the account owner's, and the evicted device
-        // only has to sign in again.
-        if (existing === null) {
-          const stalestFirst = yield* registry.stalestFirst(accountId);
-          if (stalestFirst.length >= MAX_ACCOUNT_DEVICES) {
-            // Not the advisory presence: failing open to "all offline"
-            // would evict the stalest device whether or not it is
-            // online. A presence the object cannot answer refuses the
-            // enroll instead.
-            const online = yield* presence(accountId);
-            const evict = stalestFirst.find((id) => !online.has(id));
-            if (evict === undefined) {
-              return yield* new HubAccountFullError({
-                limit: MAX_ACCOUNT_DEVICES,
-              });
-            }
-            yield* revokeAccountDevice(accountId, evict);
-          }
-        }
         // Enrolling again rotates the credential: exactly one credential
         // per device is valid at any time, because only one hash is
-        // stored.
+        // stored. The account's object admits the device against the
+        // cap and writes it in one step (DeviceHub.enroll).
         const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
-        const createdAt =
-          existing?.created_at ?? (yield* Clock.currentTimeMillis);
-        const [wrote, online] = yield* Effect.all(
-          [
-            Effect.flatMap(
-              Effect.promise(() => sha256Hex(credential)),
-              (credentialHash) =>
-                registry.upsert({
-                  deviceId,
-                  accountId,
-                  name,
-                  platform,
-                  icon,
-                  credentialHash,
-                  createdAt,
-                }),
-            ),
-            presenceOrNone(accountId),
-          ],
-          { concurrency: 2 },
+        const credentialHash = yield* Effect.promise(() =>
+          sha256Hex(credential),
         );
-        // The statement's account guard is the real enforcement against
-        // a cross-account enroll racing the pre-read above: zero changes
-        // means it suppressed one.
-        if (!wrote) return yield* new HubDeviceEnrolledElsewhereError();
+        const outcome = yield* Effect.tryPromise(
+          async (): Promise<EnrollOutcome> =>
+            await accountHub(env, accountId).enroll({
+              deviceId,
+              accountId,
+              name,
+              platform,
+              icon,
+              credentialHash,
+            }),
+        );
+        if (outcome.status === "enrolled-elsewhere") {
+          return yield* new HubDeviceEnrolledElsewhereError();
+        }
+        if (outcome.status === "account-full") {
+          return yield* new HubAccountFullError({
+            limit: MAX_ACCOUNT_DEVICES,
+          });
+        }
+        if (outcome.evicted !== null) {
+          yield* tearDownTunnel(accountId, outcome.evicted);
+        }
         return {
           credential,
           device: toDeviceInfo(
@@ -314,18 +282,13 @@ const handlers = Effect.gen(function* () {
               name,
               platform,
               icon,
-              created_at: createdAt,
-              last_seen_at: existing?.last_seen_at ?? null,
+              created_at: outcome.createdAt,
+              last_seen_at: outcome.lastSeenAt,
             },
-            online,
+            new Set(outcome.online),
           ),
         };
-      }).pipe(
-        Effect.catchTags({
-          RegistryError: unavailable("enroll"),
-          UnknownError: unavailable("enroll"),
-        }),
-      ),
+      }).pipe(Effect.catchTags({ UnknownError: unavailable("enroll") })),
     ),
   );
 
@@ -389,6 +352,7 @@ const handlers = Effect.gen(function* () {
                 deviceId: device.deviceId,
                 kind: device.kind,
                 connectionId: payload.connectionId,
+                credentialHash: device.credentialHash,
               },
               ttlMs,
             ),
