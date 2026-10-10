@@ -73,6 +73,7 @@ export const GRANTS = {
       "worktrees:push",
       "worktrees:pushForce",
       "worktrees:relocate",
+      "worktrees:rename",
       "worktrees:renameBranch",
       "worktrees:resetSoft",
       "worktrees:resolveConflict",
