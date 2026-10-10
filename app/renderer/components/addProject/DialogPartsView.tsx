@@ -15,7 +15,7 @@ import { SimpleTooltip, type WithoutTitle } from "@/components/ui/tooltip";
 // button that makes it, the way the folder browser's row reads. Inside
 // a cmdk Command (`combobox`), the input is the list's, and ↑↓ move
 // through it.
-export function ActionInputRow({
+export function ActionInputRowView({
   value,
   onChange,
   placeholder,
@@ -72,7 +72,7 @@ export function ActionInputRow({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-      <KeyedButton
+      <KeyedButtonView
         icon={icon}
         label={label}
         keys="↩"
@@ -85,7 +85,7 @@ export function ActionInputRow({
 }
 
 // The dialog's primary action, with the key that also runs it.
-export function KeyedButton({
+export function KeyedButtonView({
   icon,
   label,
   keys,
@@ -113,7 +113,7 @@ export function KeyedButton({
 // Where a new checkout lands, and the way to put it somewhere else.
 // The folder opens on where the device already keeps its repos
 // (cloneDestination.ts), so the common case needs no pick.
-export function DestinationRow({
+export function DestinationRowView({
   dest,
   onChangeParent,
 }: {
@@ -144,7 +144,7 @@ export function DestinationRow({
 
 // The clone's and the new repository's footer: the key that submits,
 // and the options that ride along (the terrier opt-in).
-export function FormFooter({
+export function FormFooterView({
   label,
   children,
 }: {
@@ -166,7 +166,7 @@ export function FormFooter({
 // cancel: neither can be called back once the device has started it.
 // Closing the dialog leaves it running, and the project shows up in the
 // sidebar when it lands.
-export function ProgressPanel({
+export function ProgressPanelView({
   icon,
   title,
   status,

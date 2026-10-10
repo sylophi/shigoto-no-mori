@@ -2,8 +2,8 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
-import { KeyedButton } from "./DialogParts";
-import { ResultRow } from "./ResultRow";
+import { KeyedButtonView } from "./DialogPartsView";
+import { ResultRowView } from "./ResultRowView";
 import { IconButton } from "@/components/ui/icon-button";
 import { MODAL_COMMAND_CLASS } from "@/components/ui/cmdk-classes";
 
@@ -24,7 +24,7 @@ interface ResultsPanelProps {
   terrierOptIn: ReactNode;
 }
 
-export function ResultsPanel(props: ResultsPanelProps) {
+export function ResultsPanelView(props: ResultsPanelProps) {
   const allSelected =
     props.results.length > 0 && props.selected.size === props.results.length;
 
@@ -82,7 +82,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
             </div>
           ) : (
             props.results.map((path) => (
-              <ResultRow
+              <ResultRowView
                 key={path}
                 path={path}
                 scanRoot={props.scanRoot}
@@ -99,7 +99,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
           className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
         >
           {props.terrierOptIn}
-          <KeyedButton
+          <KeyedButtonView
             label={
               props.bulkAdding
                 ? "Adding…"
