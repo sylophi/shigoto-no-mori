@@ -1,0 +1,50 @@
+name: Scenes
+
+# The scene comparison (app/lab/scene-compare/README.md), on demand
+# only: every scene in both themes, this branch against a base, with the
+# differing pairs as an artifact. Nothing runs it on a push.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: The ref to compare against
+        required: true
+        default: origin/release/v3
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The whole history, so the base ref resolves.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # The runner's own Chrome draws both sides. The base goes through
+      # the environment rather than into the script's text.
+      - name: Compare
+        run: pnpm scenes:compare --base "$BASE"
+        env:
+          BASE: ${{ inputs.base }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: scene-comparison
+          path: app/lab/scene-compare/report/
+          if-no-files-found: ignore
