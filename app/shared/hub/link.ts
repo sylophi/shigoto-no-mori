@@ -169,6 +169,8 @@ export type HubLink = {
     timeoutMs: number,
   ): Promise<unknown>;
   onlineDeviceIds(): readonly string[];
+  // The key the latest roster names for an online device.
+  publicKeyOf(deviceId: string): Uint8Array | undefined;
   // The socket is gone: every pending ask rejects.
   teardown(): void;
 };
@@ -508,6 +510,10 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
 
     onlineDeviceIds(): readonly string[] {
       return [...online.keys()].toSorted();
+    },
+
+    publicKeyOf(deviceId: string): Uint8Array | undefined {
+      return online.get(deviceId);
     },
 
     teardown(): void {

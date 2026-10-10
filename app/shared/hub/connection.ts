@@ -48,6 +48,7 @@ import {
 import { createLimiter } from "@shared/util/limit";
 import { log } from "@shared/log";
 import { deviceKeyPair } from "@shared/crypto/deviceKey";
+import type { KeyPair } from "@shared/crypto/noise";
 
 // The deadline for one dial phase: the ticket mint, and separately the
 // socket accept (the first presence envelope). Named rather than a bare
@@ -109,6 +110,11 @@ type HubConnectionCore = {
   refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
   stop(): Promise<void>;
   status(): HubConnectionStatus;
+  // What the device link's handshakes are made of: this device's key
+  // pair, and the key the hub's roster names for a peer. Null and
+  // undefined while signed out or the socket is down.
+  localKey(): KeyPair | null;
+  peerKey(deviceId: string): Uint8Array | undefined;
   // Ask the device hub to prove the socket is still there NOW, under
   // the short probe window: fired on a wake from sleep or a tab coming
   // back. A socket that fails it is torn down and reported to the
@@ -446,6 +452,14 @@ export function createHubConnectionCore(
   }
 
   return {
+    localKey() {
+      return current === null ? null : deviceKeyPair(current.opts.deviceKey);
+    },
+
+    peerKey(deviceId) {
+      return link?.publicKeyOf(deviceId);
+    },
+
     askConnectInfo(deviceId, input, timeoutMs) {
       if (link === null) {
         return Promise.reject(new HubLinkDownError());
