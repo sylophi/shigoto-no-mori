@@ -438,7 +438,7 @@ const tokenExpiry: Scenario = {
   does: "Every tab's wall clock jumps two hours ahead, past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock; then the tab mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
   boundMs: 30_000,
   async run(lab) {
-    await forEachTab(lab, (tab) => tab.shiftClock(2 * 60 * 60 * 1000));
+    await forEachTab(lab, (tab) => tab.advanceClock(2 * 60 * 60 * 1000));
     lab.note("clocks moved two hours ahead");
     lab.network.down();
     await forEachTab(lab, (tab) => tab.setOffline(true));
@@ -458,7 +458,6 @@ const tokenExpiry: Scenario = {
       if (!fresh) throw new Error(`${tab.name} could not mint a fresh token`);
     });
     lab.note("fresh Clerk tokens minted and the device list read");
-    await forEachTab(lab, (tab) => tab.shiftClock(0));
     return restored;
   },
 };
