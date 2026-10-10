@@ -1,6 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { PathSpan } from "@/components/ui/path-span";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
@@ -9,10 +6,10 @@ import {
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
+import { WorktreeLocationFieldView } from "./WorktreeLocationFieldView";
 
-// Which layout the project's worktrees use, as the saved config has it.
-// The pick itself lives on a subpage: changing it can move worktrees,
-// and the subpage lists each one with where it goes.
+// The project's worktree location (WorktreeLocationFieldView), off the
+// saved config and this device's layout.
 export function WorktreeLocationField({
   projectId,
   projectPath,
@@ -41,41 +38,15 @@ export function WorktreeLocationField({
     layout === "managed-root" && device
       ? managedDriveBaseFor(projectPath, device)
       : null;
-  const shownPath = customPath || drivePath;
 
   return (
-    <div className="space-y-1.5">
-      <span className="block text-sm font-medium">Location</span>
-      <div className="flex items-center gap-3">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-sm">{option?.label}</span>
-          {shownPath ? (
-            <PathSpan
-              path={shownPath}
-              home={home}
-              className="min-w-0 truncate font-mono text-xs text-muted-foreground"
-            />
-          ) : (
-            option?.description && (
-              <span className="text-xs text-muted-foreground">
-                {option.description}
-              </span>
-            )
-          )}
-        </div>
-        <SimpleTooltip
-          tip={blocked ? "Save or discard your changes first" : undefined}
-        >
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={blocked}
-            onClick={() => toProjectPage("worktreeLocation", projectId)}
-          >
-            Change…
-          </Button>
-        </SimpleTooltip>
-      </div>
-    </div>
+    <WorktreeLocationFieldView
+      label={option?.label}
+      description={option?.description}
+      shownPath={customPath || drivePath}
+      home={home}
+      blocked={blocked}
+      onChange={() => toProjectPage("worktreeLocation", projectId)}
+    />
   );
 }

@@ -28,7 +28,7 @@ const OPTIONS = [
   },
 ] as const;
 
-export function ModePicker({ mode, onChange }: ModePickerProps) {
+export function ModePickerView({ mode, onChange }: ModePickerProps) {
   return (
     <SegmentedControl
       aria-label="Carry-over mode"

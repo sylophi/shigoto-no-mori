@@ -17,7 +17,7 @@ interface ConvertRowProps {
   onToggle: () => void;
 }
 
-export function ConvertRow({
+export function ConvertRowView({
   worktree,
   checked,
   status,

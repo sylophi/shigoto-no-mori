@@ -10,7 +10,7 @@ interface OnlyInWorktreesProps {
 
 // Names the worktrees a path was found in when the main checkout
 // doesn't have it. Renders nothing otherwise.
-export function OnlyInWorktrees({
+export function OnlyInWorktreesView({
   inPrimary,
   worktrees,
   className,
@@ -28,7 +28,7 @@ export function OnlyInWorktrees({
 
 // Names where a path was found across the devices holding the repo,
 // each with its worktrees when its main checkout doesn't have it.
-export function FoundOnDevices({
+export function FoundOnDevicesView({
   holders,
   className,
 }: {
