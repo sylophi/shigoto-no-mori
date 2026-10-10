@@ -11,13 +11,15 @@
 // pill spells its name out, so the narrowed forest always says which
 // machine it is showing. A radio group: one pick at a time, arrows
 // move it, the way the device tabs do.
+import { Radio } from "@base-ui/react/radio";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceLeadView } from "../shared/DeviceGlyphView.tsx";
 import type { DeviceRosterEntry } from "../../lib/deviceRoster.ts";
 import { Button } from "../../primitives/button.tsx";
 import type { StatusTone } from "../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { useRovingPick } from "../../hooks/useRovingPick.ts";
+import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
 import { deviceAbbrev } from "../../lib/deviceAbbrev.ts";
 import { deviceTitle } from "../../lib/deviceStatus.ts";
 import { cn } from "../../lib/utils.ts";
@@ -66,19 +68,18 @@ export function DeviceFilterBarView({
     ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
   ];
   const pick = (id: string) => onPick(id === ALL_DEVICES ? null : id);
-  const { listRef, onKeyDown } = useRovingPick({
-    ids: pills.map((pill) => pill.id),
+  const listRef = useRevealPicked(
     selectedId,
-    onSelect: pick,
-    pickedSelector: '[aria-checked="true"]',
-  });
+    pills.map((pill) => pill.id),
+  );
   // One machine is nothing to filter by.
   if (choices.length < 2) return null;
 
   return (
-    <div
+    <RadioGroup
       ref={listRef}
-      role="radiogroup"
+      value={selectedId}
+      onValueChange={(id) => pick(id as string)}
       aria-label="Show worktrees on"
       data-slot="sidebar-device-filter"
       // Scrolls sideways past the edge rather than wrapping, so the
@@ -88,16 +89,12 @@ export function DeviceFilterBarView({
       {pills.map((pill) => {
         const checked = pill.id === selectedId;
         return (
-          <Button
+          <Radio.Root
             key={pill.id}
-            variant="outline"
-            size="xs"
-            role="radio"
-            aria-checked={checked}
+            value={pill.id}
+            nativeButton
+            render={<Button variant="outline" size="xs" />}
             aria-label={pill.ariaLabel}
-            tabIndex={checked ? 0 : -1}
-            onClick={() => pick(pill.id)}
-            onKeyDown={onKeyDown}
             // The picked pill wears the accent fill every selection in
             // the app wears, hover included, over the variant's own
             // fill.
@@ -113,9 +110,9 @@ export function DeviceFilterBarView({
             <SimpleTooltip whenTruncated tip={pill.label}>
               <span className="max-w-32 truncate">{pill.label}</span>
             </SimpleTooltip>
-          </Button>
+          </Radio.Root>
         );
       })}
-    </div>
+    </RadioGroup>
   );
 }

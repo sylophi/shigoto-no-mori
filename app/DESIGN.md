@@ -108,6 +108,15 @@ Rules that keep both themes cheap to maintain:
   `packages/ui/src/styles/doubutsu.css`; `pnpm test theme-contract` (run
   by lefthook pre-commit) verifies every hook still exists. If it fails,
   either restore the hook or update the CSS + CONTRACT together.
+- **A dialog is a `ModalShell`** (`primitives/modal-shell.tsx`), Base
+  UI's dialog: focus stays inside it while it is open and goes back to
+  what opened it when it closes, and the page under it is hidden from
+  assistive tech. Its `label` is its name for a screen reader, the
+  title it draws. A one-row pick is Base UI's too: `Tabs` for what
+  switches the body under it (a page's device tabs, the terminal
+  tabs), `RadioGroup` for a setting (the segmented control, the
+  sidebar's device filter). They carry the roles and the arrow keys,
+  and `useRevealPicked` keeps the picked item in view.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball
   all four modes, and a palette or two. In dev builds: Ctrl+T toggles
   light/dark, Ctrl+D toggles doubutsu, Ctrl+P cycles its palette,

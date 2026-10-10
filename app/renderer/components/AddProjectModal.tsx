@@ -88,6 +88,7 @@ function AddProjectDialog() {
 
   return (
     <ModalShell
+      label="Add project"
       onClose={onClose}
       onEscape={() => (escapeRef.current ?? onClose)()}
     >
