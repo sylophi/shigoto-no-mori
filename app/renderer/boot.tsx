@@ -27,6 +27,7 @@ import { AppToaster } from "./components/AppChrome";
 import { UpdateNews } from "./components/UpdateNews";
 import { ErrorDetailsHost } from "@shigomori/ui/primitives/inline-error.tsx";
 import { OutsideProvider } from "@shigomori/ui/outside.tsx";
+import { ThemeRootProvider } from "@shigomori/ui/root.tsx";
 import {
   ClerkGate,
   type ClerkProviderComponent,
@@ -58,6 +59,7 @@ import {
   isOwnDeletePending,
 } from "./hooks/worktrees/useWorktreeMutations";
 import "./app.css";
+import { themeRoot } from "./lib/themeRoot";
 
 // Not render blocking, unlike app.css (see fonts.css). A failed fetch
 // leaves the fallback face, which is what text paints in meanwhile.
@@ -156,22 +158,20 @@ export function bootApp({
   // and on the desktop the notifications.
   startAgentWatch(queryClient);
 
-  const rootElement = document.getElementById("root");
-  if (!rootElement) {
-    throw new Error("#root element missing from index.html");
-  }
-
+  const rootElement = themeRoot();
   createRoot(rootElement).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <OutsideProvider value={outside}>
-          <ClerkGate Provider={ClerkProvider}>
-            <App router={router} />
-          </ClerkGate>
-          <AppToaster />
-          <UpdateNews />
-          <ErrorDetailsHost />
-        </OutsideProvider>
+        <ThemeRootProvider value={rootElement}>
+          <OutsideProvider value={outside}>
+            <ClerkGate Provider={ClerkProvider}>
+              <App router={router} />
+            </ClerkGate>
+            <AppToaster />
+            <UpdateNews />
+            <ErrorDetailsHost />
+          </OutsideProvider>
+        </ThemeRootProvider>
       </QueryClientProvider>
     </StrictMode>,
   );
@@ -180,7 +180,7 @@ export function bootApp({
 }
 
 function syncFocusClass(focused: boolean): void {
-  document.documentElement.classList.toggle("unfocused", !focused);
+  themeRoot().classList.toggle("unfocused", !focused);
 }
 
 // The boot-scope subscriptions about THIS machine's projects. Single

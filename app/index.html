@@ -1,42 +1,9 @@
 <!doctype html>
-<!-- data-shell="desktop" keeps the page transparent over the window's
-     vibrancy (index.css), where a browser tab paints its canvas. -->
-<html lang="en" data-shell="desktop">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shigoto no Mori</title>
-    <script>
-      // Apply persisted theme synchronously before any CSS or React runs, so
-      // the first paint matches the user's choice. The window itself is
-      // transparent (vibrancy: "sidebar" in main/index.ts); the opaque
-      // background is painted by the main detail pane only.
-      (function () {
-        try {
-          // Key must match THEME_STORAGE_KEY in renderer/hooks/ui/useTheme.tsx.
-          var stored = localStorage.getItem("shigomori.theme") || "system";
-          var dark =
-            stored === "dark" ||
-            (stored === "system" &&
-              window.matchMedia("(prefers-color-scheme: dark)").matches);
-          var html = document.documentElement;
-          if (dark) html.classList.add("dark");
-          html.style.colorScheme = dark ? "dark" : "light";
-          // The overlay and its palette, as web/public/boot-theme.js
-          // reads them: on unless opted out, wearing the saved pick for
-          // this appearance, else the list's default.
-          if (localStorage.getItem("shigomori.doubutsu") !== "false") {
-            html.classList.add("doubutsu");
-            html.dataset.palette =
-              localStorage.getItem(
-                dark ? "shigomori.darkTheme" : "shigomori.lightTheme",
-              ) || (dark ? "charcoal" : "cream");
-          }
-        } catch (_) {
-          // localStorage may be unavailable in some contexts; render light.
-        }
-      })();
-    </script>
     <script type="module">
       // react-grab: ⌘C / Ctrl+C on a hovered element copies its source
       // location (file + component) for pasting into an AI coding agent.
@@ -47,7 +14,42 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The theme root (@shigomori/ui's root.tsx). data-shell="desktop"
+         keeps it transparent over the window's vibrancy (index.css),
+         where a browser tab paints its canvas. -->
+    <div id="root" data-theme-scope data-shell="desktop"></div>
+    <script>
+      // Apply persisted theme to the root element synchronously, before
+      // React runs, so the first paint matches the user's choice. The
+      // window itself is transparent (vibrancy: "sidebar" in
+      // main/index.ts); the opaque background is painted by the main
+      // detail pane only.
+      (function () {
+        try {
+          // Key must match THEME_STORAGE_KEY in renderer/hooks/ui/useTheme.tsx.
+          var stored = localStorage.getItem("shigomori.theme") || "system";
+          var dark =
+            stored === "dark" ||
+            (stored === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var root = document.getElementById("root");
+          if (dark) root.classList.add("dark");
+          root.style.colorScheme = dark ? "dark" : "light";
+          // The overlay and its palette, as web/public/boot-theme.js
+          // reads them: on unless opted out, wearing the saved pick for
+          // this appearance, else the list's default.
+          if (localStorage.getItem("shigomori.doubutsu") !== "false") {
+            root.classList.add("doubutsu");
+            root.dataset.palette =
+              localStorage.getItem(
+                dark ? "shigomori.darkTheme" : "shigomori.lightTheme",
+              ) || (dark ? "charcoal" : "cream");
+          }
+        } catch (_) {
+          // localStorage may be unavailable in some contexts; render light.
+        }
+      })();
+    </script>
     <script type="module" src="/renderer/index.tsx"></script>
   </body>
 </html>

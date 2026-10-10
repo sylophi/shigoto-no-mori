@@ -14,8 +14,9 @@ import { cn } from "@shigomori/ui/lib/utils.ts";
 import { villagerManifest } from "@shared/villagers/manifest";
 import { fakeHasVillagerData } from "./villagerData";
 
-const doubutsu = document.documentElement.classList.contains("doubutsu");
-const posedDark = document.documentElement.classList.contains("dark");
+const themeRoot = document.getElementById("root");
+const doubutsu = themeRoot?.classList.contains("doubutsu") ?? false;
+const posedDark = themeRoot?.classList.contains("dark") ?? false;
 
 const slugs = Object.keys(villagerManifest.villagers);
 // The icons picked by hand (the fetch script's overrides), every eighth

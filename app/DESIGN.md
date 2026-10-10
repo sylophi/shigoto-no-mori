@@ -8,7 +8,7 @@ and the web client (`web/`) both render.
 ## Theming: two visual systems, one component tree
 
 The app ships two designs: **doubutsu** (default: Animal Crossing
-overlay, class `doubutsu` on `<html>`, orthogonal to light/dark) and
+overlay, class `doubutsu` on the theme root, orthogonal to light/dark) and
 **v1** (neutral shadcn-style, the opt-out via Settings → Appearance).
 There is ONE component tree: doubutsu is
 `packages/ui/src/styles/doubutsu.css` remapping tokens and hooking
@@ -17,10 +17,23 @@ component per theme. Components are still written in v1's vocabulary
 (tokens, borders, shadows), and the overlay handles translation, so
 build in v1 terms and verify in both.
 
+The theme lives on a **theme root**, an element carrying
+`data-theme-scope` with the theme classes (`dark`, `doubutsu`),
+`data-palette` and `data-shell`: the app's `#root`,
+stamped before the first paint by the boot scripts and kept in step by
+the theme hooks, or a scene's frame. The stylesheets select only the
+root and what is inside it, never `:root`, `html` or `body`, so a scene
+or a frame can wear a theme of its own. Menus, popovers, tooltips and
+dialogs mount inside the root (`@shigomori/ui`'s `root.tsx`), so they
+wear the window's theme. The page's own canvas is the shell's business:
+a browser tab paints it from the root's background (`AppShell`), and
+Clerk's modal, which mounts on the body, gets its colors resolved
+against the root (`ClerkGate`).
+
 Doubutsu comes in palettes, picked per appearance under its switch (a
 light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
 in client config, the catalog in `packages/ui/src/lib/themes.ts`). The
-pick lands as `data-palette` on `<html>`:
+pick lands as `data-palette` on the theme root:
 `packages/ui/src/styles/doubutsu.css` carries the defaults (cream,
 charcoal) and `packages/ui/src/styles/palettes.css` the rest, each
 remapping the surface tokens and its accent: `--primary` and `--ring`
@@ -28,7 +41,7 @@ remapping the surface tokens and its accent: `--primary` and `--ring`
 the device tiles and every other positive status wear the palette's hue.
 A rule in doubutsu.css reaches every color through a token, never a
 literal, so a palette can move it. Settings paints its swatches with the
-same blocks (`[data-theme-scope]` beside `:root`), so a new palette is
+same blocks (each swatch is a theme root of its own), so a new palette is
 one CSS block plus a catalog entry. Palettes that differ in a detail
 (latte's greens) can wait as variants: ids of their own behind one
 swatch, left out of the picker and reached only by Ctrl+Alt+Shift+L
@@ -116,18 +129,20 @@ that reaches for the runtime fails the commit.
 - Open menus and dialogs render through portals, which produce nothing
   on a server; a scene uses the view's inline surface, which shares its
   class constants with the live one.
-- In v3 the theme class, `data-palette` and `data-layout` move from
-  `<html>` (where the theming section above still has them) to the
-  app's root element, and the phone layout moves to container queries,
-  so a view keeps its look and layout wherever it is mounted.
-- Nothing in the renderer touches a global: the host API comes through
-  the runtime, not `window.api`, and a listener on `document` or
-  `window` lives in a hook that owns its lifetime.
+- The theme rides the theme root, not `<html>` (the theming section
+  above), so a view keeps its look wherever it is mounted.
+- A view or a primitive reads no global: what it needs of the page comes
+  through an element's own document (`el.ownerDocument`), and a listener
+  on `document` or `window` lives in a hook that owns its lifetime. It
+  lays out by the window's width, a container query (`@min-[48rem]:`),
+  never the viewport's (`md:`). The host API comes through the runtime,
+  not `window.api`. `@shigomori/ui`'s boundary proof holds all three.
 
 ## Sizing: one density in the components, the phone's in phone.css
 
 Components are written once, at desktop density. The web client's phone
-layout (`<html data-layout="phone">`) does not get a size per call site:
+layout (the web shell's root under 48rem wide, a container query, so a
+phone-width frame takes it too) does not get a size per call site:
 `packages/ui/src/styles/phone.css` remaps the type and spacing scales
 there, gives the primitives their touch minimums, extends every other
 interactive element's hit area to 44px, and gives hover-only buttons a

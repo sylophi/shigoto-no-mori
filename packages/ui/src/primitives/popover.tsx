@@ -7,6 +7,7 @@ import {
   FLOATING_SURFACE_CLASS,
 } from "./floating-surface.ts";
 import type { WithoutTitle } from "./tooltip.tsx";
+import { useThemeRoot } from "../root.tsx";
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
@@ -41,7 +42,7 @@ function PopoverContent({
   >) {
   const popupRef = useRef<HTMLDivElement>(null);
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={useThemeRoot() ?? undefined}>
       <PopoverPrimitive.Positioner
         className={FLOATING_POSITIONER_CLASS}
         align={align}

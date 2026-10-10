@@ -84,12 +84,12 @@ export function PullReviewStepView({
     <>
       <FlowBodyView>
         <div className="flex flex-col gap-6">
-          <div className="relative grid overflow-hidden rounded-xl border border-border bg-card md:grid-cols-2">
+          <div className="relative grid overflow-hidden rounded-xl border border-border bg-card @min-[48rem]:grid-cols-2">
             {source}
             {destination}
             {/* On the seam between the halves: what the flow does from
                 one to the other. */}
-            <span className="pointer-events-none absolute top-1/2 left-1/2 hidden size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground md:flex">
+            <span className="pointer-events-none absolute top-1/2 left-1/2 hidden size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground @min-[48rem]:flex">
               <Link
                 aria-label={
                   link === "mirror" ? "kept in step both ways" : "moves to"
@@ -102,7 +102,7 @@ export function PullReviewStepView({
           <div
             className={cn(
               "grid gap-6",
-              details !== undefined && "md:grid-cols-2",
+              details !== undefined && "@min-[48rem]:grid-cols-2",
             )}
           >
             {leaveOut}
@@ -186,7 +186,7 @@ function EndCard({
   foot?: ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-col border-border not-first:border-t md:not-first:border-t-0 md:not-first:border-l">
+    <section className="flex min-w-0 flex-col border-border not-first:border-t @min-[48rem]:not-first:border-t-0 @min-[48rem]:not-first:border-l">
       <div className="flex flex-1 flex-col gap-1.5 px-5 py-4">
         <SectionHeading>{heading}</SectionHeading>
         <div className="flex items-center gap-2 pt-1 pb-1.5 text-sm">

@@ -7,9 +7,10 @@
 // must not call Clerk hooks, which the status.configured gates in the
 // account UI guarantee (configured requires the key, so a configured
 // status implies this gate mounted the provider).
-import type { ComponentType, ReactNode } from "react";
+import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import type { ClerkProviderProps } from "@clerk/react";
 import { clerkAppearance } from "@/lib/clerkAppearance";
+import { themeRoot } from "@/lib/themeRoot";
 import { ClerkAccountSync } from "./ClerkAccountSync";
 
 export type ClerkProviderComponent = ComponentType<{
@@ -26,11 +27,50 @@ export function ClerkGate({
   children: ReactNode;
 }) {
   const publishableKey = window.api.clerkPublishableKey;
+  const appearance = useThemedAppearance();
   if (!publishableKey) return children;
   return (
-    <Provider publishableKey={publishableKey} appearance={clerkAppearance}>
+    <Provider publishableKey={publishableKey} appearance={appearance}>
       <ClerkAccountSync />
       {children}
     </Provider>
   );
+}
+
+// Clerk mounts its sign-in modal on the page's body, outside the theme
+// root the tokens live on, so the appearance's token references are
+// resolved against the root and handed over as values, again whenever
+// the root's theme changes.
+function useThemedAppearance(): ClerkProviderProps["appearance"] {
+  const [appearance, setAppearance] = useState(() =>
+    resolvedAppearance(themeRoot()),
+  );
+  useEffect(() => {
+    const root = themeRoot();
+    const observer = new MutationObserver(() =>
+      setAppearance(resolvedAppearance(root)),
+    );
+    observer.observe(root, { attributeFilter: ["class", "data-palette"] });
+    return () => observer.disconnect();
+  }, []);
+  return appearance;
+}
+
+function resolvedAppearance(
+  root: HTMLElement,
+): ClerkProviderProps["appearance"] {
+  const style = getComputedStyle(root);
+  const variables = Object.fromEntries(
+    Object.entries(clerkAppearance?.variables ?? {}).map(([key, value]) => [
+      key,
+      typeof value === "string"
+        ? value.replace(
+            /var\((--[\w-]+)\)/g,
+            (reference, name: string) =>
+              style.getPropertyValue(name).trim() || reference,
+          )
+        : value,
+    ]),
+  );
+  return { ...clerkAppearance, variables };
 }

@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils.ts";
 import { rankByScore } from "../../lib/fuzzyMatch.ts";
 import type { BranchList } from "@shigomori/contracts/schemas/index";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { useThemeRoot } from "../../root.tsx";
 
 // The branch picker (BranchCombobox reads the project's branches).
 export interface BranchComboboxProps {
@@ -133,7 +134,7 @@ export function BranchComboboxView({
           className="size-3.5 shrink-0 text-muted-foreground/60"
         />
       </Combobox.Trigger>
-      <Combobox.Portal>
+      <Combobox.Portal container={useThemeRoot() ?? undefined}>
         <Combobox.Positioner
           sideOffset={4}
           side="bottom"

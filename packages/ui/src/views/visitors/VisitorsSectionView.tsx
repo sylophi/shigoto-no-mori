@@ -207,7 +207,9 @@ function revealAbove(element: HTMLElement) {
     pane &&
     !(
       pane.scrollHeight > pane.clientHeight &&
-      /auto|scroll/.test(getComputedStyle(pane).overflowY)
+      /auto|scroll/.test(
+        pane.ownerDocument.defaultView?.getComputedStyle(pane).overflowY ?? "",
+      )
     )
   ) {
     pane = pane.parentElement;
