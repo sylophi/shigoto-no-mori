@@ -12,6 +12,8 @@
 //   - a close ends every attach with an exit and leaves the list,
 //   - a quit saves each terminal, and the next start opens it again
 //     under its history in the folder it was in,
+//   - a host killed while a terminal floods comes back with what it
+//     saved when the output last paused: whole, in that folder,
 //   - a worktree terminal whose worktree is gone closes,
 //   - a shell running a foreground job counts as busy, and the quit's
 //     words name it,
@@ -20,26 +22,21 @@
 //     comes once, in order.
 //
 // Run: pnpm test terminals.
+// covers: app/test/lib/terminalsHost.mts
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import type {
   Terminal,
   TerminalEvent,
   TerminalOwner,
 } from "@shigomori/contracts/schemas";
-import * as Paths from "@shigomori/engine/Paths";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
-import * as Migration from "@shigomori/engine/Migration";
-import * as Store from "@shigomori/engine/Store";
-import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, describe, it } from "vitest";
@@ -47,7 +44,14 @@ import { makeHistory, withoutQueries } from "../host/lib/terminals/history.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
 import { busyDetail } from "../shared/busy.ts";
 import { attachTerminal } from "../renderer/lib/terminalFeed.ts";
-import { makeTracker, tempDir, waitFor } from "./lib/checkKit.mts";
+import {
+  appRoot,
+  makeTracker,
+  processAlive,
+  tempDir,
+  waitFor,
+} from "./lib/checkKit.mts";
+import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
 
 describe("the history", () => {
   it("drops terminal queries and keeps everything else", () => {
@@ -134,29 +138,17 @@ const start = (owner: TerminalOwner) => {
     : Effect.succeed<Terminals.Start>({ cwd, env: process.env });
 };
 
-// The service as the host builds it, over a store in the proof's data
-// dir: one runtime is one run of the app.
-const launch = () =>
-  ManagedRuntime.make(
-    Terminals.layer({ start }).pipe(
-      Layer.provideMerge(SavedTerminals.layer),
-      Layer.provide(Store.layer((filename) => SqliteClient.make({ filename }))),
-      Layer.provide(Migration.layer),
-      Layer.provide(Paths.layer("prod")),
-      Layer.provideMerge(NodeServices.layer),
-      Layer.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromEnv({
-            env: { HOME: root, SHIGOMORI_DATA_DIR: dataDir },
-          }),
-        ),
-      ),
-    ),
-  );
+// The service over a store in the proof's data dir, or another.
+const launch = (data = dataDir) =>
+  launchTerminals({ home: root, dataDir: data, start });
 
 type App = ReturnType<typeof launch>;
 
 const noop = (): void => {};
+
+// The numbers of the whole `tick-<n>` lines in a terminal's output.
+const ticks = (text: string) =>
+  [...text.matchAll(/tick-(\d+)\r\n/g)].map((match) => Number(match[1]));
 
 const withTerminals = <A, E>(
   app: App,
@@ -321,6 +313,108 @@ describe("the service", () => {
       assert.equal(next.cwd, folder);
     } finally {
       await second.dispose();
+    }
+  });
+
+  it("a host killed mid-stream comes back with what it saved", async () => {
+    const folder = join(root, "flooded");
+    mkdirSync(folder);
+    const crashData = join(root, "crash-data");
+    const host = spawn(
+      process.execPath,
+      [
+        "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
+        "--import",
+        "./test/lib/register-ts-alias.mts",
+        "test/lib/terminalsHost.mts",
+        // Bursts with a pause between, longer than a save waits for.
+        `cd ${folder} && i=0 && while :; do for j in $(seq 3000); do i=$((i+1)); echo tick-$i; done; sleep 2.5; done`,
+      ],
+      {
+        cwd: appRoot,
+        env: { ...process.env, HOME: root, SHIGOMORI_DATA_DIR: crashData },
+        stdio: ["ignore", "pipe", "inherit"],
+      },
+    );
+    track(() => {
+      if (host.pid !== undefined && processAlive(host.pid))
+        host.kill("SIGKILL");
+    });
+    const terminalId = await new Promise<string>((resolve, reject) => {
+      let out = "";
+      host.stdout.on("data", (data) => {
+        out += String(data);
+        if (out.includes("\n")) resolve(out.trim());
+      });
+      host.once("exit", (code) =>
+        reject(new Error(`the host exited first (${code})`)),
+      );
+    });
+    // Two saves land, after two bursts.
+    const store = openSavedTerminals({ home: root, dataDir: crashData });
+    let first: SavedTerminals.SavedTerminal | undefined;
+    let seen: SavedTerminals.SavedTerminal | undefined;
+    try {
+      await waitFor(
+        async () => {
+          const rows = await store.runPromise(
+            Effect.flatMap(
+              SavedTerminals.SavedTerminals,
+              (saved) => saved.list,
+            ),
+          );
+          seen = rows.find((row) => row.terminalId === terminalId);
+          if (seen === undefined || !seen.history.includes("tick-")) {
+            return false;
+          }
+          first ??= seen;
+          return seen.seq > first.seq;
+        },
+        "two saves under the flood",
+        20_000,
+      );
+    } finally {
+      await store.dispose();
+    }
+    // Into the next burst.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    assert.equal(host.exitCode, null, "the host died before it was killed");
+    const exited = once(host, "exit");
+    host.kill("SIGKILL");
+    await exited;
+
+    const app = launch(crashData);
+    try {
+      let reopened: ReadonlyArray<Terminal> = [];
+      await waitFor(async () => {
+        const listed = await app.runPromise(
+          Effect.flatMap(Terminals.Terminals, (terminals) =>
+            Stream.runHead(terminals.list),
+          ),
+        );
+        reopened = Option.getOrElse(listed, () => []);
+        return reopened.length > 0;
+      }, "the killed host's terminal to open again");
+      assert.deepEqual(
+        reopened.map((terminal) => [terminal.terminalId, terminal.cwd]),
+        [[terminalId, folder]],
+      );
+      const attached = attach(app, terminalId);
+      await waitFor(() => attached.events.length >= 2, "the attach's head");
+      const history = attached.events[0];
+      assert.ok(history?.kind === "history");
+      assert.ok(history.seq >= (seen?.seq ?? 0), "a save went back");
+      // The ring came back whole: every line from its first to its last.
+      const back = ticks(history.data);
+      const before = ticks(seen?.history ?? "");
+      assert.ok(back.length > 1000, `only ${back.length} lines came back`);
+      assert.ok((back.at(-1) ?? 0) >= (before.at(-1) ?? 0));
+      assert.deepEqual(
+        back,
+        Array.from({ length: back.length }, (_, i) => (back[0] ?? 0) + i),
+      );
+    } finally {
+      await app.dispose();
     }
   });
 
