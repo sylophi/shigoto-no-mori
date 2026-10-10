@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
@@ -52,8 +53,7 @@ const FILTER_MIN_FILES = 8;
 // (tick, copy its path, discard it) are on its context menu, opened by
 // a right click or a long press, the way GitHub Desktop has them: a
 // discard button on every row would cost each one width it can't
-// spare. Discards, one file's or many, confirm in a strip that takes
-// the footer's place.
+// spare. Discards, one file's or many, confirm in a dialog.
 //
 // Rows arrive built (patchFiles.ts). The caller decides whether they
 // come from the patch or from git status.
@@ -115,10 +115,8 @@ export function DiffFileIndex({
     else if (at.bottom > box.bottom) list.scrollTop += at.bottom - box.bottom;
   }, [activeKey]);
 
-  // Which discard is up for confirmation. The paths are worked out
-  // when it is confirmed, from the rows as they are then: the ticks stay
-  // live while the strip is open, and a file ticked to keep it must not
-  // go because the menu was opened a moment earlier.
+  // Which discard is up for confirmation. Its paths are worked out when
+  // it is confirmed, from the rows as they are then (discardFiles).
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscard | null>(
     null,
   );
@@ -279,21 +277,20 @@ export function DiffFileIndex({
         </p>
       )}
 
-      {changes &&
-        (editable && pendingDiscard ? (
-          <DiscardConfirmStrip
-            label={`Discard ${describeDiscard(pendingDiscard, editable)}?`}
-            busy={changes.busy}
-            onCancel={() => setPendingDiscard(null)}
-            onConfirm={() => {
-              const paths = discardPaths(pendingDiscard, editable);
-              if (paths.length > 0) editable.onDiscard(paths);
-              setPendingDiscard(null);
-            }}
-          />
-        ) : (
-          footer
-        ))}
+      {changes && footer}
+
+      {editable && pendingDiscard && (
+        <DiscardConfirmDialog
+          label={`Discard ${describeDiscard(pendingDiscard, editable)}?`}
+          busy={editable.busy}
+          onCancel={() => setPendingDiscard(null)}
+          onConfirm={() => {
+            const paths = discardPaths(pendingDiscard, editable);
+            if (paths.length > 0) editable.onDiscard(paths);
+            setPendingDiscard(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -347,7 +344,7 @@ function discardFiles(
   if (pending === "unticked") {
     return files.filter((file) => tickedOf(picks, file) === "none");
   }
-  // A file that stopped being changed while the strip was open (an
+  // A file that stopped being changed while the dialog was open (an
   // editor reverted it) has nothing left to discard.
   return files.filter((file) => changeKey(file) === pending.key);
 }
@@ -422,7 +419,7 @@ function DiscardMenu({
   );
 }
 
-function DiscardConfirmStrip({
+function DiscardConfirmDialog({
   label,
   busy,
   onCancel,
@@ -434,26 +431,34 @@ function DiscardConfirmStrip({
   onConfirm: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 border-t border-border p-3">
-      <p className="text-xs font-medium">{label}</p>
-      <p className="text-2xs text-muted-foreground">
-        The contents are snapshotted first, and the notification that follows
-        has Undo.
-      </p>
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="xs" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          size="xs"
-          onClick={onConfirm}
-          disabled={busy}
-        >
-          {busy ? "Discarding…" : "Discard"}
-        </Button>
+    <ModalShell onClose={onCancel} popoverClassName="max-w-md">
+      <div className="p-5">
+        <h2 className="text-base font-semibold break-words">{label}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The contents are snapshotted first, and the notification that follows
+          has Undo.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
+            autoFocus
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            Discard
+          </Button>
+        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
