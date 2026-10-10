@@ -442,7 +442,7 @@ const tokenExpiry: Scenario = {
 
 const signOutWithSibling: Scenario = {
   name: "sign-out-with-sibling",
-  does: "A second tab of the profile is opened, and Sign out is pressed in the first: within the bound both tabs read signed out and stay so for 30 s with no enrollment sent from either, and the host's device list no longer names the browser.",
+  does: "A second tab of the profile is opened, and the first signs out of the account while the browser's Clerk session stays (the account layer's sign-out, which the Sign out button runs when the tab's Clerk holds no session): within the bound both tabs read signed out and stay so for 30 s with no enrollment sent from either, and the host's device list no longer names the browser.",
   boundMs: 20_000,
   destructive: true,
   async run(lab) {
@@ -463,13 +463,14 @@ const signOutWithSibling: Scenario = {
       });
     }
     const deviceId = await first.page.evaluate(() => window.api.deviceId);
-    await first.page
-      .getByRole("button", { name: "Devices", exact: true })
-      .click();
-    lab.note(`pressing Sign out in ${first.name}`);
-    await first.page
-      .getByRole("button", { name: "Sign out", exact: true })
-      .click();
+    // The account layer's own sign-out, which is what the Sign out
+    // button runs when the tab's Clerk holds no session, and what the
+    // lab's cleanup runs: the browser's Clerk session stays, so the
+    // sibling still holds it.
+    lab.note(
+      `signing ${first.name} out of the account, the Clerk session kept`,
+    );
+    await first.page.evaluate(() => window.api.account.signOut());
     const pressed = Date.now();
     await waitUntil(
       "both tabs to read signed out",

@@ -58,7 +58,7 @@ again on the next run.
 | `tab-sleep` | Every tab is hidden and frozen and the network goes, for 30 to 120 s (past a hub ticket's 60 s life about half the time), then wakes on a changed network. | 30 s |
 | `reload-and-second-tab` | The tab is reloaded, a second tab of the profile opened, then closed, each step recovering. | 30 s each |
 | `token-expiry` | Every tab's wall clock jumps two hours ahead, past the Clerk session token's and a hub ticket's minute, the network drops and returns so everything is dialed again on the moved clock, then each tab mints a fresh Clerk token and reads the device list. The hub credential itself never expires. | 30 s |
-| `sign-out-with-sibling` | A second tab is opened and Sign out pressed in the first: both read signed out within the bound and stay so, nothing enrolls again, and the host no longer lists the browser. Leaves the profile signed out, so it runs only when named, and last. | 20 s |
+| `sign-out-with-sibling` | A second tab is opened, and the first signs out of the account while the browser's Clerk session stays (what the Sign out button does when the tab's Clerk holds no session): both read signed out within the bound and stay so, nothing enrolls again, and the host no longer lists the browser. Leaves the profile signed out, so it runs only when named, and last. | 20 s |
 
 Every scenario changes the host's worktrees (`smd`, against the host
 profile's data dir) while the tab is cut off. A tab has recovered when
