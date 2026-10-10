@@ -14,6 +14,14 @@
 // is only itself, so two of them can share a chord.
 type KeymapScope = "window" | "worktree" | "changes" | "palette" | "folders";
 
+const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
+  window: "Anywhere",
+  worktree: "A worktree's page",
+  changes: "Changes",
+  palette: "The palette",
+  folders: "Adding a project, picking a folder",
+};
+
 export interface KeymapAction {
   readonly id: string;
   readonly label: string;
@@ -346,7 +354,7 @@ export interface Binding {
   readonly matches: (e: KeyPress) => boolean;
 }
 
-function bindingOf(chord: Chord, mac: boolean): Binding {
+export function bindingOf(chord: Chord, mac: boolean): Binding {
   const keys = pressed(chord, mac);
   return {
     chord,
@@ -407,4 +415,56 @@ export function conflictOf(
     const held = keymap.get(other.id);
     return held !== undefined && samePressed(pressed(held.chord, mac), keys);
   });
+}
+
+// ---- the Keyboard section ----
+
+interface KeymapRow {
+  readonly id: string;
+  readonly label: string;
+  // Its keys as the screen shows them.
+  readonly keys: string;
+  // Bound to its own chord rather than its default.
+  readonly own: boolean;
+}
+
+export interface KeymapGroup {
+  readonly label: string;
+  readonly rows: readonly KeymapRow[];
+}
+
+// The section's rows, every action `keymap` has, by scope in the
+// table's order.
+export function keymapGroups(
+  keymap: ReadonlyMap<string, Binding>,
+): KeymapGroup[] {
+  const groups = new Map<KeymapScope, KeymapRow[]>();
+  for (const action of KEYMAP_ACTIONS) {
+    const binding = keymap.get(action.id);
+    if (!binding) continue;
+    const rows = groups.get(action.scope) ?? [];
+    rows.push({
+      id: action.id,
+      label: action.label,
+      keys: binding.label,
+      own: chordText(binding.chord) !== action.chord,
+    });
+    groups.set(action.scope, rows);
+  }
+  return [...groups].map(([scope, rows]) => ({
+    label: SCOPE_LABELS[scope],
+    rows,
+  }));
+}
+
+// The stored bindings with `id` on `chord`: nothing kept for a default.
+export function withBinding(
+  stored: Readonly<Record<string, string>>,
+  id: string,
+  chord: Chord | null,
+): Record<string, string> {
+  const { [id]: _dropped, ...rest } = stored;
+  const action = actionOf(id);
+  if (!chord || !action || chordText(chord) === action.chord) return rest;
+  return { ...rest, [id]: chordText(chord) };
 }

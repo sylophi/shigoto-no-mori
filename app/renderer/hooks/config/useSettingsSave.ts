@@ -107,6 +107,9 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
     notifyAgentDone: state.notifyAgentDone ? true : undefined,
     // Default is off, the same opt-in serialization as villageLife.
     inlineWorktrees: state.inlineWorktrees ? true : undefined,
+    // Only an action bound off its default is stored, so none is nothing.
+    keybindings:
+      Object.keys(state.keybindings).length > 0 ? state.keybindings : undefined,
   };
 }
 

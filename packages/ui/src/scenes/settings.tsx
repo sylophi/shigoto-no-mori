@@ -46,6 +46,7 @@ import { SettingsPanelView } from "../views/settings/SettingsPanelView.tsx";
 import {
   ACCOUNT_SECTION,
   APPEARANCE_TAB,
+  KEYBOARD_TAB,
   GENERAL_TAB,
   settingsPanelId,
   settingsSections,
@@ -74,6 +75,8 @@ import { WorktreePrefixesSectionView } from "../views/settings/WorktreePrefixesS
 import { fromConfig } from "../lib/settingsForm.ts";
 import type { SettingsFormState } from "../lib/settingsForm.ts";
 import { DARK_THEMES, LIGHT_THEMES } from "../lib/themes.ts";
+import { keymapGroups, resolveKeymap } from "../lib/keymap.ts";
+import { KeyboardSectionView } from "../views/settings/KeyboardSectionView.tsx";
 import {
   fakeGlobalConfig,
   fakeReleases,
@@ -492,6 +495,63 @@ export function SettingsDialogsScene() {
           onClose={noop}
         />
       </ModalBox>
+    </div>
+  );
+}
+
+// A Mac's keymap with `stored` over the defaults, as the section lists it.
+const keymapRows = (stored?: Record<string, string>) =>
+  keymapGroups(resolveKeymap(stored, { mac: true, desktop: true }));
+
+function keyboard(
+  stored: Record<string, string> | undefined,
+  recording: string | null,
+  refused: { id: string; message: string } | null,
+) {
+  return (
+    <KeyboardSectionView
+      groups={keymapRows(stored)}
+      recording={recording}
+      refused={refused}
+      onRecord={noop}
+      onReset={noop}
+      onResetAll={noop}
+    />
+  );
+}
+
+// The Keyboard section on its defaults.
+export function SettingsKeyboardScene() {
+  return (
+    <SceneWindowFrame
+      sidebar={settingsSidebar(KEYBOARD_TAB)}
+      pathname="/settings"
+    >
+      {page(
+        { eyebrow: "Settings", title: "Keyboard" },
+        KEYBOARD_TAB,
+        null,
+        keyboard(undefined, null, null),
+      )}
+    </SceneWindowFrame>
+  );
+}
+
+// The section with the palette on ⌘P, the terminal's keys refused for
+// keys the palette holds, and the terminal's toggle recording.
+export function SettingsKeyboardStatesScene() {
+  return (
+    <div className="grid h-full grid-cols-3 gap-8 overflow-hidden bg-background p-6 text-foreground">
+      <Part label="One rebound">
+        {keyboard({ palette: "Mod+P" }, null, null)}
+      </Part>
+      <Part label="A conflict refused">
+        {keyboard(undefined, null, {
+          id: "terminal",
+          message: "⌘K is taken by “Open or close the palette”.",
+        })}
+      </Part>
+      <Part label="Recording">{keyboard(undefined, "terminal", null)}</Part>
     </div>
   );
 }

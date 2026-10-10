@@ -9,6 +9,8 @@
 //      not read, or names no action, is ignored.
 //   4. A conflict names the action holding the keys in an overlapping
 //      scope, and a page or a dialog of its own holds none.
+//   5. A binding back on its default is stored as nothing, and the
+//      section marks only the actions off theirs.
 import { expect, it } from "vitest";
 import {
   chordAccelerator,
@@ -17,10 +19,12 @@ import {
   chordText,
   conflictOf,
   KEYMAP_ACTIONS,
+  keymapGroups,
   type Chord,
   type KeyPress,
   parseChord,
   resolveKeymap,
+  withBinding,
 } from "../src/lib/keymap.ts";
 
 // A chord the test knows reads.
@@ -119,4 +123,18 @@ it("names the action holding the keys where they overlap", () => {
   expect(conflictOf(keymap, "palette", chord("Mod+Enter"), true)?.id).toBe(
     "commit",
   );
+});
+
+it("stores only what differs from the defaults", () => {
+  const stored = withBinding({}, "palette", chord("Mod+P"));
+  expect(stored).toEqual({ palette: "Mod+P" });
+  expect(withBinding(stored, "palette", chord("Mod+K"))).toEqual({});
+  expect(withBinding(stored, "palette", null)).toEqual({});
+  const rows = keymapGroups(
+    resolveKeymap(stored, { mac: true, desktop: true }),
+  ).flatMap((group) => group.rows);
+  expect(rows.filter((row) => row.own).map((row) => row.id)).toEqual([
+    "palette",
+  ]);
+  expect(rows.find((row) => row.id === "palette")?.keys).toBe("⌘P");
 });

@@ -40,6 +40,7 @@ import { BuildVersionLineView } from "@shigomori/ui/views/settings/VersionSectio
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
 import { NotificationsSectionView } from "@shigomori/ui/views/settings/NotificationsSectionView.tsx";
+import { KeyboardSection } from "./KeyboardSection";
 import { SidebarSection } from "./SidebarSection";
 import {
   MountOnceVisited,
@@ -50,6 +51,7 @@ import {
   APPEARANCE_TAB,
   GENERAL_TAB,
   isHostTab,
+  KEYBOARD_TAB,
   LAUNCH_TAB,
   settingsPanelId,
   SECTION_LABELS,
@@ -161,6 +163,7 @@ export function SettingsForm({
           notifyAgentWaiting: prev.notifyAgentWaiting,
           notifyAgentDone: prev.notifyAgentDone,
           inlineWorktrees: prev.inlineWorktrees,
+          keybindings: prev.keybindings,
         }));
       }
     }
@@ -305,6 +308,13 @@ export function SettingsForm({
             <LaunchToolsPanel form={form} setForm={setForm} />
           </SettingsPanelView>
         )}
+
+        <SettingsPanelView
+          id={settingsPanelId(KEYBOARD_TAB)}
+          active={activeTab === KEYBOARD_TAB}
+        >
+          <KeyboardSection form={form} setForm={setForm} />
+        </SettingsPanelView>
 
         {villageLife && (
           <SettingsPanelView
