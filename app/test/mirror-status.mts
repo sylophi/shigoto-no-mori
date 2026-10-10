@@ -11,7 +11,7 @@
 // Run: pnpm test mirror-status.
 import assert from "node:assert/strict";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
-import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
+import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { it } from "vitest";
 
 const endpoint = {

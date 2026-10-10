@@ -5,7 +5,10 @@ import {
 } from "@/hooks/remote/useHostScope";
 import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import { useCreatePlan } from "./createPlan";
-import { type PullProgressProps, PullProgressView } from "./PullProgressView";
+import {
+  type PullProgressProps,
+  PullProgressView,
+} from "@shigomori/ui/views/worktreeDetail/flow/PullProgressView.tsx";
 
 // The create's rows read the destination's project while the dialog
 // sits under the source's scope, so the view re-pins itself.

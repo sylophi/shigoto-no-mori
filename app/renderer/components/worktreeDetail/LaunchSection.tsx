@@ -2,7 +2,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { LauncherRow } from "./LauncherRow";
-import { LaunchSectionView } from "./LaunchSectionView";
+import { LaunchSectionView } from "@shigomori/ui/views/worktreeDetail/LaunchSectionView.tsx";
 import { ScriptLaunchRow, useScriptLaunchCandidates } from "./ScriptLaunchRow";
 
 interface LaunchSectionProps {

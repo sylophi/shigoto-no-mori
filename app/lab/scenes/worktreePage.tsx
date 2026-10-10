@@ -8,40 +8,40 @@ import { StaticPopover } from "@shigomori/ui/primitives/popover.tsx";
 import {
   AgentSessionsMenuView,
   SessionRowView,
-} from "@/components/worktreeDetail/AgentSessionsMenuView";
+} from "@shigomori/ui/views/worktreeDetail/AgentSessionsMenuView.tsx";
 import {
   BranchMenuView,
   BranchTitleView,
-} from "@/components/worktreeDetail/branch/BranchTitleView";
-import { BranchSwitcherView } from "@/components/worktreeDetail/branch/BranchSwitcherView";
-import { DescriptionSectionView } from "@/components/worktreeDetail/DescriptionSectionView";
-import { FooterActionButtonView } from "@/components/worktreeDetail/FooterActionButtonView";
-import { LABEL_RANK } from "@/components/worktreeDetail/FooterVerbView";
-import { LaunchSectionView } from "@/components/worktreeDetail/LaunchSectionView";
-import { LauncherRowView } from "@/components/worktreeDetail/LauncherRowView";
-import { NoIdentityNoteView } from "@/components/worktreeDetail/NoIdentityNoteView";
-import { PullRequestTitleLinkView } from "@/components/worktreeDetail/pullRequests/PullRequestTitleLinkView";
-import { PullRequestStateLabelView } from "@/components/worktreeDetail/pullRequests/PullRequestStateLabelView";
+} from "@shigomori/ui/views/worktreeDetail/branch/BranchTitleView.tsx";
+import { BranchSwitcherView } from "@shigomori/ui/views/worktreeDetail/branch/BranchSwitcherView.tsx";
+import { DescriptionSectionView } from "@shigomori/ui/views/worktreeDetail/DescriptionSectionView.tsx";
+import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
+import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
+import { LaunchSectionView } from "@shigomori/ui/views/worktreeDetail/LaunchSectionView.tsx";
+import { LauncherRowView } from "@shigomori/ui/views/worktreeDetail/LauncherRowView.tsx";
+import { NoIdentityNoteView } from "@shigomori/ui/views/worktreeDetail/NoIdentityNoteView.tsx";
+import { PullRequestTitleLinkView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
+import { PullRequestStateLabelView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestStateLabelView.tsx";
 import {
   ScriptLaunchButtonView,
   ScriptLaunchRowView,
-} from "@/components/worktreeDetail/ScriptLaunchRowView";
-import { SortMenuView } from "@/components/worktreeDetail/SortMenuView";
-import { WorktreeActivityIndicatorView } from "@/components/worktreeDetail/WorktreeActivityIndicatorView";
+} from "@shigomori/ui/views/worktreeDetail/ScriptLaunchRowView.tsx";
+import { SortMenuView } from "@shigomori/ui/views/worktreeDetail/SortMenuView.tsx";
+import { WorktreeActivityIndicatorView } from "@shigomori/ui/views/worktreeDetail/WorktreeActivityIndicatorView.tsx";
 import {
   type WorktreeFooterState,
   WorktreeDetailFooterView,
-} from "@/components/worktreeDetail/WorktreeDetailFooterView";
+} from "@shigomori/ui/views/worktreeDetail/WorktreeDetailFooterView.tsx";
 import {
   WorktreeDetailView,
   WorktreeUnavailableView,
-} from "@/components/worktreeDetail/WorktreeDetailView";
-import { WorktreeHeaderView } from "@/components/worktreeDetail/WorktreeHeaderView";
-import { WorktreeLocationView } from "@/components/worktreeDetail/WorktreeLocationView";
+} from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
+import { WorktreeHeaderView } from "@shigomori/ui/views/worktreeDetail/WorktreeHeaderView.tsx";
+import { WorktreeLocationView } from "@shigomori/ui/views/worktreeDetail/WorktreeLocationView.tsx";
 import {
   OptionActionView,
   WorktreeOptionsView,
-} from "@/components/worktreeDetail/WorktreeOptionsView";
+} from "@shigomori/ui/views/worktreeDetail/WorktreeOptionsView.tsx";
 import type {
   LauncherEntry,
   PullRequest,

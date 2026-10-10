@@ -8,19 +8,29 @@
 // dialog opens on it, with several it opens on none and Start waits
 // for the pick. The handlers re-verify the identity match on the peer,
 // so this gate is UX.
-import { only } from "@shared/util/only";
+import { only } from "@shigomori/contracts/util/only";
 import { useState } from "react";
 import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceTabs } from "@/components/shared/DeviceTabs";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import type {
+  DestinationPick,
+  PeerTarget as ViewPeerTarget,
+} from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
+import type { HostApi } from "@/hooks/remote/useHostScope";
 import {
-  type DestinationPick,
-  isReadyTarget,
-  type PeerTarget,
-  type ReadyPeerTarget,
-} from "./PullReviewView";
-import { type Landing, landsOnPeer } from "./pullSteps";
+  type Landing,
+  landsOnPeer,
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
+
+// A peer target with the API scoped to it, which the flow runs on.
+export type PeerTarget = ViewPeerTarget & { api: HostApi | undefined };
+type ReadyPeerTarget = PeerTarget & { api: HostApi };
+
+function isReadyTarget(target: PeerTarget): target is ReadyPeerTarget {
+  return target.block === undefined && target.api !== undefined;
+}
 
 export function usePeerTargets(project: Project): PeerTarget[] {
   // A device without a checkout reads "no-project" among the targets,
@@ -28,11 +38,14 @@ export function usePeerTargets(project: Project): PeerTarget[] {
   const tabs = useDeviceTabs();
   return useDeviceTargets(project).flatMap((target): PeerTarget[] => {
     if (target.isThisDevice) return [];
-    if (isHolder(target)) return [target];
+    const block = isHolder(target)
+      ? target.block
+      : tabs.find((tab) => tab.deviceId === target.deviceId)?.block;
     return [
       {
         ...target,
-        block: tabs.find((tab) => tab.deviceId === target.deviceId)?.block,
+        block,
+        ready: block === undefined && target.api !== undefined,
       },
     ];
   });

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import type { PullRequestStack } from "@shared/pullRequestStack";
+import type { PullRequestStack } from "@shigomori/contracts/pullRequestStack";
 import { describeMergeVerdict } from "@shigomori/ui/lib/pullRequest.ts";
 import type {
   MergeMethod,
@@ -8,7 +8,7 @@ import type {
   RepoMergeConfig,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { MergeBoxView } from "./MergeBoxView";
+import { MergeBoxView } from "@shigomori/ui/views/worktreeDetail/pullRequests/MergeBoxView.tsx";
 import { useMergeBox } from "./useMergeBox";
 
 export function MergeBox({

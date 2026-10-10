@@ -20,7 +20,7 @@
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { RefreshCw, Shovel } from "lucide-react";
 import type { TransferPartProps } from "./PeerTransferActions";
-import { OptionActionView } from "./WorktreeOptionsView";
+import { OptionActionView } from "@shigomori/ui/views/worktreeDetail/WorktreeOptionsView.tsx";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -30,9 +30,9 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { FooterActionButtonView } from "./FooterActionButtonView";
-import { NoIdentityNoteView } from "./NoIdentityNoteView";
-import { LABEL_RANK } from "./FooterVerbView";
+import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
+import { NoIdentityNoteView } from "@shigomori/ui/views/worktreeDetail/NoIdentityNoteView.tsx";
+import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
 import { MirrorDialog } from "./mirror/MirrorDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 

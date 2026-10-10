@@ -27,7 +27,10 @@ import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
 import { ForwardAllButton } from "./ForwardAllButton";
-import { PortActionsView, PortListView } from "./PortListView";
+import {
+  PortActionsView,
+  PortListView,
+} from "@shigomori/ui/views/worktreeDetail/ports/PortListView.tsx";
 import { PortRow } from "./PortRow";
 
 export type PortListState = ReturnType<typeof usePortList>;

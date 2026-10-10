@@ -16,11 +16,14 @@ import {
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { LandedPath } from "../flow/FlowChrome";
-import { type Landing, LANDS_HERE } from "../flow/pullSteps";
+import {
+  type Landing,
+  LANDS_HERE,
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import {
   type SourceChoice,
   TransplantFinishView,
-} from "./TransplantFinishView";
+} from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 
 export function TransplantFinish({
   result,

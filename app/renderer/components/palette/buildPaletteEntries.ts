@@ -7,7 +7,7 @@ import { rankByScore, scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { LucideIcon } from "lucide-react";
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
-import { isHiddenByPrefix } from "@shared/sharedSettings";
+import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
 import {
   isAgentWorking,
   worktreeLastActivityAt,

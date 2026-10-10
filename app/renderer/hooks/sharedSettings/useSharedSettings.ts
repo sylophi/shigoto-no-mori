@@ -8,7 +8,7 @@ import type {
   SharedSettingsDoc,
   SharedSettingValue,
 } from "@shigomori/contracts/schemas";
-import { sharedStringSetting } from "@shared/sharedSettings";
+import { sharedStringSetting } from "@shigomori/contracts/sharedSettings";
 import { queryKeys } from "@/lib/queryKeys";
 import { writeSharedSetting } from "@/lib/remote/sharedSettingsSync";
 

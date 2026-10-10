@@ -9,7 +9,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
-import { PullRequestBodyView } from "./PullRequestBodyView";
+import { PullRequestBodyView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestBodyView.tsx";
 
 // What to do about the PR: merge it, or clean up after it. What the
 // PR is comes before it, from whoever places it (PullRequestSection,

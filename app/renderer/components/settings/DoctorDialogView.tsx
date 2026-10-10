@@ -32,7 +32,7 @@ import {
   FlowBodyView,
   FlowFooterView,
   FlowHeaderView,
-} from "../worktreeDetail/flow/FlowChromeView";
+} from "@shigomori/ui/views/worktreeDetail/flow/FlowChromeView.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // `sm doctor` for the scoped device, behind Settings' health check

@@ -22,9 +22,9 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { FooterActionButtonView } from "./FooterActionButtonView";
-import { LABEL_RANK } from "./FooterVerbView";
-import { OptionActionView } from "./WorktreeOptionsView";
+import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
+import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
+import { OptionActionView } from "@shigomori/ui/views/worktreeDetail/WorktreeOptionsView.tsx";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
 import { TransplantToDialog } from "./transplant/TransplantDialog";

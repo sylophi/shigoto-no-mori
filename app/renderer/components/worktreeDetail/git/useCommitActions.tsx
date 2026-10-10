@@ -1,6 +1,10 @@
 import { useState } from "react";
+import type { CommitActions } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
 import { useQuery } from "@tanstack/react-query";
-import { RewordDialogView, RewordFormView } from "./RewordDialogView";
+import {
+  RewordDialogView,
+  RewordFormView,
+} from "@shigomori/ui/views/worktreeDetail/git/RewordDialogView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -28,7 +32,7 @@ import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 export function useCommitActions(
   worktree: Worktree,
   onRewritten?: (worktree: Worktree) => void,
-) {
+): CommitActions {
   const { projectId, id: worktreeId } = worktree;
   const undo = useUndoCommits(worktree);
   const revert = useRevertCommit();
@@ -101,8 +105,6 @@ export function useCommitActions(
     ),
   };
 }
-
-export type CommitActions = ReturnType<typeof useCommitActions>;
 
 function RewordDialog({
   worktree,

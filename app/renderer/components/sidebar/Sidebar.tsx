@@ -67,7 +67,7 @@ import { SidebarTerminals } from "./SidebarTerminals";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
-import { withMember, withToggled } from "@/lib/toggleSet";
+import { withMember, withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 
 // The app sidebar, one for both shells: the brand header, the forest
 // (or, while a page with a list of its own is open, that list:

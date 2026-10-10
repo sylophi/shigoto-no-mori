@@ -10,11 +10,11 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import { BranchTitle } from "./branch/BranchTitle";
-import { PullRequestStateLabelView } from "./pullRequests/PullRequestStateLabelView";
-import { StackListView } from "./pullRequests/StackListView";
-import { PullRequestTitleLinkView } from "./pullRequests/PullRequestTitleLinkView";
-import { MERGE_VERB } from "./pullRequests/pullRequestShared";
-import { WorktreeHeaderView } from "./WorktreeHeaderView";
+import { PullRequestStateLabelView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestStateLabelView.tsx";
+import { StackListView } from "@shigomori/ui/views/worktreeDetail/pullRequests/StackListView.tsx";
+import { PullRequestTitleLinkView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
+import { MERGE_VERB } from "@shigomori/ui/views/worktreeDetail/pullRequests/pullRequestShared.ts";
+import { WorktreeHeaderView } from "@shigomori/ui/views/worktreeDetail/WorktreeHeaderView.tsx";
 
 export function WorktreeHeader({
   worktree,

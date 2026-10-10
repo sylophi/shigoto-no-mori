@@ -18,7 +18,7 @@ import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { buildApi, type AllChannelHandlers } from "@shared/ipc/client";
-import { stackCleanupForWorktree } from "@shared/pullRequestStack";
+import { stackCleanupForWorktree } from "@shigomori/contracts/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
   Project,
@@ -31,7 +31,7 @@ import { cloneFolderName } from "@shared/cloneUrl";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import {
   type ContractScope,
   inputOf,

@@ -40,7 +40,7 @@ import {
   withSharedSetting,
   worktreePrefixesValue,
   type LeaveOutPreset,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import {
   MAX_SHARED_SETTING_ENTRIES,
   SharedSettingsDocSchema,
