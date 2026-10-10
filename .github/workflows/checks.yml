@@ -99,8 +99,8 @@ jobs:
             file-sync/go.sum
             macfs/go.sum
 
-      # license-checker only reads package metadata, so no install
-      # scripts.
+      # The notices read only the dependency graph and package metadata,
+      # so no install scripts.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
