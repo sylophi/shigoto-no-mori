@@ -25,7 +25,6 @@ import * as Engine from "../../host/lib/engine.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as Ports from "../../host/lib/ports.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
-import * as Terrier from "../../host/lib/terrier.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
 import * as Villagers from "../../host/lib/villagers.ts";
 
@@ -93,8 +92,6 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.adapter),
     Layer.provideMerge(GithubCli.layer),
-    Layer.provideMerge(Terrier.adapter),
-    Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(Ports.adapter),
     Layer.provideMerge(Ports.layer),
     Layer.provideMerge(Villagers.adapter),

@@ -2,8 +2,9 @@ import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Views from "@host/lib/views";
-import type { Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
@@ -30,7 +31,8 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
-import { terrierAdd } from "@host/lib/terrier";
+import * as Terrier from "@host/lib/terrier";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import { expandHome } from "@host/lib/util/paths";
 import {
   projectIcon,
@@ -44,25 +46,73 @@ import {
 // one's project back.
 let reorderChain: Promise<void> = Promise.resolve();
 
+class NotGitRepositoryError extends Schema.TaggedError<NotGitRepositoryError>()(
+  "NotGitRepositoryError",
+  { path: Schema.String },
+) {
+  override get message(): string {
+    return `${this.path} is not a git repository`;
+  }
+}
+
+class NotGitRemoteError extends Schema.TaggedError<NotGitRemoteError>()(
+  "NotGitRemoteError",
+  {},
+) {
+  override get message(): string {
+    return "Not a git remote URL";
+  }
+}
+
+// A checkout the app made that could not be added as a project, which
+// stays where it is.
+class CheckoutUnregisteredError extends Schema.TaggedError<CheckoutUnregisteredError>()(
+  "CheckoutUnregisteredError",
+  {
+    path: Schema.String,
+    made: Schema.String,
+    reason: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `${this.made} ${this.path}, but couldn't add it as a project: ${this.reason}`;
+  }
+}
+
 // Registers a checkout the app just made (a clone, a new repository).
 // The checkout stays if registering fails, so the error says where it
 // is: a retry would only find the folder taken. Terrier first, for
 // add's reason.
-async function registerNewCheckout(
+const registerNewCheckout = (
   path: string,
   terrier: boolean | undefined,
   made: string,
-): Promise<Project> {
-  try {
-    if (terrier) await terrierAdd(path);
-    return await registerProject(path);
-  } catch (error) {
-    throw new Error(
-      `${made} ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
-      { cause: error },
-    );
-  }
-}
+) =>
+  register(path, terrier).pipe(
+    Effect.mapError(
+      (cause) =>
+        new CheckoutUnregisteredError({
+          path,
+          made,
+          reason: errorMessageOf(cause),
+          cause,
+        }),
+    ),
+  );
+
+// Into terrier first, so registering mints the id terrier's listing of
+// the repo carries (Projects.add in the engine): removing the project
+// here later leaves it under the same id, its per-project state intact.
+// Then the same engine as `sm projects add`: registration and the
+// config seed.
+const register = Effect.fn("projects.register")(function* (
+  path: string,
+  terrier: boolean | undefined,
+) {
+  if (terrier) yield* Effect.flatMap(Terrier.Terrier, (it) => it.add(path));
+  return yield* fromPromise(() => registerProject(path));
+});
 
 export const projectsViews: ViewHandlers<
   typeof projectsContract,
@@ -77,39 +127,41 @@ export const projectsViews: ViewHandlers<
     ),
 };
 
-export const projectsHandlers: Handlers<typeof projectsContract> = {
+export const projectsHandlers: Handlers<
+  typeof projectsContract,
+  unknown,
+  Terrier.Terrier
+> = {
   list: () => listProjectsWithStatus(),
 
-  add: async ({ path: rawPath, terrier }) => {
-    const path = expandHome(rawPath);
+  add: ({ path: rawPath, terrier }) =>
+    Effect.gen(function* () {
+      const path = expandHome(rawPath);
+      if (!(yield* fromPromise(() => isGitRepo(path)))) {
+        return yield* new NotGitRepositoryError({ path });
+      }
+      return yield* register(path, terrier);
+    }),
 
-    if (!(await isGitRepo(path))) {
-      throw new Error(`${path} is not a git repository`);
-    }
+  clone: ({ url, parentDir, name, terrier }) =>
+    Effect.gen(function* () {
+      const folder = name ?? cloneFolderName(url);
+      // The payload schema has held the URL to a clone source already.
+      // Not echoed: it may carry a token.
+      if (folder === null) return yield* new NotGitRemoteError();
+      const path = yield* fromPromise(() =>
+        cloneRepo(url, expandHome(parentDir), folder),
+      );
+      return yield* registerNewCheckout(path, terrier, "Cloned into");
+    }),
 
-    // Into terrier first, so registering mints the id terrier's listing
-    // of the repo carries (Projects.add in the engine):
-    // removing the project here later leaves it under the same id, its
-    // per-project state intact.
-    if (terrier) await terrierAdd(path);
-    // Same engine as `sm projects add`: registration and the config
-    // seed run in the CLI.
-    return registerProject(path);
-  },
-
-  clone: async ({ url, parentDir, name, terrier }) => {
-    const folder = name ?? cloneFolderName(url);
-    // The payload schema has held the URL to a clone source already.
-    // Not echoed: it may carry a token.
-    if (folder === null) throw new Error("Not a git remote URL");
-    const path = await cloneRepo(url, expandHome(parentDir), folder);
-    return registerNewCheckout(path, terrier, "Cloned into");
-  },
-
-  create: async ({ parentDir, name, terrier }) => {
-    const path = await createRepo(expandHome(parentDir), name);
-    return registerNewCheckout(path, terrier, "Created");
-  },
+  create: ({ parentDir, name, terrier }) =>
+    Effect.gen(function* () {
+      const path = yield* fromPromise(() =>
+        createRepo(expandHome(parentDir), name),
+      );
+      return yield* registerNewCheckout(path, terrier, "Created");
+    }),
 
   remove: async ({ id }) => {
     const removed = (await listProjects()).find((p) => p.id === id);

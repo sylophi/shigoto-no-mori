@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import * as DeviceLink from "@host/socket/server";
-import { withParentSpan } from "@host/lib/util/trace";
+import { invokeInCallSpan, withParentSpan } from "@host/lib/util/trace";
 import type { WsServerStartOpts } from "@host/socket/server";
 import * as Effect from "effect/Effect";
 import { callFailureOf } from "@shigomori/contracts/errors";
@@ -36,7 +36,12 @@ import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
-import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
+import {
+  broadcastAll,
+  registerHostContract,
+} from "@shared/ipc/registerContract";
+import type { HostServices } from "@host/process/services";
+import { hostServices } from "./hostServices.mts";
 import type {
   ClientTransport,
   HandlerContext,
@@ -54,6 +59,8 @@ import { type Track, waitFor } from "./checkKit.mts";
 // broadcastAll), and the listener's own state.
 type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
   Pick<ServerTransport, "handle"> & {
+    // A call as the host serves it, an effect (registerHostContract).
+    serve: DeviceLink.LinkRegistrar["handle"];
     // A push from the host, as main's broadcastAll publishes it.
     broadcastAll(
       channel: string,
@@ -145,6 +152,7 @@ export async function startDirectListener(
           subscribe: Effect.succeed(Stream.never),
           release: Effect.void,
         }),
+        hostServices,
         opts.provide ?? Layer.empty,
       ),
     ),
@@ -156,6 +164,7 @@ export async function startDirectListener(
   let current = await onLink((link) => link.status);
   const binding: WsServerBinding = {
     ...registrar,
+    serve: registrar.handle,
     // Each call's signal aborts when the call is interrupted, and its
     // span is the parent of the handler's, as the host's are.
     handle: (channel, fn, handleOpts) =>
@@ -309,7 +318,7 @@ export async function bootBrokeredPair(
 }
 
 export type ServedContracts<C extends readonly ContractModule[]> = {
-  [I in keyof C]: readonly [C[I], Handlers<C[I], HandlerContext>];
+  [I in keyof C]: readonly [C[I], Handlers<C[I], HandlerContext, HostServices>];
 };
 
 export type DirectWire = {
@@ -347,10 +356,16 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     deviceId: "A",
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
-        registerContract(contract, handlers, binding, {
-          validateOutputs: true,
-          onUsageTracked: () => {},
-        });
+        registerHostContract(
+          contract,
+          handlers,
+          { handle: binding.serve, broadcastAll: binding.broadcastAll },
+          {
+            validateOutputs: true,
+            onUsageTracked: () => {},
+            invoke: invokeInCallSpan,
+          },
+        );
       }
     },
   });

@@ -80,9 +80,12 @@ function wrapContractCall<Ctx>(
 }
 
 // The same, as an effect for a server built in a layer graph: a handler
-// may answer with an effect on the graph's services, which runs where
-// the call is served, or as before with a value or a Promise, which
-// gets a signal of its own that aborts when the call is interrupted.
+// answers with an effect on the graph's services, which runs where the
+// call is served. The Promise path below (a value or a Promise, with a
+// signal that aborts when the call is interrupted) is scaffolding for
+// the handlers not converted yet, not a second way to write one: it
+// goes with the last Promise handler (V3.md, the host's Promise
+// adapters), so a new handler answers with an effect.
 function wrapEffectCall<Services>(
   call: ContractCall,
   handler: (input: unknown, ctx: HandlerContext) => unknown,

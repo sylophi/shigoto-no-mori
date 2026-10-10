@@ -6,8 +6,7 @@
 // the peers. Every host-side module (`isHostSide`) registers here.
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { callFailureOf } from "@shigomori/contracts/errors";
-import { withParentSpan } from "@host/lib/util/trace";
+import { invokeInCallSpan } from "@host/lib/util/trace";
 import type { HostServices } from "./services";
 import type * as Stream from "effect/Stream";
 import { join } from "node:path";
@@ -256,23 +255,13 @@ function assertHostSide(module: ContractModule): void {
   }
 }
 
-// A Promise handler runs with the call's span as its ambient parent,
-// so its spans and its calls on a peer continue the caller's trace.
-const invoke = <A>(run: () => A) =>
-  Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
-    Effect.try({
-      try: () => withParentSpan(span, run),
-      catch: callFailureOf,
-    }),
-  );
-
 export function registerContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext, HostServices>,
 ): void {
   assertHostSide(module);
   registerHostContract(module, handlers, hostServer, {
-    invoke,
+    invoke: invokeInCallSpan,
     // Handler results are parsed with their output schema in a dev
     // build, so drift surfaces here and not as a confusing failure in a
     // window. A packaged build skips the extra parse.
@@ -320,7 +309,7 @@ export function registerLoopbackContract<M extends ContractModule>(
       handle: (channel, fn) => loopbackRegistrar.handle(channel, fn),
       broadcastAll: () => {},
     },
-    { validateOutputs: !hostFacts().packaged, invoke },
+    { validateOutputs: !hostFacts().packaged, invoke: invokeInCallSpan },
   );
   for (const [key, stream] of Object.entries(streams)) {
     loopbackRegistrar.view(`${nameOf(module)}:${key}`, stream);
