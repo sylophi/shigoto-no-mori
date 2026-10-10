@@ -1,5 +1,11 @@
-import { useResetSoft } from "@/hooks/worktrees/useWorktreeChanges";
+import { useQueryClient } from "@tanstack/react-query";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import {
+  commitMessageQueryOptions,
+  useResetSoft,
+} from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { fillEmptyCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { CommitRewrite } from "@/lib/commitRewrite";
@@ -7,13 +13,20 @@ import type { Worktree } from "@shared/schemas";
 
 // Undo commits, as one action for every surface that offers it (the
 // changes page's last-commit strip, a commit row's context menu): soft
-// reset to `target` (a merge on top is dropped whole), then a toast
-// whose Redo puts HEAD back. The backend refuses the redo if anything
-// was committed in between. The page follows the changes, since the
-// commit it may have shown is gone: to the Changes tab where they are
-// staged, or for a merge to the commit the branch is back on.
+// reset to `target` (a merge on top is dropped whole). The page follows
+// the changes, since the commit it may have shown is gone: to the
+// Changes tab where they are staged, or for a merge to the commit the
+// branch is back on.
+//
+// Undoing one commit puts its message back in an empty commit box, as
+// GitHub Desktop does, and committing again is the redo. Several
+// commits or a merge can't be made again from the box, so those get a
+// toast whose Redo puts HEAD back. The backend refuses the redo if
+// anything was committed in between.
 export function useUndoCommits(worktree: Worktree) {
   const { mutate: reset, isPending } = useResetSoft();
+  const queryClient = useQueryClient();
+  const scope = useHostScope();
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
 
@@ -29,6 +42,24 @@ export function useUndoCommits(worktree: Worktree) {
         onSuccess: ({ previousHead }) => {
           if (merge) nav.toCommit(projectId, worktreeId, target, true);
           else nav.toDiff(projectId, worktreeId, { replace: true });
+          if (!merge && count === 1) {
+            // A failed read has the query's own toast.
+            void queryClient
+              .fetchQuery(
+                commitMessageQueryOptions(
+                  scope,
+                  projectId,
+                  worktreeId,
+                  previousHead,
+                ),
+              )
+              .then(
+                (message) =>
+                  fillEmptyCommitDraft(projectId, worktreeId, message),
+                () => {},
+              );
+            return;
+          }
           toast(
             merge ? "Undid the merge" : `Undid ${pluralize(count, "commit")}`,
             {
