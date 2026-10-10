@@ -93,9 +93,8 @@ export type TraceLine = {
 };
 
 // What the harness injects into every page: a visibility it controls
-// (headless Chrome never hides a page) and a wall-clock offset (a sleep
-// longer than a token's life, without waiting for it), and each toast
-// as a console line, so what reached the user is in the trace.
+// (headless Chrome never hides a page), and each toast as a console
+// line, so what reached the user is in the trace.
 const PAGE_HOOKS = `(() => {
   let hidden = false;
   Object.defineProperty(Document.prototype, "visibilityState", {
@@ -109,21 +108,6 @@ const PAGE_HOOKS = `(() => {
   window.harnessSetHidden = (next) => {
     hidden = next;
     document.dispatchEvent(new Event("visibilitychange"));
-  };
-  const RealDate = Date;
-  let offset = 0;
-  class ShiftedDate extends RealDate {
-    constructor(...args) {
-      if (args.length === 0) super(RealDate.now() + offset);
-      else super(...args);
-    }
-    static now() {
-      return RealDate.now() + offset;
-    }
-  }
-  window.Date = ShiftedDate;
-  window.harnessShiftClock = (ms) => {
-    offset += ms;
   };
   const seen = new WeakSet();
   new MutationObserver(() => {
@@ -140,7 +124,6 @@ const PAGE_HOOKS = `(() => {
 declare global {
   interface Window {
     harnessSetHidden(hidden: boolean): void;
-    harnessShiftClock(ms: number): void;
     Clerk?: {
       loaded?: boolean;
       session?: {
@@ -202,13 +185,6 @@ export class Tab {
       await session.send("Debugger.resume").catch(() => {});
       await session.send("Debugger.disable").catch(() => {});
     }
-  }
-
-  // Moves the page's wall clock ahead, as a sleep does. Only ahead: a
-  // clock that goes back is nothing a machine does, and Effect's
-  // schedules read it. A reload puts it right.
-  async advanceClock(ms: number): Promise<void> {
-    await this.page.evaluate((offset) => window.harnessShiftClock(offset), ms);
   }
 }
 
