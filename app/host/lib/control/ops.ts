@@ -65,6 +65,7 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import * as Engine from "@host/lib/engine";
+import * as Processes from "@host/lib/util/processes";
 import * as Ops from "@host/lib/engineOps";
 import {
   BLOCK_REASON,
@@ -431,11 +432,14 @@ async function sendPlan(
   }
   const { identity, target } = await pickDevice(project, input.device);
   const choice = await choiceFor(identity, input, () =>
-    Engine.runWith(engine)(
-      syncHandlers.ignoredPaths({
-        projectId: project.id,
-        worktreeId: worktree.id,
-      }),
+    Processes.run(
+      Effect.provide(
+        syncHandlers.ignoredPaths({
+          projectId: project.id,
+          worktreeId: worktree.id,
+        }),
+        engine,
+      ),
     ),
   );
   const device = { deviceId: target.deviceId, name: target.name };

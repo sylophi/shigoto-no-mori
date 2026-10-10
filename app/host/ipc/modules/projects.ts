@@ -36,7 +36,6 @@ import {
 } from "@host/lib/scripts";
 import type { HostServices } from "@host/process/services";
 import * as Terrier from "@host/lib/terrier";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import { expandHome } from "@host/lib/util/paths";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
@@ -161,7 +160,7 @@ export const projectsHandlers = {
   add: ({ path: rawPath, terrier }) =>
     Effect.gen(function* () {
       const path = expandHome(rawPath);
-      if (!(yield* fromPromise(() => isGitRepo(path)))) {
+      if (!(yield* isGitRepo(path))) {
         return yield* new NotGitRepositoryError({ path });
       }
       return yield* register(path, terrier);
@@ -179,9 +178,7 @@ export const projectsHandlers = {
 
   create: ({ parentDir, name, terrier }) =>
     Effect.gen(function* () {
-      const path = yield* fromPromise(() =>
-        createRepo(expandHome(parentDir), name),
-      );
+      const path = yield* createRepo(expandHome(parentDir), name);
       return yield* registerNewCheckout(path, terrier, "Created");
     }),
 
@@ -248,12 +245,12 @@ export const projectsHandlers = {
 
   cloneUrl: ({ projectId }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      fromPromise(() => listRemoteEntries(project.path)),
+      listRemoteEntries(project.path),
     ).pipe(Effect.map(pickCloneUrl)),
 
   listBranches: ({ projectId }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      fromPromise(() => listBranches(project.path)),
+      listBranches(project.path),
     ),
 
   // The name the CLI would pick for a new worktree right now.
@@ -262,19 +259,17 @@ export const projectsHandlers = {
 
   worktreeIncludeStatus: ({ projectId }) =>
     Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
-      fromPromise(() => readWorktreeIncludeStatus(checkouts)),
+      readWorktreeIncludeStatus(checkouts),
     ),
 
   carryOverListing: ({ projectId, relative, ruleIgnored }) =>
     Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
-      fromPromise(() =>
-        listCarryOverCandidates(checkouts, relative, { ruleIgnored }),
-      ),
+      listCarryOverCandidates(checkouts, relative, { ruleIgnored }),
     ),
 
   carryOverStats: ({ projectId, paths }) =>
     Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
-      fromPromise(() => statCarryOverPaths(checkouts, paths)),
+      statCarryOverPaths(checkouts, paths),
     ),
 
   // The engine resolves icons through its shared cache (Icons.ts).

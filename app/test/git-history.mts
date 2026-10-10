@@ -22,6 +22,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // Same as git-changes: the hook's GIT_* variables go before the git
@@ -35,7 +36,7 @@ scrubProcessGitEnv({
 });
 
 const { cherryPickCommit, revertCommit, rewordCommit, squashIntoParent } =
-  await import("../host/lib/git/history.ts");
+  promised(await import("../host/lib/git/history.ts"));
 const {
   applyStash,
   dropStash,
@@ -43,19 +44,20 @@ const {
   readStashDiff,
   restoreStash,
   stashChanges,
-} = await import("../host/lib/git/stash.ts");
+} = promised(await import("../host/lib/git/stash.ts"));
 
 const { abortOperation, continueOperation, readOperation, resolveConflict } =
-  await import("../host/lib/git/operation.ts");
+  promised(await import("../host/lib/git/operation.ts"));
 const {
   mergePrimaryKeepingConflicts,
   mergeUpstreamKeepingConflicts,
   pullRebaseOrMergeAndPush,
   syncWithPrimary,
-} = await import("../host/lib/git/sync.ts");
+} = promised(await import("../host/lib/git/sync.ts"));
 const { isSyncConflictsError } = await import("@shigomori/contracts/errors");
-const { listCommits, readBranchHistory } =
-  await import("../host/lib/git/worktrees.ts");
+const { listCommits, readBranchHistory } = promised(
+  await import("../host/lib/git/worktrees.ts"),
+);
 
 const git = sandboxGit(gitEnv);
 

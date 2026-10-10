@@ -12,6 +12,7 @@ import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project, WorktreeRemoval } from "@shigomori/contracts/schemas";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
+import { GitRefusal } from "@host/lib/git/core";
 import {
   discardChanges,
   listChangesForPage,
@@ -209,7 +210,7 @@ const refuseRunningWork = Effect.fn("worktrees.refuseRunningWork")(function* (
 
 export const worktreesViews: ViewHandlers<
   typeof worktreesContract,
-  Views.Services | Engine.Services
+  Views.Services | Engine.Services | ChildProcessSpawner.ChildProcessSpawner
 > = {
   watch: ({ projectId }) =>
     Views.view(
@@ -543,12 +544,10 @@ export const worktreesHandlers = {
         input.worktreeId,
         { primaryRef: true },
       );
-      return yield* fromPromise(() =>
-        readBranchHistory(identity.path, {
-          base: branchBaseOf(identity),
-          count: BRANCH_HISTORY_COUNT,
-        }),
-      );
+      return yield* readBranchHistory(identity.path, {
+        base: branchBaseOf(identity),
+        count: BRANCH_HISTORY_COUNT,
+      });
     }),
 
   branchDiff: (input) =>
@@ -560,13 +559,11 @@ export const worktreesHandlers = {
       );
       const base = branchBaseOf(identity);
       if (base === undefined) {
-        return yield* new GitRefusedError({
+        return yield* new GitRefusal({
           reason: "This branch has no primary branch to compare with.",
         });
       }
-      return yield* fromPromise(() =>
-        getMergeBaseDiff(identity.path, base, "HEAD"),
-      );
+      return yield* getMergeBaseDiff(identity.path, base, "HEAD");
     }),
 
   revertCommit: (input) =>
@@ -589,9 +586,7 @@ export const worktreesHandlers = {
         input.worktreeId,
       );
       if (worktree.detached) return [];
-      return yield* fromPromise(() =>
-        listStashes(worktree.path, worktree.branch),
-      );
+      return yield* listStashes(worktree.path, worktree.branch);
     }),
   stashDiff: (input) =>
     atPath(input, (path) => readStashDiff(path, input.hash)),
@@ -608,9 +603,7 @@ export const worktreesHandlers = {
         input.projectId,
         input.worktreeId,
       );
-      yield* fromPromise(() =>
-        restoreStash(worktree.path, worktree.branch, input.hash, input),
-      );
+      yield* restoreStash(worktree.path, worktree.branch, input.hash, input);
     }),
 
   push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
@@ -628,17 +621,13 @@ export const worktreesHandlers = {
   syncWithPrimary: (input) =>
     mutateAndDescribe(input, (target, project) =>
       Effect.flatMap(primaryRefToSync(target, project), (primaryRef) =>
-        fromPromise(() =>
-          syncWithPrimary(target.path, project.path, primaryRef),
-        ),
+        syncWithPrimary(target.path, project.path, primaryRef),
       ),
     ),
   mergePrimary: (input) =>
     mutateAndDescribeWith(input, (target, project) =>
       Effect.flatMap(primaryRefToSync(target, project), (primaryRef) =>
-        fromPromise(() =>
-          mergePrimaryKeepingConflicts(target.path, project.path, primaryRef),
-        ),
+        mergePrimaryKeepingConflicts(target.path, project.path, primaryRef),
       ),
     ).pipe(
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
@@ -694,16 +683,6 @@ function branchBaseOf(identity: WorktreeIdentity): string | undefined {
   return identity.primaryRef;
 }
 
-// A git action the worktree can't take.
-class GitRefusedError extends Schema.TaggedError<GitRefusedError>()(
-  "GitRefusedError",
-  { reason: Schema.String },
-) {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
 // The ref a sync from primary takes in, refusing the worktrees it has
 // no meaning for.
 const primaryRefToSync = Effect.fnUntraced(function* (
@@ -711,12 +690,12 @@ const primaryRefToSync = Effect.fnUntraced(function* (
   project: Project,
 ) {
   if (target.isPrimary) {
-    return yield* new GitRefusedError({
+    return yield* new GitRefusal({
       reason: "The primary checkout can't be synced from itself",
     });
   }
   if (target.detached) {
-    return yield* new GitRefusedError({
+    return yield* new GitRefusal({
       reason: "Detached worktrees can't be synced with the primary branch",
     });
   }
@@ -724,55 +703,48 @@ const primaryRefToSync = Effect.fnUntraced(function* (
     primaryRef: true,
   });
   if (primaryRef === undefined) {
-    return yield* new GitRefusedError({
+    return yield* new GitRefusal({
       reason: `No primary branch resolves in ${project.path}`,
     });
   }
   return primaryRef;
 });
 
-// A git action of the host's, still a Promise, on the worktree's
-// checkout.
-const atPath = <A>(
+// A git read or write on the worktree's checkout.
+const atPath = <A, E, R>(
   scope: { projectId: string; worktreeId: string },
-  action: (path: string) => Promise<A>,
-) =>
-  Effect.flatMap(findWorktreePath(scope), (path) =>
-    fromPromise(() => action(path)),
-  );
+  action: (path: string) => Effect.Effect<A, E, R>,
+) => Effect.flatMap(findWorktreePath(scope), action);
 
 // Worktree mutations (remote syncs, local branch ops, commits) all share
 // the same shape: resolve the worktree, run a git action, return the
-// freshly-described worktree (the CLI's row) so the renderer can
+// freshly-described worktree (the engine's row) so the renderer can
 // replace its cached row in one round trip. The `With` form also hands
 // back what the action produced (a commit hash, a snapshot ref) for the
-// calls that have one. The host's git actions are still Promises.
-const mutateAndDescribeWith = <T, E = never, R = never>(
+// calls that have one.
+const mutateAndDescribeWith = <T, E, R>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
   action: (
     target: WorktreeIdentity,
     project: Project,
-  ) => Promise<T> | Effect.Effect<T, E, R>,
+  ) => Effect.Effect<T, E, R>,
 ) =>
   Effect.gen(function* () {
     const { project, worktree } = yield* findProjectAndWorktree(
       projectId,
       worktreeId,
     );
-    const acted = action(worktree, project);
-    const result = yield* Effect.isEffect(acted)
-      ? acted
-      : fromPromise(() => acted);
+    const result = yield* action(worktree, project);
     return {
       result,
       worktree: yield* Ops.describeWorktree(project.id, worktreeId),
     };
   });
 
-const mutateAndDescribe = <T, E = never, R = never>(
+const mutateAndDescribe = <T, E, R>(
   scope: { projectId: string; worktreeId: string },
   action: (
     target: WorktreeIdentity,
     project: Project,
-  ) => Promise<T> | Effect.Effect<T, E, R>,
+  ) => Effect.Effect<T, E, R>,
 ) => Effect.map(mutateAndDescribeWith(scope, action), (done) => done.worktree);

@@ -9,13 +9,13 @@
 // so the TTL is the whole staleness rule.
 import { computeRepoIdentity } from "@shared/git/repoIdentity.mts";
 import { ttlMapCache } from "../util/ttlCache";
-import { run } from "./core";
-import { resolveDefaultRef } from "./remotes";
+import { resolveDefaultRef } from "@shared/git/defaultBranch.mts";
+import { run } from "./promises";
 
 const cache = ttlMapCache<string, string | null>(60_000, (projectPath) =>
   computeRepoIdentity(projectPath, {
     run,
-    resolveDefaultRef: (path) => resolveDefaultRef(path),
+    resolveDefaultRef: (path) => resolveDefaultRef(run, path),
   }),
 );
 

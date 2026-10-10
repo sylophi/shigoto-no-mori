@@ -28,6 +28,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // changes.ts runs git under this process's environment. The pre-commit
@@ -49,8 +50,8 @@ const {
   readCommitMessage,
   resetSoft,
   restoreDiscard,
-} = await import("../host/lib/git/changes.ts");
-const { commitPicks } = await import("../host/lib/git/commit.ts");
+} = promised(await import("../host/lib/git/changes.ts"));
+const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
 
 // A commit of whole files, the way the page sends one with nothing
 // ticked by hunk.

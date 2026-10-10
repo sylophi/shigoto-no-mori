@@ -119,10 +119,10 @@ export const nukeEverything = Effect.fnUntraced(function* <R>(
   // The data dir rm wipes any managed-root worktree dirs whose removal
   // failed above, leaving stale admin entries behind. Sweep them per
   // project now that the dirs are gone.
-  yield* Effect.promise(() =>
-    Promise.all(
-      projects.map((p) => pruneStaleWorktrees(p.path).catch(() => undefined)),
-    ),
+  yield* Effect.forEach(
+    projects,
+    (p) => Effect.ignore(pruneStaleWorktrees(p.path)),
+    { concurrency: "unbounded", discard: true },
   );
 });
 

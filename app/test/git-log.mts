@@ -15,7 +15,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LOG_FORMAT, listCommits, parseLog } from "@host/lib/git/worktrees";
+import * as Worktrees from "@host/lib/git/worktrees";
+import { promised } from "./lib/gitPromises.mts";
+
+const { LOG_FORMAT, listCommits, parseLog } = promised(Worktrees);
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import { afterAll, beforeAll, it } from "vitest";
 import { appRoot, scrubProcessGitEnv } from "./lib/checkKit.mts";
