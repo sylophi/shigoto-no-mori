@@ -26,6 +26,8 @@ import {
   useEnroll,
 } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
+import { toast } from "@/lib/toast";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 export type EnrollmentStep =
   // Enrolled, with a key.
@@ -91,28 +93,41 @@ function startSignIn(clerk: Clerk): void {
   // here, marked.
   const back = new URL(location.href);
   back.searchParams.set(REDIRECT_RETURN_PARAM, "1");
-  void signIn.authenticateWithRedirect({
-    strategy,
-    redirectUrl: back.href,
-    redirectUrlComplete: location.href,
-  });
+  signIn
+    .authenticateWithRedirect({
+      strategy,
+      redirectUrl: back.href,
+      redirectUrlComplete: location.href,
+    })
+    .catch((error: unknown) => {
+      toast.error("Couldn't start the sign-in", {
+        description: errorMessageOf(error),
+      });
+    });
 }
 
 // Finishes a web client's sign-in on its return from the provider, and
 // takes the marker off the address. Mounted once, by ClerkAccountSync.
 export function useFinishRedirectSignIn(): void {
   const clerk = useClerk();
+  const { isLoaded } = useAuth();
   useEffect(() => {
-    if (hasLocalHost) return;
+    if (hasLocalHost || !isLoaded) return;
     const here = new URL(location.href);
     if (!here.searchParams.has(REDIRECT_RETURN_PARAM)) return;
     here.searchParams.delete(REDIRECT_RETURN_PARAM);
     history.replaceState(history.state, "", here.href);
-    void clerk.handleRedirectCallback({
-      signInFallbackRedirectUrl: here.href,
-      signUpFallbackRedirectUrl: here.href,
-    });
-  }, [clerk]);
+    clerk
+      .handleRedirectCallback({
+        signInFallbackRedirectUrl: here.href,
+        signUpFallbackRedirectUrl: here.href,
+      })
+      .catch((error: unknown) => {
+        toast.error("Couldn't finish the sign-in", {
+          description: errorMessageOf(error),
+        });
+      });
+  }, [clerk, isLoaded]);
 }
 
 export function useEnrollment(): {
