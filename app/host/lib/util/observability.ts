@@ -16,7 +16,6 @@ import * as Option from "effect/Option";
 import * as Tracer from "effect/Tracer";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { logger } from "@shared/log";
-import { setTraceContext } from "@host/lib/util/trace";
 
 const millis = (nanos: bigint) => Number(nanos) / 1_000_000;
 
@@ -89,23 +88,11 @@ const devTools = (packaged: boolean) =>
     ),
   );
 
-// The tracer's Promise adapter (shared/trace.ts), filled while the
-// graph lives.
-const traceAdapter = Layer.effectDiscard(
-  Effect.acquireRelease(
-    Effect.context().pipe(
-      Effect.tap((context) => Effect.sync(() => setTraceContext(context))),
-    ),
-    () => Effect.sync(() => setTraceContext(null)),
-  ),
-);
-
 export const layer = (options: {
   readonly packaged: boolean;
   readonly writeTraceLine: (line: string) => void;
 }) =>
-  traceAdapter.pipe(
-    Layer.provideMerge(devTools(options.packaged)),
+  devTools(options.packaged).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Logger.layer([logger, Logger.tracerLogger]),

@@ -35,6 +35,7 @@ import {
 } from "./facts";
 import * as HostLayer from "./layer";
 import { startHost } from "./session";
+import { graphFailed, graphUp } from "./wires";
 
 // The utility process's port to its parent, and the port the shell
 // hands over on it, as much of Electron's types as the host reads
@@ -158,8 +159,10 @@ async function main(): Promise<void> {
   );
   runtime = graph;
   try {
-    await graph.context();
+    // The listeners' calls run on the graph's services from here.
+    graphUp(await graph.context());
   } catch (error) {
+    graphFailed(errorMessageOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
     await shell.failed({

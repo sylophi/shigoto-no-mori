@@ -1,5 +1,6 @@
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import * as Sharing from "@host/lib/sharing";
 import * as Views from "@host/lib/views";
@@ -21,4 +22,4 @@ export const sharingViews: ViewHandlers<
 export const sharingHandlers = {
   read: () => current,
   set: (on) => Effect.flatMap(Sharing.Sharing, (it) => it.set(on)),
-} satisfies Handlers<typeof sharingContract, unknown, Sharing.Sharing>;
+} satisfies EffectHandlers<typeof sharingContract, unknown, Sharing.Sharing>;

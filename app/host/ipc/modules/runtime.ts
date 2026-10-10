@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import type { NukeProgress } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -11,7 +11,6 @@ import { nukeEverything } from "@host/lib/nuke";
 import { moveDataDir } from "@host/lib/dataDirMove";
 import { killAllScripts } from "@host/lib/scripts";
 import { implSlot } from "@host/lib/util/implSlot";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
@@ -26,12 +25,12 @@ import {
 // Keeping them behind a setter keeps this handler module free of
 // Electron imports.
 type RuntimeImpl = {
-  releaseStore: () => Promise<void>;
+  releaseStore: Effect.Effect<void>;
   stopUpdaterBridge: () => void;
   // Unpublishes loopback.json, so the moved data dir never carries the
   // address of this pre-move process to a terminal that resolved the
   // new one.
-  unpublishLoopback: () => Promise<void>;
+  unpublishLoopback: Effect.Effect<void>;
   broadcastNukeProgress: (progress: NukeProgress) => void;
   // The data dir was wiped and reseeded under the running app: put back
   // the plumbing files this process keeps there.
@@ -62,14 +61,15 @@ let moveInFlight = false;
 export const runtimeHandlers = {
   // Host facts only. isDev deliberately isn't here: it describes the
   // client build and rides the preload bridge (api.isDev) instead.
-  info: () => ({
-    dataDir: dataDir(),
-    dataDirSource: dataDirSource(),
-    // resolve() drops the trailing slash a hand-edited pointer may carry.
-    atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
-    canonicalDataDirName: canonicalDataDirName(),
-    homedir: homedir(),
-  }),
+  info: () =>
+    Effect.sync(() => ({
+      dataDir: dataDir(),
+      dataDirSource: dataDirSource(),
+      // resolve() drops the trailing slash a hand-edited pointer may carry.
+      atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
+      canonicalDataDirName: canonicalDataDirName(),
+      homedir: homedir(),
+    })),
 
   moveDataDir: ({ parentDir }, ctx) =>
     Effect.gen(function* () {
@@ -92,11 +92,13 @@ export const runtimeHandlers = {
       let watchersStopped = false;
       yield* moveDataDir(parentDir, {
         killAllScripts: killAllScripts(),
-        beforeMove: fromPromise(async () => {
+        beforeMove: Effect.suspend(() => {
           watchersStopped = true;
-          await runtimeImpl().releaseStore();
-          runtimeImpl().stopUpdaterBridge();
-          await runtimeImpl().unpublishLoopback();
+          const impl = runtimeImpl();
+          return impl.releaseStore.pipe(
+            Effect.andThen(Effect.sync(impl.stopUpdaterBridge)),
+            Effect.andThen(impl.unpublishLoopback),
+          );
         }),
       }).pipe(
         Effect.onError(() =>
@@ -139,4 +141,8 @@ export const runtimeHandlers = {
       // Settings offers a fresh install afterwards.
       yield* uninstallCliEverything;
     }),
-} satisfies Handlers<typeof runtimeContract, HandlerContext, HostServices>;
+} satisfies EffectHandlers<
+  typeof runtimeContract,
+  HandlerContext,
+  HostServices
+>;

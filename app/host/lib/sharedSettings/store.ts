@@ -19,6 +19,7 @@ import * as Layer from "effect/Layer";
 import { getDeviceId } from "../config/deviceId";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
+import { layerLatch } from "../util/layerLatch";
 
 let held: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
 // The changes not stored yet, in the order they were made, which the
@@ -47,13 +48,17 @@ const writer = Effect.forever(
 );
 
 // Read from the store once at launch, then written behind every change
-// until the app quits.
+// until the app quits. A reader before then waits for it.
+const loaded = layerLatch<void>("The shared settings");
 export const layer = Layer.effectDiscard(
-  Effect.gen(function* () {
-    held = yield* Ops.readSharedSettings;
-    yield* Effect.forkScoped(writer);
-  }),
+  loaded.provide(
+    Effect.gen(function* () {
+      held = yield* Ops.readSharedSettings;
+      yield* Effect.forkScoped(writer);
+    }),
+  ),
 );
+export const sharedSettingsLoaded = loaded.get;
 
 // Once every change made so far is in the store.
 export const sharedSettingsStored = allStored.await;

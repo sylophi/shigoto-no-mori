@@ -92,7 +92,7 @@ export type Signal =
 // the read.
 export const view = <A, R = never>(
   key: string,
-  read: () => Effect.Effect<A, unknown, R> | A | Promise<A>,
+  read: () => Effect.Effect<A, unknown, R>,
   when: (signal: Signal) => boolean,
   options: { readonly every?: Duration.Input } = {},
 ): Stream.Stream<A, unknown, Services | R> =>
@@ -108,7 +108,7 @@ export const view = <A, R = never>(
   );
 
 const reading = <A, R>(
-  read: () => Effect.Effect<A, unknown, R> | A | Promise<A>,
+  read: () => Effect.Effect<A, unknown, R>,
   when: (signal: Signal) => boolean,
   options: { readonly every?: Duration.Input },
 ): Stream.Stream<A, unknown, Services | R> =>
@@ -128,14 +128,7 @@ const reading = <A, R>(
       return Stream.succeed(undefined).pipe(
         Stream.concat(Stream.merge(signals, ticks)),
         Stream.buffer({ capacity: 1, strategy: "sliding" }),
-        Stream.mapEffect(() =>
-          Effect.suspend(() => {
-            const answer = read();
-            return Effect.isEffect(answer)
-              ? (answer as Effect.Effect<A, unknown, R>)
-              : Effect.tryPromise(async () => answer);
-          }),
-        ),
+        Stream.mapEffect(() => Effect.suspend(read)),
         Stream.changes,
       );
     }),

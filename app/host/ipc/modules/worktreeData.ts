@@ -1,5 +1,5 @@
 import type { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
@@ -30,4 +30,8 @@ export const worktreeDataHandlers = {
       findProject(projectId),
       Ops.writeWorktreeDescription(projectId, worktreeId, description),
     ).pipe(Effect.asVoid),
-} satisfies Handlers<typeof worktreeDataContract, unknown, Engine.Services>;
+} satisfies EffectHandlers<
+  typeof worktreeDataContract,
+  unknown,
+  Engine.Services
+>;

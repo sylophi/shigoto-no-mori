@@ -25,6 +25,7 @@ import {
 } from "@shared/packaging/cliDist.mts";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
 import { cliBinaryPath } from "./binary";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { uninstallShellIntegration } from "./shell";
@@ -103,7 +104,7 @@ function isTranslocated(): boolean {
   return packaged && resourcesPath.includes("/AppTranslocation/");
 }
 
-export async function cliLinkStatus(): Promise<CliStatus> {
+async function linkStatus(): Promise<CliStatus> {
   const binDir = cliUserBinDir();
   const base = {
     name: cliName(),
@@ -173,8 +174,8 @@ async function pointLinksAt(binary: string, force: boolean): Promise<void> {
 // translocated mount. force is the Settings "Replace and install"
 // consent: it takes over a foreign occupant too, so a command that
 // doesn't point at the app can be fixed without a trip to the shell.
-export async function installCliLinks(force: boolean): Promise<CliStatus> {
-  const status = await cliLinkStatus();
+async function installLinks(force: boolean): Promise<CliStatus> {
+  const status = await linkStatus();
   if (status.state === "foreign" && !force) {
     throw new Error(
       `${status.linkPath} already exists and wasn't created by ` +
@@ -192,8 +193,17 @@ export async function installCliLinks(force: boolean): Promise<CliStatus> {
   const binary = cliBinaryPath();
   if (binary === null) throw new Error("No CLI binary is available to link.");
   await pointLinksAt(binary, force);
-  return cliLinkStatus();
+  return linkStatus();
 }
+
+// The links' state, and their install, for the handlers. A refusal
+// crosses the wire in its own words.
+export const cliLinkStatus = Effect.tryPromise({
+  try: linkStatus,
+  catch: callFailureOf,
+});
+export const installCliLinks = (force: boolean) =>
+  Effect.tryPromise({ try: () => installLinks(force), catch: callFailureOf });
 
 // Remove this flavor's links when they are recognizably shigomori-made.
 // Anything else at the path stays. Accepts our-family on purpose: nuke
@@ -235,7 +245,7 @@ export const uninstallCliEverything = Effect.gen(function* () {
 // it. Consent was given at install time; failures only log.
 export async function repairCliLinks(): Promise<void> {
   if (isTranslocated()) return;
-  const status = await cliLinkStatus();
+  const status = await linkStatus();
   if (status.state !== "stale") return;
   const binary = cliBinaryPath();
   if (binary === null) return;

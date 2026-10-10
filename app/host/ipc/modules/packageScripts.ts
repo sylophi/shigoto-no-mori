@@ -1,5 +1,5 @@
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import { findProject } from "@host/lib/projects";
 import { startScript } from "@host/lib/scripts";
 import {
@@ -107,7 +107,7 @@ export const packageScriptsHandlers = {
       });
       return { runId };
     }),
-} satisfies Handlers<
+} satisfies EffectHandlers<
   typeof packageScriptsContract,
   HandlerContext,
   HostServices

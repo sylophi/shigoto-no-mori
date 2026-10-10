@@ -33,6 +33,7 @@ import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
 import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
 import * as Views from "../../host/lib/views.ts";
+import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
@@ -125,6 +126,8 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       Layer.mergeAll(HostPushes.layer, EngineStoreChanges.layer),
     ),
+    // The copy of the shared settings, read from the store.
+    Layer.provideMerge(SharedSettingsStore.layer),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),

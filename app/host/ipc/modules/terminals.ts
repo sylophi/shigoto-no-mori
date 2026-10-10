@@ -1,5 +1,6 @@
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Terminals } from "@host/lib/terminals/Terminals";
@@ -34,4 +35,4 @@ export const terminalsHandlers = {
     Effect.flatMap(Terminals, (terminals) =>
       terminals.resize(terminalId, { cols, rows }),
     ),
-} satisfies Handlers<typeof terminalsContract, HandlerContext, Terminals>;
+} satisfies EffectHandlers<typeof terminalsContract, HandlerContext, Terminals>;

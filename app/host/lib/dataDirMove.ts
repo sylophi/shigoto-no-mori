@@ -18,6 +18,7 @@
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
@@ -29,7 +30,6 @@ import {
   markDeleteInflight,
 } from "./scripts";
 import { tempPathFor, unlinkIfExists } from "./util/atomicJson";
-import { fromPromise } from "./util/fromPromise";
 import {
   canonicalDataDirName,
   dataDir,
@@ -39,6 +39,10 @@ import {
   isENOENT,
   legacyDataDirPointerPath,
 } from "./util/paths";
+
+// A step on the file system, its failure as it crosses a wire.
+const fsStep = <A>(step: () => Promise<A>) =>
+  Effect.tryPromise({ try: step, catch: callFailureOf });
 // newId is filled in by the re-key, which the engine answers with.
 type MovedWorktree = {
   oldId: string;
@@ -121,7 +125,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         "command). Try again when it finishes.",
     });
   }
-  yield* fromPromise(async () => {
+  yield* fsStep(async () => {
     await mkdir(parent, { recursive: true });
     // Clear an existing empty placeholder before the rename. A non-empty
     // directory is refused, never merged into.
@@ -184,7 +188,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // above can't orphan the temp file. The default location needs no
     // pointer, so none is staged for it.
     if (!toDefault) {
-      yield* fromPromise(async () => {
+      yield* fsStep(async () => {
         await mkdir(dirname(pointerFile), { recursive: true });
         await writeFile(pointerTmp, `${newDir}\n`, "utf8");
       });
@@ -202,7 +206,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // rename() can't cross volumes. Fall back to copy, commit the
     // pointer, then remove the old tree. Symlinks (carry-over entries)
     // are copied as links, not followed.
-    const copied = yield* fromPromise(async () => {
+    const copied = yield* fsStep(async () => {
       try {
         await rename(oldDir, newDir);
         return false;
@@ -223,7 +227,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     });
     renamed = true;
 
-    yield* fromPromise(async () => {
+    yield* fsStep(async () => {
       // Point both readers (app boot, CLI) at the new location. Atomic
       // rename so no reader can ever see a half-written path. Committed
       // before the old copy is deleted: if that cleanup fails midway,

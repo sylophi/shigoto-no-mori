@@ -45,7 +45,7 @@ import {
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { notifierFor } from "@host/ipc/modules/worktrees";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import type { HostServices } from "@host/process/services";
 import { landInvitedMirror } from "@host/mirror/invites";
 import { onAbort } from "@host/lib/util/abort";
@@ -356,7 +356,7 @@ export const landWorktree = (
 // tears the link down, and the landing runs under that as well as
 // under this connection, so the create here dies with its setup
 // script and the copy goes.
-export const landForSender: Handlers<
+export const landForSender: EffectHandlers<
   typeof syncContract,
   HandlerContext,
   HostServices

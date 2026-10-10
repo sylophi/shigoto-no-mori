@@ -4,7 +4,7 @@ import type {
   controlContract,
 } from "@shigomori/contracts/modules/control";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import type { HostServices } from "@host/process/services";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
@@ -24,7 +24,11 @@ export const controlHandlers = {
   peerWorktrees,
   mirrors,
   mirrorStop,
-} satisfies Handlers<typeof controlContract, HandlerContext, HostServices>;
+} satisfies EffectHandlers<
+  typeof controlContract,
+  HandlerContext,
+  HostServices
+>;
 
 // A transfer as its caller follows it: each step of its progress as the
 // op notifies it, then its answer, on one stream. Interrupting the

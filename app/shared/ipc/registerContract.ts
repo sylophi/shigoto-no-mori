@@ -47,13 +47,6 @@ type RegisterContractOpts = {
   onUsageTracked?: (parsedInput: unknown) => void;
 };
 
-type RegisterHostContractOpts = RegisterContractOpts & {
-  // Runs a step of the call (the handler itself, the input's parse),
-  // a throw failing it. The host's sets the call's span as the ambient
-  // parent of a Promise handler's own.
-  readonly invoke?: <A>(run: () => A) => Effect.Effect<A, CallFailure>;
-};
-
 // The per-call wrapper: ONE definition of what serving a contract call
 // means, so dispatch policy cannot diverge between the wires the
 // registrar loop below serves. Input parsing is
@@ -79,17 +72,21 @@ function wrapContractCall<Ctx>(
   };
 }
 
+// A step of a call, a throw failing it.
+const attempt = <A>(run: () => A) =>
+  Effect.try({ try: run, catch: callFailureOf });
+
 // The same, as an effect for a server built in a layer graph: a handler
 // answers with an effect on the graph's services, which runs where the
-// call is served. The Promise path below (a value or a Promise, with a
-// signal that aborts when the call is interrupted) is scaffolding for
-// the handlers not converted yet, not a second way to write one: it
-// goes with the last Promise handler (V3.md, the host's Promise
-// adapters), so a new handler answers with an effect.
+// call is served. Its context's signal aborts when the call is
+// interrupted.
 function wrapEffectCall<Services>(
   call: ContractCall,
-  handler: (input: unknown, ctx: HandlerContext) => unknown,
-  opts: RegisterHostContractOpts,
+  handler: (
+    input: unknown,
+    ctx: HandlerContext,
+  ) => Effect.Effect<unknown, unknown, Services>,
+  opts: RegisterContractOpts,
 ): (
   ctx: CallContext,
   raw: unknown,
@@ -98,26 +95,16 @@ function wrapEffectCall<Services>(
     annotation(call, TracksProjectUsage) === true
       ? opts.onUsageTracked
       : undefined;
-  const attempt =
-    opts.invoke ??
-    (<A>(run: () => A) => Effect.try({ try: run, catch: callFailureOf }));
   return (ctx, raw) =>
     Effect.gen(function* () {
       const input = yield* attempt(() => decode(inputOf(call), raw));
       const controller = new AbortController();
-      const answer = yield* attempt(() =>
+      const result = yield* Effect.suspend(() =>
         handler(input, { ...ctx, signal: controller.signal }),
+      ).pipe(
+        Effect.mapError(callFailureOf),
+        Effect.onInterrupt(() => Effect.sync(() => controller.abort())),
       );
-      const result = yield* (
-        Effect.isEffect(answer)
-          ? (answer as Effect.Effect<unknown, unknown, Services>).pipe(
-              Effect.mapError(callFailureOf),
-            )
-          : Effect.tryPromise({
-              try: async () => answer,
-              catch: callFailureOf,
-            })
-      ).pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())));
       onSuccess?.(input);
       return opts.validateOutputs
         ? yield* attempt(() => encode(outputOf(call), result))
@@ -222,18 +209,39 @@ export function registerContract<M extends ContractModule>(
   );
 }
 
-// A contract served from a layer graph, its handlers free to answer
-// with effects on the graph's services.
+// A side served from a layer graph (the host): each handler answers
+// with an effect on the graph's services.
+export type EffectHandlers<
+  M extends ContractModule,
+  Ctx = unknown,
+  Services = never,
+> = {
+  readonly [K in keyof Handlers<M, Ctx>]: Handlers<M, Ctx>[K] extends (
+    ...args: infer A
+  ) => infer R
+    ? (...args: A) => Effect.Effect<Awaited<R>, unknown, Services>
+    : never;
+};
+
+// A contract served from a layer graph.
 export function registerHostContract<M extends ContractModule, Services>(
   module: M,
-  handlers: Handlers<M, HandlerContext, Services>,
+  handlers: EffectHandlers<M, HandlerContext, Services>,
   server: EffectServerTransport<Services>,
-  opts: RegisterHostContractOpts,
+  opts: RegisterContractOpts,
 ): void {
   mountCalls(module, handlers, opts, (call, handler, exposure) =>
     server.handle(
       channelOf(call),
-      wrapEffectCall<Services>(call, handler, opts),
+      wrapEffectCall<Services>(
+        call,
+        // Typed by `handlers` above: each answers with an effect.
+        handler as (
+          input: unknown,
+          ctx: HandlerContext,
+        ) => Effect.Effect<unknown, unknown, Services>,
+        opts,
+      ),
       exposure,
     ),
   );

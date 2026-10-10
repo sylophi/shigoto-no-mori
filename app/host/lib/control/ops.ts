@@ -28,7 +28,8 @@ import {
   isMirrorStopUnconfirmed,
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
@@ -89,7 +90,11 @@ import {
   worktreesOn,
 } from "./peers";
 
-type Handler = Handlers<typeof controlContract, HandlerContext, HostServices>;
+type Handler = EffectHandlers<
+  typeof controlContract,
+  HandlerContext,
+  HostServices
+>;
 
 // A transfer, which the loopback serves as a stream of its progress
 // (the sync:pullProgress pushes `ctx` notifies) and then its answer.

@@ -1,5 +1,6 @@
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Views from "@host/lib/views";
 import {
   DEVICE_SETTINGS_DEFAULTS,
@@ -86,7 +87,7 @@ export const globalConfigHandlers = {
       // every project list.)
       yield* Effect.flatMap(Terrier.Terrier, (it) => it.invalidate);
     }),
-} satisfies Handlers<
+} satisfies EffectHandlers<
   typeof globalConfigContract,
   unknown,
   Terrier.Terrier | Engine.Services

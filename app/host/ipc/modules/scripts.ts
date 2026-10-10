@@ -4,7 +4,8 @@ import {
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Views from "@host/lib/views";
 import { findProject } from "@host/lib/projects";
 import {
@@ -57,7 +58,7 @@ export const scriptsViews: ViewHandlers<
   watch: () =>
     Views.view(
       "scripts:watch",
-      () => ({ runs: listRunningScripts() }),
+      () => Effect.sync(() => ({ runs: listRunningScripts() })),
       Views.pushed(scriptsContract, "changed"),
     ),
 };
@@ -92,14 +93,19 @@ export const scriptsHandlers = {
   cancel: ({ runId }) =>
     Effect.map(cancelScript(runId), (cancelled) => ({ cancelled })),
 
-  write: async ({ runId, data }) => writeToScript(runId, data),
+  write: ({ runId, data }) => Effect.sync(() => writeToScript(runId, data)),
 
-  resize: async ({ runId, cols, rows }) => resizeScript(runId, cols, rows),
+  resize: ({ runId, cols, rows }) =>
+    Effect.sync(() => resizeScript(runId, cols, rows)),
 
   orphanReport: () => Effect.flatMap(OrphanSweep, (it) => it.takeReport),
 
-  list: async () => ({ runs: listRunningScripts() }),
+  list: () => Effect.sync(() => ({ runs: listRunningScripts() })),
 
-  attach: async ({ runId }, handlerCtx: HandlerContext) =>
-    attachScript(runId, scriptEventNotifier(handlerCtx)),
-} satisfies Handlers<typeof scriptsContract, HandlerContext, HostServices>;
+  attach: ({ runId }, handlerCtx: HandlerContext) =>
+    Effect.sync(() => attachScript(runId, scriptEventNotifier(handlerCtx))),
+} satisfies EffectHandlers<
+  typeof scriptsContract,
+  HandlerContext,
+  HostServices
+>;

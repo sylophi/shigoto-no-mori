@@ -1,5 +1,5 @@
 import { branchesContract } from "@shigomori/contracts/modules/branches";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "@host/lib/engine";
@@ -25,7 +25,7 @@ export const branchesHandlers = {
     Effect.flatMap(findProject(projectId), (project) =>
       deleteAnyLocalBranch(project.path, name, force ?? false),
     ),
-} satisfies Handlers<
+} satisfies EffectHandlers<
   typeof branchesContract,
   unknown,
   Engine.Services | ChildProcessSpawner.ChildProcessSpawner

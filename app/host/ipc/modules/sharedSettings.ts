@@ -1,7 +1,17 @@
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { HandlerContext } from "@shared/ipc/transport";
+import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
-import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
+import {
+  sharedSettingsCopy,
+  sharedSettingsLoaded,
+} from "@host/lib/sharedSettings/store";
+
+// Once the copy is read from the store.
+const whenLoaded = <A>(f: () => A) =>
+  Effect.andThen(sharedSettingsLoaded, Effect.sync(f));
 
 export const sharedSettingsViews: ViewHandlers<
   typeof sharedSettingsContract,
@@ -12,13 +22,17 @@ export const sharedSettingsViews: ViewHandlers<
   watch: () =>
     Views.view(
       "sharedSettings:watch",
-      () => sharedSettingsCopy.read(),
+      () => whenLoaded(() => sharedSettingsCopy.read()),
       Views.pushed(sharedSettingsContract, "changed"),
     ),
 };
 
-export const sharedSettingsHandlers: Handlers<typeof sharedSettingsContract> = {
-  read: () => sharedSettingsCopy.read(),
-  set: ({ key, value }) => sharedSettingsCopy.set(key, value),
-  merge: ({ doc }) => sharedSettingsCopy.merge(doc),
+export const sharedSettingsHandlers: EffectHandlers<
+  typeof sharedSettingsContract,
+  HandlerContext,
+  never
+> = {
+  read: () => whenLoaded(() => sharedSettingsCopy.read()),
+  set: ({ key, value }) => whenLoaded(() => sharedSettingsCopy.set(key, value)),
+  merge: ({ doc }) => whenLoaded(() => sharedSettingsCopy.merge(doc)),
 };

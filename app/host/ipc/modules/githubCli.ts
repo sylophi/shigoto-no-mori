@@ -1,5 +1,5 @@
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import {
@@ -97,7 +97,7 @@ export const githubCliHandlers = {
     Effect.flatMap(projectPath(projectId), (cwd) =>
       disablePullRequestAutoMerge({ cwd, number }),
     ),
-} satisfies Handlers<
+} satisfies EffectHandlers<
   typeof githubCliContract,
   unknown,
   GithubCli | ChildProcessSpawner.ChildProcessSpawner | Engine.Services
