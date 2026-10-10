@@ -7,7 +7,6 @@ import { HostAddressSchema } from "./window.ts";
 // What the host asks of the shell that started it (the updater and the
 // app's own lifetime stay in Electron's process), over the port the
 // shell hands its utility process. Served by the
-
 // shell alone, so kept out of allContractModules.
 
 const UnattendedSchema = strict(Schema.Struct({ unattended: Schema.Boolean }));

@@ -138,7 +138,7 @@ function DoubutsuBrandHeader({
 }
 
 // Both v1 corner chips are the same quiet mono pill. Deliberately not
-// ui/chip-button.tsx: that primitive is ring-based and carries
+// primitives/chip-button.tsx: that primitive is ring-based and carries
 // data-slot="chip" for doubutsu to restyle, and this markup is v1-only.
 const HEADER_CHIP =
   "shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-4xs leading-none font-medium tracking-widest text-muted-foreground uppercase";

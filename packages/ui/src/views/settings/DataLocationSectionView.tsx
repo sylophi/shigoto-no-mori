@@ -8,7 +8,7 @@ import { SectionHeading } from "../../primitives/section-heading.tsx";
 // Where the shigomori data dir lives, and the flow that moves it. The
 // picker (the in-app FolderPickerModal, which still offers Finder on
 // this machine) chooses the new PARENT and the folder lands under its
-// canonical name (the main process owns that rule in
+// canonical name (the host owns that rule in
 // lib/dataDirMove.ts). A folder away from the default location gets a
 // Reset button, which is the same move with no parent given. On success
 // the main process relaunches the app, so the overlay's job is just to
