@@ -1,12 +1,12 @@
-// The branch's title (BranchTitleView), renamed in place, with its menu
-// and the switcher behind it.
+// The branch's title (BranchTitleView), renamed in place, with its
+// buttons and the switcher beside it.
 import { useRef, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
 import {
-  BranchMenuView,
+  BranchActionsView,
   BranchTitleView,
 } from "@shigomori/ui/views/worktreeDetail/branch/BranchTitleView.tsx";
 
@@ -24,6 +24,9 @@ export function BranchTitle({
   const rename = useRenameBranch();
   const { canCommand } = useCommandAccess();
   const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // A detached head has no branch to rename, but can switch onto one.
+  const canRename = canCommand && !worktree.detached;
 
   const begin = () => {
     if (worktree.detached) return;
@@ -68,20 +71,22 @@ export function BranchTitle({
               onCancel: cancel,
             }
       }
-      menu={
-        <BranchMenuView
-          canCommand={canCommand}
+      actions={
+        <BranchActionsView
+          branch={worktree.branch}
           detached={worktree.detached}
-          onRename={begin}
-          onSwitch={() => setSwitching(true)}
+          onRename={canRename ? begin : undefined}
+          onSwitch={canCommand ? () => setSwitching(true) : undefined}
           onCopy={() => void navigator.clipboard.writeText(worktree.branch)}
           switcher={
-            <BranchSwitcher
-              worktree={worktree}
-              anchorRef={titleRef}
-              open={switching}
-              onOpenChange={setSwitching}
-            />
+            canCommand && (
+              <BranchSwitcher
+                worktree={worktree}
+                anchorRef={titleRef}
+                open={switching}
+                onOpenChange={setSwitching}
+              />
+            )
           }
         />
       }

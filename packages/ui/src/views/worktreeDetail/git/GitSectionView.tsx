@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileDiff } from "lucide-react";
 import { DiffStats } from "../../../primitives/diff-stats.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
 import { SectionHeading } from "../../../primitives/section-heading.tsx";
+import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 import { pluralize } from "../../../lib/pluralize.ts";
 import { cn } from "../../../lib/utils.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
@@ -85,6 +86,14 @@ export function GitSectionView({
         >
           {worktree.changedCount > 0 ? (
             <>
+              {/* The sidebar's mark for uncommitted work, in its tone. */}
+              <FileDiff
+                aria-hidden
+                className={cn(
+                  "mr-1.5 inline size-3.5 align-[-0.125em]",
+                  TONE_MARK.amber,
+                )}
+              />
               {pluralize(worktree.changedCount, "file")} changed
               {named.length > 0 && (
                 <Aside>

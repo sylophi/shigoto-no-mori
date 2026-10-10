@@ -166,58 +166,6 @@
       }
     ]
   },
-  "SetStagedPayloadSchema": {
-    "accepts": [
-      {
-        "projectId": "p_sm",
-        "worktreeId": "wt_sm_hum",
-        "paths": ["renderer/lib/toast.tsx", "README.md"],
-        "staged": true
-      },
-      {
-        "projectId": "p_sm",
-        "worktreeId": "wt_sm_hum",
-        "paths": ["README.md"],
-        "staged": false
-      }
-    ],
-    "normalizes": [
-      {
-        "input": {
-          "projectId": "p_sm",
-          "worktreeId": "wt_sm_hum",
-          "paths": ["README.md"],
-          "staged": true,
-          "hunks": [0]
-        },
-        "output": {
-          "projectId": "p_sm",
-          "worktreeId": "wt_sm_hum",
-          "paths": ["README.md"],
-          "staged": true
-        }
-      }
-    ],
-    "rejects": [
-      {
-        "projectId": "p_sm",
-        "worktreeId": "wt_sm_hum",
-        "paths": [],
-        "staged": true
-      },
-      {
-        "projectId": "p_sm",
-        "worktreeId": "wt_sm_hum",
-        "paths": ["/etc/hosts"],
-        "staged": true
-      },
-      {
-        "projectId": "p_sm",
-        "worktreeId": "wt_sm_hum",
-        "paths": ["README.md"]
-      }
-    ]
-  },
   "CommitChangesPayloadSchema": {
     "accepts": [
       {
@@ -225,16 +173,39 @@
         "worktreeId": "wt_sm_hum",
         "summary": "Show which device a worktree lives on",
         "description": "The sidebar badges each row with its machine, so two checkouts of one branch read apart.",
-        "stagePaths": [
+        "paths": [
           "renderer/components/sidebar/DeviceBadge.tsx",
           "renderer/lib/toast.tsx"
+        ],
+        "hunks": [
+          {
+            "path": "README.md",
+            "base": "b3e91d4a07c2f5e8d9b1a6c3e4f2d0a9b8c7e6f5",
+            "changes": [
+              {
+                "oldStart": 2,
+                "oldCount": 1,
+                "newStart": 2,
+                "newCount": 1
+              }
+            ]
+          }
         ],
         "amend": true
       },
       {
         "projectId": "p_sm",
         "worktreeId": "wt_sm_hum",
-        "summary": "Fix the toast's tone on light mode"
+        "summary": "Fix the toast's tone on light mode",
+        "paths": ["renderer/lib/toast.tsx"],
+        "hunks": []
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["renderer/lib/toast.tsx"],
+        "hunks": [],
+        "amend": true
       }
     ],
     "normalizes": [
@@ -243,12 +214,16 @@
           "projectId": "p_sm",
           "worktreeId": "wt_sm_hum",
           "summary": "  Fix the toast's tone on light mode\n",
+          "paths": [],
+          "hunks": [],
           "amend": false
         },
         "output": {
           "projectId": "p_sm",
           "worktreeId": "wt_sm_hum",
           "summary": "Fix the toast's tone on light mode",
+          "paths": [],
+          "hunks": [],
           "amend": false
         }
       },
@@ -257,12 +232,16 @@
           "projectId": "p_sm",
           "worktreeId": "wt_sm_hum",
           "summary": "Fix the toast's tone on light mode",
+          "paths": [],
+          "hunks": [],
           "signoff": true
         },
         "output": {
           "projectId": "p_sm",
           "worktreeId": "wt_sm_hum",
-          "summary": "Fix the toast's tone on light mode"
+          "summary": "Fix the toast's tone on light mode",
+          "paths": [],
+          "hunks": []
         }
       }
     ],
@@ -270,23 +249,76 @@
       {
         "projectId": "p_sm",
         "worktreeId": "wt_sm_hum",
-        "summary": ""
+        "summary": "",
+        "paths": [],
+        "hunks": []
       },
       {
         "projectId": "p_sm",
         "worktreeId": "wt_sm_hum",
-        "summary": "   \n"
+        "summary": "   \n",
+        "paths": [],
+        "hunks": []
       },
       {
         "projectId": "p_sm",
         "worktreeId": "wt_sm_hum",
         "summary": "Fix the toast",
-        "stagePaths": ["../other/README.md"]
+        "paths": ["../other/README.md"],
+        "hunks": []
       },
       {
         "projectId": "p_sm",
         "worktreeId": "wt_sm_hum",
-        "description": "No summary"
+        "description": "No summary",
+        "paths": ["README.md"],
+        "hunks": []
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["README.md"],
+        "hunks": [],
+        "amend": false
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "Fix the toast",
+        "paths": [],
+        "hunks": [
+          {
+            "path": "README.md",
+            "base": "b3e91d4a07c2f5e8d9b1a6c3e4f2d0a9b8c7e6f5",
+            "changes": []
+          }
+        ]
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "Fix the toast",
+        "paths": [],
+        "hunks": [
+          {
+            "path": "README.md",
+            "base": "HEAD",
+            "changes": [
+              {
+                "oldStart": 2,
+                "oldCount": 1,
+                "newStart": 2,
+                "newCount": 1
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "Fix the toast",
+        "stagePaths": ["README.md"]
       }
     ]
   },
@@ -1346,6 +1378,12 @@
         "worktreeId": "cbc5ccb43624",
         "path": "README.md",
         "side": "theirs"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "side": "as-is"
       }
     ],
     "rejects": [
@@ -1585,30 +1623,28 @@
       }
     ]
   },
-  "HunkStatesSchema": {
+  "FileHunksSchema": {
     "accepts": [
       {
+        "head": "b3e91d4a07c2f5e8d9b1a6c3e4f2d0a9b8c7e6f5",
         "changes": [
           {
             "oldStart": 2,
             "oldCount": 1,
             "newStart": 2,
-            "newCount": 1,
-            "staged": true
+            "newCount": 1
           },
           {
             "oldStart": 10,
             "oldCount": 0,
             "newStart": 11,
-            "newCount": 1,
-            "staged": false
+            "newCount": 1
           }
-        ],
-        "editable": true
+        ]
       },
       {
-        "changes": [],
-        "editable": false
+        "head": "b3e91d4",
+        "changes": []
       }
     ],
     "rejects": [
@@ -1620,11 +1656,22 @@
             "newStart": 2,
             "newCount": 1
           }
-        ],
-        "editable": true
+        ]
       },
       {
+        "head": "HEAD",
         "changes": []
+      },
+      {
+        "head": "b3e91d4a07c2f5e8d9b1a6c3e4f2d0a9b8c7e6f5",
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": -1
+          }
+        ]
       }
     ]
   },
@@ -1645,46 +1692,6 @@
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "cbc5ccb43624",
         "path": "/etc/passwd"
-      }
-    ]
-  },
-  "SetHunksStagedPayloadSchema": {
-    "accepts": [
-      {
-        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
-        "worktreeId": "cbc5ccb43624",
-        "path": "src/app.ts",
-        "changes": [
-          {
-            "oldStart": 2,
-            "oldCount": 1,
-            "newStart": 2,
-            "newCount": 1
-          }
-        ],
-        "staged": true
-      }
-    ],
-    "rejects": [
-      {
-        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
-        "worktreeId": "cbc5ccb43624",
-        "path": "src/app.ts",
-        "changes": [],
-        "staged": true
-      },
-      {
-        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
-        "worktreeId": "cbc5ccb43624",
-        "path": "src/app.ts",
-        "changes": [
-          {
-            "oldStart": 2,
-            "oldCount": 1,
-            "newStart": 2,
-            "newCount": 1
-          }
-        ]
       }
     ]
   },

@@ -7,11 +7,11 @@ import { ArrowUp } from "lucide-react";
 import { BranchBarView } from "../views/diff/BranchBarView.tsx";
 import type { DiffChangesControls } from "../views/diff/changesControls.ts";
 import { CommitComposerView } from "../views/diff/CommitComposerView.tsx";
+import { CommitDetailsView } from "../views/diff/CommitDetailsView.tsx";
 import {
-  CommitDetailsView,
-  CommitStepsView,
-} from "../views/diff/CommitDetailsView.tsx";
-import { DiffFileIndexView } from "../views/diff/DiffFileIndexView.tsx";
+  DiffFileIndexView,
+  DiscardConfirmView,
+} from "../views/diff/DiffFileIndexView.tsx";
 import {
   DiffFileRowView,
   DiffFilesSheetView,
@@ -32,6 +32,7 @@ import {
   ChangesFooterView,
   CleanTreeMessageView,
 } from "../views/diff/WorktreeDiffView.tsx";
+import { ModalBox } from "../primitives/modal-shell.tsx";
 import { SidebarTakeoverView } from "../views/sidebar/SidebarTakeoverView.tsx";
 import { SyncActionButtonView } from "../views/worktreeDetail/SyncActionButtonView.tsx";
 import { peerReadOnlyNote } from "../lib/commandAccessCopy.ts";
@@ -62,17 +63,19 @@ const CONTROLS: DiffChangesControls = {
   readOnly: false,
   selectedKey: PICKED ? changeKey(PICKED) : null,
   onSelect: noop,
-  onSetStaged: noop,
+  picks: new Map(),
+  onSetTicked: noop,
   onDiscard: noop,
   onStash: noop,
   onResolve: noop,
 };
 
+const PICKED_CHANGES = PICKED ? CHANGES.hunks(HUM.id, PICKED.path).changes : [];
+
 const HUNKS = {
-  states: PICKED
-    ? CHANGES.hunks(HUM.id, PICKED.path)
-    : { changes: [], editable: true },
-  onSetStaged: noop,
+  changes: PICKED_CHANGES,
+  picked: PICKED_CHANGES,
+  onSetTicked: noop,
   onDiscard: noop,
 };
 
@@ -134,7 +137,6 @@ function pageHeader(
   title: ReactNode,
   subtitle: ReactNode,
   extra?: {
-    steps?: ReactNode;
     details?: ReactNode;
   },
 ) {
@@ -143,7 +145,6 @@ function pageHeader(
       title={title}
       subtitle={subtitle}
       back={null}
-      steps={extra?.steps}
       files={null}
       wrapLines={false}
       onToggleWrap={noop}
@@ -204,6 +205,7 @@ export function ChangesPageScene() {
             composer={
               <CommitComposerView
                 files={FILES}
+                included={FILES.length}
                 draft={{
                   summary: "Say what the commit button takes",
                   description: "",
@@ -212,6 +214,7 @@ export function ChangesPageScene() {
                 pending={false}
                 error={null}
                 amend={null}
+                addToLast={last ? { subject: last.subject, onAdd: noop } : null}
                 onCommit={noop}
               />
             }
@@ -252,7 +255,6 @@ export function CommitPageScene() {
       commit?.subject ?? "Commit",
       <CommitBylineView commit={commit} hash={commit?.hash} />,
       {
-        steps: <CommitStepsView onNewer={undefined} onOlder={noop} />,
         details: (
           <CommitDetailsView
             hash={commit?.hash ?? ""}
@@ -298,9 +300,10 @@ function Part({ label, children }: { label: string; children: ReactNode }) {
 
 // The pages' other pieces: their titles, the pane's other states, a
 // hunk's bar, a commit only the remote has, and the phone's file sheet
-// (closed: a sheet opens over the window).
+// (closed: a sheet opens over the window), and a discard's dialog drawn
+// in place.
 export function DiffPartsScene() {
-  const group = HUNKS.states.changes[0];
+  const group = HUNKS.changes[0];
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex flex-col gap-5">
@@ -352,12 +355,22 @@ export function DiffPartsScene() {
         {group && (
           <Part label="A hunk's bar">
             <HunkBarView
-              group={{ changes: [group], staged: "partial" }}
+              group={{ changes: [group], ticked: "partial" }}
               controls={HUNKS}
               busy={false}
             />
           </Part>
         )}
+        <Part label="A discard's dialog">
+          <ModalBox className="max-w-md">
+            <DiscardConfirmView
+              label="Discard the 2 unticked files?"
+              busy={false}
+              onCancel={noop}
+              onConfirm={noop}
+            />
+          </ModalBox>
+        </Part>
         <Part label="A detached HEAD">
           <BranchBarView
             branch="5eed5ab"

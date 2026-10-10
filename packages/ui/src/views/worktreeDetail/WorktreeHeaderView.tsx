@@ -1,7 +1,7 @@
 // The worktree page's header for work with a title of its own
 // (WorktreeHeader binds it, and gives untitled work its branch alone):
 // what the work is called (useWorktreeTitle), then one line with its
-// branch (renamed and switched from one menu). While a PR names the
+// branch (renamed, switched and copied from it). While a PR names the
 // work, the page names it once and the PR fills in the same two lines:
 // its number and state beside the title, and on the branch's line
 // where it lands, where it sits in a stack (its list in a popover),

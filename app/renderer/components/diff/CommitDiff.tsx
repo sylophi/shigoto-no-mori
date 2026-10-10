@@ -5,7 +5,7 @@ import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { NO_REWRITE } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
-import { CommitDetails, CommitSteps } from "./CommitDetails";
+import { CommitDetails } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { DiffPage } from "./DiffPage";
@@ -16,7 +16,7 @@ export function CommitDiff() {
   const diff = useCommitDiff(projectId, worktree?.id, hash);
   // The commits the worktree's Git timeline shows (the same query, so
   // it's cached), for the commit's place among them: what may be
-  // rewritten from it, and the steps to its neighbours.
+  // rewritten from it.
   const { data: history } = useBranchHistory(
     projectId,
     worktree?.id,
@@ -55,16 +55,6 @@ export function CommitDiff() {
             timeline={timeline}
             index={index}
             onlyOn={incoming ? (history?.upstream ?? undefined) : undefined}
-          />
-        )
-      }
-      steps={
-        index >= 0 &&
-        timeline.length > 1 && (
-          <CommitSteps
-            worktree={worktree}
-            newer={timeline[index - 1]?.hash}
-            older={timeline[index + 1]?.hash}
           />
         )
       }

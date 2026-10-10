@@ -88,7 +88,6 @@ export function DiffHeaderView({
   title,
   subtitle,
   back,
-  steps,
   files,
   wrapLines,
   onToggleWrap,
@@ -100,7 +99,6 @@ export function DiffHeaderView({
   subtitle: ReactNode;
   // A phone's way back. A wide viewport's is the sidebar's first row.
   back: { label: string; onClick: () => void } | null;
-  steps: ReactNode;
   // The phone's chip that opens the file list's sheet.
   files: { label: string; count: number; onOpen: () => void } | null;
   wrapLines: boolean;
@@ -135,7 +133,6 @@ export function DiffHeaderView({
           </SimpleTooltip>
         </div>
         <div className="flex shrink-0 items-center gap-2 self-center">
-          {steps}
           {files && (
             <ChipButton
               onClick={files.onOpen}
@@ -304,7 +301,7 @@ export function DiffFileRowView({
           collapsed,
         }}
         metrics={DIFF_METRICS}
-        lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks.states)}
+        lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks)}
         renderAnnotation={
           hunks
             ? (annotation) => (

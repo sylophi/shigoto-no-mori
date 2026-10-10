@@ -1,6 +1,7 @@
 // The worktree page's header (WorktreeHeaderView): the title the work
 // goes by, or its branch alone when it has none.
 import { useLayoutEffect, useRef, useState } from "react";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
@@ -49,7 +50,13 @@ function TitledHeader({
   const stack = pr ? projectStack : null;
   const lineRef = useRef<HTMLDivElement>(null);
   const branchRef = useRef<HTMLDivElement>(null);
-  const showBase = useBaseFits(lineRef, branchRef, worktree.branch);
+  // The branch's buttons beside it come and go with control.
+  const { canCommand } = useCommandAccess();
+  const showBase = useBaseFits(
+    lineRef,
+    branchRef,
+    `${worktree.branch}:${canCommand}`,
+  );
   return (
     <WorktreeHeaderView
       title={title}
@@ -107,8 +114,9 @@ function TitledHeader({
 function useBaseFits(
   lineRef: React.RefObject<HTMLElement | null>,
   branchRef: React.RefObject<HTMLElement | null>,
-  // Read again for a renamed branch, which resizes nothing observed.
-  branchName: string,
+  // Read again for a renamed branch or a change to its buttons, which
+  // resize nothing observed.
+  branchKey: string,
 ): boolean {
   const [fits, setFits] = useState(true);
   const baseMin = useRef(0);
@@ -128,7 +136,7 @@ function useBaseFits(
           // Widths that round.
           2;
       }
-      // BranchTitle's name and its menu button. Absent while the
+      // BranchTitle's name and its buttons. Absent while the
       // rename field stands in, and then the answer holds.
       const name = branch.querySelector<HTMLElement>("[data-branch-name]");
       const row = name?.parentElement;
@@ -142,6 +150,6 @@ function useBaseFits(
     observer.observe(line);
     observer.observe(branch);
     return () => observer.disconnect();
-  }, [lineRef, branchRef, branchName]);
+  }, [lineRef, branchRef, branchKey]);
   return fits;
 }

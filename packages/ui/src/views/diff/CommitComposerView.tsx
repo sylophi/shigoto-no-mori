@@ -1,5 +1,11 @@
 import { useRef, useState } from "react";
-import { GitCommitHorizontal, Loader2, PencilLine, X } from "lucide-react";
+import {
+  Combine,
+  GitCommitHorizontal,
+  Loader2,
+  PencilLine,
+  X,
+} from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { Input } from "../../primitives/input.tsx";
@@ -9,7 +15,6 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "../../lib/pluralize.ts";
 import { cn } from "../../lib/utils.ts";
 import type { ChangedFile } from "@shigomori/contracts/schemas/index";
-import { includedFiles } from "./changesControls.ts";
 
 // The commit message being written for a worktree, persisted so leaving
 // the changes page (to check one more file in the editor, say) doesn't
@@ -29,36 +34,41 @@ const SUMMARY_SOFT_LIMIT = 72;
 // once the commit lands. Which branch it lands on is the branch bar's
 // to say, right above.
 //
-// The button reads what the commit will take. With files ticked it
-// commits those. With nothing ticked it commits everything listed,
-// the way a fresh commit usually goes, and the reason a tree touched
-// only from a terminal (where nothing is staged yet) isn't a dead end.
+// The button reads what the commit will take: the ticked files.
 //
 // Amending: the button turns into "Amend with ...", the file rules stay
 // the same, and a message-only amend on a clean tree is allowed too.
+//
+// Before the button, while the last commit can be amended, a second one
+// adds the ticked files to it in one click, its message left as it is.
 export function CommitComposerView({
   files,
+  included,
   draft,
   onDraftChange,
   pending,
   error,
   amend,
+  addToLast,
   onCommit,
 }: {
   files: readonly ChangedFile[];
+  // How many of them are ticked.
+  included: number;
   draft: CommitDraft;
   onDraftChange: (next: CommitDraft) => void;
   pending: boolean;
   error: Error | null;
   // The hash being rewritten, or null when this is a new commit.
   amend: { hash: string; onCancel: () => void } | null;
+  // The last commit's subject, when the ticked files can go into it.
+  addToLast: { subject: string; onAdd: () => void } | null;
   onCommit: () => void;
 }) {
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   // The description sits one line tall, as tall as what it holds, until
   // it is being written in: the sidebar's height goes to the files.
   const [writing, setWriting] = useState(false);
-  const included = includedFiles(files).length;
   const conflicted = files.filter((file) => file.conflicted).length;
   const summary = draft.summary.trim();
   const label = buttonLabel({
@@ -69,9 +79,9 @@ export function CommitComposerView({
   });
   // Everything but the message is in place. When only the summary is
   // missing, the button's tooltip says so: conflicts have their own
-  // line, and an empty list and a commit in flight say it on the button.
+  // line, and nothing ticked and a commit in flight say it on the button.
   const ready =
-    !pending && conflicted === 0 && (files.length > 0 || amend !== null);
+    !pending && conflicted === 0 && (included > 0 || amend !== null);
   const canCommit = ready && summary.length > 0;
   const blocked = ready && !canCommit ? "Write a summary first" : undefined;
 
@@ -221,33 +231,47 @@ export function CommitComposerView({
           </pre>
         </ErrorBanner>
       )}
-      <SimpleTooltip tip={blocked}>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!canCommit}
-          onClick={submit}
-          className="w-full"
-        >
-          {pending ? (
-            <Loader2 aria-hidden className="animate-spin" />
-          ) : (
-            <GitCommitHorizontal aria-hidden />
-          )}
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          {canCommit && (
-            <Kbd className="bg-primary-foreground/20 text-primary-foreground">
-              ⌘↵
-            </Kbd>
-          )}
-        </Button>
-      </SimpleTooltip>
+      <div className="flex gap-1.5">
+        {addToLast && (
+          <SimpleTooltip tip={`Add to “${addToLast.subject}”`}>
+            <Button
+              type="button"
+              size="icon-sm"
+              disabled={pending || conflicted > 0 || included === 0}
+              onClick={addToLast.onAdd}
+              aria-label="Add to the last commit"
+            >
+              <Combine aria-hidden />
+            </Button>
+          </SimpleTooltip>
+        )}
+        <SimpleTooltip tip={blocked}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canCommit}
+            onClick={submit}
+            className="min-w-0 flex-1"
+          >
+            {pending ? (
+              <Loader2 aria-hidden className="animate-spin" />
+            ) : (
+              <GitCommitHorizontal aria-hidden />
+            )}
+            <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+            {canCommit && (
+              <Kbd className="bg-primary-foreground/20 text-primary-foreground">
+                ⌘↵
+              </Kbd>
+            )}
+          </Button>
+        </SimpleTooltip>
+      </div>
     </div>
   );
 }
 
-// What the button says it will do. Ticked files go. With nothing
-// ticked, everything listed goes.
+// What the button says it will do: which of the files go.
 function buttonLabel({
   pending,
   amending,
@@ -260,13 +284,13 @@ function buttonLabel({
   included: number;
 }): string {
   if (pending) return amending ? "Amending…" : "Committing…";
-  const count = included > 0 ? included : total;
-  const what = pluralize(count, "file");
+  const what = pluralize(included, "file");
   // "all 1 file" reads wrong, and with one file there is no "all".
-  const scope = included > 0 || count === 1 ? what : `all ${what}`;
+  const scope = included === total && total > 1 ? `all ${what}` : what;
   if (amending) {
-    return total === 0 ? "Amend the message" : `Amend with ${scope}`;
+    return included === 0 ? "Amend the message" : `Amend with ${scope}`;
   }
   if (total === 0) return "Nothing to commit";
+  if (included === 0) return "Nothing ticked";
   return `Commit ${scope}`;
 }

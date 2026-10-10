@@ -90,10 +90,10 @@ export function StashListView({
                   className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">
+                  <span className="block truncate text-xs">
                     {stash.named ? stash.message : "Stashed changes"}
                   </span>
-                  <span className="block truncate text-xs text-muted-foreground">
+                  <span className="block truncate text-2xs text-muted-foreground">
                     <RelativeDate date={stash.date} />
                     {!stash.named && `, on top of ${stash.message}`}
                   </span>

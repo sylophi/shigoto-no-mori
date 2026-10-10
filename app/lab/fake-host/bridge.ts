@@ -625,13 +625,11 @@ function hostHandlersFor(
       changes.fileDiff(worktreeId, paths),
     "worktrees:readFile": ({ path }) => fakeFile(path),
     // The working tree is kept per worktree (changesFixtures.ts), so
-    // ticking, committing and discarding show their outcome, and a
-    // commit leaves something to push.
+    // committing and discarding show their outcome, and a commit leaves
+    // something to push.
     "worktrees:changeStatus": ({ worktreeId }) => changes.status(worktreeId),
-    "worktrees:setStaged": ({ worktreeId, paths, staged }) =>
-      changes.setStaged(worktreeId, paths, staged),
-    "worktrees:commit": ({ worktreeId, summary, stagePaths, amend }) =>
-      changes.commit(worktreeId, { summary, stagePaths, amend }),
+    "worktrees:commit": ({ worktreeId, summary, paths, hunks, amend }) =>
+      changes.commit(worktreeId, { summary, paths, hunks, amend }),
     "worktrees:discardChanges": ({ worktreeId, paths }) =>
       changes.discard(worktreeId, paths),
     // The sync verbs move the counts the way the real ones would, after

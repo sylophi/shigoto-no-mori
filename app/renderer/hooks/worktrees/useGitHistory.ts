@@ -170,7 +170,7 @@ export function useWorktreeOperation(worktree: Worktree) {
 
 export function useResolveConflict() {
   return useWorkingTreeMutation<
-    Scope & { path: string; side: "mine" | "theirs" },
+    Scope & { path: string; side: "mine" | "theirs" | "as-is" },
     Worktree
   >(
     (api, input) => api.worktrees.resolveConflict(input),

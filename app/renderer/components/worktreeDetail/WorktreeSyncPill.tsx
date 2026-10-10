@@ -1,6 +1,5 @@
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import {
   useMergeUpstreamWorktree,
@@ -105,7 +104,6 @@ function PickSide({
   compact: boolean;
 }) {
   const nav = useWorktreeNav();
-  const say = useWorktreeSuccessToast();
   const input = { projectId: worktree.projectId, worktreeId: worktree.id };
   // Both actions throw away one side's commits, which is more
   // destructive than "Delete worktree" (that one keeps the branch). Same
@@ -125,9 +123,8 @@ function PickSide({
         pending: mergeUpstream.isPending,
         onClick: () =>
           mergeUpstream.mutate(input, {
-            onSuccess: ({ worktree: after, stopped }) => {
+            onSuccess: ({ stopped }) => {
               if (stopped) nav.toDiff(input.projectId, input.worktreeId);
-              else say(after, "Merged the remote's commits");
             },
           }),
       }}

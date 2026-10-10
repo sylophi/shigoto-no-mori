@@ -4,8 +4,9 @@ import { cn } from "../lib/utils.ts";
 // and deletion hues without requiring shadow-DOM theme variables.
 // Green, not emerald, which follows the palette's accent.
 //
-// `compact` is the file list's: a step smaller, and a side with nothing
-// on it left out (a new file is all additions, and "−0" says nothing).
+// `compact` is a list's (files, commits): a step smaller, and a side
+// with nothing on it left out (a new file is all additions, and "−0"
+// says nothing).
 export function DiffStats({
   additions,
   deletions,

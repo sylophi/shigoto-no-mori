@@ -2531,11 +2531,6 @@
     }
   },
   "worktrees:commit": {
-    "payload": {
-      "projectId": "0",
-      "worktreeId": "\ud800",
-      "summary": "w"
-    },
     "success": {
       "hash": "e9a1",
       "worktree": {
@@ -2577,6 +2572,14 @@
         "shelved": true,
         "autoPull": false
       }
+    },
+    "payload": {
+      "projectId": "0",
+      "worktreeId": "😀",
+      "summary": "?崥8$Y",
+      "paths": [],
+      "hunks": [],
+      "amend": false
     }
   },
   "worktrees:commitDiff": {
@@ -2879,16 +2882,21 @@
       "path": "zG"
     },
     "success": {
+      "head": "7e87",
       "changes": [
         {
           "oldStart": 3,
-          "oldCount": 0,
+          "oldCount": 4,
+          "newStart": 2,
+          "newCount": 2
+        },
+        {
+          "oldStart": 3,
+          "oldCount": 4,
           "newStart": 0,
-          "newCount": 3,
-          "staged": true
+          "newCount": 3
         }
-      ],
-      "editable": false
+      ]
     }
   },
   "worktrees:idleAgents": {
@@ -3844,34 +3852,6 @@
       "autoPull": false
     }
   },
-  "worktrees:setHunksStaged": {
-    "payload": {
-      "projectId": "0",
-      "worktreeId": "\t",
-      "path": "0",
-      "changes": [
-        {
-          "oldStart": 4,
-          "oldCount": 3,
-          "newStart": 3,
-          "newCount": 0
-        }
-      ],
-      "staged": false
-    },
-    "success": [
-      {
-        "path": "\u0000",
-        "kind": "added",
-        "staged": "none"
-      },
-      {
-        "path": "\t",
-        "kind": "renamed",
-        "staged": "none"
-      }
-    ]
-  },
   "worktrees:setShelved": {
     "payload": {
       "projectId": "😀",
@@ -3900,21 +3880,6 @@
       "shelved": true,
       "autoPull": false
     }
-  },
-  "worktrees:setStaged": {
-    "payload": {
-      "projectId": "t",
-      "worktreeId": "\udc00",
-      "paths": ["\n"],
-      "staged": false
-    },
-    "success": [
-      {
-        "path": "4",
-        "kind": "added",
-        "staged": "none"
-      }
-    ]
   },
   "worktrees:squashCommit": {
     "payload": {

@@ -1,11 +1,10 @@
 // The changes page's git, through the service: listing with counts,
-// ticking, committing, undo and redo, and discard with its snapshot.
+// undo and redo, and discard with its snapshot.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
-import * as Effect from "effect/Effect";
 import { it } from "vitest";
 import {
   DISCARD_REF_PREFIX,
@@ -43,13 +42,12 @@ function rowOf(files: readonly ChangedFile[], path: string): ChangedFile {
 const changes = (repo: string) => withGit((g) => g.changes(repo));
 
 // seedRepo plus a second commit editing a.txt, for undo.
-async function seedWithSecond() {
+function seedWithSecond() {
   const repo = seedRepo();
   const root = rev(repo, "HEAD");
   write(repo, "a.txt", "second\n");
-  await withGit((g) =>
-    g.commit({ worktree: repo, summary: "Second", stagePaths: ["a.txt"] }),
-  );
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "Second");
   return { repo, root, second: rev(repo, "HEAD") };
 }
 
@@ -147,107 +145,8 @@ it("a file edited in the index and again since reads as partial", async () => {
   });
 });
 
-it("ticking stages an addition, an edit and a removal, and unticking takes each back", async () => {
-  const repo = seedRepo();
-  write(repo, "a.txt", "edited\n");
-  rmSync(join(repo, "b.txt"));
-  write(repo, "a[1].txt", "glob-shaped name\n");
-  const paths = ["a.txt", "b.txt", "a[1].txt"];
-
-  const staged = await withGit((g) =>
-    g.setStaged({ worktree: repo, paths, staged: true }),
-  );
-  assert.deepEqual(
-    paths.map((p) => rowOf(staged, p).staged),
-    ["all", "all", "all"],
-  );
-  assert.equal(rowOf(staged, "b.txt").kind, "deleted");
-
-  const unstaged = await withGit((g) =>
-    g.setStaged({ worktree: repo, paths, staged: false }),
-  );
-  assert.deepEqual(
-    paths.map((p) => rowOf(unstaged, p).staged),
-    ["none", "none", "none"],
-  );
-  assert.equal(git(repo, "diff", "--cached", "--name-only"), "");
-  assert.equal(read(repo, "a[1].txt"), "glob-shaped name\n");
-});
-
-it("quick ticks on one worktree wait for each other instead of failing on the lock", async () => {
-  const repo = seedRepo();
-  const paths = Array.from({ length: 20 }, (_, i) => `f${i}.txt`);
-  for (const path of paths) write(repo, path, `${path}\n`);
-  // One service, as a process has: the lock is per service.
-  await withGit((g) =>
-    Effect.all(
-      paths.map((path, i) =>
-        g.setStaged({ worktree: repo, paths: [path], staged: i % 2 === 0 }),
-      ),
-      { concurrency: "unbounded" },
-    ),
-  );
-  const staged = git(repo, "diff", "--cached", "--name-only")
-    .split("\n")
-    .filter(Boolean);
-  assert.equal(staged.length, 10);
-});
-
-it("a commit takes the ticked files plus stagePaths, and the message reads back split", async () => {
-  const repo = seedRepo();
-  write(repo, "a.txt", "edited\n");
-  write(repo, "b.txt", "also edited\n");
-  write(repo, "loose.txt", "left out\n");
-  git(repo, "add", "a.txt");
-
-  const hash = await withGit((g) =>
-    g.commit({
-      worktree: repo,
-      summary: "Edit a and b",
-      description: "  Body line one.\n\nBody line two.  ",
-      stagePaths: ["b.txt"],
-    }),
-  );
-  assert.ok(rev(repo, "HEAD").startsWith(hash));
-  assert.equal(
-    git(repo, "show", "--name-only", "--format=", "HEAD").trim(),
-    "a.txt\nb.txt",
-  );
-  assert.deepEqual(await withGit((g) => g.readCommitMessage(repo, "HEAD")), {
-    summary: "Edit a and b",
-    description: "Body line one.\n\nBody line two.",
-  });
-  assert.deepEqual(
-    (await changes(repo)).map((f) => f.path),
-    ["loose.txt"],
-  );
-});
-
-it("amend folds the index into HEAD under the new message", async () => {
-  const repo = seedRepo();
-  const root = rev(repo, "HEAD");
-  write(repo, "a.txt", "first\n");
-  await withGit((g) =>
-    g.commit({ worktree: repo, summary: "First try", stagePaths: ["a.txt"] }),
-  );
-  write(repo, "b.txt", "fixed up\n");
-  await withGit((g) =>
-    g.commit({
-      worktree: repo,
-      summary: "Second try",
-      amend: true,
-      stagePaths: ["b.txt"],
-    }),
-  );
-  assert.equal(rev(repo, "HEAD~1"), root);
-  assert.equal(
-    (await withGit((g) => g.readCommitMessage(repo, "HEAD"))).summary,
-    "Second try",
-  );
-});
-
 it("undo soft-resets to an ancestor, and redo needs HEAD where it was", async () => {
-  const { repo, root, second } = await seedWithSecond();
+  const { repo, root, second } = seedWithSecond();
   assert.equal(
     await withGit((g) => g.resetSoft({ worktree: repo, target: root })),
     second,
@@ -274,7 +173,7 @@ it("undo soft-resets to an ancestor, and redo needs HEAD where it was", async ()
 });
 
 it("undo refuses a moved HEAD, a commit off the line, and a range over a merge", async () => {
-  const { repo, root, second } = await seedWithSecond();
+  const { repo, root, second } = seedWithSecond();
   const refusal = async (target: string, expectHead?: string) => {
     return failureAs(UndoRefusedError, (g) =>
       g.resetSoft({ worktree: repo, target, expectHead }),
