@@ -4,7 +4,10 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { HistoryList } from "./HistoryList";
 import { OperationBanner } from "./OperationBanner";
-import { type GitTab, GitPageSidebarView } from "./GitPageSidebarView";
+import {
+  type GitTab,
+  GitPageSidebarView,
+} from "@shigomori/ui/views/worktreeDetail/git/GitPageSidebarView.tsx";
 import { StashList } from "./StashList";
 
 // The Git page's sidebar (GitPageSidebarView): its tabs are the

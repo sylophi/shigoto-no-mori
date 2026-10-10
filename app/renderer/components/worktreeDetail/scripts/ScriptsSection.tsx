@@ -7,7 +7,7 @@ import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { PackageScripts } from "./PackageScripts";
 import { ScriptRow } from "./ScriptRow";
-import { ScriptsSectionView } from "./ScriptsSectionView";
+import { ScriptsSectionView } from "@shigomori/ui/views/worktreeDetail/scripts/ScriptsSectionView.tsx";
 
 interface ScriptsSectionProps {
   worktree: Worktree;

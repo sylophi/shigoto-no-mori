@@ -1,10 +1,13 @@
 import { describePullRequest } from "@shigomori/ui/lib/pullRequest.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import { TONE_TEXT } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
+import { TONE_TEXT } from "@shigomori/ui/views/worktreeDetail/pullRequests/pullRequestShared.ts";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView";
 import type { GroupShelf } from "./sidebarRow";
 import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
-import type { StackPosition, StackRail } from "@shared/pullRequestStack";
+import type {
+  StackPosition,
+  StackRail,
+} from "@shigomori/contracts/pullRequestStack";
 import type { WorktreeEntry } from "./useWorktreeEntry";
 import { WorktreeEntryView } from "./WorktreeEntryView";
 

@@ -8,7 +8,7 @@ import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIco
 import { BirthdayBadgeView } from "@shigomori/ui/views/villagers/BirthdayBadgeView.tsx";
 import type { SidebarMarks } from "@/hooks/config/useSidebarMarks";
 import type { Resident } from "@shigomori/ui/lib/villagerVoice.ts";
-import type { StackPosition } from "@shared/pullRequestStack";
+import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
 import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import { ActivityIconView } from "./ActivityIconView";
 import { AgentWaitingMarkView } from "./AgentWaitingMarkView";

@@ -3,6 +3,7 @@ import {
   type CommitSummary,
   type Worktree,
 } from "@shigomori/contracts/schemas";
+import type { CommitRewrite } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
 
 // What may be done to the commit at `index` of a newest-first list:
 // amend it (HEAD only), undo back to it, reword it, or squash it into
@@ -13,19 +14,6 @@ import {
 // first parent): the rewrites replay commits one parent at a time. An
 // amend keeps a merge's parents, so HEAD can be amended either way, and
 // a merge on top is undone whole, back to its first parent.
-export interface CommitRewrite {
-  canAmend: boolean;
-  // The commit the list showed on top, which a reword or squash pins
-  // HEAD to the way an undo does. Null when the move isn't allowed.
-  reword: { head: string } | null;
-  squash: { head: string } | null;
-  // `head` is the commit the list showed on top. The reset is refused if
-  // HEAD has moved since (a commit made in a terminal meanwhile), so an
-  // undo never takes more than the rows it named.
-  // `merge` when it undoes a merge on top: the branch goes back to how
-  // it was before it, rather than its changes coming back staged.
-  undo: { target: string; count: number; head: string; merge: boolean } | null;
-}
 
 export function commitRewriteAt(
   worktree: Worktree,
