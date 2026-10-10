@@ -1,8 +1,6 @@
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
 import { tildify } from "@shared/projectPaths";
 import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
@@ -13,9 +11,8 @@ import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutatio
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { layoutInputsFor, worktreePathFor } from "@shared/git/worktreeLayout";
-import { ConvertRow } from "./ConvertRow";
+import { ConvertExternalView } from "./ConvertExternalView";
 import { withToggled } from "@/lib/toggleSet";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { isConvertRefusedError } from "@shigomori/contracts/errors";
 
 // For detached HEADs `worktree.branch` is a short SHA. Pass it
@@ -114,86 +111,19 @@ function ConvertExternalBody({ project }: { project: Project }) {
     }
   };
 
-  const selectableCount = externals.length;
-  const allSelected = selectableCount > 0 && selected.size === selectableCount;
-
   return (
-    <div className={PAGE_BODY}>
-      <div className="flex flex-col gap-6">
-        <ErrorBanner>
-          <p className="text-2xs font-semibold tracking-wide uppercase">
-            This is destructive
-          </p>
-          <p className="mt-2 leading-relaxed">
-            Each selected worktree is removed from its current location and
-            re-checked-out under this project&apos;s managed worktree location.
-            Uncommitted changes, untracked files, and any state inside the old
-            worktree directory are wiped. The branch is then checked out fresh
-            under Shigoto no Mori&apos;s pipelines: carry-over, setup script,
-            and port-pool provision all run as if you had just created it.
-          </p>
-        </ErrorBanner>
-
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : externals.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            No external worktrees to convert. Anything you create from Shigoto
-            no Mori already lives in the managed tree.
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={toggleAll}
-                disabled={batchRunning}
-                className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {allSelected ? "Deselect all" : "Select all"}
-              </button>
-              <span className="text-xs text-muted-foreground">
-                {selected.size} of {selectableCount} selected
-              </span>
-            </div>
-
-            <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-              {externals.map((wt) => (
-                <ConvertRow
-                  key={wt.id}
-                  worktree={wt}
-                  checked={selected.has(wt.id)}
-                  status={status.get(wt.id) ?? { kind: "idle" }}
-                  disabled={batchRunning}
-                  proposedPath={proposedPath(wt)}
-                  home={home}
-                  onToggle={() => toggle(wt.id)}
-                />
-              ))}
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={goBack}
-                disabled={batchRunning}
-              >
-                {batchRunning ? "Working…" : "Cancel"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void runConversions()}
-                disabled={selected.size === 0 || batchRunning}
-              >
-                {batchRunning ? "Converting…" : "Convert"}
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <ConvertExternalView
+      externals={externals}
+      isLoading={isLoading}
+      selected={selected}
+      status={status}
+      batchRunning={batchRunning}
+      proposedPaths={new Map(externals.map((wt) => [wt.id, proposedPath(wt)]))}
+      home={home}
+      onToggle={toggle}
+      onToggleAll={toggleAll}
+      onBack={goBack}
+      onConvert={() => void runConversions()}
+    />
   );
 }
