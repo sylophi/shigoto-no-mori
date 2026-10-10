@@ -18,6 +18,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import { sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mts";
 import { scrubProcessGitEnv, tempDir, type Track } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
@@ -41,8 +42,9 @@ afterAll(async () => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-const { autoPullWorktree, sweepAutoPull } =
-  await import("../host/lib/worktrees/autoPullSweep.ts");
+const { autoPullWorktree, sweepAutoPull } = promised(
+  await import("../host/lib/worktrees/autoPullSweep.ts"),
+);
 const Ops = await import("../host/lib/engineOps.ts");
 const { onSandboxEngine } = await import("./lib/sandboxEngine.mts");
 const listWorktreeIdentities = (

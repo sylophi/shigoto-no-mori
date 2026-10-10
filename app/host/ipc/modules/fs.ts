@@ -2,6 +2,7 @@ import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fsContract } from "@shigomori/contracts/modules/fs";
 import type { Handlers } from "@shigomori/contracts/types";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { isGitRepo } from "@host/lib/git/core";
 import { toAbsolute } from "@host/lib/util/paths";
 
@@ -61,7 +62,7 @@ async function scanForGitRepos(rootPath: string): Promise<string[]> {
   return results.toSorted();
 }
 
-export const fsHandlers: Handlers<typeof fsContract> = {
+export const fsHandlers = {
   listDirectory: async ({ path }) => {
     const absolute = toAbsolute(path);
 
@@ -91,4 +92,8 @@ export const fsHandlers: Handlers<typeof fsContract> = {
   isGitRepo: ({ path }) => isGitRepo(toAbsolute(path)),
 
   scanForGitRepos: ({ path }) => scanForGitRepos(toAbsolute(path)),
-};
+} satisfies Handlers<
+  typeof fsContract,
+  unknown,
+  ChildProcessSpawner.ChildProcessSpawner
+>;

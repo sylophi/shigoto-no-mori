@@ -39,19 +39,16 @@ import { teardownSource } from "@host/lib/sync/receipts";
 export const syncHandlers = {
   hasCommits: ({ projectId, commits }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      fromPromise(async () => {
-        const present: string[] = [];
-        for (const commit of commits) {
-          // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
-          if (await hasCommit(project.path, commit)) present.push(commit);
-        }
-        return { present };
-      }),
+      // A handful of cheap probes, one at a time.
+      Effect.map(
+        Effect.filter(commits, (commit) => hasCommit(project.path, commit)),
+        (present) => ({ present }),
+      ),
     ),
 
   worktreeFolder: ({ relative, ruleIgnored, ...input }) =>
     Effect.flatMap(findWorktreePath(input), (path) =>
-      fromPromise(() => listWorktreeFolder(path, relative, ruleIgnored)),
+      listWorktreeFolder(path, relative, ruleIgnored),
     ),
 
   // The ignored files a capture leaves behind (see the contract note):
@@ -59,17 +56,16 @@ export const syncHandlers = {
   // transplant dialog can name what a teardown would take with it.
   ignoredPaths: (input) =>
     Effect.flatMap(findWorktreePath(input), (path) =>
-      fromPromise(async () => {
-        const [paths, patterns] = await Promise.all([
-          cachedIgnoredPaths(path),
-          listIgnoreRules(path),
-        ]);
-        return {
+      Effect.map(
+        Effect.all([cachedIgnoredPaths(path), listIgnoreRules(path)], {
+          concurrency: 2,
+        }),
+        ([paths, patterns]) => ({
           paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
           total: paths.length,
           patterns,
-        };
-      }),
+        }),
+      ),
     ),
 
   // A pull's link (and the git follower's fetch): this host is the

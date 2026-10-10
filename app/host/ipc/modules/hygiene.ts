@@ -1,7 +1,7 @@
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import type { Handlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
-import type * as Engine from "@host/lib/engine";
+import type { HostServices } from "@host/process/services";
 import { findProject } from "@host/lib/projects";
 import {
   collectProjectHygiene,
@@ -21,4 +21,4 @@ export const hygieneHandlers = {
       const worktree = yield* findWorktreeForDisk(project.id, worktreeId);
       return yield* measureWorktreeDisk(project.id, worktree);
     }),
-} satisfies Handlers<typeof hygieneContract, unknown, Engine.Services>;
+} satisfies Handlers<typeof hygieneContract, unknown, HostServices>;

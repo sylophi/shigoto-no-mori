@@ -43,19 +43,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { run, runLenient } from "@host/lib/git/core";
-import { gitDirOf, operationInProgress } from "@host/lib/git/operation";
+import { operationInProgress } from "@host/lib/git/operation";
 import {
   deleteRef,
+  gitDirOf,
   hasCommit,
   hasObject,
   isAncestor,
+  listCheckouts,
   refTip,
+  run,
+  runLenient,
   treeOf,
   updateRef,
-  ZERO_SHA,
-} from "@host/lib/git/refs";
-import { listCheckouts, worktreeIdFromPath } from "@host/lib/git/worktrees";
+} from "@host/lib/git/promises";
+import { ZERO_SHA } from "@host/lib/git/refs";
+import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 
 export type GitHead = { kind: "branch"; branch: string } | { kind: "detached" };
 

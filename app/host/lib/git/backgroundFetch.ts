@@ -15,7 +15,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
-import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
+import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/promises";
 import {
   pullRequestMapsEqual,
   readCachedProjectPullRequests,
@@ -23,6 +23,7 @@ import {
 import { loadProjects } from "@host/lib/projects";
 import { runningScriptWorktreeIds } from "@host/lib/scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
+import * as Processes from "@host/lib/util/processes";
 import { announceProjectChanged } from "@host/process/handlers";
 import { broadcastAll } from "@host/process/wires";
 import { log } from "@shared/log";
@@ -138,9 +139,11 @@ async function autoPullProject(
   projectPath: string,
 ): Promise<void> {
   try {
-    const { pulled, failed } = await sweepAutoPull(
-      await listIdentities(projectId),
-      runningScriptWorktreeIds(),
+    const { pulled, failed } = await Processes.run(
+      sweepAutoPull(
+        await listIdentities(projectId),
+        runningScriptWorktreeIds(),
+      ),
     );
     for (const { worktree, commits } of pulled) {
       log.info(

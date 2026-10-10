@@ -18,7 +18,6 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";
 import { localBranchExists } from "../git/remotes";
-import { fromPromise } from "../util/fromPromise";
 import { stderrOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
 import { GithubCli } from "./GithubCli";
@@ -37,7 +36,7 @@ class PullRequestCheckoutError extends Schema.TaggedError<PullRequestCheckoutErr
 const refused = (reason: string, cause?: unknown) =>
   new PullRequestCheckoutError({ reason, cause });
 
-const git = (cwd: string, args: string[]) => fromPromise(() => run(cwd, args));
+const git = (cwd: string, args: string[]) => run(cwd, args);
 
 // Enough to fill a picker without paging. Deliberately below the
 // sidebar sweep's 200: that one indexes every branch in the project,
@@ -205,7 +204,7 @@ export const resolvePullRequestCheckout = Effect.fn(
   // Resolved from the PR's URL rather than from "the first GitHub
   // remote": in a fork checkout both the fork and the parent are
   // remotes, and gh answered from the parent.
-  const remote = yield* fromPromise(() => remoteNameForUrl(cwd, head.url));
+  const remote = yield* remoteNameForUrl(cwd, head.url);
   if (!remote) {
     return yield* refused(
       `No git remote points at the repository holding pull request ` +
@@ -229,7 +228,7 @@ const resolveSameRepoHead = Effect.fnUntraced(function* (
   // Both fetch forms below opportunistically refresh
   // refs/remotes/<remote>/<branch> as a side effect, so neither path
   // needs a second round trip to leave the tracking ref current.
-  if (yield* fromPromise(() => localBranchExists(cwd, branch))) {
+  if (yield* localBranchExists(cwd, branch)) {
     // The <src>:<dst> refspec is fast-forward-only, so a local branch
     // that has drifted from the PR head errors out instead of quietly
     // checking out stale code. (git also refuses when the branch is
@@ -248,9 +247,7 @@ const resolveSameRepoHead = Effect.fnUntraced(function* (
     // Explicit rather than leaning on `git worktree add`'s DWIM, which
     // only fires when exactly one remote has the branch. createLocalBranch
     // sets --track for a remote-tracking base, which is what this is.
-    yield* fromPromise(() =>
-      createLocalBranch(cwd, branch, `${remote}/${branch}`),
-    );
+    yield* createLocalBranch(cwd, branch, `${remote}/${branch}`);
   }
   return { branch } satisfies PullRequestCheckoutRef;
 });
@@ -312,7 +309,7 @@ const pickForkBranchName = Effect.fnUntraced(function* (
   );
   // The first usable name wins, so the rest aren't probed up front.
   for (const name of candidates) {
-    if (!(yield* fromPromise(() => localBranchExists(cwd, name)))) return name;
+    if (!(yield* localBranchExists(cwd, name))) return name;
     if ((yield* readBranchMerge(cwd, name)) === pullRef) return name;
   }
   return yield* refused(
