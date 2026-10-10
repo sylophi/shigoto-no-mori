@@ -70,7 +70,7 @@ function anchored(compound: string): boolean {
   return false;
 }
 
-export function scopeToRoot(selector: string): string {
+function scopeToRoot(selector: string): string {
   const s = selector.trim();
   const compound = leftmost(s);
   if (compound.includes(ROOT) || anchored(compound)) return s;
