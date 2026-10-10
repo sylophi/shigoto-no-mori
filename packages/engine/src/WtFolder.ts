@@ -147,6 +147,8 @@ const make = Effect.gen(function* () {
               listed.success.find((id) => id.path === p || id.path === real),
           );
         const from = yield* at(row.from_path);
+        const there = from === undefined ? yield* at(row.to_path) : undefined;
+        let movedTo: string;
         if (from !== undefined) {
           const moved = yield* worktrees
             .move({ project, worktree: from }, row.to_path)
@@ -156,20 +158,23 @@ const make = Effect.gen(function* () {
               WHERE from_path = ${fromPath}`;
             return;
           }
-        } else if ((yield* at(row.to_path)) !== undefined) {
+          movedTo = moved.success.worktree.path;
+        } else if (there !== undefined) {
           // git moved it before a crash; the carry-over is still owed.
           yield* worktrees.rekey(
             project,
             worktreeIdFromPath(row.from_path),
-            row.to_path,
+            there.path,
           );
+          movedTo = there.path;
         } else {
           // Not a worktree git lists: a stray folder stays where it is.
           yield* sql`DELETE FROM wt_moves WHERE from_path = ${fromPath}`;
           return;
         }
-        yield* carryLease(row.from_path, row.to_path);
-        yield* sql`UPDATE wt_moves SET moved = 1, error = NULL
+        yield* carryLease(row.from_path, movedTo);
+        // As git spells it, which the new id is a hash of.
+        yield* sql`UPDATE wt_moves SET moved = 1, error = NULL, to_path = ${movedTo}
           WHERE from_path = ${fromPath}`;
       }),
     );
@@ -246,8 +251,13 @@ const make = Effect.gen(function* () {
             .readDirectory(from)
             .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
           for (const child of children) {
+            // As git spells it (symlinks resolved), which the id it has
+            // now is a hash of.
+            const at = path.join(from, child);
             yield* sql`INSERT INTO wt_moves ${sql.insert({
-              from_path: path.join(from, child),
+              from_path: yield* fs
+                .realPath(at)
+                .pipe(Effect.orElseSucceed(() => at)),
               to_path: path.join(to, child),
               project_id: project.id,
             })} ON CONFLICT DO NOTHING`;
