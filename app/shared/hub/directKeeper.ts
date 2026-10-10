@@ -15,28 +15,23 @@
 // ladder and restart schedule this reuses rather than copying):
 // forever-retry with capped backoff for transient failures, a stable
 // reset so a healthy session that blips does not inherit a punishing
-// delay, and TERMINAL verdicts schedule NOTHING rather than spin.
-// Scheduling nothing is what keeps eager dialing from weaponizing the
-// host's per-identity failed-auth lockout against ourselves: a refused
-// ticket retried on a timer is a lockout feeder, so such a peer waits
-// for its roster presence to transition offline to online (its app
-// restarted, or our own hub link came back, both of which reset the
-// roster diff) -- the "blocked until inputs change" rule with presence
-// as the input. Parking is also what keeps eager dialing off peers
-// there is structurally nothing to dial ON: a web client serves no
-// direct listener by construction, and without a park every desktop
-// would redial every open browser tab at the ladder's cap forever. A
-// peer on a version this one no longer speaks to parks the same way,
-// until it updates and its relaunch round-trips the roster.
+// delay. A refused verdict (a ticket the host read and rejected) asks
+// again only on a slow ladder of its own, spaced so a run of refusals
+// never reaches the host's per-identity failed-auth lockout: a refusal
+// can be transient (a sibling tab's newer ask voiding this one's
+// ticket) with no roster change to follow it, so waiting for one left
+// the tab without a session. A peer there is structurally nothing to
+// dial ON parks instead: a web client serves no direct listener by
+// construction, and without a park every desktop would redial every
+// open browser tab forever. It waits for its roster presence to
+// transition offline to online (its app restarted, or our own hub link
+// came back, both of which reset the roster diff).
 //
-// The mirror of that rule matters just as much: park only on verdicts
-// that really are stuck. Being INSIDE the host's lockout window is
-// not one of them -- it expires on its own, refusing a connection does
-// not extend it, and a park would leave the peer dead long after it
-// lifted with no roster transition to unpark on. The host says which
-// case it is with a distinct close code (CLOSE_AUTH_LOCKED_OUT), so a
-// lockout arrives here as a transient failure and rides the ladder
-// out. A park is for a ticket that was read and refused.
+// Being INSIDE the host's lockout window is no refusal either -- it
+// expires on its own, and refusing a connection does not extend it.
+// The host says which case it is with a distinct close code
+// (CLOSE_AUTH_LOCKED_OUT), so a lockout arrives here as a transient
+// failure and rides the shared ladder out.
 //
 // The keeper is the ONLY caller that starts a dial (the bridge's
 // dialPeer, whose cache makes a re-dial of a live or in-flight peer a
@@ -53,8 +48,14 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
-import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
-import { isTerminalDialError } from "./directDial";
+import * as Duration from "effect/Duration";
+import * as Schedule from "effect/Schedule";
+import {
+  BACKOFF_LADDER_MS,
+  backoffDelayMs,
+  restartSchedule,
+} from "@shared/remote/supervisor";
+import { isTerminalDialError, NoDialableCandidateError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log } from "@shared/log";
 
@@ -98,7 +99,21 @@ type PeerState = {
   // drop reported however early ends the session's wait.
   dropped: Deferred.Deferred<void> | null;
   lastFailure: string | null;
+  // Refused dials in a row, for the refusal ladder.
+  refusals: number;
 };
+
+// An attempt's answer for a refused dial, which the schedule reads as
+// "wait out the refusal ladder" instead of the shared one.
+const REFUSED = -1;
+
+// How long after a refused dial the keeper asks again. The host locks
+// a client out after five failed hellos each within 30 s of the last,
+// so a run of refusals stays at three before a gap that clears its
+// count, and then asks once a minute.
+const REFUSED_LADDER_MS: readonly [number, ...number[]] = [
+  2_000, 8_000, 35_000, 60_000,
+];
 
 export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
   const run = Effect.runForkWith(deps.context ?? Context.empty());
@@ -143,11 +158,18 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
           log.warn(`[direct] dial to ${deviceId} failed: ${message}`);
         }
         state.lastFailure = message;
-        // Redialing cannot change a terminal verdict and WOULD feed the
-        // host's failed-auth lockout, so the loop parks: this peer's
-        // next dial comes from its roster re-entry (see the header),
-        // which starts a fresh loop.
-        if (isTerminalDialError(error)) return yield* Effect.never;
+        // A peer with no listener (a web client) has nothing to dial
+        // while it is one, so the loop parks until its roster re-entry
+        // (see the header). Any other verdict asks again on the slow
+        // refusal ladder: a refused ticket can be a sibling tab's
+        // newer ask voiding this one's, which no roster change follows.
+        if (error instanceof NoDialableCandidateError) {
+          return yield* Effect.never;
+        }
+        if (isTerminalDialError(error)) {
+          state.refusals += 1;
+          return REFUSED;
+        }
         return 0;
       }
       const connectedAt = yield* Clock.currentTimeMillis;
@@ -155,15 +177,33 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         log.info(`[direct] session to ${deviceId} established`);
       }
       state.lastFailure = null;
+      state.refusals = 0;
       yield* Deferred.await(dropped);
       return (yield* Clock.currentTimeMillis) - connectedAt;
     });
 
   const keep = (deviceId: string) => {
-    const state: PeerState = { loop: null, dropped: null, lastFailure: null };
+    const state: PeerState = {
+      loop: null,
+      dropped: null,
+      lastFailure: null,
+      refusals: 0,
+    };
     state.loop = run(
       attempt(deviceId, state).pipe(
-        Effect.repeat(restartSchedule(BACKOFF_LADDER_MS)),
+        Effect.repeat(
+          restartSchedule(BACKOFF_LADDER_MS).pipe(
+            Schedule.modifyDelay(({ input, duration }) =>
+              Effect.succeed(
+                input === REFUSED
+                  ? Duration.millis(
+                      backoffDelayMs(REFUSED_LADDER_MS, state.refusals - 1),
+                    )
+                  : duration,
+              ),
+            ),
+          ),
+        ),
         Effect.andThen(Effect.never),
       ),
     );

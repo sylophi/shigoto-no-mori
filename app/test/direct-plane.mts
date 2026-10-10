@@ -64,7 +64,8 @@
 //     survives (no host-side supersede) and the loser's ticket is
 //     never spent.
 //   - the host NAMES its refusals: a ticket it read and rejected is
-//     LinkRefusedError (blocked, terminal, the keeper parks), while a
+//     LinkRefusedError (blocked, terminal, the keeper asks again on
+//     its slow refusal ladder), while a
 //     client benched by the failed-auth window is closed with the
 //     lockout's code (unblocked, transient, the keeper ladders)
 //     even on a single candidate holding a VALID ticket, the shape a
@@ -815,7 +816,7 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
   keeper.stop();
 });
 
-it("a genuine ticket refusal still PARKS: a ticket the host read and rejected is refused with LinkRefusedError, is blocked and terminal, and the keeper schedules nothing", async () => {
+it("a genuine ticket refusal is blocked and terminal, and the keeper asks again on the refusal ladder, never faster than the host's lockout allows", async () => {
   // The other side of the same line. Same single-candidate shape,
   // same connection-time close code family, opposite verdict --
   // and the ONLY thing separating them is what the host put on the
@@ -844,16 +845,36 @@ it("a genuine ticket refusal still PARKS: a ticket the host read and rejected is
   assert.ok(verdict instanceof RemoteConnectError);
   assert.ok(refusedTicket(verdict), "a refused ticket was not blocked");
   assert.equal(isTerminalDialError(verdict), true);
-  const { keeper, clock, dials } = stubKeeper(verdict);
+  // A refused ticket can be a sibling tab's newer ask voiding this
+  // one's, which no roster change follows, so it is asked again: 2 s,
+  // then 8 s, then 35 s, which clears the host's count (five failures
+  // each within 30 s of the last), then once a minute.
+  const { keeper, clock, dials, succeed } = stubKeeper(verdict);
   keeper.reconcile(["B"]);
   await clock.settle();
   assert.equal(dials.length, 1);
-  await clock.advance(lastOf(BACKOFF_LADDER_MS) * 100);
-  assert.equal(
-    dials.length,
-    1,
-    "a refused ticket retried on a timer, feeding the host's lockout",
-  );
+  await clock.advance(1_999);
+  assert.equal(dials.length, 1, "a refusal was asked again within 2 s");
+  await clock.advance(1);
+  assert.equal(dials.length, 2);
+  await clock.advance(8_000);
+  assert.equal(dials.length, 3);
+  await clock.advance(35_000);
+  assert.equal(dials.length, 4);
+  await clock.advance(60_000);
+  assert.equal(dials.length, 5);
+  await clock.advance(60_000);
+  assert.equal(dials.length, 6, "the refusal ladder does not hold at a minute");
+  const gaps = dials.slice(1).map((dial, i) => dial.at - (dials[i]?.at ?? 0));
+  let streak = 1;
+  for (const gap of gaps) {
+    streak = gap < 30_000 ? streak + 1 : 1;
+    assert.ok(streak < 5, "the refusals ran into the host's lockout");
+  }
+  // A landing resets it.
+  succeed();
+  await clock.advance(60_000);
+  assert.equal(dials.length, 7);
   keeper.stop();
 });
 
@@ -1874,9 +1895,9 @@ it("dialableKinds (the web path): the declared capability reaches the host over 
 });
 
 it("the terminal classification covers exactly the verdicts a redial cannot change", async () => {
-  // The park-vs-retry line the keeper consumes: a blocked verdict
-  // (ticket presented and refused, wrong identity) and no listener
-  // park. Everything transient
+  // The line the keeper consumes: no listener parks, a blocked verdict
+  // (ticket presented and refused, wrong identity) is asked again on
+  // the slow refusal ladder. Everything transient
   // (unreachable, deadline, no listener yet) retries on the
   // ladder. Misclassifying a transient as terminal would strand a
   // peer whose tunnel was merely still starting, and the reverse
@@ -2057,23 +2078,25 @@ it("keeper discipline: eager dial on roster entry, the exact shared ladder on tr
   keeper.stop();
 });
 
-it("keeper parks on terminal verdicts with NO timer (the lockout-protection rule), and the peer's roster round trip is what redials it", async () => {
+it("keeper parks on a peer with no listener with NO timer, and the peer's roster round trip is what redials it", async () => {
   const { keeper, clock, dials, succeed } = stubKeeper(
-    new RemoteConnectError("ticket refused", null, true),
+    new NoDialableCandidateError("B"),
   );
   keeper.reconcile(["B"]);
   await clock.settle();
   assert.equal(dials.length, 1);
-  // Parked: no amount of time redials a blocked verdict, so eager
-  // supervision can never feed the host's failed-auth lockout a
-  // second refused ticket on a timer.
+  // Parked: a web client serves no listener while it is one, so no
+  // amount of time redials it.
   await clock.advance(lastOf(BACKOFF_LADDER_MS) * 100);
   assert.equal(dials.length, 1, "a parked peer redialed on a timer");
-  assert.equal(keeper.unavailableReason("B"), "ticket refused");
+  assert.equal(
+    keeper.unavailableReason("B"),
+    "peer B serves no direct listener",
+  );
   // A steady roster does not unpark either...
   keeper.reconcile(["B"]);
   await clock.advance(lastOf(BACKOFF_LADDER_MS));
-  assert.equal(dials.length, 1, "a steady roster unparked a blocked peer");
+  assert.equal(dials.length, 1, "a steady roster unparked the peer");
   // ...but the peer's offline-to-online transition does (its app
   // restarted, or our own link came back: both reset the roster
   // diff), and the fresh dial may now succeed.

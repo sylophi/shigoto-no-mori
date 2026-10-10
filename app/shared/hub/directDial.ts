@@ -120,15 +120,14 @@ export class NoDialableCandidateError extends Error {
   }
 }
 
-// True when redialing cannot change the outcome until the peer's own
-// state changes: a blocked verdict (a ticket the host read and refused,
-// or the wrong machine answered) or a peer with no direct listener.
-// The keeper PARKS on these instead of retrying on the ladder, which
-// is what keeps eager supervision from feeding the host's per-identity
-// failed-auth lockout a steady diet of refused tickets: a parked peer
-// redials only when presence says its state changed (offline to
-// online), never on a timer. Every other failure (unreachable,
-// deadline, no listener yet) is transient and retries forever.
+// True when redialing at once cannot change the outcome: a blocked
+// verdict (a ticket the host read and refused, or the wrong machine
+// answered) or a peer with no direct listener. The keeper parks on the
+// second, and asks again after the first only on its slow refusal
+// ladder, which keeps eager supervision from feeding the host's
+// per-identity failed-auth lockout a steady diet of refused tickets.
+// Every other failure (unreachable, deadline, no listener yet) is
+// transient and retries forever on the shared ladder.
 export function isTerminalDialError(error: unknown): boolean {
   return (
     (error instanceof RemoteConnectError && error.blocked) ||
