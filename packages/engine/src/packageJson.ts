@@ -1,4 +1,4 @@
-// package.json's scripts in manifest order, as the Go sm reads them:
+// package.json's scripts in manifest order, as the Go sm read them:
 // only string-valued entries count, a duplicated name is listed twice,
 // and a missing or non-object scripts block means none. JSON.parse
 // would put integer-like names first and keep one of each duplicate,

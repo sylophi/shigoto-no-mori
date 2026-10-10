@@ -16,7 +16,7 @@
 //
 // The terminal's `sm doctor` must answer when the store can't open
 // (`standalone`): the checks that read only files and programs still
-// run, and the file the store refused is named as Go names it.
+// run, and the file the store refused is named as Go named it.
 import { RegistryFileSchema } from "@shigomori/contracts/schemas/dataDir";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -210,7 +210,7 @@ type StoreServices =
 
 const isStoreImportError = Schema.is(StoreImportError);
 
-// The lines that judge the 2.x files, read as Go reads them, while the
+// The lines that judge the 2.x files, read as Go read them, while the
 // store can't import them: config.json's, registry.json's, state.json's
 // when there is one, the store's own for a refused file none of them
 // names, and each registered project's project.json by project id.
@@ -319,7 +319,7 @@ const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
-// A JSON file as Go reads it: absent, unreadable, not a JSON object, or
+// A JSON file as Go read it: absent, unreadable, not a JSON object, or
 // the object.
 type JsonFile =
   | { readonly state: "absent" }
@@ -328,7 +328,7 @@ type JsonFile =
   | { readonly state: "parsed"; readonly doc: ConfigDoc };
 
 // The registry's projects as the store imports them, and its manual
-// order as Go reads it.
+// order as Go read it.
 const RegistryProjects = Schema.UndefinedOr(RegistryFileSchema.fields.projects);
 const ProjectOrder = Schema.UndefinedOr(
   Schema.NullOr(Schema.Array(Schema.String)),
@@ -2044,7 +2044,7 @@ const make = Effect.gen(function* () {
 
   // Every check. With `files`, the store's services read the 2.x files
   // (`Store.fromFiles`), and the lines that judge those files come from
-  // reading them as Go does.
+  // reading them as Go did.
   const checkAll = (input: RunInput, files: Option.Option<FileReads>) =>
     Effect.gen(function* () {
       const terrier = yield* Terrier.Terrier;
@@ -2054,7 +2054,7 @@ const make = Effect.gen(function* () {
       const listing = yield* terrier.listing;
       const listed = yield* listProjects(listing);
       const { projects } = listed;
-      // A registry Go can't load leaves the list short.
+      // A registry that can't be loaded leaves the list short.
       const complete =
         listed.complete &&
         Option.match(files, {
@@ -2145,7 +2145,7 @@ const make = Effect.gen(function* () {
 
   const stateFile = path.join(dataDir, "state.json");
 
-  // A JSON file the store imports, read as Go reads it.
+  // A JSON file the store imports, read as Go read it.
   const readJsonFile = (file: string) =>
     Effect.gen(function* () {
       const text = yield* Effect.result(fs.readFileString(file));
@@ -2185,7 +2185,7 @@ const make = Effect.gen(function* () {
     }
   });
 
-  // A registry document's line and projects, as Go judges registry.json:
+  // A registry document's line and projects, as Go judged registry.json:
   // the projects list, then the manual order, then each entry.
   const judgeRegistry = (doc: ConfigDoc, file: string) => {
     const projects = Schema.decodeUnknownOption(RegistryProjects)(
@@ -2247,7 +2247,7 @@ const make = Effect.gen(function* () {
     }
   });
 
-  // state.json holds only use history, so one Go can't read is a
+  // state.json holds only use history, so one that can't be read is a
   // warning.
   const stateFromFile = Effect.gen(function* () {
     const line = check("Data dir", "state", "state.json");
@@ -2447,7 +2447,7 @@ export const layer = Layer.effect(
 // needs it. `store` provides the store's services and is built inside
 // each run, and `files` the same services over the 2.x files
 // (`Store.fromFiles`). An import the store refused reads the files
-// instead, as Go would. Any other failure to open, or no data dir to
+// instead, as Go did. Any other failure to open, or no data dir to
 // open one in (which building it would create), runs only the checks
 // that need no state.
 export const standalone = <R>(

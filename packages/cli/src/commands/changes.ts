@@ -53,7 +53,7 @@ const force = (description: string) =>
     Flag.withDefault(false),
   );
 
-// Go reads the positionals it needs and lets the rest be.
+// The positionals it needs are read and the rest let be, as the Go sm did.
 const rest = Argument.String("args").pipe(Argument.variadic());
 
 // Where to go when the shell stands in a folder that is gone: "the

@@ -19,11 +19,11 @@ export type AccountServiceConfig = {
   publishableKey: string;
   // Exact origin of the deployed web client.
   // Desktop-only: the device hub serves any origin, this gate does not.
-  // The direct listener's Origin gate admits browser dials from
+  // The device link's Origin gate admits browser dials from
   // exactly this origin, so a web client can dial wss tunnel URLs.
-  // Empty means no web origin is admitted, which was the only prior
-  // behavior. Not part of isConfigured: the account layer works
-  // without it.
+  // Empty means no web origin is admitted. Not part of isConfigured:
+  // the account layer works without it.
+
   webOrigin: string;
 };
 
@@ -62,8 +62,8 @@ export function isConfigured(config: AccountServiceConfig): boolean {
 // optional dev .env.local values, the values baked into the bundle at
 // build time, and the real process environment. Real environment
 // variables always win, so an owner can override even a baked build
-// from the environment, and a build with nothing baked in behaves
-// exactly as before.
+// from the environment, and a build with nothing baked in reads the
+// environment alone.
 export function mergeServiceEnv(
   fileEnv: Record<string, string | undefined>,
   bakedEnv: Record<string, string>,

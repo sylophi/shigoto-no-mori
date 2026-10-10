@@ -10,7 +10,7 @@ import {
 // (schemas/sharedSettings.ts). Host-scoped because the copy
 // lives in the device's data dir and its peers read it, though a
 // browser serves the same contract off localStorage
-// (web/ipc/register.ts) so the renderer treats every copy alike.
+// (web/ipc/localRegistrar.ts) so the renderer treats every copy alike.
 export const sharedSettingsContract = defineContract(
   "sharedSettings",
   "host",

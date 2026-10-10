@@ -41,7 +41,7 @@ export const PullRequestSchema = Schema.Struct({
   // The branch the PR merges into ("main", or another PR's head when
   // the PR sits in a stack). On the slim shape because the stack is
   // read off the project-wide map: a PR whose base is another PR's
-  // head is stacked on it (shared/pullRequestStack.ts).
+  // head is stacked on it (pullRequestStack.ts).
   baseRefName: Schema.String,
   // Whether the PR comes from a fork (isFromThisRepository). Absent
   // from a host on an older build.
@@ -377,7 +377,7 @@ export const MergePullRequestPayloadSchema = Schema.Struct({
   number: PullRequestNumberSchema,
   method: MergeMethodSchema,
   // Land the PR together with every open PR under it in its stack,
-  // bottom first (shared/pullRequestStack.ts), so the whole stack up
+  // bottom first (pullRequestStack.ts), so the whole stack up
   // to this PR lands in one action. One PR at a time would leave each
   // next PR pointing at a branch that already landed.
   stack: Schema.optional(Schema.Boolean),

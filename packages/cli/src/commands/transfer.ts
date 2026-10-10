@@ -30,7 +30,7 @@ const target = (input: {
 const transferFlags = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
-  // Go reads the first positional and lets the rest be.
+  // The first positional is read and the rest let be, as the Go sm did.
   rest: Argument.String("args").pipe(Argument.variadic()),
   to: Flag.String("to").pipe(
     Flag.withDescription("The device it goes to"),

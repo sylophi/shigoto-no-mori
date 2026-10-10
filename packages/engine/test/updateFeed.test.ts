@@ -242,7 +242,7 @@ describe("dates", () => {
       "Tue, 15 Sep 2026 12:00:00 +0530": "2026-09-15T06:30:00Z",
       "Tue, 15 Sep 2026 12:00:00 GMT": "2026-09-15T12:00:00Z",
       "Tue, 15 Sep 2026 12:00:00 UTC": "2026-09-15T12:00:00Z",
-      // Go reads an abbreviation it doesn't know as UTC too.
+      // Go read an abbreviation it didn't know as UTC too.
       "Tue, 15 Sep 2026 12:00:00 EST": "2026-09-15T12:00:00Z",
       "Tue, 15 Spt 2026 12:00:00 GMT": "",
       "15 Sep 2026 12:00:00 GMT": "",

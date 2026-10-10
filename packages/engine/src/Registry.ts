@@ -74,7 +74,7 @@ export class Registry extends Context.Service<
     readonly listed: Effect.Effect<ReadonlyArray<ListedProject>>;
     // The rows the sidebar shows, in the manual order: each project
     // with whether its folder is there, its identity and remote, its use
-    // stats and its icon. The hue is always null (V3.md, decision 12).
+    // stats and its icon. The hue is always null, kept for the JSON's shape.
     // `rescanIconMisses` looks again for icons of projects remembered as
     // having none.
     readonly rows: (options?: {
