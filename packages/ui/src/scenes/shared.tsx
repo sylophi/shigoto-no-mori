@@ -48,7 +48,6 @@ import {
   deviceById,
   deviceTabs,
   FACE,
-  projectIconSrc,
   projectNamed,
   worktreeNamed,
 } from "./world.ts";
@@ -225,11 +224,7 @@ export function MarksScene() {
       <Strip label="Projects">
         <ProjectIconView src={undefined} name="loading" className="size-5" />
         <ProjectIconView src={null} name="t3code" className="size-5" />
-        <ProjectIconView
-          src={projectIconSrc("port-pool")}
-          name="port-pool"
-          className="size-5"
-        />
+        <ProjectIconView src={null} name="port-pool" className="size-5" />
         <PinnedMarkView />
         <TerrierPawView className="size-4" />
       </Strip>

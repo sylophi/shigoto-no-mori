@@ -107,9 +107,16 @@ it("keeps the stylesheets inside the root element", () => {
   const styles = join(src, "styles");
   for (const name of readdirSync(styles)) {
     if (!name.endsWith(".css")) continue;
-    const css = readFileSync(join(styles, name), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/url\([^)]*\)/g, "");
+    const source = readFileSync(join(styles, name), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+    // An image is a file the bundlers emit, so a page with a strict
+    // content security policy (the marketing site's) can draw it.
+    if (/url\(\s*["']?data:/.test(source)) {
+      failures.push(`${name} carries a data: URL`);
+    }
+    const css = source.replace(/url\([^)]*\)/g, "");
     // Only selectors: the text before each `{`.
     for (const [, selector = ""] of css.matchAll(/([^{};]+)\{/g)) {
       if (PAGE_SELECTOR.test(selector) || VIEWPORT_WIDTH.test(selector)) {
