@@ -14,10 +14,11 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { implSlot } from "@host/lib/util/implSlot";
-import { parentSpan, withParentSpan } from "@host/lib/util/trace";
+import type * as Tracer from "effect/Tracer";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import { nameOf } from "@shigomori/contracts/contract";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { Client } from "@shigomori/contracts/types";
 
@@ -40,19 +41,22 @@ const { set: setPeerReach, get: requireReach } = implSlot<PeerReach>(
 export { setPeerReach };
 
 // A peer's surface for one contract, on the cached direct session:
-// built per call, never held. Each call continues the span its caller
-// runs under (a move's step), and `signal` cancels it on the peer.
+// built per call, never held. Each call continues `span`, and `signal`
+// cancels it on the peer.
 export function peerClient<M extends ContractModule>(
   contract: M,
   deviceId: string,
-  options: { readonly signal?: AbortSignal } = {},
+  options: {
+    readonly signal?: AbortSignal;
+    readonly span?: Tracer.AnySpan | undefined;
+  } = {},
 ): Client<M> {
   const transport = requireReach().transportFor(deviceId);
   return buildClient(contract, {
     invoke: (channel, input) =>
       transport.invoke(channel, input, {
         signal: options.signal,
-        span: parentSpan(),
+        span: options.span,
       }),
     subscribe: transport.subscribe,
   });
@@ -78,17 +82,19 @@ export const peerEffects = <M extends ContractModule>(
       (...args: unknown[]) =>
         Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
           Effect.tryPromise({
-            try: (signal) =>
-              withParentSpan(span, () => {
-                const call: unknown = Reflect.get(
-                  peerClient(contract, deviceId, { signal }),
-                  method,
-                );
-                if (typeof call !== "function") {
-                  throw new Error(`${nameOf(contract)}:${method} is no call`);
-                }
-                return Promise.resolve(call(...args));
-              }),
+            try: (signal) => {
+              const call: unknown = Reflect.get(
+                peerClient(contract, deviceId, {
+                  signal,
+                  span: Option.getOrUndefined(span),
+                }),
+                method,
+              );
+              if (typeof call !== "function") {
+                throw new Error(`${nameOf(contract)}:${method} is no call`);
+              }
+              return Promise.resolve(call(...args));
+            },
             catch: callFailureOf,
           }),
         ),

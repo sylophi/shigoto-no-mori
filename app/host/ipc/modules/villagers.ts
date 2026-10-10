@@ -1,5 +1,5 @@
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import { VillagerData } from "@host/lib/villagers";
 
@@ -14,4 +14,4 @@ export const villagersHandlers = {
   remove: () => onData((data) => data.remove),
   face: ({ slug }) => onData((data) => data.face(slug)),
   profiles: () => onData((data) => data.profiles),
-} satisfies Handlers<typeof villagersContract, unknown, VillagerData>;
+} satisfies EffectHandlers<typeof villagersContract, unknown, VillagerData>;

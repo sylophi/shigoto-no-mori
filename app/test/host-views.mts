@@ -340,10 +340,11 @@ it("one read per view and input: a second subscriber joins it on the current val
   const counted = (key: string) =>
     Views.view(
       key,
-      () => {
-        reads += 1;
-        return value;
-      },
+      () =>
+        Effect.sync(() => {
+          reads += 1;
+          return value;
+        }),
       (signal) => signal.kind === "push" && signal.push.channel === bump,
     );
   const subscribe = (key: string) =>

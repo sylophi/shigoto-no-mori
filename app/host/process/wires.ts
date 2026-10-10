@@ -4,9 +4,13 @@
 // (host/socket/loopback.ts) for this machine's windows, its shell and
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
+import type * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import { invokeInCallSpan } from "@host/lib/util/trace";
+import * as Schema from "effect/Schema";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import type { HostServices } from "./services";
 import * as Captures from "./captures";
 import type * as Stream from "effect/Stream";
@@ -23,11 +27,11 @@ import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
-  Handlers,
   ViewHandlers,
 } from "@shigomori/contracts/types";
 import {
   broadcastAll as broadcastAllCore,
+  type EffectHandlers,
   registerHostContract,
 } from "@shared/ipc/registerContract";
 import type {
@@ -71,6 +75,31 @@ import { hostBinaryPath, hostFacts } from "./facts";
 // reading of them. The registrar records the handlers at start, while
 // listening follows enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
+
+// The graph's services, which the root hands over once the graph is up
+// (host.ts): a call on either listener before then waits for them, and
+// a graph that failed to build refuses it.
+const graphServices = Deferred.makeUnsafe<
+  Context.Context<HostServices>,
+  GraphDownError
+>();
+class GraphDownError extends Schema.TaggedError<GraphDownError>()(
+  "GraphDownError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return `The app failed to start: ${this.reason}`;
+  }
+}
+export const graphUp = (services: Context.Context<HostServices>): void => {
+  Deferred.doneUnsafe(graphServices, Exit.succeed(services));
+};
+export const graphFailed = (reason: string): void => {
+  Deferred.doneUnsafe(graphServices, Exit.fail(new GraphDownError({ reason })));
+};
+const lateServices = Deferred.await(graphServices).pipe(
+  Effect.mapError(callFailureOf),
+);
 const linkRegistrar = DeviceLink.createLinkRegistrar();
 export const deviceLinkLayer = () =>
   Captures.deviceLink.layer.pipe(
@@ -86,6 +115,7 @@ export const deviceLinkLayer = () =>
         },
         // Not sharing, a mirror it asked for still follows its copy here.
         seesPush: mirrorInviteSees,
+        services: lateServices,
       }),
     ),
   );
@@ -154,6 +184,7 @@ export const loopbackLayer = () =>
         file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
         // The window's own page dials it, from the renderer scheme.
         allowedOrigin: hostFacts().rendererOrigin,
+        services: lateServices,
       }),
     ),
   );
@@ -260,11 +291,10 @@ function assertHostSide(module: ContractModule): void {
 
 export function registerContract<M extends ContractModule>(
   module: M,
-  handlers: Handlers<M, HandlerContext, HostServices>,
+  handlers: EffectHandlers<M, HandlerContext, HostServices>,
 ): void {
   assertHostSide(module);
   registerHostContract(module, handlers, hostServer, {
-    invoke: invokeInCallSpan,
     // Handler results are parsed with their output schema in a dev
     // build, so drift surfaces here and not as a confusing failure in a
     // window. A packaged build skips the extra parse.
@@ -305,7 +335,7 @@ export function registerViews<M extends ContractModule>(
 // shell's session with its host): its calls, and its streams.
 export function registerLoopbackContract<M extends ContractModule>(
   module: M,
-  handlers: Handlers<M, HandlerContext, HostServices>,
+  handlers: EffectHandlers<M, HandlerContext, HostServices>,
   streams: Readonly<Record<string, View>> = {},
 ): void {
   registerHostContract(
@@ -315,7 +345,7 @@ export function registerLoopbackContract<M extends ContractModule>(
       handle: (channel, fn) => loopbackRegistrar.handle(channel, fn),
       broadcastAll: () => {},
     },
-    { validateOutputs: !hostFacts().packaged, invoke: invokeInCallSpan },
+    { validateOutputs: !hostFacts().packaged },
   );
   for (const [key, stream] of Object.entries(streams)) {
     loopbackRegistrar.view(`${nameOf(module)}:${key}`, stream);
