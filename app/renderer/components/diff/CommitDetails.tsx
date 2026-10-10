@@ -1,35 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowDown,
-  ArrowUp,
-  Check,
-  Combine,
-  Copy,
-  Ellipsis,
-  FolderGit2,
-  GitBranchPlus,
-  PencilLine,
-  RotateCcw,
-  TextCursorInput,
-  Undo2,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useCopied } from "@/components/ui/copy-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@/lib/commitRewrite";
-import { pluralize } from "@/lib/pluralize";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
+import { CommitDetailsView, CommitStepsView } from "./CommitDetailsView";
 
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find. The moves
@@ -73,142 +50,32 @@ export function CommitDetails({
   const busy = actions.pending;
 
   return (
-    <div className="flex flex-col gap-2.5 pt-1">
-      {message?.description && (
-        <p className="max-w-prose text-sm whitespace-pre-wrap text-muted-foreground select-text">
-          {message.description}
-        </p>
-      )}
-      {onlyOn && (
-        <p className="text-xs text-muted-foreground">
-          Only on <span className="font-mono">{onlyOn}</span>, not on this
-          branch yet.
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {canAmend && (
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() =>
-              nav.toDiff(worktree.projectId, worktree.id, { amend: true })
-            }
-          >
-            <PencilLine />
-            Amend
-          </Button>
-        )}
-        {/* HEAD's message is amended with the rest of it. */}
-        {reword && !canAmend && (
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={busy}
-            onClick={() => actions.reword(commit, reword.head)}
-          >
-            <TextCursorInput />
-            Reword
-          </Button>
-        )}
-        {squash && (
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={busy}
-            onClick={() => actions.squash(commit, squash.head)}
-          >
-            <Combine />
-            Squash
-          </Button>
-        )}
-        {undo && (
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={busy}
-            onClick={() => actions.undoTo(undo)}
-          >
-            <Undo2 />
-            {canAmend
-              ? "Undo"
-              : `Undo the ${pluralize(undo.count, "commit")} after it`}
-          </Button>
-        )}
-        {!onlyOn && actions.canRevert && (
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={busy}
-            onClick={() => actions.revert(commit)}
-          >
-            <RotateCcw />
-            Revert
-          </Button>
-        )}
-        {actions.pickTargets.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="xs" disabled={busy}>
-                  <GitBranchPlus />
-                  Copy to another worktree
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="start" sideOffset={4}>
-              {actions.pickTargets.map((target) => (
-                <DropdownMenuItem
-                  key={target.id}
-                  onClick={() => actions.cherryPickInto(target, commit)}
-                >
-                  <span className="font-mono">{target.branch}</span>
-                  <span className="text-muted-foreground">{target.name}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {actions.canCommand && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon-xs" aria-label="More">
-                  <Ellipsis />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="start" sideOffset={4}>
-              <DropdownMenuItem
-                disabled={busy}
-                onClick={() => actions.newWorktreeFrom(commit)}
-              >
-                <FolderGit2 />
-                New worktree from here
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <CopyHashButton hash={commit.hash} />
-      </div>
-      {actions.dialog}
-    </div>
-  );
-}
-
-// The commit's hash at the row's far end, copied with a click.
-function CopyHashButton({ hash }: { hash: string }) {
-  const [copied, copy] = useCopied(hash);
-  return (
-    <Button
-      variant="ghost"
-      size="xs"
-      onClick={copy}
-      aria-label={`Copy hash ${hash}`}
-      className="ml-auto text-muted-foreground"
-    >
-      <span className="font-mono">{hash}</span>
-      {copied ? <Check /> : <Copy />}
-    </Button>
+    <CommitDetailsView
+      hash={commit.hash}
+      description={message?.description}
+      onlyOn={onlyOn}
+      busy={busy}
+      canAmend={canAmend}
+      onAmend={() =>
+        nav.toDiff(worktree.projectId, worktree.id, { amend: true })
+      }
+      canReword={reword !== null}
+      onReword={() => reword && actions.reword(commit, reword.head)}
+      canSquash={squash !== null}
+      onSquash={() => squash && actions.squash(commit, squash.head)}
+      undoCount={undo?.count ?? null}
+      onUndo={() => undo && actions.undoTo(undo)}
+      canRevert={actions.canRevert}
+      onRevert={() => actions.revert(commit)}
+      pickTargets={actions.pickTargets}
+      onPick={(id) => {
+        const target = actions.pickTargets.find((t) => t.id === id);
+        if (target) actions.cherryPickInto(target, commit);
+      }}
+      canCommand={actions.canCommand}
+      onNewWorktree={() => actions.newWorktreeFrom(commit)}
+      dialog={actions.dialog}
+    />
   );
 }
 
@@ -227,25 +94,9 @@ export function CommitSteps({
   const step = (hash: string | undefined) =>
     hash && nav.toCommit(worktree.projectId, worktree.id, hash, true);
   return (
-    <div className="flex items-center">
-      <SimpleTooltip tip="Newer commit">
-        <IconButton
-          aria-label="Newer commit"
-          disabled={!newer}
-          onClick={() => step(newer)}
-        >
-          <ArrowUp aria-hidden className="size-4" />
-        </IconButton>
-      </SimpleTooltip>
-      <SimpleTooltip tip="Older commit">
-        <IconButton
-          aria-label="Older commit"
-          disabled={!older}
-          onClick={() => step(older)}
-        >
-          <ArrowDown aria-hidden className="size-4" />
-        </IconButton>
-      </SimpleTooltip>
-    </div>
+    <CommitStepsView
+      onNewer={newer ? () => step(newer) : undefined}
+      onOlder={older ? () => step(older) : undefined}
+    />
   );
 }
