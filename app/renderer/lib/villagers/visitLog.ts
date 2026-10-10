@@ -38,12 +38,12 @@ import {
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
 import { villageProfiles } from "./speakers";
+import type {
+  VisitEntry,
+  VisitLog,
+} from "@shigomori/ui/lib/villagers/visitors.ts";
 
 const LOG_KEY = "villagers.visits";
-
-// A visit: who, and when (epoch ms). Null for a copy.
-type VisitEntry = { slug: string; at: number } | null;
-export type VisitLog = Readonly<Record<string, VisitEntry>>;
 
 // Anything but a visit or a copy (a hand-edited or corrupt record) is
 // dropped.

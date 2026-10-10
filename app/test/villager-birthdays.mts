@@ -10,7 +10,7 @@ import {
   calendarDayOf,
   isBirthdayOn,
   monthDayOf,
-} from "@/lib/villagers/birthdays";
+} from "@shigomori/ui/lib/villagers/birthdays.ts";
 import { it } from "vitest";
 
 const day = new Date(2026, 8, 25, 12);

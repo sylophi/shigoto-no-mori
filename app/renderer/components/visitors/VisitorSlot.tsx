@@ -1,7 +1,7 @@
 import { useSeen } from "@/hooks/ui/useSeen";
 import { useVillagerFace } from "@/hooks/villagers/useVillagers";
-import type { AlbumEntry } from "@/lib/villagers/visitors";
-import { VisitorSlotView } from "./VisitorStickerView";
+import type { AlbumEntry } from "@shigomori/ui/lib/villagers/visitors.ts";
+import { VisitorSlotView } from "@shigomori/ui/views/visitors/VisitorStickerView.tsx";
 
 // One slot of the album (VisitorSlotView), its face loaded once the
 // slot is scrolled near.

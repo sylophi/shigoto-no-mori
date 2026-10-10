@@ -7,7 +7,8 @@ import {
   useSidebarMarks,
 } from "@/hooks/config/useSidebarMarks";
 import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
-import { type Resident, useResident } from "@/hooks/villagers/useResident";
+import type { Resident } from "@shigomori/ui/lib/villagerVoice.ts";
+import { useResident } from "@/hooks/villagers/useResident";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView";
 import type { WorktreeRowLook } from "./rowLook";
 import {

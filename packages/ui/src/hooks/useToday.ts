@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { calendarDayOf } from "@/lib/villagers/birthdays";
+import { calendarDayOf } from "../lib/villagers/birthdays.ts";
 
 // The local calendar day, for what changes with it (a villager's
 // birthday). Subscribers re-render once, when the day rolls over, not on

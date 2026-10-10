@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+import { cn } from "../../lib/utils.ts";
 
 // The trimmings of a villager's birthday (BirthdayPartyView.tsx, and
 // PartyFaceView's confetti): bunting, confetti and balloons, drawn flat in

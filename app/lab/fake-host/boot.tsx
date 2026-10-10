@@ -4,7 +4,7 @@
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { bootApp } from "@/boot";
-import { poseToday } from "@/hooks/ui/useToday";
+import { poseToday } from "@shigomori/ui/hooks/useToday.ts";
 
 // ?today=MM-DD (or YYYY-MM-DD): the calendar day the fake host poses, for a
 // villager's birthday without touching the clock.

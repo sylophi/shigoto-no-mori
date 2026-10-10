@@ -6,22 +6,22 @@
 import type { ReactNode } from "react";
 import { SettingsPageView } from "@/components/settings/SettingsFormView";
 import { VISITORS_TAB } from "@/components/settings/settingsSections";
-import { BirthdayBadgeView } from "@/components/villagers/BirthdayBadgeView";
+import { BirthdayBadgeView } from "@shigomori/ui/views/villagers/BirthdayBadgeView.tsx";
 import {
   BirthdayFaceView,
   PartyFaceView,
-} from "@/components/villagers/BirthdayFaceView";
-import { BirthdayPartyView } from "@/components/villagers/BirthdayPartyView";
+} from "@shigomori/ui/views/villagers/BirthdayFaceView.tsx";
+import { BirthdayPartyView } from "@shigomori/ui/views/villagers/BirthdayPartyView.tsx";
 import {
   BalloonsView,
   BuntingView,
   ConfettiView,
-} from "@/components/villagers/CelebrationView";
-import { MovingBoxView } from "@/components/villagers/MovingBoxView";
-import { NextArrowView } from "@/components/villagers/NextArrowView";
-import { ResidentFaceView } from "@/components/villagers/ResidentFaceView";
-import { StationeryPrintView } from "@/components/villagers/StationeryPrintView";
-import { TypedWordsView } from "@/components/villagers/TypedWordsView";
+} from "@shigomori/ui/views/villagers/CelebrationView.tsx";
+import { MovingBoxView } from "@shigomori/ui/views/villagers/MovingBoxView.tsx";
+import { NextArrowView } from "@shigomori/ui/views/villagers/NextArrowView.tsx";
+import { ResidentFaceView } from "@shigomori/ui/views/villagers/ResidentFaceView.tsx";
+import { StationeryPrintView } from "@shigomori/ui/views/villagers/StationeryPrintView.tsx";
+import { TypedWordsView } from "@shigomori/ui/views/villagers/TypedWordsView.tsx";
 import {
   MoveDetailView,
   MovingBoxBadgeView,
@@ -29,29 +29,29 @@ import {
   TickingTitleView,
   ToastFacesView,
   VillageToasterView,
-} from "@/components/villagers/VillageToastsView";
+} from "@shigomori/ui/views/villagers/VillageToastsView.tsx";
 import {
   DialogueFrameView,
   MoveCaptionView,
   NameplateView,
   VillagerDialogueView,
-} from "@/components/villagers/VillagerDialogueView";
+} from "@shigomori/ui/views/villagers/VillagerDialogueView.tsx";
 import {
   FaceStampView,
   VillagerLetterView,
-} from "@/components/villagers/VillagerLetterView";
-import { GuestBookView } from "@/components/visitors/GuestBookView";
-import { VisitorSlotView } from "@/components/visitors/VisitorStickerView";
+} from "@shigomori/ui/views/villagers/VillagerLetterView.tsx";
+import { GuestBookView } from "@shigomori/ui/views/visitors/GuestBookView.tsx";
+import { VisitorSlotView } from "@shigomori/ui/views/visitors/VisitorStickerView.tsx";
 import {
   AlbumSectionView,
   AlbumSkeletonView,
   NobodyYetView,
   StartOverView,
   VisitorsSectionView,
-} from "@/components/visitors/VisitorsSectionView";
+} from "@shigomori/ui/views/visitors/VisitorsSectionView.tsx";
 import type { MoveNews, Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
-import { stationeryFor } from "@/lib/villagers/stationery";
-import { buildAlbum, sortAlbum } from "@/lib/villagers/visitors";
+import { stationeryFor } from "@shigomori/ui/lib/villagers/stationery.ts";
+import { buildAlbum, sortAlbum } from "@shigomori/ui/lib/villagers/visitors.ts";
 import { villagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
 import {
   FAKE_VILLAGER_PROFILES,

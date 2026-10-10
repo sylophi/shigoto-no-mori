@@ -21,8 +21,8 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { BirthdayPartyView } from "@/components/villagers/BirthdayPartyView";
-import { ResidentFaceView } from "@/components/villagers/ResidentFaceView";
+import { BirthdayPartyView } from "@shigomori/ui/views/villagers/BirthdayPartyView.tsx";
+import { ResidentFaceView } from "@shigomori/ui/views/villagers/ResidentFaceView.tsx";
 import { useResident } from "@/hooks/villagers/useResident";
 import { LaunchSection } from "./LaunchSection";
 import { MirrorPill } from "./MirrorPill";

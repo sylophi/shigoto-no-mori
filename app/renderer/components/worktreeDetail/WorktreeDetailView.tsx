@@ -11,7 +11,7 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { PARTY_HOST } from "@/components/villagers/BirthdayPartyView";
+import { PARTY_HOST } from "@shigomori/ui/views/villagers/BirthdayPartyView.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { LifecycleBannerView } from "./LifecycleBannerView";
 

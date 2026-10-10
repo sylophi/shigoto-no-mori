@@ -1,7 +1,7 @@
 import { Cake } from "lucide-react";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import type { Resident } from "@/hooks/villagers/useResident";
-import { BirthdayFaceView } from "./BirthdayFaceView";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import type { Resident } from "../../lib/villagerVoice.ts";
+import { BirthdayFaceView } from "./BirthdayFaceView.tsx";
 
 // The cake a worktree row wears on its villager's birthday, with their
 // party-hatted face in the tooltip. Nothing on any other day, or for any

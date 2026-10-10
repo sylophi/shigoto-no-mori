@@ -1,10 +1,10 @@
-import { isBirthdayOn } from "@/lib/villagers/birthdays";
+import { isBirthdayOn } from "@shigomori/ui/lib/villagers/birthdays.ts";
 import {
   VillagerFaceView,
   VillagerSaysView,
 } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { BirthdayFaceView } from "@/components/villagers/BirthdayFaceView";
-import { useToday } from "@/hooks/ui/useToday";
+import { BirthdayFaceView } from "@shigomori/ui/views/villagers/BirthdayFaceView.tsx";
+import { useToday } from "@shigomori/ui/hooks/useToday.ts";
 import {
   useVillagerFace,
   useVillagerProfiles,

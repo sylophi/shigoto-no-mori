@@ -1,5 +1,5 @@
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import { printStyle, type Stationery } from "@/lib/villagers/stationery";
+import { cn } from "../../lib/utils.ts";
+import { printStyle, type Stationery } from "../../lib/villagers/stationery.ts";
 
 // A legendary character's stationery printed over whatever holds it,
 // drifting a tile at a time (lib/villagers/stationery.ts), or `still`

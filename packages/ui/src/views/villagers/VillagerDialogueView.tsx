@@ -1,10 +1,10 @@
 import { type CSSProperties, type ReactNode, useState } from "react";
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { MoveNews, Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
-import { MovingBoxView } from "./MovingBoxView";
-import { NextArrowView } from "./NextArrowView";
-import { TypedWordsView } from "./TypedWordsView";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import { cn } from "../../lib/utils.ts";
+import type { MoveNews, Speaker } from "../../lib/villagerVoice.ts";
+import { MovingBoxView } from "./MovingBoxView.tsx";
+import { NextArrowView } from "./NextArrowView.tsx";
+import { TypedWordsView } from "./TypedWordsView.tsx";
 
 // The look a character's words take on screen: their color as
 // --villager-ink (a face with no clear one takes amber, and their

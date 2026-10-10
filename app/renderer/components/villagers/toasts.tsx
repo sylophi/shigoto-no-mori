@@ -13,8 +13,8 @@ import {
   type Speaker,
   villagerLine,
 } from "@shigomori/ui/lib/villagerVoice.ts";
-import { NextArrowView } from "./NextArrowView";
-import { VillagerDialogueView } from "./VillagerDialogueView";
+import { NextArrowView } from "@shigomori/ui/views/villagers/NextArrowView.tsx";
+import { VillagerDialogueView } from "@shigomori/ui/views/villagers/VillagerDialogueView.tsx";
 import {
   MoveDetailView,
   MovingBoxBadgeView,
@@ -22,8 +22,8 @@ import {
   TickingTitleView,
   ToastFacesView,
   VillageToasterView,
-} from "./VillageToastsView";
-import { VillagerLetterView } from "./VillagerLetterView";
+} from "@shigomori/ui/views/villagers/VillageToastsView.tsx";
+import { VillagerLetterView } from "@shigomori/ui/views/villagers/VillagerLetterView.tsx";
 
 // The toasts villagers speak in (DESIGN.md, "Village life: rarity").
 

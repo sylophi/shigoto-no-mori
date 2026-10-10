@@ -1,24 +1,24 @@
 import { Heart } from "lucide-react";
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { StationeryPrintView } from "@/components/villagers/StationeryPrintView";
-import { FaceStampView } from "@/components/villagers/VillagerLetterView";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import { StationeryPrintView } from "../villagers/StationeryPrintView.tsx";
+import { FaceStampView } from "../villagers/VillagerLetterView.tsx";
 import {
   NameplateView,
   villagerInk,
-} from "@/components/villagers/VillagerDialogueView";
-import { useFaceColor } from "@/hooks/villagers/useFaceColor";
-import { useNow } from "@shigomori/ui/hooks/useNow.ts";
-import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import { villagerCatchphrase } from "@shigomori/ui/lib/villagerVoice.ts";
-import { stationeryFor } from "@/lib/villagers/stationery";
+} from "../villagers/VillagerDialogueView.tsx";
+import { useFaceColor } from "../../hooks/useFaceColor.ts";
+import { useNow } from "../../hooks/useNow.ts";
+import { formatRelativeTime } from "../../lib/relativeTime.ts";
+import { cn } from "../../lib/utils.ts";
+import { villagerCatchphrase } from "../../lib/villagerVoice.ts";
+import { stationeryFor } from "../../lib/villagers/stationery.ts";
 import {
   type Album,
   type VisitedEntry,
   visitDate,
   visitedTimes,
-} from "@/lib/villagers/visitors";
-import { AlbumProgressView } from "./AlbumProgressView";
+} from "../../lib/villagers/visitors.ts";
+import { AlbumProgressView } from "./AlbumProgressView.tsx";
 
 // The Visitors section's front page, drawn as a ring-bound guest book
 // lying open. The left page holds the best friend, on their own

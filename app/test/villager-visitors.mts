@@ -12,7 +12,11 @@
 // Run: pnpm test villager-visitors.
 import assert from "node:assert/strict";
 import type { VillagerProfiles } from "@shigomori/contracts/schemas";
-import { buildAlbum, sortAlbum, tallyVisits } from "@/lib/villagers/visitors";
+import {
+  buildAlbum,
+  sortAlbum,
+  tallyVisits,
+} from "@shigomori/ui/lib/villagers/visitors.ts";
 import { it } from "vitest";
 
 const profile = (name: string, kind: "villager" | "special" = "villager") => ({

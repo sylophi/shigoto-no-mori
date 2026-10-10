@@ -37,6 +37,10 @@ export interface Speaker {
   color: string | null;
 }
 
+// The character whose home a worktree is (residentOf), with their face,
+// and whether today (local date) is their birthday.
+export type Resident = Omit<Speaker, "color"> & { birthday: boolean };
+
 export interface VillagerLine {
   // The message without its closing punctuation.
   lead: string;

@@ -4,10 +4,10 @@
 // lane's wrapper that sends news off at a click.
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import type { Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import { MovingBoxView } from "./MovingBoxView";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import type { Speaker } from "../../lib/villagerVoice.ts";
+import { cn } from "../../lib/utils.ts";
+import { MovingBoxView } from "./MovingBoxView.tsx";
 
 // News goes at a click anywhere on it, or Enter on it focused, the way
 // a villager's line goes at a press of A.

@@ -6,7 +6,7 @@ import {
   useVisitLog,
   useVisitsSince,
 } from "@/lib/villagers/visitLog";
-import { tallyVisits } from "@/lib/villagers/visitors";
+import { tallyVisits } from "@shigomori/ui/lib/villagers/visitors.ts";
 
 // Who has visited, by villager, from the visit log this app keeps
 // (lib/villagers/visitLog.ts). Opening the album first records every

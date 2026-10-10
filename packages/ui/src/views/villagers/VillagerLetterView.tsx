@@ -1,11 +1,11 @@
 import { type CSSProperties, useState } from "react";
-import { stationeryFor } from "@/lib/villagers/stationery";
-import { StationeryPrintView } from "./StationeryPrintView";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { MoveNews, Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
-import { NextArrowView } from "./NextArrowView";
-import { MoveCaptionView } from "./VillagerDialogueView";
-import { TypedWordsView } from "./TypedWordsView";
+import { stationeryFor } from "../../lib/villagers/stationery.ts";
+import { StationeryPrintView } from "./StationeryPrintView.tsx";
+import { cn } from "../../lib/utils.ts";
+import type { MoveNews, Speaker } from "../../lib/villagerVoice.ts";
+import { NextArrowView } from "./NextArrowView.tsx";
+import { MoveCaptionView } from "./VillagerDialogueView.tsx";
+import { TypedWordsView } from "./TypedWordsView.tsx";
 
 // A legendary character's news: a letter on their own stationery that
 // arrives as a small scene (DESIGN.md, "Village life: rarity", with the

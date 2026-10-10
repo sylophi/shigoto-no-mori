@@ -1,24 +1,24 @@
 import { type CSSProperties, type Ref, useState } from "react";
 import { Heart } from "lucide-react";
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { StationeryPrintView } from "@/components/villagers/StationeryPrintView";
-import { FaceStampView } from "@/components/villagers/VillagerLetterView";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { StationeryPrintView } from "../villagers/StationeryPrintView.tsx";
+import { FaceStampView } from "../villagers/VillagerLetterView.tsx";
 import {
   NameplateView,
   villagerInk,
-} from "@/components/villagers/VillagerDialogueView";
-import { useFaceColor } from "@/hooks/villagers/useFaceColor";
-import { useNow } from "@shigomori/ui/hooks/useNow.ts";
-import { useToday } from "@/hooks/ui/useToday";
-import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+} from "../villagers/VillagerDialogueView.tsx";
+import { useFaceColor } from "../../hooks/useFaceColor.ts";
+import { useNow } from "../../hooks/useNow.ts";
+import { useToday } from "../../hooks/useToday.ts";
+import { formatRelativeTime } from "../../lib/relativeTime.ts";
+import { cn } from "../../lib/utils.ts";
 import {
   villagerCatchphrase,
   villagerSpecies,
-} from "@shigomori/ui/lib/villagerVoice.ts";
-import { birthdayLabel } from "@/lib/villagers/birthdays";
-import { stationeryFor } from "@/lib/villagers/stationery";
+} from "../../lib/villagerVoice.ts";
+import { birthdayLabel } from "../../lib/villagers/birthdays.ts";
+import { stationeryFor } from "../../lib/villagers/stationery.ts";
 import {
   type AlbumEntry,
   isNewVisitor,
@@ -26,7 +26,7 @@ import {
   visitDate,
   visitedTimes,
   type Visits,
-} from "@/lib/villagers/visitors";
+} from "../../lib/villagers/visitors.ts";
 
 // One slot in the Visitors album. A villager who has visited is a
 // sticker stuck in at a slight lean: their face, their name and how

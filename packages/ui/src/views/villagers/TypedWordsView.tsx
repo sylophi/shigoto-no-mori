@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useTypedText } from "@/hooks/ui/useTypedText";
+import { useTypedText } from "../../hooks/useTypedText.ts";
 
 // A villager's words, typed out (useTypedText) in a box already sized for
 // all of them, so nothing reflows as they come. The whole line is there

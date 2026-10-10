@@ -1,7 +1,7 @@
-import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import type { Resident } from "@/hooks/villagers/useResident";
-import { PartyFaceView } from "./BirthdayFaceView";
+import { VillagerFaceView } from "../shared/VillagerSaysView.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import type { Resident } from "../../lib/villagerVoice.ts";
+import { PartyFaceView } from "./BirthdayFaceView.tsx";
 
 // A worktree's resident (useResident) beside its branch title on the
 // worktree page: whose home this is. At their `party` it wears the hat

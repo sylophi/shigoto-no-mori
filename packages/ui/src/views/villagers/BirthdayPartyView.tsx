@@ -1,9 +1,9 @@
-import { stationeryFor } from "@/lib/villagers/stationery";
-import { useFaceColor } from "@/hooks/villagers/useFaceColor";
-import type { Resident } from "@/hooks/villagers/useResident";
-import { BalloonsView, BuntingView } from "./CelebrationView";
-import { StationeryPrintView } from "./StationeryPrintView";
-import { villagerInk } from "./VillagerDialogueView";
+import { stationeryFor } from "../../lib/villagers/stationery.ts";
+import { useFaceColor } from "../../hooks/useFaceColor.ts";
+import type { Resident } from "../../lib/villagerVoice.ts";
+import { BalloonsView, BuntingView } from "./CelebrationView.tsx";
+import { StationeryPrintView } from "./StationeryPrintView.tsx";
+import { villagerInk } from "./VillagerDialogueView.tsx";
 
 // The worktree page's header on its villager's birthday, behind the
 // breadcrumb and the title, whose face (ResidentFaceView) wears the
