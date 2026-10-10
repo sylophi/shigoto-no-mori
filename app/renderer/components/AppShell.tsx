@@ -19,7 +19,10 @@ import {
 } from "@shigomori/ui/views/PhoneTabBarView.tsx";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
-import { useWatchAccountChanges } from "@/hooks/account/useAccount";
+import {
+  useAccountStatus,
+  useWatchAccountChanges,
+} from "@/hooks/account/useAccount";
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useOpenProject } from "@/components/sidebar/openProject";
@@ -41,7 +44,10 @@ import {
 import { MIGRATION_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { useMigration } from "@/hooks/useMigration";
-import { migrationShows } from "@shigomori/contracts/schemas/migration";
+import {
+  migrationOwed,
+  migrationShows,
+} from "@shigomori/contracts/schemas/migration";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -75,9 +81,14 @@ export function AppShell() {
     [navigate],
   );
   // The v3 migration's page until the app opens past it, whatever the
-  // window showed.
+  // window showed: while a step isn't done, or this device's key is due
+  // on a device that migrated now.
   const migration = useMigration();
-  const migrating = migration != null && migrationShows(migration);
+  const { data: account } = useAccountStatus();
+  const migrating =
+    migration != null &&
+    (migrationShows(migration) ||
+      (migrationOwed(migration) && account?.needsDeviceKey === true));
   useEffect(() => {
     if (migrating && pathname !== MIGRATION_PATH) {
       void navigate({ to: MIGRATION_PATH, replace: true });

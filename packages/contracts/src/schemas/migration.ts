@@ -41,9 +41,15 @@ export const MigrationSchema = Schema.Struct({
 });
 export type MigrationProgress = typeof MigrationSchema.Type;
 
-// Whether a migration has a page to show: this start owes steps. The
-// page shows it until it opens the app, every step done, or a person
-// continues past one.
-export const migrationShows = (migration: MigrationProgress): boolean =>
+// Whether this start owes a 2.x data dir any step.
+export const migrationOwed = (migration: MigrationProgress): boolean =>
   migration.planned &&
   (migration.import !== null || migration.worktrees !== null);
+
+// Whether the migration's page shows: a step owed and not done, under
+// way or stuck. One that finished clean opens the app with no page.
+export const migrationShows = (migration: MigrationProgress): boolean =>
+  migrationOwed(migration) &&
+  [migration.import, migration.worktrees].some(
+    (step) => step !== null && step.state !== "done",
+  );

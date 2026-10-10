@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useMigration } from "@/hooks/useMigration";
-import { migrationShows } from "@shigomori/contracts/schemas/migration";
+import { migrationOwed } from "@shigomori/contracts/schemas/migration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import {
   migrationEnded,
@@ -63,9 +63,7 @@ export function MigrationPage() {
   // Every step done, or nothing (left) to show.
   const nothing =
     migration === null ||
-    (migration !== undefined &&
-      migration.planned &&
-      !migrationShows(migration));
+    (migration !== undefined && migration.planned && !migrationOwed(migration));
   useEffect(() => {
     if (open) {
       void window.api.migration.continue();
@@ -75,7 +73,9 @@ export function MigrationPage() {
     }
   }, [open, nothing, navigate]);
 
-  if (migration == null || !migrationShows(migration)) return null;
+  // Nothing drawn on the way out, so a migration that finished clean
+  // never flashes the page.
+  if (migration == null || !migrationOwed(migration) || open) return null;
   return (
     <MigrationView
       migration={migration}
