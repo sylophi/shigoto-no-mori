@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function ConfigureSkeleton() {
+export function ConfigureSkeletonView() {
   return (
     <div className="flex flex-col gap-8 p-6 phone:p-4">
       <div className="space-y-2">

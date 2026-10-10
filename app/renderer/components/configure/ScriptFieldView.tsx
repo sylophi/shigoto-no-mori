@@ -7,7 +7,12 @@ interface ScriptFieldProps {
   onChange: (value: string) => void;
 }
 
-export function ScriptField({ id, label, value, onChange }: ScriptFieldProps) {
+export function ScriptFieldView({
+  id,
+  label,
+  value,
+  onChange,
+}: ScriptFieldProps) {
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium">

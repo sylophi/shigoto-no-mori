@@ -1,5 +1,5 @@
 import type { Project } from "@shigomori/contracts/schemas";
-import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import type { ReactNode } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { formatBytes } from "@/lib/formatBytes";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -10,24 +10,23 @@ interface TidyGroupHeadingProps {
   // Measured bytes across the group. Climbs as the walks land, same as
   // the headline figure.
   bytes: number;
+  // Its icon (ProjectIcon).
+  icon: ReactNode;
 }
 
 // Label above one project's block of rows in the "Project" sort. Carries
 // the group's total so a project can be dismissed as not worth opening
 // without reading every row under it.
-export function TidyGroupHeading({
+export function TidyGroupHeadingView({
   project,
   count,
   bytes,
+  icon,
 }: TidyGroupHeadingProps) {
   return (
     <div className="flex items-center justify-between gap-3 px-0.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <ProjectIcon
-          projectId={project.id}
-          name={project.name}
-          className="size-3"
-        />
+        {icon}
         <SimpleTooltip whenTruncated tip={project.name}>
           <SectionHeading className="truncate">{project.name}</SectionHeading>
         </SimpleTooltip>
