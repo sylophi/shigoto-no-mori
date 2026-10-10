@@ -36,9 +36,9 @@ import {
   rankPaletteEntries,
   rankPalettePages,
   rankPaletteProjects,
-  type PaletteEntry,
-  type PalettePage,
 } from "@/components/palette/buildPaletteEntries";
+import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { Radio } from "lucide-react";
 import { matchPositions } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";

@@ -4,7 +4,7 @@ import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
 import { invalidateWorkingTree } from "./useWorktreeChanges";
-import type { SyncMove } from "@/lib/syncState";
+import type { SyncMove } from "@shigomori/ui/lib/syncState.ts";
 
 interface SyncWorktreeInput {
   projectId: string;

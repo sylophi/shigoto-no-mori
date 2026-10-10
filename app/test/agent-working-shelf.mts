@@ -15,7 +15,7 @@ import {
   projectGroupKey,
   projectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarRow } from "@/components/sidebar/sidebarRow";
+import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { it } from "vitest";

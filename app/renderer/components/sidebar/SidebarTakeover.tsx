@@ -8,7 +8,7 @@ import {
 import {
   SidebarTakeoverSlotView,
   SidebarTakeoverView,
-} from "./SidebarTakeoverView";
+} from "@shigomori/ui/views/sidebar/SidebarTakeoverView.tsx";
 
 // A page's own navigation, drawn in the app sidebar in the project
 // tree's place: Settings' section list, the diff pages' file list (with

@@ -29,7 +29,8 @@ package main
 //     snapshots out) by the host, and it dies when stdin closes, so a
 //     dead app never leaves a headless daemon behind. Sessions persist
 //     under the data directory the host names and resume on the next
-//     daemon start.
+//     daemon start. A session v2 persisted has its labels rewritten
+//     into v3's mode on load (relabelV2Sessions).
 //
 // The host owns the lifecycle, fully. Nothing here starts on its own:
 // the host spawns both roles, and each one stops the moment the host
@@ -68,12 +69,16 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 
+	"github.com/mutagen-io/mutagen/pkg/encoding"
+	"github.com/mutagen-io/mutagen/pkg/filesystem"
+	"github.com/mutagen-io/mutagen/pkg/identifier"
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/selection"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
@@ -401,6 +406,7 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	// start connecting immediately.
 	synchronization.ProtocolHandlers[urlpkg.Protocol_SSH] = mirrorGatewayHandler{gateway: gateway}
 
+	relabelV2Sessions(dataDir, logOut)
 	logger := logging.NewLogger(logging.LevelWarn, logOut)
 	manager, err := synchronization.NewManager(logger)
 	if err != nil {
@@ -450,6 +456,63 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	cancel()
 	pending.Wait()
 	return readErr
+}
+
+// v2 said what a session is in three labels (copySide, mirrorBranch,
+// transfer), and v3 says it in one, mode (the host's mirror registry).
+// Mutagen keeps a session's labels for its life, so the persisted
+// sessions are rewritten once, before the manager loads them: a mirror
+// takes its mode, and a transfer takes a token no transfer holds, so
+// the host ends it as an orphan. Each file is written atomically, and a
+// session that has a mode is left alone, so a crash midway resumes on
+// the next start. A file that can't be read or written is logged and
+// left for Mutagen to judge.
+func relabelV2Sessions(dataDir string, logOut io.Writer) {
+	dir := filepath.Join(dataDir, filesystem.MutagenSynchronizationSessionsDirectoryName)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !identifier.IsValid(entry.Name()) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		session := &synchronization.Session{}
+		if err := encoding.LoadAndUnmarshalProtobuf(path, session); err != nil {
+			fmt.Fprintf(logOut, "file-sync: relabel: %s: %v\n", entry.Name(), err)
+			continue
+		}
+		mode, ok := v2Mode(session.Labels)
+		if !ok {
+			continue
+		}
+		delete(session.Labels, "copySide")
+		delete(session.Labels, "mirrorBranch")
+		delete(session.Labels, "transfer")
+		session.Labels["mode"] = mode
+		if err := encoding.MarshalAndSaveProtobuf(path, session); err != nil {
+			fmt.Fprintf(logOut, "file-sync: relabel: %s: %v\n", entry.Name(), err)
+		}
+	}
+}
+
+// The mode a v2 session's labels mean, false for one that has a mode
+// already or never had a kind.
+func v2Mode(labels map[string]string) (string, bool) {
+	if _, ok := labels["mode"]; ok {
+		return "", false
+	}
+	if token, ok := labels["transfer"]; ok {
+		return "transfer-" + token, true
+	}
+	if labels["copySide"] != "remote" {
+		return "", false
+	}
+	if labels["mirrorBranch"] == "1" {
+		return "mirror-branch", true
+	}
+	return "mirror", true
 }
 
 func handleMirrorRequest(ctx context.Context, manager *synchronization.Manager, req mirrorRequest) mirrorResponse {

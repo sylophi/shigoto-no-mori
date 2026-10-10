@@ -5,9 +5,9 @@
 // follow a pick here exactly as they follow the sidebar's.
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
-import { SettingsSectionChipsView } from "./SettingsNavView";
+import { SettingsSectionChipsView } from "@shigomori/ui/views/settings/SettingsNavView.tsx";
 import { selectSettingsTab, useSettingsPanelControls } from "./settingsNav";
-import { settingsSections } from "./settingsSections";
+import { settingsSections } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 
 export function SettingsSectionChips({

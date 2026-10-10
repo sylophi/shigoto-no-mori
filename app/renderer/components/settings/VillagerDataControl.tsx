@@ -1,7 +1,7 @@
 import { useVillagerData } from "@/hooks/villagers/useVillagerData";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { VillagerDataControlView } from "./VillagerDataControlView";
-import { villagerDataView } from "./villagerDataView";
+import { VillagerDataControlView } from "@shigomori/ui/views/settings/VillagerDataControlView.tsx";
+import { villagerDataView } from "@shigomori/ui/views/settings/villagerDataView.ts";
 
 // The villager data's control (VillagerDataControlView), bound to its
 // download, cancel and removal.

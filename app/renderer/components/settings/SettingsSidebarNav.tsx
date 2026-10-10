@@ -18,8 +18,8 @@ import {
   ACCOUNT_SECTION,
   settingsSections,
   TIDY_SECTION,
-} from "./settingsSections";
-import { SettingsSidebarNavView } from "./SettingsNavView";
+} from "@shigomori/ui/views/settings/settingsSections.ts";
+import { SettingsSidebarNavView } from "@shigomori/ui/views/settings/SettingsNavView.tsx";
 
 // Settings and the pages its list leads to (Tidy, and on a desktop the
 // account), as one layout route (router.tsx). The list is drawn in the

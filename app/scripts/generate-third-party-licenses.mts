@@ -433,11 +433,12 @@ const BUNDLED_BINARIES = [
 // Data the engine and the app embed: the doubutsu worktree names, taken
 // from Nookipedia's character lists (scripts/fetch-doubutsu-names.mts).
 // The entry opens with the Animal Crossing notice the Settings page
-// shows beside Village life (shared/acNotice.json), so the two never
-// drift, then gives the CC BY-SA attribution.
+// shows beside Village life (packages/ui/src/lib/acNotice.json), so the
+// two never drift, then gives the CC BY-SA attribution.
 const doubutsuSource: { retrieved: string; url: string; name: string } =
   require("../../packages/engine/src/data/doubutsu-names.json").source;
-const acNotice: string = require("../shared/acNotice.json").notice;
+const acNotice: string =
+  require("../../packages/ui/src/lib/acNotice.json").notice;
 const BUNDLED_DATA = [
   normalizeEntry([
     `doubutsu-names@${doubutsuSource.retrieved}`,

@@ -10,7 +10,7 @@ import {
   settingsPanelId,
   type SettingsTab,
   VISITORS_TAB,
-} from "./settingsSections";
+} from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { hasLocalHost } from "@/lib/localHost";
 import {

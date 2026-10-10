@@ -4,10 +4,10 @@ import {
   type DarkTheme,
   LIGHT_THEMES,
   type LightTheme,
-} from "@shared/themes";
+} from "@shigomori/ui/lib/themes.ts";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
 import { hasLocalHost } from "@/lib/localHost";
-import { AppearanceSectionView } from "./AppearanceSectionView";
+import { AppearanceSectionView } from "@shigomori/ui/views/settings/AppearanceSectionView.tsx";
 import { ThemePicker } from "./ThemePicker";
 import { VillageLifeSetting } from "./VillageLifeSetting";
 

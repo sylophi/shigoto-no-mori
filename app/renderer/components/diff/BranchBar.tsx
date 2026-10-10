@@ -1,6 +1,6 @@
 import { WorktreeSyncPill } from "@/components/worktreeDetail/WorktreeSyncPill";
 import { useWorktreeOperation } from "@/hooks/worktrees/useGitHistory";
-import { BranchBarView } from "./BranchBarView";
+import { BranchBarView } from "@shigomori/ui/views/diff/BranchBarView.tsx";
 import {
   deriveRemoteSyncState,
   type Worktree,

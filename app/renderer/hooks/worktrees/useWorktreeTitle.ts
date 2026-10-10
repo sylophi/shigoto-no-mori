@@ -6,7 +6,7 @@ import {
   pullRequestOwnsTitle,
   titledByPullRequest,
   worktreeTitle,
-} from "@/lib/worktreeTitle";
+} from "@shigomori/ui/lib/worktreeTitle.ts";
 import type {
   PullRequest,
   PullRequestDetail,

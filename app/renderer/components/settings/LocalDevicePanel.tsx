@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { SettingsFormState } from "@/hooks/config/settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
 import { localDeviceId } from "@/lib/queryKeys";
 import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";
@@ -8,9 +8,9 @@ import { DataLocationSection } from "./DataLocationSection";
 import { DoctorSection } from "./DoctorSection";
 import { IntegrationToggles, WorktreeToggles } from "./DeviceSettingsSections";
 import { HostPanels } from "./SettingsPanel";
-import type { HostTab } from "./settingsSections";
+import type { HostTab } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { VersionSection } from "./VersionSection";
-import { BuildVersionLineView } from "./VersionSectionView";
+import { BuildVersionLineView } from "@shigomori/ui/views/settings/VersionSectionView.tsx";
 
 // This machine's host sections: the sections a peer's renders too
 // (some only while that peer allows control), plus the danger zone,
