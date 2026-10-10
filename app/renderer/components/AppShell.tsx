@@ -41,9 +41,10 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
-import { MIGRATION_PATH } from "@/lib/routePaths";
+import { MIGRATION_PATH, WELCOME_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { useMigration } from "@/hooks/useMigration";
+import { useMarkWelcomed } from "@/hooks/config/useWelcomed";
 import {
   migrationOwed,
   migrationShows,
@@ -89,6 +90,12 @@ export function AppShell() {
     migration != null &&
     (migrationShows(migration) ||
       (migrationOwed(migration) && account?.needsDeviceKey === true));
+  // A device that migrates from v2 is past its first run.
+  const migrated = migration != null && migrationOwed(migration);
+  const markWelcomed = useMarkWelcomed();
+  useEffect(() => {
+    if (migrated) markWelcomed();
+  }, [migrated, markWelcomed]);
   useEffect(() => {
     if (migrating && pathname !== MIGRATION_PATH) {
       void navigate({ to: MIGRATION_PATH, replace: true });
@@ -98,7 +105,7 @@ export function AppShell() {
   useDeepLinks();
 
   // A page in place of the app, with none of its ways elsewhere.
-  if (pathname === MIGRATION_PATH) {
+  if (pathname === MIGRATION_PATH || pathname === WELCOME_PATH) {
     return (
       <AppShellView phone={phone} hasLocalHost={hasLocalHost} sidebar={null}>
         <Outlet />
