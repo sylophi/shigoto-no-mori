@@ -42,4 +42,5 @@ which are not compared. The script exits 1 when a pair differs.
 its input and uploads the report as the `scene-comparison` artifact.
 Nothing runs it on a commit or a pull request.
 
-It takes about two and a half minutes on a laptop.
+It takes about two and a half minutes on a laptop and ten on a GitHub
+runner, whose first load of each server is slow.

@@ -4,7 +4,6 @@ name: Scenes
 # only: every scene in both themes, this branch against a base, with the
 # differing pairs as an artifact. Nothing runs it on a push.
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       base:
@@ -41,7 +40,7 @@ jobs:
       - name: Compare
         run: pnpm scenes:compare --base "$BASE"
         env:
-          BASE: ${{ inputs.base || 'origin/release/v3' }}
+          BASE: ${{ inputs.base }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
