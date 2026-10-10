@@ -26,10 +26,11 @@ import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import type { ClientTransport } from "@shared/ipc/transport";
+import type * as Scope from "effect/Scope";
+import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { type ChannelMux, createChannelMux } from "./channels";
-import { type FlatClient, rpcTransport } from "./rpcTransport";
+import { type FlatClient, linkTransport, rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
 import { LinkGroup } from "@shigomori/contracts/link";
 import {
@@ -82,7 +83,7 @@ export type DeviceLinkOptions = {
   expectedDeviceId: string;
   // Once, when an established link drops on its own. Never for an
   // owner close, never for a failed dial.
-  onClose: () => void;
+  onClose?: () => void;
   // Every push the peer sends, by channel, decoded.
   onPush?: (channel: string, payload: unknown) => void;
   openSocket: OpenClientSocket;
@@ -128,18 +129,25 @@ export type PendingDeviceConnection = {
   abandon(): void;
 };
 
-// The pushes a peer serves, which every link subscribes to as it opens
-// (the bridge fans them out by channel).
+// A link dialed in the caller's scope: open, said hello on, and up
+// until the scope closes or the link drops (`dropped`). `gate`, for
+// openDevice's two steps, hears the challenge answered and holds the
+// hello until it is let through.
+type DialedDevice = Omit<DeviceConnection, "close"> & {
+  // The link's Effect face, which `transport` is the Promise face of.
+  readonly link: Link;
+  // Settles when the link drops on its own.
+  readonly dropped: Effect.Effect<void>;
+};
 
-export function openDevice(
+export const dialDevice = (
   options: DeviceLinkOptions,
-): PendingDeviceConnection {
+  gate?: {
+    readonly opened: Deferred.Deferred<string, RemoteConnectError>;
+    readonly helloAsked: Deferred.Deferred<void>;
+  },
+): Effect.Effect<DialedDevice, RemoteConnectError, Scope.Scope> => {
   const group = options.group ?? LinkGroup;
-  const opened = Deferred.makeUnsafe<string, RemoteConnectError>();
-  const helloAsked = Deferred.makeUnsafe<void>();
-  const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
-  let established = false;
-  let ownerClosed = false;
   // Whatever the platform said about why the socket failed (`ws` names
   // the errno), for the dial's failure message. The code over the
   // message: it is address-free, so six interfaces refusing the same
@@ -155,7 +163,7 @@ export function openDevice(
       refusal,
     );
 
-  const link = Effect.gen(function* () {
+  return Effect.gen(function* () {
     const ws = options.openSocket(options.url);
     ws.addEventListener("error", (event) => {
       const cause = (event as { error?: unknown }).error;
@@ -230,8 +238,10 @@ export function openDevice(
         connectError("the peer did not answer the challenge"),
       ),
     );
-    yield* Deferred.succeed(opened, hostNonce);
-    yield* Deferred.await(helloAsked);
+    if (gate !== undefined) {
+      yield* Deferred.succeed(gate.opened, hostNonce);
+      yield* Deferred.await(gate.helloAsked);
+    }
 
     const clientNonce = newHandshakeNonce();
     const proof = yield* Effect.promise(() =>
@@ -275,12 +285,7 @@ export function openDevice(
       );
     }
 
-    const transport = rpcTransport({
-      client,
-      group,
-      fork: (effect) => runFork(effect),
-      onPush: options.onPush,
-    });
+    const link = yield* rpcLink({ client, group, onPush: options.onPush });
 
     // A round trip behind the subscriptions, so the link counts as open
     // only once the host hears it for its pushes: the host serves a
@@ -300,11 +305,10 @@ export function openDevice(
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => channels.closeAll()));
 
-    established = true;
-    yield* Deferred.succeed(welcomed, {
-      transport,
+    return {
+      link,
+      transport: linkTransport(link, runFork),
       channels,
-      close,
       probe: () => {
         runFork(
           call("link:ping", undefined).pipe(
@@ -315,33 +319,61 @@ export function openDevice(
       },
       remoteDeviceId: welcome.deviceId,
       remoteAppVersion: welcome.appVersion,
-    });
-    yield* Deferred.await(dropped);
+      dropped: Deferred.await(dropped),
+    };
   }).pipe(
-    Effect.scoped,
     Effect.catchCause((cause) => {
+      if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
       const error = Cause.squash(cause);
-      const failed =
+      return Effect.fail(
         error instanceof RemoteConnectError
           ? error
-          : connectError(`the link failed: ${errorMessageOf(error)}`);
-      return Effect.andThen(
-        Deferred.fail(opened, failed),
-        Deferred.fail(welcomed, failed),
+          : connectError(`the link failed: ${errorMessageOf(error)}`),
       );
     }),
   );
+};
 
-  const fiber = Effect.runFork(link);
+export function openDevice(
+  options: DeviceLinkOptions,
+): PendingDeviceConnection {
+  const opened = Deferred.makeUnsafe<string, RemoteConnectError>();
+  const helloAsked = Deferred.makeUnsafe<void>();
+  const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
+  let established = false;
+  let ownerClosed = false;
+
+  const fiber = Effect.runFork(
+    Effect.gen(function* () {
+      const {
+        dropped,
+        link: _,
+        ...dialed
+      } = yield* dialDevice(options, {
+        opened,
+        helloAsked,
+      });
+      established = true;
+      yield* Deferred.succeed(welcomed, { ...dialed, close });
+      yield* dropped;
+    }).pipe(
+      Effect.scoped,
+      Effect.catch((failed) =>
+        Effect.andThen(
+          Deferred.fail(opened, failed),
+          Deferred.fail(welcomed, failed),
+        ),
+      ),
+    ),
+  );
   fiber.addObserver(() => {
     // The established link ended on its own: the keeper's redial signal.
-    if (established && !ownerClosed) options.onClose();
+    if (established && !ownerClosed) options.onClose?.();
     // A dial still waiting is answered.
+    const closed = new RemoteConnectError("connection closed", null, false);
     Effect.runSync(
-      Deferred.fail(opened, connectError("connection closed")).pipe(
-        Effect.andThen(
-          Deferred.fail(welcomed, connectError("connection closed")),
-        ),
+      Deferred.fail(opened, closed).pipe(
+        Effect.andThen(Deferred.fail(welcomed, closed)),
       ),
     );
   });

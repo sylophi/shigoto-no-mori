@@ -8,7 +8,7 @@ import {
 } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { OperationBannerView } from "./OperationBannerView";
+import { OperationBannerView } from "@shigomori/ui/views/worktreeDetail/git/OperationBannerView.tsx";
 
 export function OperationBanner({
   worktree,

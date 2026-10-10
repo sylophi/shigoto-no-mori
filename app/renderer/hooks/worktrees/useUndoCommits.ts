@@ -3,7 +3,7 @@ import { useResetSoft } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
-import type { CommitRewrite } from "@/lib/commitRewrite";
+import type { CommitRewrite } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 
 // Undo commits, as one action for every surface that offers it (the

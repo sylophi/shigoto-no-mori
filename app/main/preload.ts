@@ -1,7 +1,7 @@
 // Preload script. Runs in an isolated context with access to Node + Electron APIs.
 // Exposes the window's facts as `window.electronBridge`, and asks for
 // the port the window's calls to its shell ride, which the renderer
-// builds `window.api` over (renderer/electronApi.ts).
+// builds `window.api` over (renderer/lib/runtime/desktop.ts).
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
@@ -22,7 +22,7 @@ exposeClerkBridge();
 // webPreferences.additionalArguments, which reaches sandboxed
 // preloads). The renderer sends it in the link's hello and compares it
 // against a remote host's welcome to flag a version skew. The device id
-// is the host's, and comes with its address (renderer/electronApi.ts).
+// is the host's, and comes with its address (renderer/index.tsx).
 const appVersion = requireArgFlag(APP_VERSION_FLAG, "--sm-app-version");
 
 const bridge = {

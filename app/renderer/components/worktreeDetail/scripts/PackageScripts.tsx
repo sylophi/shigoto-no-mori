@@ -11,7 +11,7 @@ import type {
   PackageScriptsResult,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { PackageScriptsView } from "./PackageScriptsView";
+import { PackageScriptsView } from "@shigomori/ui/views/worktreeDetail/scripts/PackageScriptsView.tsx";
 import { ScriptRow } from "./ScriptRow";
 
 export function PackageScripts({

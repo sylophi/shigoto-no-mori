@@ -1,4 +1,4 @@
-import { only } from "@shared/util/only";
+import { only } from "@shigomori/contracts/util/only";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
