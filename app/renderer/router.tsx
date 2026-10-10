@@ -20,6 +20,7 @@ import { ErrorFallbackView } from "@shigomori/ui/views/ErrorFallbackView.tsx";
 import { EmptyState } from "@/components/EmptyState";
 import { ForestPage } from "@/components/ForestPage";
 import { MigrationPage } from "@/components/migration/MigrationPage";
+import { WelcomePage } from "@/components/welcome/WelcomePage";
 import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { SettingsPages } from "@/components/settings/SettingsSidebarNav";
@@ -32,6 +33,7 @@ import {
   DEVICE_TERMINALS_PATH,
   MIGRATION_PATH,
   PROJECT_ROUTE_PATHS,
+  WELCOME_PATH,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
 
@@ -73,6 +75,13 @@ const migrationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: MIGRATION_PATH,
   component: MigrationPage,
+});
+
+// A fresh install's first run, in place of the app like the migration.
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WELCOME_PATH,
+  component: WelcomePage,
 });
 
 // The phone layout's two forest tabs, the inbox and the project tree,
@@ -338,6 +347,7 @@ const projectRoutes = [
 const routeTree = rootRoute.addChildren([
   indexRoute,
   migrationRoute,
+  welcomeRoute,
   forestRoute,
   liveRoute,
   // Where accountRoute hangs, as its getParentRoute says.
