@@ -140,7 +140,7 @@ export function ProjectRemoveMenuItem({
   const armed = removeArm.armedKey === armKey;
   // A terrier-sourced project has nothing here to remove: its presence
   // is terrier's call (`terrier rm`), so say that instead of offering
-  // a remove that the main process would refuse anyway.
+  // a remove that the host would refuse anyway.
   if (project.source === "terrier") {
     return device === undefined ? (
       <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>

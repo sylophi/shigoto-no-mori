@@ -1,8 +1,8 @@
 // The worktree header's mirror line, drawn: one status chip per mirror
 // the worktree is part of, each naming the other device. MirrorPill.tsx
 // binds it to the worktree's mirrors.
-// Built on the shared chip (ui/chip-button.tsx) and the status tones
-// (ui/status-dot.tsx): emerald for a live mirror, sky while files or
+// Built on the shared chip (primitives/chip-button.tsx) and the status tones
+// (primitives/status-dot.tsx): emerald for a live mirror, sky while files or
 // git state move (mirror/mirrorStatus.ts), amber for conflicts and
 // reconnects, rose for a halt or an error, slate for paused.
 import { RefreshCw } from "lucide-react";

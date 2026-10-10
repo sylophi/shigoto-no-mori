@@ -101,7 +101,6 @@ export type HubStatus = typeof HubStatusSchema.Type;
 
 // A push frame received from a peer, fanned out to every window. The
 // renderer filters by deviceId and channel, so the host forwards every
-
 // push wholesale and needs no per-channel subscription bookkeeping.
 const HubPeerPushSchema = Schema.Struct({
   deviceId: Schema.String,

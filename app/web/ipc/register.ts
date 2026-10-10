@@ -1,5 +1,5 @@
 // The browser binding's composition root: the web client is a device
-// with no host of its own (decision 6 of V3.md), so it reaches every
+// with no host of its own, so it reaches every
 // host as a peer, over the device link through the hub (the direct
 // plane below), and serves only itself, in the page: the client modules
 // (clientConfig, account, hub, shell, releases) and its copy of the
@@ -158,8 +158,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     broadcastPeerPush: (push) =>
       broadcastAll(hubContract, "peerPush", push, tab.server),
     dialableKinds: deps.dialableKinds ?? ["tunnel"],
-    // One device per browser profile, a link per tab (V3.md, "The web
-    // client's tabs").
+    // One device per browser profile, a link per tab: a host keeps a set
+    // of links per web device, and the hub relays to each.
     deviceKind: "web",
   });
   const hubHandlers = directPlane.handlers;
@@ -247,7 +247,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // Any account transition re-reconciles the hub socket and fans the
   // change out so every account query re-reads, matching the desktop's
-  // emitChanged wiring in main/ipc/handlers.ts. Like there, the account
+  // emitChanged wiring in main/ipc/modules/account.ts. Like there, the account
   // the copy of the shared settings was built under is tracked so a
   // sign-out or an account switch drops it (a rename keeps it).
   let settingsAccountId: string | null = store.read()?.accountId ?? null;

@@ -2,7 +2,7 @@
 // (packages/contracts/src/schemas/sharedSettings.ts) level with its peers', boot-scoped
 // like the other remote subscriptions. No server holds the settings:
 // every device keeps a full copy, and the copies converge by merging
-// (shared/sharedSettings.ts), which is order-free and idempotent, so
+// (contracts' sharedSettings.ts), which is order-free and idempotent, so
 // the exchange needs no sessions, acks or retries. A device that was
 // away catches up the next time any session with it lands.
 //

@@ -32,8 +32,8 @@ export function ScriptConsoleView({
   // The run's terminal (TerminalView).
   terminal: ReactNode;
 }) {
-  // Lifecycle scripts the CLI ran for the app stream here too, but
-  // their process lives in the CLI, not behind one of the host's PTYs.
+  // Lifecycle scripts the engine ran for the app stream here too, but
+  // no PTY of the host's sits behind them.
   const outputOnly = busy && !state.interactive;
   return (
     <div className="flex h-full flex-col">

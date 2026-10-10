@@ -91,7 +91,7 @@ export type SidebarRow =
       pr: PullRequest | undefined;
       // The PR's place in its stack, off the project's map, and its
       // stop on the stack's rail when its rows sit together
-      // (shared/pullRequestStack.ts).
+      // (contracts' pullRequestStack.ts).
       stack: StackPosition | null;
       stackRail?: StackRail;
       // The fold the row was filed behind, null for the group's open

@@ -1,5 +1,5 @@
 // Tells each connected host that this window is looking at it, so the
-// host keeps its background sweep ticking (main/electron/fetch.ts has
+// host keeps its background sweep ticking (the host's backgroundFetch.ts has
 // the design). Asked on this window's focus and on a session landing,
 // then renewed within the lease the host hands back, for as long as
 // this window stays focused. Boot-scoped like the device sync.

@@ -6,7 +6,6 @@ import {
 
 // A worktree's ports, as one host read: port-pool's allocation for the
 // directory plus the user-added entries in the worktree's data, each
-
 // probed on the host's loopback so the list says which have a server up.
 //
 // A read, not a command: it moves nothing and reveals only whether a

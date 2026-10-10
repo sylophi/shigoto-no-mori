@@ -1,6 +1,6 @@
 # ui
 
-What the app draws, apart from the app: the views, the primitives they are built from, the stylesheets and the fixture world, so the desktop window, the web client, the marketing site and the scenes proof draw the same thing (`V3.md`, decision 8). The app keeps the containers, hooks, store and routes, and imports the rest from here.
+What the app draws, apart from the app: the views, the primitives they are built from, the stylesheets and the fixture world, so the desktop window, the web client, the marketing site and the scenes proof draw the same thing (`app/DESIGN.md`, "Views and containers"). The app keeps the containers, hooks, store and routes, and imports the rest from here.
 
 - `src/views/`: the views (`app/DESIGN.md`, "Views and containers"), by area as they were under `app/renderer/components`, and the models only they read. A view takes data and callbacks and draws; its container stays in the app.
 - `src/views/*/build*.ts`, `gridModel.ts`, `projectListSections.ts`: the row builders of the sidebar, the inbox, the home grid and the palette. Pure functions over what the app's hooks read (`src/lib/forest.ts` names those inputs), so a scene builds rows the same way the app does.

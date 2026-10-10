@@ -3,7 +3,6 @@
 // Shared so the two surfaces that start one, the review dialog
 // (renderer/components/worktreeDetail/flow/ignoreChoice.ts) and the
 // CLI's control ops (host/lib/control/ops.ts), come to the same
-
 // rule and the same setup default from the same project preset.
 import {
   anchorIgnoredPath,

@@ -4,20 +4,20 @@
 // and whenever the shared device-list query moves in the cache (which
 // is where account changes, this window's own and everyone else's,
 // land). There is no per-device
-// supervisor here: the one hub socket lives in main, so a hub
+// supervisor here: the one hub socket lives in the host, so a hub
 // device's status DERIVES from the bridge instead of being driven.
 //
 // Status mapping, chosen to lie the least given the
 // RemoteDeviceStatus vocabulary:
 //   - the hub socket stopped: no devices at all. The socket is stopped
-//     exactly while this device is signed out (main's hub refresh),
+//     exactly while this device is signed out (the host's hub refresh),
 //     and a signed-out window shows no peers, whatever the cached
 //     device list still says.
 //   - a direct session established (a peerAppVersions key): phase
 //     "connected" with the appVersion the session's welcome confirmed
 //     and the command access the peer reports (peerAcceptsCommands),
-//     WHATEVER the hub socket is doing. Data is direct or nothing (v2
-//     step 10, slice C), so an established direct session is the only
+//     WHATEVER the hub socket is doing. Data is direct or nothing, so
+//     an established direct session is the only
 //     thing "connected" may mean, and it is also sufficient: the
 //     device hub is orchestration only, and a live session survives
 //     our own hub outage by design (shared/hub/directPresence.ts), so
@@ -28,7 +28,7 @@
 //     socket's state is the honest reason.
 //   - socket connected, the peer in the roster, no direct session:
 //     phase "online" (renderer-local). The roster fact shows, nothing
-//     claims a data wire, and main's keeper is already dialing or
+//     claims a data wire, and the host's keeper is already dialing or
 //     backing off toward one (sessions are supervised desired state),
 //     so the normal resolution is the next snapshot flipping the
 //     device to "connected" with no action here.
@@ -84,7 +84,7 @@ const deviceListHash = hashKey(accountDevicesQueryOptions.queryKey);
 
 // One api per hub deviceId, built on first reachable sighting and
 // kept: the transport forwards through the bridge, whose session for
-// that peer is supervised desired state (main's keeper redials it
+// that peer is supervised desired state (the host's keeper redials it
 // forever), so the api never goes stale the way a dead socket does.
 // Its pushes reach the cache from the same moment (watchPeer), until
 // the account is left (`unwatch`).
@@ -213,7 +213,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // forever, while this way it re-asks once per hub event, as before.
   // A device that left the roster may have left the account (a
   // sign-out, a revoke on another device), which only the list can
-  // say, and which main's own peer-side teardown (a mirror with that
+  // say, and which the host's own peer-side teardown (a mirror with that
   // device) hangs off the list landing. One HTTP call per departure,
   // like the unknown-online rule.
   let someoneLeft = false;
@@ -381,7 +381,7 @@ function buildEntry(
   } else if (!online.has(info.deviceId)) {
     status = { phase: "stopped" };
   } else {
-    // In the roster but no direct session yet: main's keeper is
+    // In the roster but no direct session yet: the host's keeper is
     // dialing or backing off toward one. The api is present anyway so
     // a view can stand ready and the invoke that races the landing
     // dial joins it -- and when the dial lands a beat later,

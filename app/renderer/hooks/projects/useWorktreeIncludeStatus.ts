@@ -10,7 +10,7 @@ export function useWorktreeIncludeStatus(projectId: string | null) {
       projectId !== null
         ? () => api.projects.worktreeIncludeStatus({ projectId })
         : skipToken,
-    // Each fetch spawns two `git ls-files` enumerations in main. Dampen
+    // Each fetch spawns two `git ls-files` enumerations on the host. Dampen
     // the global refetch-on-focus/mount so Cmd-Tabbing around while
     // Configure is open doesn't re-walk the ignored tree every time;
     // reconciliation events invalidate this key explicitly.

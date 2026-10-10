@@ -30,7 +30,7 @@
  * -modal-muted as well. A palette with variants declares that set once
  * for all of them, and each variant's own block after it moves only
  * what sets it apart.
- * The names are the catalog's (shared/themes.ts).
+ * The names are the catalog's (lib/themes.ts).
  */
 
 /* --- Snow ---

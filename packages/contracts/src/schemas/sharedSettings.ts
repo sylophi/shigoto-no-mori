@@ -18,7 +18,6 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 
 // Bounds that keep a whole document under the device link's frame cap
 // (MAX_INBOUND_FRAME_BYTES in host/socket/server.ts, 1 MiB),
-
 // since it rides pushes whole: 512 entries of at most 512 + 256
 // characters and a stamp come to well under half of it.
 const MAX_SHARED_SETTING_KEY_LENGTH = 512;

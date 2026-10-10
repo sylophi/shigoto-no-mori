@@ -11,7 +11,7 @@ export interface ScriptRunState {
   // something to show or clear.
   hasOutput: boolean;
   // Whether keystrokes reach the process. True for runs the app spawned
-  // (they own a PTY in main), false for lifecycle scripts the CLI ran
+  // (they own a PTY in the host), false for lifecycle scripts the engine ran
   // on the app's behalf, which stream output through the same events
   // but have nothing to type into.
   interactive: boolean;

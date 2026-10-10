@@ -1,6 +1,6 @@
 // The icon button that opens a port on this machine in the browser,
 // shared by the local row (the port itself) and the forward band (the
-// local end of a live forward). Same failure toast as ui/external-link.
+// local end of a live forward). Same failure toast as primitives/external-link.
 import { ExternalLink } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";

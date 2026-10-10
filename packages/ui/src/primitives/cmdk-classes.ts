@@ -13,7 +13,7 @@ export const EMPTY_CLASS = "p-3 text-center text-xs text-muted-foreground";
 export const HEADING_CLASS =
   "px-2 pt-2 pb-1 text-2xs font-medium text-muted-foreground";
 
-// For a Command that is a modal's body (ui/modal-shell.tsx): a column
+// For a Command that is a modal's body (primitives/modal-shell.tsx): a column
 // that shrinks to the window, so its list scrolls instead of clipping.
 export const MODAL_COMMAND_CLASS = "flex min-h-0 flex-col";
 

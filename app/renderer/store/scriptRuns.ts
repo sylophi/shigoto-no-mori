@@ -1,7 +1,7 @@
 // In-memory store for in-flight + most-recent script runs, keyed by
 // (projectId, worktreeId, slot). One store per device: each drains the
 // ScriptEvent channel of the device its api names (this machine's over
-// the preload bridge, a peer's over its direct session), and events
+// the loopback link, a peer's over its device link), and events
 // route to the right record via a runId→key index built when a run
 // starts. Worktree ids are path hashes that can collide across the
 // owner's machines, so a run's key is only unambiguous inside its

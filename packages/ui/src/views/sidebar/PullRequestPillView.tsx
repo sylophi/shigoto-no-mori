@@ -9,7 +9,7 @@ interface PullRequestPillProps {
   // subscribes to anyway.
   pr: PullRequest | undefined;
   // Where the PR sits in its stack, when it is in one
-  // (shared/pullRequestStack.ts): the pill then reads "#142 2/3",
+  // (contracts' pullRequestStack.ts): the pill then reads "#142 2/3",
   // bottom counted first, the order the stack merges in.
   stack?: StackPosition | null;
   // The row stands on a stack rail that shows every layer

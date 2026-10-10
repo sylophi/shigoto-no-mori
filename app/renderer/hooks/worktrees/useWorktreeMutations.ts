@@ -61,7 +61,7 @@ interface CreateWorktreeFromPullRequestInput {
 
 // Two calls behind one mutation: land the PR head on a local branch,
 // then create the worktree on it through the ordinary checkout path.
-// Splitting it this way keeps the create itself on the bundled CLI.
+// Splitting it this way keeps the create itself on the engine's.
 // Only the ref resolution is PR-aware. The branch survives a failed
 // create, which is fine: it's the same branch `gh pr checkout` would
 // have left, and a retry reuses it.
@@ -262,7 +262,7 @@ export function useDeleteWorktree() {
     mutationFn: (input) => api.worktrees.delete(input),
     onMutate: async (vars) => {
       // Cancel this worktree's in-flight fetches (a focus-triggered
-      // diff/data refetch) before main starts removing it: left to
+      // diff/data refetch) before the host starts removing it: left to
       // settle, they'd reject with "Unknown worktree" and toast, while
       // cancellation is swallowed silently. Gated on the scoped device
       // so another device's queries never match on a coincidentally

@@ -375,7 +375,6 @@ export const SyncSendWorktreePayloadSchema = strict(
 
 // The id of a source link's channel, minted by the device that opens
 // it (modules/link.ts).
-
 const ChannelIdSchema = HexId32Schema;
 
 // A pull's source link: the source worktree on this host, which the
@@ -593,7 +592,6 @@ export const syncContract = defineContract(
   // The local orchestrators (see the header note): remote:false keeps
   // them off every remote wire, gated:true documents intent and keeps
   // the web client's fail-closed refusal.
-
   invoke(
     "pullWorktree",
     SyncPullWorktreePayloadSchema,

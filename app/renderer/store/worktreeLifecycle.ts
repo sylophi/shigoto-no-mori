@@ -43,7 +43,7 @@ type WorktreesApi = Pick<
 >;
 
 interface StartDeps {
-  // Fired when main auto-removed manual carry-over entries because
+  // Fired when the host auto-removed manual carry-over entries because
   // .worktreeinclude now covers them, so caches over project.json can be
   // invalidated.
   onCarryOverReconciled?: (projectId: string) => void;

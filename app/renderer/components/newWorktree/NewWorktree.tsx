@@ -208,13 +208,13 @@ function NewWorktreeForm({
   const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
   const folderName = sanitizeBranchForPath(folderSourceRaw);
   // Case-insensitive: NTFS and default APFS treat "Feature" and
-  // "feature" as the same directory (matches the main-side check).
+  // "feature" as the same directory (matches the host-side check).
   const folderTaken =
     folderName.length > 0 &&
     worktrees.some((w) => w.name.toLowerCase() === folderName.toLowerCase());
 
   // Checkout mode waits for the branch list: the occupancy gate reads
-  // it, and submitting before it lands would let the CLI find the
+  // it, and submitting before it lands would let the engine find the
   // collision instead.
   const sourceReady = prMode
     ? selectedPr !== null && !prHeadOccupied

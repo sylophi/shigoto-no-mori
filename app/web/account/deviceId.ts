@@ -1,6 +1,6 @@
 // The stable per-browser hub device identity.
 // The desktop's deviceId is a UUID naming a shigomori root, minted once
-// and persisted in registry.json (host/lib/config/deviceId.ts). The web
+// and persisted in its store (host/lib/config/deviceId.ts). The web
 // client has no root, so its analogue is a UUID naming this browser
 // profile, minted on first use and persisted in localStorage: the same
 // browser is the same hub device across sessions, and clearing site

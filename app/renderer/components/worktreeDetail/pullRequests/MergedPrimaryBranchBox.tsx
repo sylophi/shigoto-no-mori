@@ -11,7 +11,7 @@ import { MergedPrimaryBranchBoxView } from "@shigomori/ui/views/worktreeDetail/p
 // to switch it back to the primary branch and delete the merged branch.
 // This is the same cleanup a regular worktree gets, adapted to the root.
 //
-// Both halves run as one main-side operation (worktrees.switchToPrimaryAndDeleteBranch):
+// Both halves run as one host-side operation (worktrees.switchToPrimaryAndDeleteBranch):
 // the switch unmounts this box, and a renderer-chained delete would be lost
 // to that unmount (React Query drops mutate() callbacks once their component
 // is gone). Failures surface via a global toast for the same reason.

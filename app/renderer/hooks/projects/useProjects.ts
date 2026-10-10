@@ -119,7 +119,7 @@ export function useRemoveProject() {
   return useMutation<void, Error, string>({
     mutationFn: (id) => api.projects.remove({ id }),
     onMutate: async (id) => {
-      // Cancel this project's in-flight fetches before main starts the
+      // Cancel this project's in-flight fetches before the host starts the
       // removal (mirrors the nuke path): left to settle, one would
       // reject with "Unknown project" during the awaits below and
       // toast, while cancellation is swallowed silently. Gated on the

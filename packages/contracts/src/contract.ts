@@ -50,7 +50,6 @@ export const Remote = Context.Service<"sm/contracts/Remote", boolean>(
 // The gate axis for the device link. Gated true marks a call served
 // to another device only while this host's command-access switch is on
 // (CommandGate in link.ts, the one place that decides).
-
 // That is every call that changes state the user owns (writes files or
 // config, runs a script, moves a branch or a worktree), and also a few
 // READS kept behind the switch because of what they disclose:

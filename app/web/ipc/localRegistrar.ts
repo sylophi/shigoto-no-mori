@@ -1,5 +1,5 @@
 // The tab's local registrar: what a browser serves itself, in the page.
-// A web client is a device with no host (decision 6 of V3.md): every
+// A web client is a device with no host: every
 // host it shows is a peer, reached over the device link through the
 // hub (shared/hub/directPlane.ts). What stays in the page are the
 // client modules (the account, the client config, the hub bridge, the
@@ -9,9 +9,8 @@
 // through buildApi like every window's.
 //
 // A host call nothing here serves is the renderer asking a local host
-// the browser does not have, which it still does in a few places until
-// step 6 makes "local" one device in the list. Those are answered
-// FAIL-CLOSED:
+// the browser does not have, which it still does in a few places. Those
+// are answered FAIL-CLOSED:
 //
 //   - An invoke explicitly classified `gated: false` (the registrar
 //     makes every remote-exposed host invoke classify itself, and only

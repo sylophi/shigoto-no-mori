@@ -28,7 +28,7 @@ export const ProjectSchema = Schema.Struct({
   // Populated by ProjectsList only. `false` means the project's path is
   // missing on disk (deleted/moved/unmounted). Other handlers don't set it.
   pathExists: Schema.optional(Schema.Boolean),
-  // Repo identity (shared/git/repoIdentity.mts), populated by ProjectsList
+  // Repo identity (the engine's Identity.ts), populated by ProjectsList
   // only. `null` means the repo has none (or the probe failed), so it
   // never matches across devices. Other handlers don't set it.
   identity: Schema.optional(Schema.NullOr(Schema.String)),

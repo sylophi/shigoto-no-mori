@@ -43,7 +43,6 @@ export function parseLauncherId(
 }
 
 // The terminals terminal tools open in (the device setting `terminal`), as
-
 // launcher catalog ids, in the order Settings lists them.
 export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
 export type TerminalId = (typeof TERMINAL_IDS)[number];

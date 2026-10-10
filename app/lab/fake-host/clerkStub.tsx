@@ -1,6 +1,6 @@
 // In-memory stand-in for @clerk/react and @clerk/electron/react,
 // aliased in by vite.base.ts only. Exposes exactly the names the
-// renderer/web trees import, shaped so the fake host boots signed-in: the
+// renderer and web trees import, shaped so the fake host boots signed-in: the
 // stub session's userId matches the fixture account id
 // (fixtures.ts), so ClerkAccountSync sees "enrolled under this
 // user" and never fires an enroll or sign-out.

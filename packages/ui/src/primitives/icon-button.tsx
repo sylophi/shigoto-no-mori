@@ -20,7 +20,7 @@ const REVEAL_CLASS =
   "shrink-0 text-muted-foreground/50 opacity-0 transition-opacity focus-visible:opacity-100 phone:opacity-100";
 
 // The bare icon button a row wears (rename, remove, back): quieter and
-// smaller than ui/button.tsx's icon sizes, with a fill only on hover.
+// smaller than primitives/button.tsx's icon sizes, with a fill only on hover.
 // data-icon-button is the phone layout's hook for a resting fill, since
 // nothing hovers there (phone.css). An attribute of its own rather than
 // a data-slot, which a menu trigger rendering this would overwrite.

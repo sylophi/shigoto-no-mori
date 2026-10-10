@@ -47,8 +47,8 @@ import {
   LANDS_HERE,
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 
-// Where the pull would refuse at step 2 (host/ipc/modules/sync.ts
-// runPullWorktree): the landing device already has the branch, checked
+// Where the pull would refuse at step 2 (host/lib/sync/landing.ts
+// refuseLandingCollision): the landing device already has the branch, checked
 // out in a worktree or merely existing, or already has a worktree
 // under the folder name the copy would take. Read under
 // DestinationScope. Both lists are the ordinary cached ones, so the

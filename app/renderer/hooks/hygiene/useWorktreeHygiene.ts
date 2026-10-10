@@ -85,7 +85,7 @@ export function useWorktreeDiskUsage(
     queries: worktrees.map(({ projectId, id }) => ({
       queryKey: keys.worktreeDiskUsage(projectId, id),
       queryFn: () => api.hygiene.diskUsage({ projectId, worktreeId: id }),
-      // Matches the main-side cache TTL, so a remount inside the window
+      // Matches the host-side cache TTL, so a remount inside the window
       // reuses the walk instead of paying for it twice.
       staleTime: 60_000,
       meta: { silentError: true },

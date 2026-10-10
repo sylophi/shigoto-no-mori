@@ -1,8 +1,8 @@
 // Push-driven cache upkeep of the requests (React Query) for ONE device,
 // the same for this machine and every peer: the host's broadcasts,
 // received over whatever wire
-// the device's api rides (this machine's preload bridge, a peer's
-// direct session through the hub bridge's peerPush fan-out), land in
+// the device's api rides (this machine's loopback link, a peer's
+// device link through the hub bridge's peerPush fan-out), land in
 // that device's cache the same way. The boot calls it for this machine
 // (renderer/boot.tsx) and remoteDeviceSync for each peer the moment it
 // builds the peer's api, so the always-mounted sidebar rows for any
@@ -12,7 +12,7 @@
 // No reachability gate on purpose: a push from a device IS that
 // device's session speaking, and invalidating a device nothing caches
 // under matches no query. Sessions are supervised desired state owned
-// by main's keeper (shared/hub/directKeeper.ts), and the session-landed
+// by the host's keeper (shared/hub/directKeeper.ts), and the session-landed
 // sweep (remoteDeviceSync's noteSessions) covers whatever changed
 // while a session was down, so this never needs to know a session's
 // lifecycle.
@@ -49,8 +49,8 @@ export function watchHost(
 ): () => void {
   const keys = queryKeysFor(deviceId);
   const unsubscribes = [
-    // State changed on the device (an app-driven mutation, or its fs
-    // watcher seeing a CLI run in a terminal): see invalidateHostDevice
+    // State changed on the device (an app-driven mutation, or a store
+    // write from the terminal's `sm`): see invalidateHostDevice
     // for the breadth and exemption rationale.
     api.git.onExternalChange(() => {
       invalidateHostDevice(queryClient, deviceId);

@@ -6,9 +6,10 @@
 // react plugin itself.
 //
 // The plugin parses .ts and .tsx as TypeScript and nothing else, so a
-// .mts module (shared/git/repoIdentity.mts, which node scripts also
-// load directly) reaches babel as plain JavaScript and fails on its
-// first type. The override teaches it the third extension.
+// .mts module (shared/packaging/updateFeed.mts, which the release list
+// reads and node scripts also load directly) reaches babel as plain
+// JavaScript and fails on its first type. The override teaches it the
+// third extension.
 import { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 

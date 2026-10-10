@@ -87,7 +87,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
       queue,
       (wt) => wt.id,
       async (wt) => {
-        // Unforced first, whatever the row's count showed: the CLI's
+        // Unforced first, whatever the row's count showed: the engine's
         // guard also sees what the row can't (an untracked file under
         // `status.showUntrackedFiles no`, an edit since the list
         // loaded), and its refusal is the one warning before a wipe.
