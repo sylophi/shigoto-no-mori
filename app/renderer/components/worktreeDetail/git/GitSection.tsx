@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileDiff } from "lucide-react";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -76,6 +76,11 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
         >
           {worktree.changedCount > 0 ? (
             <>
+              {/* The sidebar's mark for uncommitted work, in its tone. */}
+              <FileDiff
+                aria-hidden
+                className="mr-1.5 inline size-3.5 align-[-0.125em] text-amber-500"
+              />
               {pluralize(worktree.changedCount, "file")} changed
               {named.length > 0 && (
                 <Aside>
