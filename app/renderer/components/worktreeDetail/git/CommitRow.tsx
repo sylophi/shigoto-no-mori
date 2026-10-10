@@ -95,13 +95,13 @@ export function CommitRow({
     >
       <span
         className={cn(
-          "w-full truncate text-sm group-hover/commit:pr-6 group-has-data-popup-open/commit:pr-6",
+          "w-full truncate text-xs group-hover/commit:pr-6 group-has-data-popup-open/commit:pr-6",
           faded && "text-muted-foreground",
         )}
       >
         {commit.subject}
       </span>
-      <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
+      <span className="flex w-full items-center gap-2 text-2xs text-muted-foreground">
         <span className="flex min-w-0 items-center gap-1 truncate">
           {unpushed && (
             <CloudOff aria-label="Not pushed yet" className="size-3 shrink-0" />
@@ -113,6 +113,7 @@ export function CommitRow({
             <DiffStats
               additions={commit.additions}
               deletions={commit.deletions}
+              compact
             />
           </span>
         )}
