@@ -1,30 +1,12 @@
-// The Live page's surfaces: a device's heading, and the card of one
-// worktree's live things. A card is built like a project tile and is a
-// way into the worktree as much as a report on it: its header opens the
-// worktree's page, each live thing has its controls in its block
-// (LiveItems.tsx), and the ports that answer sit along the bottom. The
-// card is scoped to the device holding the worktree, so its runner and
-// the dialogs it opens drive that device as the worktree's page would.
+// The Live page's surfaces bound to their devices (LiveCardView.tsx
+// draws them). The card is scoped to the device holding the worktree,
+// so its runner and the dialogs it opens drive that device as the
+// worktree's page would.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import {
-  Cable,
-  ChevronRight,
-  ExternalLink as ExternalLinkIcon,
-  FolderGit2,
-  Loader2,
-  Plus,
-} from "lucide-react";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { BranchLabel } from "@/components/ui/branch-label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ChipButton } from "@/components/ui/chip-button";
-import { ExternalLink } from "@/components/ui/external-link";
-import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
@@ -46,9 +28,19 @@ import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
-import { cn } from "@/lib/utils";
 import { mappedPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
-import { AgentItem, ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
+import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
+import { AgentItemView } from "./LiveItemsView";
+import {
+  DeviceHeadingView,
+  LiveCardView,
+  LivePortsHeaderView,
+  LiveWorktreeHeaderView,
+  LocalhostPortView,
+  PeerPortView,
+  PortReadoutView,
+  PortsStripView,
+} from "./LiveCardView";
 import type { LiveCard as LiveCardModel } from "./liveModel";
 
 // A device's heading over its cards: its mark in its connection tone,
@@ -65,18 +57,13 @@ export function DeviceHeading({
   const device = useRemoteDevice(deviceId);
   const status = device ? deviceStatusView(device.status) : THIS_DEVICE_VIEW;
   return (
-    <div className="flex items-center gap-2">
-      <DeviceMarkView icon={icon} tone={status.tone} />
-      <SimpleTooltip whenTruncated tip={name}>
-        <h2 className="truncate text-sm font-medium">{name}</h2>
-      </SimpleTooltip>
-      <span className={cn("shrink-0 text-xs", TONE_TEXT[status.tone])}>
-        {status.label}
-      </span>
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
-        {summary}
-      </span>
-    </div>
+    <DeviceHeadingView
+      icon={icon}
+      tone={status.tone}
+      name={name}
+      status={status.label}
+      summary={summary}
+    />
   );
 }
 
@@ -117,59 +104,61 @@ function CardBody({
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
-    <article
-      data-slot="live-card"
-      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4"
+    <LiveCardView
+      header={
+        card.worktree ? (
+          <WorktreeHeader
+            deviceId={card.deviceId}
+            {...card.worktree}
+            state={cardWorktree}
+          />
+        ) : (
+          <LivePortsHeaderView />
+        )
+      }
+      ports={
+        worktree &&
+        reachable &&
+        scripts && (
+          <PortsStrip
+            deviceId={card.deviceId}
+            worktree={worktree}
+            forwarded={forwarded}
+          />
+        )
+      }
     >
-      {card.worktree ? (
-        <WorktreeHeader
-          deviceId={card.deviceId}
-          {...card.worktree}
-          state={cardWorktree}
-        />
-      ) : (
-        <PortsHeader />
+      {card.items.map((item) =>
+        item.kind === "agent" ? (
+          <AgentItemView
+            key={`${item.session.harness}:${item.session.session}`}
+            session={item.session}
+          />
+        ) : item.kind === "script" ? (
+          <ScriptItem
+            key={item.run.runId}
+            deviceId={card.deviceId}
+            run={item.run}
+          />
+        ) : item.kind === "mirror" ? (
+          <MirrorItem
+            key={
+              item.mirror.kind === "session"
+                ? item.mirror.session.session
+                : item.mirror.stream.channelId
+            }
+            mirror={item.mirror}
+          />
+        ) : (
+          <ForwardItem
+            key={item.forward.forwardId}
+            forward={item.forward}
+            // Its Ports dialog reads the peer, so only under its scope.
+            worktree={reachable ? worktree : undefined}
+          />
+        ),
       )}
-      <ul className="flex flex-col gap-2">
-        {card.items.map((item) =>
-          item.kind === "agent" ? (
-            <AgentItem
-              key={`${item.session.harness}:${item.session.session}`}
-              session={item.session}
-            />
-          ) : item.kind === "script" ? (
-            <ScriptItem
-              key={item.run.runId}
-              deviceId={card.deviceId}
-              run={item.run}
-            />
-          ) : item.kind === "mirror" ? (
-            <MirrorItem
-              key={
-                item.mirror.kind === "session"
-                  ? item.mirror.session.session
-                  : item.mirror.stream.channelId
-              }
-              mirror={item.mirror}
-            />
-          ) : (
-            <ForwardItem
-              key={item.forward.forwardId}
-              forward={item.forward}
-              // Its Ports dialog reads the peer, so only under its scope.
-              worktree={reachable ? worktree : undefined}
-            />
-          ),
-        )}
-      </ul>
-      {worktree && reachable && scripts && (
-        <PortsStrip
-          deviceId={card.deviceId}
-          worktree={worktree}
-          forwarded={forwarded}
-        />
-      )}
-    </article>
+    </LiveCardView>
   );
 }
 
@@ -231,80 +220,57 @@ function WorktreeHeader({
   // Held as placeholders until the lists are in, rather than read as
   // a worktree that is gone.
   const pending = state.kind === "loading";
-  const title = (
-    <>
-      {project ? (
-        <ProjectIcon
-          projectId={projectId}
-          name={project.name}
-          deviceId={deviceId}
-          className="size-8"
-        />
-      ) : state.kind === "unreachable" ? (
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <FolderGit2 aria-hidden className="size-4" />
-        </span>
-      ) : (
-        <Skeleton className="size-8 shrink-0 rounded-md" />
-      )}
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        {worktree ? (
-          <SimpleTooltip whenTruncated tip={workTitle ?? worktree.branch}>
-            <span
-              className={cn(
-                "truncate text-sm font-medium",
-                workTitle === null && "font-mono",
-              )}
-            >
-              {workTitle ?? (
-                <BranchLabel
-                  branch={worktree.branch}
-                  detached={worktree.detached}
-                  suffixClassName="text-xs"
-                />
-              )}
-            </span>
-          </SimpleTooltip>
-        ) : pending ? (
-          <Skeleton className="h-4 w-36" />
-        ) : (
-          <span className="truncate text-sm text-muted-foreground italic">
-            {state.kind === "unreachable"
-              ? `A worktree on ${deviceName}`
-              : "Removed worktree"}
-          </span>
-        )}
-        {pending ? (
-          <Skeleton className="h-3 w-24" />
-        ) : (
-          <span className="truncate text-2xs text-muted-foreground">
-            {state.kind === "unreachable"
-              ? `${deviceName} is out of reach`
-              : [worktree?.name, project?.name].filter(Boolean).join(" in ")}
-          </span>
-        )}
-      </span>
-    </>
-  );
+  const unreachable = state.kind === "unreachable";
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      {worktree ? (
-        <Link
-          to={WORKTREE_ROUTE_PATHS.detail}
-          params={{ deviceId, projectId, worktreeId }}
-          aria-label={`Open ${workTitle ?? worktree.branch}`}
-          className="group/open -m-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1.5 transition-colors outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {title}
-          <ChevronRight
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground/50 transition-colors group-hover/open:text-foreground"
+    <LiveWorktreeHeaderView
+      icon={
+        project ? (
+          <ProjectIcon
+            projectId={projectId}
+            name={project.name}
+            deviceId={deviceId}
+            className="size-8"
           />
-        </Link>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-3">{title}</div>
-      )}
-    </div>
+        ) : unreachable ? (
+          "unreachable"
+        ) : (
+          "pending"
+        )
+      }
+      heading={
+        worktree
+          ? {
+              title: workTitle,
+              branch: worktree.branch,
+              detached: worktree.detached,
+            }
+          : pending
+            ? "pending"
+            : {
+                note: unreachable
+                  ? `A worktree on ${deviceName}`
+                  : "Removed worktree",
+              }
+      }
+      subline={
+        pending
+          ? null
+          : unreachable
+            ? `${deviceName} is out of reach`
+            : [worktree?.name, project?.name].filter(Boolean).join(" in ")
+      }
+      renderLink={
+        worktree
+          ? (props) => (
+              <Link
+                to={WORKTREE_ROUTE_PATHS.detail}
+                params={{ deviceId, projectId, worktreeId }}
+                {...props}
+              />
+            )
+          : null
+      }
+    />
   );
 }
 
@@ -335,10 +301,21 @@ function PortsStrip({
   );
   if (answering.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+    <PortsStripView
+      onAllPorts={() => setOpen(true)}
+      dialog={
+        open && (
+          <PortsDialog worktree={worktree} onClose={() => setOpen(false)} />
+        )
+      }
+    >
       {answering.map((port) =>
         !remote ? (
-          <LocalhostLink key={port.port} port={port.port} label={port.label} />
+          <LocalhostPortView
+            key={port.port}
+            port={port.port}
+            label={port.label}
+          />
         ) : canForward ? (
           <PeerPort
             key={port.port}
@@ -348,40 +325,14 @@ function PortsStrip({
             worktree={worktree}
           />
         ) : (
-          // A peer's server this window cannot forward is only news.
-          <span key={port.port} className="inline-flex items-center gap-1">
-            <ListeningDot />
-            <PortText port={port.port} label={port.label} />
-          </span>
+          <PortReadoutView
+            key={port.port}
+            port={port.port}
+            label={port.label}
+          />
         ),
       )}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="ml-auto rounded-sm transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        All ports
-      </button>
-      {open && (
-        <PortsDialog worktree={worktree} onClose={() => setOpen(false)} />
-      )}
-    </div>
-  );
-}
-
-function LocalhostLink({ port, label }: { port: number; label?: string }) {
-  return (
-    <span className="inline-flex">
-      <ExternalLink
-        href={`http://localhost:${port}`}
-        errorTitle="Couldn't open the port"
-        className="inline-flex items-center gap-1 rounded-sm no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ListeningDot />
-        <PortText port={`localhost:${port}`} label={label} />
-        <ExternalLinkIcon aria-hidden className="size-3" />
-      </ExternalLink>
-    </span>
+    </PortsStripView>
   );
 }
 
@@ -403,68 +354,12 @@ function PeerPort({
     worktreeId: worktree.id,
   });
   return (
-    <SimpleTooltip tip={control.error}>
-      <ChipButton
-        disabled={control.isPending}
-        onClick={() => control.apply({ on: true, localPort: port })}
-        className={cn("py-0.5", control.error && "text-destructive")}
-      >
-        {control.isPending ? (
-          <Loader2 aria-hidden className="size-3 animate-spin" />
-        ) : (
-          <Plus aria-hidden className="size-3" />
-        )}
-        <PortText prefix="Forward" port={port} label={label} />
-      </ChipButton>
-    </SimpleTooltip>
-  );
-}
-
-// A port's words as one run of text, so the mono number and the sans
-// words around it share a baseline. As separate flex items each would
-// be centered on its own box, and the mono font's different metrics
-// set the number off the words beside it.
-function PortText({
-  prefix,
-  port,
-  label,
-}: {
-  prefix?: string;
-  port: number | string;
-  label?: string;
-}) {
-  return (
-    <span className="truncate">
-      {prefix && <>{prefix} </>}
-      <span className="font-mono">{port}</span>
-      {label && <span className="text-muted-foreground"> {label}</span>}
-    </span>
-  );
-}
-
-// A device's loose forwards, the ones switched on from the account
-// page rather than a worktree.
-function PortsHeader() {
-  return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <Cable aria-hidden className="size-4" />
-      </span>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium">Forwarded ports</span>
-        <span className="truncate text-2xs text-muted-foreground">
-          Not tied to a worktree
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// A port's dot: a server answers on it.
-function ListeningDot() {
-  return (
-    <SimpleTooltip tip="A server is listening">
-      <StatusDot tone="emerald" />
-    </SimpleTooltip>
+    <PeerPortView
+      port={port}
+      label={label}
+      pending={control.isPending}
+      error={control.error}
+      onForward={() => control.apply({ on: true, localPort: port })}
+    />
   );
 }
