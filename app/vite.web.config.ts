@@ -187,8 +187,11 @@ export default defineConfig(({ mode }) => {
     // material icons come in through the materialIcons plugin above.
     // The contracts package is served as source, and effect with it, as
     // the contracts import it: prebundled, either is a second copy.
+    // The ui package is source the app imports, so the scanner crawls it
+    // too: a dependency only it imports (Base UI's dialog) is served raw
+    // otherwise, and its CommonJS imports fail in the page.
     optimizeDeps: {
-      entries: ["index.html"],
+      entries: ["index.html", "../../packages/ui/src/**/*.{ts,tsx}"],
       exclude: ["@shigomori/contracts", "effect"],
     },
     define: {
