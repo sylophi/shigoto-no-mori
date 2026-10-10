@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, session } from "electron";
+import { app, dialog, session } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { platform } from "node:os";
@@ -8,39 +8,25 @@ import {
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
 } from "@shared/packaging/appName.mts";
-import { windowContract } from "@shigomori/contracts/modules/window";
 import {
   createDesktopClerkBridge,
-  rendererSchemeUrl,
   serveRendererOverScheme,
 } from "./electron/clerk";
-import { APP_VERSION_FLAG, CLERK_PK_FLAG, DEV_BUILD_FLAG } from "./argFlags";
-import { attachContextMenu } from "./electron/contextMenu";
-import {
-  deepLinkRoute,
-  deepLinkRouteInArgv,
-  receiveDeepLink,
-} from "./electron/deepLink";
+import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
-import {
-  applyThemeSource,
-  readClientConfigSync,
-} from "./electron/clientConfig";
 import { registerShellHandlers } from "./ipc/handlers";
-import { clerkPublishableKey } from "./ipc/modules/account";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import {
   type HostFailure,
   host,
-  noteWindowFocused,
   startHostProcess,
   stopHostProcess,
 } from "./hostProcess";
-import { broadcast, installShellPorts } from "./ipc/register";
+import { installShellPorts } from "./ipc/register";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "@host/lib/util/shellEnv";
 import { cliBinaryName } from "@shared/packaging/cliDist.mts";
@@ -55,14 +41,18 @@ import * as ShellLayer from "./shellLayer";
 import { confirmBusyAction } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
-  applyRestartVisibility,
   rememberVisibilityAtShutdown,
   rememberVisibilityForRestart,
-  type RestartVisibility,
   takeRestartVisibility,
 } from "./electron/restartVisibility";
 import {
-  attachRenderProcessRecovery,
+  openDeepLink,
+  openWindowsAtStart,
+  rememberWindows,
+  reopenIfNone,
+  surfaceWindow,
+} from "./electron/windows";
+import {
   installChildProcessLogging,
   installFatalRecovery,
   reconcileLaunchAtLogin,
@@ -205,17 +195,6 @@ const runtime = ManagedRuntime.make(
   ),
 );
 
-let mainWindow: BrowserWindow | null = null;
-// Set once the ready handler's own createWindow() call has run, so
-// second-instance can tell "boot is still in flight" (nothing to do
-// yet, that call is on its way) apart from "the window was closed
-// after boot" (recreate it). Without this, a launch that lands during
-// the ready handler's await (ensureDataDir on a slow or
-// unreachable data folder) would see mainWindow still null, create a
-// window itself, and then get a second one from the ready handler
-// finishing right after.
-let hasBooted = false;
-
 // The data dir for the boot error, which may be that it couldn't be
 // found at all.
 function dataDirOrNone(): string {
@@ -228,99 +207,6 @@ function dataDirOrNone(): string {
 
 // The layer graph's build, started in the ready handler.
 let graph: Promise<unknown> = Promise.resolve();
-
-const createWindow = (restart: RestartVisibility | null = null) => {
-  hasBooted = true;
-  // Drive the native appearance from the saved theme before constructing
-  // the window so the macOS vibrancy material picks the right light/dark
-  // variant on first paint. Absent or "system" delegates back to the OS.
-  applyThemeSource(readClientConfigSync().theme);
-  mainWindow = new BrowserWindow({
-    width: 920,
-    height: 720,
-    minWidth: 640,
-    minHeight: 420,
-    show: restart === null,
-    // Inset traffic lights over a transparent shell so the
-    // NSVisualEffectView material set via `vibrancy` shows through where
-    // the renderer paints no background (the sidebar column). Inset as
-    // far from the top as from the left, which centers the 14pt buttons
-    // on y=23: the renderer's title bars line up on that (SidebarHeader,
-    // PageHeader's device tabs).
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: "#00000000",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-      // Facts about this client build, read synchronously by the
-      // preload off process.argv. isDev is the build showing the
-      // window, never the host's, so it must not travel via
-      // runtime.info.
-      additionalArguments: [
-        // This build's version: the renderer sends it in the link's
-        // hello and compares it against a remote host's for skew.
-        `${APP_VERSION_FLAG}${app.getVersion()}`,
-        // The resolved Clerk publishable key (empty when the build is
-        // unconfigured), so the renderer can mount or skip the
-        // ClerkProvider synchronously at boot.
-        `${CLERK_PK_FLAG}${clerkPublishableKey()}`,
-        ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
-      ],
-    },
-  });
-
-  // The renderer is a single local document with in-memory routing, so
-  // no in-page navigation or popup is ever legitimate. External links go
-  // through the scheme-validated shell:openExternal IPC instead. Same-URL
-  // navigation stays allowed so the dev server's full reload still works.
-  const webContents = mainWindow.webContents;
-  webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  webContents.on("will-navigate", (event, url) => {
-    if (url !== webContents.getURL()) event.preventDefault();
-  });
-
-  // Both modes load over the renderer scheme rather than file:// or the
-  // vite http origin. Clerk requires it (see main/electron/clerk.ts).
-  // The protocol handler is installed in the ready handler below,
-  // before the first createWindow.
-  void mainWindow.loadURL(rendererSchemeUrl());
-
-  // Relay BrowserWindow focus/blur to the renderer. The web-level `focus`
-  // and `visibilitychange` events don't fire on every Electron focus
-  // transition (notably ⌘Tab between apps), so React Query's
-  // refetch-on-focus needs this signal to be reliable.
-  const sendFocus = () => {
-    const wc = mainWindow?.webContents;
-    if (wc) broadcast(windowContract, "focused", undefined, wc);
-    // The host's background fetch ticks while someone is looking.
-    noteWindowFocused(true);
-  };
-  const sendBlur = () => {
-    const wc = mainWindow?.webContents;
-    if (wc) broadcast(windowContract, "blurred", undefined, wc);
-    noteWindowFocused(false);
-  };
-  mainWindow.on("focus", sendFocus);
-  mainWindow.on("blur", sendBlur);
-
-  // Recover the UI from a renderer crash. Attached
-  // per window, including the ones recreated below, so a second crash
-  // still lands on a live handler. The recreate budget lives in the
-  // liveness module, so re-attaching does not reset the loop guard.
-  attachRenderProcessRecovery(mainWindow, {
-    isShuttingDown,
-    recreateWindow: recreateAfterRendererCrash,
-    onGiveUp: showCrashGiveUpDialog,
-  });
-
-  attachContextMenu(mainWindow);
-  if (restart) applyRestartVisibility(mainWindow, restart);
-};
 
 // An update install or a relaunch: a quit that neither asks about busy
 // work nor waits for it (hostLayer.ts has why), counted from the moment
@@ -335,75 +221,7 @@ function isShuttingDown(): boolean {
   return quitting || isHurriedQuit();
 }
 
-// Recreate the window after its renderer crashed. The crashed shell can
-// linger with a dead renderer, so destroy the previous one after the new
-// window has taken its place, leaving no ghost behind.
-const recreateAfterRendererCrash = () => {
-  const previous = mainWindow;
-  createWindow();
-  if (previous && !previous.isDestroyed()) previous.destroy();
-};
-
-// Set when the renderer crash-loop guard gives up: mainWindow then points
-// at a shell whose renderer is gone but whose isDestroyed() is still
-// false, so second-instance must recreate rather than raise a dead frame.
-// Cleared on the next successful recreate.
-let gaveUp = false;
-
-// Last resort when the renderer crash-loops: stop recreating and tell the
-// user, rather than thrash a window that dies as fast as it opens.
-const showCrashGiveUpDialog = () => {
-  gaveUp = true;
-  dialog.showErrorBox(
-    "Shigoto no Mori keeps crashing",
-    "The window crashed several times in a row, so it was not reopened " +
-      "to avoid a crash loop. Quit and relaunch the app. If it keeps " +
-      "happening, restart your machine or reinstall.",
-  );
-};
-
-// Launching the app again while a copy runs is a request to see it, and
-// so is a deep link, so surface the window we already have. It can be
-// missing if the user closed it and then cancelled the quit that
-// followed. Before the first boot-time createWindow() call, do nothing
-// beyond the focus below: that call is already on its way, and racing
-// it here would leave two windows open instead of one.
-function surfaceMainWindow(): void {
-  // After the crash-loop guard gave up, or if the renderer has crashed,
-  // mainWindow is a live handle to a dead shell: isDestroyed() is false
-  // but its renderer is gone, so show()/focus() would raise an empty
-  // frame. Recreate instead (and clear the give-up latch on success).
-  const deadShell =
-    !!mainWindow &&
-    !mainWindow.isDestroyed() &&
-    (gaveUp || mainWindow.webContents.isCrashed());
-  if (mainWindow && !mainWindow.isDestroyed() && !deadShell) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  } else if (hasBooted) {
-    // recreateAfterRendererCrash destroys the dead shell (if any) after
-    // the fresh window takes its place, leaving no ghost behind. When no
-    // window exists it is just a createWindow.
-    recreateAfterRendererCrash();
-    gaveUp = false;
-  }
-  // macOS won't raise a background app just because one of its windows
-  // asked for focus, and the launch the user just made is already gone.
-  app.focus({ steal: true });
-}
-
-// Hands a deep link's route to the renderer (main/electron/deepLink.ts)
-// and raises the window it will open in. Before "ready" (a link that
-// launched the app) there is nothing to raise yet: the boot-time window
-// is on its way and takes the link.
-function openDeepLink(route: string): void {
-  if (app.isReady()) surfaceMainWindow();
-  const live = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-  receiveDeepLink(route, live?.webContents);
-}
-
-// A notification's click opens its page the same way.
+// A notification's click opens its page the way a deep link does.
 setNotificationOpener(openDeepLink);
 
 // Windows and Linux pass a deep link in a launch's argv: this
@@ -411,12 +229,14 @@ setNotificationOpener(openDeepLink);
 // otherwise. macOS sends open-url, registered here before "ready" so a
 // link that launched the app is not missed.
 const launchRoute = deepLinkRouteInArgv(process.argv);
-if (launchRoute) receiveDeepLink(launchRoute, undefined);
+if (launchRoute) openDeepLink(launchRoute);
 
+// Launching the app again while a copy runs is a request to see it, and
+// so is a deep link.
 app.on("second-instance", (_event, argv) => {
   const route = deepLinkRouteInArgv(argv);
   if (route) openDeepLink(route);
-  else surfaceMainWindow();
+  else surfaceWindow();
 });
 
 app.on("open-url", (event, url) => {
@@ -435,7 +255,7 @@ app.on("ready", async () => {
     (_contents, permission, callback) =>
       callback(permission === "clipboard-sanitized-write"),
   );
-  // The scheme the window loads from (see createWindow). protocol.handle
+  // The scheme the windows load from (electron/windows.ts). protocol.handle
   // only works post-ready, and it must precede the first loadURL.
   serveRendererOverScheme(
     MAIN_WINDOW_VITE_DEV_SERVER_URL
@@ -483,8 +303,8 @@ app.on("ready", async () => {
   // and every sign-in or sign-out (the account fan-out in
   // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();
-  installFatalRecovery({ isShuttingDown });
-  createWindow(takeRestartVisibility());
+  installFatalRecovery({ isShuttingDown, rememberWindows });
+  openWindowsAtStart({ restart: takeRestartVisibility(), isShuttingDown });
   reconcileLaunchAtLogin();
   rememberVisibilityAtShutdown();
   // The window is already up, so the graph delays only the background
@@ -494,6 +314,7 @@ app.on("ready", async () => {
   });
 });
 
+// The app is its windows: closing the last one quits, on macOS too.
 app.on("window-all-closed", () => {
   app.quit();
 });
@@ -548,12 +369,12 @@ app.on("before-quit", (event) => {
         return;
       }
       // When the user got here by closing the last window (close-X →
-      // window-all-closed → app.quit()), the BrowserWindow is already
-      // destroyed. Restore it so the cancelled quit doesn't leave the
-      // app running headless with the busy work still in progress.
-      // Cmd-Q / menu Quit reach before-quit before any window is closed,
-      // so the recreate is a no-op there.
-      if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+      // window-all-closed → app.quit()), it is already gone. Reopen it
+      // so the cancelled quit doesn't leave the app running headless
+      // with the busy work still in progress. Cmd-Q / menu Quit reach
+      // before-quit before any window is closed, so this is a no-op
+      // there.
+      reopenIfNone();
     });
 });
 
@@ -563,6 +384,7 @@ let askingToQuit = false;
 function quit(): void {
   quitting = true;
   const hurried = isHurriedQuit();
+  rememberWindows();
   if (hurried) rememberVisibilityForRestart();
   // The host first, whose quit sequence (host/process/layer.ts) may
   // still ask the shell for its updater bridge.

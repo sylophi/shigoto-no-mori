@@ -91,6 +91,10 @@ export type HandlerContext = {
   // every caller is this machine's own, leave it undefined, so a
   // handler that needs a peer identity fails closed on absence.
   callerDeviceId?: string;
+  // The window the call came from (its webContents id), supplied only
+  // by the shell's port, which each window holds one of: what a call
+  // about "this window" (its route, its deep link) answers for.
+  windowId?: number;
   // Byte channels on the calling link (shared/remote/channels.ts),
   // supplied only by the device link: a handler
   // that opens a byte stream for its caller (forward:open) attaches

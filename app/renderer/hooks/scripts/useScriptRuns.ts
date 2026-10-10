@@ -8,7 +8,11 @@ import type {
   ScriptRunState,
 } from "@shigomori/ui/lib/scriptRun.ts";
 import { useSyncExternalStore } from "react";
+import type { RunningScript } from "@shigomori/contracts/schemas";
+import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
+import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import {
   EMPTY_STATE,
@@ -42,15 +46,46 @@ function useDeviceScriptRunState(
 
 // The sidebar's activity glyph. Takes its device explicitly rather than
 // reading the scope: the rows render outside any provider, and a peer
-// row names the device it belongs to.
+// row names the device it belongs to. A run this window holds says
+// most; one held elsewhere (another window, another device) shows off
+// the device's running scripts.
 export function useWorktreeScriptActivity(
   worktreeId: string,
   deviceId: string = localDeviceId,
 ): ScriptActivityKind | null {
   const store = scriptRunsFor(deviceId);
-  return useSyncExternalStore(
+  const held = useSyncExternalStore(
     (cb) => store.subscribeWorktree(worktreeId, cb),
     () => store.getActivityKind(worktreeId),
     () => null,
   );
+  const local = deviceId === localDeviceId;
+  const peerApi = useRemoteDeviceApi(local ? undefined : deviceId);
+  const listed = useDeviceRunningScripts(
+    deviceId,
+    local ? (hasLocalHost ? window.api : undefined) : peerApi,
+  );
+  if (held !== null && held !== "failed") return held;
+  return listedActivity(listed ?? [], worktreeId) ?? held;
+}
+
+// The busiest of a worktree's listed runs, ranked as the store ranks
+// its own: a teardown, then a setup, then a package script.
+function listedActivity(
+  runs: readonly RunningScript[],
+  worktreeId: string,
+): ScriptActivityKind | null {
+  let kind: ScriptActivityKind | null = null;
+  for (const { worktreeId: id, slot } of runs) {
+    if (id !== worktreeId) continue;
+    if (
+      slot.kind === "teardown" ||
+      (slot.kind === "portPool" && slot.phase === "release")
+    ) {
+      return "teardown";
+    }
+    if (slot.kind === "setup" || slot.kind === "portPool") kind = "setup";
+    else if (kind === null) kind = "package";
+  }
+  return kind;
 }

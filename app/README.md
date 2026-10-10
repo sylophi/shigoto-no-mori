@@ -44,3 +44,11 @@ its own behind the window (launch tools, this device's settings, port
 forwarding) on `renderer/lib/localHost.ts`; everything else is the same
 code in both shells. `shared/` is the code every side compiles, over
 the contracts in `packages/contracts`.
+
+The desktop app is as many windows as the user opens, each one client
+of the host like a browser tab: its own runtime, links and
+subscriptions, its own page and terminal drawer. The shell keeps the
+set (`main/electron/windows.ts`): New Window, a page opened in a
+window of its own, deep links to the window focused last, and each
+window's page and bounds brought back at the next start. The app quits
+with its last window.

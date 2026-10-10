@@ -15,9 +15,10 @@ import {
   readJsonOrNullSync,
 } from "@host/lib/util/atomicJson";
 
+// Whether the app was hidden. Which windows were minimized is each
+// window's own (main/electron/windows.ts remembers it).
 const RestartVisibilitySchema = Schema.Struct({
   hidden: Schema.Boolean,
-  minimized: Schema.Boolean,
 });
 export type RestartVisibility = typeof RestartVisibilitySchema.Type;
 
@@ -36,13 +37,11 @@ function markerPath(): string {
 export function rememberVisibilityForRestart(): void {
   if (process.platform !== "darwin") return;
   try {
-    const visibility: RestartVisibility = {
-      hidden: app.isHidden(),
-      minimized: BrowserWindow.getAllWindows().some((window) =>
-        window.isMinimized(),
-      ),
-    };
-    if (!visibility.hidden && !visibility.minimized) return;
+    const visibility: RestartVisibility = { hidden: app.isHidden() };
+    const minimized = BrowserWindow.getAllWindows().some((window) =>
+      window.isMinimized(),
+    );
+    if (!visibility.hidden && !minimized) return;
     atomicWriteJsonSync(markerPath(), visibility);
   } catch (error) {
     warn("could not write the marker", error);
@@ -81,18 +80,19 @@ export function takeRestartVisibility(): RestartVisibility | null {
 
 // For a window created unshown, so it is never on screen before it
 // goes away. A minimized one goes straight to the Dock, and a Dock
-// click restores it. A hidden one appears when the user brings the app
-// back (Dock, Cmd-Tab).
+// click restores it. In a hidden app the rest appear when the user
+// brings it back (Dock, Cmd-Tab), and otherwise at once.
 export function applyRestartVisibility(
   window: BrowserWindow,
-  { hidden, minimized }: RestartVisibility,
+  { hidden }: RestartVisibility,
+  minimized: boolean,
 ): void {
   if (hidden) app.hide();
-  if (minimized) {
-    window.minimize();
-    return;
+  if (minimized) window.minimize();
+  else if (!hidden) window.show();
+  else {
+    app.once("did-become-active", () => {
+      if (!window.isDestroyed()) window.show();
+    });
   }
-  app.once("did-become-active", () => {
-    if (!window.isDestroyed()) window.show();
-  });
 }

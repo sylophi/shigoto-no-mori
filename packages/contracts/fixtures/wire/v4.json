@@ -2236,12 +2236,22 @@
       "route": "["
     }
   },
+  "window:open": {
+    "payload": {
+      "route": "/"
+    }
+  },
   "window:previewTheme": {
     "payload": {
       "theme": "dark"
     }
   },
   "window:relaunch": {},
+  "window:showing": {
+    "payload": {
+      "route": "/{"
+    }
+  },
   "worktreeData:describe": {
     "payload": {
       "projectId": "😀",

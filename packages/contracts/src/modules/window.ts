@@ -21,6 +21,11 @@ export const HostAddressSchema = strict(
   }),
 );
 
+// A page of the app, as the router names it: a window opens on one and
+// says which it shows, so a quit can bring it back there.
+const RouteSchema = Schema.String.check(Schema.isPattern(/^\//));
+const RoutePayloadSchema = strict(Schema.Struct({ route: RouteSchema }));
+
 // The this-window / app-instance surface: focus signals from the
 // BrowserWindow, plus the calls that act on the window's own process.
 export const windowContract = defineContract(
@@ -43,4 +48,9 @@ export const windowContract = defineContract(
   // LoopbackGroup), and the token its handshake proves: what the window
   // dials for every call that is not the shell's.
   invoke("hostAddress", VoidSchema, HostAddressSchema),
+  // Another window, on `route`.
+  invoke("open", RoutePayloadSchema, VoidSchema),
+  // The page this window shows now, which the shell reopens it on at
+  // the next start.
+  invoke("showing", RoutePayloadSchema, VoidSchema),
 );
