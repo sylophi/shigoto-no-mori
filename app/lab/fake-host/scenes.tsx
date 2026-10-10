@@ -5,7 +5,7 @@
 // ?theme, ?doubutsu, ?light, ?dark).
 import { createRoot } from "react-dom/client";
 import "./scenes.css";
-import "@/fonts.css";
+import "@shigomori/ui/styles/fonts.css";
 import { windowAttributes } from "../scenes/frame";
 import { type Scene, scenes } from "../scenes/index";
 import { applyPose } from "./pose";

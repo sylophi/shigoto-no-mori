@@ -1,0 +1,7 @@
+/* The app's stylesheet: @shigomori/ui's, with the app's own sources
+   named, since auto-detection scans under the Vite root only and the
+   web build's root is web/. Without them, every utility that appears
+   only in a renderer component drops out of the web bundle. */
+@import "@shigomori/ui/styles/index.css";
+@source "./";
+@source "../web";

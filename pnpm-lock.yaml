@@ -201,6 +201,15 @@ catalogs:
     '@effect/tsgo':
       specifier: 0.51.1
       version: 0.51.1
+    '@fontsource-variable/geist':
+      specifier: ^5.2.9
+      version: 5.2.9
+    '@fontsource-variable/jetbrains-mono':
+      specifier: ^5.3.0
+      version: 5.3.0
+    '@fontsource/zen-maru-gothic':
+      specifier: ^5.2.8
+      version: 5.2.8
     '@types/node':
       specifier: ^24.13.5
       version: 24.13.5
@@ -210,6 +219,9 @@ catalogs:
     '@types/react-dom':
       specifier: ^19.2.3
       version: 19.2.3
+    '@xterm/xterm':
+      specifier: 6.0.0
+      version: 6.0.0
     class-variance-authority:
       specifier: ^0.7.1
       version: 0.7.1
@@ -243,6 +255,12 @@ catalogs:
     tailwind-merge:
       specifier: ^3.6.0
       version: 3.6.0
+    tailwindcss:
+      specifier: ^4.3.2
+      version: 4.3.2
+    tw-animate-css:
+      specifier: ^1.4.0
+      version: 1.4.0
     typescript:
       specifier: ~7.0.2
       version: 7.0.2
@@ -305,15 +323,6 @@ importers:
       '@effect/sql-sqlite-node':
         specifier: 'catalog:'
         version: 4.0.2(effect@4.0.2)
-      '@fontsource-variable/geist':
-        specifier: ^5.2.9
-        version: 5.2.9
-      '@fontsource-variable/jetbrains-mono':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/zen-maru-gothic':
-        specifier: ^5.2.8
-        version: 5.2.8
       '@pierre/diffs':
         specifier: ^1.4.3
         version: 1.4.3(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -345,7 +354,7 @@ importers:
         specifier: 0.19.0
         version: 0.19.0
       '@xterm/xterm':
-        specifier: 6.0.0
+        specifier: 'catalog:'
         version: 6.0.0
       class-variance-authority:
         specifier: 'catalog:'
@@ -392,9 +401,6 @@ importers:
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.6.0
-      tw-animate-css:
-        specifier: ^1.4.0
-        version: 1.4.0
       ws:
         specifier: ^8.21.3
         version: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -465,9 +471,6 @@ importers:
       react-grab:
         specifier: ^0.1.48
         version: 0.1.48(react@19.2.7)
-      tailwindcss:
-        specifier: ^4.3.2
-        version: 4.3.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -640,9 +643,21 @@ importers:
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.6.0(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@fontsource-variable/geist':
+        specifier: 'catalog:'
+        version: 5.2.9
+      '@fontsource-variable/jetbrains-mono':
+        specifier: 'catalog:'
+        version: 5.3.0
+      '@fontsource/zen-maru-gothic':
+        specifier: 'catalog:'
+        version: 5.2.8
       '@shigomori/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@xterm/xterm':
+        specifier: 'catalog:'
+        version: 6.0.0
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -670,6 +685,12 @@ importers:
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.6.0
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.2
+      tw-animate-css:
+        specifier: 'catalog:'
+        version: 1.4.0
     devDependencies:
       '@effect/tsgo':
         specifier: 'catalog:'

@@ -28,7 +28,7 @@ pre-commit:
             glob: "lint/**"
             run: pnpm run check:lint-rules
           - name: format-all
-            glob: "{.oxfmtrc.json,app/renderer/index.css,package.json}"
+            glob: "{.oxfmtrc.json,packages/ui/src/styles/index.css,package.json}"
             run: pnpm run format:check
           # The proofs the staged files reach: vitest related, plus the
           # proofs' covers lines (app/test/README.md).

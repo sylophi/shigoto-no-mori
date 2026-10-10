@@ -5,10 +5,10 @@
 //   pnpm dmg:background
 //
 // Electron does the painting on purpose: scripts/dmg-background.html
-// links the app's own renderer/doubutsu.css, so the leaf wallpaper, the
-// palette tokens, the sticker and stripe recipes and Zen Maru Gothic in
-// the artwork are the rules the app ships rather than copies that can
-// drift. Re-run this after a doubutsu palette change. `pnpm test dmg-art`
+// links the app's own doubutsu.css (packages/ui/src/styles), so the
+// leaf wallpaper, the palette tokens, the sticker and stripe recipes
+// and Zen Maru Gothic in the artwork are the rules the app ships rather
+// than copies that can drift. Re-run this after a doubutsu palette change. `pnpm test dmg-art`
 // (lefthook pre-commit) fails when the committed art predates one.
 //
 // Window and icon geometry, and the file names, come from

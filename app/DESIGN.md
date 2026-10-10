@@ -11,28 +11,27 @@ The app ships two designs: **doubutsu** (default: Animal Crossing
 overlay, class `doubutsu` on `<html>`, orthogonal to light/dark) and
 **v1** (neutral shadcn-style, the opt-out via Settings → Appearance).
 There is ONE component tree: doubutsu is
-`renderer/doubutsu.css` remapping tokens and hooking stable attributes
-on top of the v1 base. Keep it that way; never fork a component per
-theme. Components are still written in v1's vocabulary (tokens,
-borders, shadows), and the overlay handles translation, so build in v1
-terms and verify in both.
+`packages/ui/src/styles/doubutsu.css` remapping tokens and hooking
+stable attributes on top of the v1 base. Keep it that way; never fork a
+component per theme. Components are still written in v1's vocabulary
+(tokens, borders, shadows), and the overlay handles translation, so
+build in v1 terms and verify in both.
 
 Doubutsu comes in palettes, picked per appearance under its switch (a
 light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
-in client config, the catalog in `shared/themes.ts`). The pick lands
-as `data-palette` on `<html>`:
-`renderer/doubutsu.css` carries the defaults (cream, charcoal) and
-`renderer/palettes.css` the rest, each remapping the surface tokens
-and its accent: `--primary` and `--ring` (switches, the loud button)
-and the emerald steps, so the online dots, the device tiles and every
-other positive status wear the palette's hue. A rule in doubutsu.css
-reaches every color through a token, never a literal, so a palette can
-move it. Settings paints its swatches with the same blocks
-(`[data-theme-scope]` beside `:root`), so a new palette is one CSS
-block plus a catalog entry. Palettes that differ in a detail (latte's
-greens) can wait as variants: ids of their own behind one swatch,
-left out of the picker and reached only by Ctrl+Alt+Shift+L
-(shared/themes.ts).
+in client config, the catalog in `shared/themes.ts`). The pick lands as
+`data-palette` on `<html>`: `packages/ui/src/styles/doubutsu.css`
+carries the defaults (cream, charcoal) and
+`packages/ui/src/styles/palettes.css` the rest, each remapping the
+surface tokens and its accent: `--primary` and `--ring` (switches, the
+loud button) and the emerald steps, so the online dots, the device tiles
+and every other positive status wear the palette's hue. A rule in
+doubutsu.css reaches every color through a token, never a literal, so a
+palette can move it. Settings paints its swatches with the same blocks
+(`[data-theme-scope]` beside `:root`), so a new palette is one CSS block
+plus a catalog entry. Palettes that differ in a detail (latte's greens)
+can wait as variants: ids of their own behind one swatch, left out of
+the picker and reached only by Ctrl+Alt+Shift+L (shared/themes.ts).
 
 Rules that keep both themes cheap to maintain:
 
@@ -46,9 +45,10 @@ Rules that keep both themes cheap to maintain:
   doubutsu remaps via `--color-*`. A new raw family needs a matching
   remap entry in doubutsu.css.
 - **Interactive primitives carry `data-slot`** (and `data-variant` where
-  variants matter). Text fields use `primitives/input.tsx` / `primitives/textarea.tsx`,
-  chips use `primitives/chip-button.tsx`, few-way toggles use
-  `primitives/segmented-control.tsx`. Don't re-inline their class strings.
+  variants matter). Text fields use `primitives/input.tsx` /
+  `primitives/textarea.tsx`, chips use `primitives/chip-button.tsx`,
+  few-way toggles use `primitives/segmented-control.tsx`. Don't
+  re-inline their class strings.
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
   `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
@@ -80,9 +80,9 @@ Rules that keep both themes cheap to maintain:
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
   muted band).
 - The full dependency list lives in the CONTRACT header of
-  `renderer/doubutsu.css`; `pnpm test theme-contract` (run by lefthook
-  pre-commit) verifies every hook still exists. If it fails, either
-  restore the hook or update the CSS + CONTRACT together.
+  `packages/ui/src/styles/doubutsu.css`; `pnpm test theme-contract` (run
+  by lefthook pre-commit) verifies every hook still exists. If it fails,
+  either restore the hook or update the CSS + CONTRACT together.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball
   all four modes, and a palette or two. In dev builds: Ctrl+T toggles
   light/dark, Ctrl+D toggles doubutsu, Ctrl+P cycles its palette,
@@ -123,12 +123,12 @@ depend on it land in step 6 (`V3.md`).
 
 ## Sizing: one density in the components, the phone's in phone.css
 
-Components are written once, at desktop density. The web client's
-phone layout (`<html data-layout="phone">`) does not get a size per
-call site: `renderer/phone.css` remaps the type and spacing scales
-there, gives the primitives their touch minimums, extends every
-other interactive element's hit area to 44px, and gives hover-only
-buttons a resting fill. Its header explains the layers.
+Components are written once, at desktop density. The web client's phone
+layout (`<html data-layout="phone">`) does not get a size per call site:
+`packages/ui/src/styles/phone.css` remaps the type and spacing scales
+there, gives the primitives their touch minimums, extends every other
+interactive element's hit area to 44px, and gives hover-only buttons a
+resting fill. Its header explains the layers.
 
 Rules that keep that working:
 
@@ -185,26 +185,26 @@ smaller and larger:
 
 ## Devices: one identity, drawn one way
 
-A device is its name and its icon. The icon is one of the closed
-catalog in `packages/contracts/src/deviceIcon.ts`: seven device shapes (laptop,
+A device is its name and its icon. The icon is one of the closed catalog
+in `packages/contracts/src/deviceIcon.ts`: seven device shapes (laptop,
 desktop, mini, server, phone, tablet, browser) and a set of marks that
 are only ever picked (a leaf, a cat, a rocket), for telling two laptops
-apart. The device detects its own shape at
-enrollment (`main/core/account/defaultDeviceIcon.ts` on a machine,
+apart. The device detects its own shape at enrollment
+(`main/core/account/defaultDeviceIcon.ts` on a machine,
 `web/account/deviceIcon.ts` in a browser), and its owner can pick
 another. The hub keeps both the name and the icon, so either can be
-changed on the device's row of any device's account page, online or
-not, and every device draws every other one the same way. The device
-itself takes its own from the hub on each registry read
-(`syncHubDevice` in `shared/account/enroll.ts`).
+changed on the device's row of any device's account page, online or not,
+and every device draws every other one the same way. The device itself
+takes its own from the hub on each registry read (`syncHubDevice` in
+`shared/account/enroll.ts`).
 
 Rules that keep a machine looking like itself everywhere:
 
 - **Every mark for a device goes through `shared/DeviceGlyphView.tsx`.**
-  `DeviceGlyphView` is the bare glyph, `DeviceLeadView` the connection dot and
-  glyph that leads a name, `DeviceMarkView` the glyph on a tile in the
-  device's connection tone. Never a lucide laptop or monitor picked at
-  a call site, and never a mark derived from the name.
+  `DeviceGlyphView` is the bare glyph, `DeviceLeadView` the connection
+  dot and glyph that leads a name, `DeviceMarkView` the glyph on a tile
+  in the device's connection tone. Never a lucide laptop or monitor
+  picked at a call site, and never a mark derived from the name.
 - **The icon comes off the device record**, never guessed: a
   `RemoteDevice` and a `DeviceRosterEntry` carry `icon`, this device's
   comes from `useLocalDeviceIcon`, and `useDeviceIcon(deviceId)`
