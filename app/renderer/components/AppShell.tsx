@@ -41,7 +41,7 @@ import {
 import { MIGRATION_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { useMigration } from "@/hooks/useMigration";
-import { migrationRunning } from "@shigomori/contracts/schemas/migration";
+import { migrationShows } from "@shigomori/contracts/schemas/migration";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -74,9 +74,10 @@ export function AppShell() {
       }),
     [navigate],
   );
-  // The v3 migration's page while it runs, whatever the window showed.
+  // The v3 migration's page until the app opens past it, whatever the
+  // window showed.
   const migration = useMigration();
-  const migrating = migration !== null && migrationRunning(migration);
+  const migrating = migration != null && migrationShows(migration);
   useEffect(() => {
     if (migrating && pathname !== MIGRATION_PATH) {
       void navigate({ to: MIGRATION_PATH, replace: true });

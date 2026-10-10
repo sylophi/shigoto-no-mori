@@ -7,7 +7,7 @@
 // window focused last, or a new one if none is open. At a quit each
 // window's route and bounds are remembered (windows.json in userData)
 // and the next start opens them again, one window on the home route
-// when there is nothing to bring back. While the host runs the v3
+// when there is nothing to bring back. Until the app opens past the v3
 // migration, a window opened meanwhile shows its page in place of the
 // app. The app quits with its last window
 // (main/index.ts).
@@ -306,8 +306,8 @@ function showCrashGiveUpDialog(): void {
   );
 }
 
-// The host began or ended the v3 migration: a window opened meanwhile
-// shows its page. Open ones follow it themselves (AppShell).
+// Whether the v3 migration's page shows: a window opened meanwhile
+// opens on it. Open ones follow it themselves (AppShell).
 export function noteMigrating(on: boolean): void {
   migrating = on;
 }

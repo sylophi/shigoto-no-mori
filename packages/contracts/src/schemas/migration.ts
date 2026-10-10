@@ -41,11 +41,9 @@ export const MigrationSchema = Schema.Struct({
 });
 export type MigrationProgress = typeof MigrationSchema.Type;
 
-// Whether a migration is under way: planned, owing a step, and one of
-// them not ended yet.
-export const migrationRunning = (migration: MigrationProgress): boolean =>
+// Whether a migration has a page to show: this start owes steps. The
+// page shows it until it opens the app, every step done, or a person
+// continues past one.
+export const migrationShows = (migration: MigrationProgress): boolean =>
   migration.planned &&
-  [migration.import, migration.worktrees].some(
-    (step) =>
-      step !== null && (step.state === "waiting" || step.state === "running"),
-  );
+  (migration.import !== null || migration.worktrees !== null);

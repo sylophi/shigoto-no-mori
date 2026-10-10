@@ -1460,6 +1460,7 @@ const downloadingUpdates = new Set<string>();
 // ?migration=waiting|moving|stuck|done: the v3 migration in that state
 // (stepsFixtures.ts), for its page (?to=/migration). Without it there is
 // nothing to migrate.
+let migrationContinued = false;
 function posedMigration(): MigrationProgress {
   const pose = new URLSearchParams(location.search).get("migration");
   return pose !== null && pose in MIGRATION_POSES
@@ -1833,7 +1834,10 @@ export function installFakeHostBridge(
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
-    "migration:read": () => posedMigration(),
+    "migration:read": () => (migrationContinued ? null : posedMigration()),
+    "migration:continue": () => {
+      migrationContinued = true;
+    },
     "account:enroll": async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));
       keyDue = false;

@@ -719,6 +719,20 @@
       "worktrees": null
     }
   },
+  "migration:continue": {},
+  "migration:read": {
+    "success": {
+      "planned": false,
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
+    }
+  },
   "migration:read": {
     "success": {
       "planned": false,
