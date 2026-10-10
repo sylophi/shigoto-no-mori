@@ -1226,7 +1226,9 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
       run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, HostServices>,
     ) =>
     (input: I, ctx: HandlerContext) =>
-      Engine.runAside(otherEngine.runPromise, () => runHost(run(input, ctx)));
+      Engine.runAside(otherEngine.runPromise, async () =>
+        runHost(Effect.provide(run(input, ctx), await otherEngine.context())),
+      );
   // A transfer, the same way, as the effect its stream follows.
   const asOtherTransfer =
     <I, A>(
@@ -1238,8 +1240,10 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     (input: I, ctx: HandlerContext) =>
       Effect.tryPromise({
         try: () =>
-          Engine.runAside(otherEngine.runPromise, () =>
-            runHost(run(input, ctx)),
+          Engine.runAside(otherEngine.runPromise, async () =>
+            runHost(
+              Effect.provide(run(input, ctx), await otherEngine.context()),
+            ),
           ),
         catch: callFailureOf,
       });

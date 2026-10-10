@@ -64,6 +64,7 @@ import {
 } from "@host/mirror/sessions";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import { listWorktrees } from "@host/lib/engineCalls";
 import {
   BLOCK_REASON,
   chooseTarget,
@@ -160,7 +161,7 @@ async function choiceFor(
 // already stands.
 // A transfer done, with how to settle its source.
 type Settle = {
-  readonly shelve: () => Promise<unknown>;
+  readonly shelve: Effect.Effect<unknown, unknown, HostServices>;
   readonly teardown: Effect.Effect<
     { sourceRemoved: boolean; sourceError?: string },
     unknown,
@@ -182,7 +183,7 @@ const settleSource = (
     unknown,
     HostServices
   > = fate === "shelve"
-    ? fromPromise(run.shelve).pipe(Effect.as({ fate, done: true }))
+    ? run.shelve.pipe(Effect.as({ fate, done: true }))
     : run.teardown.pipe(
         Effect.map((result) =>
           result.sourceRemoved
@@ -269,7 +270,7 @@ async function alreadyMirrored(
         session.projectId,
         session.worktreeId,
       )
-    : (await worktreesHandlers.list({ projectId: session.projectId })).find(
+    : (await listWorktrees(session.projectId)).find(
         (worktree) => worktree.id === session.worktreeId,
       );
   if (copy === undefined) {
@@ -400,12 +401,11 @@ export const send = settled<"send">(async (input, ctx) => {
   return {
     moved: { ...sent, device, copySide: "remote" },
     settle: {
-      shelve: async () =>
-        worktreesHandlers.setShelved({
-          projectId: project.id,
-          worktreeId: worktree.id,
-          shelved: true,
-        }),
+      shelve: worktreesHandlers.setShelved({
+        projectId: project.id,
+        worktreeId: worktree.id,
+        shelved: true,
+      }),
       teardown: syncHandlers.teardownSource(
         {
           direction: "send",
@@ -532,12 +532,13 @@ export const bring = settled<"bring">(async (input, ctx) => {
   return {
     moved: { ...pulled, device: found.device, copySide: "local" },
     settle: {
-      shelve: () =>
+      shelve: fromPromise(() =>
         peerWorktreesApiFor(found.device.deviceId).setShelved({
           projectId: found.projectId,
           worktreeId: found.worktree.id,
           shelved: true,
         }),
+      ),
       teardown: syncHandlers.teardownSource(sourceRef, ctx),
     },
   };

@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -33,6 +34,7 @@ import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
 import * as Views from "../../host/lib/views.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/ports.ts";
+import { sandboxEngine } from "./sandboxEngine.mts";
 import * as Villagers from "../../host/lib/villagers.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
@@ -127,9 +129,15 @@ const runtime = ManagedRuntime.make(
 
 export type Services = ManagedRuntime.ManagedRuntime.Services<typeof runtime>;
 
-export const hostContext = () => runtime.context();
-export const runHost = <A, E>(effect: Effect.Effect<A, E, Services>) =>
-  runtime.runPromise(effect);
+// With the sandbox's engine in place of this file's, once a proof has
+// brought one up (sandboxEngine.mts).
+export const hostContext = async () => {
+  const context = await runtime.context();
+  const sandbox = sandboxEngine();
+  return sandbox === undefined ? context : Context.merge(context, sandbox);
+};
+export const runHost = async <A, E>(effect: Effect.Effect<A, E, Services>) =>
+  Effect.runPromiseWith(await hostContext())(effect);
 
 beforeAll(() => runtime.context());
 afterAll(async () => {

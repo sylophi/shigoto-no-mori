@@ -10,11 +10,7 @@ import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type {
-  Project,
-  Worktree,
-  WorktreeRemoval,
-} from "@shigomori/contracts/schemas";
+import type { Project, WorktreeRemoval } from "@shigomori/contracts/schemas";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
   commitStaged,
@@ -68,18 +64,16 @@ import {
   syncWithPrimary,
 } from "@host/lib/git/sync";
 import {
-  describeWorktree,
-  findWorktreeIdentityOrThrow,
+  findWorktreeIdentity,
   listCommits,
-  listWorktreeIdentities,
   listWorktrees,
   readBranchHistory,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
 import {
-  findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
-  findWorktreePathOrThrow,
+  findProject,
+  findProjectAndWorktree,
+  findWorktreePath,
 } from "@host/lib/projects";
 import {
   assertWorktreeMutable,
@@ -104,20 +98,8 @@ import {
   stopMirrorsForWorktree,
 } from "@host/mirror/registry";
 import { scriptEventNotifier } from "../scriptRun";
-import {
-  adoptWorktree,
-  createWorktree,
-  deleteStack,
-  deleteWorktree,
-  finishWorktree,
-  idleAgents,
-  moveWorktree,
-  renameWorktree,
-  resumeAgent,
-  setAutoPull,
-  setShelved,
-  unbindAgent,
-} from "@host/lib/engineCalls";
+import * as Ops from "@host/lib/engineOps";
+import type * as Engine from "@host/lib/engine";
 
 // Exported for the sync module's pull orchestration, whose createWorktree
 // call streams the same lifecycle events.
@@ -232,7 +214,7 @@ const refuseRunningWork = Effect.fn("worktrees.refuseRunningWork")(function* (
 
 export const worktreesViews: ViewHandlers<
   typeof worktreesContract,
-  Views.Services
+  Views.Services | Engine.Services
 > = {
   watch: ({ projectId }) =>
     Views.view(
@@ -257,7 +239,7 @@ export const worktreesViews: ViewHandlers<
   watchChangeStatus: (input) =>
     Views.view(
       `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`,
-      async () => listChangesForPage(await findWorktreePathOrThrow(input)),
+      () => atPath(input, listChangesForPage),
       Views.either(
         gitMoved(input.projectId),
         Views.pushed(mirrorContract, "gitChanged", (staged) => {
@@ -273,28 +255,25 @@ export const worktreesHandlers = {
   // an unknown project id with the entity-gone error.
   list: ({ projectId }) => listWorktrees(projectId),
 
-  // Lifecycle mutations route through the bundled CLI so the app and a
-  // terminal run the same engine.
-  create: async (
+  // Lifecycle mutations run the engine a terminal runs.
+  create: (
     { projectId, worktreeName, branchName, base, checkout, cloneFiles },
     ctx,
-  ) => {
-    const project = await findProjectOrThrow(projectId);
-    const input = { worktreeName, branchName, base, checkout, cloneFiles };
-    return createWorktree(project, input, notifierFor(ctx));
-  },
+  ) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.createWorktree(
+        project,
+        { worktreeName, branchName, base, checkout, cloneFiles },
+        notifierFor(ctx),
+      ),
+    ),
 
   // A renderer from before the field sends none and expects the force
   // it always got, so only an explicit false runs unforced.
-  convertExternal: async ({ projectId, worktreeId, force }, ctx) => {
-    const project = await findProjectOrThrow(projectId);
-    return adoptWorktree(
-      project,
-      worktreeId,
-      force !== false,
-      notifierFor(ctx),
-    );
-  },
+  convertExternal: ({ projectId, worktreeId, force }, ctx) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.adoptWorktree(project, worktreeId, force !== false, notifierFor(ctx)),
+    ),
 
   // `sm worktrees move` moves the checkout and carries what is keyed by
   // its path-derived id to the new id. What lives in this process stays
@@ -303,21 +282,20 @@ export const worktreesHandlers = {
   // on the new path.
   relocate: ({ projectId, worktreeId, destinationPath }) =>
     Effect.gen(function* () {
-      const { project, worktree } = yield* fromPromise(() =>
-        findProjectAndWorktreeOrThrow(projectId, worktreeId),
+      const { project, worktree } = yield* findProjectAndWorktree(
+        projectId,
+        worktreeId,
       );
       if (worktree.isPrimary) return yield* new PrimaryRelocateError();
       // Already where it should be: refresh the row.
       if (worktree.path === destinationPath) {
-        return yield* fromPromise(() =>
-          describeWorktree(project.id, worktreeId),
-        );
+        return yield* Ops.describeWorktree(project.id, worktreeId);
       }
       yield* refuseRunningWork(worktree, "move");
       return yield* withDeleteInflight(
         worktreeId,
         "This worktree is already being removed or moved.",
-        fromPromise(() => moveWorktree(project, worktreeId, destinationPath)),
+        Ops.moveWorktree(project, worktreeId, destinationPath),
         (moved) => fromPromise(() => moveMirrorsOfWorktree(worktreeId, moved)),
       );
     }),
@@ -325,19 +303,18 @@ export const worktreesHandlers = {
   // A move to the same parent under a new name, with a move's guards.
   rename: ({ projectId, worktreeId, name }) =>
     Effect.gen(function* () {
-      const { project, worktree } = yield* fromPromise(() =>
-        findProjectAndWorktreeOrThrow(projectId, worktreeId),
+      const { project, worktree } = yield* findProjectAndWorktree(
+        projectId,
+        worktreeId,
       );
       if (worktree.name === name) {
-        return yield* fromPromise(() =>
-          describeWorktree(project.id, worktreeId),
-        );
+        return yield* Ops.describeWorktree(project.id, worktreeId);
       }
       yield* refuseRunningWork(worktree, "rename");
       return yield* withDeleteInflight(
         worktreeId,
         "This worktree is already being removed or moved.",
-        fromPromise(() => renameWorktree(project, worktreeId, name)),
+        Ops.renameWorktree(project, worktreeId, name),
         (renamed) =>
           fromPromise(() => moveMirrorsOfWorktree(worktreeId, renamed)),
       );
@@ -348,7 +325,7 @@ export const worktreesHandlers = {
     ctx,
   ) =>
     Effect.gen(function* () {
-      const project = yield* fromPromise(() => findProjectOrThrow(projectId));
+      const project = yield* findProject(projectId);
       // Local delete kills scripts by design (withDeleteInflight reaps
       // them). The transplant orchestrator refuses instead, since its
       // teardown must never take down work still running on the source
@@ -380,12 +357,10 @@ export const worktreesHandlers = {
       return yield* withDeleteInflight(
         worktreeId,
         busy,
-        fromPromise(() =>
-          deleteWorktree(
-            project,
-            { worktreeId, force, skipCleanup },
-            notifierFor(ctx),
-          ),
+        Ops.deleteWorktree(
+          project,
+          { worktreeId, force, skipCleanup },
+          notifierFor(ctx),
         ),
         (outcome) =>
           outcome.ok
@@ -419,12 +394,10 @@ export const worktreesHandlers = {
   // its scripts reaped and its removal announced once it is gone.
   deleteStack: ({ projectId, worktreeId, force, skipCleanup }, ctx) =>
     Effect.gen(function* () {
-      const project = yield* fromPromise(() => findProjectOrThrow(projectId));
+      const project = yield* findProject(projectId);
       const [identities, prs] = yield* Effect.all(
         [
-          fromPromise(() =>
-            listWorktreeIdentities(projectId, { primaryRef: true }),
-          ),
+          Ops.listWorktreeIdentities({ projectId }, { primaryRef: true }),
           refreshProjectPullRequests(project.path),
         ],
         { concurrency: 2 },
@@ -448,12 +421,10 @@ export const worktreesHandlers = {
       return yield* withDeletesInflight(
         ids,
         busy,
-        fromPromise(() =>
-          deleteStack(
-            project,
-            { worktreeId: cleanup.target.id, force, skipCleanup },
-            notifierFor(ctx),
-          ),
+        Ops.deleteStack(
+          project,
+          { worktreeId: cleanup.target.id, force, skipCleanup },
+          notifierFor(ctx),
         ),
         (outcome) =>
           fromPromise(() =>
@@ -486,7 +457,7 @@ export const worktreesHandlers = {
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
     mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
-      setShelved(project, worktreeId, shelved),
+      Ops.setShelved(project, worktreeId, shelved),
     ),
 
   // A flag flip only, like setShelved, answered with the refreshed row.
@@ -494,26 +465,24 @@ export const worktreesHandlers = {
   // (main/electron/fetch.ts): the renderer follows a mark with
   // git:refreshProject so the first pull happens right away, through
   // the same path as every later one.
-  setAutoPull: async ({ projectId, worktreeId, autoPull }) =>
-    setAutoPull(await findProjectOrThrow(projectId), worktreeId, autoPull),
-
-  idleAgents: async ({ projectId, worktreeId }) =>
-    idleAgents(await findProjectOrThrow(projectId), worktreeId),
-
-  unbindAgent: async ({ projectId, worktreeId, harness, session }) =>
-    unbindAgent(
-      await findProjectOrThrow(projectId),
-      worktreeId,
-      harness,
-      session,
+  setAutoPull: ({ projectId, worktreeId, autoPull }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.setAutoPull(project, worktreeId, autoPull),
     ),
 
-  resumeAgent: async ({ projectId, worktreeId, harness, session }) =>
-    resumeAgent(
-      await findProjectOrThrow(projectId),
-      worktreeId,
-      harness,
-      session,
+  idleAgents: ({ projectId, worktreeId }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.idleAgents(project, worktreeId),
+    ),
+
+  unbindAgent: ({ projectId, worktreeId, harness, session }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.unbindAgent(project, worktreeId, harness, session),
+    ),
+
+  resumeAgent: ({ projectId, worktreeId, harness, session }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.resumeAgent(project, worktreeId, harness, session),
     ),
 
   renameBranch: (input) =>
@@ -522,104 +491,96 @@ export const worktreesHandlers = {
   checkoutBranch: (input) =>
     mutateAndDescribe(input, (wt) => checkoutBranch(wt.path, input.branch)),
 
-  fileDiff: async (input) =>
-    getFileDiff(
-      await findWorktreePathOrThrow(input),
-      input.paths,
-      input.untracked,
+  fileDiff: (input) =>
+    atPath(input, (path) => getFileDiff(path, input.paths, input.untracked)),
+
+  readFile: ({ path, ...input }) =>
+    atPath(input, (root) => readWorktreeFile(root, path)),
+
+  changeStatus: (input) => atPath(input, listChangesForPage),
+
+  setStaged: (input) =>
+    atPath(input, (path) => setStaged(path, input.paths, input.staged)),
+
+  fileHunks: (input) =>
+    atPath(input, (path) => readHunkStates(path, input.path)),
+  setHunksStaged: (input) =>
+    atPath(input, (path) =>
+      setHunksStaged(path, input.path, input.changes, input.staged),
+    ),
+  discardHunks: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
+      discardHunks(wt.path, input.path, input.changes),
+    ).pipe(
+      Effect.map(({ result, worktree }) => ({ snapshot: result, worktree })),
     ),
 
-  readFile: async ({ path, ...input }) =>
-    readWorktreeFile(await findWorktreePathOrThrow(input), path),
-
-  changeStatus: async (input) =>
-    listChangesForPage(await findWorktreePathOrThrow(input)),
-
-  setStaged: async (input) =>
-    setStaged(await findWorktreePathOrThrow(input), input.paths, input.staged),
-
-  fileHunks: async (input) =>
-    readHunkStates(await findWorktreePathOrThrow(input), input.path),
-  setHunksStaged: async (input) =>
-    setHunksStaged(
-      await findWorktreePathOrThrow(input),
-      input.path,
-      input.changes,
-      input.staged,
+  commit: (input) =>
+    mutateAndDescribeWith(input, (wt) => commitStaged(wt.path, input)).pipe(
+      Effect.map(({ result, worktree }) => ({ hash: result, worktree })),
     ),
-  discardHunks: async (input) => {
-    const { result: snapshot, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => discardHunks(wt.path, input.path, input.changes),
-    );
-    return { snapshot, worktree };
-  },
 
-  commit: async (input) => {
-    const { result: hash, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => commitStaged(wt.path, input),
-    );
-    return { hash, worktree };
-  },
-
-  discardChanges: async (input) => {
-    const { result: snapshot, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => discardChanges(wt.path, input.paths),
-    );
-    return { snapshot, worktree };
-  },
+  discardChanges: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
+      discardChanges(wt.path, input.paths),
+    ).pipe(
+      Effect.map(({ result, worktree }) => ({ snapshot: result, worktree })),
+    ),
 
   restoreDiscard: (input) =>
     mutateAndDescribe(input, (wt) => restoreDiscard(wt.path, input.snapshot)),
 
-  commitMessage: async (input) =>
-    readCommitMessage(await findWorktreePathOrThrow(input), input.hash),
+  commitMessage: (input) =>
+    atPath(input, (path) => readCommitMessage(path, input.hash)),
 
-  resetSoft: async (input) => {
-    const { result: previousHead, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => resetSoft(wt.path, input.target, input.expectHead),
-    );
-    return { previousHead, worktree };
-  },
+  resetSoft: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
+      resetSoft(wt.path, input.target, input.expectHead),
+    ).pipe(
+      Effect.map(({ result, worktree }) => ({
+        previousHead: result,
+        worktree,
+      })),
+    ),
 
-  commitDiff: async (input) =>
-    getCommitDiff(await findWorktreePathOrThrow(input), input.hash),
+  commitDiff: (input) =>
+    atPath(input, (path) => getCommitDiff(path, input.hash)),
 
-  listCommits: async ({ skip, count, query, from, ...input }) =>
-    listCommits(await findWorktreePathOrThrow(input), {
-      skip,
-      count,
-      query,
-      from,
+  listCommits: ({ skip, count, query, from, ...input }) =>
+    atPath(input, (path) => listCommits(path, { skip, count, query, from })),
+
+  branchHistory: (input) =>
+    Effect.gen(function* () {
+      const identity = yield* findWorktreeIdentity(
+        input.projectId,
+        input.worktreeId,
+        { primaryRef: true },
+      );
+      return yield* fromPromise(() =>
+        readBranchHistory(identity.path, {
+          base: branchBaseOf(identity),
+          count: BRANCH_HISTORY_COUNT,
+        }),
+      );
     }),
 
-  branchHistory: async (input) => {
-    const identity = await findWorktreeIdentityOrThrow(
-      input.projectId,
-      input.worktreeId,
-      { primaryRef: true },
-    );
-    return readBranchHistory(identity.path, {
-      base: branchBaseOf(identity),
-      count: BRANCH_HISTORY_COUNT,
-    });
-  },
-
-  branchDiff: async (input) => {
-    const identity = await findWorktreeIdentityOrThrow(
-      input.projectId,
-      input.worktreeId,
-      { primaryRef: true },
-    );
-    const base = branchBaseOf(identity);
-    if (base === undefined) {
-      throw new Error("This branch has no primary branch to compare with.");
-    }
-    return getMergeBaseDiff(identity.path, base, "HEAD");
-  },
+  branchDiff: (input) =>
+    Effect.gen(function* () {
+      const identity = yield* findWorktreeIdentity(
+        input.projectId,
+        input.worktreeId,
+        { primaryRef: true },
+      );
+      const base = branchBaseOf(identity);
+      if (base === undefined) {
+        return yield* new GitRefusedError({
+          reason: "This branch has no primary branch to compare with.",
+        });
+      }
+      return yield* fromPromise(() =>
+        getMergeBaseDiff(identity.path, base, "HEAD"),
+      );
+    }),
 
   revertCommit: (input) =>
     mutateAndDescribe(input, (wt) => revertCommit(wt.path, input.hash)),
@@ -634,30 +595,36 @@ export const worktreesHandlers = {
       squashIntoParent(wt.path, input.hash, input.expectHead),
     ),
 
-  stashes: async (input) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      input.projectId,
-      input.worktreeId,
-    );
-    return worktree.detached ? [] : listStashes(worktree.path, worktree.branch);
-  },
-  stashDiff: async (input) =>
-    readStashDiff(await findWorktreePathOrThrow(input), input.hash),
+  stashes: (input) =>
+    Effect.gen(function* () {
+      const { worktree } = yield* findProjectAndWorktree(
+        input.projectId,
+        input.worktreeId,
+      );
+      if (worktree.detached) return [];
+      return yield* fromPromise(() =>
+        listStashes(worktree.path, worktree.branch),
+      );
+    }),
+  stashDiff: (input) =>
+    atPath(input, (path) => readStashDiff(path, input.hash)),
   stashChanges: (input) =>
     mutateAndDescribe(input, (wt) => stashChanges(wt.path, input.message)),
   applyStash: (input) =>
     mutateAndDescribe(input, (wt) =>
       applyStash(wt.path, input.hash, input.drop),
     ),
-  dropStash: async (input) =>
-    dropStash(await findWorktreePathOrThrow(input), input.hash),
-  restoreStash: async (input) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      input.projectId,
-      input.worktreeId,
-    );
-    await restoreStash(worktree.path, worktree.branch, input.hash, input);
-  },
+  dropStash: (input) => atPath(input, (path) => dropStash(path, input.hash)),
+  restoreStash: (input) =>
+    Effect.gen(function* () {
+      const { worktree } = yield* findProjectAndWorktree(
+        input.projectId,
+        input.worktreeId,
+      );
+      yield* fromPromise(() =>
+        restoreStash(worktree.path, worktree.branch, input.hash, input),
+      );
+    }),
 
   push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
   pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt.path)),
@@ -672,56 +639,59 @@ export const worktreesHandlers = {
   pullAndPush: (input) =>
     mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPush(wt.path)),
   syncWithPrimary: (input) =>
-    mutateAndDescribe(input, async (target, project) => {
-      const primaryRef = await primaryRefToSync(target, project);
-      await syncWithPrimary(target.path, project.path, primaryRef);
-    }),
-  mergePrimary: async (input) => {
-    const { result, worktree } = await mutateAndDescribeWith(
-      input,
-      async (target, project) =>
-        mergePrimaryKeepingConflicts(
-          target.path,
-          project.path,
-          await primaryRefToSync(target, project),
+    mutateAndDescribe(input, (target, project) =>
+      Effect.flatMap(primaryRefToSync(target, project), (primaryRef) =>
+        fromPromise(() =>
+          syncWithPrimary(target.path, project.path, primaryRef),
         ),
-    );
-    return { worktree, stopped: result };
-  },
+      ),
+    ),
+  mergePrimary: (input) =>
+    mutateAndDescribeWith(input, (target, project) =>
+      Effect.flatMap(primaryRefToSync(target, project), (primaryRef) =>
+        fromPromise(() =>
+          mergePrimaryKeepingConflicts(target.path, project.path, primaryRef),
+        ),
+      ),
+    ).pipe(
+      Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
+    ),
 
-  mergeUpstream: async (input) => {
-    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+  mergeUpstream: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
       mergeUpstreamKeepingConflicts(wt.path),
-    );
-    return { worktree, stopped: result };
-  },
+    ).pipe(
+      Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
+    ),
 
-  operation: async (input) =>
-    readOperation(await findWorktreePathOrThrow(input)),
+  operation: (input) => atPath(input, readOperation),
   resolveConflict: (input) =>
     mutateAndDescribe(input, (wt) =>
       resolveConflict(wt.path, input.path, input.side),
     ),
-  mergePreview: async (input) =>
-    readMergePreview(await findWorktreePathOrThrow(input), input.ref),
-  mergeBranch: async (input) => {
-    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+  mergePreview: (input) =>
+    atPath(input, (path) => readMergePreview(path, input.ref)),
+  mergeBranch: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
       mergeBranch(wt.path, input.ref, input.method, input.message),
-    );
-    return { worktree, stopped: result };
-  },
+    ).pipe(
+      Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
+    ),
   continueOperation: (input) =>
     mutateAndDescribe(input, (wt) => continueOperation(wt.path)),
   abortOperation: (input) =>
     mutateAndDescribe(input, (wt) => abortOperation(wt.path)),
-  switchToPrimaryAndDeleteBranch: async (input) => {
-    const project = await findProjectOrThrow(input.projectId);
-    return finishWorktree(project, input.worktreeId);
-  },
+  switchToPrimaryAndDeleteBranch: (input) =>
+    Effect.flatMap(findProject(input.projectId), (project) =>
+      Ops.finishWorktree(project, input.worktreeId),
+    ),
 } satisfies Handlers<
   typeof worktreesContract,
   HandlerContext,
-  Terminals | GithubCli | ChildProcessSpawner.ChildProcessSpawner
+  | Terminals
+  | GithubCli
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Engine.Services
 >;
 
 // How many of a branch's own commits the Git timeline is handed. A
@@ -737,52 +707,85 @@ function branchBaseOf(identity: WorktreeIdentity): string | undefined {
   return identity.primaryRef;
 }
 
+// A git action the worktree can't take.
+class GitRefusedError extends Schema.TaggedError<GitRefusedError>()(
+  "GitRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 // The ref a sync from primary takes in, refusing the worktrees it has
 // no meaning for.
-async function primaryRefToSync(
+const primaryRefToSync = Effect.fnUntraced(function* (
   target: WorktreeIdentity,
   project: Project,
-): Promise<string> {
+) {
   if (target.isPrimary) {
-    throw new Error("The primary checkout can't be synced from itself");
+    return yield* new GitRefusedError({
+      reason: "The primary checkout can't be synced from itself",
+    });
   }
   if (target.detached) {
-    throw new Error(
-      "Detached worktrees can't be synced with the primary branch",
-    );
+    return yield* new GitRefusedError({
+      reason: "Detached worktrees can't be synced with the primary branch",
+    });
   }
-  const { primaryRef } = await findWorktreeIdentityOrThrow(
-    project.id,
-    target.id,
-    { primaryRef: true },
-  );
+  const { primaryRef } = yield* findWorktreeIdentity(project.id, target.id, {
+    primaryRef: true,
+  });
   if (primaryRef === undefined) {
-    throw new Error(`No primary branch resolves in ${project.path}`);
+    return yield* new GitRefusedError({
+      reason: `No primary branch resolves in ${project.path}`,
+    });
   }
   return primaryRef;
-}
+});
+
+// A git action of the host's, still a Promise, on the worktree's
+// checkout.
+const atPath = <A>(
+  scope: { projectId: string; worktreeId: string },
+  action: (path: string) => Promise<A>,
+) =>
+  Effect.flatMap(findWorktreePath(scope), (path) =>
+    fromPromise(() => action(path)),
+  );
 
 // Worktree mutations (remote syncs, local branch ops, commits) all share
 // the same shape: resolve the worktree, run a git action, return the
 // freshly-described worktree (the CLI's row) so the renderer can
-// replace its cached row in one round trip. The `With` form also hands back what the action
-// produced (a commit hash, a snapshot ref) for the calls that have one.
-async function mutateAndDescribeWith<T>(
+// replace its cached row in one round trip. The `With` form also hands
+// back what the action produced (a commit hash, a snapshot ref) for the
+// calls that have one. The host's git actions are still Promises.
+const mutateAndDescribeWith = <T, E = never, R = never>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
-  action: (target: WorktreeIdentity, project: Project) => Promise<T>,
-): Promise<{ result: T; worktree: Worktree }> {
-  // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
-  );
-  const result = await action(worktree, project);
-  return { result, worktree: await describeWorktree(project.id, worktreeId) };
-}
+  action: (
+    target: WorktreeIdentity,
+    project: Project,
+  ) => Promise<T> | Effect.Effect<T, E, R>,
+) =>
+  Effect.gen(function* () {
+    const { project, worktree } = yield* findProjectAndWorktree(
+      projectId,
+      worktreeId,
+    );
+    const acted = action(worktree, project);
+    const result = yield* Effect.isEffect(acted)
+      ? acted
+      : fromPromise(() => acted);
+    return {
+      result,
+      worktree: yield* Ops.describeWorktree(project.id, worktreeId),
+    };
+  });
 
-async function mutateAndDescribe(
+const mutateAndDescribe = <T, E = never, R = never>(
   scope: { projectId: string; worktreeId: string },
-  action: (target: WorktreeIdentity, project: Project) => Promise<void>,
-): Promise<Worktree> {
-  return (await mutateAndDescribeWith(scope, action)).worktree;
-}
+  action: (
+    target: WorktreeIdentity,
+    project: Project,
+  ) => Promise<T> | Effect.Effect<T, E, R>,
+) => Effect.map(mutateAndDescribeWith(scope, action), (done) => done.worktree);

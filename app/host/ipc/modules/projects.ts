@@ -4,6 +4,7 @@ import { reorderProjects } from "@shared/reorder";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -13,13 +14,13 @@ import { isGitRepo } from "@host/lib/git/core";
 import { createRepo } from "@host/lib/git/init";
 import { listRemoteEntries } from "@host/lib/git/remotes";
 import {
-  findProjectOrThrow,
-  listProjects,
+  addProject,
+  findProject,
+  freshProjects,
   listProjectsWithStatus,
   loadProjects,
-  primaryRefOf,
-  refreshProjects,
-  registerProject,
+  primaryRef,
+  refresh,
   relocateProject,
 } from "@host/lib/projects";
 import {
@@ -36,17 +37,13 @@ import type { HostServices } from "@host/process/services";
 import * as Terrier from "@host/lib/terrier";
 import { fromPromise } from "@host/lib/util/fromPromise";
 import { expandHome } from "@host/lib/util/paths";
-import {
-  projectIcon,
-  removeProject,
-  storeProjectOrder,
-  worktreeDestination,
-} from "@host/lib/engineCalls";
+import type * as Engine from "@host/lib/engine";
+import * as Ops from "@host/lib/engineOps";
 
 // Moves run one at a time: each writes the whole order, so a second
 // drag computed before the first's refresh landed would put the first
 // one's project back.
-let reorderChain: Promise<void> = Promise.resolve();
+const reorders = Semaphore.makeUnsafe(1);
 
 class NotGitRepositoryError extends Schema.TaggedError<NotGitRepositoryError>()(
   "NotGitRepositoryError",
@@ -122,12 +119,12 @@ const register = Effect.fn("projects.register")(function* (
   terrier: boolean | undefined,
 ) {
   if (terrier) yield* Effect.flatMap(Terrier.Terrier, (it) => it.add(path));
-  return yield* fromPromise(() => registerProject(path));
+  return yield* addProject(path);
 });
 
 export const projectsViews: ViewHandlers<
   typeof projectsContract,
-  Views.Services
+  Views.Services | Engine.Services
 > = {
   // The usage log orders the list, and the device config says whether
   // terrier's projects join it. A project's remote is git's, which the
@@ -136,7 +133,7 @@ export const projectsViews: ViewHandlers<
   watch: () =>
     Views.view(
       "projects:watch",
-      listProjectsWithStatus,
+      () => listProjectsWithStatus,
       Views.either(
         Views.wrote(
           "projects",
@@ -151,7 +148,7 @@ export const projectsViews: ViewHandlers<
 };
 
 export const projectsHandlers = {
-  list: () => listProjectsWithStatus(),
+  list: () => listProjectsWithStatus,
 
   add: ({ path: rawPath, terrier }) =>
     Effect.gen(function* () {
@@ -182,9 +179,7 @@ export const projectsHandlers = {
 
   remove: ({ id }) =>
     Effect.gen(function* () {
-      const removed = (yield* fromPromise(listProjects)).find(
-        (p) => p.id === id,
-      );
+      const removed = (yield* freshProjects).find((p) => p.id === id);
       if (!removed) return;
       if (removed.source === "terrier") {
         // The UI disables removal for terrier-sourced projects, so this
@@ -201,7 +196,7 @@ export const projectsHandlers = {
             // Registry drop and per-project state deletion (the icon
             // cache entry included) run in the CLI, same engine as `sm
             // projects remove`.
-            yield* fromPromise(() => removeProject(id));
+            yield* Ops.removeProject(id);
             // A path terrier also registers doesn't leave the sidebar:
             // dropping the registry entry just demotes it to a
             // terrier-sourced project, and when the id carries over
@@ -209,9 +204,7 @@ export const projectsHandlers = {
             // is actually going away. Read from the list the removal
             // left behind, so the answer is the CLI's own, not a guess
             // at its rule.
-            const survived = (yield* fromPromise(refreshProjects)).some(
-              (p) => p.id === id,
-            );
+            const survived = (yield* refresh).some((p) => p.id === id);
             // Reap scripts running in this project's worktrees: once the
             // id is gone the renderer has no UI left to stop them, and
             // the per-worktree delete path (which would normally kill
@@ -229,57 +222,55 @@ export const projectsHandlers = {
   // Over the whole list, terrier-only projects included: the CLI stores
   // the order apart from the registry entries, so any project can hold
   // any place. Each move goes over the list the previous one left (see
-  // reorderChain), and the CLI checks the ids against its own read (one
+  // reorders), and the CLI checks the ids against its own read (one
   // added meanwhile lands last, a stale id is ignored).
-  reorder: ({ draggedId, targetId, position }) => {
-    const run = reorderChain.then(async () => {
+  reorder: ({ draggedId, targetId, position }) =>
+    Effect.gen(function* () {
       const current = loadProjects();
       const next = reorderProjects(current, draggedId, targetId, position);
       if (next === current) return;
-      await storeProjectOrder(next.map((p) => p.id));
-      await refreshProjects();
-    });
-    // The chain outlives a failed move, and the caller still sees it fail.
-    reorderChain = run.catch(() => {});
-    return run;
-  },
+      yield* Ops.storeProjectOrder(next.map((p) => p.id));
+      yield* refresh;
+    }).pipe(reorders.withPermits(1)),
 
   // The primary ref every row is measured against, which the CLI
   // resolves once per project (the configured override first).
-  defaultBranch: async ({ projectId }) =>
-    primaryRefOf(await findProjectOrThrow(projectId)),
+  defaultBranch: ({ projectId }) =>
+    Effect.flatMap(findProject(projectId), primaryRef),
 
-  cloneUrl: async ({ projectId }) => {
-    const project = await findProjectOrThrow(projectId);
-    return pickCloneUrl(await listRemoteEntries(project.path));
-  },
+  cloneUrl: ({ projectId }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => listRemoteEntries(project.path)),
+    ).pipe(Effect.map(pickCloneUrl)),
 
-  listBranches: async ({ projectId }) => {
-    const project = await findProjectOrThrow(projectId);
-    return listBranches(project.path);
-  },
+  listBranches: ({ projectId }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => listBranches(project.path)),
+    ),
 
   // The name the CLI would pick for a new worktree right now.
-  pickWorktreeName: async ({ projectId }) =>
-    (await worktreeDestination(projectId)).name,
+  pickWorktreeName: ({ projectId }) =>
+    Effect.map(Ops.worktreeDestination(projectId), ({ name }) => name),
 
-  worktreeIncludeStatus: async ({ projectId }) => {
-    const project = await findProjectOrThrow(projectId);
-    return readWorktreeIncludeStatus(project.id, project.path);
-  },
+  worktreeIncludeStatus: ({ projectId }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => readWorktreeIncludeStatus(project.id, project.path)),
+    ),
 
-  carryOverListing: async ({ projectId, relative, ruleIgnored }) => {
-    const project = await findProjectOrThrow(projectId);
-    return listCarryOverCandidates(project.id, project.path, relative, {
-      ruleIgnored,
-    });
-  },
+  carryOverListing: ({ projectId, relative, ruleIgnored }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() =>
+        listCarryOverCandidates(project.id, project.path, relative, {
+          ruleIgnored,
+        }),
+      ),
+    ),
 
-  carryOverStats: async ({ projectId, paths }) => {
-    const project = await findProjectOrThrow(projectId);
-    return statCarryOverPaths(project.id, project.path, paths);
-  },
+  carryOverStats: ({ projectId, paths }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => statCarryOverPaths(project.id, project.path, paths)),
+    ),
 
   // The engine resolves icons through its shared cache (Icons.ts).
-  icon: ({ projectId }) => projectIcon(projectId),
+  icon: ({ projectId }) => Ops.projectIcon(projectId),
 } satisfies Handlers<typeof projectsContract, unknown, HostServices>;
