@@ -49,7 +49,7 @@ jobs:
 
       # The runner's own Chrome shoots it.
       - name: Shoot
-        run: pnpm -C marketing build && pnpm -C marketing og
+        run: pnpm -F ./marketing build && pnpm -F ./marketing og
 
       - name: Open a pull request if it changed
         env:
