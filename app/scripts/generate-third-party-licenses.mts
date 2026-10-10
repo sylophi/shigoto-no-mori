@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
@@ -284,6 +285,31 @@ const BUNDLED_DATA = [
         "licensed under Creative Commons Attribution-ShareAlike 4.0 " +
         "International. Changed: turned into kebab-case worktree names. " +
         "Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode",
+    },
+  ]),
+  // The terminal's fallback face for Nerd Font icons
+  // (renderer/fonts/SymbolsNerdFontMono-Regular.woff2), from the
+  // project's NerdFontsSymbolsOnly release, its TTF compressed to woff2.
+  // The glyphs come from icon sets under their own licenses, which the
+  // release's README lists.
+  normalizeEntry([
+    "symbols-nerd-font-mono@3.5.1",
+    {
+      licenses: "MIT AND CC-BY-4.0 AND Apache-2.0 AND OFL-1.1 AND Unlicense",
+      repository: "https://github.com/ryanoasis/nerd-fonts",
+      publisher: "Ryan L McIntyre",
+      licenseText:
+        readFileSync(
+          join(appRoot, "renderer", "fonts", "SymbolsNerdFontMono-LICENSE"),
+          "utf8",
+        ) +
+        "\nThe glyphs come from these icon sets: Codicons and Font Awesome " +
+        "(CC BY 4.0), Material Design Icons (Apache 2.0), Pomicons and " +
+        "Weather Icons (OFL 1.1), Font Logos (Unlicense), and Devicons, " +
+        "Font Awesome Extension, Octicons, Seti UI, Powerline Symbols, " +
+        "Powerline Extra Symbols, Power Symbols IEC and Hack's extra glyphs " +
+        "(MIT). Changed: the TTF compressed to woff2. Details: " +
+        "https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1",
     },
   ]),
   // tmux's launcher icon (renderer/app-icons/tmux.png), its 128px logo
