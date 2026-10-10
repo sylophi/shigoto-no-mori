@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
-import { SettingsPanelView } from "./SettingsPanelView";
-import { HOST_TABS, type HostTab, settingsPanelId } from "./settingsSections";
+import { SettingsPanelView } from "@shigomori/ui/views/settings/SettingsPanelView.tsx";
+import {
+  HOST_TABS,
+  type HostTab,
+  settingsPanelId,
+} from "@shigomori/ui/views/settings/settingsSections.ts";
 
 // What a device shows on each host section.
 export type HostSections = Record<HostTab, ReactNode>;

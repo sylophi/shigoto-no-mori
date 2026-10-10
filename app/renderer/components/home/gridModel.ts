@@ -3,6 +3,7 @@
 // and per project where its tile lands and what its work comes to.
 // Kept apart from the page so the proof can drive it
 // (test/project-grid.mts).
+import type { GroupWork } from "@shigomori/ui/views/home/ProjectGridView.tsx";
 import {
   worktreeLastActivityAt,
   type Project,
@@ -10,30 +11,19 @@ import {
 import {
   buildPaletteEntries,
   projectLead,
-  type PaletteEntry,
 } from "@/components/palette/buildPaletteEntries";
+import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import {
   projectGroupKey,
   type ProjectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
-import {
-  projectListSections,
-  type ProjectSection,
-} from "@/components/sidebar/projectListSections";
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
+import { projectListSections } from "@/components/sidebar/projectListSections";
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-
-// What a tile says about its project's work, off the palette's entries.
-export interface GroupWork {
-  // Where the tile lands (projectLead): the worktree visited last,
-  // else the one worked in last.
-  lead: PaletteEntry | undefined;
-  lastActivity: number;
-  openPullRequests: number;
-}
 
 export interface GridInput {
   // This machine's projects and their listings, positionally aligned,

@@ -4,8 +4,8 @@
 // legend's letter. Faces are the scenes' stand-in (world.ts FACE): the
 // villager data is a download the fixtures don't hold.
 import type { ReactNode } from "react";
-import { SettingsPageView } from "@/components/settings/SettingsFormView";
-import { VISITORS_TAB } from "@/components/settings/settingsSections";
+import { SettingsPageView } from "@shigomori/ui/views/settings/SettingsFormView.tsx";
+import { VISITORS_TAB } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { BirthdayBadgeView } from "@shigomori/ui/views/villagers/BirthdayBadgeView.tsx";
 import {
   BirthdayFaceView,

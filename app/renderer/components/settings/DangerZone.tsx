@@ -9,7 +9,7 @@ import {
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { notifyError } from "@/lib/toast";
-import { DangerZoneView } from "./DangerZoneView";
+import { DangerZoneView } from "@shigomori/ui/views/settings/DangerZoneView.tsx";
 
 export function DangerZone() {
   const queryClient = useQueryClient();

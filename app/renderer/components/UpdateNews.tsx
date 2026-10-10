@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { releaseVersionOf, updatedFrom } from "@shared/releases";
+import {
+  releaseVersionOf,
+  updatedFrom,
+} from "@shigomori/contracts/releaseVersions";
 import { ChangelogDialog } from "@/components/settings/ChangelogDialog";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { toast } from "@/lib/toast";

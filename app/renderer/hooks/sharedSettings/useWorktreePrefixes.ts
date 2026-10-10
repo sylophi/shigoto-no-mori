@@ -3,6 +3,7 @@
 // away the way it does shelved ones, and the grouped ones, which a
 // project's tree and the inbox gather under a header each. Shared settings, so the
 // lists are the same on every device.
+import type { WorktreePrefixList } from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
 import { notifyError } from "@/lib/toast";
 import {
   parseWorktreePrefixes,
@@ -13,8 +14,6 @@ import {
   useSetSharedSetting,
   useSharedStringSetting,
 } from "./useSharedSettings";
-
-export type WorktreePrefixList = "hidden" | "grouped";
 
 const KEYS: Record<WorktreePrefixList, string> = {
   hidden: sharedSettingKeys.hiddenWorktreePrefixes,

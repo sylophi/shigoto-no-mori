@@ -8,14 +8,14 @@
 // keeps drafts out and names GitHub's refusals.
 // Run: pnpm test changelog.
 import assert from "node:assert/strict";
+import { fetchReleases } from "@shared/releases";
 import {
   changelogFor,
   compareVersions,
-  fetchReleases,
   isBetween,
   releaseVersionOf,
   updatedFrom,
-} from "@shared/releases";
+} from "@shigomori/contracts/releaseVersions";
 import type { Release } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 

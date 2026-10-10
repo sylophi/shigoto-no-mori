@@ -4,35 +4,35 @@
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import type { ReactNode } from "react";
 import { ArrowUp } from "lucide-react";
-import { BranchBarView } from "@/components/diff/BranchBarView";
-import type { DiffChangesControls } from "@/components/diff/changesControls";
-import { CommitComposerView } from "@/components/diff/CommitComposerView";
+import { BranchBarView } from "@shigomori/ui/views/diff/BranchBarView.tsx";
+import type { DiffChangesControls } from "@shigomori/ui/views/diff/changesControls.ts";
+import { CommitComposerView } from "@shigomori/ui/views/diff/CommitComposerView.tsx";
 import {
   CommitDetailsView,
   CommitStepsView,
-} from "@/components/diff/CommitDetailsView";
-import { DiffFileIndexView } from "@/components/diff/DiffFileIndexView";
+} from "@shigomori/ui/views/diff/CommitDetailsView.tsx";
+import { DiffFileIndexView } from "@shigomori/ui/views/diff/DiffFileIndexView.tsx";
 import {
   DiffFileRowView,
   DiffFilesSheetView,
   DiffHeaderView,
   DiffPageView,
   DiffPaneView,
-} from "@/components/diff/DiffPageView";
+} from "@shigomori/ui/views/diff/DiffPageView.tsx";
 import {
   BranchDiffSubtitleView,
   CommitBylineView,
   PullRequestDiffSubtitleView,
   PullRequestDiffTitleView,
   WorktreeDiffSubtitleView,
-} from "@/components/diff/DiffTitlesView";
-import { HunkBarView } from "@/components/diff/HunkBarView";
-import { LastCommitStripView } from "@/components/diff/LastCommitStripView";
+} from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
+import { HunkBarView } from "@shigomori/ui/views/diff/HunkBarView.tsx";
+import { LastCommitStripView } from "@shigomori/ui/views/diff/LastCommitStripView.tsx";
 import {
   ChangesFooterView,
   CleanTreeMessageView,
-} from "@/components/diff/WorktreeDiffView";
-import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
+} from "@shigomori/ui/views/diff/WorktreeDiffView.tsx";
+import { SidebarTakeoverView } from "@shigomori/ui/views/sidebar/SidebarTakeoverView.tsx";
 import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";

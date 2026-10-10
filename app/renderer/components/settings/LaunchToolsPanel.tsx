@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { SettingsFormState } from "@/hooks/config/settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
-import { LaunchToolsPanelView } from "./LaunchToolsPanelView";
+import { LaunchToolsPanelView } from "@shigomori/ui/views/settings/LaunchToolsPanelView.tsx";
 
 // The Launch tools tab (LaunchToolsPanelView) over the tools this
 // machine detected.

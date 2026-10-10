@@ -11,7 +11,10 @@ import {
   describeMergeState,
   describeMergeVerdict,
 } from "@shigomori/ui/lib/pullRequest.ts";
-import { titledByPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
+import {
+  titledByPullRequest,
+  worktreeTitle,
+} from "@shigomori/ui/lib/worktreeTitle.ts";
 import {
   summarizeChecks,
   type PullRequest,

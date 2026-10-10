@@ -8,7 +8,7 @@ import {
   IntegrationTogglesView,
   type ToggleProps,
   WorktreeTogglesView,
-} from "./DeviceSettingsSectionsView";
+} from "@shigomori/ui/views/settings/DeviceSettingsSectionsView.tsx";
 
 // The device-managed toggles (DeviceSettingsSectionsView), every query
 // they need through host-scoped hooks, so the same sections answer for

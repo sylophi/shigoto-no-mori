@@ -8,7 +8,7 @@ import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { changeEntries } from "@/lib/patchFiles";
-import { worktreeTitle } from "@/lib/worktreeTitle";
+import { worktreeTitle } from "@shigomori/ui/lib/worktreeTitle.ts";
 import { MirrorConflictsChipView } from "@shigomori/ui/views/worktreeDetail/MirrorConflictsView.tsx";
 import {
   MirrorLineView,

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { isEditableTarget, isRawKeySurface } from "@/lib/dom";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { DARK_THEMES, LIGHT_THEMES } from "@shared/themes";
+import { DARK_THEMES, LIGHT_THEMES } from "@shigomori/ui/lib/themes.ts";
 
 // The swatches' own palettes, leaving hidden variants to their hotkey.
 const DARK_CYCLE = DARK_THEMES.map((option) => option.id);

@@ -12,7 +12,10 @@ import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { useWorktreeEntry } from "../useWorktreeEntry";
-import { type InboxRowProps, InboxRowView } from "./InboxRowView";
+import {
+  type InboxRowProps,
+  InboxRowView,
+} from "@shigomori/ui/views/sidebar/inbox/InboxRowView.tsx";
 
 export function InboxRow({ mirrorWorktreeId, ...props }: InboxRowProps) {
   const { worktree, project, device, mirror } = props;

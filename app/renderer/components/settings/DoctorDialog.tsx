@@ -10,7 +10,7 @@ import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
-import { DoctorDialogView } from "./DoctorDialogView";
+import { DoctorDialogView } from "@shigomori/ui/views/settings/DoctorDialogView.tsx";
 
 // `sm doctor` for the scoped device (DoctorDialogView), run by that
 // machine's own CLI each time the dialog opens.

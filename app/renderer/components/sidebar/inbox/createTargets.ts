@@ -6,10 +6,8 @@ import type { Project } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectGroupOrder } from "../buildSidebarRows";
-import {
-  projectListSections,
-  type ProjectSection,
-} from "../projectListSections";
+import { projectListSections } from "../projectListSections";
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 // Every device's projects, whatever the device filter shows: creating
 // is not browsing. Only the checkouts that can take a create are

@@ -3,7 +3,7 @@
 // mounted under its device's HostScopeProvider.
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shigomori/contracts/schemas";
-import { QuickCreateButtonView } from "./QuickCreateButtonView";
+import { QuickCreateButtonView } from "@shigomori/ui/views/sidebar/QuickCreateButtonView.tsx";
 
 export function QuickCreateButton({
   project,

@@ -2,33 +2,33 @@
 // open, the New worktree list, a page's takeover, a drag, arranging,
 // and the marks a quiet fixture forest has no row for.
 import type { ReactNode } from "react";
-import { ActivityIconView } from "@/components/sidebar/ActivityIconView";
-import { AgentWaitingMarkView } from "@/components/sidebar/AgentWaitingMarkView";
-import { MirrorBadgeView } from "@/components/sidebar/DeviceBadgeView";
-import { DeviceMenuRowView } from "@/components/sidebar/DeviceMenuRowView";
+import { ActivityIconView } from "@shigomori/ui/views/sidebar/ActivityIconView.tsx";
+import { AgentWaitingMarkView } from "@shigomori/ui/views/sidebar/AgentWaitingMarkView.tsx";
+import { MirrorBadgeView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
+import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import {
   CreateMenuListView,
   CreateMenuView,
   CreateTargetItemView,
-} from "@/components/sidebar/inbox/NewWorktreeButtonView";
-import { ProjectDragPreviewView } from "@/components/sidebar/ProjectDragPreviewView";
-import { SidebarFooterView } from "@/components/sidebar/SidebarFooterView";
-import { SidebarHeaderView } from "@/components/sidebar/SidebarHeaderView";
+} from "@shigomori/ui/views/sidebar/inbox/NewWorktreeButtonView.tsx";
+import { ProjectDragPreviewView } from "@shigomori/ui/views/sidebar/ProjectDragPreviewView.tsx";
+import { SidebarFooterView } from "@shigomori/ui/views/sidebar/SidebarFooterView.tsx";
+import { SidebarHeaderView } from "@shigomori/ui/views/sidebar/SidebarHeaderView.tsx";
 import {
   SidebarTakeoverSlotView,
   SidebarTakeoverView,
-} from "@/components/sidebar/SidebarTakeoverView";
+} from "@shigomori/ui/views/sidebar/SidebarTakeoverView.tsx";
 import {
   CheckItemView,
   SortOptionsView,
   WorktreeSortMenuView,
   WorktreeSortSubmenuView,
-} from "@/components/sidebar/SidebarToolbarView";
+} from "@shigomori/ui/views/sidebar/SidebarToolbarView.tsx";
 import {
   WorktreesErrorView,
   WorktreesLoadingView,
-} from "@/components/sidebar/SidebarRowsView";
-import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
+} from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
+import { StatusIndicatorView } from "@shigomori/ui/views/sidebar/StatusIndicatorView.tsx";
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import {
   DropdownMenuItem,

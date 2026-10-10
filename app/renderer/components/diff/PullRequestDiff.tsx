@@ -6,7 +6,7 @@ import { DiffPage } from "./DiffPage";
 import {
   PullRequestDiffSubtitleView,
   PullRequestDiffTitleView,
-} from "./DiffTitlesView";
+} from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 
 export function PullRequestDiff() {

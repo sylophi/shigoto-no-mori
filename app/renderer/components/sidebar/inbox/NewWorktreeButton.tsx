@@ -11,7 +11,7 @@ import {
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { ProjectGroupOrder } from "../buildSidebarRows";
-import { DeviceBadgeView } from "../DeviceBadgeView";
+import { DeviceBadgeView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   useGroupCreator,
   useGroupMembers,
@@ -19,14 +19,15 @@ import {
   type GroupMember,
   type LiveMember,
 } from "../ProjectGroupActions";
-import type { ProjectListRow, ProjectSection } from "../projectListSections";
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { buildCreateSections } from "./createTargets";
 import {
   CreateMenuListView,
   CreateMenuView,
   CreateTargetItemView,
   NewWorktreeButtonView,
-} from "./NewWorktreeButtonView";
+} from "@shigomori/ui/views/sidebar/inbox/NewWorktreeButtonView.tsx";
 
 interface NewWorktreeButtonProps {
   projects: readonly Project[];

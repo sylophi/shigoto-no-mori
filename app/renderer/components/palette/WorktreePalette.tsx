@@ -37,11 +37,18 @@ import {
   rankPalettePages,
   rankPaletteProjects,
 } from "./buildPaletteEntries";
-import { PaletteGroupView, PaletteItemView } from "./PaletteItemView";
-import { PaletteRowContent, type PaletteRow } from "./PaletteRows";
+import {
+  PaletteGroupView,
+  PaletteItemView,
+} from "@shigomori/ui/views/palette/PaletteItemView.tsx";
+import { PaletteRowContent } from "./PaletteRows";
+import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { PaletteVerbs, type GoTo, type PaletteActions } from "./PaletteVerbs";
 import { usePalettePages } from "./usePalettePages";
-import { PaletteDialogView, PickedChipView } from "./WorktreePaletteView";
+import {
+  PaletteDialogView,
+  PickedChipView,
+} from "@shigomori/ui/views/palette/WorktreePaletteView.tsx";
 
 // ⌘K: every worktree on every machine, one fuzzy list, and beside it
 // what the highlighted one offers. ↩ jumps to it, ⌘↩ opens its

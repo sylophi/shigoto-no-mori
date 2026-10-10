@@ -30,7 +30,7 @@ import {
   ProjectGridLayoutView,
   ProjectGridView,
   ProjectTileView,
-} from "@/components/home/ProjectGridView";
+} from "@shigomori/ui/views/home/ProjectGridView.tsx";
 import {
   BranchDeleteDialogView,
   BranchRowView,

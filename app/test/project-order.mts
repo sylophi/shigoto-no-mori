@@ -23,7 +23,7 @@ import {
   buildSidebarRows,
   projectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarRow } from "@/components/sidebar/sidebarRow";
+import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { sortProjects } from "@/lib/sortProjects";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import {

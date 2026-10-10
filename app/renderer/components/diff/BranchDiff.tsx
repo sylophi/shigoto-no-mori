@@ -5,7 +5,7 @@ import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { DiffPage } from "./DiffPage";
-import { BranchDiffSubtitleView } from "./DiffTitlesView";
+import { BranchDiffSubtitleView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 
 // Everything the branch's commits change against where it left the
 // primary branch: what a pull request of it would show, with or without

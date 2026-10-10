@@ -27,7 +27,7 @@ import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { worktreeTitle } from "@/lib/worktreeTitle";
+import { worktreeTitle } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { LandingTarget } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import { useCreatePlan } from "./createPlan";
 import type { PullChoiceState } from "./ignoreChoice";

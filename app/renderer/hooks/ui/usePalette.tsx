@@ -5,7 +5,7 @@ import {
   type DoubutsuPicks,
   type LightTheme,
   resolveDoubutsuPicks,
-} from "@shared/themes";
+} from "@shigomori/ui/lib/themes.ts";
 import { useClientConfig } from "../config/useClientConfig";
 import { usePauseAnimationsOnBattery } from "./usePauseAnimationsOnBattery";
 import { readStored, writeStored } from "@/lib/localStorage";

@@ -16,9 +16,9 @@ import {
   rowSizeHint,
   type SidebarRow,
   type SidebarViewModel,
-} from "./sidebarRow";
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
-import { SidebarListView } from "./SidebarRowsView";
+import { SidebarListView } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 
 interface SidebarListProps {

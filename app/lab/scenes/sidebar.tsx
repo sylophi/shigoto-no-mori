@@ -6,27 +6,27 @@
 import { buildGrid } from "@/components/home/gridModel";
 import type { ReactNode } from "react";
 import type { SidebarView } from "@shigomori/contracts/schemas";
-import { AddProjectButtonView } from "@/components/sidebar/AddProjectButtonView";
+import { AddProjectButtonView } from "@shigomori/ui/views/sidebar/AddProjectButtonView.tsx";
 import {
   buildSidebarRows,
   projectGroupKey,
   projectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
-import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
+import { DeviceBadgeClusterView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   ALL_DEVICES,
   DeviceFilterBarView,
-} from "@/components/sidebar/DeviceFilterBarView";
-import { FoldHeaderView } from "@/components/sidebar/FoldHeaderView";
+} from "@shigomori/ui/views/sidebar/DeviceFilterBarView.tsx";
+import { FoldHeaderView } from "@shigomori/ui/views/sidebar/FoldHeaderView.tsx";
 import { buildInboxRows } from "@/components/sidebar/inbox/buildInboxRows";
-import { InboxRowView } from "@/components/sidebar/inbox/InboxRowView";
-import { NewWorktreeButtonView } from "@/components/sidebar/inbox/NewWorktreeButtonView";
-import { ProjectActionsView } from "@/components/sidebar/ProjectActionsView";
-import { ProjectHeaderView } from "@/components/sidebar/ProjectHeaderView";
-import { ProjectRowView } from "@/components/sidebar/ProjectRowView";
-import { QuickCreateButtonView } from "@/components/sidebar/QuickCreateButtonView";
-import { ShelfRowView } from "@/components/sidebar/ShelfRowView";
+import { InboxRowView } from "@shigomori/ui/views/sidebar/inbox/InboxRowView.tsx";
+import { NewWorktreeButtonView } from "@shigomori/ui/views/sidebar/inbox/NewWorktreeButtonView.tsx";
+import { ProjectActionsView } from "@shigomori/ui/views/sidebar/ProjectActionsView.tsx";
+import { ProjectHeaderView } from "@shigomori/ui/views/sidebar/ProjectHeaderView.tsx";
+import { ProjectRowView } from "@shigomori/ui/views/sidebar/ProjectRowView.tsx";
+import { QuickCreateButtonView } from "@shigomori/ui/views/sidebar/QuickCreateButtonView.tsx";
+import { ShelfRowView } from "@shigomori/ui/views/sidebar/ShelfRowView.tsx";
 import {
   ForestSlotView,
   InboxCreateRowView,
@@ -35,28 +35,28 @@ import {
   SidebarEmptyStateView,
   SidebarScrollerView,
   ViewPaneView,
-} from "@/components/sidebar/SidebarFrameView";
-import { SidebarTakeoverSlotView } from "@/components/sidebar/SidebarTakeoverView";
+} from "@shigomori/ui/views/sidebar/SidebarFrameView.tsx";
+import { SidebarTakeoverSlotView } from "@shigomori/ui/views/sidebar/SidebarTakeoverView.tsx";
 import {
   SidebarFooterView,
   SidebarNavActionsView,
   SidebarViewToggleView,
-} from "@/components/sidebar/SidebarFooterView";
-import { SidebarHeaderView } from "@/components/sidebar/SidebarHeaderView";
+} from "@shigomori/ui/views/sidebar/SidebarFooterView.tsx";
+import { SidebarHeaderView } from "@shigomori/ui/views/sidebar/SidebarHeaderView.tsx";
 import {
   SidebarListView,
   VirtualRowView,
   WorktreesErrorView,
   WorktreesLoadingView,
-} from "@/components/sidebar/SidebarRowsView";
-import type { SidebarRow } from "@/components/sidebar/sidebarRow";
-import { SidebarToolbarView } from "@/components/sidebar/SidebarToolbarView";
-import { ProjectSortMenuView } from "@/components/sidebar/SidebarToolbarView";
-import type { WorktreeEntry } from "@/components/sidebar/useWorktreeEntry";
-import { WorktreeRowView } from "@/components/sidebar/WorktreeRowView";
+} from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
+import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import { SidebarToolbarView } from "@shigomori/ui/views/sidebar/SidebarToolbarView.tsx";
+import { ProjectSortMenuView } from "@shigomori/ui/views/sidebar/SidebarToolbarView.tsx";
+import type { WorktreeEntry } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
+import { WorktreeRowView } from "@shigomori/ui/views/sidebar/WorktreeRowView.tsx";
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
-import type { SidebarMarks } from "@/hooks/config/useSidebarMarks";
+import type { SidebarMarks } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";

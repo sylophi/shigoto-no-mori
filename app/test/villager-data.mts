@@ -51,7 +51,7 @@ import {
 import {
   villageLifeRow,
   villagerDataView,
-} from "@/components/settings/villagerDataView";
+} from "@shigomori/ui/views/settings/villagerDataView.ts";
 import { afterAll, afterEach, beforeAll, it } from "vitest";
 import { waitFor } from "./lib/checkKit.mts";
 

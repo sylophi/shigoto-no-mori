@@ -6,19 +6,19 @@ import {
   FileTreeNoteView,
   FileTreeRowsView,
   FileTreeView,
-} from "@/components/files/FileTreeView";
+} from "@shigomori/ui/views/files/FileTreeView.tsx";
 import {
   CodeFileView,
   FileViewerView,
-} from "@/components/files/FileViewerView";
+} from "@shigomori/ui/views/files/FileViewerView.tsx";
 import {
   FilesHeaderView,
   FilesNoteView,
   FilesPageView,
   FilesTreeSheetView,
   HideIgnoredToggleView,
-} from "@/components/files/WorktreeFilesView";
-import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
+} from "@shigomori/ui/views/files/WorktreeFilesView.tsx";
+import { SidebarTakeoverView } from "@shigomori/ui/views/sidebar/SidebarTakeoverView.tsx";
 import { peerFilesHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { FAKE_TREE, fakeFile } from "../fake-host/filesFixtures";
 import { LOCAL_DEVICE_ID } from "../fake-host/fixtures";

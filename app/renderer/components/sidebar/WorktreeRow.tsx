@@ -3,7 +3,10 @@
 // scoped to the device: the open remote worktree reads as selected
 // like a local one.
 import { useWorktreeEntry } from "./useWorktreeEntry";
-import { type WorktreeRowProps, WorktreeRowView } from "./WorktreeRowView";
+import {
+  type WorktreeRowProps,
+  WorktreeRowView,
+} from "@shigomori/ui/views/sidebar/WorktreeRowView.tsx";
 
 export function WorktreeRow({ mirrorWorktreeId, ...props }: WorktreeRowProps) {
   const entry = useWorktreeEntry(props.worktree, props.device, {

@@ -4,31 +4,29 @@
 // the keys once ⇥ picks the row.
 import type { ReactNode } from "react";
 import { Copy, FileDiff, Folder, GitPullRequest, Settings } from "lucide-react";
-import type {
-  PaletteEntry,
-  PalettePage,
-  PaletteProject,
-} from "@/components/palette/buildPaletteEntries";
+import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import {
   PaletteGroupView,
   PaletteItemView,
-} from "@/components/palette/PaletteItemView";
-import type { PaletteRow } from "@/components/palette/PaletteRows";
+} from "@shigomori/ui/views/palette/PaletteItemView.tsx";
+import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import {
   CreateRowView,
   PageRowView,
   ProjectRowView,
   WorktreeRowView,
-} from "@/components/palette/PaletteRowsView";
+} from "@shigomori/ui/views/palette/PaletteRowsView.tsx";
 import {
   iconOf,
   ScriptVerbView,
   VerbGroupView,
-} from "@/components/palette/PaletteVerbsView";
+} from "@shigomori/ui/views/palette/PaletteVerbsView.tsx";
 import {
   PaletteDialogView,
   PickedChipView,
-} from "@/components/palette/WorktreePaletteView";
+} from "@shigomori/ui/views/palette/WorktreePaletteView.tsx";
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";

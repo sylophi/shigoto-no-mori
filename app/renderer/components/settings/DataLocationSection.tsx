@@ -5,7 +5,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import { notifyError, toast } from "@/lib/toast";
-import { DataLocationSectionView } from "./DataLocationSectionView";
+import { DataLocationSectionView } from "@shigomori/ui/views/settings/DataLocationSectionView.tsx";
 
 // Where the shigomori data dir lives (DataLocationSectionView), and
 // the move that relaunches the app holding it.

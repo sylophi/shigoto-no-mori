@@ -16,10 +16,10 @@ import { strict } from "./strict.ts";
 const ThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export type Theme = typeof ThemeSchema.Type;
 
-// The doubutsu palettes, one list per appearance. In
-// packages/ui/src/styles, doubutsu.css carries the defaults (cream,
-// charcoal) and palettes.css the rest. The catalog in shared/themes.ts names them and pairs each light
-// over its dark twin.
+// The doubutsu palettes, one list per appearance. In packages/ui/src/styles,
+// doubutsu.css carries the defaults (cream, charcoal) and palettes.css the
+// rest. The catalog in packages/ui/src/lib/themes.ts names them and pairs
+// each light over its dark twin.
 export const LIGHT_THEME_IDS = [
   "snow",
   "meadow",
@@ -463,11 +463,11 @@ export const ClientConfigSchema = Schema.Struct({
   // `false` is the opt-out back to the v1 look. Mirrored to
   // localStorage so startup paints without a flash.
   doubutsu: Schema.optional(Schema.Boolean),
-  // Which doubutsu palette each appearance wears (shared/themes.ts),
-  // picked separately for light and dark the way most apps offer it.
-  // Absent is the default of each list, cream and charcoal. Kept while
-  // doubutsu is off, so switching it back on restores the picks.
-  // Mirrored to localStorage with the switch.
+  // Which doubutsu palette each appearance wears
+  // (packages/ui/src/lib/themes.ts), picked separately for light and dark the
+  // way most apps offer it. Absent is the default of each list, cream and
+  // charcoal. Kept while doubutsu is off, so switching it back on restores
+  // the picks. Mirrored to localStorage with the switch.
   lightTheme: Schema.optional(LightThemeSchema),
   darkTheme: Schema.optional(DarkThemeSchema),
   // Village life: the purely visual villager extras on worktrees named
@@ -617,10 +617,9 @@ export const WriteShigomoriPayloadSchema = Schema.Struct({
 // `worktreeId` (unlike other handlers, which route the id through git's
 // worktree list first). Constrain it to the exact 12-hex shape that
 // `worktreeIdFromPath` produces so a malformed id can't escape the
-// projects/<id>/worktrees/ directory.
-// The derived worktree id (worktreeIdFromPath in the engine's worktreeLayout.ts): the
-// first 12 hex chars of the path's sha256. One schema for every
-// payload that names one.
+// projects/<id>/worktrees/ directory. The derived worktree id
+// (worktreeIdFromPath in the engine's worktreeLayout.ts): the first 12 hex
+// chars of the path's sha256. One schema for every payload that names one.
 export const WorktreeIdSchema = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{12}$/),
 );

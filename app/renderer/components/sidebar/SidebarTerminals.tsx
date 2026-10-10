@@ -7,7 +7,7 @@ import type { DeviceTab } from "@/components/shared/DeviceTabs";
 import {
   SidebarDeviceTerminalsView,
   SidebarTerminalsView,
-} from "./SidebarTerminalsView";
+} from "@shigomori/ui/views/sidebar/SidebarTerminalsView.tsx";
 
 // The folder a terminal started in, as its row names it: its last part.
 const folderName = (cwd: string): string =>

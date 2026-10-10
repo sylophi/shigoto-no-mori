@@ -7,16 +7,16 @@ import { useSidebarMarks } from "@/hooks/config/useSidebarMarks";
 import {
   DeviceBadgeClusterView,
   type SidebarDeviceBadge,
-} from "./DeviceBadgeView";
+} from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import { useLocateProject } from "./LocateProjectPicker";
 import {
   ProjectGroupActions,
   useGroupMembers,
   useIconMember,
 } from "./ProjectGroupActions";
-import { ProjectHeaderView } from "./ProjectHeaderView";
-import { ProjectRowView } from "./ProjectRowView";
-import type { RemoteProjectMember } from "./sidebarRow";
+import { ProjectHeaderView } from "@shigomori/ui/views/sidebar/ProjectHeaderView.tsx";
+import { ProjectRowView } from "@shigomori/ui/views/sidebar/ProjectRowView.tsx";
+import type { RemoteProjectMember } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 interface ProjectRowProps {
   // This machine's checkout, or the first peer's when the repo is on

@@ -1,11 +1,18 @@
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { InboxRow } from "./inbox/InboxRow";
-import { FoldHeaderView } from "./FoldHeaderView";
+import { FoldHeaderView } from "@shigomori/ui/views/sidebar/FoldHeaderView.tsx";
 import { ProjectRow } from "./ProjectRow";
-import { ShelfRowView } from "./ShelfRowView";
+import { ShelfRowView } from "@shigomori/ui/views/sidebar/ShelfRowView.tsx";
 import { WorktreeRow } from "./WorktreeRow";
-import { WorktreesErrorView, WorktreesLoadingView } from "./SidebarRowsView";
-import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
+import {
+  WorktreesErrorView,
+  WorktreesLoadingView,
+} from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
+import type {
+  GroupShelf,
+  InboxShelf,
+  SidebarRow,
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 interface RowContentProps {
   row: SidebarRow;

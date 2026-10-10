@@ -13,10 +13,10 @@ import {
   ACCOUNT_SECTION,
   settingsSections,
   TIDY_SECTION,
-} from "@/components/settings/settingsSections";
+} from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { hasLocalHost } from "@/lib/localHost";
-import type { PalettePage } from "./buildPaletteEntries";
+import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
 // The pages the palette can open: the sidebar footer's (Live, the
 // project grid, a hostless client's Devices), each device's own

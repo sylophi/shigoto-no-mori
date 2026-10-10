@@ -8,7 +8,7 @@ import {
   usePushForceWorktree,
   useSyncMoveMutations,
 } from "@/hooks/worktrees/useWorktreeSync";
-import { worktreeSyncView } from "@/lib/syncState";
+import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";

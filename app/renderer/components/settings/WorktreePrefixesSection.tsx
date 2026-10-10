@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { normalizeWorktreePrefixes } from "@shigomori/contracts/sharedSettings";
 import {
-  type WorktreePrefixList,
   useSaveWorktreePrefixes,
   useWorktreePrefixes,
 } from "@/hooks/sharedSettings/useWorktreePrefixes";
+import type { WorktreePrefixList } from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
 import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettings";
-import { WorktreePrefixesSectionView } from "./WorktreePrefixesSectionView";
+import { WorktreePrefixesSectionView } from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
 
 const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((prefix, i) => prefix === b[i]);

@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
+import { RELEASES_PAGE_URL } from "@shared/releases";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useReleases } from "@/hooks/system/useReleases";
-import { ChangelogDialogView, type StagedUpdate } from "./ChangelogDialogView";
+import {
+  ChangelogDialogView,
+  type StagedUpdate,
+} from "@shigomori/ui/views/settings/ChangelogDialogView.tsx";
 
 // The app's changelog (ChangelogDialogView), read from its GitHub
 // releases.
@@ -26,6 +30,7 @@ export function ChangelogDialog({
           error: releases.error,
           onRetry: () => void releases.refetch(),
         }}
+        releasesPageUrl={RELEASES_PAGE_URL}
         onClose={onClose}
       />
     </ModalShell>

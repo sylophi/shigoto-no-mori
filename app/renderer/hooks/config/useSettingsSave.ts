@@ -10,11 +10,15 @@ import {
   type GlobalConfig,
   type LauncherCommand,
 } from "@shigomori/contracts/schemas";
-import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@shared/themes";
+import {
+  DEFAULT_DARK_THEME,
+  DEFAULT_LIGHT_THEME,
+} from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
-import { fromConfig, type SettingsFormState } from "./settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import { fromConfig } from "./settingsForm";
 
 // A launcher row persists only once both halves are filled in.
 // Half-typed rows live purely in form state. Shared by the encoders so

@@ -16,7 +16,7 @@ import {
   SidebarFooterView,
   SidebarNavActionsView,
   SidebarViewToggleView,
-} from "./SidebarFooterView";
+} from "@shigomori/ui/views/sidebar/SidebarFooterView.tsx";
 
 interface SidebarFooterProps {
   arrangeMode: boolean;

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
 import { rowDeviceId } from "@/lib/routePaths";
 import { usePageOnScreen } from "../openProject";
-import type { SidebarViewModel } from "../sidebarRow";
+import type { SidebarViewModel } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 // The inbox leaves some worktrees out (a primary checkout, unless its
 // project opts in), so a worktree's page opened from outside the

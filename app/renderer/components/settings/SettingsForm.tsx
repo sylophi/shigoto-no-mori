@@ -4,10 +4,8 @@ import {
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
-import {
-  fromConfig,
-  type SettingsFormState,
-} from "@/hooks/config/settingsForm";
+import { fromConfig } from "@/hooks/config/settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
 import {
   pickHostDevice,
   useDeviceRoster,
@@ -31,16 +29,19 @@ import type {
   GlobalConfig,
   Theme,
 } from "@shigomori/contracts/schemas";
-import type { DarkTheme, LightTheme } from "@shared/themes";
+import type { DarkTheme, LightTheme } from "@shigomori/ui/lib/themes.ts";
 import { AppearanceSection } from "./AppearanceSection";
 import { WorktreePrefixesSection } from "./WorktreePrefixesSection";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
-import { NotificationsSectionView } from "./NotificationsSectionView";
+import { NotificationsSectionView } from "@shigomori/ui/views/settings/NotificationsSectionView.tsx";
 import { SidebarSection } from "./SidebarSection";
-import { MountOnceVisited, SettingsPanelView } from "./SettingsPanelView";
+import {
+  MountOnceVisited,
+  SettingsPanelView,
+} from "@shigomori/ui/views/settings/SettingsPanelView.tsx";
 import { landOnStagedUpdate, useActiveSettingsTab } from "./settingsNav";
 import {
   APPEARANCE_TAB,
@@ -51,7 +52,7 @@ import {
   SECTION_LABELS,
   type SettingsTab,
   VISITORS_TAB,
-} from "./settingsSections";
+} from "@shigomori/ui/views/settings/settingsSections.ts";
 import { offersUpdateAll, UpdateAllButton } from "./UpdateAllButton";
 import { VisitorsSection } from "@/components/visitors/VisitorsSection";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
@@ -65,7 +66,7 @@ import {
   NoDevicesView,
   type SettingsHeading,
   SettingsPageView,
-} from "./SettingsFormView";
+} from "@shigomori/ui/views/settings/SettingsFormView.tsx";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this

@@ -1,7 +1,7 @@
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { SettingsForm } from "./SettingsForm";
-import { SettingsLoadingView } from "./SettingsSkeletonView";
+import { SettingsLoadingView } from "@shigomori/ui/views/settings/SettingsSkeletonView.tsx";
 
 // The page picks its sections from the app sidebar, where its layout
 // route (SettingsPages) draws their list. A hostless client has no

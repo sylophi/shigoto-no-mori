@@ -9,7 +9,7 @@
 // is a read, so any member with a session can answer it, including a
 // peer that won't take commands from here: bringing its repo to THIS
 // machine needs nothing of it but the URL.
-import { DeviceMenuRowView } from "./DeviceMenuRowView";
+import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import {
   DropdownMenuItem,
   DropdownMenuSub,

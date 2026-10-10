@@ -1,13 +1,6 @@
+import type { CommitDraft } from "@shigomori/ui/views/diff/CommitComposerView.tsx";
 import { useEffect, useState } from "react";
 import { readStoredJson, removeStored, writeStored } from "@/lib/localStorage";
-
-// The commit message being written for a worktree, persisted so leaving
-// the changes page (to check one more file in the editor, say) doesn't
-// cost it. Keyed per worktree: two branches in flight have two drafts.
-export interface CommitDraft {
-  summary: string;
-  description: string;
-}
 
 export const EMPTY_DRAFT: CommitDraft = { summary: "", description: "" };
 

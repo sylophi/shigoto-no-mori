@@ -5,44 +5,44 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
-import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
+import { SidebarTakeoverView } from "@shigomori/ui/views/sidebar/SidebarTakeoverView.tsx";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
-import { AgentsSectionView } from "@/components/settings/AgentsSectionView";
-import { AppearanceSectionView } from "@/components/settings/AppearanceSectionView";
-import { ChangelogDialogView } from "@/components/settings/ChangelogDialogView";
+import { AgentsSectionView } from "@shigomori/ui/views/settings/AgentsSectionView.tsx";
+import { AppearanceSectionView } from "@shigomori/ui/views/settings/AppearanceSectionView.tsx";
+import { ChangelogDialogView } from "@shigomori/ui/views/settings/ChangelogDialogView.tsx";
 import {
   CliSectionView,
   PeerReadErrorView,
   ShellIntegrationView,
-} from "@/components/settings/CliSectionView";
-import { DangerZoneView } from "@/components/settings/DangerZoneView";
-import { DataLocationSectionView } from "@/components/settings/DataLocationSectionView";
+} from "@shigomori/ui/views/settings/CliSectionView.tsx";
+import { DangerZoneView } from "@shigomori/ui/views/settings/DangerZoneView.tsx";
+import { DataLocationSectionView } from "@shigomori/ui/views/settings/DataLocationSectionView.tsx";
 import {
   IntegrationTogglesView,
   WorktreeTogglesView,
-} from "@/components/settings/DeviceSettingsSectionsView";
-import { DoctorDialogView } from "@/components/settings/DoctorDialogView";
-import { DoctorSectionView } from "@/components/settings/DoctorSectionView";
-import { LaunchToolsPanelView } from "@/components/settings/LaunchToolsPanelView";
-import { NotificationsSectionView } from "@/components/settings/NotificationsSectionView";
+} from "@shigomori/ui/views/settings/DeviceSettingsSectionsView.tsx";
+import { DoctorDialogView } from "@shigomori/ui/views/settings/DoctorDialogView.tsx";
+import { DoctorSectionView } from "@shigomori/ui/views/settings/DoctorSectionView.tsx";
+import { LaunchToolsPanelView } from "@shigomori/ui/views/settings/LaunchToolsPanelView.tsx";
+import { NotificationsSectionView } from "@shigomori/ui/views/settings/NotificationsSectionView.tsx";
 import {
   PeerOfflineNoteView,
   PeerReadOnlyNoteView,
   PeerSettingsLoadingView,
   PeerTogglesView,
   PeerVersionLineView,
-} from "@/components/settings/PeerDeviceSettingsView";
+} from "@shigomori/ui/views/settings/PeerDeviceSettingsView.tsx";
 import {
   ClientVersionSectionView,
   NoDevicesView,
   type SettingsHeading,
   SettingsPageView,
-} from "@/components/settings/SettingsFormView";
+} from "@shigomori/ui/views/settings/SettingsFormView.tsx";
 import {
   SettingsSectionChipsView,
   SettingsSidebarNavView,
-} from "@/components/settings/SettingsNavView";
-import { SettingsPanelView } from "@/components/settings/SettingsPanelView";
+} from "@shigomori/ui/views/settings/SettingsNavView.tsx";
+import { SettingsPanelView } from "@shigomori/ui/views/settings/SettingsPanelView.tsx";
 import {
   ACCOUNT_SECTION,
   APPEARANCE_TAB,
@@ -50,32 +50,30 @@ import {
   settingsPanelId,
   settingsSections,
   TIDY_SECTION,
-} from "@/components/settings/settingsSections";
+} from "@shigomori/ui/views/settings/settingsSections.ts";
 import {
   SettingsLoadingView,
   SettingsSkeletonView,
-} from "@/components/settings/SettingsSkeletonView";
-import { SidebarSectionView } from "@/components/settings/SidebarSectionView";
-import { ThemePickerView } from "@/components/settings/ThemePickerView";
-import { UpdateAllButtonView } from "@/components/settings/UpdateAllButtonView";
-import { UpdaterStatusLineView } from "@/components/settings/UpdaterStatusLineView";
-import { VillageLifeSettingView } from "@/components/settings/VillageLifeSettingView";
-import { VillagerDataControlView } from "@/components/settings/VillagerDataControlView";
+} from "@shigomori/ui/views/settings/SettingsSkeletonView.tsx";
+import { SidebarSectionView } from "@shigomori/ui/views/settings/SidebarSectionView.tsx";
+import { ThemePickerView } from "@shigomori/ui/views/settings/ThemePickerView.tsx";
+import { UpdateAllButtonView } from "@shigomori/ui/views/settings/UpdateAllButtonView.tsx";
+import { UpdaterStatusLineView } from "@shigomori/ui/views/settings/UpdaterStatusLineView.tsx";
+import { VillageLifeSettingView } from "@shigomori/ui/views/settings/VillageLifeSettingView.tsx";
+import { VillagerDataControlView } from "@shigomori/ui/views/settings/VillagerDataControlView.tsx";
 import {
   villageLifeRow,
   villagerDataView,
-} from "@/components/settings/villagerDataView";
+} from "@shigomori/ui/views/settings/villagerDataView.ts";
 import {
   BuildVersionLineView,
   RestartToUpdateButtonView,
   VersionSectionView,
-} from "@/components/settings/VersionSectionView";
-import { WorktreePrefixesSectionView } from "@/components/settings/WorktreePrefixesSectionView";
-import {
-  fromConfig,
-  type SettingsFormState,
-} from "@/hooks/config/settingsForm";
-import { DARK_THEMES, LIGHT_THEMES } from "@shared/themes";
+} from "@shigomori/ui/views/settings/VersionSectionView.tsx";
+import { WorktreePrefixesSectionView } from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
+import { fromConfig } from "@/hooks/config/settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsForm.ts";
+import { DARK_THEMES, LIGHT_THEMES } from "@shigomori/ui/lib/themes.ts";
 import {
   fakeGlobalConfig,
   fakeReleases,
@@ -472,6 +470,7 @@ export function SettingsDialogsScene() {
       </ModalBox>
       <ModalBox className="max-w-2xl">
         <ChangelogDialogView
+          releasesPageUrl="https://github.com/sylophi/shigoto-no-mori/releases"
           installed={VERSION}
           staged={{ version: STAGED.version }}
           restartButton={

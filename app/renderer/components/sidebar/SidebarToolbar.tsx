@@ -18,7 +18,7 @@ import {
   SidebarToolbarView,
   WorktreeSortMenuView,
   WorktreeSortSubmenuView,
-} from "./SidebarToolbarView";
+} from "@shigomori/ui/views/sidebar/SidebarToolbarView.tsx";
 
 interface SidebarToolbarProps {
   // Enter-only: the footer owns "Done arranging", so this never toggles
