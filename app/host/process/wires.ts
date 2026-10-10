@@ -86,14 +86,16 @@ export const deviceLinkLayer = () =>
     registrar: linkRegistrar,
     auth: {
       opens: {
-        admit: (ticket, arrivedAs) => {
-          const deviceId = directTickets.consume(ticket, arrivedAs);
+        check: (ticket, arrivedAs) => {
+          const deviceId = directTickets.check(ticket, arrivedAs);
           const publicKey =
             deviceId === null ? undefined : hubServer.peerKey(deviceId);
           return deviceId === null || publicKey === undefined
             ? null
             : { deviceId, publicKey };
         },
+        spend: (ticket, arrivedAs) => directTickets.consume(ticket, arrivedAs),
+        keyOf: (deviceId) => hubServer.peerKey(deviceId),
         localKey: () => hubServer.localKey(),
       },
       isCommandGranted: acceptsPeerCommands,
@@ -209,8 +211,12 @@ const directPlane = () =>
       new WsWebSocket(url, { perMessageDeflate: url.startsWith("wss:") }),
     dialableKinds: devDialKinds(),
     host: {
-      closeHostPeersNotIn: (online) =>
-        void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online))),
+      // A device the roster dropped loses its links and the tickets it
+      // was handed but has not spent.
+      closeHostPeersNotIn: (online) => {
+        directTickets.keepDevices(online);
+        void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online)));
+      },
       tunnelState: () =>
         Graph.readNow(
           onTunnel((tunnel) => tunnel.status),

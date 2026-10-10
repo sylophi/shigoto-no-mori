@@ -108,11 +108,12 @@ function connect(setup: Setup = {}) {
   const [dialerWire, listenerWire] = pair();
   const listener = sealListener(listenerWire, {
     localKey: listenerKey,
-    // Single use, like the host's ticket store.
+    // Checked, not spent: the host spends a ticket on the hello.
     admit: async (ticket) =>
-      tickets.delete(ticket)
+      tickets.has(ticket)
         ? (setup.rosterDialerKey ?? dialerKey.publicKey)
         : null,
+    opened: () => {},
     refused: (reason) => refusals.push(reason),
   });
   const dialer = sealDialer(dialerWire, {
@@ -194,42 +195,39 @@ it("refuses a dialer that sealed to a key the listener does not hold", async () 
   assert.equal(link.dialerIn.opened(), false);
 });
 
-it("refuses a replayed first frame: its ticket is spent, and a fresh ticket does not open it", async () => {
+it("a replayed first frame draws an answer only the dialer can read: nothing its replayer sends authenticates, and the ticket stays pending", async () => {
   const tickets = new Set(["smpt_good"]);
   const first = connect({ tickets });
   await established(first);
   const recorded = first.dialerWire.wire[0];
   assert.ok(recorded !== undefined);
+  const [attacker, listenerWire] = pair();
+  const listener = sealListener(listenerWire, {
+    localKey: first.listenerKey,
+    admit: async (ticket) =>
+      tickets.has(ticket) ? first.dialerKey.publicKey : null,
+    opened: () => {},
+    refused: () => {},
+  });
+  const listenerIn = inbox(listener);
+  open([attacker, listenerWire]);
+  attacker.send(recorded);
+  await waitFor(() => listenerIn.opened(), "the listener to answer");
+  attacker.send(text("a forged frame"));
+  await waitFor(() => listenerWire.closedWith !== null, "the close");
+  assert.equal(listenerWire.closedWith, CLOSE_HANDSHAKE_FAILED);
+  assert.equal(listenerIn.frames.length, 0);
+  assert.ok(tickets.has("smpt_good"));
+});
 
-  // The same frame on a new socket to the same listener key: the ticket
-  // is single use.
-  const refusals: string[] = [];
-  const replay = (ticketsNow: Set<string>) => {
-    const [attacker, listenerWire] = pair();
-    const listener = sealListener(listenerWire, {
-      localKey: first.listenerKey,
-      admit: async (ticket) =>
-        ticketsNow.delete(ticket) ? first.dialerKey.publicKey : null,
-      refused: (reason) => refusals.push(reason),
-    });
-    const listenerIn = inbox(listener);
-    open([attacker, listenerWire]);
-    attacker.send(recorded);
-    return { attacker, listenerWire, listenerIn };
-  };
-  replay(tickets);
-  await waitFor(() => refusals.length === 1, "the refusal");
-  assert.deepEqual(refusals, ["the ticket was refused"]);
-
-  // Even were the ticket good again, the listener's answer opens only
-  // for the dialer's ephemeral key, which the replayer does not hold:
-  // nothing it can send afterwards authenticates.
-  const second = replay(new Set(["smpt_good"]));
-  await waitFor(() => second.listenerIn.opened(), "the listener to answer");
-  second.attacker.send(text("a forged frame"));
-  await waitFor(() => second.listenerWire.closedWith !== null, "the close");
-  assert.equal(second.listenerWire.closedWith, CLOSE_HANDSHAKE_FAILED);
-  assert.equal(second.listenerIn.frames.length, 0);
+it("closes on a truncated frame", async () => {
+  const link = connect();
+  await established(link);
+  link.dialerWire.tap = (frame) => frame.slice(0, frame.length - 1);
+  link.dialer.send(text("cut short"));
+  await waitFor(() => link.listenerWire.closedWith !== null, "the close");
+  assert.equal(link.listenerWire.closedWith, CLOSE_HANDSHAKE_FAILED);
+  assert.equal(link.listenerIn.frames.length, 0);
 });
 
 it("closes on a tampered frame and on a reordered one", async () => {
