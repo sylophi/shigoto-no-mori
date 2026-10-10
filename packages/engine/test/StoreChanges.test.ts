@@ -94,7 +94,14 @@ it("names the tables another process wrote", () =>
     }),
   ));
 
-it("watches every table but the caches", () =>
+const unwatched = new Set([
+  "icon_cache",
+  "clone_verified",
+  "saved_terminals",
+  "terminal_folder",
+]);
+
+it("watches every table but the caches and the saved terminals", () =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -102,9 +109,7 @@ it("watches every table but the caches", () =>
         readonly name: string;
       }>`SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT IN ('changes', 'effect_sql_migrations') ORDER BY name`;
       assert.deepEqual(
-        tables
-          .map((row) => row.name)
-          .filter((name) => name !== "icon_cache" && name !== "clone_verified"),
+        tables.map((row) => row.name).filter((name) => !unwatched.has(name)),
         [...watchedTables].toSorted(),
       );
     }),

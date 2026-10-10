@@ -27,6 +27,7 @@ import { sharedSettingsContract } from "./modules/sharedSettings.ts";
 import { sharingContract } from "./modules/sharing.ts";
 import { cliContract } from "./modules/cli.ts";
 import { shellContract } from "./modules/shell.ts";
+import { terminalsContract } from "./modules/terminals.ts";
 import { terrierContract } from "./modules/terrier.ts";
 import { shigomoriContract } from "./modules/shigomori.ts";
 import { worktreeDataContract } from "./modules/worktreeData.ts";
@@ -69,6 +70,7 @@ export const allContractModules = [
   sharingContract,
   cliContract,
   shellContract,
+  terminalsContract,
   terrierContract,
   shigomoriContract,
   worktreeDataContract,

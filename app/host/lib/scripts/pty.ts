@@ -46,18 +46,24 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
 }
 
 export interface SpawnOptions {
-  readonly command: string;
+  // What the login shell runs, or null for the shell itself,
+  // interactive (a terminal's).
+  readonly command: string | null;
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly cols: number;
   readonly rows: number;
 }
 
-// How a run is stopped. `wait: false` sends the first SIGTERM and
-// moves on: an update's installer is waiting on the app to exit.
+// How a run is stopped. `wait: false` sends the first signal and
+// moves on: an update's installer is waiting on the app to exit. The
+// first signal is SIGTERM unless `signal` says otherwise: an
+// interactive shell ignores SIGTERM and ends on SIGHUP, as when its
+// terminal window closes.
 export interface Stopping {
   readonly graceMs: number;
   readonly wait: boolean;
+  readonly signal?: NodeJS.Signals;
 }
 
 // What the layer's close stops a run it finds still open with.
@@ -71,6 +77,10 @@ export interface PtyHandle {
   readonly pid: number;
   readonly write: (data: string) => void;
   readonly resize: (cols: number, rows: number) => void;
+  // Stops and restarts reading the PTY, so a program writing faster
+  // than its output is taken blocks, as it would in any terminal.
+  readonly pause: () => void;
+  readonly resume: () => void;
   readonly onData: (listener: (data: string) => void) => void;
   // A read error on the PTY master, other than the EAGAIN and EIO noise
   // of a PTY closing.
@@ -85,10 +95,12 @@ export interface PtyHandle {
 // passwd entry directly. We use a *login* shell (no `-i`) so the user's
 // `.zprofile` / `.bash_profile` runs without zsh's interactive-init code
 // (job control, prompt setup, zle) getting in the way of the command.
+// Given no command (a terminal's), the shell is interactive anyway,
+// since its input is a terminal.
 function resolveShell(): { command: string; args: string[] } {
   const userShell = envSetting("SHELL") || userInfo().shell;
-  if (userShell) return { command: userShell, args: ["-l", "-c"] };
-  return { command: "/bin/sh", args: ["-c"] };
+  if (userShell) return { command: userShell, args: ["-l"] };
+  return { command: "/bin/sh", args: [] };
 }
 
 // Inherited terminal state that would mislead a program in the new
@@ -106,7 +118,7 @@ const STALE_TERMINAL_ENV = new Set([
   "WINDOW",
 ]);
 
-const pty = Effect.fn("Pty.spawn")(function* (
+export const spawn = Effect.fn("Pty.spawn")(function* (
   opts: SpawnOptions,
   stopping: () => Stopping,
 ) {
@@ -143,13 +155,19 @@ const pty = Effect.fn("Pty.spawn")(function* (
   const child = yield* Effect.acquireRelease(
     Effect.try({
       try: (): IPty => {
-        const spawned = spawnPty(shell, [...shellArgs, opts.command], {
-          name: "xterm-256color",
-          cols: opts.cols,
-          rows: opts.rows,
-          cwd: opts.cwd,
-          env,
-        });
+        const spawned = spawnPty(
+          shell,
+          opts.command === null
+            ? shellArgs
+            : [...shellArgs, "-c", opts.command],
+          {
+            name: "xterm-256color",
+            cols: opts.cols,
+            rows: opts.rows,
+            cwd: opts.cwd,
+            env,
+          },
+        );
         // node-pty's type leaves the emitter out (the terminal has one
         // of its own, not node's), so the method onError needs is
         // checked for, not assumed.
@@ -164,17 +182,17 @@ const pty = Effect.fn("Pty.spawn")(function* (
     (spawned) =>
       Effect.gen(function* () {
         if (yield* Deferred.isDone(exited)) return;
-        const { graceMs, wait } = stopping();
+        const { graceMs, wait, signal = "SIGTERM" } = stopping();
         if (!wait) {
-          signalTreeBestEffort(spawned.pid, "SIGTERM");
+          signalTreeBestEffort(spawned.pid, signal);
           return;
         }
-        yield* signalTree(spawned.pid, "SIGTERM");
+        yield* signalTree(spawned.pid, signal);
         if (yield* waitExit(graceMs)) return;
         yield* signalTree(spawned.pid, "SIGKILL");
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] "${opts.command}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
+          `[scripts] "${opts.command ?? shell}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
         );
       }),
   );
@@ -194,6 +212,8 @@ const pty = Effect.fn("Pty.spawn")(function* (
     pid: child.pid,
     write: (data) => child.write(data),
     resize: (cols, rows) => child.resize(cols, rows),
+    pause: () => child.pause(),
+    resume: () => child.resume(),
     onData: (listener) => void child.onData(listener),
     // A read error on the PTY master is rethrown by node-pty unless
     // someone else listens for it, and an uncaught throw here takes the
@@ -236,7 +256,7 @@ const make = Effect.gen(function* () {
     // Read by the release: the stopping the close was given, or the
     // default when the layer closes the run.
     let stopping = DEFAULT_STOPPING;
-    const handle = yield* pty(opts, () => stopping).pipe(
+    const handle = yield* spawn(opts, () => stopping).pipe(
       Scope.provide(run),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.onError(() => Scope.close(run, Exit.void)),

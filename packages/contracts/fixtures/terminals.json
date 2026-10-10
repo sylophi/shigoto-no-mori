@@ -1,0 +1,192 @@
+{
+  "TerminalOwnerSchema": {
+    "accepts": [
+      {
+        "kind": "worktree",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6"
+      },
+      {
+        "kind": "device"
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "worktree",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      },
+      {
+        "kind": "project"
+      },
+      {}
+    ]
+  },
+  "TerminalsSchema": {
+    "accepts": [
+      {
+        "terminals": []
+      },
+      {
+        "terminals": [
+          {
+            "terminalId": "7c1e9a52",
+            "owner": {
+              "kind": "worktree",
+              "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+              "worktreeId": "a1b2c3d4e5f6"
+            },
+            "cwd": "/Users/sam/code/app",
+            "openedAt": 1760000000000
+          }
+        ]
+      }
+    ],
+    "rejects": [{}]
+  },
+  "OpenTerminalPayloadSchema": {
+    "accepts": [
+      {
+        "owner": {
+          "kind": "device"
+        }
+      },
+      {
+        "owner": {
+          "kind": "device"
+        },
+        "size": {
+          "cols": 120,
+          "rows": 40
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "owner": {
+          "kind": "device"
+        },
+        "size": {
+          "cols": 0,
+          "rows": 40
+        }
+      },
+      {
+        "owner": {
+          "kind": "device"
+        },
+        "size": {
+          "cols": 1.5,
+          "rows": 40
+        }
+      },
+      {}
+    ]
+  },
+  "CloseTerminalPayloadSchema": {
+    "accepts": [
+      {
+        "terminalId": "7c1e9a52"
+      }
+    ],
+    "rejects": [
+      {
+        "terminalId": ""
+      }
+    ]
+  },
+  "AttachTerminalPayloadSchema": {
+    "accepts": [
+      {
+        "terminalId": "7c1e9a52"
+      },
+      {
+        "terminalId": "7c1e9a52",
+        "after": 0
+      },
+      {
+        "terminalId": "7c1e9a52",
+        "after": 42
+      }
+    ],
+    "rejects": [
+      {
+        "terminalId": "7c1e9a52",
+        "after": -1
+      },
+      {
+        "terminalId": ""
+      }
+    ]
+  },
+  "TerminalEventSchema": {
+    "accepts": [
+      {
+        "kind": "history",
+        "data": "$ ls\r\n",
+        "seq": 12,
+        "reset": true
+      },
+      {
+        "kind": "output",
+        "data": "\u001b[1mREADME.md\u001b[0m\r\n",
+        "seq": 13
+      },
+      {
+        "kind": "size",
+        "cols": 120,
+        "rows": 40
+      },
+      {
+        "kind": "exit",
+        "code": 0
+      },
+      {
+        "kind": "exit",
+        "code": null
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "output",
+        "data": "x"
+      },
+      {
+        "kind": "output",
+        "data": "x",
+        "seq": -1
+      },
+      {
+        "kind": "bell"
+      }
+    ]
+  },
+  "WriteTerminalPayloadSchema": {
+    "accepts": [
+      {
+        "terminalId": "7c1e9a52",
+        "data": "ls\r"
+      }
+    ],
+    "rejects": [
+      {
+        "terminalId": "7c1e9a52"
+      }
+    ]
+  },
+  "ResizeTerminalPayloadSchema": {
+    "accepts": [
+      {
+        "terminalId": "7c1e9a52",
+        "cols": 80,
+        "rows": 24
+      }
+    ],
+    "rejects": [
+      {
+        "terminalId": "7c1e9a52",
+        "cols": 80,
+        "rows": 0
+      }
+    ]
+  }
+}

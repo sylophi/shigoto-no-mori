@@ -32,6 +32,7 @@ import * as Processes from "../util/processes";
 import { signalPidTree } from "./process";
 import { openRun, type PtyHandle, UNKILLABLE_WAIT_MS } from "./pty";
 import { log } from "@shared/log";
+import { closeMissingTerminals } from "../terminals/Terminals";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
@@ -155,6 +156,27 @@ export interface ScriptEnvValues {
   // What `sm describe` set, "" when unset.
   title: string;
   description: string;
+}
+
+// The SHIGOMORI_* values that say which worktree a process runs in,
+// for a script and a worktree's terminal alike.
+export function worktreeEnv(
+  worktree: ScriptWorktree,
+  project: Pick<Project, "path" | "name">,
+  values: ScriptEnvValues,
+): Record<string, string> {
+  return {
+    [SCRIPT_ENV_KEYS.WORKTREE_PATH]: worktree.path,
+    [SCRIPT_ENV_KEYS.WORKTREE_NAME]: worktree.name,
+    [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: worktree.branch,
+    [SCRIPT_ENV_KEYS.WORKTREE_ID]: worktree.id,
+    [SCRIPT_ENV_KEYS.WORKTREE_TITLE]: values.title,
+    [SCRIPT_ENV_KEYS.WORKTREE_DESCRIPTION]: values.description,
+    [SCRIPT_ENV_KEYS.PROJECT_PATH]: project.path,
+    [SCRIPT_ENV_KEYS.PROJECT_NAME]: project.name,
+    [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: values.projectBranch,
+    [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: values.defaultBranch,
+  };
 }
 
 interface RunArgs {
@@ -423,6 +445,7 @@ export async function withDeletesInflight<T>(
   try {
     await Promise.all(worktreeIds.map(killScriptsForWorktree));
     const result = await run();
+    await closeMissingTerminals();
     await mirrorsAfter(result);
     return result;
   } finally {
@@ -650,16 +673,7 @@ export function startScript(args: RunArgs): string {
     GIT_PAGER: "cat",
     ...(args.scriptEnv && {
       [SCRIPT_ENV_KEYS.SCRIPT_NAME]: runScriptName(args.slot),
-      [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
-      [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
-      [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
-      [SCRIPT_ENV_KEYS.WORKTREE_ID]: args.worktree.id,
-      [SCRIPT_ENV_KEYS.WORKTREE_TITLE]: args.scriptEnv.title,
-      [SCRIPT_ENV_KEYS.WORKTREE_DESCRIPTION]: args.scriptEnv.description,
-      [SCRIPT_ENV_KEYS.PROJECT_PATH]: args.project.path,
-      [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
-      [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.scriptEnv.projectBranch,
-      [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.scriptEnv.defaultBranch,
+      ...worktreeEnv(args.worktree, args.project, args.scriptEnv),
     }),
   };
 
