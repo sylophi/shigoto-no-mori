@@ -9,7 +9,7 @@ import * as Engine from "../engine";
 import * as Ops from "../engineOps";
 
 // The Promise face of the engine's Scripts (engineOps.ts), for the
-// callers not converted yet: goes in step 7's B4b PR (V3.md, the
+// callers not converted yet: goes in step 7's B4c PR (V3.md, the
 // host's Promise adapters).
 const onScripts = <A>(
   f: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<A>,
