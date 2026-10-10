@@ -88,7 +88,8 @@ import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData"
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { registerHostContract } from "@shared/ipc/registerContract";
-import { runHost } from "./lib/adapters.mts";
+import { hostContext, runHost } from "./lib/adapters.mts";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import type { HostServices } from "@host/process/services";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
@@ -160,7 +161,7 @@ const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
 const { addWorktree, projectIdOf } = fixture;
 const loopbackFile = join(dataDir, Loopback.LOOPBACK_FILE);
 
-type View = (input: unknown) => Stream.Stream<unknown, unknown, never>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
 
 // The REAL loopback on `file`, serving the control contract's `handlers`
 // and `transfers`, built on `run`'s engine: this device's, or a second
@@ -188,6 +189,9 @@ async function startLoopback(options: {
   for (const [key, transfer] of Object.entries(options.transfers)) {
     registrar.view(`control:${key}`, transfer);
   }
+  // The proof file's host services, which the handlers and transfers
+  // answer on.
+  const host = await hostContext();
   const scope = Effect.runSync(Scope.make());
   const context = await options.run(
     Layer.buildWithScope(
@@ -198,7 +202,11 @@ async function startLoopback(options: {
         file: () => options.file,
       }).pipe(
         Layer.provide(
-          Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer),
+          Layer.mergeAll(
+            StoreChanges.layer,
+            HostPushes.layer,
+            Views.layer,
+          ).pipe(Layer.provideMerge(Layer.succeedContext(host))),
         ),
       ),
       scope,
@@ -1219,6 +1227,22 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     ) =>
     (input: I, ctx: HandlerContext) =>
       Engine.runAside(otherEngine.runPromise, () => runHost(run(input, ctx)));
+  // A transfer, the same way, as the effect its stream follows.
+  const asOtherTransfer =
+    <I, A>(
+      run: (
+        input: I,
+        ctx: HandlerContext,
+      ) => Effect.Effect<A, unknown, HostServices>,
+    ) =>
+    (input: I, ctx: HandlerContext) =>
+      Effect.tryPromise({
+        try: () =>
+          Engine.runAside(otherEngine.runPromise, () =>
+            runHost(run(input, ctx)),
+          ),
+        catch: callFailureOf,
+      });
   const otherControl = await startLoopback({
     file: join(otherDataDir, Loopback.LOOPBACK_FILE),
     handlers: {
@@ -1228,8 +1252,8 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
       mirrorStop: asOtherEffect(controlHandlers.mirrorStop),
     },
     transfers: {
-      send: followTransfer(asOther(send)),
-      bring: followTransfer(asOther(bring)),
+      send: followTransfer(asOtherTransfer(send)),
+      bring: followTransfer(asOtherTransfer(bring)),
     },
     run: otherEngine.runPromise as <A, E>(
       effect: Effect.Effect<A, E, never>,
