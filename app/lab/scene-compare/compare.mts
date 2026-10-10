@@ -96,10 +96,12 @@ async function serve(checkout: string): Promise<string> {
 }
 
 // The viewer's list, loaded twice: the first load is where Vite finds
-// and bundles the dependencies, and reloads the page once it has.
+// and bundles the dependencies, and reloads the page once it has. On a
+// cold CI runner that takes minutes.
 async function sceneNames(page: Page, origin: string): Promise<string[]> {
-  await page.goto(`${origin}/scenes.html`, { waitUntil: "networkidle" });
-  await page.goto(`${origin}/scenes.html`, { waitUntil: "networkidle" });
+  const warm = { waitUntil: "networkidle", timeout: 300_000 } as const;
+  await page.goto(`${origin}/scenes.html`, warm);
+  await page.goto(`${origin}/scenes.html`, warm);
   return page
     .locator('a[href*="scene="]')
     .evaluateAll((links) =>
