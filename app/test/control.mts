@@ -91,7 +91,7 @@ import { registerHostContract } from "@shared/ipc/registerContract";
 import { hostContext, runHost } from "./lib/adapters.mts";
 import type { HostServices } from "@host/process/services";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import {
   type RuntimeInfo,
   type WorktreeRemoval,
@@ -135,6 +135,7 @@ import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -147,6 +148,7 @@ import {
   cliFailureMessage,
   type CliResult,
   createCliRunner,
+  delay,
   makeTracker,
 } from "./lib/checkKit.mts";
 import { secondEngine } from "./lib/smBinary.mts";
@@ -166,13 +168,16 @@ type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
 // one's.
 async function startLoopback(options: {
   readonly file: string;
-  readonly handlers: Handlers<
+  readonly handlers: EffectHandlers<
     typeof controlContract,
     HandlerContext,
     HostServices
   >;
   readonly transfers: Readonly<Record<string, View>>;
   readonly run: <A, E>(effect: Effect.Effect<A, E, never>) => Promise<A>;
+  // The services held back until `ready`, as the app's root holds them
+  // until its graph is up.
+  readonly late?: boolean;
 }) {
   const registrar = createLinkRegistrar();
   registerHostContract(
@@ -191,14 +196,28 @@ async function startLoopback(options: {
   // answer on.
   const host = await hostContext();
   const scope = Effect.runSync(Scope.make());
+  const handedOver = Deferred.makeUnsafe<Context.Context<HostServices>>();
+  let services: Context.Context<HostServices> | undefined;
+  const ready = () => {
+    if (services !== undefined) {
+      Deferred.doneUnsafe(handedOver, Exit.succeed(services));
+    }
+  };
   const context = await options.run(
     Layer.buildWithScope(
-      Loopback.layer({
-        registrar,
-        deviceId: () => "B",
-        appVersion: "9.9.9",
-        file: () => options.file,
-      }).pipe(
+      Layer.unwrap(
+        Effect.map(Effect.context<HostServices>(), (built) => {
+          services = built;
+          if (options.late !== true) ready();
+          return Loopback.layer({
+            registrar,
+            deviceId: () => "B",
+            appVersion: "9.9.9",
+            file: () => options.file,
+            services: Deferred.await(handedOver),
+          });
+        }),
+      ).pipe(
         Layer.provide(
           Layer.mergeAll(
             StoreChanges.layer,
@@ -211,6 +230,7 @@ async function startLoopback(options: {
     ) as Effect.Effect<Context.Context<Loopback.Loopback>, never, never>,
   );
   return {
+    ready,
     loopback: Context.get(context, Loopback.Loopback),
     stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
   };
@@ -500,33 +520,18 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   engineA = fakeMirrorEngine();
   engineA.state.git = "synced";
   setMirrorImpl(engine.impl);
+  // A's engine is swapped in for the run of each of A's handlers.
   const asA =
-    <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
-    (input: I, ctx: HandlerContext): O => {
-      setMirrorImpl(engineA.impl);
-      let result: O;
-      try {
-        result = run(input, ctx);
-      } catch (error) {
-        setMirrorImpl(engine.impl);
-        throw error;
-      }
-      if (Effect.isEffect(result)) {
-        // An effect runs later: A's engine is swapped in for its run.
-        setMirrorImpl(engine.impl);
-        return Effect.acquireUseRelease(
-          Effect.sync(() => setMirrorImpl(engineA.impl)),
-          () => result as Effect.Effect<unknown, unknown, HostServices>,
-          () => Effect.sync(() => setMirrorImpl(engine.impl)),
-        ) as O;
-      }
-      if (!(result instanceof Promise)) {
-        setMirrorImpl(engine.impl);
-        return result;
-      }
-      return result.finally(() => setMirrorImpl(engine.impl)) as O;
-    };
-  const mirrorOnA: Handlers<
+    <I, A, E, R>(
+      run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, R>,
+    ) =>
+    (input: I, ctx: HandlerContext) =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => setMirrorImpl(engineA.impl)),
+        () => run(input, ctx),
+        () => Effect.sync(() => setMirrorImpl(engine.impl)),
+      );
+  const mirrorOnA: EffectHandlers<
     typeof mirrorContract,
     HandlerContext,
     HostServices
@@ -566,10 +571,11 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
         runtimeContract,
         {
           ...runtimeHandlers,
-          info: () => ({
-            ...runtimeFacts,
-            homedir: homedir(),
-          }),
+          info: () =>
+            Effect.succeed({
+              ...runtimeFacts,
+              homedir: homedir(),
+            }),
         },
       ],
     ],
@@ -641,6 +647,7 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     handlers: controlHandlers,
     transfers: controlTransfers,
     run: runHost,
+    late: true,
   });
   track(control.stop);
 
@@ -664,6 +671,17 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   );
   await refused(["devices"], "app-not-running");
   writeFileSync(loopbackFile, JSON.stringify(published));
+
+  // A call that comes before the services are handed over waits for
+  // them, and is answered once they are.
+  const early = sm("devices");
+  assert.equal(
+    await Promise.race([early.then(() => "answered"), delay(500)]),
+    undefined,
+    "a call before the services was answered",
+  );
+  control.ready();
+  assert.equal((await early).code, 0);
 });
 
 it("devices: names the peers, skips the browser, and reports offline, not-sharing, no-grant and ready for the repo", async () => {
@@ -1231,17 +1249,10 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
   // A handler's effect runs on the second engine.
   const asOther =
     <I, A, E>(
-      run: (
-        input: I,
-        ctx: HandlerContext,
-      ) => Effect.Effect<A, E, HostServices> | Promise<A> | A,
+      run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, HostServices>,
     ) =>
-    (input: I, ctx: HandlerContext) => {
-      const result = run(input, ctx);
-      return Effect.isEffect(result)
-        ? Effect.provide(result, otherContext)
-        : result;
-    };
+    (input: I, ctx: HandlerContext) =>
+      Effect.provide(run(input, ctx), otherContext);
   // A transfer, the same way, as the effect its stream follows.
   const asOtherTransfer =
     <I, A>(

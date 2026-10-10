@@ -62,10 +62,8 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
-import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import * as Tracer from "effect/Tracer";
-import { setTraceContext } from "@host/lib/util/trace";
 import {
   type PeerChannels,
   peerSyncFor,
@@ -770,25 +768,20 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
   );
   // Every span the pull makes, on both devices.
   spans.length = 0;
-  setTraceContext(Context.make(Tracer.Tracer, tracer));
-  try {
-    cleanPull = await runHost(
-      syncHandlers
-        .pullWorktree(
-          {
-            sourceDeviceId: "A",
-            sourceProjectId,
-            sourceWorktreeId: worktreeIdFromPath(worktree2Path),
-            sourceIdentity: identity,
-            branch: "feature2",
-          },
-          pullCtx,
-        )
-        .pipe(Effect.withTracer(tracer)),
-    );
-  } finally {
-    setTraceContext(null);
-  }
+  cleanPull = await runHost(
+    syncHandlers
+      .pullWorktree(
+        {
+          sourceDeviceId: "A",
+          sourceProjectId,
+          sourceWorktreeId: worktreeIdFromPath(worktree2Path),
+          sourceIdentity: identity,
+          branch: "feature2",
+        },
+        pullCtx,
+      )
+      .pipe(Effect.withTracer(tracer)),
+  );
   // One trace: the source's answers, served on A for the link B's pull
   // opened, continue the pull's trace.
   const pull = spans.find((span) => span.name === "Sync.pull");
@@ -1566,7 +1559,9 @@ describe("cancelMove", () => {
     assert.equal(processAlive(pullSetupPid), true);
     const cancelledAt = Date.now();
     assert.deepEqual(
-      await syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
+      await runHost(
+        syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
+      ),
       { cancelled: true },
     );
     await assert.rejects(cancelledPull, /The move was cancelled/);
@@ -1577,7 +1572,9 @@ describe("cancelMove", () => {
     await waitFor(() => !processAlive(pullSetupPid), "the setup script to die");
     await landedNothing("cancel1", wtCancelPath);
     assert.deepEqual(
-      await syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
+      await runHost(
+        syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
+      ),
       { cancelled: false },
       "a move that is over is not cancellable",
     );
@@ -1618,7 +1615,9 @@ describe("cancelMove", () => {
     cancelledSend.catch(() => {});
     const sendSetupPid = await setupStarted();
     assert.deepEqual(
-      await syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),
+      await runHost(
+        syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),
+      ),
       { cancelled: true },
     );
     await assert.rejects(cancelledSend, /The move was cancelled/);

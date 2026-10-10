@@ -4,6 +4,8 @@
 // (main/hostProcess.ts).
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { implSlot } from "@host/lib/util/implSlot";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
 
 export type ShellCalls = {
   // Restarts the app with nobody at it to answer a prompt: after a
@@ -26,6 +28,10 @@ const { set: setShellCalls, get: shellCalls } = implSlot<ShellCalls>(
   "the host called its shell before the shell wired itself in",
 );
 export { setShellCalls, shellCalls };
+
+// A call on the shell, for an effect: its failure as it crosses a wire.
+export const onShell = <A>(call: () => Promise<A>) =>
+  Effect.tryPromise({ try: call, catch: callFailureOf });
 
 // The updater's state as the shell last reported it (session.ts), so a
 // peer's read is answered here without a round trip.
