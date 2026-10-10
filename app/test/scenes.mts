@@ -85,18 +85,12 @@ const views = import.meta.glob<Record<string, unknown>>(
 const PENDING = [
   "AddProjectModal.tsx",
   "addProject/",
-  "configure/",
-  "convertExternal/",
   "diff/",
   "files/",
-  "home/",
   "live/",
-  "manageBranches/",
   "newWorktree/",
   "palette/",
   "scriptConsole/",
-  "tidy/",
-  "worktreeLocation/",
 ];
 
 // An intrinsic element opening (<div, <span ...>), not a type argument
