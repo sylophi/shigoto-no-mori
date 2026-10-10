@@ -53,9 +53,14 @@ const execFileP = promisify(execFile);
 // (.github/workflows/release.yml, setup-bun).
 const BUN_VERSION = "1.4.0";
 
-// Where license-checker starts: the app's production dependencies, and
-// the terminal sm's, which Bun compiles into its binary.
-const NPM_ROOTS = [appRoot, join(repoRoot, "packages", "cli")];
+// Where license-checker starts: the app's production dependencies, the
+// ui package's, which the renderer bundles, and the terminal sm's, which
+// Bun compiles into its binary.
+const NPM_ROOTS = [
+  appRoot,
+  join(repoRoot, "packages", "ui"),
+  join(repoRoot, "packages", "cli"),
+];
 
 // The Go modules whose binaries ship inside the app (the file-sync
 // engine and the darwin helper), each walked for the modules
@@ -288,7 +293,7 @@ const BUNDLED_DATA = [
     },
   ]),
   // The terminal's fallback face for Nerd Font icons
-  // (renderer/fonts/SymbolsNerdFontMono-Regular.woff2), from the
+  // (packages/ui/src/styles/fonts/SymbolsNerdFontMono-Regular.woff2), from the
   // project's NerdFontsSymbolsOnly release, its TTF compressed to woff2.
   // The glyphs come from icon sets under their own licenses, which the
   // release's README lists.
@@ -300,7 +305,15 @@ const BUNDLED_DATA = [
       publisher: "Ryan L McIntyre",
       licenseText:
         readFileSync(
-          join(appRoot, "renderer", "fonts", "SymbolsNerdFontMono-LICENSE"),
+          join(
+            repoRoot,
+            "packages",
+            "ui",
+            "src",
+            "styles",
+            "fonts",
+            "SymbolsNerdFontMono-LICENSE",
+          ),
           "utf8",
         ) +
         "\nThe glyphs come from these icon sets: Codicons and Font Awesome " +

@@ -1,4 +1,4 @@
-/* The app's stylesheet, plus this page: index.css only scans renderer/
+/* The app's stylesheet, plus this page: app.css only scans renderer/
    and web/ for utilities, so the contact sheet's own would drop out. */
-@import "../../renderer/index.css";
+@import "../../renderer/app.css";
 @source "./villagerSheet.tsx";

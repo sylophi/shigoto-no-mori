@@ -7,7 +7,7 @@
   "printWidth": 80,
   "sortPackageJson": false,
   "sortTailwindcss": {
-    "stylesheet": "./app/renderer/index.css"
+    "stylesheet": "./packages/ui/src/styles/index.css"
   },
   "ignorePatterns": [
     "**/node_modules/",

@@ -57,11 +57,11 @@ import {
   forgetDeletedWorktree,
   isOwnDeletePending,
 } from "./hooks/worktrees/useWorktreeMutations";
-import "./index.css";
+import "./app.css";
 
-// Not render blocking, unlike index.css (see fonts.css). A failed fetch
+// Not render blocking, unlike app.css (see fonts.css). A failed fetch
 // leaves the fallback face, which is what text paints in meanwhile.
-import("./fonts.css").catch(() => {});
+import("@shigomori/ui/styles/fonts.css").catch(() => {});
 
 export function bootApp({
   ClerkProvider,

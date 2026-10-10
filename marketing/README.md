@@ -54,7 +54,8 @@ is its own file. That keeps the page inside the strict CSP in
   1200x630.
 - Colors, the flat sticker shadows, and the five wallpapers (`leaf`,
   `apple`, `square`, `flower`, `triangle`, with their drift speeds)
-  come from the app's doubutsu theme (`renderer/doubutsu.css`).
+  come from the app's doubutsu theme
+  (`packages/ui/src/styles/doubutsu.css`).
 - The kanji watermarks (`src/assets/kanji/`) are Zen Maru Gothic Black
   rendered to images and used as masks, so the site doesn't ship the
   1.5 MB Japanese font file.

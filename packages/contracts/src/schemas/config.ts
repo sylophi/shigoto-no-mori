@@ -16,9 +16,9 @@ import { strict } from "./strict.ts";
 const ThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export type Theme = typeof ThemeSchema.Type;
 
-// The doubutsu palettes, one list per appearance. renderer/doubutsu.css
-// carries the defaults (cream, charcoal), renderer/palettes.css the
-// rest. The catalog in shared/themes.ts names them and pairs each light
+// The doubutsu palettes, one list per appearance. In
+// packages/ui/src/styles, doubutsu.css carries the defaults (cream,
+// charcoal) and palettes.css the rest. The catalog in shared/themes.ts names them and pairs each light
 // over its dark twin.
 export const LIGHT_THEME_IDS = [
   "snow",

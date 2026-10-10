@@ -1,6 +1,6 @@
 /* Tokens and patterns come from the app's doubutsu theme
-   (renderer/doubutsu.css): cream layers, one warm brown for text, leaf
-   green for the loud action, flat "sticker" shadows instead of soft
+   (packages/ui/src/styles/doubutsu.css): cream layers, one warm brown
+   for text, leaf green for the loud action, flat "sticker" shadows instead of soft
    ones. Like the app's pages, each band wears its own tint, wallpaper
    and kanji watermark. */
 
