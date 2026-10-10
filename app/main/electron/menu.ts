@@ -17,16 +17,29 @@ import type {
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
+import { openWindow } from "./windows";
 
 // ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
 
-// Sticky entries for the File menu's ⌘1..⌘9. The renderer owns ordering
-// (it ships whatever the visible LauncherRow is showing) so the menu and
-// the row can never disagree. The click handler sends the id (not the
-// index) so the renderer can't drift out of sync with the menu.
-let currentLaunchToolEntries: readonly LaunchToolMenuEntry[] = [];
-let currentLaunchToolsEnabled = false;
+// The File menu's ⌘1..⌘9, each window's own. The renderer owns
+// ordering (it ships whatever its visible LauncherRow is showing) so
+// the menu and the row can never disagree, and the menu shows the
+// focused window's. The click handler sends the id (not the index) so
+// the renderer can't drift out of sync with the menu.
+type LaunchTools = {
+  readonly enabled: boolean;
+  readonly entries: readonly LaunchToolMenuEntry[];
+};
+const NO_LAUNCH_TOOLS: LaunchTools = { enabled: false, entries: [] };
+const launchToolsByWindow = new Map<number, LaunchTools>();
+let focusedWindowId: number | null = null;
+
+function shownLaunchTools(): LaunchTools {
+  return focusedWindowId === null
+    ? NO_LAUNCH_TOOLS
+    : (launchToolsByWindow.get(focusedWindowId) ?? NO_LAUNCH_TOOLS);
+}
 
 function entriesEqual(
   a: readonly LaunchToolMenuEntry[],
@@ -38,27 +51,52 @@ function entriesEqual(
   );
 }
 
+function sameLaunchTools(a: LaunchTools, b: LaunchTools): boolean {
+  return a.enabled === b.enabled && entriesEqual(a.entries, b.entries);
+}
+
+// Rebuilds the menu when what it shows changed.
+function showing(change: () => void): void {
+  const before = shownLaunchTools();
+  change();
+  if (!sameLaunchTools(before, shownLaunchTools())) buildAppMenu();
+}
+
 function setLaunchToolsEnabled(
+  windowId: number,
   enabled: boolean,
   entries?: readonly LaunchToolMenuEntry[],
 ): void {
   // No entries means "just toggle the enabled flag on whatever we last
   // displayed", so unmount cleanups can grey out the shortcuts without
   // erasing them.
-  const nextEntries = entries
-    ? entries.slice(0, MAX_LAUNCH_TOOL_SHORTCUTS)
-    : currentLaunchToolEntries;
-  const unchanged =
-    enabled === currentLaunchToolsEnabled &&
-    entriesEqual(nextEntries, currentLaunchToolEntries);
-  if (unchanged) return;
-  currentLaunchToolsEnabled = enabled;
-  currentLaunchToolEntries = nextEntries;
-  buildAppMenu();
+  const current = launchToolsByWindow.get(windowId) ?? NO_LAUNCH_TOOLS;
+  showing(() =>
+    launchToolsByWindow.set(windowId, {
+      enabled,
+      entries: entries
+        ? entries.slice(0, MAX_LAUNCH_TOOL_SHORTCUTS)
+        : current.entries,
+    }),
+  );
 }
 
 export function installMenuImpl(): void {
   setMenuImpl(setLaunchToolsEnabled);
+}
+
+// The menu follows the focused window's tools.
+export function noteMenuWindowFocused(windowId: number): void {
+  showing(() => {
+    focusedWindowId = windowId;
+  });
+}
+
+export function forgetWindowMenu(windowId: number): void {
+  showing(() => {
+    launchToolsByWindow.delete(windowId);
+    if (focusedWindowId === windowId) focusedWindowId = null;
+  });
 }
 
 // Click handler that broadcasts to the focused window. Electron types
@@ -77,14 +115,15 @@ function clickBroadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 }
 
 function launchToolMenuItems(): MenuItemConstructorOptions[] {
-  if (currentLaunchToolEntries.length === 0) return [];
+  const { enabled, entries } = shownLaunchTools();
+  if (entries.length === 0) return [];
   return [
     { type: "separator" },
-    ...currentLaunchToolEntries.map(
+    ...entries.map(
       (entry, i): MenuItemConstructorOptions => ({
         label: entry.label,
         accelerator: `Cmd+${i + 1}`,
-        enabled: currentLaunchToolsEnabled,
+        enabled,
         click: clickBroadcast(navContract, "launchById", entry.id),
       }),
     ),
@@ -131,8 +170,14 @@ export function buildAppMenu(): void {
       label: "File",
       submenu: [
         {
-          label: "Add project…",
+          label: "New Window",
           accelerator: "Cmd+N",
+          click: () => openWindow("/"),
+        },
+        { type: "separator" },
+        {
+          label: "Add project…",
+          accelerator: "Shift+Cmd+N",
           click: clickBroadcast(navContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),

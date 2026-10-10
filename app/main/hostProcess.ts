@@ -198,9 +198,10 @@ export function noteUpdaterState(state: UpdaterState): void {
   if (child !== null) tell(session().updaterState(state));
 }
 
-// A window here gained or lost focus, kept to tell a host that forks
+// Whether a window here is focused, kept to tell a host that forks
 // later.
 export function noteWindowFocused(focused: boolean): void {
+  if (focused === windowFocused) return;
   windowFocused = focused;
   if (child !== null) tell(session().windowFocused(focused));
 }

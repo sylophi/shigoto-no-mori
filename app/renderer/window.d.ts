@@ -4,7 +4,7 @@
 import type { ClientApi } from "./lib/runtime/Api";
 import type { ElectronBridge } from "../main/preload";
 
-type RendererApi = Omit<ElectronBridge, "requestShellPort"> & {
+type RendererApi = Omit<ElectronBridge, "requestShellPort" | "route"> & {
   readonly deviceId: string;
 } & ClientApi;
 

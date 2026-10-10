@@ -45,6 +45,7 @@ import type {
 } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailFooterView.tsx";
 import { WorktreeDetailView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
 import { TerminalButton } from "./TerminalButton";
+import { NewWindowOption } from "./NewWindowOption";
 import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeLocation } from "./WorktreeLocation";
@@ -267,8 +268,9 @@ export function WorktreeDetailInner({
           actions={footerActions}
           canMutate={granted}
           // The same verbs on either page: Files and the running mirror's
-          // button, then the transfers. Transplant, used far less, is a
-          // row of the footer's Options popover.
+          // button, then the transfers. A new window on the page and
+          // Transplant, used far less, are rows of the footer's Options
+          // popover.
           leading={
             <>
               <FilesButton worktree={worktree} />
@@ -277,7 +279,12 @@ export function WorktreeDetailInner({
               <Transfers part="footer" {...transfers} />
             </>
           }
-          options={<Transfers part="option" {...transfers} />}
+          options={
+            <>
+              <NewWindowOption worktree={worktree} />
+              <Transfers part="option" {...transfers} />
+            </>
+          }
         />
       }
       drawer={<TerminalDrawer worktree={worktree} />}

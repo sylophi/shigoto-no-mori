@@ -1,5 +1,8 @@
 import { navContract } from "@shigomori/contracts/modules/nav";
 import type { Handlers } from "@shigomori/contracts/types";
-import { takeDeepLink } from "../../electron/deepLink";
+import type { HandlerContext } from "@shared/ipc/transport";
+import { takeDeepLink } from "../../electron/windows";
 
-export const navHandlers: Handlers<typeof navContract> = { takeDeepLink };
+export const navHandlers: Handlers<typeof navContract, HandlerContext> = {
+  takeDeepLink: (_, { windowId }) => takeDeepLink(windowId),
+};
