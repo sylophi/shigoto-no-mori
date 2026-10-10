@@ -4,8 +4,8 @@
 import type { ReactNode } from "react";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PageHeaderView } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import type { DiskUsageTotals } from "@/hooks/hygiene/useWorktreeHygiene";
 import { formatBytes } from "@/lib/formatBytes";
 import { TIDY_SORT_OPTIONS, type TidySort } from "./tidyModel";

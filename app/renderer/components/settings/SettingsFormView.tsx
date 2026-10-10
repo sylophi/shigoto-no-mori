@@ -2,8 +2,8 @@
 // (SettingsForm.tsx binds them).
 import type { ReactNode } from "react";
 import { ScrollText } from "lucide-react";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PageHeaderView } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import {

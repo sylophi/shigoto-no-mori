@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 
 // Mounts its children on the first visit and keeps them mounted, so a
 // form and its state survive a look elsewhere, while what is never

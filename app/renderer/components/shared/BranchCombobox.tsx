@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   BranchComboboxView,
   type BranchComboboxProps,
-} from "@/components/shared/BranchComboboxView";
+} from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 

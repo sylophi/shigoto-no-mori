@@ -3,7 +3,7 @@ import { Moon, Sun, SunMoon } from "lucide-react";
 import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import type { Theme } from "@shigomori/contracts/schemas";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [

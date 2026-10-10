@@ -1,4 +1,4 @@
-import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
+import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";

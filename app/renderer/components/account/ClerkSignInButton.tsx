@@ -1,7 +1,7 @@
 import { useAuth, useClerk } from "@clerk/react";
 import { useEnroll } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
-import { SignInButtonView } from "./AccountButtonsView";
+import { SignInButtonView } from "@shigomori/ui/views/account/AccountButtonsView.tsx";
 
 // The shared sign-in affordance, beside ClerkSignOutButton for the
 // same reason: no shell layout ever calls a Clerk hook itself. Mount

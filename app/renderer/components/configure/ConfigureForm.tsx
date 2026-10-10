@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
-import { EditorFooterView } from "@/components/shared/EditorFooterView";
+import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";

@@ -17,10 +17,10 @@ import type {
   CarryOverEntry,
   LauncherCommand,
 } from "@shigomori/contracts/schemas";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInputView";
-import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
+import { CustomLauncherInputView } from "@shigomori/ui/views/shared/CustomLauncherInputView.tsx";
+import { ScriptEnvPopoverView } from "@shigomori/ui/views/shared/ScriptEnvPopoverView.tsx";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import { ScriptFieldView } from "./ScriptFieldView";
 
 export interface ConfigureFormState {

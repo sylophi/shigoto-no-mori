@@ -54,9 +54,9 @@ import {
   rejectingClientTransport,
   type RemoteDevice,
   type RemoteDeviceApi,
-  type RemoteDeviceStatus,
   setRemoteDevices,
 } from "./devices";
+import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 import { createHubClientTransport } from "./hubTransport";
 
 // The account device list lives in the shared react-query entry

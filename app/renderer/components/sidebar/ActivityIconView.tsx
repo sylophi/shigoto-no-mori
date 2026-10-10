@@ -1,5 +1,5 @@
 import { CircleAlert, Rocket, Terminal, Trash2 } from "lucide-react";
-import type { ScriptActivityKind } from "@/store/scriptRuns";
+import type { ScriptActivityKind } from "@shigomori/ui/lib/scriptRun.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 

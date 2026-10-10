@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, Loader2, Search } from "lucide-react";
-import { type BranchEntry } from "@/components/shared/BranchComboboxView";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { type BranchEntry } from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 
 // Switching the worktree's branch, opened from the branch's menu

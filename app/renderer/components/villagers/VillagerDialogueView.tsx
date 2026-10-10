@@ -1,7 +1,7 @@
 import { type CSSProperties, type ReactNode, useState } from "react";
-import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
+import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { MoveNews, Speaker } from "@/lib/villagerVoice";
+import type { MoveNews, Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
 import { MovingBoxView } from "./MovingBoxView";
 import { NextArrowView } from "./NextArrowView";
 import { TypedWordsView } from "./TypedWordsView";

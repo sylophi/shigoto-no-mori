@@ -3,8 +3,8 @@
 // the other sections and states, and the health check and changelog
 // dialogs.
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
-import { EditorFooterView } from "@/components/shared/EditorFooterView";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
+import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { AgentsSectionView } from "@/components/settings/AgentsSectionView";

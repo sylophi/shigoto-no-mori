@@ -49,10 +49,10 @@ import {
   StartOverView,
   VisitorsSectionView,
 } from "@/components/visitors/VisitorsSectionView";
-import type { MoveNews, Speaker } from "@/lib/villagerVoice";
+import type { MoveNews, Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import { buildAlbum, sortAlbum } from "@/lib/villagers/visitors";
-import { villagerRarity } from "@shared/villagers/rarity";
+import { villagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
 import {
   FAKE_VILLAGER_PROFILES,
   fakeVisitTally,

@@ -3,12 +3,12 @@
 // the conversion of its external worktrees, the Tidy page across the
 // forest, and the home page's tiles.
 import type { ReactNode } from "react";
-import { EditorFooterView } from "@/components/shared/EditorFooterView";
-import { BranchComboboxView } from "@/components/shared/BranchComboboxView";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
-import { ProjectDevicePageView } from "@/components/shared/ProjectDevicePageView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
-import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
+import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
+import { BranchComboboxView } from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
+import { ProjectDevicePageView } from "@shigomori/ui/views/shared/ProjectDevicePageView.tsx";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
+import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { CarryOverRowView } from "@/components/configure/CarryOverRowView";
 import { CarryOverSectionView } from "@/components/configure/CarryOverSectionView";

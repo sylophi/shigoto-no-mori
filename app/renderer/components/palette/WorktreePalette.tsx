@@ -23,7 +23,7 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
-import { scoreFields } from "@/lib/fuzzyMatch";
+import { scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import {
   buildPaletteEntries,
   createTargets,

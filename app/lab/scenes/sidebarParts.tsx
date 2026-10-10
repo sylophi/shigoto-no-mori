@@ -29,7 +29,7 @@ import {
   WorktreesLoadingView,
 } from "@/components/sidebar/SidebarRowsView";
 import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import {
   DropdownMenuItem,
   StaticMenu,

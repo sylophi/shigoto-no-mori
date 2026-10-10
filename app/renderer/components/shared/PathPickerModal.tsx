@@ -7,8 +7,8 @@ import {
   PathPickerView,
   type PathListing,
   type PathPickerProps,
-} from "@/components/shared/PathPickerView";
-import type { PickerEntry } from "@/components/shared/PickerRowView";
+} from "@shigomori/ui/views/shared/PathPickerView.tsx";
+import type { PickerEntry } from "@shigomori/ui/views/shared/PickerRowView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 

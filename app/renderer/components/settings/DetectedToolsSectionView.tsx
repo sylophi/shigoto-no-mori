@@ -1,5 +1,5 @@
 import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { LauncherIconView } from "@/components/shared/LauncherIconView";
+import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { DetectedLauncher } from "@shigomori/contracts/schemas";

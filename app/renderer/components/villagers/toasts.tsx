@@ -5,14 +5,14 @@ import {
   Toaster,
   toast,
 } from "sonner";
-import { VillagerSaysView } from "@/components/shared/VillagerSaysView";
+import { VillagerSaysView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import {
   MOVE_TOAST_MS,
   type MoveNews,
   type Speaker,
   villagerLine,
-} from "@/lib/villagerVoice";
+} from "@shigomori/ui/lib/villagerVoice.ts";
 import { NextArrowView } from "./NextArrowView";
 import { VillagerDialogueView } from "./VillagerDialogueView";
 import {

@@ -32,7 +32,7 @@ import {
   isWorktreeListKey,
   queryKeysFor,
 } from "@/lib/queryKeys";
-import { keyOf, residentOf } from "@/lib/villagerVoice";
+import { keyOf, residentOf } from "@shigomori/ui/lib/villagerVoice.ts";
 import {
   createExternalStore,
   useExternalStore,

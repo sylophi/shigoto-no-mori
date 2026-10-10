@@ -7,7 +7,7 @@
 // other side's ids not yet known (only a served stream says so, which
 // names no project).
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
-import type { DeviceBarTab } from "@/components/shared/DeviceTabBarView";
+import type { DeviceBarTab } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import type {
   MirrorCopyAt,
   WorktreeMirrorLink,

@@ -24,7 +24,7 @@ import {
   LiveDeviceSectionView,
   LivePageView,
 } from "@/components/live/LivePageView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {

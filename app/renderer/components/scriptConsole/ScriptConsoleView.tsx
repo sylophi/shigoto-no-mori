@@ -2,12 +2,12 @@
 // how its run stands over the run's terminal, with Run or Stop.
 import type { ReactNode } from "react";
 import { Play, Square, Trash2 } from "lucide-react";
-import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
+import { ScriptStatusBadgeView } from "@shigomori/ui/views/shared/ScriptStatusBadgeView.tsx";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import type { ScriptRunState } from "@/store/scriptRuns";
+import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 
 export function ScriptConsoleView({
   command,

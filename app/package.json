@@ -61,7 +61,7 @@
     "@xterm/xterm": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
-    "cmdk": "^1.1.1",
+    "cmdk": "catalog:",
     "dompurify": "catalog:",
     "effect": "catalog:",
     "electron-log": "5.4.4",

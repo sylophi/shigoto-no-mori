@@ -19,7 +19,7 @@ import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";

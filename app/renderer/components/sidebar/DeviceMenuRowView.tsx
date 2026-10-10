@@ -1,7 +1,7 @@
 // A device as a menu item names it (a project's Remove and Add to
 // device submenus): its glyph and name, and a note at the item's end.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 
 export function DeviceMenuRowView({
   icon,

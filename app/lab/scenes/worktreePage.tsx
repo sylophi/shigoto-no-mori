@@ -2,7 +2,7 @@
 // open, in a window beside the sidebar, and the states its footer and
 // header go through.
 import type { ReactNode } from "react";
-import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
+import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
 import { StaticMenu } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { StaticPopover } from "@shigomori/ui/primitives/popover.tsx";
 import {

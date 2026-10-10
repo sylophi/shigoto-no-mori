@@ -8,7 +8,7 @@ import {
   useQuickCreateWorktree,
   wantsCreateForm,
 } from "@/hooks/worktrees/useQuickCreateWorktree";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { ProjectGroupOrder } from "../buildSidebarRows";
 import { DeviceBadgeView } from "../DeviceBadgeView";

@@ -15,7 +15,7 @@ import {
   sortAlbum,
   type VisitorSort,
 } from "@/lib/villagers/visitors";
-import type { VillagerRarity } from "@shared/villagers/rarity";
+import type { VillagerRarity } from "@shigomori/ui/lib/villagers/rarity.ts";
 import { GuestBook } from "./GuestBook";
 import { VisitorSlot } from "./VisitorSlot";
 import {

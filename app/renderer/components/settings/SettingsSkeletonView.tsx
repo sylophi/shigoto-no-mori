@@ -1,4 +1,4 @@
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
+import { PageHeaderView } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
 import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
 
 export function SettingsSkeletonView() {

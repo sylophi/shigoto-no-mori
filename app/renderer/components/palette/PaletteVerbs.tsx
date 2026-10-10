@@ -6,7 +6,7 @@ import {
   Plus,
   SquarePen,
 } from "lucide-react";
-import { LauncherIconView } from "@/components/shared/LauncherIconView";
+import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { openPullRequest } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
@@ -18,7 +18,7 @@ import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { worktreeSyncView } from "@/lib/syncState";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";

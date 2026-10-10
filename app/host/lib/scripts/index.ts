@@ -26,7 +26,7 @@ import {
   scriptErrorLine,
   type ScriptRunSlot,
 } from "@shigomori/contracts/schemas";
-import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
+import { SCRIPT_ENV_KEYS } from "@shigomori/contracts/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import * as Processes from "../util/processes";
 import { signalPidTree } from "./process";

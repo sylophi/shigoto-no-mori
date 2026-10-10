@@ -5,7 +5,7 @@ import {
   PathPickerModal,
   type PathPickerModalProps,
 } from "@/components/shared/PathPickerModal";
-import type { PickerEntry } from "@/components/shared/PickerRowView";
+import type { PickerEntry } from "@shigomori/ui/views/shared/PickerRowView.tsx";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import type { IgnoreSelection } from "./ignoreChoice";
 import {

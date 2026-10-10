@@ -1,6 +1,6 @@
 import { type ReactNode, useRef } from "react";
 import { FoldVertical, RotateCcw } from "lucide-react";
-import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
+import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { DialogueFrameView } from "@/components/villagers/VillagerDialogueView";
 import { TypedWordsView } from "@/components/villagers/TypedWordsView";
 import { ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";

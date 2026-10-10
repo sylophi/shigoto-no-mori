@@ -66,7 +66,7 @@ import {
   PickSideView,
 } from "@/components/worktreeDetail/WorktreeSyncPillView";
 import { NO_REWRITE } from "@/lib/commitRewrite";
-import type { ScriptRunState } from "@/store/scriptRuns";
+import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import type {
   ChangedFile,
   StashEntry,

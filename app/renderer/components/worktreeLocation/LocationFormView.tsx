@@ -7,7 +7,7 @@ import type { Worktree, WorktreeLayout } from "@shigomori/contracts/schemas";
 import { pluralize } from "@/lib/pluralize";
 import { LayoutOptionItemView } from "./LayoutOptionItemView";
 import { LAYOUT_OPTIONS } from "./layoutOptions";
-import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
+import { WorktreeMoveDetailsView } from "@shigomori/ui/views/shared/WorktreeMoveDetailsView.tsx";
 import { tildify } from "@shigomori/contracts/projectPaths";
 
 // The project's worktree layout, picked, and the worktrees the pick

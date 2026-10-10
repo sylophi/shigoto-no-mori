@@ -4,9 +4,9 @@ import { ChevronRight, Plus, Search } from "lucide-react";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 
 // A device's branch lists (ManageBranches.tsx binds them): the local
 // ones with their rows, and the remote-tracking ones for reference.

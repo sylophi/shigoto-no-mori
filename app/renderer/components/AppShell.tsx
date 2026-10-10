@@ -13,7 +13,10 @@ import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { WorktreePalette } from "@/components/palette/WorktreePalette";
 import { PhoneTabBar } from "@/components/PhoneTabBar";
-import { forestTabFor, isTabRoute } from "@/components/PhoneTabBarView";
+import {
+  forestTabFor,
+  isTabRoute,
+} from "@shigomori/ui/views/PhoneTabBarView.tsx";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
@@ -34,7 +37,7 @@ import {
   SIDEBAR_DEFAULT,
   SIDEBAR_MAX,
   SIDEBAR_MIN,
-} from "@/components/AppShellView";
+} from "@shigomori/ui/views/AppShellView.tsx";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity

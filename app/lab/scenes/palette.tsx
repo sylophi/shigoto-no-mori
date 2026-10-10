@@ -29,8 +29,8 @@ import {
   PaletteDialogView,
   PickedChipView,
 } from "@/components/palette/WorktreePaletteView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
-import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
+import { WorktreeKindIconView } from "@shigomori/ui/views/shared/WorktreeKindIconView.tsx";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { forests, LOCAL_DEVICE_ID } from "../fake-host/fixtures";
 import { unposedPullRequests } from "../fake-host/pullRequestFixtures";
