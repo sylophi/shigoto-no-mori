@@ -50,3 +50,16 @@ export function routeDeviceId(rowDevice: string | undefined): string {
 export function rowDeviceId(routeDevice: string): string | undefined {
   return routeDevice === localDeviceId ? undefined : routeDevice;
 }
+
+// Fills a route template's `$param` segments with values, for a route
+// handed to the shell as a string (a notification's, a new window's).
+export function fillRoutePath(
+  template: string,
+  params: Record<string, string>,
+): string {
+  return template.replace(/\$([A-Za-z]+)/g, (_, name: string) => {
+    const value = params[name];
+    if (value === undefined) throw new Error(`route param ${name} missing`);
+    return value;
+  });
+}
