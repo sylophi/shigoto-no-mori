@@ -109,7 +109,7 @@ export function PaletteDialogView({
             !picked && "phone:hidden",
           )}
         >
-          <PaneKeysProvider value={picked !== null}>{verbs}</PaneKeysProvider>
+          <PaneKeysProvider value={picked}>{verbs}</PaneKeysProvider>
           {picked && (
             <Command.Empty className={EMPTY_CLASS}>
               No actions match.
