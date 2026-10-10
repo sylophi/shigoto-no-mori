@@ -20,8 +20,8 @@ import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.ts
 import { LaunchSectionView } from "@shigomori/ui/views/worktreeDetail/LaunchSectionView.tsx";
 import { LauncherRowView } from "@shigomori/ui/views/worktreeDetail/LauncherRowView.tsx";
 import { NoIdentityNoteView } from "@shigomori/ui/views/worktreeDetail/NoIdentityNoteView.tsx";
-import { PullRequestTitleLinkView } from "@/components/worktreeDetail/pullRequests/PullRequestTitleLinkView";
-import { PullRequestStateLabelView } from "@/components/worktreeDetail/pullRequests/PullRequestStateLabelView";
+import { PullRequestTitleLinkView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
+import { PullRequestStateLabelView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestStateLabelView.tsx";
 import {
   ScriptLaunchButtonView,
   ScriptLaunchRowView,

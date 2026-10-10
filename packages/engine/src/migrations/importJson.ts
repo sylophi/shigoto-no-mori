@@ -124,25 +124,15 @@ export const importFiles = (lenient: boolean) =>
     const registryFile = path.join(dataDir, "registry.json");
     const stateFile = path.join(dataDir, "state.json");
     const registry = yield* strictDocument(registryFile);
-    // Until registry.json first existed, the projects and the shelf lived
-    // in state.json, so it is read as strictly as the registry then.
-    const legacy = lenient
-      ? !(yield* fs
-          .exists(registryFile)
-          .pipe(Effect.orElseSucceed(() => false)))
-      : Option.isNone(registry);
-    const state = legacy
-      ? yield* strictDocument(stateFile)
-      : yield* lenientDocument(stateFile);
+    const state = yield* lenientDocument(stateFile);
     const stateDoc: JsonObject = Option.getOrElse(state, () => ({}));
-    const registryDoc: JsonObject = Option.getOrElse(registry, () => stateDoc);
-    const registrySource = legacy ? stateFile : registryFile;
+    const registryDoc: JsonObject = Option.getOrElse(registry, () => ({}));
     const registryKey = <K extends keyof typeof RegistryFileSchema.fields>(
       key: K,
       fallback: (typeof RegistryFileSchema.fields)[K]["Type"],
     ) =>
       lenientKey(
-        registrySource,
+        registryFile,
         key,
         RegistryFileSchema.fields[key],
         registryDoc[key],
@@ -167,9 +157,9 @@ export const importFiles = (lenient: boolean) =>
         Effect.catchTags({
           SchemaError: (cause) =>
             lenient
-              ? skipped(registrySource, "projects", undefined)
+              ? skipped(registryFile, "projects", undefined)
               : Effect.fail(
-                  new StoreImportError({ path: registrySource, cause }),
+                  new StoreImportError({ path: registryFile, cause }),
                 ),
         }),
       )) ?? [],
@@ -197,43 +187,37 @@ export const importFiles = (lenient: boolean) =>
       );
     }
 
-    // The keys registry.json has had from the start.
-    if (!legacy) {
-      yield* insertAll(
-        "project_order",
-        Arr.dedupe(yield* registryKey("projectOrder", [])).map(
-          (projectPath, position) => ({ path: projectPath, position }),
-        ),
-      );
-      yield* insertAll(
-        "shelf_snapshots",
-        Object.entries(yield* registryKey("shelfSnapshots", {})).flatMap(
-          ([worktree_id, entry]) =>
-            Option.match(
-              Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry),
-              {
-                onNone: () => [],
-                onSome: ({ at, head, changed }) => [
-                  { worktree_id, at, head, changed },
-                ],
-              },
-            ),
-        ),
-      );
-      const deviceId = yield* registryKey("deviceId", "");
-      yield* insertAll(
-        "device",
-        deviceId === "" ? [] : [{ id: 1, device_id: deviceId }],
-      );
-      const shared = yield* registryKey("sharedSettings", { entries: {} });
-      yield* insertAll(
-        "shared_settings",
-        Object.entries(shared.entries).map(([key, entry]) => ({
-          key,
-          entry: JSON.stringify(entry),
-        })),
-      );
-    }
+    yield* insertAll(
+      "project_order",
+      Arr.dedupe(yield* registryKey("projectOrder", [])).map(
+        (projectPath, position) => ({ path: projectPath, position }),
+      ),
+    );
+    yield* insertAll(
+      "shelf_snapshots",
+      Object.entries(yield* registryKey("shelfSnapshots", {})).flatMap(
+        ([worktree_id, entry]) =>
+          Option.match(Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry), {
+            onNone: () => [],
+            onSome: ({ at, head, changed }) => [
+              { worktree_id, at, head, changed },
+            ],
+          }),
+      ),
+    );
+    const deviceId = yield* registryKey("deviceId", "");
+    yield* insertAll(
+      "device",
+      deviceId === "" ? [] : [{ id: 1, device_id: deviceId }],
+    );
+    const shared = yield* registryKey("sharedSettings", { entries: {} });
+    yield* insertAll(
+      "shared_settings",
+      Object.entries(shared.entries).map(([key, entry]) => ({
+        key,
+        entry: JSON.stringify(entry),
+      })),
+    );
 
     yield* insertAll("usage", [
       ...Object.entries(yield* stateKey("projectUseLog", {})).flatMap(
@@ -276,7 +260,8 @@ export const importFiles = (lenient: boolean) =>
     const config = yield* strictDocument(path.join(dataDir, "config.json"));
     // A data dir nothing has used yet starts with the settings of a fresh
     // install. One from before doubutsuNames defaulted on keeps it off.
-    const fresh = legacy && Option.isNone(state) && Option.isNone(config);
+    const fresh =
+      Option.isNone(registry) && Option.isNone(state) && Option.isNone(config);
     yield* insertAll(
       "device_config",
       configRows(Option.getOrElse(config, () => (fresh ? FRESH_INSTALL : {}))),

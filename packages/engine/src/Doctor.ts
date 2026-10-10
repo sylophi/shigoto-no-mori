@@ -2217,46 +2217,15 @@ const make = Effect.gen(function* () {
     return { entry: registeredLine(listed, file), projects: listed };
   };
 
-  // Before registry.json, the registry's keys lived in state.json, which
-  // Go splits out before reading. A state.json it can't read fails the
-  // split.
-  const legacyRegistry = Effect.gen(function* () {
-    const found: JsonFile = yield* readJsonFile(stateFile);
-    const split = (why: string) => ({
-      entry: registryLine.fail(
-        `can't be split out of state.json: ${why}`,
-        `Fix the permissions on ${collapseHome(home, dataDir)}.`,
-      ),
-      projects: [],
-    });
-    switch (found.state) {
-      case "unreadable":
-        return split(
-          `Couldn't read ${collapseHome(home, stateFile)}: ${found.why}`,
-        );
-      case "invalid":
-        return split(
-          `${collapseHome(home, stateFile)} is not valid JSON. Fix the file or move it aside, then retry.`,
-        );
-      case "parsed":
-        if (
-          Object.keys(RegistryFileSchema.fields).some((key) => key in found.doc)
-        ) {
-          return judgeRegistry(found.doc, stateFile);
-        }
-    }
-    return {
-      entry: registryLine.ok("absent, so no projects are registered yet"),
-      projects: [],
-    };
-  });
-
   // registry.json's line and its projects, read from the file.
   const registryFromFile = Effect.gen(function* () {
     const found: JsonFile = yield* readJsonFile(registryFile);
     switch (found.state) {
       case "absent":
-        return yield* legacyRegistry;
+        return {
+          entry: registryLine.ok("absent, so no projects are registered yet"),
+          projects: [],
+        };
       case "unreadable":
         return {
           entry: registryLine.fail(

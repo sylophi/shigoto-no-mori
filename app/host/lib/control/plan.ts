@@ -1,7 +1,7 @@
 // The control ops' decisions (ops.ts): which device or worktree a
 // name means, why a device can't take part, and how a mirror reads
 // from either side. Pure.
-import { only } from "@shared/util/only";
+import { only } from "@shigomori/contracts/util/only";
 import {
   type ControlDevice,
   ControlError,

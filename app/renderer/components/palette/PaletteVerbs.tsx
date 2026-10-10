@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { openPullRequest } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
+import { openExternalUrl } from "@/lib/openExternal";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -138,7 +138,7 @@ function WorktreeVerbs({
       tip: pr.title,
       run: () => {
         actions.close();
-        openPullRequest(pr.url);
+        openExternalUrl(pr.url, "Couldn't open pull request");
       },
     });
   }

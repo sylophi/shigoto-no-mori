@@ -217,33 +217,14 @@ export async function updateDevice(
   });
 }
 
-// A change to this device's name made here without the hub (main's
-// default-name migration). The hub still holds the name it left, unless
-// it moved since, so the next registry read pushes the new one over it
-// (syncHubDevice).
-export function renameLocally(
-  store: AccountStore,
-  record: StoredAccount,
-  name: string,
-): StoredAccount {
-  const renamed = {
-    ...record,
-    deviceName: name,
-    hubName: record.hubName ?? record.deviceName,
-  };
-  store.write(renamed);
-  return renamed;
-}
-
 // Squares this device's name and icon with the registry the hub just
 // listed. hubName and hubIcon, what the hub last held as far as this
 // device knows, tell the two ways a field can differ apart:
 // - The hub moved: another device changed this one, adopted here.
-// - The hub did not move but this device did: a default name it
-//   migrated forward (renameLocally), a detection that improved with an
-//   upgrade (it has no pick, so it wears what it detects now). The hub
-//   copy is stale and gets this device's value, best-effort, recorded
-//   as the hub's once it lands.
+// - The hub did not move but this device did: a detection that
+//   improved with an upgrade (it has no pick, so it wears what it
+//   detects now). The hub copy is stale and gets this device's value,
+//   best-effort, recorded as the hub's once it lands.
 // A record from before these fields existed has no answer, so each
 // field takes the likelier one. A name only ever changed on this
 // device before, so a hub name that differs is a peer's rename and is

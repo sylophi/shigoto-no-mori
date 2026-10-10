@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import type { CommitRewrite } from "@/lib/commitRewrite";
+import type { CommitRewrite } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
 import { CommitDetailsView, CommitStepsView } from "./CommitDetailsView";
