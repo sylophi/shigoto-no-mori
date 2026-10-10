@@ -35,6 +35,7 @@ import type { Handlers } from "@shigomori/contracts/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { fetchReleases } from "@shared/releases";
 import {
+  type SharedSettingsDoc,
   SharedSettingsDocSchema,
   StoredClientConfigSchema,
 } from "@shigomori/contracts/schemas";
@@ -395,6 +396,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       SharedSettingsDocSchema,
       EMPTY_SHARED_SETTINGS,
     );
+  // The copy as a view (sharedSettings:watch), the way a host serves its
+  // own: as it stands, then every move.
+  const sharedSettingsWatchers = new Set<(doc: SharedSettingsDoc) => void>();
   const sharedSettingsCopy = createSharedSettingsCopy(
     {
       read: readSharedSettings,
@@ -414,8 +418,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     },
     {
       deviceId: () => deviceId,
-      announce: (doc) =>
-        broadcastAll(sharedSettingsContract, "changed", doc, tab.server),
+      announce: (doc) => {
+        broadcastAll(sharedSettingsContract, "changed", doc, tab.server);
+        for (const watcher of sharedSettingsWatchers) watcher(doc);
+      },
     },
   );
 
@@ -456,6 +462,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     tab.server,
     registrarOpts,
   );
+  tab.view("sharedSettings:watch", (_input, observer) => {
+    observer.value(sharedSettingsCopy.read());
+    sharedSettingsWatchers.add(observer.value);
+    return () => {
+      sharedSettingsWatchers.delete(observer.value);
+    };
+  });
   registerContract(shellContract, shellHandlers, tab.server, registrarOpts);
   registerContract(
     releasesContract,

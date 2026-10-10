@@ -21,7 +21,6 @@ import {
   useRevokeDevice,
   useWatchCommandAccessChanges,
 } from "@/hooks/account/useAccount";
-import { useWatchSharingChanges } from "@/hooks/account/useSharing";
 import {
   CLERK_SIGN_OUT_KEY,
   useAccountIdentity,
@@ -48,7 +47,6 @@ import { deviceRowStatus } from "@shigomori/ui/views/remote/deviceRegistryStatus
 
 export function DeviceRegistry({ accountId }: { accountId: string }) {
   useWatchCommandAccessChanges();
-  useWatchSharingChanges();
   const local = useLocalDevice();
   const devicesQuery = useAccountDevices();
   const revokeDevice = useRevokeDevice();

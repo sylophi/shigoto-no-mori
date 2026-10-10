@@ -17,10 +17,11 @@
 // while a session was down, so this never needs to know a session's
 // lifecycle.
 //
-// Not here: what the host serves as views (the lists of projects,
-// worktrees, mirrors and running scripts are atoms that stream, and
-// nothing invalidates them), the shared settings (a peer's copy is
-// folded into this device's own, lib/remote/sharedSettingsSync.ts), and
+// Not here: what the host serves as views (projects, worktrees,
+// mirrors, running scripts, ports, terminals, the config, sharing and
+// the shared settings are atoms that stream, and nothing invalidates
+// them), a peer's shared settings (folded into this device's own copy,
+// lib/remote/sharedSettingsSync.ts), and
 // the per-device stores that keep a stream (store/scriptRuns.ts,
 // store/worktreeLifecycle.ts).
 import type { QueryClient } from "@tanstack/react-query";
