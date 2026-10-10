@@ -9,7 +9,9 @@ import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import { getBusyOperations } from "@host/lib/scripts";
-import { busyTerminals, setWindowFocused } from "./captures";
+import * as Graph from "./graph";
+import * as Terminals from "@host/lib/terminals/Terminals";
+import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { type HostFacts, setHostFacts } from "./facts";
 import {
   applyAccount,
@@ -23,6 +25,12 @@ import {
   probeRemoteConnections,
   registerLoopbackContract,
 } from "./wires";
+
+// What a quit asks about: the terminals busy right now.
+const busyTerminals = () =>
+  Graph.run(Effect.flatMap(Terminals.Terminals, (it) => it.busy)).catch(
+    () => 0,
+  );
 
 // The root's own Promise work, for the session's calls.
 const onRoot = <A>(run: () => Promise<A>) =>
@@ -43,7 +51,16 @@ export function startHost(options: {
     account: (facts) => onRoot(() => applyAccount(facts)),
     accountDevices: (deviceIds) =>
       Effect.sync(() => noteAccountDevices(deviceIds)),
-    windowFocused: (focused) => Effect.sync(() => setWindowFocused(focused)),
+    // One sent before the graph is up lands once it is.
+    windowFocused: (focused) =>
+      Effect.sync(
+        () =>
+          void Graph.run(
+            Effect.map(BackgroundFetch.BackgroundFetch, (fetch) =>
+              fetch.setWindowFocused(focused),
+            ),
+          ).catch(() => {}),
+      ),
     wake: () => Effect.sync(probeRemoteConnections),
     busy: () =>
       Effect.map(onRoot(busyTerminals), (terminals) => ({

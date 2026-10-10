@@ -7,6 +7,7 @@
 import { createWriteStream, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schema from "effect/Schema";
@@ -25,7 +26,8 @@ import { getDeviceId } from "@host/lib/config/deviceId";
 import { storeFailureReport } from "@host/lib/storeFailure";
 import * as Observability from "@host/lib/util/observability";
 import { initDataDir } from "@host/lib/util/paths";
-import { loopbackAddress } from "./captures";
+import * as Graph from "./graph";
+import * as Loopback from "@host/socket/loopback";
 import {
   flavorOf,
   HOST_FACTS_FLAG,
@@ -35,7 +37,6 @@ import {
 } from "./facts";
 import * as HostLayer from "./layer";
 import { startHost } from "./session";
-import { graphFailed, graphUp } from "./wires";
 
 // The utility process's port to its parent, and the port the shell
 // hands over on it, as much of Electron's types as the host reads
@@ -147,8 +148,10 @@ async function main(): Promise<void> {
     macfs: hostBinaryPath(MACFS_DIST_DIR, MACFS_BINARY_NAME),
     sm: hostBinaryPath(CLI_DIST_DIR, cliBinaryName(flavor)),
   };
+  // The root's door on top: open once every service is up (graph.ts).
   const graph = ManagedRuntime.make(
-    HostLayer.layer({ hurried: () => hurried, engine }).pipe(
+    Graph.layer.pipe(
+      Layer.provideMerge(HostLayer.layer({ hurried: () => hurried, engine })),
       Layer.provideMerge(
         Observability.layer({
           packaged: facts.packaged,
@@ -160,10 +163,9 @@ async function main(): Promise<void> {
   );
   runtime = graph;
   try {
-    // The listeners' calls run on the graph's services from here.
-    graphUp(await graph.context());
+    await graph.context();
   } catch (error) {
-    graphFailed(errorMessageOf(error));
+    Graph.failed(errorMessageOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
     await shell.failed({
@@ -176,7 +178,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   await shell.ready({
-    ...(await loopbackAddress()),
+    ...(await Graph.run(Effect.flatMap(Loopback.Loopback, (it) => it.address))),
     deviceId: getDeviceId(),
   });
 }

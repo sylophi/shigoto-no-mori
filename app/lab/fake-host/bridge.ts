@@ -1837,6 +1837,7 @@ export function installFakeHostBridge(
     "migration:read": () => (migrationContinued ? null : posedMigration()),
     "migration:continue": () => {
       migrationContinued = true;
+      client.emit("migration:changed", null);
     },
     "account:enroll": async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));

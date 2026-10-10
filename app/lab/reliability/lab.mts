@@ -234,6 +234,9 @@ export class Lab {
   readonly profile = `${this.tag}-host`;
   readonly profileDir = join(homedir(), ".smd-profiles", this.profile);
   readonly browserDir = join(homedir(), ".smd-profiles", `${this.tag}-browser`);
+  // The host's one project, named for the profile, so two labs on one
+  // account never show a project of the same name.
+  readonly hostRepo = join(this.profileDir, "repos", this.profile);
   readonly webPort = Number(portsEnv().WEB_PORT);
   readonly origin = `http://localhost:${this.webPort}`;
   readonly smd = join(appDir, "dist-cli", "smd");
@@ -296,7 +299,7 @@ export class Lab {
     return JSON.parse(
       execFileSync(this.smd, ["--json", ...args], {
         env: this.hostEnv(),
-        cwd: join(this.profileDir, "repos", "shared"),
+        cwd: this.hostRepo,
         encoding: "utf8",
       }),
     ) as T;
@@ -305,7 +308,7 @@ export class Lab {
   smdRun(args: string[]): void {
     execFileSync(this.smd, args, {
       env: this.hostEnv(),
-      cwd: join(this.profileDir, "repos", "shared"),
+      cwd: this.hostRepo,
       stdio: "ignore",
     });
   }
@@ -318,7 +321,7 @@ export class Lab {
     mkdirSync(join(this.profileDir, "repos"), { recursive: true });
     git(this.profileDir, "init", "-q", "-b", "main", seed);
     git(seed, "commit", "-q", "--allow-empty", "-m", "Initial");
-    git(this.profileDir, "clone", "-q", seed, join("repos", "shared"));
+    git(this.profileDir, "clone", "-q", seed, this.hostRepo);
     execFileSync(
       this.smd,
       ["projects", "add", join(this.profileDir, "repos"), "--all", "--yes"],
@@ -340,7 +343,7 @@ export class Lab {
       Promise.all([window.api.account.status(), window.api.projects.list()]),
     );
     const [status, projects] = facts;
-    const project = projects.find((p) => p.name === "shared");
+    const project = projects.find((p) => p.name === this.profile);
     if (project === undefined) throw new Error("the host lists no project");
     this.host = {
       deviceId: await this.hostEval(() => window.api.deviceId),
@@ -585,7 +588,7 @@ export class Lab {
     await waitFor(
       "Clerk to load",
       () => tab.page.evaluate(() => Boolean(window.Clerk?.loaded)),
-      30_000,
+      120_000,
     );
     if (await signedIn()) return;
     const command = process.env.RELIABILITY_SIGN_IN;

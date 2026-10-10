@@ -162,7 +162,7 @@ import {
 } from "./wires";
 import { log, logFailure } from "@shared/log";
 import { layerLatch } from "@host/lib/util/layerLatch";
-import * as Captures from "./captures";
+import * as Graph from "./graph";
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
@@ -203,7 +203,7 @@ const mirrorGateway = createMirrorGateway({
 // follower reports every verdict. The renderer's ping is coalesced so
 // a busy mirror costs viewers one refetch per beat, not one per cycle.
 const broadcastMirrorChanged = coalesce(() => {
-  void Captures.onEngine(currentMirrorList).then(
+  void Graph.run(currentMirrorList).then(
     (list) => {
       // The list is validated against its strict schema on the way
       // out, and one that fails it goes out as the bare signal (a
@@ -256,6 +256,14 @@ const mirrorHistory = createMirrorHistory({
   },
   onChange: () => broadcastMirrorChanged(),
 });
+// The daemon's sessions as they stand, for the root's synchronous
+// callbacks: none before the graph is up.
+export const mirrorSessionsNow = () =>
+  Graph.readNow(
+    MirrorDaemon.onDaemon((daemon) => daemon.sessions),
+    () => [],
+  );
+
 // The daemon and the git follower the mirror impl below runs on, once
 // the mirror layer is up (mirrorLayer). A call before then waits for
 // it.
@@ -413,7 +421,7 @@ export const mirrorDaemonLayer = MirrorDaemon.layer({
     // The history, the orphaned transfers, and the stops that waited
     // for the daemon, originals gone behind the app's back, sessions a
     // re-open replaced (registry.ts).
-    void Captures.onEngine(
+    void Graph.run(
       Effect.all([
         observeMirrorHistory,
         reapOrphanedTransfers,
@@ -425,7 +433,7 @@ export const mirrorDaemonLayer = MirrorDaemon.layer({
 const LEFT_ACCOUNT_DETAIL =
   "This device left the account. The copy stays as a worktree.";
 const endAllMirrors = () =>
-  Captures.onEngine(
+  Graph.run(
     endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
       transfers: true,
     }),
@@ -434,7 +442,7 @@ const endAllMirrors = () =>
 // (registry.ts createNoAccountSweep). The account fan-out's own sweep
 // covers a sign-out with the daemon up, and resets this one.
 const noAccountSweep = createNoAccountSweep({
-  sessions: () => Captures.mirrorSessionsNow(),
+  sessions: mirrorSessionsNow,
   signedIn: accountSignedIn,
   end: () => void endAllMirrors().catch(() => {}),
 });
@@ -487,14 +495,14 @@ export const mirrorLayer = Layer.effectDiscard(
         },
         onChange: () => {
           broadcastMirrorChanged();
-          void Captures.onEngine(observeMirrorHistory).catch(() => {});
+          void Graph.run(observeMirrorHistory).catch(() => {});
         },
         // The peer says the session's copy is gone, behind this device's
         // back: confirmed against the peer's own list (an answer while
         // its registry loads, or mid-move, is no removal), the session
         // ends and the original keeps its own.
         onCopyGone: (session) =>
-          void Captures.onEngine(endMirrorIfCopyGone(session)).catch(() => {}),
+          void Graph.run(endMirrorIfCopyGone(session)).catch(() => {}),
         // A pull it applied here is a ref move the git watcher skips as
         // the app's own: announced like one, so the pages showing it
         // refetch.
@@ -610,7 +618,7 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
   if (same) return;
   lastMembership = onAccount;
   const stillOn = (deviceId: string) => onAccount.has(deviceId);
-  void Captures.onEngine(
+  void Graph.run(
     endMirrorsWithPeers(
       stillOn,
       "The other device left the account. The copy stays as a worktree.",
@@ -676,7 +684,7 @@ export function registerHostHandlers(): void {
   // it, so the boot checks the landed ones against the worktrees
   // listed.
   void reconcileMirrorInvites(({ projectId, worktreeId }) =>
-    Captures.onEngine(findProjectAndWorktree(projectId, worktreeId)).then(
+    Graph.run(findProjectAndWorktree(projectId, worktreeId)).then(
       () => true,
       // Only a worktree known to be gone loses its invitation. A read
       // that failed for any other reason keeps it.
@@ -745,7 +753,7 @@ export function registerHostHandlers(): void {
           );
       }
     } else if (push.channel === "worktrees:removal") {
-      void Captures.onEngine(
+      void Graph.run(
         endMirrorsOnPeerRemoval(push.deviceId, push.payload),
       ).catch(() => {});
     }
