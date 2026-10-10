@@ -23,6 +23,7 @@ import {
   startScript,
 } from "@host/lib/scripts";
 import { initDataDirAt } from "@host/lib/util/paths";
+import { runHost } from "./lib/adapters.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import {
   makeTracker,
@@ -40,21 +41,23 @@ beforeAll(() => {
 });
 afterAll(teardown);
 
-function run(command: string) {
+async function run(command: string) {
   const events: ScriptEvent[] = [];
-  const runId = startScript({
-    command,
-    slot: { kind: "package", name: "proof" },
-    worktree: { id: "wt", name: "wt", branch: "main", path: root },
-    project: { id: "p", path: root, name: "p" },
-    notify: (event) => events.push(event),
-  });
+  const runId = await runHost(
+    startScript({
+      command,
+      slot: { kind: "package", name: "proof" },
+      worktree: { id: "wt", name: "wt", branch: "main", path: root },
+      project: { id: "p", path: root, name: "p" },
+      notify: (event) => events.push(event),
+    }),
+  );
   const exit = () => events.find((event) => event.kind === "exit");
   return { runId, events, exit };
 }
 
 it("a run that ends reports its code and leaves the list", async () => {
-  const { runId, exit } = run("exit 3");
+  const { runId, exit } = await run("exit 3");
   await waitFor(() => exit() !== undefined, "the run to exit");
   assert.deepEqual(exit(), { runId, kind: "exit", code: 3 });
   assert.ok(listRunningScripts().every((script) => script.runId !== runId));
@@ -62,11 +65,11 @@ it("a run that ends reports its code and leaves the list", async () => {
 
 it("a cancel takes the whole process group down and reads as stopped", async () => {
   const pidFile = join(root, "background.pid");
-  const { runId, exit } = run(`sleep 60 & echo $! > ${pidFile}; wait`);
+  const { runId, exit } = await run(`sleep 60 & echo $! > ${pidFile}; wait`);
   await waitFor(() => existsSync(pidFile), "the background child to start");
   const background = Number(readFileSync(pidFile, "utf8").trim());
   assert.ok(processAlive(background));
-  assert.equal(await cancelScript(runId), true);
+  assert.equal(await runHost(cancelScript(runId)), true);
   assert.deepEqual(exit(), { runId, kind: "exit", code: null });
   await waitFor(
     () => !processAlive(background),
@@ -76,12 +79,12 @@ it("a cancel takes the whole process group down and reads as stopped", async () 
 
 it("a script that ignores SIGTERM is killed when the grace is up", async () => {
   const ready = join(root, "ready");
-  const { exit } = run(
+  const { exit } = await run(
     `trap '' TERM; touch ${ready}; while :; do sleep 1; done`,
   );
   await waitFor(() => existsSync(ready), "the script to arm its trap");
   const started = Date.now();
-  await killAllScripts({ graceMs: 300 });
+  await runHost(killAllScripts({ graceMs: 300 }));
   await waitFor(() => exit() !== undefined, "the run to exit");
   assert.ok(
     Date.now() - started < 3_000,

@@ -27,7 +27,7 @@ import {
   serveSource,
   withLinkSource,
 } from "@host/lib/sync/sourceLink";
-import { worktreesHandlers } from "./worktrees";
+import { deleteWorktreeHere } from "./worktrees";
 import { landForSender } from "@host/lib/sync/landing";
 import { pullWorktree, sendWorktree } from "@host/lib/sync/move";
 import { teardownSource } from "@host/lib/sync/receipts";
@@ -110,5 +110,5 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   // The source teardown, after either move (host/lib/sync/receipts.ts).
   // A send's source is this device's own, removed by the ordinary delete.
   teardownSource: (move, ctx) =>
-    teardownSource(move, (removal) => worktreesHandlers.delete(removal, ctx)),
+    teardownSource(move, (removal) => deleteWorktreeHere(removal, ctx)),
 };

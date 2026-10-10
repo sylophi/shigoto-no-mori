@@ -16,6 +16,7 @@ import * as Loopback from "@host/socket/loopback";
 import * as DeviceLink from "@host/socket/server";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Effect from "effect/Effect";
+import * as ScriptsLib from "@host/lib/scripts";
 import * as Bridge from "./bridge";
 
 // Every broadcast publishes here. Synchronous, so pushes keep their
@@ -145,3 +146,9 @@ export const github = Bridge.capture<
 >("gh");
 export const refreshPullRequests = (projectPath: string) =>
   github.run(refreshProjectPullRequests(projectPath));
+
+// The scripts' kill chains and the sweep of removed worktrees' scripts,
+// for the store watcher's callback and the data-folder move and wipe.
+export const scripts =
+  Bridge.capture<ChildProcessSpawner.ChildProcessSpawner>("The scripts");
+export const killAllScripts = () => scripts.run(ScriptsLib.killAllScripts());

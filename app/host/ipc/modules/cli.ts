@@ -8,6 +8,9 @@ import { runDoctor } from "@host/lib/engineCalls";
 import { loadProjects, refreshProjects } from "@host/lib/projects";
 import { killScriptsForProject } from "@host/lib/scripts";
 import { implSlot } from "@host/lib/util/implSlot";
+import { fromPromise } from "@host/lib/util/fromPromise";
+import type { HostServices } from "@host/process/services";
+import * as Effect from "effect/Effect";
 
 // The electron layer injects the CLI link and shell-integration
 // operations at boot. Keeping them behind a setter keeps this handler
@@ -51,7 +54,7 @@ async function doctorInput(): Promise<{
   };
 }
 
-export const cliHandlers: Handlers<typeof cliContract> = {
+export const cliHandlers = {
   status: () => cliImpl().cliLinkStatus(),
   install: ({ force }) => cliImpl().installCliLinks(force),
   // Only ever removes what shigomori made (links it owns, hooks it
@@ -70,15 +73,20 @@ export const cliHandlers: Handlers<typeof cliContract> = {
   // and, as with projects.remove, scripts still running in a project
   // that left have no UI left to stop them. Re-read whatever the report
   // says: a repair that failed halfway can still have unregistered.
-  doctorFix: async () => {
-    const before = loadProjects();
-    const report = await runDoctor(true, await doctorInput());
-    const after = new Set((await refreshProjects()).map((p) => p.id));
-    await Promise.all(
-      before
-        .filter(({ id }) => !after.has(id))
-        .map(({ id }) => killScriptsForProject(id)),
-    );
-    return report;
-  },
-};
+  doctorFix: () =>
+    Effect.gen(function* () {
+      const before = loadProjects();
+      const report = yield* fromPromise(async () =>
+        runDoctor(true, await doctorInput()),
+      );
+      const after = new Set(
+        (yield* fromPromise(refreshProjects)).map((p) => p.id),
+      );
+      yield* Effect.forEach(
+        before.filter(({ id }) => !after.has(id)),
+        ({ id }) => killScriptsForProject(id),
+        { concurrency: "unbounded", discard: true },
+      );
+      return report;
+    }),
+} satisfies Handlers<typeof cliContract, unknown, HostServices>;
