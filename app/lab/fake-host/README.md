@@ -188,8 +188,10 @@ id is twelve hex digits, as the contracts require: Studio Mac's
 `happy-hummingbird`). Each device has a small disk
 there (`fakeDisks`) for the add-project dialog to browse, and adding or
 cloning on one really registers the project, so it folds into the
-sidebar the way a real one would. `bridge.ts` serves them and
-answers any unhandled channel with a schema-derived stub (fabricated
+sidebar the way a real one would. `bridge.ts` serves them as the links
+of the page's client runtime (`renderer/lib/runtime`), in place of the
+shell's and the host's, and answers any unhandled channel with a
+schema-derived stub (fabricated
 arms allowed: this is a fake, not the fail-closed web bridge). The sync
 verbs really mutate the fixture world, so the transplant and mirror
 flows show their outcome: a posed mirror session cycles every few

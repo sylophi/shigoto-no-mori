@@ -7,17 +7,18 @@
 // would hoist above the install).
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
-import { startClient } from "./lib/runtime/client";
+import { disposeWithPage, startClient } from "./lib/runtime/client";
 import * as Desktop from "./lib/runtime/desktop";
 
 async function installApi(): Promise<void> {
   const bridge = window.electronBridge;
   if (bridge === undefined) throw new Error("the preload's bridge is missing");
   const { requestShellPort: _, ...facts } = bridge;
-  const api = await startClient(Desktop.layer(bridge));
+  const client = await startClient(Desktop.layer(bridge));
+  disposeWithPage(client);
   // The device id is the host's, read from its store.
-  const { deviceId } = await api.window.hostAddress();
-  window.api = { ...facts, deviceId, ...api };
+  const { deviceId } = await client.api.window.hostAddress();
+  window.api = { ...facts, deviceId, ...client.api };
 }
 
 void installApi()

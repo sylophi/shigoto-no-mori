@@ -17,7 +17,7 @@ import {
 import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { buildApi, type AllChannelHandlers } from "@shared/ipc/client";
+import type { AllChannelHandlers } from "@shared/ipc/client";
 import { stackCleanupForWorktree } from "@shigomori/contracts/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
@@ -36,6 +36,7 @@ import {
   type ContractScope,
   inputOf,
   outputOf,
+  scopeOf,
 } from "@shigomori/contracts/contract";
 import { decode } from "@shigomori/contracts/codec";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
@@ -59,8 +60,13 @@ import type {
   MirrorServing,
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
-import type { ClientTransport } from "@shared/ipc/transport";
-import { createSubscriberRegistry } from "@shared/remote/subscriberRegistry";
+import type { Link } from "@shared/ipc/transport";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { ClientLinks } from "@/lib/runtime/ClientLinks";
+import { disposeWithPage, startClientNow } from "@/lib/runtime/client";
+import { pushFanOut } from "@shared/remote/rpcTransport";
 import {
   FAKE_DIFF,
   FAKE_REPO_MERGE_CONFIG,
@@ -155,7 +161,9 @@ declare global {
 }
 
 type FixtureWire = {
-  transport: ClientTransport;
+  link: Link;
+  // A call's answer, for the hub hop's fixture (hub:invokePeer).
+  answer: (channel: string, input: unknown) => Promise<unknown>;
   emit: (channel: string, payload: unknown) => void;
 };
 
@@ -165,54 +173,55 @@ type FixtureWire = {
 function createFixtureWire(
   scope: ContractScope,
   handlersFor: (emit: FixtureWire["emit"]) => FixtureHandlers,
-  name: string,
 ): FixtureWire {
-  const registry = createSubscriberRegistry(`fake-host:${name}`);
+  const fanOut = pushFanOut();
   const index = invokeIndexFor(scope);
-  const emit: FixtureWire["emit"] = (channel, payload) =>
-    registry.emit(channel, payload);
   // Read by channel name off the wire, which loses the link between a
   // channel and its input type. The parse below restores it.
-  const handlers = handlersFor(emit) as Record<
+  const handlers = handlersFor(fanOut.emit) as Record<
     string,
     ((input: unknown) => unknown) | undefined
   >;
+  const answer = async (channel: string, input: unknown) => {
+    const call = index.get(channel);
+    if (call === undefined) {
+      throw new Error(`[fake-host] no contract entry for ${channel}`);
+    }
+    const handler = handlers[channel];
+    if (handler !== undefined) {
+      // Parsed the way the real registrar parses it, so a handler sees
+      // the contract's shape and a bad fixture call fails. The answer is
+      // copied the way the real wire's serializing copies it, so
+      // handlers can hand back the fixture world's own rows and change
+      // them in place later: a cached answer that is the same object as
+      // the next one would never look changed.
+      return structuredClone(await handler(decode(inputOf(call), input)));
+    }
+    const stub = stubValueFor(outputOf(call), { fabricateArms: true });
+    if (stub === NO_STRUCTURAL_STUB) {
+      throw new Error(`[fake-host] no stub for ${channel}`);
+    }
+    return stub;
+  };
   return {
-    // The lab's own fixtures, local and peer alike, read as given.
-    transport: {
+    // The lab's own fixtures, local and peer alike, read as given. What
+    // a fixture rejects with (a posed contract error) is the call's
+    // failure as it is.
+    link: {
       local: true,
-      invoke(channel, input) {
-        const call = index.get(channel);
-        if (call === undefined) {
-          return Promise.reject(
-            new Error(`[fake-host] no contract entry for ${channel}`),
+      call: (channel, input) =>
+        Effect.callback<unknown, unknown>((resume) => {
+          answer(channel, input).then(
+            (value) => resume(Effect.succeed(value)),
+            (error: unknown) => resume(Effect.fail(error)),
           );
-        }
-        const handler = handlers[channel];
-        if (handler !== undefined) {
-          // Parsed the way the real registrar parses it, so a handler
-          // sees the contract's shape and a bad fixture call fails. The
-          // answer is copied the way the real wire's serializing copies
-          // it, so handlers can hand back the fixture world's own rows
-          // and change them in place later: a cached answer that is the
-          // same object as the next one would never look changed.
-          return Promise.resolve()
-            .then(() => handler(decode(inputOf(call), input)))
-            .then((answer) => structuredClone(answer));
-        }
-        const stub = stubValueFor(outputOf(call), { fabricateArms: true });
-        if (stub === NO_STRUCTURAL_STUB) {
-          return Promise.reject(
-            new Error(`[fake-host] no stub for ${channel}`),
-          );
-        }
-        return Promise.resolve(stub);
-      },
-      subscribe(channel, handler) {
-        return registry.subscribe(channel, handler);
-      },
+        }),
+      view: (channel) =>
+        Stream.die(new Error(`[fake-host] no fixture serves ${channel}`)),
+      pushes: fanOut.pushes,
     },
-    emit,
+    answer,
+    emit: fanOut.emit,
   };
 }
 
@@ -1629,13 +1638,10 @@ export function installFakeHostBridge(
     if (forest.deviceId === selfDeviceId) continue;
     peerWires.set(
       forest.deviceId,
-      createFixtureWire(
-        "host",
-        () =>
-          hostHandlersFor(forest, (channel, payload) =>
-            pushFromPeer(forest.deviceId, channel, payload),
-          ),
-        forest.deviceId,
+      createFixtureWire("host", () =>
+        hostHandlersFor(forest, (channel, payload) =>
+          pushFromPeer(forest.deviceId, channel, payload),
+        ),
       ),
     );
   }
@@ -1645,14 +1651,11 @@ export function installFakeHostBridge(
   // matching the real browser bridge's shape.
   const localForest = forests[LOCAL_DEVICE_ID];
   if (localForest === undefined) throw new Error("[fake-host] no local forest");
-  const localHost = createFixtureWire(
-    "host",
-    (emit) =>
-      WEB_SHELL
-        ? // A browser still keeps its own copy of the shared settings.
-          sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
-        : hostHandlersFor(localForest, emit),
-    "local",
+  const localHost = createFixtureWire("host", (emit) =>
+    WEB_SHELL
+      ? // A browser still keeps its own copy of the shared settings.
+        sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
+      : hostHandlersFor(localForest, emit),
   );
 
   const webDevice: DeviceInfo = {
@@ -1797,7 +1800,7 @@ export function installFakeHostBridge(
       if (notSharing.has(deviceId)) {
         return Promise.reject(new NotSharingError());
       }
-      return wire.transport.invoke(channel, input);
+      return wire.answer(channel, input);
     },
     "shell:openExternal": ({ url }) => {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -1856,17 +1859,27 @@ export function installFakeHostBridge(
     },
   };
 
-  const client = createFixtureWire("client", () => clientHandlers, "client");
+  const client = createFixtureWire("client", () => clientHandlers);
   pushFromPeer = (deviceId, channel, payload) =>
     client.emit("hub:peerPush", { deviceId, channel, payload });
 
+  const fixtureClient = startClientNow(
+    Layer.succeed(
+      ClientLinks,
+      ClientLinks.of({
+        linkOf: (module) =>
+          scopeOf(module) === "host" ? localHost.link : client.link,
+      }),
+    ),
+  );
+  disposeWithPage(fixtureClient);
   const api = {
     deviceId: selfDeviceId,
     appVersion: FAKE_APP_VERSION,
     clerkPublishableKey: "pk_test_fake",
     isDev: true,
     isElectron: !WEB_SHELL,
-    ...buildApi({ host: localHost.transport, client: client.transport }),
+    ...fixtureClient.api,
   };
   // The renderer's window.d.ts types window.api, so this assignment is
   // the proof the fake host bridge has the same surface.
