@@ -72,7 +72,9 @@ export function useCommitDraft(projectId: string, worktreeId: string) {
       setDraft((current) => (isEmptyDraft(current) ? stored : current));
     }
     const onFill = (filled: string, next: CommitDraft) => {
-      if (filled === key) setDraft(next);
+      if (filled !== key) return;
+      // Storage can lag the box (a failed write), so the box is checked too.
+      setDraft((current) => (isEmptyDraft(current) ? next : current));
     };
     listeners.add(onFill);
     return () => {
