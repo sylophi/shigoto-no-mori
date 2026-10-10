@@ -17,6 +17,16 @@ export type LayoutSettings = {
   readonly managedOnProjectDrive: boolean;
 };
 
+// The folder worktrees live in under each root: short, since agents and
+// people read and type these paths all day.
+const WT = "wt";
+
+// The roots v2 put worktrees in, before `wt`. They stay managed, since
+// harness transcripts, port-pool leases and running work are keyed by a
+// worktree's path, so its folder only moves when the user moves it
+// (`worktrees move`). They go in a release after v3, once they empty.
+const V2_WT = "worktrees";
+
 // Where the data dir is, and the flavor's name for it, which a managed
 // root on another drive is named after.
 export type DataDirPlace = {
@@ -39,14 +49,15 @@ export function externalVolumeRoot(path: string): string | undefined {
 // The managed root's place on the project's own external drive. Always
 // managed, so worktrees placed there stay ours whatever happens to the
 // setting or the data dir later.
-export function driveBaseOf(
+function driveBaseOf(
   projectPath: string,
   place: DataDirPlace,
+  folder = WT,
 ): string | undefined {
   const volume = externalVolumeRoot(projectPath);
   return volume === undefined
     ? undefined
-    : join(volume, place.dataDirName, "worktrees", basename(projectPath));
+    : join(volume, place.dataDirName, folder, basename(projectPath));
 }
 
 // driveBaseOf as a destination for new worktrees: none as well when the
@@ -61,6 +72,31 @@ export function projectDriveBase(
   }
   return driveBaseOf(projectPath, place);
 }
+
+// The bases under a root folder name: the managed root under the data
+// dir, the in-project folder, and the drive's when the project is on one.
+const basesIn = (projectPath: string, place: DataDirPlace, folder: string) => {
+  const drive = driveBaseOf(projectPath, place, folder);
+  return [
+    join(place.dataDir, folder, basename(projectPath)),
+    join(projectPath, ".shigomori", folder),
+    ...(drive === undefined ? [] : [drive]),
+  ];
+};
+
+// The base a worktree's parent is when it is ours, and how many levels
+// from it up are ours too, removed once a last worktree leaves them
+// empty: the project's folder under the managed root, the in-project
+// folder and `.shigomori`, or the drive's project folder, root and data
+// dir. Zero for any other parent.
+export const ownedLevels = (
+  parent: string,
+  projectPath: string,
+  place: DataDirPlace,
+) =>
+  [WT, V2_WT]
+    .map((folder) => basesIn(projectPath, place, folder).indexOf(parent) + 1)
+    .find((levels) => levels > 0) ?? 0;
 
 const trimTrailingSlashes = (path: string) => path.replace(/\/+$/, "");
 
@@ -78,12 +114,10 @@ export function managedBases(
   settings: Pick<LayoutSettings, "customWorktreePath">,
   place: DataDirPlace,
 ): ReadonlyArray<string> {
-  const drive = driveBaseOf(projectPath, place);
   const custom = settings.customWorktreePath?.trim() ?? "";
   return [
-    join(place.dataDir, "worktrees", basename(projectPath)),
-    join(projectPath, ".shigomori", "worktrees"),
-    ...(drive === undefined ? [] : [drive]),
+    ...basesIn(projectPath, place, WT),
+    ...basesIn(projectPath, place, V2_WT),
     ...(custom === "" ? [] : [trimTrailingSlashes(custom)]),
   ];
 }
@@ -110,10 +144,10 @@ export function worktreeBase(
   settings: LayoutSettings,
   place: DataDirPlace,
 ): string {
-  const managedRoot = join(place.dataDir, "worktrees", basename(projectPath));
+  const managedRoot = join(place.dataDir, WT, basename(projectPath));
   switch (settings.worktreeLayout ?? "managed-root") {
     case "in-project":
-      return join(projectPath, ".shigomori", "worktrees");
+      return join(projectPath, ".shigomori", WT);
     case "custom": {
       const custom = settings.customWorktreePath?.trim() ?? "";
       return custom === "" ? managedRoot : trimTrailingSlashes(custom);

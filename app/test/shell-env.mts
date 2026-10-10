@@ -46,7 +46,7 @@ const LAUNCH = {
   CLAUDE_CODE_MESSAGING_TOKEN: "secret",
   NODE_OPTIONS: "--inspect",
   ELECTRON_RUN_AS_NODE: "1",
-  SHIGOMORI_WORKTREE_PATH: "/Users/u/.sm/worktrees/repo/fox",
+  SHIGOMORI_WORKTREE_PATH: "/Users/u/.sm/wt/repo/fox",
   SHIGOMORI_CD_FILE: "/tmp/u/sm-cd.123",
   SHIGOMORI_DATA_DIR: "/tmp/sandbox",
 };

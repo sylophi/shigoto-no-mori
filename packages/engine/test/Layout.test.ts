@@ -20,15 +20,12 @@ it("reads the project's layout once it is configured, and the device's drive set
   box.write("projects/P/project.json", {
     worktreeLayout: "in-project",
   });
-  assert.equal(await box.engine(base), "/Volumes/Ext/.smd/worktrees/repo");
+  assert.equal(await box.engine(base), "/Volumes/Ext/.smd/wt/repo");
   await box.remove();
   box = sandbox();
   box.write("projects/P/project.json", {
     defaultBranch: "main",
     worktreeLayout: "in-project",
   });
-  assert.equal(
-    await box.engine(base),
-    "/Volumes/Ext/code/repo/.shigomori/worktrees",
-  );
+  assert.equal(await box.engine(base), "/Volumes/Ext/code/repo/.shigomori/wt");
 });

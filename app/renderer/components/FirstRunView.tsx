@@ -26,7 +26,7 @@ export function FirstRunView({ onAdd }: { onAdd: () => void }) {
           </Step>
           <Step n={2} title="Spawn worktrees.">
             One per branch you want in parallel. They live under{" "}
-            <Mono>~/.sm/worktrees/</Mono>.
+            <Mono>~/.sm/wt/</Mono>.
           </Step>
           <Step n={3} title="Launch your tools.">
             Open each worktree in Cursor, VS Code, Zed, or any custom tool you

@@ -15,7 +15,7 @@ import {
 import { holds, textOf } from "./lib/properties.ts";
 
 const external = "/Volumes/Ext/code/repo";
-const driveBase = "/Volumes/Ext/.sm/worktrees/repo";
+const driveBase = "/Volumes/Ext/.sm/wt/repo";
 const place = (dataDir: string) => ({ dataDir, dataDirName: ".sm" });
 
 it("finds the external drive a path sits on", () => {
@@ -51,7 +51,7 @@ it("offers the project's drive unless the data dir is already on it", () => {
 
 it("moves only the managed root onto the project's drive, and only when asked", () => {
   const at = place("/Users/me/.sm");
-  const managedRoot = "/Users/me/.sm/worktrees/repo";
+  const managedRoot = "/Users/me/.sm/wt/repo";
   const off = { managedOnProjectDrive: false };
   const on = { managedOnProjectDrive: true };
   assert.equal(worktreeBase(external, off, at), managedRoot);
@@ -62,7 +62,7 @@ it("moves only the managed root onto the project's drive, and only when asked", 
   );
   assert.equal(
     worktreeBase(external, { ...on, worktreeLayout: "in-project" }, at),
-    `${external}/.shigomori/worktrees`,
+    `${external}/.shigomori/wt`,
   );
   assert.equal(
     worktreeBase(
@@ -99,14 +99,25 @@ it("counts the drive base as managed wherever the data dir is", () => {
   }
   assert.equal(
     managedBases("/Users/me/code/repo", {}, place("/Users/me/.sm")).length,
-    2,
+    4,
   );
 });
 
+it("keeps the worktrees under the v2 roots managed", () => {
+  const bases = managedBases(external, {}, place("/Users/me/.sm"));
+  for (const v2 of [
+    "/Users/me/.sm/worktrees/repo",
+    `${external}/.shigomori/worktrees`,
+    "/Volumes/Ext/.sm/worktrees/repo",
+  ]) {
+    assert.ok(isManagedPath(`${v2}/otter`, bases), v2);
+  }
+});
+
 it("holds a worktree managed by its parent, not a prefix", () => {
-  const bases = ["/", "/Users/me/.sm/worktrees/repo/"];
-  assert.ok(isManagedPath("/Users/me/.sm/worktrees/repo/otter/", bases));
-  assert.ok(!isManagedPath("/Users/me/.sm/worktrees/repo/otter/deep", bases));
+  const bases = ["/", "/Users/me/.sm/wt/repo/"];
+  assert.ok(isManagedPath("/Users/me/.sm/wt/repo/otter/", bases));
+  assert.ok(!isManagedPath("/Users/me/.sm/wt/repo/otter/deep", bases));
   assert.ok(!isManagedPath("relative", bases));
 });
 

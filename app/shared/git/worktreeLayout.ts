@@ -13,7 +13,7 @@ import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectCon
 // component (`.shigomori`) is also the path appended to the primary's
 // `.git/info/exclude` so it stays out of `git status`.
 const IN_PROJECT_ROOT_DIR = ".shigomori";
-const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
+const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/wt`;
 
 // Containment test: true when `path` IS `ancestor` or sits anywhere
 // beneath it. Prefix matching by intent. Callers guarding destructive
@@ -69,12 +69,7 @@ export function projectDriveBaseFor(
 ): string | null {
   const volume = externalVolumeRoot(projectPath);
   if (volume === null || dataDir.startsWith(`${volume}/`)) return null;
-  return joinPath(
-    volume,
-    canonicalDataDirName,
-    "worktrees",
-    lastSegment(projectPath),
-  );
+  return joinPath(volume, canonicalDataDirName, "wt", lastSegment(projectPath));
 }
 
 // Where the device keeps this project's managed worktrees when its
@@ -143,7 +138,7 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
     const driveBase = managedDriveBaseFor(projectPath, inputs);
     if (driveBase !== null) return driveBase;
   }
-  return joinPath(dataDir, "worktrees", lastSegment(projectPath));
+  return joinPath(dataDir, "wt", lastSegment(projectPath));
 }
 
 // Full destination path for a single worktree under the given layout.

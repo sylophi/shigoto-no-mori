@@ -115,7 +115,7 @@ const alpha = (settings: Record<string, unknown> = {}) => {
     worktreeLayout: "in-project",
     ...settings,
   });
-  const base = join(repo, ".shigomori", "worktrees");
+  const base = join(repo, ".shigomori", "wt");
   const tree = (name: string) => {
     const path = join(base, name);
     box.git(repo, "worktree", "add", "-q", "-b", name, path);

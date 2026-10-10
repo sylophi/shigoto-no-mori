@@ -1358,7 +1358,7 @@ async function fakeSyncPull(
     projectId: project.id,
     name,
     branch: input.landBranch ?? input.branch,
-    path: `/Users/rin/.sm/worktrees/${project.name}/${name}`,
+    path: `/Users/rin/.sm/wt/${project.name}/${name}`,
     ahead: sourceWorktree?.ahead ?? 0,
     behind: 0,
     changedCount: sourceWorktree?.changedCount ?? 0,
@@ -1585,7 +1585,7 @@ function initCrowd(): void {
             projectId: id,
             name: animal,
             branch: n === 0 ? "fix-flaky-sync" : "exp/redo-cache",
-            path: `/Users/rin/.sm/worktrees/${name}/${animal}`,
+            path: `/Users/rin/.sm/wt/${name}/${animal}`,
           }),
       ),
     );

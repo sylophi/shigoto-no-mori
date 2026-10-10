@@ -66,11 +66,11 @@ const CarryOverEntrySchema = Schema.Struct({
 export type CarryOverEntry = typeof CarryOverEntrySchema.Type;
 
 // Where shigomori's managed worktrees for this project live on disk.
-// - managed-root: <dataDir>/worktrees/<projectName>/<worktreeName>
+// - managed-root: <dataDir>/wt/<projectName>/<worktreeName>
 //   (default; one place for every project's worktrees, easy to nuke.
 //   The device's managedOnProjectDrive setting moves it onto the
 //   drive of a project that sits on an external one)
-// - in-project: <projectPath>/.shigomori/worktrees/<worktreeName>
+// - in-project: <projectPath>/.shigomori/wt/<worktreeName>
 //   (sits inside the primary; lets tools that walk up to a workspace
 //   root, like Turbopack, accept symlinked node_modules from carry-over)
 // - custom: <customWorktreePath>/<worktreeName>
