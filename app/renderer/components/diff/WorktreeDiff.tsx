@@ -21,7 +21,7 @@ import {
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { isOverlayOpen } from "@/lib/dom";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";

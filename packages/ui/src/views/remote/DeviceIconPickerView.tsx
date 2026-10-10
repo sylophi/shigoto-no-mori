@@ -18,19 +18,16 @@ import {
   DEVICE_SHAPES,
   type DeviceIcon,
 } from "@shigomori/contracts/deviceIcon";
-import {
-  DeviceGlyphView,
-  DeviceMarkView,
-} from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
+import { DeviceGlyphView, DeviceMarkView } from "../shared/DeviceGlyphView.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@shigomori/ui/primitives/dropdown-menu.tsx";
-import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+} from "../../primitives/dropdown-menu.tsx";
+import type { StatusTone } from "../../primitives/status-dot.tsx";
+import { cn } from "../../lib/utils.ts";
 
 export function DeviceIconPickerView({
   icon,

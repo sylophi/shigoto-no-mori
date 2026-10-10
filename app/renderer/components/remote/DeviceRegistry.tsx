@@ -42,9 +42,9 @@ import {
   AccountIdentityView,
   DeviceRegistryView,
   SignInBannerView,
-} from "./DeviceRegistryView";
+} from "@shigomori/ui/views/remote/DeviceRegistryView.tsx";
 import { useHostChipIndex } from "./deviceHostChips";
-import { deviceRowStatus } from "./deviceRegistryStatus";
+import { deviceRowStatus } from "@shigomori/ui/views/remote/deviceRegistryStatus.ts";
 
 export function DeviceRegistry({ accountId }: { accountId: string }) {
   useWatchCommandAccessChanges();
@@ -96,7 +96,13 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       // the ones every other surface of this device draws.
       name: isThisDevice ? local.name : device.name,
       icon: isThisDevice ? local.icon : device.icon,
-      status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
+      status: deviceRowStatus(
+        device,
+        isThisDevice,
+        hubDevice?.status,
+        socket,
+        now,
+      ),
       // Whether THIS device may drive verbs on the peer: the peer's own
       // "allow control from other devices" switch, as it reports it.
       access: commandAccessOf(device.deviceId, hubDevice),

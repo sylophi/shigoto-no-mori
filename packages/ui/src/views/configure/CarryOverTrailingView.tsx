@@ -1,7 +1,7 @@
 import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
-import type { CarryOverEntry } from "@shigomori/contracts/schemas";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import type { CarryOverEntry } from "@shigomori/contracts/schemas/index";
+import { Button } from "../../primitives/button.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 
 // A carry-over picker row's control: Symlink and Copy on an ignored
 // path, and why not otherwise.

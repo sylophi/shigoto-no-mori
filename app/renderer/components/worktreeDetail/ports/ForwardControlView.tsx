@@ -19,7 +19,7 @@ import { Switch } from "@shigomori/ui/primitives/switch.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { OpenLocalhostButtonView } from "./OpenLocalhostButtonView";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 
 export function ForwardControlView({
   deviceLabel,

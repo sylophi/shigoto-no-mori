@@ -4,24 +4,24 @@
 // the project's own tools.
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { FolderOpen, Plus } from "lucide-react";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
-import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
+import { Button } from "../../primitives/button.tsx";
+import { ErrorBanner } from "../../primitives/error-banner.tsx";
+import { PathSpan } from "../../primitives/path-span.tsx";
 import {
   SectionHeading,
   SectionIntro,
-} from "@shigomori/ui/primitives/section-heading.tsx";
-import { fieldSetter } from "@/hooks/ui/useDirtyForm";
-import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
+} from "../../primitives/section-heading.tsx";
+import { fieldSetter } from "../../hooks/useDirtyForm.ts";
+import { useLauncherListEditor } from "../../hooks/useLauncherListEditor.ts";
 import type {
   CarryOverEntry,
   LauncherCommand,
-} from "@shigomori/contracts/schemas";
-import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
-import { CustomLauncherInputView } from "@shigomori/ui/views/shared/CustomLauncherInputView.tsx";
-import { ScriptEnvPopoverView } from "@shigomori/ui/views/shared/ScriptEnvPopoverView.tsx";
-import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
-import { ScriptFieldView } from "./ScriptFieldView";
+} from "@shigomori/contracts/schemas/index";
+import { ToggleRowView } from "../shared/ToggleRowView.tsx";
+import { CustomLauncherInputView } from "../shared/CustomLauncherInputView.tsx";
+import { ScriptEnvPopoverView } from "../shared/ScriptEnvPopoverView.tsx";
+import { PAGE_BODY } from "../shared/PageShellView.tsx";
+import { ScriptFieldView } from "./ScriptFieldView.tsx";
 
 export interface ConfigureFormState {
   defaultBranch: string;

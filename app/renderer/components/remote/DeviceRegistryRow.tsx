@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import type { CommandAccess } from "@/hooks/remote/useCommandAccess";
+import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -17,12 +17,12 @@ import {
   deviceRowLabels,
   DeviceRegistryRowView,
   ExposureSwitchesView,
-} from "./DeviceRegistryRowView";
+} from "@shigomori/ui/views/remote/DeviceRegistryRowView.tsx";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
 import { ShareDataToggle } from "./ShareDataToggle";
-import type { HostChip } from "./deviceHostChips";
-import type { DeviceRowStatus } from "./deviceRegistryStatus";
+import type { HostChip } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
+import type { DeviceRowStatus } from "@shigomori/ui/views/remote/deviceRegistryStatus.ts";
 
 // A registry row (DeviceRegistryRowView) with its rename and removal
 // state and the controls that write to the hub and this machine.

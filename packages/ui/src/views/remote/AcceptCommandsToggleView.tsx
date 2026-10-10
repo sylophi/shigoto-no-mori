@@ -25,9 +25,9 @@ import {
   SquareTerminal,
   type LucideIcon,
 } from "lucide-react";
-import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
-import { TONE_PILL, TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+import { ToggleRowView } from "../shared/ToggleRowView.tsx";
+import { TONE_PILL, TONE_TEXT } from "../../primitives/status-dot.tsx";
+import { cn } from "../../lib/utils.ts";
 import { GRANTS, type GrantId } from "@shigomori/contracts/grants";
 
 // The consent lines are the contract's (packages/contracts/src/grants.ts),

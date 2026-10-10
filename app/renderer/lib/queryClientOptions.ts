@@ -11,7 +11,7 @@ import {
   isNotSharingError,
 } from "@shigomori/contracts/errors";
 import { notifyError } from "@/lib/toast";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 
 // Per-query opt-out: pass `meta: { silentError: true }` to suppress the
 // global toast (use when the call site renders a richer inline error).

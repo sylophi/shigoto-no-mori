@@ -1,16 +1,9 @@
 import { useQueries } from "@tanstack/react-query";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { PickerEntry } from "@shigomori/ui/views/shared/PickerRowView.tsx";
+import type { RepoEntryHolder } from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { carryOverListingQueryOptions } from "@/hooks/projects/useCarryOverListing";
-
-// Where one device holds an entry: in its main checkout, or only in
-// the worktrees named.
-export interface RepoEntryHolder {
-  device: string;
-  inPrimary: boolean;
-  worktrees: readonly string[];
-}
 
 // A folder entry of the repo as the devices holding it have it.
 // `everywhere` when every one of them has it in its main checkout, so

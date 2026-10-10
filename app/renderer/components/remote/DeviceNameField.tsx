@@ -1,5 +1,5 @@
 import { useSetDeviceName } from "@/hooks/account/useAccount";
-import { DeviceNameFieldView } from "./DeviceNameFieldView";
+import { DeviceNameFieldView } from "@shigomori/ui/views/remote/DeviceNameFieldView.tsx";
 
 // A device's name field (DeviceNameFieldView), its rename written to
 // the device hub.

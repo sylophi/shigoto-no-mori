@@ -18,13 +18,13 @@ import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
-import { NotSharingView } from "./NotSharingView";
+import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
 import {
   OpenDevicesButtonView,
   RemoteScopeFrameView,
   UnreachableBannerView,
   UnreachableDeviceView,
-} from "./RemoteScopeView";
+} from "@shigomori/ui/views/remote/RemoteScopeView.tsx";
 
 function RemoteScopeGate({
   deviceId,

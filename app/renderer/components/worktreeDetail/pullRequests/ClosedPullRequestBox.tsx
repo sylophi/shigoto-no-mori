@@ -5,7 +5,7 @@ import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import { useDeleteStackWorktrees } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas";

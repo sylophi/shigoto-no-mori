@@ -1,5 +1,5 @@
 import { usePortForwards } from "@/hooks/remote/usePortForwards";
-import { PortForwardSectionView } from "./PortForwardSectionView";
+import { PortForwardSectionView } from "@shigomori/ui/views/remote/PortForwardSectionView.tsx";
 
 // A peer's port forwards (PortForwardSectionView), started and stopped
 // through the forwards store.

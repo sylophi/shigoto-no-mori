@@ -31,7 +31,7 @@ import {
   isConfigured,
   mergeServiceEnv,
   resolveServiceConfig,
-} from "../shared/account/serviceConfig.ts";
+} from "@shigomori/contracts/accountServiceConfig";
 import {
   effectiveDeviceIcon,
   enrollDevice,

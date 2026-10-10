@@ -44,12 +44,6 @@ export const BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
 // healthy, so its next reconnect starts the ladder from the bottom.
 export const STABLE_CONNECTION_MS = 30_000;
 
-// How long a freshly provisioned tunnel is probed before the host
-// gives up and re-provisions (host/direct/cloudflared.ts): its DNS
-// record is new and may take this long to route. Shared so the
-// registry's "tunnel starting" note quotes the same figure.
-export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
-
 // Defined by the hub contract, whose schema validates it on the
 // loopback.
 export type SupervisorStatus = HubStatus["socket"];

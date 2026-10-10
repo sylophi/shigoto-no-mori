@@ -1,4 +1,4 @@
-import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";
+import { Skeleton } from "../../primitives/skeleton.tsx";
 
 export function ConfigureSkeletonView() {
   return (

@@ -16,7 +16,7 @@ import {
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
-import { hostsProjects } from "@/lib/remote/deviceTraits";
+import { hostsProjects } from "@shigomori/ui/lib/deviceTraits.ts";
 import {
   type RemoteDevice,
   type RemoteDeviceApi,

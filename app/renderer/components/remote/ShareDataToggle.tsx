@@ -2,7 +2,7 @@
 // Off, the account's other devices see it as not sharing, with nothing
 // on it, while the mirrors this machine asks for keep working.
 import { useSetSharing, useSharing } from "@/hooks/account/useSharing";
-import { ShareDataToggleView } from "./ShareDataToggleView";
+import { ShareDataToggleView } from "@shigomori/ui/views/remote/ShareDataToggleView.tsx";
 
 export function ShareDataToggle() {
   const { data: on, isError } = useSharing();

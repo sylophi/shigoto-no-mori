@@ -7,15 +7,12 @@
 // whichever device it is made from. A project held on one device alone
 // has nothing to pick, so the section stays out.
 import { Check } from "lucide-react";
-import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
-import type {
-  DeviceBlock,
-  DeviceTarget,
-} from "@/components/shared/deviceTargets";
-import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
-import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
-import { THIS_DEVICE_VIEW } from "@shigomori/ui/lib/deviceStatus.ts";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+import { DeviceGlyphView } from "../shared/DeviceGlyphView.tsx";
+import type { DeviceBlock, DeviceTarget } from "../../lib/deviceRoster.ts";
+import { RowTag } from "../../primitives/row-tag.tsx";
+import { SectionIntro } from "../../primitives/section-heading.tsx";
+import { THIS_DEVICE_VIEW } from "../../lib/deviceStatus.ts";
+import { cn } from "../../lib/utils.ts";
 
 // A device holding the repo.
 export type CreateOnHolder = Pick<

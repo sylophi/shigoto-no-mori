@@ -16,13 +16,13 @@
 // reconnecting), so a row wearing it is one that is trying.
 import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shared/remote/supervisor";
-import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
+import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shigomori/contracts/modules/hub";
+import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import {
   deviceStatusView,
   type DeviceStatusView,
-} from "@shigomori/ui/lib/deviceStatus.ts";
-import type { RemoteDevice } from "@/lib/remote/devices";
+  type RemoteDeviceStatus,
+} from "../../lib/deviceStatus.ts";
 
 // The same triple every other device surface renders: tone, label,
 // reachable. A registry row differs only in how it ANSWERS that, not in
@@ -65,7 +65,9 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
 export function deviceRowStatus(
   device: DeviceInfo,
   isThisDevice: boolean,
-  hubDevice: RemoteDevice | undefined,
+  // The peer's status in the live hub store, undefined before it has
+  // an entry.
+  hubStatus: RemoteDeviceStatus | undefined,
   // THIS device's own hub socket, null before the first snapshot.
   socket: HubStatus["socket"] | null,
   // The registry's clock (useNow), for the "last seen" label.
@@ -87,7 +89,7 @@ export function deviceRowStatus(
   // A peer absent from the hub roster -- or with no store entry at
   // all, which is the same fact before the first reconcile lands -- is
   // off, not broken.
-  if (hubDevice === undefined || hubDevice.status.phase === "stopped") {
+  if (hubStatus === undefined || hubStatus.phase === "stopped") {
     return {
       tone: "slate",
       // lastSeenAt is null until a device first connects, and a device
@@ -102,5 +104,5 @@ export function deviceRowStatus(
   // Every other phase (connected, online, connecting, reconnecting,
   // blocked) is a live transport fact, so the shared presentation
   // mapping owns it outright.
-  return deviceStatusView(hubDevice.status);
+  return deviceStatusView(hubStatus);
 }
