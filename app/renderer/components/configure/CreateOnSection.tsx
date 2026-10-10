@@ -10,7 +10,7 @@ import {
   BLOCK_REASON,
   useDeviceTargets,
 } from "@/components/shared/deviceTargets";
-import { CreateOnSectionView } from "./CreateOnSectionView";
+import { CreateOnSectionView } from "@shigomori/ui/views/configure/CreateOnSectionView.tsx";
 
 export function CreateOnSection({ project }: { project: Project }) {
   const holders = useDeviceTargets(project).filter(

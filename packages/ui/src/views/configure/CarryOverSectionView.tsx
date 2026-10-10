@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
-import { Switch } from "@shigomori/ui/primitives/switch.tsx";
-import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
+import { Button } from "../../primitives/button.tsx";
+import { SectionIntro } from "../../primitives/section-heading.tsx";
+import { Switch } from "../../primitives/switch.tsx";
+import { ExternalLink } from "../../primitives/external-link.tsx";
 import { normalizeRelPath } from "@shigomori/contracts/git/gitPaths";
 import type {
   CarryOverEntry,
   CarryOverStat,
-} from "@shigomori/contracts/schemas";
-import { CarryOverRowView } from "./CarryOverRowView";
+} from "@shigomori/contracts/schemas/index";
+import { CarryOverRowView } from "./CarryOverRowView.tsx";
 
 export function CarryOverSectionView({
   entries,

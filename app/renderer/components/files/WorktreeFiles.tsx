@@ -9,7 +9,7 @@ import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
-import { peerFilesHiddenNote } from "@/lib/commandAccessCopy";
+import { peerFilesHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@/lib/toggleSet";
 import type { Worktree } from "@shigomori/contracts/schemas";

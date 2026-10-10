@@ -16,11 +16,11 @@ import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import { useRemoteProjects } from "@/hooks/remote/useRemoteForests";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-
-// Why a device can't host a create. Ordered by how the user would ask:
-// a machine that isn't there can't be missing a checkout yet.
-export type DeviceBlock = "offline" | "no-project" | "no-grant";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
+import type {
+  DeviceBlock,
+  DeviceTarget as ViewTarget,
+} from "@shigomori/ui/lib/deviceRoster.ts";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
 // is the device hub's job, and granting happens on the other machine's
@@ -35,14 +35,8 @@ export const BLOCK_REASON: Record<DeviceBlock, string> = {
   "no-grant": peerReadOnlyNote("it"),
 };
 
-export type DeviceTarget = Omit<DeviceTab, "block"> & {
-  // The identity-matched project ON THAT DEVICE -- the id every scoped
-  // hook keys off once a page moves there. Undefined when the device
-  // has no checkout of this repo.
-  project: Project | undefined;
-  // Undefined when the device can host the create.
-  block: DeviceBlock | undefined;
-};
+// A device's target with the API scoped to it, which the pages move to.
+export type DeviceTarget = ViewTarget & Pick<DeviceTab, "api">;
 
 // A device with a checkout of the repo whose folder is still there,
 // which leaves it a tab's own blocks.

@@ -19,7 +19,7 @@ import {
   HideIgnoredToggleView,
 } from "@/components/files/WorktreeFilesView";
 import { SidebarTakeoverView } from "@/components/sidebar/SidebarTakeoverView";
-import { peerFilesHiddenNote } from "@/lib/commandAccessCopy";
+import { peerFilesHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { FAKE_TREE, fakeFile } from "../fake-host/filesFixtures";
 import { LOCAL_DEVICE_ID } from "../fake-host/fixtures";
 import { SceneWindowFrame } from "./frame";

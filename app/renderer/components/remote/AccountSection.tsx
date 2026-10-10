@@ -5,7 +5,7 @@ import {
   AccountLoadingView,
   NotConfiguredPanelView,
   SignedOutPanelView,
-} from "./AccountPanelsView";
+} from "@shigomori/ui/views/remote/AccountPanelsView.tsx";
 import { DeviceRegistry } from "./DeviceRegistry";
 
 // "Account": sign in to the device hub so this device can reach the

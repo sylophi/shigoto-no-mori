@@ -1,6 +1,6 @@
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import type { HostChip } from "./deviceHostChips";
-import { DeviceHostsView } from "./DeviceHostsView";
+import type { HostChip } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
+import { DeviceHostsView } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
 
 // A device's project strip (DeviceHostsView), each chip's icon read
 // through that machine's api.

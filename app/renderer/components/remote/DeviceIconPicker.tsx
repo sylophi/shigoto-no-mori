@@ -1,7 +1,7 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { useAccountStatus, useSetDeviceIcon } from "@/hooks/account/useAccount";
-import { DeviceIconPickerView } from "./DeviceIconPickerView";
+import { DeviceIconPickerView } from "@shigomori/ui/views/remote/DeviceIconPickerView.tsx";
 
 // A device's icon picker (DeviceIconPickerView), its pick written to
 // the device hub.

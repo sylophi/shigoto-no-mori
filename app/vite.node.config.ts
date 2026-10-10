@@ -6,7 +6,7 @@
 // so nothing is inlined there.
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
-import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
+import { ACCOUNT_ENV_KEYS } from "@shigomori/contracts/accountServiceConfig";
 import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 
 // The account service values (ACCOUNT_ENV_KEYS) present in the BUILD

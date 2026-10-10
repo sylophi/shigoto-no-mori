@@ -9,36 +9,36 @@ import {
 } from "@shigomori/ui/views/account/AccountButtonsView.tsx";
 import { PageShellView } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
-import { AcceptCommandsToggleView } from "@/components/remote/AcceptCommandsToggleView";
+import { AcceptCommandsToggleView } from "@shigomori/ui/views/remote/AcceptCommandsToggleView.tsx";
 import {
   AccountLoadingView,
   NotConfiguredPanelView,
   SignedOutPanelView,
-} from "@/components/remote/AccountPanelsView";
-import { DeviceHostsView } from "@/components/remote/DeviceHostsView";
-import { DeviceIconPickerView } from "@/components/remote/DeviceIconPickerView";
-import { DeviceNameFieldView } from "@/components/remote/DeviceNameFieldView";
+} from "@shigomori/ui/views/remote/AccountPanelsView.tsx";
+import { DeviceHostsView } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
+import { DeviceIconPickerView } from "@shigomori/ui/views/remote/DeviceIconPickerView.tsx";
+import { DeviceNameFieldView } from "@shigomori/ui/views/remote/DeviceNameFieldView.tsx";
 import {
   deviceRowLabels,
   DeviceRegistryRowView,
   ExposureSwitchesView,
-} from "@/components/remote/DeviceRegistryRowView";
+} from "@shigomori/ui/views/remote/DeviceRegistryRowView.tsx";
 import {
   AccountIdentityView,
   DeviceRegistryView,
   SignInBannerView,
-} from "@/components/remote/DeviceRegistryView";
-import { KeepReachableToggleView } from "@/components/remote/KeepReachableToggleView";
-import { NotSharingView } from "@/components/remote/NotSharingView";
-import { PortForwardSectionView } from "@/components/remote/PortForwardSectionView";
+} from "@shigomori/ui/views/remote/DeviceRegistryView.tsx";
+import { KeepReachableToggleView } from "@shigomori/ui/views/remote/KeepReachableToggleView.tsx";
+import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
+import { PortForwardSectionView } from "@shigomori/ui/views/remote/PortForwardSectionView.tsx";
 import {
   OpenDevicesButtonView,
   RemoteScopeFrameView,
   UnreachableBannerView,
   UnreachableDeviceView,
-} from "@/components/remote/RemoteScopeView";
-import { ShareDataToggleView } from "@/components/remote/ShareDataToggleView";
-import { deviceRowStatus } from "@/components/remote/deviceRegistryStatus";
+} from "@shigomori/ui/views/remote/RemoteScopeView.tsx";
+import { ShareDataToggleView } from "@shigomori/ui/views/remote/ShareDataToggleView.tsx";
+import { deviceRowStatus } from "@shigomori/ui/views/remote/deviceRegistryStatus.ts";
 import {
   accountDevices,
   forests,

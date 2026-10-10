@@ -34,9 +34,11 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
-import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import {
   TUNNEL_PROBE_DEADLINE_FRESH_MS,
+  type TunnelState,
+} from "@shigomori/contracts/modules/hub";
+import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
   restartSchedule,

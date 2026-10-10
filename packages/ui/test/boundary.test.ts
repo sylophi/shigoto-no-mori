@@ -26,11 +26,20 @@ const isAllowed = (specifier: string, fileDir: string) =>
 const stripComments = (code: string) =>
   code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
-// `from "x"` (imports and re-exports), `import("x")`, and `import "x"`
-// at the start of a statement. A `from` inside a string, after a dot or
-// ending a word like `branch-from` is not a keyword.
-const IMPORT_SPECIFIER =
-  /(?:(?<![\w$."'`-])\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)["']([^"']+)["']/gm;
+// The specifiers of import and export statements (which start a line,
+// or follow a semicolon, and end at theirs), side-effect imports
+// and `import("x")`. Matching statements rather than every `from "x"`
+// keeps JSX text like `Pre-fills "Branched from" when…` out.
+const IMPORT_SPECIFIERS = [
+  /(?:^|;)\s*(?:import|export)\s[^;]*?(?<![\w$."'`-])from\s*["']([^"']+)["']/gm,
+  /^\s*import\s*["']([^"']+)["']/gm,
+  /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+];
+
+const specifiersOf = (code: string) =>
+  IMPORT_SPECIFIERS.flatMap((pattern) =>
+    [...code.matchAll(pattern)].map(([, specifier = ""]) => specifier),
+  );
 
 const HOST_BRIDGE = /\bwindow\.api\b/;
 
@@ -44,7 +53,7 @@ it("imports only its dependencies, and never the host bridge", () => {
     const file = join(entry.parentPath, entry.name);
     const rel = relative(root, file);
     const code = stripComments(readFileSync(file, "utf8"));
-    for (const [, specifier = ""] of code.matchAll(IMPORT_SPECIFIER)) {
+    for (const specifier of specifiersOf(code)) {
       if (!isAllowed(specifier, dirname(file))) {
         failures.push(`${rel} imports "${specifier}"`);
       }

@@ -7,7 +7,7 @@
 // One place, so a row never branches on the platform string, or on
 // the shell it happens to render in, by itself.
 import { hostsProjects } from "@shigomori/contracts/platform";
-import { platformLabel } from "@/lib/platformLabel";
+import { platformLabel } from "./platformLabel.ts";
 
 export type DeviceTraits = {
   // How the device's own row names itself.

@@ -16,9 +16,15 @@
 // says "last known" rather than pretending the numbers are live.
 import { type ReactNode, useState } from "react";
 import { FolderGit2 } from "lucide-react";
-import { Chip, ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
-import type { HostChip } from "./deviceHostChips";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { Chip, ChipButton } from "../../primitives/chip-button.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+
+// A project a device hosts, as its chip names it.
+export type HostChip = {
+  projectId: string;
+  name: string;
+  worktrees: number;
+};
 
 // Enough to name a machine's forest at a glance. Past this the strip
 // folds behind a count. A power user's main box can register dozens of

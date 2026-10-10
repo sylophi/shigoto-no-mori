@@ -13,7 +13,7 @@ import {
   describeForwardError,
   usePortForwards,
 } from "@/hooks/remote/usePortForwards";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
 import {
   type ForwardAllMode,

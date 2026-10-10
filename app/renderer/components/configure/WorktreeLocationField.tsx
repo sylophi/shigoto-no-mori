@@ -6,7 +6,7 @@ import {
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
-import { WorktreeLocationFieldView } from "./WorktreeLocationFieldView";
+import { WorktreeLocationFieldView } from "@shigomori/ui/views/configure/WorktreeLocationFieldView.tsx";
 
 // The project's worktree location (WorktreeLocationFieldView), off the
 // saved config and this device's layout.

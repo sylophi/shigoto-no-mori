@@ -30,12 +30,12 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { parsePortNumber } from "@shigomori/contracts/schemas";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { Chip, ChipButton } from "@shigomori/ui/primitives/chip-button.tsx";
-import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
-import { Input } from "@shigomori/ui/primitives/input.tsx";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { parsePortNumber } from "@shigomori/contracts/schemas/index";
+import { Button } from "../../primitives/button.tsx";
+import { Chip, ChipButton } from "../../primitives/chip-button.tsx";
+import { ExternalLink } from "../../primitives/external-link.tsx";
+import { Input } from "../../primitives/input.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 
 export function PortForwardSectionView({

@@ -1,6 +1,13 @@
-import type { RepoEntryHolder } from "@/hooks/remote/useRepoListing";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { cn } from "@shigomori/ui/lib/utils.ts";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { cn } from "../../lib/utils.ts";
+
+// Where one device holds an entry: in its main checkout, or only in
+// the worktrees named.
+export interface RepoEntryHolder {
+  device: string;
+  inPrimary: boolean;
+  worktrees: readonly string[];
+}
 
 interface OnlyInWorktreesProps {
   inPrimary: boolean;

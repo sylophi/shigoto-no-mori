@@ -4,7 +4,6 @@
 // (DeviceTabBarView) and mounts its body under the picked device's
 // HostScope, so the page needs no remote-awareness of its own.
 import { useState, type ReactNode } from "react";
-import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
   DeviceTabNoteView,
   StaleDeviceNoteView,
@@ -22,26 +21,17 @@ import {
   useRemoteDevice,
   useRemoteDevices,
 } from "@/hooks/remote/useRemoteDevices";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
-import {
-  deviceStatusView,
-  type DeviceStatusView,
-} from "@shigomori/ui/lib/deviceStatus.ts";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
+import type { DeviceRosterEntry as ViewRosterEntry } from "@shigomori/ui/lib/deviceRoster.ts";
 
-export interface DeviceRosterEntry {
-  deviceId: string;
-  label: string;
-  // What it looks like (DeviceGlyphView), so every pick draws it.
-  icon: DeviceIcon;
-  isThisDevice: boolean;
-  // Null for this device, which has no connection to describe.
-  status: DeviceStatusView | null;
+export interface DeviceRosterEntry extends ViewRosterEntry {
   // The api the body is scoped to: window.api for this device, a
   // peer's only while it has a session.
   api: HostApi | undefined;

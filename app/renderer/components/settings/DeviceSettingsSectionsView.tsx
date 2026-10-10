@@ -5,7 +5,7 @@ import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
 import { SegmentedControl } from "@shigomori/ui/primitives/segmented-control.tsx";
 import { ExternalLink } from "@shigomori/ui/primitives/external-link.tsx";
-import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+import { fieldSetter } from "@shigomori/ui/hooks/useDirtyForm.ts";
 
 const PORT_POOL = {
   href: "https://github.com/dittofleet/port-pool",

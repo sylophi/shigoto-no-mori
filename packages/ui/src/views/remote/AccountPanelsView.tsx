@@ -3,8 +3,8 @@
 // with no account service.
 import type { ReactNode } from "react";
 import { CloudOff, MonitorSmartphone, type LucideIcon } from "lucide-react";
-import { ACCOUNT_ENV } from "@shared/account/serviceConfig";
-import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
+import { ACCOUNT_ENV } from "@shigomori/contracts/accountServiceConfig";
+import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 
 export function AccountLoadingView() {
   return <p className="text-xs text-muted-foreground/70">Loading&hellip;</p>;

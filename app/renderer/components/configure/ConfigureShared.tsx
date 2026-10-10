@@ -7,7 +7,7 @@
 import type { Project } from "@shigomori/contracts/schemas";
 import { CreateOnSection } from "./CreateOnSection";
 import { LeaveOutSection } from "./LeaveOutSection";
-import { ConfigureSharedView } from "./ConfigureProjectView";
+import { ConfigureSharedView } from "@shigomori/ui/views/configure/ConfigureProjectView.tsx";
 
 export function ConfigureShared({ project }: { project: Project }) {
   return (

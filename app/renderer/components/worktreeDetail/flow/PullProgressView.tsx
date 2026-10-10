@@ -20,7 +20,7 @@ import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { formatBytes } from "@shigomori/ui/lib/formatBytes.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import {

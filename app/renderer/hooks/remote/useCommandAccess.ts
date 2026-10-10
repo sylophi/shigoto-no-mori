@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
@@ -7,21 +8,6 @@ import {
   type RemoteDeviceApi,
   remoteDeviceStore,
 } from "@/lib/remote/devices";
-
-// Whether THIS device may command a device: the other machine's own
-// "allow control from other devices" switch, as its connectInfo answer
-// and its live push report it (HubStatus.peerAcceptsCommands, carried
-// on the registry entry). A reading for the UI only: the peer's direct
-// listener enforces the switch on every call regardless.
-export interface CommandAccess {
-  granted: boolean;
-  // No direct session yet, so the peer has not said.
-  isLoading: boolean;
-  // Whether a surface should offer commands right now: granted, or the
-  // verdict not in yet (assume granted rather than flash a disabled
-  // control that turns live a moment later).
-  canCommand: boolean;
-}
 
 const GRANTED: CommandAccess = {
   granted: true,

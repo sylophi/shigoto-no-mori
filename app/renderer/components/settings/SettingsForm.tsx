@@ -21,7 +21,7 @@ import {
   useOutdatedDevices,
   useStagedUpdates,
 } from "@/hooks/system/useUpdater";
-import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";

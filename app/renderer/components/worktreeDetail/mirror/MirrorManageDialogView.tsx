@@ -44,7 +44,7 @@ import {
 } from "@shigomori/ui/primitives/status-dot.tsx";
 import { InlineError } from "@shigomori/ui/primitives/inline-error.tsx";
 import { MirrorConflictsChipView } from "@/components/worktreeDetail/MirrorConflictsView";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import {

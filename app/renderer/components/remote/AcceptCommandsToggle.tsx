@@ -4,7 +4,7 @@ import {
   useAcceptsCommands,
   useSetAcceptsCommands,
 } from "@/hooks/account/useAccount";
-import { AcceptCommandsToggleView } from "./AcceptCommandsToggleView";
+import { AcceptCommandsToggleView } from "@shigomori/ui/views/remote/AcceptCommandsToggleView.tsx";
 
 export function AcceptCommandsToggle() {
   const { data: enabled, isError } = useAcceptsCommands();

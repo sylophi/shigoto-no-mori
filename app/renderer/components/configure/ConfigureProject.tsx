@@ -2,9 +2,9 @@ import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import type { Project } from "@shigomori/contracts/schemas";
 import { ConfigureForm } from "./ConfigureForm";
-import { ConfigureLoadFailureView } from "./ConfigureProjectView";
+import { ConfigureLoadFailureView } from "@shigomori/ui/views/configure/ConfigureProjectView.tsx";
 import { ConfigureShared } from "./ConfigureShared";
-import { ConfigureSkeletonView } from "./ConfigureSkeletonView";
+import { ConfigureSkeletonView } from "@shigomori/ui/views/configure/ConfigureSkeletonView.tsx";
 
 export function ConfigureProject() {
   return (

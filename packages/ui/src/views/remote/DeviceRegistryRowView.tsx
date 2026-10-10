@@ -19,17 +19,17 @@ import type { ReactNode } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { RowTag } from "@shigomori/ui/primitives/row-tag.tsx";
-import { StatusDot, TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import type { CommandAccess } from "@/hooks/remote/useCommandAccess";
-import { abbreviateId } from "@/lib/abbreviateId";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { cn } from "@shigomori/ui/lib/utils.ts";
-import { deviceTraits } from "@/lib/remote/deviceTraits";
-import { DeviceRenameButtonView } from "./DeviceNameFieldView";
-import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
+import { Button } from "../../primitives/button.tsx";
+import { RowTag } from "../../primitives/row-tag.tsx";
+import { StatusDot, TONE_TEXT } from "../../primitives/status-dot.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import type { CommandAccess } from "../../lib/commandAccessCopy.ts";
+import { abbreviateId } from "../../lib/abbreviateId.ts";
+import { peerReadOnlyNote } from "../../lib/commandAccessCopy.ts";
+import { cn } from "../../lib/utils.ts";
+import { deviceTraits } from "../../lib/deviceTraits.ts";
+import { DeviceRenameButtonView } from "./DeviceNameFieldView.tsx";
+import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus.ts";
 
 // What the row's controls call the machine: this one by its role, a
 // peer by name, and where the name alone cannot pick it out, the same

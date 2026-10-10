@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { SectionIntro } from "@shigomori/ui/primitives/section-heading.tsx";
 import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import type { SettingsFormState } from "@/hooks/config/settingsForm";
-import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+import { fieldSetter } from "@shigomori/ui/hooks/useDirtyForm.ts";
 
 // The desktop's notices about agent sessions (lib/agentWatch.ts), in
 // Appearance: settings of this window, saved with the rest of the local

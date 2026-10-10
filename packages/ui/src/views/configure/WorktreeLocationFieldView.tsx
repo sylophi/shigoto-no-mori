@@ -1,6 +1,6 @@
-import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { PathSpan } from "@shigomori/ui/primitives/path-span.tsx";
-import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
+import { Button } from "../../primitives/button.tsx";
+import { PathSpan } from "../../primitives/path-span.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 
 // Which layout the project's worktrees use, as the saved config has it.
 // The pick itself lives on a subpage: changing it can move worktrees,
