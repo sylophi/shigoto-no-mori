@@ -13,7 +13,7 @@ import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import {
   type describeMergeVerdict,
   MERGE_METHOD_LABEL,
-} from "@/lib/pullRequest";
+} from "@shigomori/ui/lib/pullRequest.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type {
   MergeMethod,

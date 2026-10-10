@@ -8,7 +8,7 @@
 // per-row so a slow disk never holds up the page.
 import { diskUsage } from "@host/lib/engineCalls";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
-import { isSameOrInside } from "@shared/git/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import {
   isRealBranch,
   type WorktreeDiskUsage,

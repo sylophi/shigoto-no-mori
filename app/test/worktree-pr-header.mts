@@ -7,7 +7,10 @@
 //
 // Run: pnpm test worktree-pr-header.
 import assert from "node:assert/strict";
-import { describeMergeState, describeMergeVerdict } from "@/lib/pullRequest";
+import {
+  describeMergeState,
+  describeMergeVerdict,
+} from "@shigomori/ui/lib/pullRequest.ts";
 import { titledByPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
 import {
   summarizeChecks,

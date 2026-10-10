@@ -11,7 +11,7 @@ import {
   useTerminalDrawer,
 } from "@/store/terminalDrawer";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { TerminalDrawerView } from "./TerminalDrawerView";
+import { TerminalDrawerView } from "@shigomori/ui/views/terminal/TerminalDrawerView.tsx";
 
 // xterm comes with the first terminal opened, not with the page.
 const TerminalTabs = lazy(() =>

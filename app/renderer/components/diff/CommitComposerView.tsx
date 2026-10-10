@@ -7,7 +7,7 @@ import { Kbd } from "@shigomori/ui/primitives/kbd.tsx";
 import { Textarea } from "@shigomori/ui/primitives/textarea.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { CommitDraft } from "@/lib/commitDraft";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
 import { includedFiles } from "./changesControls";

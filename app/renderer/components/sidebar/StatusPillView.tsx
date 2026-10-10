@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
-import type { PullRequestTone } from "@/lib/pullRequest";
+import type { PullRequestTone } from "@shigomori/ui/lib/pullRequest.ts";
 
 // Superset of PullRequestTone so the PR badge and sync-state badges
 // share one pill primitive. Add new tones as new states show up.

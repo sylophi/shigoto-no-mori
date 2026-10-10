@@ -24,7 +24,7 @@ import {
   type HostForestScope,
 } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { ownBranchPullRequests } from "@/lib/pullRequest";
+import { ownBranchPullRequests } from "@shigomori/ui/lib/pullRequest.ts";
 
 // Cascading invalidator: the shared key prefix knocks out both the
 // sidebar map and any open per-branch detail in one call, so PR

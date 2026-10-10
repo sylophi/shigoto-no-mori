@@ -1,6 +1,6 @@
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import type { GitOperationState } from "@shigomori/contracts/schemas";
 

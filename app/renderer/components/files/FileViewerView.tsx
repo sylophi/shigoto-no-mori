@@ -5,7 +5,7 @@ import { CODE_STYLE, CODE_THEME } from "@/components/diff/codeTheme";
 import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { CopyButton } from "@shigomori/ui/primitives/copy-button.tsx";
 import { IconButton } from "@shigomori/ui/primitives/icon-button.tsx";
-import { formatBytes } from "@/lib/formatBytes";
+import { formatBytes } from "@shigomori/ui/lib/formatBytes.ts";
 
 // Past this many lines a file shows as plain text: highlighting it
 // would hold the window for seconds, all at once on the main thread.

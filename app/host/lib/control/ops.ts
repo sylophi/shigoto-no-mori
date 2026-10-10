@@ -26,7 +26,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { pullWorktreeName } from "@shared/git/branches";
+import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
   type IgnoreSelection,
   type MirrorIgnoreChoice,

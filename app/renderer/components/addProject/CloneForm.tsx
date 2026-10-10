@@ -12,8 +12,8 @@ import { useGithubRepos } from "@/hooks/githubCli/useGithubRepos";
 import { useCloneProject } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
-import { CloneFormView } from "./CloneFormView";
-import { ProgressPanelView } from "./DialogPartsView";
+import { CloneFormView } from "@shigomori/ui/views/addProject/CloneFormView.tsx";
+import { ProgressPanelView } from "@shigomori/ui/views/addProject/DialogPartsView.tsx";
 import { useNewCheckout } from "./useNewCheckout";
 
 // Clones a remote onto the scoped device and opens it as a project.

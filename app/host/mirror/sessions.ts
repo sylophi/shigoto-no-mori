@@ -22,7 +22,7 @@
 // never taken from the caller.
 //
 // A primary checkout is mirrored the same way, its copy on
-// mirror/<branch> in a mirror-<name> folder (shared/git/branches.ts),
+// mirror/<branch> in a mirror-<name> folder (contracts/git/branches.ts),
 // and the session's mode says so, so the git follower reads the two
 // branch names as one. Both primaries keep what they had.
 import * as Option from "effect/Option";

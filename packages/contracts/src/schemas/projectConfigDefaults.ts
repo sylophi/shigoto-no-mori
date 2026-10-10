@@ -5,7 +5,7 @@ import type { ShigomoriConfig } from "./config.ts";
 // unset). The app decodes a missing key with it. The engine's
 // Config reads its defaults from here.
 // Dependency-free (types only), so the layout math in
-// shared/git/worktreeLayout.ts can import it. config.ts re-exports it.
+// contracts/git/worktreeLayout.ts can import it. config.ts re-exports it.
 export const PROJECT_CONFIG_DEFAULTS: Required<
   Pick<
     ShigomoriConfig,

@@ -24,7 +24,7 @@ import { PinnedMarkView } from "@shigomori/ui/views/shared/PinnedMarkView.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
-import { pluralize } from "@/lib/pluralize";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { formatRelativeTime } from "@shigomori/ui/lib/relativeTime.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";

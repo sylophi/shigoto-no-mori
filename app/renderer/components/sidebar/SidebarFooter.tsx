@@ -9,7 +9,7 @@ import {
   useSidebarView,
 } from "@/hooks/projects/useSidebarView";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
-import { agentsNeedYou } from "@/lib/agentNeeds";
+import { agentsNeedYou } from "@shigomori/ui/lib/agentNeeds.ts";
 import { useWaitingAgents } from "@/lib/agentWatch";
 import { hasLocalHost } from "@/lib/localHost";
 import {

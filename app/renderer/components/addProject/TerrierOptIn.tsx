@@ -1,6 +1,6 @@
 import type { ReactNode, RefObject } from "react";
 import { useOffersTerrier } from "@/hooks/terrier/useOffersTerrier";
-import { TerrierOptInView } from "./TerrierOptInView";
+import { TerrierOptInView } from "@shigomori/ui/views/addProject/TerrierOptInView.tsx";
 
 // Whether a project added here goes into terrier too, and the footer's
 // box that says so. Asked only of a device that lists terrier's repos.

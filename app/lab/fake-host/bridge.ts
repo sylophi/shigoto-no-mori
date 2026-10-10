@@ -50,7 +50,10 @@ import {
   pullBringsIgnoredFiles,
 } from "@shigomori/contracts/modules/sync";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import {
+  pullLandingBranch,
+  pullWorktreeName,
+} from "@shigomori/contracts/git/branches";
 import type {
   MirrorEvent,
   MirrorServing,

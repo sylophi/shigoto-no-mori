@@ -2,14 +2,14 @@
 // script's console, a device's own terminals on their page over a
 // shell fed a fixture prompt with Nerd Font icons, and the sidebar's
 // list of them.
-import { ScriptConsoleView } from "@/components/scriptConsole/ScriptConsoleView";
-import { DeviceTerminalsPageView } from "@/components/terminal/DeviceTerminalsPageView";
-import { TerminalDrawerView } from "@/components/terminal/TerminalDrawerView";
-import { TerminalTabsView } from "@/components/terminal/TerminalTabsView";
+import { ScriptConsoleView } from "@shigomori/ui/views/scriptConsole/ScriptConsoleView.tsx";
+import { DeviceTerminalsPageView } from "@shigomori/ui/views/terminal/DeviceTerminalsPageView.tsx";
+import { TerminalDrawerView } from "@shigomori/ui/views/terminal/TerminalDrawerView.tsx";
+import { TerminalTabsView } from "@shigomori/ui/views/terminal/TerminalTabsView.tsx";
 import {
   type TerminalFeed,
   TerminalView,
-} from "@/components/terminal/TerminalView";
+} from "@shigomori/ui/views/terminal/TerminalView.tsx";
 import {
   SidebarDeviceTerminalsView,
   SidebarTerminalsView,

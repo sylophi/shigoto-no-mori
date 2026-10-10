@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
-import type { DeviceLayout } from "@/hooks/config/useDeviceLayout";
+import type { DeviceLayout } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import {
@@ -12,9 +12,9 @@ import {
   type Worktree,
   type WorktreeLayout,
 } from "@shigomori/contracts/schemas";
-import { worktreePathFor } from "@shared/git/worktreeLayout";
-import { pluralize } from "@/lib/pluralize";
-import { LocationFormView } from "./LocationFormView";
+import { worktreePathFor } from "@shigomori/contracts/git/worktreeLayout";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { LocationFormView } from "@shigomori/ui/views/worktreeLocation/LocationFormView.tsx";
 
 interface LocationFormProps {
   projectId: string;
