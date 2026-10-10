@@ -10,7 +10,7 @@ import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";
 import { fromPromise } from "../util/fromPromise";
-import { isCommandError, stderrOf } from "../util/processes";
+import { isCommandError, stderrOf, stdoutOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { GithubCli } from "./GithubCli";
@@ -233,8 +233,7 @@ export const listGithubRepos = Effect.fn("GithubActions.repos")(function* () {
         // non-zero on it, with the response on stdout, and the
         // repositories that did come are still the ones to offer. Any
         // other failure stands.
-        const cause = err.cause as { stdout?: unknown } | undefined;
-        const partial = typeof cause?.stdout === "string" ? cause.stdout : "";
+        const partial = isCommandError(err.cause) ? stdoutOf(err.cause) : "";
         return reposOf(partial) === null
           ? Effect.fail(err)
           : Effect.succeed(partial);

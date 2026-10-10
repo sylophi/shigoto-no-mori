@@ -43,11 +43,27 @@ export class CommandError extends Schema.TaggedError<CommandError>()(
 
 export const isCommandError = Schema.is(CommandError);
 
+// A command's exit, its stderr the message and its stdout beside it.
+class ExitedError extends Error {
+  readonly stdout: string;
+  constructor(stderr: string, stdout: string) {
+    super(stderr);
+    this.stdout = stdout;
+  }
+}
+
 // What the command wrote to stderr, for a caller that relays it.
 // Only a command that exited carries it.
 export const stderrOf = (error: CommandError): string =>
   error.exitCode !== null && error.cause instanceof Error
     ? error.cause.message
+    : "";
+
+// What it wrote to stdout before it failed, for a caller that reads a
+// partial answer. Only a command that exited carries it.
+export const stdoutOf = (error: CommandError): string =>
+  error.exitCode !== null && error.cause instanceof ExitedError
+    ? error.cause.stdout
     : "";
 
 // The spawn itself failed because the binary is not there.
@@ -105,8 +121,8 @@ export interface ExecOptions {
   readonly maxOutputBytes?: number | undefined;
 }
 
-// Runs `command` to its exit. Anything but exit 0 fails, with stderr
-// as the cause.
+// Runs `command` to its exit. Anything but exit 0 fails, with what it
+// wrote as the cause (stderrOf, stdoutOf).
 export const exec = Effect.fn("exec")(function* (
   command: string,
   args: readonly string[],
@@ -142,7 +158,11 @@ export const exec = Effect.fn("exec")(function* (
     );
     const code = yield* handle.exitCode;
     if (code !== 0) {
-      return yield* fail("failed", new Error(stderr.trim()), code);
+      return yield* fail(
+        "failed",
+        new ExitedError(stderr.trim(), stdout),
+        code,
+      );
     }
     return { stdout, stderr };
   }).pipe(
