@@ -13,19 +13,14 @@ import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
-import { AgentsSection } from "./AgentsSection";
-import { CliSection } from "./CliSection";
-import { DataLocationSection } from "./DataLocationSection";
-import { DoctorSection } from "./DoctorSection";
-import { IntegrationToggles, WorktreeToggles } from "./DeviceSettingsSections";
-import { HostPanels, type HostSections, onEveryHostTab } from "./SettingsPanel";
+import { deviceSections } from "./deviceSections";
+import { HostPanels, onEveryHostTab } from "./SettingsPanel";
 import type { HostTab } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 import {
   PeerOfflineNoteView,
   PeerReadOnlyNoteView,
   PeerSettingsLoadingView,
-  PeerTogglesView,
   PeerVersionLineView,
 } from "@shigomori/ui/views/settings/PeerDeviceSettingsView.tsx";
 import { VersionSection } from "./VersionSection";
@@ -206,68 +201,34 @@ function PeerSettingsForm({
     discard: () => setForm(savedSnapshot),
   });
 
-  const readOnlyNote = readOnly && (
-    <PeerReadOnlyNoteView label={device.label} />
-  );
-  const saveError = save.error && (
-    <ErrorBanner
-      message={save.error.message}
-      title="Couldn't save the device's settings"
-    />
-  );
-  const toggles = (children: React.ReactNode) => (
-    <PeerTogglesView
-      readOnly={readOnly}
-      note={readOnlyNote}
-      saveError={saveError}
-    >
-      {children}
-    </PeerTogglesView>
-  );
-
   // Offline: the note stands in for the sections. The form state (and
   // the registration) stays alive for when the device is back.
-  const sections: HostSections = offline
-    ? onEveryHostTab(<OfflineNote device={device} />)
-    : {
-        general: (
-          <>
-            <PeerVersion device={device} />
-            {/* The health check sits right under the version, like the
-                local General section. Its report, the CLI's and the
-                data location all name the device's paths, which the
-                device only names to a peer it lets command it, so a
-                read-only visitor has nothing to show here. Mounted on
-                the landed verdict, not the optimistic one the toggles
-                use: these sections read on mount, and asking a device
-                that turns out not to allow it is a refusal per read. */}
-            {access.granted ? (
-              <>
-                <DoctorSection />
-                <CliSection />
-                <DataLocationSection />
-              </>
-            ) : (
-              readOnlyNote
-            )}
-          </>
-        ),
-        worktrees: toggles(<WorktreeToggles form={form} setForm={setForm} />),
-        integrations: (
-          <>
-            {toggles(<IntegrationToggles form={form} setForm={setForm} />)}
-            {/* Read on mount, so only once the device allows it, like
-                the CLI section. */}
-            {access.granted && <AgentsSection />}
-          </>
-        ),
-      };
-
   return (
     <HostPanels
       deviceId={device.deviceId}
       active={active}
-      sections={sections}
+      sections={
+        offline
+          ? onEveryHostTab(<OfflineNote device={device} />)
+          : deviceSections({
+              form,
+              setForm,
+              version: <PeerVersion device={device} />,
+              // On the landed verdict, not the optimistic one the
+              // toggles use: these sections read on mount, and asking a
+              // device that turns out not to allow it is a refusal per
+              // read.
+              commands: access.granted,
+              readOnly,
+              note: readOnly && <PeerReadOnlyNoteView label={device.label} />,
+              saveError: save.error && (
+                <ErrorBanner
+                  message={save.error.message}
+                  title="Couldn't save the device's settings"
+                />
+              ),
+            })
+      }
     />
   );
 }

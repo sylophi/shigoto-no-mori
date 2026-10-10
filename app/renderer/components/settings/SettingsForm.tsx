@@ -33,7 +33,10 @@ import type { DarkTheme, LightTheme } from "@shigomori/ui/lib/themes.ts";
 import { AppearanceSection } from "./AppearanceSection";
 import { WorktreePrefixesSection } from "./WorktreePrefixesSection";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
-import { LocalDevicePanel } from "./LocalDevicePanel";
+import { deviceSections } from "./deviceSections";
+import { HostPanels } from "./SettingsPanel";
+import { VersionSection } from "./VersionSection";
+import { BuildVersionLineView } from "@shigomori/ui/views/settings/VersionSectionView.tsx";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
 import { NotificationsSectionView } from "@shigomori/ui/views/settings/NotificationsSectionView.tsx";
@@ -313,10 +316,26 @@ export function SettingsForm({
         )}
 
         {hasLocalHost && (
-          <LocalDevicePanel
+          <HostPanels
+            deviceId={localDeviceId}
             active={hostTabFor(localDeviceId)}
-            form={form}
-            setForm={setForm}
+            sections={deviceSections({
+              form,
+              setForm,
+              version: (
+                <VersionSection
+                  version={
+                    <BuildVersionLineView
+                      version={__APP_VERSION__}
+                      commit={__APP_COMMIT__}
+                    />
+                  }
+                  installed={__APP_VERSION__}
+                />
+              ),
+              commands: true,
+              dangerZone: true,
+            })}
           />
         )}
 
