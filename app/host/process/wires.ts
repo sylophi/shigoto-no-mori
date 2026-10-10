@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { invokeInCallSpan } from "@host/lib/util/trace";
 import type { HostServices } from "./services";
-import * as RootContext from "./rootContext";
+import * as Captures from "./captures";
 import type * as Stream from "effect/Stream";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
@@ -47,7 +47,6 @@ import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import { readGlobalConfig } from "@host/lib/config/global";
-import { publishPush } from "@host/lib/hostPushes";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
 import * as Sharing from "@host/lib/sharing";
@@ -74,7 +73,7 @@ import { hostBinaryPath, hostFacts } from "./facts";
 const directTickets = createConnectTicketStore();
 const linkRegistrar = DeviceLink.createLinkRegistrar();
 export const deviceLinkLayer = () =>
-  DeviceLink.adapter.pipe(
+  Captures.deviceLink.layer.pipe(
     Layer.provideMerge(
       DeviceLink.layer({
         registrar: linkRegistrar,
@@ -93,10 +92,15 @@ export const deviceLinkLayer = () =>
 
 // The sharing switch the link's gate reads. Its changes go to this
 // device's windows and, the push being remote, to every peer.
-export const sharingLayer = Sharing.layer({
-  announce: (on) => broadcastAll(sharingContract, "changed", on),
-});
-const directLink = DeviceLink.deviceLink;
+export const sharingLayer = Captures.sharing.layer.pipe(
+  Layer.provideMerge(
+    Sharing.layer({
+      announce: (on) => broadcastAll(sharingContract, "changed", on),
+    }),
+  ),
+);
+
+const { directLink, tunnel } = Captures;
 
 // The tunnel endpoint: a supervised cloudflared child fronting the
 // listener's port through this device's named Cloudflare tunnel.
@@ -105,7 +109,7 @@ const directLink = DeviceLink.deviceLink;
 // as reconcile(null) through the same path. The connector token stays
 // inside the Tunnel.
 export const tunnelLayer = () =>
-  TunnelService.adapter.pipe(
+  Captures.tunnelCapture.layer.pipe(
     Layer.provideMerge(
       TunnelService.layer({
         // Resolved fresh per start attempt: the probe is one bounded
@@ -139,7 +143,7 @@ export const tunnelLayer = () =>
 // machine: the windows, the shell, and the terminal's control ops.
 const loopbackRegistrar = DeviceLink.createLinkRegistrar();
 export const loopbackLayer = () =>
-  Loopback.adapter.pipe(
+  Captures.loopback.layer.pipe(
     Layer.provideMerge(
       Loopback.layer({
         registrar: loopbackRegistrar,
@@ -191,7 +195,7 @@ const directPlane = () =>
     dialableKinds: devDialKinds(),
     host: {
       closeHostPeersNotIn: (online) => void directLink.closePeersNotIn(online),
-      tunnelState: () => TunnelService.tunnel.state(),
+      tunnelState: () => tunnel.state(),
     },
   }));
 
@@ -210,14 +214,10 @@ const serveConnectInfo = makeConnectInfo({
   mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
   // is healthy (probed routable).
-  tunnelUrl: () => TunnelService.tunnel.tunnelUrl(),
+  tunnelUrl: () => tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
   // Before the graph is up the link serves nobody, so it reads as off.
-  sharesData: () =>
-    RootContext.readNow(
-      Effect.flatMap(Sharing.Sharing, (it) => it.current),
-      () => false,
-    ),
+  sharesData: Captures.sharesData,
 });
 
 // The hub connection: connecting itself is gated in
@@ -246,7 +246,7 @@ const hostServer: EffectServerTransport<HostServices> = {
   broadcastAll(channel, payload, opts) {
     // The loopback serves every one off the host's pushes, and the
     // device link the remote ones.
-    publishPush({ channel, payload, remote: opts?.remote === true });
+    Captures.publishPush({ channel, payload, remote: opts?.remote === true });
   },
 };
 
@@ -420,7 +420,7 @@ export async function refreshDirectHost(): Promise<void> {
   // problem must not fail the change that triggered the refresh.
   await logFailure("[tunnel] reconcile failed", () => {
     const listener = directLink.status();
-    return TunnelService.tunnel.reconcile(
+    return tunnel.reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,

@@ -6,6 +6,7 @@
 // port forwards) to the same peer sessions the windows use, and
 // registers the lot in registerHostHandlers, once at start. The
 // account's changes arrive from the shell (applyAccount).
+import * as Captures from "./captures";
 import { join } from "node:path";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { branchesContract } from "@shigomori/contracts/modules/branches";
@@ -279,7 +280,7 @@ function listening<T>(value: T | null): T {
   return value;
 }
 
-const { mirrorDaemon } = MirrorDaemon;
+const { mirrorDaemon } = Captures;
 export const mirrorDaemonLayer = MirrorDaemon.layer({
   dataDir: fileSyncDir,
   gatewayAddress: () => listening(mirrorGateway.address()),

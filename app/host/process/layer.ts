@@ -36,11 +36,9 @@ import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
 import * as GitWatcher from "@host/lib/gitWatcher";
-import { reconcileGitWatchers } from "@host/lib/gitWatcher";
 import { startBackgroundFetch } from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
-import * as MirrorDaemon from "@host/mirror/daemon";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
@@ -61,7 +59,7 @@ import {
   tunnelLayer,
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
-import * as RootContext from "./rootContext";
+import * as Captures from "./captures";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -119,7 +117,7 @@ function onExternalStateChange() {
   // mirror of the worktree carries it now (host/mirror/gitFollow.ts).
   // Which worktree it was is not told, so every mirrored project is.
   const mirrored = new Set(
-    MirrorDaemon.mirrorDaemon
+    Captures.mirrorDaemon
       .sessions()
       .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
       .filter((projectId) => projectId !== undefined),
@@ -129,7 +127,7 @@ function onExternalStateChange() {
   // then follow it with the git-directory watches.
   void refreshProjects()
     .catch(() => undefined)
-    .then(reconcileGitWatchers);
+    .then(Captures.reconcileGitWatchers);
   // A worktree or project gone takes its terminals with it.
   void closeMissingTerminals();
   // The app's only chance to notice an `sm rm` run in a terminal, which
@@ -165,7 +163,7 @@ const logged = <R>(name: string, layer: Layer.Layer<never, never, R>) =>
 
 const storeChanges = logged(
   "the store's changes",
-  StoreChanges.adapter.pipe(
+  Captures.storeChanges.layer.pipe(
     Layer.provide(StoreChanges.layer(onExternalStateChange)),
   ),
 );
@@ -174,7 +172,7 @@ const storeChanges = logged(
 // any tool), as a project-scoped ping on every wire.
 const gitWatcher = logged(
   "the git watcher",
-  GitWatcher.adapter.pipe(
+  Captures.gitWatcher.layer.pipe(
     Layer.provide(
       GitWatcher.layer({
         onChange: announceProjectChanged,
@@ -207,7 +205,7 @@ const mirrorFollower = lifetime(
   Effect.sync(startGitFollower),
   stopGitFollower,
 );
-const mirrorDaemon = MirrorDaemon.adapter.pipe(
+const mirrorDaemon = Captures.daemon.layer.pipe(
   Layer.provideMerge(mirrorDaemonLayer),
 );
 const mirrorGateway = lifetime(
@@ -242,7 +240,7 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     Layer.provideMerge(Villagers.deviceLayer),
     // Every push the host makes and every store write, which the wires
     // and the views read.
-    Layer.provideMerge(HostPushes.adapter),
+    Layer.provideMerge(Captures.pushes.layer),
     Layer.provideMerge(HostPushes.layer),
     Layer.provideMerge(EngineStoreChanges.layer),
     // This device's id, which the wires above name themselves by, read
@@ -293,8 +291,6 @@ export const layer = (options: {
   readonly engine: Parameters<typeof Engine.layer>[0];
 }) =>
   scriptGate.pipe(
-    // What the root's callbacks read the graph through, gone first.
-    Layer.provideMerge(RootContext.layer),
     Layer.provideMerge(portForwards),
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit

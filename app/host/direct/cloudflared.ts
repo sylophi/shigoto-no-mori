@@ -45,7 +45,6 @@ import {
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
 import * as Processes from "@host/lib/util/processes";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 
 // ---- pure deciders, exported for the direct-plane check ----
 
@@ -712,31 +711,3 @@ const make = (options: Options) =>
   });
 
 export const layer = (options: Options) => Layer.effect(Tunnel, make(options));
-
-// The Promise face, for main/ipc/register.ts.
-const promiseAdapter = PromiseAdapter.make<Tunnel>("The tunnel");
-export const adapter = promiseAdapter.layer;
-
-const onTunnel = <A>(f: (tunnel: Tunnel["Service"]) => Effect.Effect<A>) =>
-  Effect.gen(function* () {
-    return yield* f(yield* Tunnel);
-  });
-
-export const tunnel = {
-  // Nothing to reconcile once the app is quitting: the layer's close
-  // has stopped the child.
-  reconcile: (wanted: { readonly port: number } | null) =>
-    promiseAdapter
-      .run(onTunnel((t) => t.reconcile(wanted)))
-      .catch(() => undefined),
-  state: (): TunnelState =>
-    promiseAdapter.runSyncOr(
-      onTunnel((t) => t.status),
-      () => ({ state: "off" as const, hostname: null }),
-    ).state,
-  tunnelUrl: (): string | null =>
-    promiseAdapter.runSyncOr(
-      onTunnel((t) => t.tunnelUrl),
-      () => null,
-    ),
-};

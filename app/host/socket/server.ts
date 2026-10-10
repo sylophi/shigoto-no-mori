@@ -91,7 +91,6 @@ import {
 } from "@shared/remote/link";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Sharing from "@host/lib/sharing";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 import type { HostServices } from "@host/process/services";
 import { type HostChannels, makeHostChannels } from "./channels";
 
@@ -1144,22 +1143,3 @@ export const layer = (options: {
       });
     }),
   );
-
-const promiseAdapter = PromiseAdapter.forService(DeviceLink, "The device link");
-export const adapter = promiseAdapter.layer;
-
-// The listener's Promise face, for main/ipc/register.ts.
-export const deviceLink = {
-  // `resolve` reads the wanted state inside the serialized reconcile.
-  refresh: (resolve: () => Promise<WsServerStartOpts | null>) =>
-    promiseAdapter.call((link) => link.reconcile(Effect.promise(resolve))),
-  status: (): LinkServerStatus =>
-    promiseAdapter.runSyncOr(
-      Effect.flatMap(DeviceLink, (link) => link.status),
-      () => ({ listening: false, port: null, bindAddress: null, error: null }),
-    ),
-  closePeersNotIn: (online: readonly string[]) =>
-    promiseAdapter.runIfOpen(
-      Effect.flatMap(DeviceLink, (link) => link.closePeersNotIn(online)),
-    ),
-};
