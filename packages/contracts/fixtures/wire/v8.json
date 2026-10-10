@@ -2288,6 +2288,7 @@
       "deviceId": "-1"
     }
   },
+  "window:networkChanged": {},
   "window:notify": {
     "payload": {
       "title": "😀",

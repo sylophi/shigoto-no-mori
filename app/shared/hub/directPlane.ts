@@ -118,9 +118,11 @@ export type DirectPlane = {
   // both.
   handleConnectionChange(): void;
   // The wake-time liveness probe for every established direct session
-  // (bridgeHandlers.ts probeDirectPeers). Owners fire it beside the hub
-  // connection's own probe when the machine resumes or the page comes
-  // back, so both planes get their verdict in seconds.
+  // (bridgeHandlers.ts probeDirectPeers), and a dial now for every peer
+  // waiting out the keeper's ladder. Owners fire it beside the hub
+  // connection's own probe when the machine resumes, the page comes
+  // back or the network does, so both planes get their verdict in
+  // seconds.
   probe(): void;
   // Tears the whole plane down (quit, tab teardown): latches the
   // keeper, then closes every cached direct session. The ORDER is the
@@ -263,6 +265,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
     },
     probe: () => {
       handlers.probeDirectPeers();
+      keeper.dialNow();
     },
     stop: () => {
       keeper.stop();

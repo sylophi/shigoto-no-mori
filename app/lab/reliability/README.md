@@ -74,7 +74,7 @@ again on the next run.
 
 | Name | What happens | Bound |
 | --- | --- | --- |
-| `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
+| `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. A tab has to stop reading the host as Connected within 10 s and a window within 15 s. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
 | `network-blip` | Every flow stalls for 5 to 15 s and resumes, with no offline event. | 30 s |
 | `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Skipped when this checkout's hub differs from `origin/release/v3`. | 60 s |
 | `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
@@ -86,7 +86,7 @@ again on the next run.
 | `reload-and-third-window` | A's first window is reloaded, a third window opened (New Window), then closed, each step recovering. | 30 s each |
 | `two-tabs-redial` | A second tab is opened and both tabs' flows are cut at once, three times, so both dial the host together; each tab recovers each time. A host minting a device's direct tickets as one set refuses one of the two, which has to ask again. | 30 s each |
 | `token-expiry` | Every tab sleeps (hidden and frozen) and every window goes offline, the network gone for 75 s, past the Clerk session token's and a hub ticket's minute. They wake on a changed network and dial everything again, then each page mints a fresh Clerk token and reads the device list. Real time passes rather than the page's clock moving, which would skew the page against every other device. The hub credential itself never expires. | 30 s |
-| `clock-skew` | Every page's clock runs two hours ahead of the other devices' and every flow is cut, so each connection is dialed again on the skewed clock. Then the pages reload, which puts their clocks right, and recover again. Not in the soak until a skewed device connects (V3.md). | 30 s each |
+| `clock-skew` | Every page's clock runs two hours ahead of the other devices' and every flow is cut, so each connection is dialed again on the skewed clock. Then the pages reload, which puts their clocks right, and recover again. | 30 s each |
 | `sign-out-with-sibling` | A second tab is opened, and the first signs out of the account while the browser's Clerk session stays (what the Sign out button does when the tab's Clerk holds no session): both read signed out within the bound and stay so, nothing enrolls again, and the host no longer lists the browser. Leaves the profile signed out, so it runs only when named, and last. | 20 s |
 
 A scenario runs only when a client it acts on runs. Every scenario
