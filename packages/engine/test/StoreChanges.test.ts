@@ -94,7 +94,7 @@ it("names the tables another process wrote", () =>
     }),
   ));
 
-it("watches every table but the caches", () =>
+it("watches every table but the caches and the wt/ move's", () =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -104,7 +104,15 @@ it("watches every table but the caches", () =>
       assert.deepEqual(
         tables
           .map((row) => row.name)
-          .filter((name) => name !== "icon_cache" && name !== "clone_verified"),
+          .filter(
+            (name) =>
+              ![
+                "icon_cache",
+                "clone_verified",
+                "wt_moves",
+                "wt_move_scan",
+              ].includes(name),
+          ),
         [...watchedTables].toSorted(),
       );
     }),
