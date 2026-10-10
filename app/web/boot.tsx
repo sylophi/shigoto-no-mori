@@ -4,5 +4,8 @@
 import { ClerkProvider } from "@clerk/react";
 import { createBrowserHistory } from "@tanstack/react-router";
 import { bootApp } from "@/boot";
+import type { ClientLinks } from "@/lib/runtime/ClientLinks";
 
-bootApp({ ClerkProvider, history: createBrowserHistory() });
+export function bootWeb(links: ClientLinks["Service"]): void {
+  bootApp({ ClerkProvider, history: createBrowserHistory(), links });
+}

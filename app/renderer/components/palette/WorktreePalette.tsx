@@ -157,13 +157,10 @@ function PaletteDialog({
   const [creating, setCreating] = useState<{ branch?: string } | null>(null);
   const now = useNow();
 
-  // The sidebar's own reads, so they are warm. The sidebar's observers
-  // and push invalidation keep the worktree lists fresh, so opening
-  // doesn't re-list every project's worktrees in git.
+  // The sidebar's own views, already streaming, so opening doesn't
+  // re-list every project's worktrees in git.
   const { data: projects = [] } = useProjects();
-  const worktreeQueries = useAllProjectWorktrees(projects, {
-    refetchOnMount: false,
-  });
+  const worktreeQueries = useAllProjectWorktrees(projects);
   const pullRequestQueries = useAllProjectPullRequests(projects);
   const { items: remote } = useRemoteForests();
   const mirrors = useMirrorLinks();

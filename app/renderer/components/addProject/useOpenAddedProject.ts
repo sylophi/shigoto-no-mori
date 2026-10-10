@@ -1,32 +1,32 @@
-import { useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
+import { worktreeListKey, worktreesAtom } from "@/hooks/worktrees/useWorktrees";
+import { firstValueOf, useRegistry } from "@/lib/runtime/viewHooks";
 
 // Lands on a just-added project's primary checkout, so every way in
 // ends somewhere useful instead of wherever the app happened to be.
-// ensureQueryData reuses a warm cache entry (e.g. the always-mounted
-// sidebar already listed this project mid-bulk-add) over re-listing.
-// Best-effort: if listing fails, the project is added either way.
+// It reads the project's worktrees view, which the always-mounted
+// sidebar may already be streaming (mid-bulk-add). Best-effort: if
+// listing fails, the project is added either way.
 // Both navs follow the scope, so a project added on a peer opens under
 // that peer's device route.
 export function useOpenAddedProject(): (projectId: string) => Promise<void> {
-  const queryClient = useQueryClient();
+  const registry = useRegistry();
   const scope = useHostScope();
   // Route choice made outside the try below: React Compiler can't
   // lower a conditional inside one, and bails out the whole component.
   const worktreeNav = useWorktreeNav();
   const projectNav = useProjectNav();
   return async (projectId) => {
-    try {
-      const worktrees = await queryClient.ensureQueryData(
-        worktreesQueryOptions(projectId, scope),
-      );
+    const worktrees = await firstValueOf(
+      registry,
+      worktreesAtom(worktreeListKey(scope.deviceId, projectId)),
+    );
+    // With none, stay wherever we are. The add itself already succeeded.
+    if (worktrees !== undefined) {
       openProject(worktreeNav, projectNav, projectId, worktrees);
-    } catch {
-      // Stay wherever we are. The add itself already succeeded.
     }
   };
 }

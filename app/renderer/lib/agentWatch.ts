@@ -1,15 +1,14 @@
 // The agent sessions in every device's worktree lists, the same lists
-// the sidebar shows, read off the cache like the villagers' moves
-// (lib/villagers/moves.ts): this machine's reach it through the fs
-// watcher's refetch and a peer's through its pushes. From them, the
+// the sidebar shows, as their hosts stream them (lib/viewFeed.ts), like
+// the villagers' moves (lib/villagers/moves.ts). From them, the
 // worktrees whose agent waits on you (useWaitingAgents, for the Live
 // page and its mark), and on the desktop a system notification when a
 // session starts waiting on you or ends its turn.
 //
 // A notification goes out only while the window is in the background,
 // where the sidebar's mark can't be seen, and a list seen for the first
-// time (or again after it failed or left the cache) tells nothing:
-// nothing changed that this window saw.
+// time (or again after its stream stopped) tells nothing: nothing
+// changed that this window saw.
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   AgentSession,
@@ -21,7 +20,7 @@ import { needView } from "@shigomori/ui/lib/agentNeeds.ts";
 import { harnessLabel } from "@shigomori/ui/lib/agentSessions.ts";
 import { documentFocused } from "@/lib/focus";
 import { hasLocalHost } from "@/lib/localHost";
-import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
+import { onWorktreeLists } from "@/lib/viewFeed";
 import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
   createExternalStore,
@@ -36,13 +35,13 @@ export type WaitingAgent = {
   session: AgentSession;
 };
 
-// Each list as last seen, by query hash: the list itself (structural
-// sharing hands back the same one when nothing changed), its sessions
+// Each list as last seen, by its key: the list itself (the view sends
+// only what differs), its sessions
 // by worktree and session, and its worktrees waiting on you.
 const lastSeen = new Map<
   string,
   {
-    list: Worktree[];
+    list: readonly Worktree[];
     sessions: Map<string, AgentSession>;
     waiting: WaitingAgent[];
   }
@@ -65,21 +64,13 @@ function publishWaiting(): void {
 
 // Boot wiring, once per window, like the other boot subscriptions.
 export function startAgentWatch(queryClient: QueryClient): void {
-  queryClient.getQueryCache().subscribe((event) => {
-    const { queryKey, queryHash } = event.query;
-    if (!isWorktreeListKey(queryKey)) return;
-    if (
-      event.type === "removed" ||
-      (event.type === "updated" && event.action.type === "error")
-    ) {
-      if (lastSeen.delete(queryHash)) publishWaiting();
+  onWorktreeLists(({ key: listKey, deviceId, list }) => {
+    if (list === null) {
+      if (lastSeen.delete(listKey)) publishWaiting();
       return;
     }
-    if (event.type !== "updated" || event.action.type !== "success") return;
-    const list = event.query.state.data as Worktree[] | undefined;
-    const before = lastSeen.get(queryHash);
-    if (list === undefined || list === before?.list) return;
-    const deviceId = String(hostKeyDeviceId(queryKey));
+    const before = lastSeen.get(listKey);
+    if (list === before?.list) return;
     const sessions = new Map<string, AgentSession>();
     const waiting: WaitingAgent[] = [];
     const notices: Notice[] = [];
@@ -107,7 +98,7 @@ export function startAgentWatch(queryClient: QueryClient): void {
         if (notice) notices.push({ ...notice, worktree, deviceId });
       }
     }
-    lastSeen.set(queryHash, { list, sessions, waiting });
+    lastSeen.set(listKey, { list, sessions, waiting });
     publishWaiting();
     for (const notice of notices) notify(notice);
   });

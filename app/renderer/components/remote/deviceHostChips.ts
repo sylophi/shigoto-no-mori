@@ -2,27 +2,15 @@
 // than per row: one hook call per row would mean one fan-out per row.
 //
 // Two sources, because the two halves of the account are read two
-// different ways. THIS device's forest comes from the ordinary local
-// projects/worktrees queries -- the same cache entries the sidebar
-// already fills, so the strip costs nothing extra. Every peer's comes
-// from useRemoteForests, the sidebar's merged-tree fan-out, for the
-// same reason: the registry can never disagree with the tree because it
-// is reading the tree's data.
+// different ways. THIS device's forest comes from its own projects and
+// worktrees views, the ones the sidebar already streams, so the strip
+// costs nothing extra. Every peer's comes from useRemoteForests, the
+// sidebar's merged-tree fan-out, for the same reason: the registry can
+// never disagree with the tree because it is reading the tree's data.
 import type { Project } from "@shigomori/contracts/schemas";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-
-// A chip count is decorative, so the local sweep rides whatever the
-// sidebar's always-mounted listings already hold rather than re-running
-// worktrees.list (~4 git subprocesses per worktree, for every project)
-// on each visit to the page and every window focus. Same calm shape
-// useRemoteForests gives the peers' half.
-const CALM_REFETCH = {
-  staleTime: 30_000,
-  refetchOnMount: false,
-  refetchOnWindowFocus: false,
-};
 
 import type { HostChip } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
 
@@ -44,7 +32,7 @@ export function useHostChipIndex(localDeviceId: string): HostChipIndex {
   const localProjects: readonly Project[] = projectsQuery.data ?? [];
   // Positionally aligned with localProjects, which is the contract
   // useAllProjectWorktrees documents.
-  const localWorktrees = useAllProjectWorktrees(localProjects, CALM_REFETCH);
+  const localWorktrees = useAllProjectWorktrees(localProjects);
   const forests = useRemoteForests();
 
   const byDevice = new Map<string, HostChip[]>();

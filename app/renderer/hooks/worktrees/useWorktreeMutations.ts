@@ -14,11 +14,14 @@ import {
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
 import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { worktreeQueriesOn } from "@/lib/queryKeys";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 import {
-  type QueryKeyRegistry,
-  worktreeQueriesOn,
-  queryKeysFor,
-} from "@/lib/queryKeys";
+  changeWorktreeRow,
+  forgetWorktreeRows,
+  spliceWorktreeRow,
+} from "@/hooks/worktrees/useWorktrees";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
@@ -33,39 +36,17 @@ interface CreateWorktreeInput {
   checkout?: boolean;
 }
 
-// Splice a new or re-keyed worktree into its cached list (in place of
-// `replacesId`, the id it had before a convert or move), then refetch.
-// The callers route onto the row's page as soon as the mutation
-// resolves, and a list refetch (one `sm worktrees list` run) lands well
-// after that, so without the splice the page reads the stale list and
-// says "Worktree not found." until it does. The villager news reads
-// the new row as a move in (lib/villagers/moves.ts). The counterpart of
-// forgetDeletedWorktree.
-function spliceWorktree(
-  queryClient: QueryClient,
-  keys: QueryKeyRegistry,
-  worktree: Worktree,
-  replacesId?: string,
-): void {
-  const key = keys.worktrees(worktree.projectId);
-  queryClient.setQueryData<readonly Worktree[]>(key, (current) => {
-    if (!current) return current;
-    // In place, so the sidebar row and the sibling order don't shift.
-    const at = current.findIndex(
-      (w) => w.id === worktree.id || w.id === replacesId,
-    );
-    return at === -1 ? [...current, worktree] : current.with(at, worktree);
-  });
-  void queryClient.invalidateQueries({ queryKey: key });
-}
-
+// A made or re-keyed worktree is shown in its list at once
+// (spliceWorktreeRow): the callers route onto its page as the mutation
+// resolves. The villager news hears it once the host's list has it
+// (lib/villagers/moves.ts).
 export function useCreateWorktree() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const registry = useRegistry();
+  const { api, deviceId } = useHostScope();
   return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
     mutationFn: (input) => api.worktrees.create(input),
     onSuccess: (result) => {
-      spliceWorktree(queryClient, keys, result.worktree);
+      spliceWorktreeRow(registry, deviceId, result.worktree);
     },
     meta: { errorTitle: "Couldn't create worktree" },
   });
@@ -86,7 +67,8 @@ interface CreateWorktreeFromPullRequestInput {
 // have left, and a retry reuses it.
 export function useCreateWorktreeFromPullRequest() {
   const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const registry = useRegistry();
+  const { api, deviceId, keys } = useHostScope();
   return useMutation<
     CreateWorktreeResult,
     Error,
@@ -106,7 +88,7 @@ export function useCreateWorktreeFromPullRequest() {
       });
     },
     onSuccess: (result, vars) => {
-      spliceWorktree(queryClient, keys, result.worktree);
+      spliceWorktreeRow(registry, deviceId, result.worktree);
       // The resolve step created a local branch, so the branch list and
       // the "already checked out" bookkeeping behind it are both stale.
       void queryClient.invalidateQueries({
@@ -134,13 +116,13 @@ function useReplaceWorktree<
   // The page surfaces per-row errors inline; a toast on top would be noise.
   meta: Record<string, unknown> = { silentError: true },
 ) {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const registry = useRegistry();
+  const { api, deviceId } = useHostScope();
   const scriptRuns = useScriptRuns();
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => call(api, input),
     onSuccess: (result, vars) => {
-      spliceWorktree(queryClient, keys, rowOf(result), vars.worktreeId);
+      spliceWorktreeRow(registry, deviceId, rowOf(result), vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
     },
     meta,
@@ -231,41 +213,34 @@ export function isOwnDeletePending(
 }
 
 // What the renderer does once a worktree is gone from a device: drop
-// it from the cached list synchronously (consumers routing off the
-// back of the mutation must not read the stale list during the
-// refetch), clear its script runs, and remove its no-longer-observed
-// queries so nothing can refetch or replay them. Run by this window's
-// own delete on success, by a mirror stop, and for every removal a
-// host announces (boot's worktrees:removal follower), whoever asked
-// for it. The villager news reads the dropped row as a move out
-// (lib/villagers/moves.ts).
+// it from its list at once (consumers routing off the back of the
+// mutation must not read it until the host's list drops it too), clear
+// its script runs, and remove its no-longer-observed queries so nothing
+// can refetch or replay them. Run by this window's own delete on
+// success, by a mirror stop, and for every removal a host announces
+// (boot's worktrees:removal follower), whoever asked for it.
 export function forgetDeletedWorktree(
   queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
   deviceId: string,
   projectId: string,
   worktreeId: string,
 ): void {
-  forgetDeletedWorktrees(queryClient, deviceId, projectId, [worktreeId]);
+  forgetDeletedWorktrees(queryClient, registry, deviceId, projectId, [
+    worktreeId,
+  ]);
 }
 
-// Several at once (a stack's layers): one list write and one
-// invalidation for all of them, not a refetch per row.
+// Several at once (a stack's layers): one list edit for all of them.
 function forgetDeletedWorktrees(
   queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
   deviceId: string,
   projectId: string,
   worktreeIds: readonly string[],
 ): void {
   if (worktreeIds.length === 0) return;
-  const keys = queryKeysFor(deviceId);
-  queryClient.setQueryData<readonly Worktree[]>(
-    keys.worktrees(projectId),
-    (current) =>
-      current ? current.filter((w) => !worktreeIds.includes(w.id)) : current,
-  );
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktrees(projectId),
-  });
+  forgetWorktreeRows(registry, deviceId, projectId, worktreeIds);
   for (const worktreeId of worktreeIds) {
     scriptRunsFor(deviceId).clearForWorktree(worktreeId);
     // Same treatment as project removal. Active queries (the detail
@@ -280,6 +255,7 @@ function forgetDeletedWorktrees(
 
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
+  const registry = useRegistry();
   const { api, deviceId } = useHostScope();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
@@ -301,6 +277,7 @@ export function useDeleteWorktree() {
       if (data.ok) {
         forgetDeletedWorktree(
           queryClient,
+          registry,
           deviceId,
           vars.projectId,
           vars.worktreeId,
@@ -341,6 +318,7 @@ export interface StackCleanupInput {
 
 export function useDeleteStackWorktrees() {
   const queryClient = useQueryClient();
+  const registry = useRegistry();
   const { deviceId } = useHostScope();
   return useMutation<StackCleanupOutcome, Error, StackCleanupInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
@@ -358,6 +336,7 @@ export function useDeleteStackWorktrees() {
             outcome.removed.set(device.deviceId, result.removed);
             forgetDeletedWorktrees(
               queryClient,
+              registry,
               device.deviceId,
               device.projectId,
               result.removed,
@@ -405,13 +384,10 @@ export function useIsDeletingWorktree(
 }
 
 // The per-worktree row changes (shelf, auto-pull, idle agents) share
-// one mutation shape: an optimistic flip so the row and the sidebar group update
-// before the IPC round-trip lands, then a splice of the server's row
-// instead of a refetch of the whole project's list (the handler
-// already returns the refreshed Worktree, so cache state stays
-// accurate without an N-git-call round trip), and a rollback to truth
-// on error. Optimistic writes change a row and never add or drop one:
-// the villager news reads those as moves (lib/villagers/moves.ts).
+// one shape: the row shows the change while the call runs, then the row
+// the host answered with until its list next streams, and as it was if
+// the call failed (changeWorktreeRow). Such a change edits a row and
+// never adds or drops one.
 type WorktreeVars = { projectId: string; worktreeId: string };
 type AgentSessionVars = WorktreeVars & { harness: string; session: string };
 
@@ -421,29 +397,27 @@ function useWorktreeRowMutation<V extends WorktreeVars>(
   errorTitle: string,
   onSettled?: (api: HostApi, input: V) => void,
 ) {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const registry = useRegistry();
+  const { api, deviceId } = useHostScope();
   return useMutation<Worktree, Error, V>({
-    mutationFn: (input) => call(api, input),
-    onMutate: (vars) => {
-      queryClient.setQueryData<readonly Worktree[]>(
-        keys.worktrees(vars.projectId),
-        (current) =>
-          current?.map((w) => (w.id === vars.worktreeId ? patch(w, vars) : w)),
+    mutationFn: async (input) => {
+      const change = changeWorktreeRow(
+        registry,
+        deviceId,
+        input.projectId,
+        input.worktreeId,
+        (w) => patch(w, input),
       );
+      try {
+        const worktree = await call(api, input);
+        change.answered(worktree);
+        return worktree;
+      } catch (error) {
+        change.failed();
+        throw error;
+      }
     },
-    onSuccess: (data, vars) => {
-      queryClient.setQueryData<readonly Worktree[]>(
-        keys.worktrees(vars.projectId),
-        (current) => current?.map((w) => (w.id === data.id ? data : w)),
-      );
-      onSettled?.(api, vars);
-    },
-    onError: (_err, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktrees(vars.projectId),
-      });
-    },
+    onSuccess: (_data, vars) => onSettled?.(api, vars),
     meta: { errorTitle },
   });
 }

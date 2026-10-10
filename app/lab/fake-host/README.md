@@ -190,7 +190,9 @@ there (`fakeDisks`) for the add-project dialog to browse, and adding or
 cloning on one really registers the project, so it folds into the
 sidebar the way a real one would. `bridge.ts` serves them as the links
 of the page's client runtime (`renderer/lib/runtime`), in place of the
-shell's and the host's, and answers any unhandled channel with a
+shell's and the host's. A module's view answers its list (or its
+settings' read) again after any push or call on its wire, the way a
+host's view re-reads on what moved. Any unhandled channel gets a
 schema-derived stub (fabricated
 arms allowed: this is a fake, not the fail-closed web bridge). The sync
 verbs really mutate the fixture world, so the transplant and mirror

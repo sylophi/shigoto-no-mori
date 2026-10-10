@@ -1,9 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import type { MergeBranchResult, Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
-import { invalidateWorkingTree } from "./useWorktreeChanges";
+import { useWorkingTreeWriteBack } from "./useWorktreeChanges";
 import type { SyncMove } from "@shigomori/ui/lib/syncState.ts";
 
 interface SyncWorktreeInput {
@@ -21,16 +21,15 @@ function useSyncMutation(
   // the hook, so a failure is said even once the caller has unmounted.
   onError?: (err: Error) => void,
 ) {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
+  const writeBack = useWorkingTreeWriteBack();
   return useMutation<Worktree, Error, SyncWorktreeInput>({
     mutationFn: (input) => apiMethod(api, input),
     // Pull, overwrite and sync rewrite the working tree, so an open
     // changes page has to re-read its patch and its checkbox states. PR
     // queries refresh via the refs-changed broadcast that the push
     // itself triggers, so no PR invalidation is needed here.
-    onSuccess: (data, vars) =>
-      invalidateWorkingTree(queryClient, keys, vars, data),
+    onSuccess: (data, vars) => writeBack(vars, data),
     onError,
     meta: onError ? { silentError: true } : { errorTitle },
   });
@@ -78,12 +77,11 @@ function useMergeKeepingConflicts(
   call: (api: HostApi, input: SyncWorktreeInput) => Promise<MergeBranchResult>,
   errorTitle: string,
 ) {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
+  const writeBack = useWorkingTreeWriteBack();
   return useMutation<MergeBranchResult, Error, SyncWorktreeInput>({
     mutationFn: (input) => call(api, input),
-    onSuccess: (data, vars) =>
-      invalidateWorkingTree(queryClient, keys, vars, data.worktree),
+    onSuccess: (data, vars) => writeBack(vars, data.worktree),
     meta: { errorTitle },
   });
 }

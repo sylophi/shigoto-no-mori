@@ -10,7 +10,7 @@ import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
-import { projectsQueryOptions } from "@/hooks/projects/useProjects";
+import { useDeviceProjects } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
@@ -23,7 +23,7 @@ import {
   useDeviceProperName,
   useRemoteDevice,
 } from "@/hooks/remote/useRemoteDevices";
-import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
+import { useDeviceWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import {
@@ -176,17 +176,27 @@ type CardWorktree =
   | { kind: "found"; worktree: Worktree }
   | { kind: "loading" | "missing" | "unreachable"; worktree: undefined };
 
+// Whether a device has a host to read: a peer while it has an api,
+// this machine only where it hosts projects (not the web client).
+function useHostReachable(deviceId: string): boolean {
+  const { api } = useDeviceApi(deviceId);
+  return api !== undefined && (deviceId !== localDeviceId || hasLocalHost);
+}
+
 function useCardWorktree(card: LiveCardModel): CardWorktree {
-  const scope = useDeviceApi(card.deviceId);
-  const query = useQuery({
-    ...worktreesQueryOptions(card.worktree?.projectId ?? null, scope),
-    select: (worktrees) =>
-      worktrees.find((entry) => entry.id === card.worktree?.worktreeId),
-  });
-  if (query.data) return { kind: "found", worktree: query.data };
-  if (query.isSuccess) return { kind: "missing", worktree: undefined };
+  const reachable = useHostReachable(card.deviceId);
+  const list = useDeviceWorktrees(
+    card.deviceId,
+    card.worktree?.projectId ?? null,
+    reachable,
+  );
+  const worktree = list.data?.find(
+    (entry) => entry.id === card.worktree?.worktreeId,
+  );
+  if (worktree) return { kind: "found", worktree };
+  if (list.data !== undefined) return { kind: "missing", worktree: undefined };
   return {
-    kind: scope.api === undefined ? "unreachable" : "loading",
+    kind: reachable ? "loading" : "unreachable",
     worktree: undefined,
   };
 }
@@ -209,11 +219,10 @@ function WorktreeHeader({
   const { worktree } = state;
   const deviceName = useDeviceProperName(deviceId);
   const scope = useDeviceApi(deviceId);
-  const project = useQuery({
-    ...projectsQueryOptions(scope),
-    select: (projects) => projects.find((entry) => entry.id === projectId),
-    meta: { silentError: true },
-  }).data;
+  const project = useDeviceProjects(
+    deviceId,
+    useHostReachable(deviceId),
+  ).data?.find((entry) => entry.id === projectId);
   // What the work is called, as its sidebar row names it: its PR's
   // title, the one `sm describe` gave it, else the branch.
   const prs = useQuery({

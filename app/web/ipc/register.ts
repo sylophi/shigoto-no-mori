@@ -96,6 +96,8 @@ export type WebBridge = {
     isDev: boolean;
     isElectron: boolean;
   } & ClientApi;
+  // The tab's links, for the boot's atoms.
+  links: ClientLinks["Service"];
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
@@ -483,6 +485,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   return {
     api,
+    links: client.links,
 
     notifyAccountChanged: accountChanged,
 

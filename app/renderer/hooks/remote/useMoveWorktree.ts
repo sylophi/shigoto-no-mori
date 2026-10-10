@@ -40,17 +40,11 @@ export function keptSourceReason(
     : sourceError;
 }
 
-// What a pull does once the worktree is here: the local forest's
-// registry keys refresh, read off the landed worktree (the project it
-// went into may be one the pull made). Also what a send's teardown
-// refreshes, the removed source being this device's.
+// What a pull does once the worktree is here: the landed project's
+// branches refresh (its lists are the host's views, which follow on
+// their own). Also what a send's teardown refreshes, the removed source
+// being this device's.
 function invalidateLanded(queryClient: QueryClient, landed: Landed): void {
-  if (landed.cloned !== undefined) {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
-  }
-  void queryClient.invalidateQueries({
-    queryKey: queryKeys.worktrees(landed.worktree.projectId),
-  });
   void queryClient.invalidateQueries({
     queryKey: queryKeys.branches(landed.worktree.projectId),
   });

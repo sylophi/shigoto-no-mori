@@ -10,7 +10,7 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { disposeWithPage, startClient } from "./lib/runtime/client";
 import * as Desktop from "./lib/runtime/desktop";
 
-async function installApi(): Promise<void> {
+async function installApi() {
   const bridge = window.electronBridge;
   if (bridge === undefined) throw new Error("the preload's bridge is missing");
   const { requestShellPort: _, ...facts } = bridge;
@@ -19,13 +19,14 @@ async function installApi(): Promise<void> {
   // The device id is the host's, read from its store.
   const { deviceId } = await client.api.window.hostAddress();
   window.api = { ...facts, deviceId, ...client.api };
+  return client.links;
 }
 
-void installApi()
-  .then(() => import("./boot"))
-  .then(({ bootApp }) =>
-    bootApp({
-      ClerkProvider,
-      history: createMemoryHistory({ initialEntries: ["/"] }),
-    }),
-  );
+void installApi().then(async (links) => {
+  const { bootApp } = await import("./boot");
+  bootApp({
+    ClerkProvider,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+    links,
+  });
+});

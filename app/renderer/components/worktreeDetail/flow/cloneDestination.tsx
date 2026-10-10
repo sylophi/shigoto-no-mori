@@ -23,7 +23,7 @@ import type {
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import type { Project } from "@shigomori/contracts/schemas";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
-import { projectsQueryOptions } from "@/hooks/projects/useProjects";
+import { useDeviceProjects } from "@/hooks/projects/useProjects";
 import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
 import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
@@ -45,8 +45,9 @@ function useCloneDestination(
   const { data: destinationRuntime } = useQuery(
     runtimeInfoQueryOptions(destination, enabled),
   );
-  const { data: destinationProjects = [] } = useQuery(
-    projectsQueryOptions(destination, enabled),
+  const { data: destinationProjects = [] } = useDeviceProjects(
+    destination.deviceId,
+    enabled && destination.hasHost,
   );
   // A folder picked on one destination means nothing on another.
   const [picked, setPicked] = useState<{

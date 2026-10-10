@@ -1,63 +1,91 @@
+import { useAtomSet } from "@effect/atom-react";
 import {
-  queryOptions,
   useIsMutating,
   useMutation,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import type {
-  AddProjectPayload,
-  CloneProjectPayload,
-  CreateProjectPayload,
-  Project,
+import {
+  type AddProjectPayload,
+  type CloneProjectPayload,
+  type CreateProjectPayload,
+  type Project,
+  ProjectSchema,
 } from "@shigomori/contracts/schemas";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
+import * as Schema from "effect/Schema";
 import { reorderProjects } from "@shared/reorder";
 import {
   hostKeyDeviceId,
-  queryKeysFor,
+  localDeviceId,
   worktreeQueriesOn,
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { noteProjects } from "@/lib/viewFeed";
+import { hostCallFn, hostViewAtom, optimisticView } from "@/lib/runtime/atoms";
 import {
-  resolveForestScope,
-  type HostForestScope,
-} from "@/hooks/worktrees/useWorktrees";
+  type LiveViewState,
+  useRegistry,
+  useView,
+  whenViewShows,
+} from "@/lib/runtime/viewHooks";
 
-// Single source of truth for the projects-list query. The key registry
-// is derived from the scope's device id, so the key and the queryFn can
-// never name different devices. The scope rule is resolveForestScope's.
-export function projectsQueryOptions(
-  scope: HostForestScope = {},
+// A device's projects, as its host streams them (projects:watch).
+export const projectsAtom = Atom.family((deviceId: string) =>
+  hostViewAtom({
+    deviceId,
+    localDeviceId,
+    channel: "projects:watch",
+    input: undefined,
+    schema: Schema.Array(ProjectSchema),
+    onValue: (list) => noteProjects(deviceId, list),
+    onStop: () => noteProjects(deviceId, null),
+  }),
+);
+
+// The list as shown: the stream's, with a reorder still on its way laid
+// over it.
+const shownProjectsAtom = Atom.family((deviceId: string) =>
+  optimisticView(projectsAtom(deviceId)),
+);
+
+// A device's projects: the scope's, or another device's by id. Nothing
+// is read for a device with no host behind it (a peer without a
+// session, the web client's own scope) or while `enabled` holds it off.
+export function useDeviceProjects(
+  deviceId: string,
   enabled = true,
-) {
-  const { deviceId, api } = resolveForestScope(scope);
-  return queryOptions<readonly Project[]>({
-    queryKey: queryKeysFor(deviceId).projects(),
-    queryFn: () => (api ? api.projects.list() : []),
-    // Local: api and id are always present, so this stays always-enabled.
-    // Remote: an unconnected device never fetches. A caller with no use
-    // for the list yet holds it off.
-    enabled: enabled && api !== undefined && deviceId !== "",
-    meta: { errorTitle: "Couldn't load projects" },
-  });
+): LiveViewState<readonly Project[]> {
+  return useView(
+    enabled && deviceId !== "" ? shownProjectsAtom(deviceId) : null,
+  );
 }
 
-export function useProjects() {
-  const scope = useHostScope();
-  return useQuery(projectsQueryOptions(scope));
+export function useProjects(): LiveViewState<readonly Project[]> {
+  const { deviceId, hasHost } = useHostScope();
+  return useDeviceProjects(deviceId, hasHost);
+}
+
+// Settles once the device's list has the project, so a caller can move
+// into it at once.
+function useWhenListed() {
+  const registry = useRegistry();
+  const { deviceId } = useHostScope();
+  return (project: Project) =>
+    whenViewShows(registry, projectsAtom(deviceId), (list) =>
+      list.some((p) => p.id === project.id),
+    ).then(() => project);
 }
 
 export function useAddProject() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
+  const whenListed = useWhenListed();
   return useMutation<Project, Error, AddProjectPayload>({
-    mutationFn: (input) => api.projects.add(input),
-    // Returned (not void-ed) so mutateAsync resolves only after the
-    // projects list is fresh: callers navigate into the new project right
-    // away, and routes render "not found" against a stale list.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: keys.projects() }),
+    // Settles once the list has it: callers navigate into the new
+    // project right away, and routes render "not found" against a list
+    // without it.
+    mutationFn: (input) => api.projects.add(input).then(whenListed),
     meta: { errorTitle: "Couldn't add project" },
   });
 }
@@ -65,26 +93,22 @@ export function useAddProject() {
 // Clones a remote onto the scoped device and registers the checkout.
 // The clone runs there, under that device's git credentials.
 export function useCloneProject() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
+  const whenListed = useWhenListed();
   return useMutation<Project, Error, CloneProjectPayload>({
-    mutationFn: (input) => api.projects.clone(input),
-    // Returned for the same reason useAddProject returns it.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: keys.projects() }),
+    // Settles once listed, as useAddProject does.
+    mutationFn: (input) => api.projects.clone(input).then(whenListed),
     meta: { errorTitle: "Couldn't clone the repository" },
   });
 }
 
 // Starts a new repository on the scoped device and registers it.
 export function useCreateProject() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
+  const whenListed = useWhenListed();
   return useMutation<Project, Error, CreateProjectPayload>({
-    mutationFn: (input) => api.projects.create(input),
-    // Returned for the same reason useAddProject returns it.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: keys.projects() }),
+    // Settles once listed, as useAddProject does.
+    mutationFn: (input) => api.projects.create(input).then(whenListed),
     meta: { errorTitle: "Couldn't create the repository" },
   });
 }
@@ -92,7 +116,7 @@ export function useCreateProject() {
 export function useRemoveProject() {
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { api, deviceId, keys } = useHostScope();
+  const { api, deviceId } = useHostScope();
   return useMutation<void, Error, string>({
     mutationFn: (id) => api.projects.remove({ id }),
     onMutate: async (id) => {
@@ -118,9 +142,6 @@ export function useRemoveProject() {
       if (pathname.startsWith(`/devices/${deviceId}/projects/${id}`)) {
         await router.navigate({ to: "/" });
       }
-      await queryClient.invalidateQueries({
-        queryKey: keys.projects(),
-      });
       // With the route and sidebar row gone nothing observes the
       // removed project's queries; drop the leftovers so nothing can
       // replay them. Only inactive ones: removing a query that still
@@ -138,22 +159,19 @@ export function useRemoveProject() {
 
 // Points a project at where its repo lives now, after it was moved or
 // renamed by hand. The id stays, so the project's own queries refetch
-// against the new path along with the list.
+// against the new path, and the list follows as the host streams it.
 export function useRelocateProject(id: string) {
   const queryClient = useQueryClient();
-  const { api, deviceId, keys } = useHostScope();
+  const { api, deviceId } = useHostScope();
   return useMutation<Project, Error, string>({
     mutationKey: relocateProjectKey(deviceId, id),
     mutationFn: (path) => api.projects.relocate({ id, path }),
+    // Any host key naming the id: the one predicate that sweeps a
+    // worktree's queries sweeps a project's just as well.
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: keys.projects() }),
-        // Any host key naming the id: the one predicate that sweeps a
-        // worktree's queries sweeps a project's just as well.
-        queryClient.invalidateQueries({
-          predicate: worktreeQueriesOn(deviceId, id),
-        }),
-      ]),
+      queryClient.invalidateQueries({
+        predicate: worktreeQueriesOn(deviceId, id),
+      }),
     meta: { errorTitle: "Couldn't locate the project" },
   });
 }
@@ -168,42 +186,42 @@ export function useRelocatingProject(deviceId: string, id: string): boolean {
 const relocateProjectKey = (deviceId: string, id: string) =>
   ["relocateProject", deviceId, id] as const;
 
+type ReorderInput = {
+  draggedId: string;
+  targetId: string;
+  position: "before" | "after";
+};
+
+// The reorder, laid over the list at once and left to the host's stream
+// to settle.
+const reorderProjectsAtom = Atom.family((deviceId: string) =>
+  Atom.optimisticFn(shownProjectsAtom(deviceId), {
+    reducer: (
+      current: AsyncResult.AsyncResult<readonly Project[], unknown>,
+      { draggedId, targetId, position }: ReorderInput,
+    ) =>
+      AsyncResult.map(current, (list) =>
+        reorderProjects(list, draggedId, targetId, position),
+      ),
+    fn: hostCallFn({
+      deviceId,
+      localDeviceId,
+      call: (input: ReorderInput) => ({ channel: "projects:reorder", input }),
+    }),
+  }),
+);
+
 export function useReorderProjects() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<
-    void,
-    Error,
-    { draggedId: string; targetId: string; position: "before" | "after" },
-    { previous?: readonly Project[] }
-  >({
-    mutationFn: (input) => api.projects.reorder(input),
-    onMutate: ({ draggedId, targetId, position }) => {
-      // Synchronous on purpose: dnd-kit reads the active item's rect for
-      // the drop animation right after onDragEnd returns. If the optimistic
-      // reorder is awaited, React hasn't flushed by then and the overlay
-      // animates back to the old slot before snapping. Cancel without
-      // awaiting; cancelled in-flight fetches can't overwrite the cache.
-      void queryClient.cancelQueries({
-        queryKey: keys.projects(),
-      });
-      const previous = queryClient.getQueryData<readonly Project[]>(
-        keys.projects(),
-      );
-      queryClient.setQueryData<readonly Project[]>(keys.projects(), (current) =>
-        current
-          ? reorderProjects(current, draggedId, targetId, position)
-          : current,
-      );
-      return { previous };
-    },
-    onError: (_error, _vars, context) => {
-      queryClient.setQueryData(keys.projects(), context?.previous);
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.projects(),
-      });
+  const { deviceId } = useHostScope();
+  // Synchronous on purpose: dnd-kit reads the active item's rect for
+  // the drop animation right after onDragEnd returns, so the list must
+  // already read reordered by then.
+  const reorder = useAtomSet(reorderProjectsAtom(deviceId), {
+    mode: "promise",
+  });
+  return useMutation<void, Error, ReorderInput>({
+    mutationFn: async (input) => {
+      await reorder(input);
     },
     meta: { errorTitle: "Couldn't reorder projects" },
   });

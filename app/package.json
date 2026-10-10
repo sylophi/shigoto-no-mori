@@ -40,6 +40,7 @@
     "postinstall": "node scripts/copy-material-icons.mts && node scripts/fix-node-pty-helper.mts"
   },
   "dependencies": {
+    "@effect/atom-react": "catalog:",
     "@base-ui/react": "catalog:",
     "@clerk/electron": "0.0.35",
     "@clerk/react": "6.14.5",

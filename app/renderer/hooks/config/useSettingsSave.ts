@@ -5,7 +5,6 @@ import {
 } from "@tanstack/react-query";
 import {
   type ClientConfig,
-  DEVICE_SETTINGS_DEFAULTS as DEFAULTS,
   type DeviceSettingsPatch,
   type GlobalConfig,
   type LauncherCommand,
@@ -146,10 +145,12 @@ interface SettingsSaveResult {
 // through window.api, so the caches it staled are exactly this
 // machine's), and useDeviceSettingsSave passes the scoped registry of
 // the peer it patched.
+// The projects and worktree lists are the host's views, which read the
+// device config again themselves (terrier's projects, Codex-style names,
+// the idle shelf).
 export function invalidateDeviceSettingsQueries(
   queryClient: QueryClient,
   keys: QueryKeyRegistry,
-  worktreeRowsChanged: boolean,
 ): void {
   void queryClient.invalidateQueries({ queryKey: keys.globalConfig() });
   // Launcher catalogs for every project depend on global custom launchers.
@@ -158,35 +159,6 @@ export function invalidateDeviceSettingsQueries(
   // and the project PR list -- refetch immediately rather than wait
   // for the next focus/mount.
   void queryClient.invalidateQueries({ queryKey: keys.githubCliAll() });
-  // Toggling the terrier integration changes which projects the
-  // list handler merges in -- same immediate refetch. (Terrier
-  // readiness depends only on the binary, not the toggle, so it
-  // has nothing to invalidate here.)
-  void queryClient.invalidateQueries({ queryKey: keys.projects() });
-  // Toggling Codex-style worktree names renames external worktrees in
-  // every project's list, and a new idle shelf setting shelves the
-  // worktrees it now covers on the next listing. Gated on the change
-  // because this refetch costs a git fan-out per worktree, unlike the
-  // ones above.
-  if (worktreeRowsChanged) {
-    void queryClient.invalidateQueries({ queryKey: keys.worktreesAll() });
-  }
-}
-
-// The device settings the worktree listing reads: Codex-style names,
-// and the idle shelf.
-const WORKTREE_ROW_SETTINGS = ["codexWorktreeNames", "autoShelveDays"] as const;
-
-// Whether a save changes what the worktree listing answers (see
-// invalidateDeviceSettingsQueries), against the stored config the form
-// was seeded from.
-export function changesWorktreeRows(
-  before: GlobalConfig,
-  after: SettingsFormState,
-): boolean {
-  return WORKTREE_ROW_SETTINGS.some(
-    (key) => (before[key] ?? DEFAULTS[key]) !== after[key],
-  );
 }
 
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
@@ -214,11 +186,6 @@ export function useSettingsSave({
   const initialClientDoc = serialize(toClientConfig(initialState));
 
   return useMutation({
-    // Decided up front: initialConfig follows the live config query, which
-    // can refetch the saved value before onSuccess runs.
-    onMutate: (state: SettingsFormState) => ({
-      worktreeRowsChanged: changesWorktreeRows(initialConfig, state),
-    }),
     mutationFn: async (
       state: SettingsFormState,
     ): Promise<SettingsSaveResult> => {
@@ -261,11 +228,7 @@ export function useSettingsSave({
         clientConfig: persistedClientConfig,
       };
     },
-    onSuccess: (
-      { devicePersisted, clientPersisted, clientConfig },
-      _state,
-      { worktreeRowsChanged },
-    ) => {
+    onSuccess: ({ devicePersisted, clientPersisted, clientConfig }) => {
       if (clientPersisted) {
         // setQueryData where the device half invalidates: the
         // divergence is deliberate. No CLI merge can change the client
@@ -275,23 +238,15 @@ export function useSettingsSave({
         queryClient.setQueryData(queryKeys.clientConfig(), clientConfig);
       }
       if (devicePersisted) {
-        invalidateDeviceSettingsQueries(
-          queryClient,
-          queryKeys,
-          worktreeRowsChanged,
-        );
+        invalidateDeviceSettingsQueries(queryClient, queryKeys);
       }
     },
-    onError: (error, _state, context) => {
+    onError: (error) => {
       // A SettingsSaveError with devicePersisted means the device write
       // landed before the appearance write failed, so its caches are
       // stale exactly as on success.
       if (error instanceof SettingsSaveError && error.devicePersisted) {
-        invalidateDeviceSettingsQueries(
-          queryClient,
-          queryKeys,
-          context?.worktreeRowsChanged ?? true,
-        );
+        invalidateDeviceSettingsQueries(queryClient, queryKeys);
       }
     },
     meta: { errorTitle: "Couldn't save settings" },

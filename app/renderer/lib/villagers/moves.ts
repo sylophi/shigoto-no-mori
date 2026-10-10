@@ -3,19 +3,15 @@
 // moving out, and the app says so (toastVillagerMove) however it
 // happened: from this app, from `sm` in a terminal, or from another
 // device. It watches what every one of those ends in: a device's
-// worktree list changing, the same list the sidebar shows, so the news
-// comes with the row. The app's own create and delete write their row
-// into the list the moment the host answers (useWorktreeMutations.ts),
-// the CLI's changes reach it through the fs watcher's refetch, and
-// another device's through the peer push that invalidates its lists
-// (lib/hostWatch.ts).
+// worktree list changing as its host streams it (lib/viewFeed.ts), the
+// same list the sidebar shows, so the news comes with the row.
 //
-// Every write to a list counts, the app's own included, so the app
-// adds or drops a row only once the host has made or removed the
-// worktree, never optimistically. A re-key (a convert, a relocate) nets
-// out by name. A list seen for the first time, or again after it
-// failed or left the cache, starts over without news: nothing moved
-// that this window saw.
+// Only the host's list counts, never a row laid over it ahead of the
+// host (useWorktreeMutations.ts), so a move is told once the host has
+// made or removed the worktree. A re-key (a convert, a relocate) nets
+// out by name. A list seen for the first time, or again after its
+// stream stopped, starts over without news: nothing moved that this
+// window saw.
 //
 // Moves wait a moment before they are told, so several at once come
 // out together, and a hold (holdVillagerMoves) keeps them waiting for
@@ -30,7 +26,7 @@ import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
-import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
+import { onWorktreeLists } from "@/lib/viewFeed";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import {
   type MoveKind,
@@ -49,8 +45,8 @@ const SETTLE_MS = 150;
 // How long a quieted worktree stays quiet: a transplant's whole dialog.
 const QUIET_MS = 5 * 60_000;
 
-// The last list seen for each project, by query hash.
-const lastSeen = new Map<string, Worktree[]>();
+// The last list seen for each project, by its list's key.
+const lastSeen = new Map<string, readonly Worktree[]>();
 // Moves not yet told, by device.
 const pending = new Map<string, { in: Worktree[]; out: Worktree[] }>();
 let holds = 0;
@@ -70,26 +66,14 @@ let client: QueryClient | undefined;
 // Boot wiring, once per window, like the other boot subscriptions.
 export function startVillagerMoves(queryClient: QueryClient): void {
   client = queryClient;
-  queryClient.getQueryCache().subscribe((event) => {
-    const { queryKey, queryHash } = event.query;
-    if (!isWorktreeListKey(queryKey)) return;
-    if (event.type === "removed") {
-      lastSeen.delete(queryHash);
+  onWorktreeLists(({ key, deviceId, list }) => {
+    if (list === null) {
+      lastSeen.delete(key);
       return;
     }
-    if (event.type !== "updated") return;
-    const { action } = event;
-    if (action.type === "error") {
-      lastSeen.delete(queryHash);
-      return;
-    }
-    if (action.type !== "success") return;
-    const list = event.query.state.data as Worktree[] | undefined;
-    const before = lastSeen.get(queryHash);
-    // Structural sharing hands back the same list when nothing changed.
-    if (list === undefined || list === before) return;
-    lastSeen.set(queryHash, list);
-    const deviceId = String(hostKeyDeviceId(queryKey));
+    const before = lastSeen.get(key);
+    if (list === before) return;
+    lastSeen.set(key, list);
     // The album counts every villager it sees, a list's first reading
     // included (visitLog.ts).
     void recordVisits(queryClient, deviceId, list, isQuiet);

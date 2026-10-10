@@ -21,11 +21,12 @@ export function useBranches(projectId: string | null) {
   });
 }
 
-// Anything derived from refs/heads or refs/remotes for a project: branches,
-// worktrees (each carries ahead/behind + recent commits), and the resolved
-// default branch (which depends on which refs exist). Branch and worktree
-// mutations call this, and so does a host's refsRefreshed broadcast
-// (lib/hostWatch.ts) after a background fetch.
+// The requests derived from refs/heads or refs/remotes for a project:
+// branches and the resolved default branch (which depends on which refs
+// exist). The worktree list is the host's view, which re-reads when the
+// refs move. Branch and worktree mutations call this, and so does a
+// host's refsRefreshed broadcast (lib/hostWatch.ts) after a background
+// fetch.
 export function invalidateBranchState(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
@@ -33,9 +34,6 @@ export function invalidateBranchState(
 ) {
   void queryClient.invalidateQueries({
     queryKey: keys.branches(projectId),
-  });
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktrees(projectId),
   });
   void queryClient.invalidateQueries({
     queryKey: keys.defaultBranch(projectId),

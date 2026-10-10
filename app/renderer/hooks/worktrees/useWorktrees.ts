@@ -1,114 +1,181 @@
-import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 import {
-  useHostScope,
-  type HostApi,
-  type HostScope,
-} from "@/hooks/remote/useHostScope";
+  type Project,
+  type Worktree,
+  WorktreeSchema,
+} from "@shigomori/contracts/schemas";
+import * as Atom from "effect/reactivity/Atom";
+import * as Schema from "effect/Schema";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import { localDeviceId } from "@/lib/queryKeys";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import {
+  endWith,
+  hostViewAtom,
+  layOver,
+  optimisticView,
+  overlay,
+  type ViewState,
+} from "@/lib/runtime/atoms";
+import {
+  type LiveViewState,
+  useView,
+  useViews,
+  viewsOf,
+} from "@/lib/runtime/viewHooks";
+import { noteWorktreeList } from "@/lib/viewFeed";
 
-// Which device's forest to read, and over which api. Both default to
-// the local machine, so a scope-less call reads this machine's forest;
-// a scoped caller (a useHostScope consumer, the sidebar's remote
-// fan-out) passes a peer's id and api and that device's data caches
-// under its own id.
-export type HostForestScope = Partial<HostScope>;
+// The key of one device's project's list.
+export const worktreeListKey = (deviceId: string, projectId: string) =>
+  `${deviceId}\n${projectId}`;
 
-// The (device, api) pair a scope names. The api falls back to
-// window.api only when the KEY is absent (a scope-less local call): a
-// caller passing `api: undefined` means "this device has no
-// connection", and a default parameter would silently swap the local
-// api in, so every offline device would fetch and cache THIS machine's
-// data under its own device key.
-export function resolveForestScope(scope: HostForestScope): {
-  deviceId: string;
-  api: HostApi | undefined;
-} {
+// One device's project's worktrees, as its host streams them
+// (worktrees:watch), told to the watchers of every list
+// (lib/viewFeed.ts) as they come.
+export const worktreesAtom = Atom.family((key: string) => {
+  const [deviceId = "", projectId = ""] = key.split("\n");
+  return hostViewAtom({
+    deviceId,
+    localDeviceId,
+    channel: "worktrees:watch",
+    input: { projectId },
+    schema: Schema.Array(WorktreeSchema),
+    onValue: (list) => noteWorktreeList({ key, deviceId, list }),
+    onStop: () => noteWorktreeList({ key, deviceId, list: null }),
+  });
+});
+
+// The list as shown: the stream's, with a row change on its way, or a
+// row the host just made or removed (useWorktreeMutations.ts), laid
+// over it.
+const shownWorktreesAtom = Atom.family((key: string) =>
+  optimisticView(worktreesAtom(key)),
+);
+
+// The view of the worktree's list on that device, and the list shown.
+const listOf = (deviceId: string, projectId: string) => {
+  const key = worktreeListKey(deviceId, projectId);
+  return { view: worktreesAtom(key), shown: shownWorktreesAtom(key) };
+};
+
+// A row the host answered a change with, shown in its list until the
+// list's next value: a working-tree change (a discard, a restore) moves
+// no ref, so the view may not read again for a while.
+export function writeBackWorktree(
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+  worktree: Worktree,
+): void {
+  const { view, shown } = listOf(deviceId, worktree.projectId);
+  layOver(
+    registry,
+    shown,
+    view,
+    (list) => list.map((w) => (w.id === worktree.id ? worktree : w)),
+    "next",
+  );
+}
+
+// A new or re-keyed worktree (in place of `replacesId`, the id it had
+// before a convert or move) shown in its list until the host's view has
+// it: the callers route onto the row's page as soon as the mutation
+// resolves. The counterpart of forgetWorktreeRows.
+export function spliceWorktreeRow(
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+  worktree: Worktree,
+  replacesId?: string,
+): void {
+  const { view, shown } = listOf(deviceId, worktree.projectId);
+  layOver(
+    registry,
+    shown,
+    view,
+    (list) => {
+      // In place, so the sidebar row and the sibling order don't shift.
+      const at = list.findIndex(
+        (w) => w.id === worktree.id || w.id === replacesId,
+      );
+      return at === -1 ? [...list, worktree] : list.with(at, worktree);
+    },
+    { caughtUp: (list) => list.some((w) => w.id === worktree.id) },
+  );
+}
+
+// A row changed by a call, shown changed while the call runs, then as
+// the host answered until the list's next value; as it was if the call
+// failed.
+export function changeWorktreeRow(
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+  patch: (worktree: Worktree) => Worktree,
+): { answered: (worktree: Worktree) => void; failed: () => void } {
+  const { view, shown } = listOf(deviceId, projectId);
+  const laid = overlay(registry, shown, (list) =>
+    list.map((w) => (w.id === worktreeId ? patch(w) : w)),
+  );
   return {
-    deviceId: scope.deviceId ?? localDeviceId,
-    api: "api" in scope ? scope.api : window.api,
+    answered: (worktree) => {
+      laid.replace((list) =>
+        list.map((w) => (w.id === worktree.id ? worktree : w)),
+      );
+      endWith(registry, view, laid, "next");
+    },
+    failed: () => laid.end(true),
   };
 }
 
-// Single source of truth for the worktrees-list query, so imperative
-// fetches (e.g. queryClient.ensureQueryData) hit the same cache entry
-// and config as the hooks below. The key registry is derived from the
-// scope's device id, so the key and the queryFn can never name
-// different devices.
-export function worktreesQueryOptions(
-  projectId: string | null,
-  scope: HostForestScope = {},
-) {
-  const { deviceId, api } = resolveForestScope(scope);
-  return queryOptions<readonly Worktree[]>({
-    queryKey: queryKeysFor(deviceId).worktrees(projectId),
-    queryFn: () => {
-      if (!projectId || !api) return [];
-      return api.worktrees.list({ projectId });
-    },
-    // Local: api and id are always present, so this is projectId !== null,
-    // unchanged. Remote: an unconnected device (no api, empty id) never
-    // fetches and the page renders its connecting or blocked state.
-    enabled: projectId !== null && api !== undefined && deviceId !== "",
-    // Four components observe this key and listing costs ~4 git subprocesses
-    // per worktree. Without a window, opening the ⌘K palette re-lists every
-    // project for data the sidebar just fetched. Short enough that focus
-    // refetches and invalidations still behave as before.
-    staleTime: 3_000,
-    // Sidebar renders inline "Failed to list worktrees" + the project-
-    // missing affordance handles the dominant ENOENT case.
-    meta: { silentError: true },
+// Removed worktrees gone from their list at once, until the host's view
+// drops them too: a caller routing off a deleted row must not read it.
+export function forgetWorktreeRows(
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+  projectId: string,
+  worktreeIds: readonly string[],
+): void {
+  const { view, shown } = listOf(deviceId, projectId);
+  const gone = (w: Worktree) => worktreeIds.includes(w.id);
+  layOver(registry, shown, view, (list) => list.filter((w) => !gone(w)), {
+    caughtUp: (list) => !list.some(gone),
   });
 }
 
-// Shared by the sidebar fan-outs. See useAllProjectWorktrees.
-export function combineFanOut<T>(
-  results: readonly {
-    data: T | undefined;
-    error: Error | null;
-    isLoading: boolean;
-    isPending: boolean;
-  }[],
-) {
-  return results.map((result) => ({
-    data: result.data,
-    error: result.error,
-    isLoading: result.isLoading,
-    isPending: result.isPending,
-  }));
+// A device's project's worktrees: nothing is read with no project, for
+// a device with no host behind it (a peer without a session, the web
+// client's own scope), or while `enabled` holds it off.
+export function useDeviceWorktrees(
+  deviceId: string,
+  projectId: string | null,
+  enabled = true,
+): LiveViewState<readonly Worktree[]> {
+  return useView(
+    enabled && projectId !== null && deviceId !== ""
+      ? shownWorktreesAtom(worktreeListKey(deviceId, projectId))
+      : null,
+  );
 }
 
 export function useWorktrees(projectId: string | null) {
-  const scope = useHostScope();
-  return useQuery(worktreesQueryOptions(projectId, scope));
+  const { deviceId, hasHost } = useHostScope();
+  return useDeviceWorktrees(deviceId, projectId, hasHost);
 }
 
-// One query per project, sharing the per-project cache key with useWorktrees.
-// Skip projects whose path is gone, since git would just ENOENT.
-// Without a `combine`, useQueries hands back a fresh array of fresh
-// objects every render, so nothing downstream can stay memoized.
-// Projecting to the fields consumers read routes it through
-// replaceEqualDeep, which keeps identity when nothing changed.
-// Freshness overrides for a consumer that tolerates stale counts (the
-// account page's chips) and must not re-list every project on mount or
-// focus. Empty for everyone else, who keep the query's own defaults.
-export type WorktreeFanOutRefetch = {
-  staleTime?: number;
-  refetchOnMount?: boolean;
-  refetchOnWindowFocus?: boolean;
-};
+// Every listed project's worktrees on one device, positionally aligned
+// with `projects`. A project whose path is gone is skipped, since git
+// would just ENOENT.
+export const someWorktreesAtom = viewsOf((key) => shownWorktreesAtom(key));
 
 export function useAllProjectWorktrees(
   projects: readonly Project[],
-  refetch: WorktreeFanOutRefetch = {},
-) {
-  const scope = useHostScope();
-  return useQueries({
-    queries: projects.map((project) => ({
-      ...worktreesQueryOptions(project.id, scope),
-      ...refetch,
-      enabled: project.pathExists !== false,
-    })),
-    combine: combineFanOut,
-  });
+): readonly ViewState<readonly Worktree[]>[] {
+  const { deviceId, hasHost } = useHostScope();
+  return useViews(
+    someWorktreesAtom,
+    projects.map((project) =>
+      hasHost && project.pathExists !== false
+        ? worktreeListKey(deviceId, project.id)
+        : null,
+    ),
+  );
 }

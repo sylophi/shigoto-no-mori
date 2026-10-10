@@ -4,7 +4,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   type HostForestScope,
   resolveForestScope,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/remote/hostForestScope";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 
