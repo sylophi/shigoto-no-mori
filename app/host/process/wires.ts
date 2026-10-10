@@ -46,7 +46,7 @@ import { devDialKinds } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import { readGlobalConfig } from "@host/lib/config/global";
+import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
 import * as Sharing from "@host/lib/sharing";
@@ -116,7 +116,9 @@ export const tunnelLayer = () =>
         // spawn, and any memo here would leave the install-cloudflared
         // recovery path (any config write re-probes) dead for the PATH
         // case.
-        resolveBinary: Effect.promise(readGlobalConfig).pipe(
+        resolveBinary: Effect.promise(() =>
+          Captures.onEngine(Ops.readGlobalConfig()),
+        ).pipe(
           Effect.flatMap((config) =>
             TunnelService.resolveCloudflaredBinary(
               config.cloudflaredPath,
@@ -270,13 +272,16 @@ export function registerContract<M extends ContractModule>(
     // Actions that opt in via `tracksProjectUsage` rank their project
     // for the sidebar's usage sorts, which reorder live on this push.
     onUsageTracked: (parsedInput) => {
-      void recordProjectActionUsage(parsedInput).then((bumpedProjectId) => {
-        if (bumpedProjectId) {
-          broadcastAll(projectsContract, "usageBumped", {
-            projectId: bumpedProjectId,
-          });
-        }
-      });
+      void Captures.onEngine(recordProjectActionUsage(parsedInput)).then(
+        (bumpedProjectId) => {
+          if (bumpedProjectId) {
+            broadcastAll(projectsContract, "usageBumped", {
+              projectId: bumpedProjectId,
+            });
+          }
+        },
+        () => {},
+      );
     },
   });
 }
@@ -400,7 +405,7 @@ export async function refreshDirectHost(): Promise<void> {
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
       // false stops the listener.
-      const config = await readGlobalConfig();
+      const config = await Captures.onEngine(Ops.readGlobalConfig());
       if (config.directConnections === false) return null;
       return {
         port: 0,

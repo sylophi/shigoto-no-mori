@@ -1,25 +1,30 @@
 import { branchesContract } from "@shigomori/contracts/modules/branches";
 import type { Handlers } from "@shigomori/contracts/types";
+import * as Effect from "effect/Effect";
+import type * as Engine from "@host/lib/engine";
 import {
   createLocalBranch,
   deleteAnyLocalBranch,
   renameAnyLocalBranch,
 } from "@host/lib/git/branches";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject } from "@host/lib/projects";
+import { fromPromise } from "@host/lib/util/fromPromise";
 
-export const branchesHandlers: Handlers<typeof branchesContract> = {
-  create: async ({ projectId, name, base }) => {
-    const project = await findProjectOrThrow(projectId);
-    await createLocalBranch(project.path, name, base);
-  },
+export const branchesHandlers = {
+  create: ({ projectId, name, base }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => createLocalBranch(project.path, name, base)),
+    ),
 
-  rename: async ({ projectId, oldName, newName }) => {
-    const project = await findProjectOrThrow(projectId);
-    await renameAnyLocalBranch(project.path, oldName, newName);
-  },
+  rename: ({ projectId, oldName, newName }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() => renameAnyLocalBranch(project.path, oldName, newName)),
+    ),
 
-  delete: async ({ projectId, name, force }) => {
-    const project = await findProjectOrThrow(projectId);
-    await deleteAnyLocalBranch(project.path, name, force ?? false);
-  },
-};
+  delete: ({ projectId, name, force }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      fromPromise(() =>
+        deleteAnyLocalBranch(project.path, name, force ?? false),
+      ),
+    ),
+} satisfies Handlers<typeof branchesContract, unknown, Engine.Services>;

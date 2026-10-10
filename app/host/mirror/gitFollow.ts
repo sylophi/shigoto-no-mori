@@ -35,8 +35,9 @@ import {
   MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
 } from "@shigomori/contracts/modules/mirror";
-import { findProjectOrThrow } from "@host/lib/projects";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
+import * as Engine from "@host/lib/engine";
+import { findProject } from "@host/lib/projects";
 import {
   MIRROR_LABEL_LOCAL_PROJECT,
   MIRROR_LABEL_LOCAL_WORKTREE,
@@ -100,6 +101,9 @@ const RECONCILE_NOW_LIMIT_MS = 10_000;
 
 export function createGitFollower(deps: {
   sessions: () => readonly FollowableSession[];
+  // The engine the local projects are read from and the bundles made
+  // and unpacked on, once it is up.
+  engine: () => Promise<Engine.Handle>;
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
   peerMirrorApiFor: (deviceId: string) => PeerMirrorApi;
   // Persists the agreed state per session. Absent means memory only
@@ -121,7 +125,9 @@ export function createGitFollower(deps: {
   // which side it wrote. A write here is the app's own, which the
   // state watcher skips, so it is announced like a pull's apply
   // (onLocalApplied). Absent in the checks that don't exercise it.
-  followDescription?: typeof followDescription;
+  followDescription?: (
+    ...args: Parameters<typeof followDescription>
+  ) => Promise<"here" | "there" | null>;
   // A pull landed here: refs, HEAD and the index moved in the local
   // project by the app's own git, which the git-directory watcher
   // skips as the app's own writes, so nothing else would tell this
@@ -276,8 +282,10 @@ export function createGitFollower(deps: {
     const localProjectId = session.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "";
     const localWorktreeId = session.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "";
     let project: Project;
+    let engine: Engine.Handle;
     try {
-      project = await findProjectOrThrow(localProjectId);
+      engine = await deps.engine();
+      project = await Engine.runWith(engine)(findProject(localProjectId));
     } catch (error) {
       setStatus(record, { status: "error", detail: errorMessageOf(error) });
       return;
@@ -401,6 +409,7 @@ export function createGitFollower(deps: {
         peerMirror,
         local,
         peer,
+        engine,
       };
       const outcome =
         direction === "pull"

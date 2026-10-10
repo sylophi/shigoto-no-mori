@@ -85,7 +85,7 @@ import {
   reconcileMirrorInvites,
   setMirrorInviteStore,
 } from "@host/mirror/invites";
-import { findProjectAndWorktreeOrThrow } from "@host/lib/projects";
+import { findProjectAndWorktree } from "@host/lib/projects";
 import { onRunningScriptsChanged } from "@host/lib/scripts";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
@@ -295,7 +295,9 @@ export const mirrorDaemonLayer = MirrorDaemon.layer({
     noAccountSweep.run();
     // The stops that waited for the daemon, originals gone behind the
     // app's back, sessions a re-open replaced (registry.ts).
-    void settleMirrorBookkeeping();
+    void Captures.engineHandle()
+      .then(settleMirrorBookkeeping)
+      .catch(() => {});
   },
 });
 const LEFT_ACCOUNT_DETAIL =
@@ -345,7 +347,8 @@ const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
   peerSyncApiFor,
   peerMirrorApiFor,
-  followDescription,
+  engine: Captures.engineHandle,
+  followDescription: (...args) => Captures.onEngine(followDescription(...args)),
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
   // back to ancestry.
@@ -527,7 +530,7 @@ export function registerHostHandlers(): void {
   // it, so the boot checks the landed ones against the worktrees
   // listed.
   void reconcileMirrorInvites(({ projectId, worktreeId }) =>
-    findProjectAndWorktreeOrThrow(projectId, worktreeId).then(
+    Captures.onEngine(findProjectAndWorktree(projectId, worktreeId)).then(
       () => true,
       // Only a worktree known to be gone loses its invitation. A read
       // that failed for any other reason keeps it.

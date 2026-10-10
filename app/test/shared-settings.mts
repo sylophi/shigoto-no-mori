@@ -46,14 +46,17 @@ import {
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
 } from "@shigomori/contracts/schemas/sharedSettings";
-import * as Engine from "@host/lib/engine";
 import { readDeviceId } from "@host/lib/config/deviceId";
 import {
-  loadSharedSettings,
+  layer as sharedSettingsStore,
   onSharedSettingsChange,
   sharedSettingsCopy,
   sharedSettingsStored,
 } from "@host/lib/sharedSettings/store";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import { onSandboxEngine } from "./lib/sandboxEngine.mts";
 import * as SharedSettings from "@shigomori/engine/SharedSettings";
 import * as Effect from "effect/Effect";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
@@ -299,8 +302,8 @@ it("full copy: a new key is refused out loud, while held keys still take writes"
 
 // The host copy as the store holds it, once its writes have landed.
 const stored = async () => {
-  await sharedSettingsStored();
-  return Engine.run(
+  await Effect.runPromise(sharedSettingsStored);
+  return onSandboxEngine(
     Effect.gen(function* () {
       return yield* (yield* SharedSettings.SharedSettings).read;
     }),
@@ -316,8 +319,11 @@ it("host copy: kept in the store, stamps with this device, announces only real c
   );
   const engine = await hostEngine(dir);
   trackTest(engine.close);
-  await readDeviceId();
-  await loadSharedSettings();
+  await onSandboxEngine(readDeviceId);
+  // The store's read at launch, and its writer until the check ends.
+  const scope = Scope.makeUnsafe();
+  trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  await onSandboxEngine(Layer.buildWithScope(sharedSettingsStore, scope));
   const announced: SharedSettingsDoc[] = [];
   onSharedSettingsChange((doc) => announced.push(doc));
 

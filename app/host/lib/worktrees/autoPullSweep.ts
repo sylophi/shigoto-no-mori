@@ -17,11 +17,7 @@
 // dev server is the one way a pull the user never clicked could bite.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { fastForwardToUpstream, hasUncommittedOrUntracked } from "../git/sync";
-import {
-  getUpstreamCounts,
-  listWorktreeIdentities,
-  type WorktreeIdentity,
-} from "../git/worktrees";
+import { getUpstreamCounts, type WorktreeIdentity } from "../git/worktrees";
 
 type AutoPullSkipReason =
   | "detached"
@@ -69,7 +65,7 @@ export interface AutoPullSweepResult {
   failed: { worktree: WorktreeIdentity; message: string }[];
 }
 
-// Every marked worktree of one project, sequentially: a marked
+// Every marked worktree of one project's `identities`, sequentially: a marked
 // worktree is rare (the primary, maybe a release branch), and one git
 // at a time keeps the sweep from stacking onto the row probes the same
 // fetch just triggered. `busyWorktreeIds` are the worktrees with an
@@ -77,11 +73,10 @@ export interface AutoPullSweepResult {
 // exist simply match nothing, so an `sm rm` in a terminal leaves no
 // pull behind.
 export async function sweepAutoPull(
-  projectId: string,
+  identities: readonly WorktreeIdentity[],
   busyWorktreeIds: ReadonlySet<string>,
 ): Promise<AutoPullSweepResult> {
   const result: AutoPullSweepResult = { pulled: [], failed: [] };
-  const identities = await listWorktreeIdentities(projectId);
   for (const worktree of identities) {
     if (!worktree.autoPull) continue;
     // oxlint-disable-next-line no-await-in-loop -- one git at a time, by design (see above)

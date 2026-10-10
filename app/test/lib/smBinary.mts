@@ -127,8 +127,7 @@ export async function hostEngine(dataDir: string, macfs = "macfs") {
   initDataDirAt(dataDir);
   process.env["SHIGOMORI_DATA_DIR"] = dataDir;
   const runtime = ManagedRuntime.make(
-    Engine.adapter.pipe(
-      Layer.provideMerge(Engine.layer({ flavor: "prod", macfs, sm: "sm" })),
+    Engine.layer({ flavor: "prod", macfs, sm: "sm" }).pipe(
       Layer.provideMerge(NodeServices.layer),
     ),
   );
@@ -154,9 +153,8 @@ export async function addProject(
 }
 
 // A second device's engine, on a data dir of its own, for a proof that
-// plays both sides in one process: what runs inside `Engine.runAside`
-// with its runPromise goes there, and so does an effect given its
-// context.
+// plays both sides in one process: an effect given its context runs
+// there.
 export async function secondEngine(dataDir: string) {
   const Engine = await import("@host/lib/engine");
   const runtime = ManagedRuntime.make(

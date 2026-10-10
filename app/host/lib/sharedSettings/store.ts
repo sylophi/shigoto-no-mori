@@ -13,33 +13,50 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shigomori/contracts/sharedSettings";
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
+import * as Effect from "effect/Effect";
+import * as Latch from "effect/Latch";
+import * as Layer from "effect/Layer";
 import { getDeviceId } from "../config/deviceId";
-import * as Engine from "../engine";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
 
 let held: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
-let written: Promise<unknown> = Promise.resolve();
-
-// At launch, once the store is open.
-export async function loadSharedSettings(): Promise<void> {
-  held = await Engine.run(Ops.readSharedSettings);
-}
-
-// Settles once every change made so far is in the store.
-export function sharedSettingsStored(): Promise<unknown> {
-  return written;
-}
+// The changes not stored yet, in the order they were made, which the
+// layer's writer stores one at a time.
+const unstored: SharedSettingsDoc[] = [];
+const waiting = Latch.makeUnsafe(false);
+const allStored = Latch.makeUnsafe(true);
 
 function persist(doc: SharedSettingsDoc): void {
-  written = written
-    .then(() => Engine.run(Ops.storeSharedSettings(doc)))
-    .catch((error: unknown) => {
-      log.warn(
-        `[sharedSettings] the copy wasn't stored: ${errorMessageOf(error)}`,
-      );
-    });
+  unstored.push(doc);
+  allStored.closeUnsafe();
+  waiting.openUnsafe();
 }
+
+const writer = Effect.forever(
+  Effect.gen(function* () {
+    yield* waiting.await;
+    const doc = unstored.shift();
+    if (doc === undefined) {
+      waiting.closeUnsafe();
+      allStored.openUnsafe();
+      return;
+    }
+    yield* Ops.storeSharedSettings(doc);
+  }),
+);
+
+// Read from the store once at launch, then written behind every change
+// until the app quits.
+export const layer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    held = yield* Ops.readSharedSettings;
+    yield* Effect.forkScoped(writer);
+  }),
+);
+
+// Once every change made so far is in the store.
+export const sharedSettingsStored = allStored.await;
 
 type ChangeListener = (doc: SharedSettingsDoc) => void;
 const changeListeners = new Set<ChangeListener>();

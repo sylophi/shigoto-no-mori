@@ -9,27 +9,13 @@ import { setCliImpl } from "@host/ipc/modules/cli";
 import { setGitImpl } from "@host/ipc/modules/git";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
 import { requireCliBinary } from "@host/lib/cli/binary";
-import {
-  cliLinkStatus,
-  installCliLinks,
-  uninstallCliEverything,
-} from "@host/lib/cli/install";
-import {
-  hookPathEnv,
-  installShellIntegration,
-  shellIntegrationStatus,
-  uninstallShellIntegration,
-} from "@host/lib/cli/shell";
+import { cliLinkStatus, installCliLinks } from "@host/lib/cli/install";
+import { hookPathEnv } from "@host/lib/cli/shell";
 import { onGlobalConfigChange } from "@host/lib/config/global";
 import { refreshProject, sweepForPeer } from "@host/lib/git/backgroundFetch";
 import { getBusyOperations } from "@host/lib/scripts";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
-import {
-  killAllScripts,
-  publishLoopback,
-  releaseStore,
-  unpublishLoopback,
-} from "./captures";
+import { publishLoopback, releaseStore, unpublishLoopback } from "./captures";
 import { hostFacts } from "./facts";
 import { shellCalls } from "./shell";
 import { broadcastAll, refreshDirectHost } from "./wires";
@@ -38,10 +24,6 @@ export function installHostImpls(): void {
   setCliImpl({
     cliLinkStatus,
     installCliLinks,
-    uninstallCliEverything,
-    shellIntegrationStatus,
-    installShellIntegration,
-    uninstallShellIntegration,
     hookPathEnv,
     appVersion: () => hostFacts().appVersion,
     binaryPath: requireCliBinary,
@@ -58,7 +40,6 @@ export function installHostImpls(): void {
     void refreshDirectHost();
   });
   setRuntimeImpl({
-    uninstallCliEverything,
     releaseStore,
     stopUpdaterBridge: () => void shellCalls().stopUpdaterBridge(),
     unpublishLoopback,
@@ -67,7 +48,6 @@ export function installHostImpls(): void {
     afterDataWipe: () => void publishLoopback(),
     relaunchAppUnattended: () => void shellCalls().relaunch(),
     unattendedMoveRefusal: () => busyRemoteRefusal(getBusyOperations(), "move"),
-    killAllScripts,
   });
   // This device's copy of the shared settings moved (a pick here, or a
   // peer's entries merged in): every window re-reads it off the push,

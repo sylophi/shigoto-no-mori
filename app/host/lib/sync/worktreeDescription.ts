@@ -11,11 +11,10 @@ import type {
   ShigomoriWorktreeData,
   WorktreeDescription,
 } from "@shigomori/contracts/schemas";
-import {
-  readWorktreeData,
-  writeWorktreeDescription,
-} from "@host/lib/config/project";
+import * as Effect from "effect/Effect";
+import * as Ops from "@host/lib/engineOps";
 import { peerWorktreeDataApiFor } from "@host/ipc/peerSync";
+import { fromPromise } from "@host/lib/util/fromPromise";
 
 export type WorktreeRef = { projectId: string; worktreeId: string };
 
@@ -33,25 +32,38 @@ function descriptionOf(
 // side it wrote, if either. A copy a move just landed has nothing of
 // its own yet, so the move's original wins. A mirror's two sides each
 // take describes, so either can.
-export async function followDescription(
+export const followDescription = Effect.fnUntraced(function* (
   deviceId: string,
   local: WorktreeRef,
   peer: WorktreeRef,
-): Promise<"here" | "there" | null> {
+) {
   const api = peerWorktreeDataApiFor(deviceId);
-  const [here, there] = await Promise.all([
-    readWorktreeData(local.projectId, local.worktreeId).then(descriptionOf),
-    api.read(peer).then(descriptionOf),
-  ]);
+  const [here, there] = yield* Effect.all(
+    [
+      Effect.map(
+        Ops.readWorktreeData(local.projectId, local.worktreeId),
+        descriptionOf,
+      ),
+      Effect.map(
+        fromPromise(() => api.read(peer)),
+        descriptionOf,
+      ),
+    ],
+    { concurrency: 2 },
+  );
   const hereAt = here.describedAt ?? 0;
   const thereAt = there.describedAt ?? 0;
   if (hereAt > thereAt) {
-    await api.describe({ ...peer, description: here });
-    return "there";
+    yield* fromPromise(() => api.describe({ ...peer, description: here }));
+    return "there" as const;
   }
   if (thereAt > hereAt) {
-    await writeWorktreeDescription(local.projectId, local.worktreeId, there);
-    return "here";
+    yield* Ops.writeWorktreeDescription(
+      local.projectId,
+      local.worktreeId,
+      there,
+    );
+    return "here" as const;
   }
   // Both described in the same millisecond, differently: this side
   // wins (the original, for a mirror, which runs here). It is stamped
@@ -59,9 +71,13 @@ export async function followDescription(
   // is newer than what the other side holds.
   if (here.title !== there.title || here.description !== there.description) {
     const winner = { ...here, describedAt: hereAt + 1 };
-    await writeWorktreeDescription(local.projectId, local.worktreeId, winner);
-    await api.describe({ ...peer, description: winner });
-    return "there";
+    yield* Ops.writeWorktreeDescription(
+      local.projectId,
+      local.worktreeId,
+      winner,
+    );
+    yield* fromPromise(() => api.describe({ ...peer, description: winner }));
+    return "there" as const;
   }
   return null;
-}
+});

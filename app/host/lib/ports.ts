@@ -26,14 +26,11 @@ import {
   mergeWorktreePorts,
   type PoolPort,
 } from "@shared/ports/mergeWorktreePorts";
-import { readGlobalConfig } from "./config/global";
-import {
-  parseWorktreeKey,
-  readWorktreeData,
-  worktreeKey,
-} from "./config/project";
+import { parseWorktreeKey, worktreeKey } from "./config/project";
+import type * as Engine from "./engine";
+import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
-import { findProjectOrThrow, findWorktreePathOrThrow } from "./projects";
+import { findProject, findWorktreePath } from "./projects";
 import { answersFor } from "./util/cacheTtl";
 import * as Processes from "./util/processes";
 
@@ -109,6 +106,11 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  // The engine the reads below go through. A failed one is a defect:
+  // the list has no failure of its own.
+  const engine = yield* Effect.context<Engine.Services>();
+  const read = <A, E>(effect: Effect.Effect<A, E, Engine.Services>) =>
+    effect.pipe(Effect.provide(engine), Effect.orDie);
 
   const installed = yield* Processes.resolveOnPath("port-pool").pipe(
     Effect.map((resolved) => resolved !== null),
@@ -165,8 +167,7 @@ const make = Effect.gen(function* () {
   });
 
   const paths = yield* Cache.makeWith(
-    (key: string) =>
-      Effect.promise(() => findWorktreePathOrThrow(parseWorktreeKey(key))),
+    (key: string) => read(findWorktreePath(parseWorktreeKey(key))),
     {
       capacity: Infinity,
       timeToLive: answersFor(PATH_TTL),
@@ -183,7 +184,7 @@ const make = Effect.gen(function* () {
       "state.json",
     );
 
-  const portPoolEnabled = Effect.promise(readGlobalConfig).pipe(
+  const portPoolEnabled = read(Ops.readGlobalConfig()).pipe(
     Effect.map((config) => config.portPool === true),
   );
 
@@ -206,15 +207,13 @@ const make = Effect.gen(function* () {
   return Ports.of({
     list: Effect.fn("Ports.list")(function* (worktree) {
       // Validated first so a bogus project id never builds a path.
-      yield* Effect.promise(() => findProjectOrThrow(worktree.projectId));
+      yield* read(findProject(worktree.projectId));
       const [pool, data] = yield* Effect.all(
         [
           Effect.flatMap(active(worktree), (dir) =>
             dir === null ? Effect.succeed([]) : poolPorts(dir),
           ),
-          Effect.promise(() =>
-            readWorktreeData(worktree.projectId, worktree.worktreeId),
-          ),
+          read(Ops.readWorktreeData(worktree.projectId, worktree.worktreeId)),
         ],
         { concurrency: 2 },
       );

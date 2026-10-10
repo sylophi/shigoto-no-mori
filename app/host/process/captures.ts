@@ -4,6 +4,7 @@
 // graph (layer.ts, wires.ts).
 import type { MirrorCreateInput } from "@host/mirror/registry";
 import * as Tunnel from "@host/direct/cloudflared";
+import * as Engine from "@host/lib/engine";
 import * as GitWatcher from "@host/lib/gitWatcher";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
@@ -16,8 +17,17 @@ import * as Loopback from "@host/socket/loopback";
 import * as DeviceLink from "@host/socket/server";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Effect from "effect/Effect";
-import * as ScriptsLib from "@host/lib/scripts";
 import * as Bridge from "./bridge";
+
+// The engine, for the root's callbacks into it and the engine handle
+// of the Promise subsystems it starts (the mirror's git follower, the
+// background fetch).
+export const engine = Bridge.capture<Engine.Services>("The engine");
+export const onEngine = <A, E>(
+  effect: Effect.Effect<A, E, Engine.Services>,
+): Promise<A> => engine.run(effect);
+export const engineHandle = (): Promise<Engine.Handle> =>
+  engine.run(Engine.handle);
 
 // Every broadcast publishes here. Synchronous, so pushes keep their
 // order. Before the graph is up nobody can be listening, and the push
@@ -147,8 +157,8 @@ export const github = Bridge.capture<
 export const refreshPullRequests = (projectPath: string) =>
   github.run(refreshProjectPullRequests(projectPath));
 
-// The scripts' kill chains and the sweep of removed worktrees' scripts,
-// for the store watcher's callback and the data-folder move and wipe.
-export const scripts =
-  Bridge.capture<ChildProcessSpawner.ChildProcessSpawner>("The scripts");
-export const killAllScripts = () => scripts.run(ScriptsLib.killAllScripts());
+// The sweep of removed worktrees' scripts, for the store watcher's
+// callback.
+export const scripts = Bridge.capture<
+  ChildProcessSpawner.ChildProcessSpawner | Engine.Services
+>("The scripts");

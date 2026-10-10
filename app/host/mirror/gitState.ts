@@ -55,10 +55,7 @@ import {
   updateRef,
   ZERO_SHA,
 } from "@host/lib/git/refs";
-import {
-  listWorktreeIdentities,
-  worktreeIdFromPath,
-} from "@host/lib/git/worktrees";
+import { listCheckouts, worktreeIdFromPath } from "@host/lib/git/worktrees";
 
 export type GitHead = { kind: "branch"; branch: string } | { kind: "detached" };
 
@@ -449,8 +446,8 @@ async function applyGitStateUnswept(
       // it carries commits the incoming tip does not (moving it would
       // orphan them). Otherwise create it or fast-forward it, then
       // point HEAD at it.
-      const identities = await listWorktreeIdentities(project.id);
-      const elsewhere = identities.find(
+      const checkouts = await listCheckouts(project.path);
+      const elsewhere = checkouts.find(
         (w) => w.branch === target && w.path !== worktree.path,
       );
       if (elsewhere !== undefined) {

@@ -89,7 +89,6 @@ import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { registerHostContract } from "@shared/ipc/registerContract";
 import { hostContext, runHost } from "./lib/adapters.mts";
-import { callFailureOf } from "@shigomori/contracts/errors";
 import type { HostServices } from "@host/process/services";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
@@ -150,7 +149,6 @@ import {
   createCliRunner,
   makeTracker,
 } from "./lib/checkKit.mts";
-import * as Engine from "@host/lib/engine";
 import { secondEngine } from "./lib/smBinary.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
@@ -499,21 +497,30 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   engineA.state.git = "synced";
   setMirrorImpl(engine.impl);
   const asA =
-    <I, O>(run: (input: I, ctx: HandlerContext) => O | Promise<O>) =>
-    (input: I, ctx: HandlerContext): O | Promise<O> => {
+    <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
+    (input: I, ctx: HandlerContext): O => {
       setMirrorImpl(engineA.impl);
-      let result: O | Promise<O>;
+      let result: O;
       try {
         result = run(input, ctx);
       } catch (error) {
         setMirrorImpl(engine.impl);
         throw error;
       }
+      if (Effect.isEffect(result)) {
+        // An effect runs later: A's engine is swapped in for its run.
+        setMirrorImpl(engine.impl);
+        return Effect.acquireUseRelease(
+          Effect.sync(() => setMirrorImpl(engineA.impl)),
+          () => result as Effect.Effect<unknown, unknown, HostServices>,
+          () => Effect.sync(() => setMirrorImpl(engine.impl)),
+        ) as O;
+      }
       if (!(result instanceof Promise)) {
         setMirrorImpl(engine.impl);
         return result;
       }
-      return result.finally(() => setMirrorImpl(engine.impl));
+      return result.finally(() => setMirrorImpl(engine.impl)) as O;
     };
   const mirrorOnA: Handlers<
     typeof mirrorContract,
@@ -628,7 +635,7 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     file: loopbackFile,
     handlers: controlHandlers,
     transfers: controlTransfers,
-    run: Engine.run,
+    run: runHost,
   });
   track(control.stop);
 
@@ -1215,20 +1222,21 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     SHIGOMORI_DATA_DIR: otherDataDir,
   });
   const otherEngine = await secondEngine(otherDataDir);
+  const otherContext = await otherEngine.context();
+  // A handler's effect runs on the second engine.
   const asOther =
-    <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
-    (input: I, ctx: HandlerContext) =>
-      Engine.runAside(otherEngine.runPromise, () => run(input, ctx));
-  // A handler that answers with an effect runs it here, inside the
-  // aside, so its engine calls stay on the second engine.
-  const asOtherEffect =
     <I, A, E>(
-      run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, HostServices>,
+      run: (
+        input: I,
+        ctx: HandlerContext,
+      ) => Effect.Effect<A, E, HostServices> | Promise<A> | A,
     ) =>
-    (input: I, ctx: HandlerContext) =>
-      Engine.runAside(otherEngine.runPromise, async () =>
-        runHost(Effect.provide(run(input, ctx), await otherEngine.context())),
-      );
+    (input: I, ctx: HandlerContext) => {
+      const result = run(input, ctx);
+      return Effect.isEffect(result)
+        ? Effect.provide(result, otherContext)
+        : result;
+    };
   // A transfer, the same way, as the effect its stream follows.
   const asOtherTransfer =
     <I, A>(
@@ -1238,22 +1246,14 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
       ) => Effect.Effect<A, unknown, HostServices>,
     ) =>
     (input: I, ctx: HandlerContext) =>
-      Effect.tryPromise({
-        try: () =>
-          Engine.runAside(otherEngine.runPromise, async () =>
-            runHost(
-              Effect.provide(run(input, ctx), await otherEngine.context()),
-            ),
-          ),
-        catch: callFailureOf,
-      });
+      Effect.provide(run(input, ctx), otherContext);
   const otherControl = await startLoopback({
     file: join(otherDataDir, Loopback.LOOPBACK_FILE),
     handlers: {
       devices: asOther(controlHandlers.devices),
       peerWorktrees: asOther(controlHandlers.peerWorktrees),
       mirrors: asOther(controlHandlers.mirrors),
-      mirrorStop: asOtherEffect(controlHandlers.mirrorStop),
+      mirrorStop: asOther(controlHandlers.mirrorStop),
     },
     transfers: {
       send: followTransfer(asOtherTransfer(send)),
