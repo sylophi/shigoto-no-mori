@@ -6,6 +6,9 @@
 // the peers. Every host-side module (`isHostSide`) registers here.
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import { withParentSpan } from "@host/lib/util/trace";
+import type { HostServices } from "./services";
 import type * as Stream from "effect/Stream";
 import { join } from "node:path";
 import { WebSocket as WsWebSocket } from "ws";
@@ -25,9 +28,12 @@ import type {
 } from "@shigomori/contracts/types";
 import {
   broadcastAll as broadcastAllCore,
-  registerContract as registerContractCore,
+  registerHostContract,
 } from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import type {
+  EffectServerTransport,
+  HandlerContext,
+} from "@shared/ipc/transport";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { logFailure } from "@shared/log";
 import {
@@ -230,7 +236,7 @@ const hubServer = createHubConnection({
 // and a peer asking for it gets the same no-handler answer as for a
 // channel the host does not serve at all. The device hub is not a wire
 // here: it answers connectInfo and nothing else.
-const hostServer: ServerTransport = {
+const hostServer: EffectServerTransport<HostServices> = {
   handle(channel, fn, opts) {
     loopbackRegistrar.handle(channel, fn);
     // The link's gate reads each call's own annotations
@@ -250,12 +256,23 @@ function assertHostSide(module: ContractModule): void {
   }
 }
 
+// A Promise handler runs with the call's span as its ambient parent,
+// so its spans and its calls on a peer continue the caller's trace.
+const invoke = <A>(run: () => A) =>
+  Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
+    Effect.try({
+      try: () => withParentSpan(span, run),
+      catch: callFailureOf,
+    }),
+  );
+
 export function registerContract<M extends ContractModule>(
   module: M,
-  handlers: Handlers<M, HandlerContext>,
+  handlers: Handlers<M, HandlerContext, HostServices>,
 ): void {
   assertHostSide(module);
-  registerContractCore(module, handlers, hostServer, {
+  registerHostContract(module, handlers, hostServer, {
+    invoke,
     // Handler results are parsed with their output schema in a dev
     // build, so drift surfaces here and not as a confusing failure in a
     // window. A packaged build skips the extra parse.
@@ -293,17 +310,17 @@ export function registerViews<M extends ContractModule>(
 // shell's session with its host): its calls, and its streams.
 export function registerLoopbackContract<M extends ContractModule>(
   module: M,
-  handlers: Handlers<M, HandlerContext>,
+  handlers: Handlers<M, HandlerContext, HostServices>,
   streams: Readonly<Record<string, View>> = {},
 ): void {
-  registerContractCore(
+  registerHostContract(
     module,
     handlers,
     {
       handle: (channel, fn) => loopbackRegistrar.handle(channel, fn),
       broadcastAll: () => {},
     },
-    { validateOutputs: !hostFacts().packaged },
+    { validateOutputs: !hostFacts().packaged, invoke },
   );
   for (const [key, stream] of Object.entries(streams)) {
     loopbackRegistrar.view(`${nameOf(module)}:${key}`, stream);

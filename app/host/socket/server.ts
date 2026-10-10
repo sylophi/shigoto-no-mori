@@ -39,9 +39,9 @@ import {
 } from "@shigomori/contracts/contract";
 import {
   CommandRefusedError,
-  errorCodeOf,
+  type CallFailure,
+  callFailureOf,
   errorMessageOf,
-  isContractError,
   LinkRefusedError,
   LinkUnauthenticatedError,
   NotSharingError,
@@ -69,7 +69,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import type { CallContext, EffectServerTransport } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {
   CommandGate,
@@ -92,8 +92,8 @@ import {
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Sharing from "@host/lib/sharing";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
-import { withParentSpan } from "@host/lib/util/trace";
 import type * as Views from "@host/lib/views";
+import type { HostServices } from "@host/process/services";
 import { type HostChannels, makeHostChannels } from "./channels";
 
 // The listener's auth: the single-use connect tickets minted over the
@@ -267,12 +267,18 @@ function closeThenTerminate(
 
 type Push = { readonly channel: string; readonly payload: unknown };
 
-type Served = (ctx: HandlerContext, input: unknown) => Promise<unknown>;
+type Served = (
+  ctx: CallContext,
+  input: unknown,
+) => Effect.Effect<unknown, CallFailure, HostServices>;
 type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
 
 // What the app registers to serve: every remote handler and view, by
 // channel. The pushes it serves are the host's (HostPushes).
-export type LinkRegistrar = Pick<ServerTransport, "handle"> & {
+export type LinkRegistrar = Pick<
+  EffectServerTransport<HostServices>,
+  "handle"
+> & {
   readonly served: ReadonlyMap<string, Served>;
   readonly views: ReadonlyMap<string, View>;
   readonly view: (channel: string, view: View) => void;
@@ -300,40 +306,25 @@ export function createLinkRegistrar(): LinkRegistrar {
   };
 }
 
-// A contract call: the registered handler, its signal aborted when the
-// call is interrupted (the peer cancelling it, or its link dropping),
-// its failure crossing as the contract error it is, or as
-// RemoteCallError with its message and code.
-const serve = (channel: string, fn: Served) => (payload: unknown) =>
-  Effect.gen(function* () {
-    const peer = yield* LinkPeer;
-    // The call's span: what the handler's own spans and peer calls
-    // continue, so the caller's trace goes on here.
-    const span = yield* Effect.option(Effect.currentSpan);
-    return yield* Effect.tryPromise({
-      try: (signal) =>
-        withParentSpan(span, () =>
-          fn(
-            {
-              signal,
-              connection: peer.closed,
-              callerDeviceId: peer.deviceId,
-              channels: peer.channels,
-              notifier: (module, key) => (push) =>
-                peer.notify(module, key, push),
-            },
-            payload,
-          ),
-        ),
-      catch: (error) =>
-        isContractError(error)
-          ? error
-          : new RemoteCallError({
-              text: errorMessageOf(error),
-              code: errorCodeOf(error),
-            }),
-    });
-  }).pipe(Effect.annotateSpans({ channel }));
+// A contract call: the registered handler, run with the graph's
+// services, interrupted when the peer cancels it or its link drops, its
+// failure crossing as the contract error it is, or as RemoteCallError
+// with its message and code.
+const serve =
+  (channel: string, fn: Served, services: Context.Context<HostServices>) =>
+  (payload: unknown) =>
+    Effect.gen(function* () {
+      const peer = yield* LinkPeer;
+      return yield* fn(
+        {
+          connection: peer.closed,
+          callerDeviceId: peer.deviceId,
+          channels: peer.channels,
+          notifier: (module, key) => (push) => peer.notify(module, key, push),
+        },
+        payload,
+      ).pipe(Effect.provideContext(services));
+    }).pipe(Effect.annotateSpans({ channel }));
 
 // A frame's messages. One malformed frame is dropped rather than taking
 // down a link carrying other calls.
@@ -409,7 +400,7 @@ export const make = (options: {
     const sharingNow =
       sharing === undefined ? Effect.succeed(true) : sharing.current;
     // What the views read, and the pushes every peer hears.
-    const services = yield* Effect.context<Views.Services>();
+    const services = yield* Effect.context<HostServices>();
     const hostPushes = yield* HostPushes.HostPushes;
     const runFork = yield* FiberSet.makeRuntime<never>();
     const lifecycle = yield* Semaphore.make(1);
@@ -703,14 +694,7 @@ export const make = (options: {
         const watch = (view: View) => (payload: unknown) =>
           view(payload).pipe(
             Stream.provideContext(services),
-            Stream.mapError((error) =>
-              isContractError(error)
-                ? error
-                : new RemoteCallError({
-                    text: errorMessageOf(error),
-                    code: errorCodeOf(error),
-                  }),
-            ),
+            Stream.mapError(callFailureOf),
           );
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
@@ -736,7 +720,7 @@ export const make = (options: {
           handlers[tag] =
             fn === undefined
               ? () => Effect.fail(unserved(tag))
-              : serve(tag, fn);
+              : serve(tag, fn, services);
         }
 
         const peerAuth = Layer.succeed(PeerAuth, (effect, { client, rpc }) =>

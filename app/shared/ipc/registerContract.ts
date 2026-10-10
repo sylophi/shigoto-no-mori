@@ -18,7 +18,14 @@ import {
   TracksProjectUsage,
 } from "@shigomori/contracts/contract";
 import { decode, encode } from "@shigomori/contracts/codec";
-import type { HandlerContext, ServerTransport } from "./transport";
+import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
+import type {
+  CallContext,
+  EffectServerTransport,
+  HandlerContext,
+  ServerTransport,
+} from "./transport";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
@@ -38,6 +45,13 @@ type RegisterContractOpts = {
   // forgets the hook fails at startup instead of silently freezing the
   // usage sorts.
   onUsageTracked?: (parsedInput: unknown) => void;
+};
+
+type RegisterHostContractOpts = RegisterContractOpts & {
+  // Runs a step of the call (the handler itself, the input's parse),
+  // a throw failing it. The host's sets the call's span as the ambient
+  // parent of a Promise handler's own.
+  readonly invoke?: <A>(run: () => A) => Effect.Effect<A, CallFailure>;
 };
 
 // The per-call wrapper: ONE definition of what serving a contract call
@@ -63,6 +77,49 @@ function wrapContractCall<Ctx>(
     onSuccess?.(input);
     return opts.validateOutputs ? encode(outputOf(call), result) : result;
   };
+}
+
+// The same, as an effect for a server built in a layer graph: a handler
+// may answer with an effect on the graph's services, which runs where
+// the call is served, or as before with a value or a Promise, which
+// gets a signal of its own that aborts when the call is interrupted.
+function wrapEffectCall<Services>(
+  call: ContractCall,
+  handler: (input: unknown, ctx: HandlerContext) => unknown,
+  opts: RegisterHostContractOpts,
+): (
+  ctx: CallContext,
+  raw: unknown,
+) => Effect.Effect<unknown, CallFailure, Services> {
+  const onSuccess =
+    annotation(call, TracksProjectUsage) === true
+      ? opts.onUsageTracked
+      : undefined;
+  const attempt =
+    opts.invoke ??
+    (<A>(run: () => A) => Effect.try({ try: run, catch: callFailureOf }));
+  return (ctx, raw) =>
+    Effect.gen(function* () {
+      const input = yield* attempt(() => decode(inputOf(call), raw));
+      const controller = new AbortController();
+      const answer = yield* attempt(() =>
+        handler(input, { ...ctx, signal: controller.signal }),
+      );
+      const result = yield* (
+        Effect.isEffect(answer)
+          ? (answer as Effect.Effect<unknown, unknown, Services>).pipe(
+              Effect.mapError(callFailureOf),
+            )
+          : Effect.tryPromise({
+              try: async () => answer,
+              catch: callFailureOf,
+            })
+      ).pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())));
+      onSuccess?.(input);
+      return opts.validateOutputs
+        ? yield* attempt(() => encode(outputOf(call), result))
+        : result;
+    });
 }
 
 // Fails closed on a host call that never classified itself: a host
@@ -93,11 +150,24 @@ export function classificationGap(call: ContractCall): string | null {
   return null;
 }
 
-export function registerContract<M extends ContractModule>(
-  module: M,
-  handlers: Handlers<M, HandlerContext>,
-  server: ServerTransport,
+// Checks every call of `module` before any is mounted, so a module
+// either serves whole or not at all, then mounts each with its
+// exposure: `remote` so a composite wire can withhold a non-remote
+// channel from the socket entirely, and `gated` RAW (undefined stays
+// undefined, never collapsed to false) so the remote bindings'
+// read-only collections stay fail-closed at the transport level too:
+// they record a channel as servable-ungated only on an EXPLICIT
+// gated:false, so a call that never classified itself is gated like a
+// command rather than served as a read.
+function mountCalls(
+  module: ContractModule,
+  handlers: object,
   opts: RegisterContractOpts,
+  mount: (
+    call: ContractCall,
+    handler: (i: unknown, ctx: HandlerContext) => unknown,
+    exposure: { remote: boolean; gated: boolean | undefined },
+  ) => void,
 ): void {
   const calls = callsOf(module);
   const tracked = calls.find(
@@ -116,8 +186,6 @@ export function registerContract<M extends ContractModule>(
     string,
     (i: unknown, ctx: HandlerContext) => unknown
   >;
-  // Every call checked before any is mounted, so a module either
-  // serves whole or not at all.
   const invokes = calls.filter(isInvoke);
   for (const call of invokes) {
     const gap = classificationGap(call);
@@ -129,21 +197,43 @@ export function registerContract<M extends ContractModule>(
   for (const call of invokes) {
     const handler = byName[keyOf(call)];
     if (handler === undefined) continue;
-    // The call's exposure decision rides to the transport so a composite
-    // wire can withhold a non-remote channel from the socket entirely.
-    const remote = annotation(call, Remote) === true;
-    // The command-vs-read decision rides RAW (undefined stays
-    // undefined, never collapsed to false) so the remote bindings'
-    // read-only collections stay fail-closed at the transport level
-    // too: they record a channel as servable-ungated only on an
-    // EXPLICIT gated:false, so a call that never classified itself is
-    // gated like a command rather than served as a read.
-    const gated = annotation(call, Gated);
-    server.handle(channelOf(call), wrapContractCall(call, handler, opts), {
-      remote,
-      gated,
+    mount(call, handler, {
+      remote: annotation(call, Remote) === true,
+      gated: annotation(call, Gated),
     });
   }
+}
+
+export function registerContract<M extends ContractModule>(
+  module: M,
+  handlers: Handlers<M, HandlerContext>,
+  server: ServerTransport,
+  opts: RegisterContractOpts,
+): void {
+  mountCalls(module, handlers, opts, (call, handler, exposure) =>
+    server.handle(
+      channelOf(call),
+      wrapContractCall(call, handler, opts),
+      exposure,
+    ),
+  );
+}
+
+// A contract served from a layer graph, its handlers free to answer
+// with effects on the graph's services.
+export function registerHostContract<M extends ContractModule, Services>(
+  module: M,
+  handlers: Handlers<M, HandlerContext, Services>,
+  server: EffectServerTransport<Services>,
+  opts: RegisterHostContractOpts,
+): void {
+  mountCalls(module, handlers, opts, (call, handler, exposure) =>
+    server.handle(
+      channelOf(call),
+      wrapEffectCall<Services>(call, handler, opts),
+      exposure,
+    ),
+  );
 }
 
 // Parse at source: a producer bug surfaces here rather than as a
@@ -183,7 +273,7 @@ export function broadcastAll<
   module: M,
   key: K,
   payload: BroadcastProducerPayload<M, K>,
-  server: ServerTransport,
+  server: Pick<ServerTransport, "broadcastAll">,
 ): void {
   const { channel, parsed, remote } = resolveBroadcast(module, key, payload);
   server.broadcastAll(channel, parsed, { remote });
