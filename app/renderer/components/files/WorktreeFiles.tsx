@@ -14,7 +14,7 @@ import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { FileTree } from "./FileTree";
-import { ancestorsOf } from "./treePaths";
+import { ancestorsOf } from "@shigomori/ui/views/files/treePaths.ts";
 import { FileViewer } from "./FileViewer";
 import {
   FilesHeaderView,
@@ -22,7 +22,7 @@ import {
   FilesPageView,
   FilesTreeSheetView,
   HideIgnoredToggleView,
-} from "./WorktreeFilesView";
+} from "@shigomori/ui/views/files/WorktreeFilesView.tsx";
 
 // Kept across worktrees and launches, like the diff's line wrap.
 const HIDE_IGNORED_STORAGE_KEY = "files.hideIgnored";

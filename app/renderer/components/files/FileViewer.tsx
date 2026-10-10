@@ -1,13 +1,16 @@
 import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { useQuery } from "@tanstack/react-query";
-import { CODE_THEME } from "@/components/diff/codeTheme";
+import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeFile } from "@/hooks/worktrees/useWorktreeFile";
 import { formatBytes } from "@shigomori/ui/lib/formatBytes.ts";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
-import { CodeFileView, FileViewerView } from "./FileViewerView";
+import {
+  CodeFileView,
+  FileViewerView,
+} from "@shigomori/ui/views/files/FileViewerView.tsx";
 
 // The files page's pane: one file, read whole and highlighted by the
 // same renderer the diffs use.

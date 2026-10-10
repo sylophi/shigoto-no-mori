@@ -4,7 +4,7 @@ import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { canSyncFromPrimary } from "@/lib/syncState";
+import { canSyncFromPrimary } from "@shigomori/ui/lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";

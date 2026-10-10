@@ -9,7 +9,7 @@ import { CommitDetails, CommitSteps } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { DiffPage } from "./DiffPage";
-import { CommitBylineView } from "./DiffTitlesView";
+import { CommitBylineView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 
 export function CommitDiff() {
   const { projectId, hash, worktree, goBack, missing } = useRouteWorktree();

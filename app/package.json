@@ -48,7 +48,7 @@
     "@dnd-kit/utilities": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
-    "@pierre/diffs": "^1.4.3",
+    "@pierre/diffs": "catalog:",
     "@shigomori/contracts": "workspace:*",
     "@shigomori/engine": "workspace:*",
     "@shigomori/ui": "workspace:*",

@@ -1,7 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
 import { RowContent } from "./RowContent";
-import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
-import { VirtualRowView } from "./SidebarRowsView";
+import type {
+  GroupShelf,
+  InboxShelf,
+  SidebarRow,
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import { VirtualRowView } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
 
 // What a row needs from the sidebar but this wrapper only forwards,
 // grouped so VirtualRow's own props stay about positioning and hover.

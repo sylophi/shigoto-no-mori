@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useDoctorReport } from "@/hooks/cli/useDoctor";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { DoctorDialog } from "./DoctorDialog";
-import { DoctorSectionView } from "./DoctorSectionView";
+import { DoctorSectionView } from "@shigomori/ui/views/settings/DoctorSectionView.tsx";
 
 // The health check's section (DoctorSectionView) on whichever device it
 // is mounted under, with the last run's verdict.

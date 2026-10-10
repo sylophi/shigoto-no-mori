@@ -19,22 +19,20 @@ import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
-import { worktreeSyncView } from "@/lib/syncState";
+import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";
-import { PaletteGroupView } from "./PaletteItemView";
+import { PaletteGroupView } from "@shigomori/ui/views/palette/PaletteItemView.tsx";
 import {
   iconOf,
   ScriptVerbView,
   VerbGroupView,
   type Verb,
-} from "./PaletteVerbsView";
-import type { PaletteRow } from "./PaletteRows";
-import type {
-  PaletteEntry,
-  PalettePage,
-  PaletteProject,
-} from "./buildPaletteEntries";
+} from "@shigomori/ui/views/palette/PaletteVerbsView.tsx";
+import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
 export type GoTo = (
   entry: PaletteEntry,

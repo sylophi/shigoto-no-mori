@@ -14,7 +14,7 @@ import {
   CliSectionView,
   PeerReadErrorView,
   ShellIntegrationView,
-} from "./CliSectionView";
+} from "@shigomori/ui/views/settings/CliSectionView.tsx";
 
 // The CLI's install (CliSectionView) on whichever device the section
 // is mounted for, so a peer's section installs on the peer. A peer

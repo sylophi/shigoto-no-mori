@@ -1,32 +1,27 @@
+import type { WorktreeEntry } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
+
 import { useLocation, useNavigate } from "@tanstack/react-router";
+
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
+
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+
 import type { Worktree } from "@shigomori/contracts/schemas";
-import {
-  type SidebarMarks,
-  useSidebarMarks,
-} from "@/hooks/config/useSidebarMarks";
+
+import { useSidebarMarks } from "@/hooks/config/useSidebarMarks";
+
 import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
-import type { Resident } from "@shigomori/ui/lib/villagerVoice.ts";
+
 import { useResident } from "@/hooks/villagers/useResident";
-import type { SidebarDeviceBadge } from "./DeviceBadgeView";
-import type { WorktreeRowLook } from "./rowLook";
+
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
+
 import {
   fillRoutePath,
   matchRoutePath,
   routeDeviceId,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
-
-export interface WorktreeEntry {
-  look: WorktreeRowLook;
-  open: () => void;
-  // The villager whose home the worktree is, under Village life.
-  resident: Resident | null;
-  // This machine's forwards of a peer's worktree, for its mark.
-  forwardTip: string | undefined;
-  marks: SidebarMarks;
-}
 
 // What the two sidebar rows share in behaviour (their shared look is
 // WorktreeEntryView): "am I the open one", "what's running here",

@@ -24,16 +24,15 @@ import {
   useIconMember,
 } from "@/components/sidebar/ProjectGroupActions";
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
-import type {
-  ProjectListRow,
-  ProjectSection,
-} from "@/components/sidebar/projectListSections";
-import { buildGrid, type GroupWork } from "./gridModel";
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import { buildGrid } from "./gridModel";
+import type { GroupWork } from "@shigomori/ui/views/home/ProjectGridView.tsx";
 import {
   ProjectGridLayoutView,
   ProjectGridView,
   ProjectTileView,
-} from "./ProjectGridView";
+} from "@shigomori/ui/views/home/ProjectGridView.tsx";
 
 export function ProjectGrid() {
   const sources = useForestSources({ warm: true });

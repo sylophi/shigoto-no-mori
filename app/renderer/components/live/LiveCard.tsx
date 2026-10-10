@@ -31,7 +31,10 @@ import {
   THIS_DEVICE_VIEW,
 } from "@shigomori/ui/lib/deviceStatus.ts";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
-import { mappedPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
+import {
+  mappedPullRequest,
+  worktreeTitle,
+} from "@shigomori/ui/lib/worktreeTitle.ts";
 import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
 import { AgentItemView } from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import {

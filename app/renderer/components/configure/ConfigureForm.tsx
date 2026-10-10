@@ -16,7 +16,7 @@ import {
 import { CarryOverSection } from "./CarryOverSection";
 import { WorktreeLocationField } from "./WorktreeLocationField";
 import { selectSettingsTab } from "@/components/settings/settingsNav";
-import { LAUNCH_TAB } from "@/components/settings/settingsSections";
+import { LAUNCH_TAB } from "@shigomori/ui/views/settings/settingsSections.ts";
 import {
   type ConfigureFormState as FormState,
   ConfigureFormView,
