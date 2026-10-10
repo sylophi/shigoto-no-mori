@@ -350,6 +350,7 @@ export async function refreshHubConnection(): Promise<void> {
         // in the opts to force a reconnect onto the new account's object
         // instead of leaving the old socket live.
         accountId: inputs.accountId,
+        deviceKey: inputs.deviceKey,
         mintTicket: inputs.mintTicket,
         deviceId: getDeviceId(),
       };

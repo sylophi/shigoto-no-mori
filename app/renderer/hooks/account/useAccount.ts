@@ -115,8 +115,13 @@ export function useWatchAccountChanges(): void {
 // session. The Clerk sign-in UI itself never touches this layer.
 // Takes the token mint as a callback so a failed mint lands in the
 // same error path (and toast) as a failed enrollment.
+// Every enrollment's key, so a reader can see one running anywhere
+// (useDeviceKeyStep).
+export const ENROLL_MUTATION_KEY = ["account", "enroll"];
+
 export function useEnroll() {
   return useMutation<AccountStatus, Error, () => Promise<string | null>>({
+    mutationKey: ENROLL_MUTATION_KEY,
     mutationFn: async (mintToken) => {
       const token = await mintToken();
       if (!token) throw new Error("Clerk returned no session token");

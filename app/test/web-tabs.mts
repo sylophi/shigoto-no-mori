@@ -18,7 +18,7 @@ import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
 import { startDirectListener } from "./lib/directBoot.mts";
 import { bootDevice } from "./lib/hubBoot.mts";
-import { startStubHub } from "./lib/hubStub.mts";
+import { startStubHub, testDeviceKey } from "./lib/hubStub.mts";
 import { memoryStorage, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
@@ -26,17 +26,24 @@ import { trackTest } from "./lib/vitestKit.mts";
 const ECHO = "projects:defaultBranch";
 const PUSH = "git:projectChanged";
 
+// The profile's key, which the stub hub names for any device but the
+// host.
+const PROFILE_KEY = testDeviceKey("profile");
+
 const STORED_ENVELOPE = JSON.stringify({
   v: 1,
   enc: false,
   credential: "cred-stored",
+  deviceKey: PROFILE_KEY.privateKey,
   accountId: "acct",
   deviceName: "Stored browser",
 });
 
 async function boot() {
   const track = trackTest;
-  const stub = await startStubHub(track);
+  const stub = await startStubHub(track, (deviceId) =>
+    deviceId === "A" ? testDeviceKey("A").publicKey : PROFILE_KEY.publicKey,
+  );
   const listener = await startDirectListener(track, {
     deviceId: "A",
     registerHandlers: (binding) => {

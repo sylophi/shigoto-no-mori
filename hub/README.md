@@ -3,13 +3,33 @@
 Cloudflare Worker that keeps a Clerk account's sm devices in touch.
 Every device holds one outbound websocket to its account's `DeviceHub`
 Durable Object, which tells each device which others are online and
-forwards the small opaque envelopes they use to broker direct
-connections (a device asks a peer how to dial it, the peer answers
-with its addresses and one-time tickets). Data never passes through
-here: it flows over the direct sockets those answers set up. No sm
-logic runs here either: the Worker verifies Clerk tokens, keeps a
-device registry in D1, mints short-lived connection tickets and
-forwards envelopes it never parses. The HTTP routes are the shared
+the key each enrolled with, and forwards the small opaque envelopes
+they use to broker direct connections (a device asks a peer how to
+dial it, the peer answers with its addresses and one-time tickets).
+Data never passes through here: it flows over the direct sockets
+those answers set up. No sm logic runs here either: the Worker
+verifies Clerk tokens, keeps a device registry in D1, mints
+short-lived connection tickets and forwards envelopes it never
+parses.
+
+## Keys and sealed envelopes
+
+Each device makes an X25519 key pair at every enrollment and sends
+the public half with it (`publicKey` on the enroll body), which the
+registry keeps in the device's row, replacing the last. When a socket
+is admitted the object reads the row and tags the socket with the
+key, and the presence roster names every online device with its key.
+That roster is how a device knows its peers' keys: the hub is the
+trust root for them, as it is for which devices exist. A row without
+a key (enrolled before keys) has its socket refused, and the app
+enrolls again to make one.
+
+What a device relays to another is the connectInfo ask or its answer
+sealed as a Noise handshake message to the addressed device's key
+(`app/shared/hub/link.ts`), as the envelope's `frame`: a string the
+object copies without reading, under the same size limit. A frame
+that is not a string is dropped like any malformed envelope. So the
+hub reads only the addressing: who sent it, to whom, and the ask's id. The HTTP routes are the shared
 `HubApi` (`packages/contracts/src/hubApi.ts`), served on Effect's
 `http-api` and called by the app through the client derived from it,
 and the socket's envelopes are `packages/contracts/src/hubProtocol.ts`.
@@ -124,6 +144,12 @@ the Worker. A device reading a frame over its bound closes the socket,
 so a Worker still forwarding at the old size must never meet a device
 that already enforces the new one.
 
+Deploy order for device keys (`0006_device_public_key.sql`, protocol
+6): apply the migration, then deploy the Worker, whose floor of 6
+turns away every older build at once, then ship the app builds. A
+device whose row has no key enrolls again on its first start, on its
+own where its Clerk session lives.
+
 Deploy order for the device icon rename (`0005_device_icon.sql`, which
 renames the `devices.kind` column and the wire field to `icon`): apply
 the migration and deploy the Worker back to back, then ship the app
@@ -181,7 +207,25 @@ authenticates), it only bounds what that traffic can cost.
 - Connection tickets are signed (`TICKET_SIGNING_KEY`), so
   `GET /connect` cannot be used to instantiate a Durable Object under
   a name of the caller's choosing. A forged ticket is a `403` from the
-  Worker.
+  Worker. A ticket is bound to the credential it was minted with:
+  enrolling a device again rotates its credential, drops its unspent
+  tickets and closes its sockets (`4104`), and each dials again with
+  the new credential.
+- A device holds at most `MAX_DEVICE_CONNECTIONS` (32) sockets,
+  whatever its kind. A desktop holds one and a browser profile one per
+  tab; past the cap the device's oldest socket gives way.
+- A socket may send a burst of 300 messages, refilled at 30 a second,
+  and nothing longer than `MAX_HUB_MESSAGE_BYTES`; past either it is
+  closed (`4105`, `1009`) and its device dials again. Measured on the
+  dev hub, a socket sends two messages a second at most (a dial's
+  connectInfo ask and answer, per peer), so an account at its device
+  cap asks 30 at once: the budget is ten times that. Terminal and file
+  traffic never ride this socket.
+- Enrollment is admitted in the account's Durable Object, one at a
+  time, so enrollments arriving together cannot pass the device cap.
+- Workers Logs keeps what the code logs, with invocation logs off:
+  they would record request URLs, and the connect route carries its
+  ticket in one.
 - The Worker's limiter runs inside the Worker, so a limited request is
   still a billed Worker invocation. Only a rule at the zone stops a
   flood before it is billed. Set one up once, in the Cloudflare

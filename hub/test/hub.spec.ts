@@ -4,10 +4,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { env, listDurableObjectIds } from "cloudflare:test";
 import {
+  CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
+  CLOSE_RATE_LIMITED,
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
   encodeEnvelope,
+  MAX_DEVICE_CONNECTIONS,
+  MAX_ACCOUNT_DEVICES,
   MAX_ONLINE_DEVICES,
   MAX_HUB_MESSAGE_BYTES,
   hubTextWithinLimit,
@@ -26,6 +30,7 @@ import {
   revoke,
   sleep,
   newConnectionId,
+  testPublicKey,
   ticketRequest,
 } from "./helpers.ts";
 
@@ -41,6 +46,29 @@ describe("GET /connect", () => {
   it("accepts a fresh ticket and sends the presence list", async () => {
     const { socket } = await enrollAndConnect("acct-conn", "dev-conn");
     await socket.untilPresence(["dev-conn"]);
+  });
+
+  it("names each online device with the key it enrolled with", async () => {
+    const a = await enrollAndConnect("acct-keys", "dev-keys-a");
+    const b = await enrollAndConnect("acct-keys", "dev-keys-b");
+    const roster = await b.socket.untilPresence(["dev-keys-a", "dev-keys-b"]);
+    expect(roster).toEqual([
+      { deviceId: "dev-keys-a", publicKey: testPublicKey("dev-keys-a") },
+      { deviceId: "dev-keys-b", publicKey: testPublicKey("dev-keys-b") },
+    ]);
+    await a.socket.untilPresence(["dev-keys-a", "dev-keys-b"]);
+  });
+
+  it("refuses the socket of a device enrolled before keys", async () => {
+    const { credential } = await enroll("acct-keyless", "dev-keyless");
+    await env.DB.prepare(
+      "UPDATE devices SET public_key = NULL WHERE device_id = ?",
+    )
+      .bind("dev-keyless")
+      .run();
+    const { ticket } = await mintTicket(credential);
+    const socket = await openSocket(ticket);
+    expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });
 
   it("rejects a structurally malformed ticket before the upgrade", async () => {
@@ -162,10 +190,10 @@ describe("a web device's tabs", () => {
     await tabB.untilPresence(["dev-tabs-web"]);
     const peer = await enrollAndConnect("acct-tabs", "dev-tabs-peer");
     await peer.socket.untilPresence(["dev-tabs-peer", "dev-tabs-web"]);
-    peer.socket.send({ t: "relay", to: "dev-tabs-web", frame: { n: 1 } });
+    peer.socket.send({ t: "relay", to: "dev-tabs-web", frame: "one" });
     for (const tab of [tabA, tabB]) {
       // oxlint-disable-next-line no-await-in-loop -- two tabs, each reads its own queue
-      await tab.untilRelay({ n: 1 });
+      await tab.untilRelay("one");
     }
     // One tab closing leaves the device online through the other.
     tabA.close();
@@ -193,35 +221,95 @@ describe("a web device's tabs", () => {
     );
     expect((await stale.closed).code).toBe(CLOSE_SUPERSEDED);
     await redial.untilPresence(["dev-redial-web"]);
-    other.send({ t: "relay", to: "dev-redial-web", frame: { still: "here" } });
-    await redial.untilRelay({ still: "here" });
+    other.send({ t: "relay", to: "dev-redial-web", frame: "still here" });
+    await redial.untilRelay("still here");
+  });
+});
+
+describe("a device's socket cap", () => {
+  it("lets the oldest of a device's sockets give way past the cap, whatever its kind", async () => {
+    const { credential } = await enroll(
+      "acct-socket-cap",
+      "dev-socket-cap",
+      "Chrome on macOS",
+      "web",
+      "browser",
+    );
+    const sockets = [];
+    for (let i = 0; i < MAX_DEVICE_CONNECTIONS; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- age is open order, so these have to land one at a time
+      sockets.push(await openSocket((await mintTicket(credential)).ticket));
+    }
+    const [oldest, next] = sockets;
+    if (oldest === undefined || next === undefined) {
+      throw new Error("the cap is at least two");
+    }
+    await next.untilPresence(["dev-socket-cap"]);
+    const newest = await openSocket((await mintTicket(credential)).ticket);
+    expect((await oldest.closed).code).toBe(CLOSE_SUPERSEDED);
+    await newest.untilPresence(["dev-socket-cap"]);
+    await next.untilPresence(["dev-socket-cap"]);
+  });
+});
+
+describe("rotation", () => {
+  it("closes the device's sockets when it enrolls again, and they dial back with the new credential", async () => {
+    const { socket } = await enrollAndConnect("acct-rotate", "dev-rotate");
+    await socket.untilPresence(["dev-rotate"]);
+    const watcher = await enrollAndConnect("acct-rotate", "dev-rotate-peer");
+    await watcher.socket.untilPresence(["dev-rotate", "dev-rotate-peer"]);
+    const { credential } = await enroll("acct-rotate", "dev-rotate");
+    expect((await socket.closed).code).toBe(CLOSE_CREDENTIAL_ROTATED);
+    await watcher.socket.untilPresence(["dev-rotate-peer"]);
+    const redial = await openSocket((await mintTicket(credential)).ticket);
+    await redial.untilPresence(["dev-rotate", "dev-rotate-peer"]);
+  });
+
+  it("refuses a ticket minted before the device enrolled again", async () => {
+    const first = await enroll("acct-rotate-ticket", "dev-rotate-ticket");
+    const { ticket } = await mintTicket(first.credential);
+    await enroll("acct-rotate-ticket", "dev-rotate-ticket");
+    const socket = await openSocket(ticket);
+    expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
+  });
+
+  it("refuses a ticket stored under a credential the device no longer holds", async () => {
+    // A mint that read the old credential and stored its ticket after
+    // the rotation dropped the device's tickets.
+    await enroll("acct-rotate-race", "dev-rotate-race");
+    const hub = env.DEVICE_HUB.get(
+      env.DEVICE_HUB.idFromName("acct-rotate-race"),
+    );
+    const random = await hub.mintTicket(
+      {
+        deviceId: "dev-rotate-race",
+        kind: "desktop",
+        connectionId: newConnectionId(),
+        credentialHash: "a credential rotated away",
+      },
+      60_000,
+    );
+    const socket = await openSocket(
+      await signedTicket("acct-rotate-race", random),
+    );
+    expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });
 });
 
 describe("relaying", () => {
-  it("relays an opaque frame between two devices, byte for byte", async () => {
+  it("relays an opaque frame between two devices, unchanged", async () => {
     const a = await enrollAndConnect("acct-hub", "dev-hub-a");
     const b = await enrollAndConnect("acct-hub", "dev-hub-b");
     await a.socket.untilPresence(["dev-hub-a", "dev-hub-b"]);
     await b.socket.untilPresence(["dev-hub-a", "dev-hub-b"]);
-    // Deliberately gnarly: nested, unicode, null and undefined-adjacent
-    // shapes, exactly what future sm frames may contain.
-    const frame = {
-      t: "res",
-      id: 7,
-      ok: true,
-      result: {
-        text: "木漏れ日   line-sep",
-        list: [1, null, { deep: true }],
-        empty: {},
-      },
-    };
+    // Deliberately gnarly: the hub must not care what the string holds.
+    const frame = 'ask:7:{"木漏れ日"}\u2028 "quoted" \\ end';
     a.socket.send({ t: "relay", to: "dev-hub-b", frame });
     const delivered = await b.socket.next();
     expect(delivered.t).toBe("relay");
     if (delivered.t !== "relay") return;
     expect(delivered.from).toBe("dev-hub-a");
-    expect(JSON.stringify(delivered.frame)).toBe(JSON.stringify(frame));
+    expect(delivered.frame).toBe(frame);
     // Relaying is symmetric in both directions.
     b.socket.send({ t: "relay", to: "dev-hub-a", frame: "pong" });
     const back = await a.socket.next();
@@ -235,7 +323,7 @@ describe("relaying", () => {
   it("nacks a send to an offline device", async () => {
     const { socket } = await enrollAndConnect("acct-nack", "dev-nack-sender");
     await socket.untilPresence(["dev-nack-sender"]);
-    socket.send({ t: "relay", to: "dev-nack-nobody", frame: 1 });
+    socket.send({ t: "relay", to: "dev-nack-nobody", frame: "1" });
     expect(await socket.next()).toEqual({
       t: "nack",
       to: "dev-nack-nobody",
@@ -248,14 +336,20 @@ describe("relaying", () => {
     const b = await enrollAndConnect("acct-big", "dev-big-b");
     await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
     await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // Just past the device hub's control-frame cap (64 KiB since the
-    // wire went orchestration-only): a legitimate broker frame is far
-    // smaller, so anything here is a client aiming data at the wrong
-    // wire and gets the nack.
+    // A send right at the device hub's control-frame cap (64 KiB since
+    // the wire went orchestration-only), whose forward, naming the
+    // sender where the send named the target, lands just past it: a
+    // legitimate broker frame is far smaller, so anything here is a
+    // client aiming data at the wrong wire and gets the nack.
+    const overhead = encodeEnvelope({
+      t: "relay",
+      to: "dev-big-b",
+      frame: "",
+    }).length;
     a.socket.send({
       t: "relay",
       to: "dev-big-b",
-      frame: "x".repeat(MAX_HUB_MESSAGE_BYTES + 1),
+      frame: "x".repeat(MAX_HUB_MESSAGE_BYTES - overhead),
     });
     expect(await a.socket.next()).toEqual({
       t: "nack",
@@ -272,6 +366,10 @@ describe("relaying", () => {
     await b.socket.untilPresence(["dev-malformed-a", "dev-malformed-b"]);
     a.socket.ws.send("not json at all");
     a.socket.ws.send(JSON.stringify({ t: "mystery" }));
+    // A frame is a string: anything else is not relayed.
+    a.socket.ws.send(
+      JSON.stringify({ t: "relay", to: "dev-malformed-b", frame: { a: 1 } }),
+    );
     a.socket.send({ t: "relay", to: "dev-malformed-b", frame: "still alive" });
     const delivered = await b.socket.next();
     expect(delivered).toMatchObject({ t: "relay", frame: "still alive" });
@@ -315,6 +413,36 @@ describe("relaying", () => {
       reason: "offline",
     });
     await b.socket.expectSilence();
+  });
+});
+
+describe("what a socket may send", () => {
+  it("cuts a socket that sends more than any envelope could be, before parsing it", async () => {
+    const { socket } = await enrollAndConnect("acct-input-size", "dev-input");
+    await socket.untilPresence(["dev-input"]);
+    socket.ws.send("x".repeat(MAX_HUB_MESSAGE_BYTES + 1));
+    expect((await socket.closed).code).toBe(1009);
+  });
+
+  it("cuts a socket that sends faster than its budget", async () => {
+    const { socket } = await enrollAndConnect("acct-input-rate", "dev-rate");
+    await socket.untilPresence(["dev-rate"]);
+    // Malformed, so nothing is relayed or answered: only the count
+    // matters. Far more than the burst, in less time than it refills.
+    for (let i = 0; i < 1000; i++) socket.ws.send("{}");
+    expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
+  });
+
+  it("lets a dial storm's worth of asks through", async () => {
+    const { socket } = await enrollAndConnect("acct-input-storm", "dev-storm");
+    await enrollAndConnect("acct-input-storm", "dev-storm-peer");
+    await socket.untilPresence(["dev-storm", "dev-storm-peer"]);
+    // Two messages per peer of an account at its device cap.
+    for (let i = 0; i < 2 * (MAX_ACCOUNT_DEVICES - 1); i++) {
+      socket.send({ t: "relay", to: "dev-storm-peer", frame: `ask:${i}:x` });
+    }
+    socket.send({ t: "relay", to: "dev-gone", frame: "x" });
+    expect(await socket.next()).toMatchObject({ t: "nack", to: "dev-gone" });
   });
 });
 
@@ -415,13 +543,16 @@ describe("orchestration-only caps", () => {
     // one cost more than the bound is worth, see hubObject.ts), so
     // this arithmetic plus the client's presence schema cap IS the
     // bound. Worst case: MAX_ONLINE_DEVICES ids, each at the
-    // DeviceIdSchema ceiling of 200 characters (a deviceId is
+    // DeviceIdSchema ceiling of 200 characters with its key (a deviceId is
     // schema-bounded on enroll, so no real id exceeds it). Built with
     // the real encodeEnvelope so growth in the envelope shape cannot
     // silently outgrow this guard.
     const worstCase = encodeEnvelope({
       t: "presence",
-      online: Array.from({ length: MAX_ONLINE_DEVICES }, () => "x".repeat(200)),
+      online: Array.from({ length: MAX_ONLINE_DEVICES }, () => ({
+        deviceId: "x".repeat(200),
+        publicKey: "k".repeat(43),
+      })),
     });
     expect(hubTextWithinLimit(worstCase)).toBe(true);
     // Headroom, not a squeeze: the arithmetic should not sit within a

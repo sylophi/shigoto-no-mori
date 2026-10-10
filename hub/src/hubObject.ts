@@ -11,17 +11,21 @@
 // method call.
 //
 // Sockets use the WebSocket Hibernation API: each is tagged with its
-// device id and its connection (connectionTag), and tags survive
-// hibernation, so the handlers still know the socket after the object
-// was evicted from memory. A web device holds a connection per tab and
+// device id, its connection (connectionTag) and the public key its
+// device enrolled with, and tags survive hibernation, so the handlers
+// still know the socket after the object was evicted from memory. A web device holds a connection per tab and
 // the object relays to each. A desktop device holds one.
 import * as SqliteClient from "@effect/sql-sqlite-do/SqliteClient";
 import { DurableObject } from "cloudflare:workers";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Semaphore from "effect/Semaphore";
 import {
+  CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
+  CLOSE_RATE_LIMITED,
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
   DeviceEnvelopeSchema,
@@ -30,6 +34,9 @@ import {
   HUB_PING,
   HUB_PONG,
   hubTextWithinLimit,
+  MAX_ACCOUNT_DEVICES,
+  MAX_DEVICE_CONNECTIONS,
+  type OnlineDevice,
 } from "@shigomori/contracts/hubProtocol";
 import { type Env, WorkerEnv } from "./env.ts";
 import * as Registry from "./Registry.ts";
@@ -42,11 +49,68 @@ export const CONNECT_RANDOM_PARAM = "random";
 const connectionTag = (deviceId: string, connectionId: string) =>
   `${deviceId}#${connectionId}`;
 
+// The tag carrying the device's public key into the roster.
+const KEY_TAG_PREFIX = "key:";
+
+// What a socket may send, as a token bucket per socket: a burst of
+// RELAY_BURST messages, refilled at RELAY_PER_SECOND. Measured on the
+// dev hub, a socket sends at most two messages a second (a dial's
+// connectInfo ask and its answer, per peer), so a socket of an account
+// at its device cap asks at most 30 in a burst, and these sit ten times
+// above that. Terminal and file traffic ride the direct sockets, never
+// this one. The bucket lives in memory: an object that hibernated was
+// idle, so starting it full again loses nothing.
+const RELAY_BURST = 300;
+const RELAY_PER_SECOND = 30;
+
+// The standard close code for a message over the size the socket
+// accepts.
+const CLOSE_MESSAGE_TOO_BIG = 1009;
+
+// What the Worker asks the object to enroll: the device, its account,
+// and the hash of the credential the Worker minted for it.
+export interface EnrollRequest {
+  readonly deviceId: string;
+  readonly accountId: string;
+  readonly name: string;
+  readonly platform: string;
+  readonly icon: string;
+  readonly publicKey: string;
+  readonly credentialHash: string;
+}
+
+export type EnrollOutcome =
+  | {
+      readonly status: "enrolled";
+      readonly createdAt: number;
+      readonly lastSeenAt: number | null;
+      readonly online: ReadonlyArray<string>;
+      // The device dropped to make room, whose tunnel the Worker tears
+      // down.
+      readonly evicted: string | null;
+    }
+  | { readonly status: "enrolled-elsewhere" }
+  | { readonly status: "account-full" };
+
+// A socket's attachment, which survives hibernation: when it connected,
+// so the device's oldest gives way past MAX_DEVICE_CONNECTIONS.
+interface SocketAttachment {
+  readonly connectedAt: number;
+}
+
 export class DeviceHub extends DurableObject<Env> {
   private readonly runtime: ManagedRuntime.ManagedRuntime<
     Registry.Registry | Tickets.Tickets,
     unknown
   >;
+  // One enrollment or socket admission at a time per account, so the
+  // device cap is read and the new row written with nothing in between,
+  // and no socket is admitted under a credential being rotated.
+  private readonly admission = Semaphore.makeUnsafe(1);
+  private readonly relayBudget = new WeakMap<
+    WebSocket,
+    { tokens: number; at: number }
+  >();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -92,18 +156,48 @@ export class DeviceHub extends DurableObject<Env> {
   // tickets dropped (a pre-minted ticket must not let a revoked device
   // back in within its TTL) and the sockets closed.
   async revoke(deviceId: string, accountId: string): Promise<void> {
-    await this.runtime.runPromise(
-      Effect.gen(function* () {
-        const registry = yield* Registry.Registry;
-        const tickets = yield* Tickets.Tickets;
-        yield* registry.remove(deviceId, accountId);
-        yield* tickets.dropDevice(deviceId);
-      }),
+    await this.runtime.runPromise(removeDevice(deviceId, accountId));
+    this.closeDevice(deviceId, CLOSE_DEVICE_REVOKED, "device revoked");
+  }
+
+  // Enrolls the device, or enrolls it again, which rotates its
+  // credential: only one hash is stored, its unconsumed tickets go, and
+  // its sockets close so each dials again with the new one. The cap
+  // counts new devices only, so a full account can still enroll the
+  // devices it has, and it makes room by dropping its stalest offline
+  // device rather than refusing: removing a device takes a device
+  // credential, and a browser profile that cleared its storage has lost
+  // its own, so a refusal could lock an account out with nothing left to
+  // remove devices from. The login authorizing this is the account
+  // owner's, and the evicted device only has to sign in again.
+  async enroll(request: EnrollRequest): Promise<EnrollOutcome> {
+    const online = () => new Set(this.online());
+    const outcome = await this.runtime.runPromise(
+      this.admission.withPermits(1)(admit(request, online)),
     );
-    const closing = this.ctx.getWebSockets(deviceId);
-    if (closing.length > 0) {
-      this.closeAndAnnounce(closing, CLOSE_DEVICE_REVOKED, "device revoked");
+    if (outcome.status !== "enrolled") return outcome;
+    if (outcome.evicted !== null) {
+      this.closeDevice(outcome.evicted, CLOSE_DEVICE_REVOKED, "device revoked");
     }
+    if (outcome.rotated) {
+      this.closeDevice(
+        request.deviceId,
+        CLOSE_CREDENTIAL_ROTATED,
+        "credential rotated",
+      );
+    }
+    return {
+      status: "enrolled",
+      createdAt: outcome.createdAt,
+      lastSeenAt: outcome.lastSeenAt,
+      online: outcome.online,
+      evicted: outcome.evicted,
+    };
+  }
+
+  private closeDevice(deviceId: string, code: number, reason: string): void {
+    const closing = this.ctx.getWebSockets(deviceId);
+    if (closing.length > 0) this.closeAndAnnounce(closing, code, reason);
   }
 
   // The upgrade for GET /connect. Every verdict is an accepted socket:
@@ -123,13 +217,24 @@ export class DeviceHub extends DurableObject<Env> {
               const registry = yield* Registry.Registry;
               const holder = yield* tickets.take(random);
               if (holder === null) return null;
-              // The device must still be enrolled. A mint racing a
-              // revoke can store its ticket after the revoke dropped
-              // the device's tickets, and the row delete comes first,
-              // so this read catches what the drop missed.
+              // The device must still be enrolled, under the credential
+              // the ticket was minted with. A mint racing a revoke or a
+              // rotation can store its ticket after the device's
+              // tickets were dropped, and the row changes first, so
+              // this read catches what the drop missed. It holds the
+              // admission permit, so an enrollment's rotation lands
+              // before it or after the socket is accepted, which the
+              // rotation then closes. A row with no key predates keys:
+              // its device enrolls again first.
               const device = yield* registry.byId(holder.deviceId);
-              return device === null ? null : holder;
-            }).pipe(Effect.orElseSucceed(() => null)),
+              return device?.credential_hash === holder.credentialHash &&
+                device.public_key !== null
+                ? { ...holder, publicKey: device.public_key }
+                : null;
+            }).pipe(
+              this.admission.withPermits(1),
+              Effect.orElseSucceed(() => null),
+            ),
           );
     if (admitted === null) {
       return this.refuseSocket(CLOSE_TICKET_REJECTED, "ticket rejected");
@@ -145,14 +250,23 @@ export class DeviceHub extends DurableObject<Env> {
     // reconnect never fights its own half-dead one. On a desktop device
     // a second connection supersedes the first too, since there it
     // means two app instances on one root. A web device's tabs stand
-    // side by side.
-    const { deviceId, kind, connectionId } = admitted;
+    // side by side, up to MAX_DEVICE_CONNECTIONS, past which the oldest
+    // gives way.
+    const { deviceId, kind, connectionId, publicKey } = admitted;
     const tag = connectionTag(deviceId, connectionId);
-    const superseded = this.ctx.getWebSockets(
-      kind === "desktop" ? deviceId : tag,
-    );
+    const superseded =
+      kind === "desktop"
+        ? this.ctx.getWebSockets(deviceId)
+        : this.overCap(deviceId, tag);
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1], [deviceId, tag]);
+    this.ctx.acceptWebSocket(pair[1], [
+      deviceId,
+      tag,
+      `${KEY_TAG_PREFIX}${publicKey}`,
+    ]);
+    pair[1].serializeAttachment({
+      connectedAt: Date.now(),
+    } satisfies SocketAttachment);
     // Full presence to everyone, including the fresh socket: joining
     // devices learn the room, present devices learn about the join.
     this.closeAndAnnounce(
@@ -162,6 +276,34 @@ export class DeviceHub extends DurableObject<Env> {
     );
     this.touchLastSeen(deviceId);
     return new Response(null, { status: 101, webSocket: pair[0] });
+  }
+
+  // The web device's sockets a new connection supersedes: its own
+  // connection's older one, and its oldest others while the device
+  // would hold more than MAX_DEVICE_CONNECTIONS with the new one.
+  private overCap(deviceId: string, tag: string): WebSocket[] {
+    const own = this.ctx.getWebSockets(tag);
+    const others = this.ctx
+      .getWebSockets(deviceId)
+      .filter((ws) => !own.includes(ws))
+      .toSorted((a, b) => connectedAt(a) - connectedAt(b));
+    const excess = others.length + 1 - MAX_DEVICE_CONNECTIONS;
+    return excess > 0 ? [...own, ...others.slice(0, excess)] : own;
+  }
+
+  // Whether the socket may send one more message now (RELAY_BURST).
+  private withinRelayBudget(ws: WebSocket): boolean {
+    const now = Date.now();
+    const budget = this.relayBudget.get(ws) ?? { tokens: RELAY_BURST, at: now };
+    budget.tokens = Math.min(
+      RELAY_BURST,
+      budget.tokens + ((now - budget.at) / 1000) * RELAY_PER_SECOND,
+    );
+    budget.at = now;
+    this.relayBudget.set(ws, budget);
+    if (budget.tokens < 1) return false;
+    budget.tokens -= 1;
+    return true;
   }
 
   private refuseSocket(code: number, reason: string): Response {
@@ -174,6 +316,17 @@ export class DeviceHub extends DurableObject<Env> {
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
+    // A socket over its budget, or sending what no envelope this hub
+    // forwards could be, is cut before anything is parsed. Its device
+    // dials again.
+    if (!this.withinRelayBudget(ws)) {
+      this.closeAndAnnounce([ws], CLOSE_RATE_LIMITED, "too many messages");
+      return;
+    }
+    if (!hubTextWithinLimit(message)) {
+      this.closeAndAnnounce([ws], CLOSE_MESSAGE_TOO_BIG, "message too big");
+      return;
+    }
     // Malformed envelopes are dropped, never fatal: one bad message must
     // not tear down a socket carrying live traffic.
     const envelope = decodeEnvelope(message, DeviceEnvelopeSchema);
@@ -246,12 +399,21 @@ export class DeviceHub extends DurableObject<Env> {
   }
 
   private onlineIds(sockets: WebSocket[]): string[] {
-    const ids = new Set<string>();
+    return this.onlineDevices(sockets).map((device) => device.deviceId);
+  }
+
+  // Each device once, with the key its sockets were admitted under,
+  // sorted by id.
+  private onlineDevices(sockets: WebSocket[]): OnlineDevice[] {
+    const keys = new Map<string, string>();
     for (const ws of sockets) {
-      const deviceId = this.deviceIdOf(ws);
-      if (deviceId !== undefined) ids.add(deviceId);
+      const [deviceId, , keyTag] = this.ctx.getTags(ws);
+      if (deviceId === undefined || keyTag === undefined) continue;
+      keys.set(deviceId, keyTag.slice(KEY_TAG_PREFIX.length));
     }
-    return [...ids].toSorted();
+    return [...keys]
+      .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([deviceId, publicKey]) => ({ deviceId, publicKey }));
   }
 
   // Closes the given sockets, then broadcasts the presence list
@@ -274,7 +436,7 @@ export class DeviceHub extends DurableObject<Env> {
     const sockets = this.ctx.getWebSockets().filter((ws) => !exclude.has(ws));
     const text = encodeEnvelope({
       t: "presence",
-      online: this.onlineIds(sockets),
+      online: this.onlineDevices(sockets),
     });
     for (const ws of sockets) this.safeSend(ws, text);
   }
@@ -291,3 +453,58 @@ export class DeviceHub extends DurableObject<Env> {
     }
   }
 }
+
+// A socket's connection time, 0 for one accepted before sockets carried
+// it, which then counts as the oldest.
+function connectedAt(ws: WebSocket): number {
+  const attachment = ws.deserializeAttachment() as SocketAttachment | null;
+  return attachment?.connectedAt ?? 0;
+}
+
+// The row delete and the tickets of a revoke, in that order (revoke).
+const removeDevice = (deviceId: string, accountId: string) =>
+  Effect.gen(function* () {
+    const registry = yield* Registry.Registry;
+    const tickets = yield* Tickets.Tickets;
+    yield* registry.remove(deviceId, accountId);
+    yield* tickets.dropDevice(deviceId);
+  });
+
+// The enrollment's reads and writes, run under the account's admission
+// permit (DeviceHub.enroll).
+const admit = (request: EnrollRequest, online: () => ReadonlySet<string>) =>
+  Effect.gen(function* () {
+    const registry = yield* Registry.Registry;
+    const tickets = yield* Tickets.Tickets;
+    const { deviceId, accountId } = request;
+    const existing = yield* registry.byId(deviceId);
+    if (existing !== null && existing.account_id !== accountId) {
+      return { status: "enrolled-elsewhere" } as const;
+    }
+    let evicted: string | null = null;
+    if (existing === null) {
+      const stalestFirst = yield* registry.stalestFirst(accountId);
+      if (stalestFirst.length >= MAX_ACCOUNT_DEVICES) {
+        const present = online();
+        const evict = stalestFirst.find((id) => !present.has(id));
+        if (evict === undefined) return { status: "account-full" } as const;
+        yield* removeDevice(evict, accountId);
+        evicted = evict;
+      }
+    }
+    const createdAt = existing?.created_at ?? (yield* Clock.currentTimeMillis);
+    // The statement's account guard holds against an enroll of the same
+    // device in another account, whose object this permit does not
+    // cover: zero changes means it suppressed one.
+    const wrote = yield* registry.upsert({ ...request, createdAt });
+    if (!wrote) return { status: "enrolled-elsewhere" } as const;
+    if (existing !== null) yield* tickets.dropDevice(deviceId);
+    return {
+      status: "enrolled",
+      createdAt,
+      lastSeenAt: existing?.last_seen_at ?? null,
+      online: [...online()],
+      evicted,
+      rotated: existing !== null,
+    } as const;
+  });
