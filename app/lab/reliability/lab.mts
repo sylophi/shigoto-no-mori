@@ -1,102 +1,66 @@
-// The lab a run works in: the web client's dev server, a dev app on this
-// machine as the host the web client reaches through the dev hub, and a
-// Chrome profile of its own holding the web client's tabs, its network
-// behind the switch. Everything a run starts it stops (Lab.close).
+// The lab a run works in: a dev app on this machine as the host (B),
+// and the clients that reach it, each behind a switch the harness
+// throws (networkSwitch.mts):
+//
+// - web: the web client's dev server and a Chrome profile of its own
+//   holding its tabs, reaching B through the dev hub over B's tunnel;
+// - desktop: a second dev app (A), two windows, reaching B over the
+//   LAN, its hub behind a front;
+// - tunnel: a third (C), one window, dialing B's tunnel only
+//   (SHIGOMORI_DIAL_KINDS=tunnel), as a device on another network does;
+// - terminal: the terminal (`smd`) against A, whose cross-device verbs
+//   ride A's link to B.
+//
+// Every client's link to B passes B's listener front, so the clients'
+// network going down is the browser's proxy, the hub front and B's
+// listener front going down together, while B itself stays online.
+// Everything a run starts it stops (Lab.close).
 /* oxlint-disable no-await-in-loop -- the harness steps through time on purpose: each wait, poll and scenario follows the one before */
-import {
-  execFileSync,
-  spawn,
-  spawnSync,
-  type ChildProcess,
-} from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import {
   createWriteStream,
   existsSync,
   mkdirSync,
-  readFileSync,
-  rmSync,
   type WriteStream,
 } from "node:fs";
-import { createServer, type AddressInfo } from "node:net";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import {
   chromium,
-  type Browser,
   type BrowserContext,
   type CDPSession,
   type Page,
 } from "playwright-core";
-import { NetworkSwitch } from "./networkSwitch.mts";
+import { DevApp } from "./devApp.mts";
+import {
+  HubFront,
+  ListenerFront,
+  Network,
+  NetworkSwitch,
+} from "./networkSwitch.mts";
+import {
+  answers,
+  appDir,
+  envFile,
+  freePort,
+  git,
+  killGroup,
+  repoDir,
+  waitFor,
+  type TraceLine,
+} from "./util.mts";
 
-const appDir = resolve(import.meta.dirname, "../..");
-export const repoDir = resolve(appDir, "..");
+export { repoDir, sleep, within, type TraceLine } from "./util.mts";
 
-export const sleep = (ms: number) =>
-  new Promise<void>((done) => setTimeout(done, ms));
-
-function freePort(): Promise<number> {
-  return new Promise((done) => {
-    const server = createServer().listen(0, "127.0.0.1", () => {
-      const { port } = server.address() as AddressInfo;
-      server.close(() => done(port));
-    });
-  });
-}
-
-// The promise, or a failure naming `what` after `ms`: a page that stops
-// answering must fail its check, not hang the run.
-export function within<T>(
-  ms: number,
-  what: string,
-  promise: Promise<T>,
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_done, fail) =>
-      setTimeout(
-        () => fail(new Error(`${what} did not answer in ${ms} ms`)),
-        ms,
-      ),
-    ),
-  ]);
-}
-
-// Polls until `check` answers something truthy, or throws `what` once
-// `ms` have gone by.
-async function waitFor<T>(
-  what: string,
-  check: () => Promise<T | null | undefined | false>,
-  ms: number,
-  every = 250,
-): Promise<T> {
-  const until = Date.now() + ms;
-  for (;;) {
-    let value: T | null | undefined | false = null;
-    try {
-      value = await check();
-    } catch {
-      // Not yet.
-    }
-    if (value) return value;
-    if (Date.now() > until) throw new Error(`timed out waiting for ${what}`);
-    await sleep(every);
-  }
-}
-
-// One line of what a tab, the host or the harness said, for the trace.
-export type TraceLine = {
-  readonly at: number;
-  readonly source: string;
-  readonly level: string;
-  readonly text: string;
-};
+export const CLIENT_KINDS = ["web", "desktop", "tunnel", "terminal"] as const;
+export type ClientKind = (typeof CLIENT_KINDS)[number];
 
 // What the harness injects into every page: a visibility it controls
 // (headless Chrome never hides a page) and a wall-clock offset (a sleep
 // longer than a token's life, without waiting for it), and each toast
 // as a console line, so what reached the user is in the trace.
 const PAGE_HOOKS = `(() => {
+  if (window.harnessSetHidden !== undefined) return;
   let hidden = false;
   Object.defineProperty(Document.prototype, "visibilityState", {
     configurable: true,
@@ -159,14 +123,18 @@ declare global {
   }
 }
 
+// A page a client shows: a browser tab, or a desktop app's window.
 export class Tab {
   readonly name: string;
   readonly page: Page;
+  // The app whose window it is, none for a browser tab.
+  readonly app: DevApp | null;
   cdp: CDPSession | null = null;
 
-  constructor(name: string, page: Page) {
+  constructor(name: string, page: Page, app: DevApp | null) {
     this.name = name;
     this.page = page;
+    this.app = app;
   }
 
   async session(): Promise<CDPSession> {
@@ -219,14 +187,27 @@ export type HostFacts = {
 export type LabOptions = {
   readonly headed: boolean;
   readonly out: string;
-  // Keep the host profile and the devices enrolled at the end, for the
+  // Keep the profiles and the devices enrolled at the end, for the
   // next run.
   readonly keep: boolean;
+  readonly clients: ReadonlySet<ClientKind>;
+};
+
+// A run of the terminal: what it printed, how it exited, how long it
+// took.
+export type TerminalRun = {
+  readonly code: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly ms: number;
 };
 
 export class Lab {
   readonly trace: TraceLine[] = [];
+  // The browser's tabs.
   readonly tabs: Tab[] = [];
+  // The desktop apps' windows (A's, then C's).
+  readonly windows: Tab[] = [];
   readonly tag = basename(repoDir)
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -234,26 +215,23 @@ export class Lab {
   readonly profile = `${this.tag}-host`;
   readonly profileDir = join(homedir(), ".smd-profiles", this.profile);
   readonly browserDir = join(homedir(), ".smd-profiles", `${this.tag}-browser`);
-  readonly webPort = Number(portsEnv().WEB_PORT);
+  readonly webPort = Number(envFile(".env.ports").WEB_PORT);
   readonly origin = `http://localhost:${this.webPort}`;
   readonly smd = join(appDir, "dist-cli", "smd");
-  readonly hostLogFile = join(
-    homedir(),
-    "Library",
-    "Logs",
-    `Shigoto no Mori (Dev) [${this.profile}]`,
-    "main.log",
-  );
+  readonly network = new Network();
   host!: HostFacts;
-  network!: NetworkSwitch;
+  // B, the host every client reaches.
+  readonly hostApp: DevApp;
+  // A, the desktop device under test, and C, the one on the tunnel.
+  readonly desk: DevApp | null;
+  readonly remote: DevApp | null;
+  browserSwitch: NetworkSwitch | null = null;
   context!: BrowserContext;
-  private hostDebugPort = 0;
-  private hostLaunch: ChildProcess | null = null;
-  private hostBrowser: Browser | null = null;
-  private hostPage: Page | null = null;
+  private hubFront: HubFront | null = null;
   private webServer: ChildProcess | null = null;
   private readonly logs: WriteStream;
   private tabCount = 0;
+  private windowCount = new Map<DevApp, number>();
 
   readonly options: LabOptions;
 
@@ -261,11 +239,57 @@ export class Lab {
     this.options = options;
     mkdirSync(options.out, { recursive: true });
     this.logs = createWriteStream(join(options.out, "processes.log"));
+    const app = (profile: string, needsTunnel: boolean) =>
+      new DevApp({ profile, env: {}, needsTunnel, logs: this.logs });
+    this.hostApp = app(this.profile, true);
+    this.desk =
+      this.has("desktop") || this.has("terminal")
+        ? app(`${this.tag}-desk`, false)
+        : null;
+    this.remote = this.has("tunnel") ? app(`${this.tag}-tunnel`, false) : null;
+  }
+
+  has(kind: ClientKind): boolean {
+    return this.options.clients.has(kind);
+  }
+
+  // Every page a client shows.
+  pages(): Tab[] {
+    return [...this.tabs, ...this.windows];
   }
 
   note(text: string, level = "info"): void {
     this.trace.push({ at: Date.now(), source: "harness", level, text });
     console.log(`[reliability] ${text}`);
+  }
+
+  // ---- the network ----
+
+  // The fronts every client but the browser reaches B and the hub
+  // through. The browser's switch comes with the browser.
+  async startNetwork(): Promise<void> {
+    const frontPort = await freePort();
+    this.network.add(
+      await ListenerFront.start(frontPort, async () =>
+        this.hostApp.listenerPort(),
+      ),
+    );
+    this.hostApp.options.env.SHIGOMORI_DIRECT_FRONT_PORT = String(frontPort);
+    this.hostApp.options.env.SM_ACCOUNT_WEB_ORIGIN = this.origin;
+    if (this.desk === null && this.remote === null) return;
+    const hubUrl = envFile(".env.local").SM_DEVICE_HUB_URL;
+    if (hubUrl === undefined)
+      throw new Error("no SM_DEVICE_HUB_URL in .env.local");
+    this.hubFront = this.network.add(await HubFront.start(hubUrl));
+    for (const each of [this.desk, this.remote]) {
+      if (each !== null) each.options.env.SM_DEVICE_HUB_URL = this.hubFront.url;
+    }
+    if (this.remote !== null) {
+      this.remote.options.env.SHIGOMORI_DIAL_KINDS = "tunnel";
+    }
+    this.note(
+      `B's listener front on ${frontPort}, the hub front on ${this.hubFront.port}`,
+    );
   }
 
   // ---- the web client's dev server ----
@@ -283,203 +307,204 @@ export class Lab {
     await waitFor("the web client", () => answers(this.origin), 60_000);
   }
 
-  // ---- the host ----
+  // ---- the devices ----
 
-  private hostEnv(): NodeJS.ProcessEnv {
-    return {
-      ...process.env,
-      SHIGOMORI_DATA_DIR: join(this.profileDir, "data"),
-    };
-  }
-
-  smdJson<T>(args: string[]): T {
+  smdJson<T>(args: string[], app: DevApp = this.hostApp): T {
     return JSON.parse(
       execFileSync(this.smd, ["--json", ...args], {
-        env: this.hostEnv(),
-        cwd: join(this.profileDir, "repos", "shared"),
+        env: app.smdEnv(),
+        cwd: join(app.profileDir, "repos", "shared"),
         encoding: "utf8",
       }),
     ) as T;
   }
 
-  smdRun(args: string[]): void {
+  smdRun(args: string[], app: DevApp = this.hostApp): void {
     execFileSync(this.smd, args, {
-      env: this.hostEnv(),
-      cwd: join(this.profileDir, "repos", "shared"),
+      env: app.smdEnv(),
+      cwd: join(app.profileDir, "repos", "shared"),
       stdio: "ignore",
     });
   }
 
-  // A repo for the host to list, made once per profile.
-  private seedHost(): boolean {
-    if (existsSync(join(this.profileDir, "data"))) return false;
-    this.note(`seeding the host profile ${this.profile}`);
-    const seed = join(this.profileDir, "seed");
-    mkdirSync(join(this.profileDir, "repos"), { recursive: true });
-    git(this.profileDir, "init", "-q", "-b", "main", seed);
-    git(seed, "commit", "-q", "--allow-empty", "-m", "Initial");
-    git(this.profileDir, "clone", "-q", seed, join("repos", "shared"));
+  // The terminal against A, with its exit, its words and its time, each
+  // run a line in the trace. Never left running past `timeoutMs`.
+  terminal(args: string[], timeoutMs = 90_000): Promise<TerminalRun> {
+    const app = this.desk;
+    if (app === null) throw new Error("the terminal needs the desktop device");
+    const started = Date.now();
+    return new Promise((done) => {
+      const child = spawn(this.smd, args, {
+        env: app.smdEnv(),
+        cwd: join(app.profileDir, "repos", "shared"),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+      child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+      const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        const ms = Date.now() - started;
+        const said = (stderr.trim() || stdout.trim()).split("\n")[0] ?? "";
+        this.trace.push({
+          at: Date.now(),
+          source: "term",
+          level: code === 0 ? "info" : `exit-${code ?? "killed"}`,
+          text: `smd ${args.join(" ")} (${ms} ms): ${said.slice(0, 240)}`,
+        });
+        done({ code, stdout, stderr, ms });
+      });
+    });
+  }
+
+  // A repo the devices share (matched by root commit), made once per
+  // profile: B's from a seed, A's a clone of the same seed.
+  private seed(app: DevApp, origin: string | null): boolean {
+    if (existsSync(app.dataDir)) return false;
+    this.note(`seeding the profile ${app.profile}`);
+    mkdirSync(join(app.profileDir, "repos"), { recursive: true });
+    let from = origin;
+    if (from === null) {
+      from = join(app.profileDir, "seed");
+      git(app.profileDir, "init", "-q", "-b", "main", from);
+      git(from, "commit", "-q", "--allow-empty", "-m", "Initial");
+    }
+    git(app.profileDir, "clone", "-q", from, join("repos", "shared"));
     execFileSync(
       this.smd,
-      ["projects", "add", join(this.profileDir, "repos"), "--all", "--yes"],
-      { env: this.hostEnv(), stdio: "ignore" },
+      ["projects", "add", join(app.profileDir, "repos"), "--all", "--yes"],
+      { env: app.smdEnv(), stdio: "ignore" },
     );
     return true;
   }
 
-  async startHost(): Promise<void> {
+  // Seeds and launches every device. A goes first when it runs: the
+  // first window of a worktree is the primary, which serves the
+  // renderer the others load, and B must be free to quit and relaunch.
+  async startDevices(): Promise<void> {
     if (!existsSync(this.smd)) {
       execFileSync(process.execPath, ["scripts/dev-cli.mts"], {
         cwd: appDir,
         stdio: "ignore",
       });
     }
-    const fresh = this.seedHost();
-    await this.launchHost(fresh);
-    const facts = await this.hostEval(() =>
+    const hostFresh = this.seed(this.hostApp, null);
+    const origin = join(this.hostApp.profileDir, "seed");
+    const deskFresh = this.desk !== null && this.seed(this.desk, origin);
+    const remoteFresh = this.remote !== null && this.seed(this.remote, origin);
+    if (this.desk !== null) {
+      this.note(`launching A, ${this.desk.profile}`);
+      await this.desk.launch(deskFresh);
+    }
+    this.note(`launching B, ${this.hostApp.profile}`);
+    await this.hostApp.launch(hostFresh);
+    if (this.remote !== null) {
+      this.note(`launching C, ${this.remote.profile}`);
+      await this.remote.launch(remoteFresh);
+    }
+    const [status, projects] = await this.hostApp.eval(() =>
       Promise.all([window.api.account.status(), window.api.projects.list()]),
     );
-    const [status, projects] = facts;
     const project = projects.find((p) => p.name === "shared");
     if (project === undefined) throw new Error("the host lists no project");
     this.host = {
-      deviceId: await this.hostEval(() => window.api.deviceId),
+      deviceId: await this.hostApp.eval(() => window.api.deviceId),
       label: status.deviceName,
       projectId: project.id,
       projectName: project.name,
     };
     this.note(`host ${this.host.label} is ${this.host.deviceId}`);
+    if (this.desk !== null) {
+      // A's sends and brings are commands B runs.
+      await this.hostApp.eval(() =>
+        window.api.account.setAcceptsCommands(true),
+      );
+      await this.adoptWindows(this.desk, "desk", this.has("desktop") ? 2 : 0);
+    }
+    if (this.remote !== null) await this.adoptWindows(this.remote, "tun", 1);
   }
 
-  // Launches the dev app as the host profile and waits until it is
-  // signed in, its hub socket connected and its tunnel up.
-  async launchHost(cloneLogin: boolean): Promise<void> {
-    this.hostDebugPort = await freePort();
-    this.hostLaunch = spawn(
-      "pnpm",
-      ["device", this.profile, ...(cloneLogin ? ["--clone-login"] : [])],
-      {
-        cwd: appDir,
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          SHIGOMORI_DEBUG_PORT: String(this.hostDebugPort),
-          SM_ACCOUNT_WEB_ORIGIN: this.origin,
-        },
-      },
-    );
-    this.hostLaunch.stdout?.pipe(this.logs, { end: false });
-    this.hostLaunch.stderr?.pipe(this.logs, { end: false });
-    await this.attachHost();
+  // Takes `count` of the app's windows as clients, opening more or
+  // closing extras (a relaunch restores the windows a quit left).
+  private async adoptWindows(
+    app: DevApp,
+    prefix: string,
+    count: number,
+  ): Promise<void> {
+    const context = app.context();
+    await context.addInitScript(PAGE_HOOKS);
+    while (app.windows().length < Math.max(count, 1)) {
+      const before = app.windows().length;
+      await app.eval(() => window.api.window.open({ route: "/" }));
+      await waitFor(
+        `${app.profile}'s new window`,
+        async () => app.windows().length > before,
+        30_000,
+      );
+    }
+    for (const extra of app.windows().slice(Math.max(count, 1))) {
+      await extra.close().catch(() => {});
+    }
+    if (count === 0) return;
+    for (const page of app.windows().slice(0, count)) {
+      await this.adoptWindow(app, prefix, page);
+    }
   }
 
-  async attachHost(): Promise<void> {
-    this.hostBrowser = await waitFor(
-      "the host window's debugging port",
-      () => chromium.connectOverCDP(`http://127.0.0.1:${this.hostDebugPort}`),
-      240_000,
-      1000,
-    );
+  async adoptWindow(app: DevApp, prefix: string, page: Page): Promise<Tab> {
+    const number = (this.windowCount.get(app) ?? 0) + 1;
+    this.windowCount.set(app, number);
+    const tab = new Tab(`${prefix}${number}`, page, app);
+    this.listen(tab);
+    await page.waitForLoadState("domcontentloaded");
+    await page.evaluate(PAGE_HOOKS);
+    this.windows.push(tab);
+    return tab;
+  }
+
+  // A new window of A's, as a client.
+  async openWindow(app: DevApp, prefix: string): Promise<Tab> {
+    const before = new Set(app.windows());
+    await app.eval(() => window.api.window.open({ route: "/" }));
     const page = await waitFor(
-      "the host window",
-      async () =>
-        this.hostBrowser
-          ?.contexts()
-          .flatMap((context) => context.pages())
-          .find((candidate) => candidate.url().startsWith("shigomori-dev://")),
-      60_000,
+      `${app.profile}'s new window`,
+      async () => app.windows().find((each) => !before.has(each)),
+      30_000,
     );
-    this.hostPage = page;
-    await waitFor(
-      "the host to be signed in, on the hub, with its tunnel up",
-      () =>
-        page.evaluate(async () => {
-          const [account, hub] = await Promise.all([
-            window.api.account.status(),
-            window.api.hub.status(),
-          ]);
-          return (
-            account.signedIn &&
-            hub.socket.phase === "connected" &&
-            hub.tunnel === "up"
-          );
-        }),
-      180_000,
-      1000,
-    );
+    return await this.adoptWindow(app, prefix, page);
+  }
+
+  async closeWindow(tab: Tab): Promise<void> {
+    await tab.page.close();
+    this.windows.splice(this.windows.indexOf(tab), 1);
+  }
+
+  // What every device logged since `at`, with B's lines as "host".
+  devicesLogSince(at: number): TraceLine[] {
+    return [
+      ...this.hostApp.logSince(at, "host"),
+      ...(this.desk?.logSince(at, "A") ?? []),
+      ...(this.remote?.logSince(at, "C") ?? []),
+    ];
+  }
+
+  // Kept for the scenarios written against the host alone.
+  hostPid(): number | null {
+    return this.hostApp.hostPid();
+  }
+
+  async stopHostApp(): Promise<void> {
+    await this.hostApp.stop();
+  }
+
+  async launchHost(cloneLogin: boolean): Promise<void> {
+    await this.hostApp.launch(cloneLogin);
   }
 
   async hostEval<T>(fn: () => T | Promise<T>): Promise<T> {
-    const page = this.hostPage;
-    if (page === null) throw new Error("no host window");
-    return await page.evaluate(fn);
-  }
-
-  // The host's process (the shell's utility process for the profile),
-  // which the shell forks again when it dies.
-  hostPid(): number | null {
-    const table = execFileSync("ps", ["-Ao", "pid=,command="], {
-      encoding: "utf8",
-    });
-    const line = table
-      .split("\n")
-      .find(
-        (row) =>
-          row.includes("node.mojom.NodeService") &&
-          row.includes(`/profiles/${this.profile}`),
-      );
-    return line === undefined ? null : Number(line.trim().split(/\s+/)[0]);
-  }
-
-  // The whole dev app, the launcher and everything under it.
-  async stopHostApp(): Promise<void> {
-    await this.hostBrowser?.close().catch(() => {});
-    this.hostBrowser = null;
-    this.hostPage = null;
-    const launch = this.hostLaunch;
-    this.hostLaunch = null;
-    if (launch?.pid === undefined) return;
-    // Electron leaves the launcher's process group, so the whole tree
-    // is signalled, found from the launcher down.
-    const tree = processTree(launch.pid);
-    for (const pid of tree) signal(pid, "SIGTERM");
-    await waitFor(
-      "the host app to quit",
-      async () => tree.every((pid) => !alive(pid)),
-      20_000,
-    ).catch(() => {
-      for (const pid of tree) signal(pid, "SIGKILL");
-    });
-    await waitFor(
-      "the host app to exit",
-      async () => this.hostPid() === null,
-      30_000,
-    );
-    this.reapOrphans();
-  }
-
-  // The host's helpers that outlive a killed app: its cloudflared and
-  // file-sync, once orphaned, from this checkout's builds.
-  private reapOrphans(): void {
-    const table = execFileSync("ps", ["-Ao", "pid=,ppid=,command="], {
-      encoding: "utf8",
-    });
-    for (const row of table.split("\n")) {
-      const [pid = "", ppid = "", ...command] = row.trim().split(/\s+/);
-      const line = command.join(" ");
-      const ours =
-        line.startsWith(join(appDir, "dist-cloudflared", "cloudflared")) ||
-        (line.startsWith(join(appDir, "dist-file-sync", "file-sync")) &&
-          line.includes(this.profileDir));
-      if (ours && ppid === "1") {
-        try {
-          process.kill(Number(pid), "SIGTERM");
-        } catch {
-          // Already gone.
-        }
-      }
-    }
+    return await this.hostApp.eval(fn);
   }
 
   // What the host itself says about the project's worktrees.
@@ -492,38 +517,17 @@ export class Lab {
     return rows.map((row) => row.branch ?? "").toSorted();
   }
 
-  hostLogSince(at: number): TraceLine[] {
-    if (!existsSync(this.hostLogFile)) return [];
-    const lines: TraceLine[] = [];
-    for (const row of readFileSync(this.hostLogFile, "utf8").split("\n")) {
-      const match =
-        /^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\] \[(\w+)\]\s+(.*)$/.exec(
-          row,
-        );
-      if (match === null) continue;
-      const lineAt = new Date(match[1]?.replace(" ", "T") ?? "").getTime();
-      if (lineAt < at) continue;
-      lines.push({
-        at: lineAt,
-        source: "host",
-        level: match[2] ?? "info",
-        text: match[3] ?? "",
-      });
-    }
-    return lines;
-  }
-
   // ---- the browser ----
 
   async startBrowser(): Promise<void> {
-    this.network = await NetworkSwitch.start();
+    this.browserSwitch = this.network.add(await NetworkSwitch.start());
     mkdirSync(this.browserDir, { recursive: true });
     this.context = await chromium.launchPersistentContext(this.browserDir, {
       channel: "chrome",
       headless: !this.options.headed,
       viewport: { width: 1440, height: 900 },
       proxy: {
-        server: `http://127.0.0.1:${this.network.port}`,
+        server: `http://127.0.0.1:${this.browserSwitch.port}`,
         bypass: "localhost,127.0.0.1",
       },
     });
@@ -531,9 +535,8 @@ export class Lab {
     for (const page of this.context.pages()) await page.close();
   }
 
-  async openTab(): Promise<Tab> {
-    const page = await this.context.newPage();
-    const tab = new Tab(`tab${++this.tabCount}`, page);
+  private listen(tab: Tab): void {
+    const { page } = tab;
     page.on("console", (message) => {
       const text = message.text();
       if (/React DevTools|development keys|\[vite\]/.test(text)) return;
@@ -562,6 +565,12 @@ export class Lab {
         text: `${request.method()} ${url.split("?")[0]} ${request.failure()?.errorText ?? ""}`,
       });
     });
+  }
+
+  async openTab(): Promise<Tab> {
+    const page = await this.context.newPage();
+    const tab = new Tab(`tab${++this.tabCount}`, page, null);
+    this.listen(tab);
     await page.goto(this.origin);
     this.tabs.push(tab);
     return tab;
@@ -627,119 +636,29 @@ export class Lab {
   }
 
   async close(): Promise<void> {
-    if (!this.options.keep) await this.revokeDevices();
-    await this.context?.close().catch(() => {});
-    await this.network?.stop().catch(() => {});
-    await this.stopHostApp().catch(() => {});
-    if (this.webServer?.pid !== undefined)
-      killGroup(this.webServer.pid, "SIGTERM");
+    const apps = [this.remote, this.desk, this.hostApp].filter(
+      (each): each is DevApp => each !== null,
+    );
+    // Nothing may stay frozen, or it could not be revoked or quit.
+    for (const app of apps) app.thaw(app.appPids());
+    this.network.restore({ cut: true });
     if (!this.options.keep) {
-      rmSync(this.profileDir, { recursive: true, force: true });
-      rmSync(
-        join(
-          homedir(),
-          "Library",
-          "Application Support",
-          "Shigoto no Mori (dev)",
-          "profiles",
-          this.profile,
-        ),
-        { recursive: true, force: true },
-      );
-    }
-    this.logs.end();
-  }
-
-  // The web client's device and the host's, off the account. The browser
-  // keeps its Clerk session, so the next run enrolls it again.
-  private async revokeDevices(): Promise<void> {
-    const tab = this.tabs[0];
-    if (tab !== undefined) {
-      await tab.page
+      // The web client's device, and each app's. The browser keeps its
+      // Clerk session, so the next run enrolls it again.
+      const [tab] = this.tabs;
+      await tab?.page
         .evaluate(() => window.api.account.signOut())
         .catch(() => {});
+      for (const app of apps) await app.revoke();
     }
-    if (this.hostPage !== null) {
-      await this.hostEval(() => window.api.account.signOut()).catch(() => {});
+    await this.context?.close().catch(() => {});
+    // B and C before A, whose launcher serves their renderer.
+    for (const app of apps) await app.stop().catch(() => {});
+    await this.network.stop().catch(() => {});
+    if (this.webServer?.pid !== undefined) {
+      killGroup(this.webServer.pid, "SIGTERM");
     }
+    if (!this.options.keep) for (const app of apps) app.removeProfile();
+    this.logs.end();
   }
-}
-
-// The process and every descendant, from the process table.
-function processTree(root: number): number[] {
-  const children = new Map<number, number[]>();
-  const table = execFileSync("ps", ["-Ao", "pid=,ppid="], { encoding: "utf8" });
-  for (const row of table.split("\n")) {
-    const [pid, ppid] = row.trim().split(/\s+/).map(Number);
-    if (pid === undefined || ppid === undefined || Number.isNaN(pid)) continue;
-    children.set(ppid, [...(children.get(ppid) ?? []), pid]);
-  }
-  const tree = [root];
-  for (let i = 0; i < tree.length; i++) {
-    tree.push(...(children.get(tree[i] ?? -1) ?? []));
-  }
-  return tree;
-}
-
-function signal(pid: number, name: NodeJS.Signals): void {
-  try {
-    process.kill(pid, name);
-  } catch {
-    // Already gone.
-  }
-}
-
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// A commit's author and committer, whatever this machine's git config.
-function git(cwd: string, ...args: string[]): void {
-  execFileSync("git", args, {
-    cwd,
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "lab",
-      GIT_AUTHOR_EMAIL: "lab@example.com",
-      GIT_COMMITTER_NAME: "lab",
-      GIT_COMMITTER_EMAIL: "lab@example.com",
-    },
-    stdio: "ignore",
-  });
-}
-
-function killGroup(pid: number, name: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, name);
-  } catch {
-    // Already gone.
-  }
-}
-
-async function answers(url: string): Promise<boolean> {
-  try {
-    await fetch(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function portsEnv(): Record<string, string> {
-  spawnSync(process.execPath, [join(appDir, "scripts", "ensure-ports.mts")], {
-    cwd: appDir,
-    stdio: "ignore",
-  });
-  const text = readFileSync(join(appDir, ".env.ports"), "utf8");
-  return Object.fromEntries(
-    text
-      .split("\n")
-      .map((line) => line.split("="))
-      .filter((pair): pair is [string, string] => pair.length === 2),
-  );
 }
