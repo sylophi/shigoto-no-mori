@@ -269,7 +269,9 @@ async function heal(): Promise<void> {
   }
   for (const extra of lab.tabs.slice(1)) await lab.closeTab(extra);
   const deskWindows = lab.windows.filter((each) => each.app === lab.desk);
-  for (const extra of deskWindows.slice(2)) await lab.closeWindow(extra);
+  for (const extra of deskWindows.slice(2)) {
+    await lab.closeWindow(extra).catch(() => {});
+  }
   if (lab.hostPid() === null) {
     await lab.stopHostApp();
     await lab.launchHost(false);

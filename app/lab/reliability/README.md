@@ -58,7 +58,7 @@ sleeps.
 The clients' network (`networkSwitch.mts`) is the browser's proxy, the
 hub front and B's listener front, thrown together, plus the pages'
 offline emulation. Down, new connections are refused and open ones
-stall; back up, the stalled flows resume or are cut.
+stall. Back up, the stalled flows resume or are cut.
 
 The browser profile keeps its sign-in between runs. The first run
 needs one: run with `--headed` and sign in with GitHub, or set
@@ -77,11 +77,11 @@ again on the next run.
 | `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
 | `network-blip` | Every flow stalls for 5 to 15 s and resumes, with no offline event. | 30 s |
 | `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Skipped when this checkout's hub differs from `origin/release/v3`. | 60 s |
-| `host-kill` | B's host process is killed; its shell forks it again. | 60 s |
+| `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
 | `app-relaunch` | B's whole dev app quits and launches again. | 60 s from the relaunch |
 | `laptop-sleep` | The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, A and C stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT), the windows' clocks jump by the time asleep, and the tabs wake. | 30 s |
 | `host-sleep` | B's machine sleeps for 30 to 120 s: its whole app stopped, cloudflared and all, its sockets silent but open. Every page must stop reading B as Connected, the terminal runs its verbs meanwhile, and all find B again once it goes on. | 60 s |
-| `desk-host-kill` | A's own host process is killed; its windows and the terminal have to find it once its shell forks it again. | 30 s |
+| `desk-host-kill` | A's own host process is killed. Its windows and the terminal have to find it once its shell forks it again. | 30 s |
 | `reload-and-second-tab` | The tab is reloaded, a second tab of the profile opened, then closed, each step recovering. | 30 s each |
 | `reload-and-third-window` | A's first window is reloaded, a third window opened (New Window), then closed, each step recovering. | 30 s each |
 | `two-tabs-redial` | A second tab is opened and both tabs' flows are cut at once, three times, so both dial the host together; each tab recovers each time. A host minting a device's direct tickets as one set refuses one of the two, which has to ask again. | 30 s each |
@@ -99,7 +99,7 @@ both match what B itself says (a window's sidebar is narrowed to B
 first, since it lists every device on the account). The terminal has
 when `smd --json devices` names B with nothing blocking it and
 `smd --json worktrees list --remote --from <B>` lists what B says, both
-exiting 0; after each recovery it sends a worktree to B and brings it
+exiting 0. After each recovery it sends a worktree to B and brings it
 back (`--source teardown`), both exiting 0. While B is out of reach,
 each of its verbs has to end within 60 s, a refusal exiting non-zero in
 words (no silence, no stack trace), and a failed send has to leave the

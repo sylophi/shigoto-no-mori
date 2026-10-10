@@ -3,11 +3,11 @@
 // throws (networkSwitch.mts):
 //
 // - web: the web client's dev server and a Chrome profile of its own
-//   holding its tabs, reaching B through the dev hub over B's tunnel;
+//   holding its tabs, reaching B through the dev hub over B's tunnel.
 // - desktop: a second dev app (A), two windows, reaching B over the
-//   LAN, its hub behind a front;
+//   LAN, its hub behind a front.
 // - tunnel: a third (C), one window, dialing B's tunnel only
-//   (SHIGOMORI_DIAL_KINDS=tunnel), as a device on another network does;
+//   (SHIGOMORI_DIAL_KINDS=tunnel), as a device on another network does.
 // - terminal: the terminal (`smd`) against A, whose cross-device verbs
 //   ride A's link to B.
 //

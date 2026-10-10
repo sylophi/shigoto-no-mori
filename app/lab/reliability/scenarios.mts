@@ -561,7 +561,7 @@ const hubRedeploy: Scenario = {
 
 const hostKill: Scenario = {
   name: "host-kill",
-  does: "The host's process is killed (SIGKILL); its shell forks it again and every client has to find it.",
+  does: "The host's process is killed (SIGKILL). Its shell forks it again and every client has to find it.",
   boundMs: 60_000,
   async run(lab) {
     const pid = lab.hostPid();
@@ -590,7 +590,7 @@ const appRelaunch: Scenario = {
 
 const laptopSleep: Scenario = {
   name: "laptop-sleep",
-  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone; then the network comes back changed, the apps go on (SIGCONT), the pages' clocks jump by the time asleep and the tabs wake.",
+  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT), the pages' clocks jump by the time asleep and the tabs wake.",
   boundMs: 30_000,
   async run(lab, random) {
     const ms = between(random, 30_000, 120_000);
@@ -662,7 +662,7 @@ const hostSleep: Scenario = {
 
 const deskHostKill: Scenario = {
   name: "desk-host-kill",
-  does: "The desktop device's own host process is killed (SIGKILL); its shell forks it again, and its windows and the terminal have to find it.",
+  does: "The desktop device's own host process is killed (SIGKILL). Its shell forks it again, and its windows and the terminal have to find it.",
   boundMs: 30_000,
   applies: (lab) => lab.desk !== null,
   async run(lab) {
@@ -755,7 +755,7 @@ const twoTabsRedial: Scenario = {
 
 const tokenExpiry: Scenario = {
   name: "token-expiry",
-  does: "Every page's wall clock jumps two hours ahead (and stays there, as after a sleep, until the next reload), past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock; then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
+  does: "Every page's wall clock jumps two hours ahead (and stays there, as after a sleep, until the next reload), past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock. Then each page mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
   boundMs: 30_000,
   async run(lab) {
     await forEachPage(lab, (tab) => tab.advanceClock(2 * 60 * 60 * 1000));
