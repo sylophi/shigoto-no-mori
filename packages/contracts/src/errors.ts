@@ -39,6 +39,17 @@ export class UnknownWorktreeError extends Schema.TaggedError<UnknownWorktreeErro
   }
 }
 
+// A terminal that is not open on the host: closed, exited, or never
+// there.
+export class UnknownTerminalError extends Schema.TaggedError<UnknownTerminalError>()(
+  "UnknownTerminalError",
+  { terminalId: Schema.String },
+) {
+  override get message(): string {
+    return "That terminal is closed.";
+  }
+}
+
 export const isEntityGoneError = Schema.is(
   Schema.Union([UnknownProjectError, UnknownWorktreeError]),
 );
@@ -208,6 +219,7 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
 export const ContractErrorSchema = Schema.Union([
   UnknownProjectError,
   UnknownWorktreeError,
+  UnknownTerminalError,
   NoDirectConnectionError,
   ConvertRefusedError,
   WorktreeSettingUpError,

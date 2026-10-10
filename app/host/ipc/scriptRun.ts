@@ -2,12 +2,22 @@
 // project scripts and package.json scripts): the connection-guarded
 // notifier, and for the configured scripts, the context startScript
 // needs to set the SHIGOMORI_* env (package.json scripts run through
-// `sm run`, which sets it itself).
-import { UnknownWorktreeError } from "@shigomori/contracts/errors";
+// `sm run`, which sets it itself). A worktree's terminal starts with
+// the same env.
+import * as Effect from "effect/Effect";
+import {
+  isEntityGoneError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import { hasWorktreeData } from "@shigomori/contracts/schemas";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Project, ShigomoriConfig } from "@shigomori/contracts/schemas";
+import type {
+  Project,
+  ShigomoriConfig,
+  TerminalOwner,
+} from "@shigomori/contracts/schemas";
+import { findProjectOrThrow } from "@host/lib/projects";
 import {
   readShigomoriConfig,
   readWorktreeData,
@@ -16,7 +26,12 @@ import {
   listWorktreeIdentities,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
-import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/scripts";
+import {
+  type NotifyScriptEvent,
+  type ScriptEnvValues,
+  worktreeEnv,
+} from "@host/lib/scripts";
+import type { Start } from "@host/lib/terminals/Terminals";
 
 export interface ScriptRunContext {
   config: ShigomoriConfig | null;
@@ -65,3 +80,30 @@ export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {
     connection: ctx.connection,
   });
 }
+
+// Where a terminal starts (host/lib/terminals): a worktree's in its
+// folder with its scripts' SHIGOMORI_* env, a device's with the app's
+// own. TERM and COLORTERM say what xterm in the renderer draws.
+export const terminalStart = (owner: TerminalOwner) => {
+  const env = {
+    ...process.env,
+    TERM: "xterm-256color",
+    COLORTERM: "truecolor",
+  };
+  if (owner.kind === "device") return Effect.succeed<Start>({ env });
+  return Effect.tryPromise({
+    try: async (): Promise<Start> => {
+      const project = await findProjectOrThrow(owner.projectId);
+      const ctx = await prepareScriptRun(project, owner.worktreeId);
+      return {
+        cwd: ctx.worktree.path,
+        env: { ...env, ...worktreeEnv(ctx.worktree, project, ctx.scriptEnv) },
+      };
+    },
+    // Anything but the worktree or project being gone is a defect.
+    catch: (cause) => {
+      if (isEntityGoneError(cause)) return cause;
+      throw cause;
+    },
+  });
+};
