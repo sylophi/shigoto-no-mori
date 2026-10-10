@@ -1,7 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowDown,
-  ArrowUp,
   Check,
   Combine,
   Copy,
@@ -15,8 +13,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCopied } from "@/components/ui/copy-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -209,43 +205,5 @@ function CopyHashButton({ hash }: { hash: string }) {
       <span className="font-mono">{hash}</span>
       {copied ? <Check /> : <Copy />}
     </Button>
-  );
-}
-
-// Beside a commit's view controls: a step to the commit after or before
-// it on the branch's timeline, so a branch reads commit by commit.
-export function CommitSteps({
-  worktree,
-  newer,
-  older,
-}: {
-  worktree: Worktree;
-  newer: string | undefined;
-  older: string | undefined;
-}) {
-  const nav = useWorktreeNav();
-  const step = (hash: string | undefined) =>
-    hash && nav.toCommit(worktree.projectId, worktree.id, hash, true);
-  return (
-    <div className="flex items-center">
-      <SimpleTooltip tip="Newer commit">
-        <IconButton
-          aria-label="Newer commit"
-          disabled={!newer}
-          onClick={() => step(newer)}
-        >
-          <ArrowUp aria-hidden className="size-4" />
-        </IconButton>
-      </SimpleTooltip>
-      <SimpleTooltip tip="Older commit">
-        <IconButton
-          aria-label="Older commit"
-          disabled={!older}
-          onClick={() => step(older)}
-        >
-          <ArrowDown aria-hidden className="size-4" />
-        </IconButton>
-      </SimpleTooltip>
-    </div>
   );
 }

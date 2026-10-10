@@ -143,7 +143,6 @@ export function DiffView({
   changes,
   footer,
   details,
-  steps,
   renderSidebar,
   sidebarActions,
 }: {
@@ -164,8 +163,6 @@ export function DiffView({
   footer?: ReactNode;
   // Under the title, the header's width: a commit's message and moves.
   details?: ReactNode;
-  // Beside the view's own controls: a commit's steps to its neighbours.
-  steps?: ReactNode;
   // What the sidebar (and a phone's sheet) shows in place of the bare
   // file list: the Git page's tabs, its Changes tab around this list and
   // its History tab in place of it. Handed the list.
@@ -335,7 +332,6 @@ export function DiffView({
             </SimpleTooltip>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
-            {steps}
             {phone &&
               (renderSidebar !== undefined ||
                 singleFile ||
