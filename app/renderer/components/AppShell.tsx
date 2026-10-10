@@ -72,6 +72,16 @@ export function AppShell() {
       }),
     [navigate],
   );
+  // The v3 migration's page while the host runs it, as the shell says
+  // (main/electron/windows.ts): asked as the window mounts, and heard
+  // when it begins later.
+  useEffect(() => {
+    const show = () => void navigate({ to: MIGRATION_PATH, replace: true });
+    void window.api.nav.migrating().then((on) => {
+      if (on) show();
+    });
+    return window.api.nav.onShowMigration(show);
+  }, [navigate]);
 
   useDeepLinks();
 

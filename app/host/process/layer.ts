@@ -60,6 +60,7 @@ import {
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
 import * as Captures from "./captures";
+import * as MigrationShell from "./migration";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -232,6 +233,8 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Captures.engine.layer),
+    // The shell hears the v3 migration start and end.
+    Layer.provideMerge(MigrationShell.tellShell),
     Layer.provideMerge(Engine.layer(engine)),
     // The Promise face of the platform's child processes for the code
     // that is not Effect yet. Last to go, so every finalizer above can

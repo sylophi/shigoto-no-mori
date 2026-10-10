@@ -20,6 +20,9 @@ export type ShellCalls = {
   // The bridge the terminal's `sm update` asks the updater through,
   // stopped before a wipe of the data folder it lives in.
   readonly stopUpdaterBridge: () => Promise<void>;
+  // The v3 migration started or ended, which routes the shell's windows
+  // to its page meanwhile.
+  readonly migrating: (on: boolean) => Promise<void>;
 };
 
 const { set: setShellCalls, get: shellCalls } = implSlot<ShellCalls>(

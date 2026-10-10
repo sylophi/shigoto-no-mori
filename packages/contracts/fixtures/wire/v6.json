@@ -1325,7 +1325,14 @@
   "nav:launchById": {
     "payload": "\udc00"
   },
+  "nav:migrating": {
+    "success": true
+  },
   "nav:openSettings": {},
+  "nav:showMigration": {},
+  "nav:takeDeepLink": {
+    "success": " "
+  },
   "nav:takeDeepLink": {
     "success": " "
   },
@@ -1850,6 +1857,9 @@
       "message": "0",
       "storeReport": "e"
     }
+  },
+  "shellCalls:migrating": {
+    "payload": true
   },
   "shellCalls:ready": {
     "payload": {

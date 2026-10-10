@@ -30,6 +30,9 @@ export const shellCallsContract = defineContract(
     ),
     VoidSchema,
   ),
+  // The v3 migration started or ended, so the windows show its page in
+  // place of the app while it runs (main/electron/windows.ts).
+  invoke("migrating", Schema.Boolean, VoidSchema),
   // Restart the app with nobody at it to answer a prompt: after a
   // data-folder move a peer asked for.
   invoke("relaunch", VoidSchema, VoidSchema),
