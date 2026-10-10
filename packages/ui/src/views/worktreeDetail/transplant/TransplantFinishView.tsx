@@ -200,7 +200,7 @@ export function TransplantFinishView({
             <div
               role="radiogroup"
               aria-label={`What to do with the copy on ${sourceDeviceLabel}`}
-              className="grid gap-2 sm:grid-cols-3"
+              className="grid gap-2 @min-[40rem]:grid-cols-3"
             >
               {CHOICES.map((entry) => {
                 const off = entry.key === "teardown" && stranded;

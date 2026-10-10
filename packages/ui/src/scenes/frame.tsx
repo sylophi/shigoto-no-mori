@@ -14,18 +14,18 @@ import { cn } from "../lib/utils.ts";
 // on a phone.
 export type SceneWindow = "desktop" | "phone";
 
-// What the app's stylesheet reads off <html> to lay a window out
-// (data-shell, data-layout), for whoever stands in for <html> around a
-// scene: the desktop window's page is transparent under the sidebar
-// and its headers sit on the traffic lights' line, and the phone takes
-// the phone layout.
-export function windowAttributes(window: SceneWindow | undefined): {
-  "data-shell"?: "desktop";
-  "data-layout"?: "phone";
-} {
-  if (window === "desktop") return { "data-shell": "desktop" };
-  if (window === "phone") return { "data-layout": "phone" };
-  return {};
+// The shell a scene's root stands in for (data-shell, which the app's
+// stylesheet lays a window out by): the desktop window's page is
+// transparent under the sidebar and its headers sit on the traffic
+// lights' line, and the phone is the web app's, which takes the phone
+// layout at its width. A part sits on the page's background in a
+// window of neither, so it keeps the desktop's density at any width.
+export function windowShell(
+  window: SceneWindow | undefined,
+): "desktop" | "web" | "part" {
+  if (window === "desktop") return "desktop";
+  if (window === "phone") return "web";
+  return "part";
 }
 
 export function SceneWindowFrame({

@@ -13,10 +13,10 @@
 /* Default-on Animal Crossing overlay (opt-out in Settings). Self-
    contained; see the CONTRACT
    header in the file for the hooks it depends on (token blocks in it
-   use :root.doubutsu so this early import position can't lose to the
-   :root/.dark blocks below). */
+   use [data-theme-scope].doubutsu so this early import position can't
+   lose to the [data-theme-scope]/.dark blocks below). */
 @import "./doubutsu.css";
-/* The other doubutsu palettes, picked by data-palette on <html>.
+/* The other doubutsu palettes, picked by data-palette on the theme root.
    After doubutsu.css: a light pick ties its default block on
    specificity and wins on order. */
 @import "./palettes.css";
@@ -25,13 +25,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* The phone layout (AppShell marks <html> with data-layout="phone" on
-   a phone-width browser tab): `phone:` utilities restyle for a thumb
-   instead of a cursor, the way `dark:` follows the theme class. */
-@custom-variant phone (&:is([data-layout="phone"] *));
+/* The phone layout (the web app's root under 48rem wide, phone.css):
+   `phone:` utilities restyle for a thumb instead of a cursor, the way
+   `dark:` follows the theme class. */
+@custom-variant phone {
+  @container web (width < 48rem) {
+    @slot;
+  }
+}
 
-/* The desktop window (index.html marks <html> with data-shell="desktop"):
-   `desktop:` utilities place what sits on the title bar's line, beside
+/* The desktop window (index.html marks the theme root with
+   data-shell="desktop"): `desktop:` utilities place what sits on the title bar's line, beside
    the traffic lights, which a browser tab has none of. */
 @custom-variant desktop (&:is([data-shell="desktop"] *));
 
@@ -48,11 +52,10 @@
   }
 }
 
-/* [data-theme-scope] beside :root: the Settings picker paints its
-   swatches on elements of their own, and a light swatch inside a dark
-   window has to start from these, not from the dark tokens it would
-   inherit. */
-:root,
+/* Every theme root starts from these: the window's (the app's #root, a
+   scene's frame), and each swatch the Settings picker paints, where a
+   light swatch inside a dark window has to start from these, not from
+   the dark tokens it would inherit. */
 [data-theme-scope] {
   --background: var(--color-white);
   --foreground: var(--color-neutral-950);
@@ -73,6 +76,14 @@
   --input: var(--color-neutral-200);
   --ring: var(--color-neutral-400);
   --radius: 0.625rem;
+  /* The scale again, from the @theme block below: Tailwind declares it
+     on :root, where --radius is unset, so a var(--radius-md) would read
+     nothing there. */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
 .dark {
@@ -163,29 +174,24 @@
   * {
     @apply border-border outline-ring/50;
   }
-  /* The page's canvas is what shows past its edges: a trackpad's
-     rubber band, and on iOS the strips around Safari's toolbars, which
-     Safari 26 tints from the body's colour (it no longer reads
-     theme-color). Left transparent in a browser tab, that was white on
-     every theme. A phone's bottom edge is the tab bar, so there the
-     canvas continues its card. (Safari tints its top strip from that
-     same colour, a shade off the page's background up there.) */
-  html,
-  body {
+  /* A window's root is a container, so a view's `@min-*` widths read
+     the window, whatever box draws it, rather than the viewport. The
+     web app's is named for the phone layout's query (phone.css). Its
+     background is the one the page's canvas wears (AppShell). */
+  [data-shell] {
     background-color: var(--background);
+    container-type: inline-size;
   }
-  html[data-layout="phone"],
-  [data-layout="phone"] body {
-    background-color: var(--card);
+  [data-shell="web"] {
+    container-name: web;
   }
   /* The desktop window (index.html) stays transparent so the
      BrowserWindow vibrancy material shows through under the sidebar.
      The main detail pane paints its own opaque `bg-background`. */
-  html[data-shell="desktop"],
-  [data-shell="desktop"] body {
+  [data-shell="desktop"] {
     background: transparent;
   }
-  body {
+  [data-theme-scope] {
     @apply font-sans text-foreground antialiased;
     font-feature-settings: "tnum" 1;
     user-select: none;
@@ -213,7 +219,7 @@
      the diff viewer's code blocks get the native bar in place of
      their library's own, so nothing may set it back to auto. */
   @media (pointer: fine) {
-    :root {
+    [data-theme-scope] {
       scrollbar-color: color-mix(in oklab, var(--foreground) 40%, transparent)
         transparent;
     }
@@ -260,7 +266,7 @@
 }
 
 /*
- * Nobody is looking (boot.tsx keeps `.unfocused` on <html>): freeze
+ * Nobody is looking (boot.tsx keeps `.unfocused` on the theme root): freeze
  * the infinite utilities, which sit on long-lived state (a running
  * script's badge, the status dot) for as long as the operation does.
  * One-shot enter/exit animations are left alone so a toast that fires
@@ -278,14 +284,14 @@
 /*
  * ANSI 16-color palette for the terminals. xterm reads these (and
  * the --background / --foreground tokens) through
- * terminal/terminalTheme.ts whenever <html>'s theme classes
+ * terminal/terminalTheme.ts whenever the theme root's classes
  * change, so a theme can restyle the terminals by overriding them. OKLCH
  * values are tuned for legibility against both light and dark
  * backgrounds without a theme-specific override. The dim 8 colors
  * match what tools normally use for severity (red = error, yellow =
  * warn, etc.) and the bright 8 are punchier for emphasis.
  */
-:root {
+[data-theme-scope] {
   --ansi-black: oklch(0.55 0.005 270);
   --ansi-red: oklch(0.6 0.18 25);
   --ansi-green: oklch(0.62 0.17 145);
@@ -314,7 +320,6 @@
  * descendant on focus (dropdown-menu's `focus:**:text-accent-foreground`),
  * and that utility would otherwise repaint the tile.
  */
-:root,
 [data-theme-scope] {
   --project-tile-fill: 0.72 0.13;
   --project-tile-ink: var(--color-white);

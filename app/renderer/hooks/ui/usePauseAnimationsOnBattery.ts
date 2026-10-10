@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useClientConfig } from "../config/useClientConfig";
+import { themeRoot } from "@/lib/themeRoot";
 
 // Whether this browser can tell battery from AC. Gates both the pause
 // itself and the Settings toggle for it, so the two cannot disagree.
@@ -19,7 +20,7 @@ export function usePauseAnimationsOnBattery(): void {
   const onBattery = useOnBattery();
 
   useEffect(() => {
-    const root = document.documentElement;
+    const root = themeRoot();
     root.classList.toggle("battery-pause", enabled && onBattery);
     return () => root.classList.remove("battery-pause");
   }, [enabled, onBattery]);

@@ -13,7 +13,7 @@ export function useCopied(value: string): [copied: boolean, copy: () => void] {
   const copy = () => {
     void navigator.clipboard.writeText(value).then(() => {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
+      setTimeout(() => setCopied(false), 1200);
     });
   };
   return [copied, copy];

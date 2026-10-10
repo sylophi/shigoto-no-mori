@@ -10,6 +10,7 @@ import { useClientConfig } from "../config/useClientConfig";
 import { usePauseAnimationsOnBattery } from "./usePauseAnimationsOnBattery";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useTheme } from "./useTheme";
+import { themeRoot } from "@/lib/themeRoot";
 
 interface PaletteState {
   // Persisted values from clientConfig.json: what Settings considers
@@ -90,10 +91,10 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const html = document.documentElement;
-    html.classList.toggle("doubutsu", applied.doubutsu);
-    if (active) html.dataset.palette = active;
-    else delete html.dataset.palette;
+    const root = themeRoot();
+    root.classList.toggle("doubutsu", applied.doubutsu);
+    if (active) root.dataset.palette = active;
+    else delete root.dataset.palette;
   }, [applied.doubutsu, active]);
 
   // Mirror the saved values into localStorage so the next launch can

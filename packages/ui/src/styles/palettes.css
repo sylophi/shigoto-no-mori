@@ -18,7 +18,7 @@
  * A light block ties its default on specificity and wins on order
  * (index.css imports this file after doubutsu.css). A dark block
  * carries .dark too and outranks its default outright, so a light id
- * can never be shadowed by the dark default while <html> is dark.
+ * can never be shadowed by the dark default while the window is dark.
  *
  * Every palette declares the same set, so a token a rule reaches for
  * can never fall through to another palette's value: the six surface
@@ -37,7 +37,7 @@
    Cool white with the color kept for the rail: the light twin of
    charcoal. A near-neutral canvas (hue 250, next to no chroma), slate
    text rather than brown, and the mint on the sidebar alone. */
-:is(:root, [data-theme-scope]).doubutsu[data-palette="snow"] {
+[data-theme-scope].doubutsu[data-palette="snow"] {
   --background: oklch(0.985 0.004 250);
   --foreground: oklch(0.3 0.02 250);
   --card: oklch(0.995 0.002 250);
@@ -68,7 +68,7 @@
    Mint all over: the canvas carries a tint of it, the rail a deeper
    one, and the text is a green-gray instead of brown. Grass in the
    daytime, the forest the app is named for. */
-:is(:root, [data-theme-scope]).doubutsu[data-palette="meadow"] {
+[data-theme-scope].doubutsu[data-palette="meadow"] {
   --background: oklch(0.972 0.022 160);
   --foreground: oklch(0.33 0.045 165);
   --card: oklch(0.99 0.012 160);
@@ -100,7 +100,7 @@
    selection pillow, the action and the positive status pink too. The
    accent sits at hue 350, a blossom pink rather than the danger red
    (hue 30), so an online dot never reads as an error. */
-:is(:root, [data-theme-scope]).doubutsu[data-palette="sakura"] {
+[data-theme-scope].doubutsu[data-palette="sakura"] {
   --background: oklch(0.975 0.013 10);
   --foreground: oklch(0.37 0.05 20);
   --card: oklch(0.992 0.008 10);
@@ -135,7 +135,7 @@
    in the same blue. That blue is where the info family sits in every
    other palette, so here info moves to a teal, and a staged update or
    a following mirror stays apart from a connected device. */
-:is(:root, [data-theme-scope]).doubutsu[data-palette="sky"] {
+[data-theme-scope].doubutsu[data-palette="sky"] {
   --background: oklch(0.975 0.012 230);
   --foreground: oklch(0.34 0.04 245);
   --card: oklch(0.992 0.007 230);
@@ -176,7 +176,7 @@
    brown. Its hidden variants (shared/themes.ts) share this block and
    move only their greens below: sage, a cooler grey-green, and mocha,
    a brown rail with a sage action. */
-:is(:root, [data-theme-scope]).doubutsu:is(
+[data-theme-scope].doubutsu:is(
   [data-palette="latte"],
   [data-palette="latte-sage"],
   [data-palette="latte-mocha"]
@@ -209,7 +209,7 @@
   --doubutsu-rail-muted-foreground: oklch(0.48 0.04 128);
 }
 
-:is(:root, [data-theme-scope]).doubutsu[data-palette="latte-sage"] {
+[data-theme-scope].doubutsu[data-palette="latte-sage"] {
   --primary: oklch(0.56 0.085 152);
   --ring: oklch(0.56 0.085 152);
   --color-emerald-500: oklch(0.56 0.085 152);
@@ -221,7 +221,7 @@
   --doubutsu-rail-muted-foreground: oklch(0.48 0.03 150);
 }
 
-:is(:root, [data-theme-scope]).doubutsu[data-palette="latte-mocha"] {
+[data-theme-scope].doubutsu[data-palette="latte-mocha"] {
   --primary: oklch(0.5 0.075 150);
   --ring: oklch(0.5 0.075 150);
   --color-emerald-500: oklch(0.5 0.075 150);
@@ -238,7 +238,7 @@
    (235) a step lighter, slate outline buttons, and a moonlit aqua
    accent (185) on top, for the action, the positive status and the
    wallpaper, far enough toward green to stay clear of info's blue. */
-:is(:root, [data-theme-scope]).doubutsu.dark[data-palette="midnight"] {
+[data-theme-scope].doubutsu.dark[data-palette="midnight"] {
   --background: oklch(0.22 0.03 265);
   --foreground: oklch(0.95 0.012 90);
   --card: oklch(0.285 0.034 265);
@@ -274,7 +274,7 @@
    340), a rail of the same plum a step lighter and pinker, cream-pink
    text, and the blossom pink (350) lit up for the action, the pillow
    and the positive status, still clear of the danger red (30). */
-:is(:root, [data-theme-scope]).doubutsu.dark[data-palette="yozakura"] {
+[data-theme-scope].doubutsu.dark[data-palette="yozakura"] {
   --background: oklch(0.22 0.028 340);
   --foreground: oklch(0.95 0.015 20);
   --card: oklch(0.285 0.032 340);
@@ -309,7 +309,7 @@
    The woods after dark: a green-black canvas, sage for the second
    button, and a rail that is the same green a step lighter and more
    saturated, so the two surfaces read as one place at two depths. */
-:is(:root, [data-theme-scope]).doubutsu.dark[data-palette="forest"] {
+[data-theme-scope].doubutsu.dark[data-palette="forest"] {
   --background: oklch(0.215 0.02 165);
   --foreground: oklch(0.95 0.015 100);
   --card: oklch(0.275 0.024 165);
@@ -342,7 +342,7 @@
    The warm one: chocolate rather than khaki, with enough chroma at low
    lightness to read as wood by lamplight, cream text, and the mint
    rail the light palette has, at night. */
-:is(:root, [data-theme-scope]).doubutsu.dark[data-palette="cocoa"] {
+[data-theme-scope].doubutsu.dark[data-palette="cocoa"] {
   --background: oklch(0.225 0.022 55);
   --foreground: oklch(0.95 0.02 85);
   --card: oklch(0.29 0.026 55);
@@ -377,7 +377,7 @@
    and milk-tea outline buttons. Kept as a pick for anyone who settled
    in with it. The popover sits a step above the card, as the others
    do now. Every other value is the original. */
-:is(:root, [data-theme-scope]).doubutsu.dark[data-palette="wood"] {
+[data-theme-scope].doubutsu.dark[data-palette="wood"] {
   --background: oklch(0.219 0.008 84.6);
   --foreground: oklch(0.942 0.011 76.6);
   --card: oklch(0.31 0.01 85);

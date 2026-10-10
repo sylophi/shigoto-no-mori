@@ -4,6 +4,7 @@ import { Check, Loader2, Search } from "lucide-react";
 import { type BranchEntry } from "../../shared/BranchComboboxView.tsx";
 import { rankByScore } from "../../../lib/fuzzyMatch.ts";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
+import { useThemeRoot } from "../../../root.tsx";
 
 // Switching the worktree's branch, opened from the branch's menu
 // (BranchMenuView). BranchSwitcher lists the branches.
@@ -48,7 +49,7 @@ export function BranchSwitcherView({
       onOpenChange={onOpenChange}
       autoHighlight
     >
-      <Combobox.Portal>
+      <Combobox.Portal container={useThemeRoot()}>
         <Combobox.Positioner
           anchor={anchorRef}
           sideOffset={6}

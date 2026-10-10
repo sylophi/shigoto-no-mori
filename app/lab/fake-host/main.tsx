@@ -10,12 +10,6 @@ import { applyPose } from "./pose";
 // applied after mount.
 applyPose();
 
-// The shared boot script (web/public/boot-theme.js, loaded here for
-// its theme half) also stamps the web shell's phone layout by width.
-// This entry poses as the desktop, which never takes that layout, so
-// the stamp comes off before the app reads it.
-delete document.documentElement.dataset["layout"];
-
 const links = installFakeHostBridge();
 
 void import("./boot").then(({ bootFakeHost }) => bootFakeHost(links));

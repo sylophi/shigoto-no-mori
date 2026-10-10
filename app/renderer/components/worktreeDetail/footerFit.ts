@@ -5,6 +5,7 @@
 // shares how far it collapsed. Each verb (FooterVerbView) hides its own
 // label and turns its tooltip on.
 import { type RefObject, useLayoutEffect, useState } from "react";
+import { themeRoot } from "@/lib/themeRoot";
 
 const rankOf = (label: HTMLElement) => Number(label.dataset.labelRank);
 // A pixel of slack: the leading row shrinks to a fractional width, and
@@ -70,8 +71,8 @@ export function useFittedLabels(
       characterData: true,
       attributeFilter: ["data-label-rank"],
     });
-    mutation.observe(document.documentElement, {
-      attributeFilter: ["class", "data-layout"],
+    mutation.observe(themeRoot(), {
+      attributeFilter: ["class"],
     });
     document.fonts.addEventListener("loadingdone", fit);
     return () => {

@@ -38,6 +38,7 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
+import { themeRoot } from "@/lib/themeRoot";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -59,14 +60,7 @@ export function AppShell() {
     fallback: SIDEBAR_DEFAULT,
   });
 
-  // The layout rides <html> as a data attribute, like the theme
-  // classes, so the `phone:` variant (index.css) reaches every element
-  // -- portaled overlays and the toaster included. The web boot script
-  // stamps it pre-paint. This keeps it in step with resizes.
-  useEffect(() => {
-    if (phone) document.documentElement.dataset["layout"] = "phone";
-    else delete document.documentElement.dataset["layout"];
-  }, [phone]);
+  usePageCanvas(phone);
 
   // The app menu's Settings item (a client-scoped broadcast that only
   // the desktop's menu ever sends).
@@ -128,4 +122,34 @@ function ForestKeepalive() {
   const { data: projects = [] } = useProjects();
   useOpenProject(projects, items);
   return null;
+}
+
+// The page's canvas is what shows past its edges: a trackpad's rubber
+// band, and on iOS the strips around Safari's toolbars, which Safari
+// tints from the body's colour. The stylesheets theme the root element,
+// not the page, so in a browser tab the page wears the root's
+// background, kept in step as the theme changes (the boot script paints
+// it first). A phone's bottom edge is the tab bar, so there the canvas
+// continues its card, and the rubber band at the top of a fixed shell,
+// which reads as a broken layout, is off. The desktop window stays
+// transparent.
+function usePageCanvas(phone: boolean): void {
+  useEffect(() => {
+    const root = themeRoot();
+    if (root.dataset["shell"] !== "web") return;
+    const page = document.documentElement;
+    page.style.overscrollBehaviorY = phone ? "none" : "";
+    const paint = () => {
+      const style = getComputedStyle(root);
+      const color = phone
+        ? style.getPropertyValue("--card")
+        : style.backgroundColor;
+      page.style.backgroundColor = color;
+      document.body.style.backgroundColor = color;
+    };
+    paint();
+    const observer = new MutationObserver(paint);
+    observer.observe(root, { attributeFilter: ["class", "data-palette"] });
+    return () => observer.disconnect();
+  }, [phone]);
 }

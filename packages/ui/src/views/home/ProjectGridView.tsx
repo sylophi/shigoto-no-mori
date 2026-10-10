@@ -296,7 +296,9 @@ function moveFocus(event: KeyboardEvent, root: HTMLElement | null) {
       "button[data-project-tile]:not(:disabled)",
     ),
   ];
-  const from = tiles.indexOf(document.activeElement as HTMLButtonElement);
+  const from = tiles.indexOf(
+    root.ownerDocument.activeElement as HTMLButtonElement,
+  );
   const current = tiles[from];
   if (!current) return;
   event.preventDefault();

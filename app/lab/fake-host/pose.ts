@@ -78,10 +78,11 @@ export function applyPose(): void {
   if (updatedFrom !== null) {
     localStorage.setItem("shigomori.lastVersion", updatedFrom);
   }
-  const html = document.documentElement;
-  html.classList.toggle("dark", theme === "dark");
-  html.style.colorScheme = theme;
-  html.classList.toggle("doubutsu", doubutsu);
-  if (doubutsu) html.dataset.palette = theme === "dark" ? dark : light;
-  else delete html.dataset.palette;
+  const root = document.getElementById("root");
+  if (!root) return;
+  root.classList.toggle("dark", theme === "dark");
+  root.style.colorScheme = theme;
+  root.classList.toggle("doubutsu", doubutsu);
+  if (doubutsu) root.dataset.palette = theme === "dark" ? dark : light;
+  else delete root.dataset.palette;
 }

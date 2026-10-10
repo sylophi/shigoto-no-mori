@@ -15,6 +15,7 @@ import type { HTMLProps } from "@base-ui/react/types";
 import { isTruncated } from "../hooks/useIsTruncated.ts";
 
 import { cn } from "../lib/utils.ts";
+import { useThemeRoot } from "../root.tsx";
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
@@ -46,7 +47,7 @@ function TooltipContent({
     "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   >) {
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal container={useThemeRoot()}>
       <TooltipPrimitive.Positioner
         anchor={anchor}
         align={align}
@@ -191,7 +192,9 @@ function withoutOpenState(child: TooltipChild) {
 function overflows(trigger: Element | undefined): boolean {
   if (!trigger) return false;
   return [trigger, ...trigger.querySelectorAll("*")].some(
-    (el) => isTruncated(el) && getComputedStyle(el).overflow !== "visible",
+    (el) =>
+      isTruncated(el) &&
+      el.ownerDocument.defaultView?.getComputedStyle(el).overflow !== "visible",
   );
 }
 

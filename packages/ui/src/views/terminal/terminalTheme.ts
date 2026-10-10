@@ -27,9 +27,9 @@ type ThemeColorKey = Exclude<keyof ITheme, "extendedAnsi">;
 // colors (oklch, and the translucent selection) go through a canvas
 // here and come out as #rrggbb[aa].
 let scratch: CanvasRenderingContext2D | null = null;
-function toHex(color: string): string {
+function toHex(color: string, doc: Document): string {
   if (!scratch) {
-    const canvas = document.createElement("canvas");
+    const canvas = doc.createElement("canvas");
     canvas.width = 1;
     canvas.height = 1;
     scratch = canvas.getContext("2d", { willReadFrequently: true });
@@ -62,9 +62,10 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
   }
   // All probes go in before any is read: interleaving writes and
   // computed-style reads would force a style recalculation per color.
-  const fragment = document.createDocumentFragment();
+  const doc = host.ownerDocument;
+  const fragment = doc.createDocumentFragment();
   const probes = entries.map(([key, expr]) => {
-    const probe = document.createElement("span");
+    const probe = doc.createElement("span");
     probe.style.display = "none";
     probe.style.color = expr;
     fragment.append(probe);
@@ -72,8 +73,10 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
   });
   host.append(fragment);
   const theme: ITheme = {};
+  const view = doc.defaultView;
   for (const { key, probe } of probes) {
-    theme[key] = toHex(getComputedStyle(probe).color);
+    const color = view?.getComputedStyle(probe).color;
+    if (color) theme[key] = toHex(color, doc);
   }
   for (const { probe } of probes) probe.remove();
   return theme;

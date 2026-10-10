@@ -2,6 +2,7 @@ import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import type { Theme } from "@shigomori/contracts/schemas";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useClientConfig } from "../config/useClientConfig";
+import { themeRoot } from "@/lib/themeRoot";
 
 interface ThemeState {
   // Persisted value from clientConfig.json: what the settings UI
@@ -65,7 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolved = applied === "system" ? systemTheme : applied;
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", resolved === "dark");
+    themeRoot().classList.toggle("dark", resolved === "dark");
   }, [resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks

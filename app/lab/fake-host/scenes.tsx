@@ -6,29 +6,32 @@
 import { createRoot } from "react-dom/client";
 import "./scenes.css";
 import "@shigomori/ui/styles/fonts.css";
-import { windowAttributes } from "@shigomori/ui/scenes/frame.tsx";
+import { windowShell } from "@shigomori/ui/scenes/frame.tsx";
 import { type Scene, scenes } from "@shigomori/ui/scenes/index.ts";
+import { ThemeRootProvider } from "@shigomori/ui/root.tsx";
 import { applyPose } from "./pose";
 
 applyPose();
-delete document.documentElement.dataset["layout"];
+const root = document.getElementById("root");
+if (!root) throw new Error("#root missing from scenes.html");
+// A desktop scene's page is transparent under its sidebar, so the
+// browser's canvas shows there, and follows the theme.
+document.documentElement.style.colorScheme = root.style.colorScheme;
 const name = new URLSearchParams(location.search).get("scene");
 const scene: Scene | undefined = name
   ? scenes[name as keyof typeof scenes]
   : undefined;
-const root = document.getElementById("root");
-if (!root) throw new Error("#root missing from scenes.html");
 
 if (scene) {
-  for (const [attribute, value] of Object.entries(
-    windowAttributes(scene.window),
-  )) {
-    document.documentElement.setAttribute(attribute, value);
-  }
+  root.dataset["shell"] = windowShell(scene.window);
   const [width, height] = scene.size;
   root.style.width = `${width}px`;
   root.style.height = `${height}px`;
-  createRoot(root).render(<scene.Scene />);
+  createRoot(root).render(
+    <ThemeRootProvider value={root}>
+      <scene.Scene />
+    </ThemeRootProvider>,
+  );
 } else {
   createRoot(root).render(
     <ul className="p-6 text-sm">

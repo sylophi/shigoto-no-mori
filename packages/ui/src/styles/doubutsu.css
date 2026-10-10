@@ -1,7 +1,8 @@
 /*
  * Doubutsu theme: the default Animal Crossing visual overlay. Opt out
  * via Settings -> Appearance, which restores the plain v1 look.
- * Activated by adding `.doubutsu` to <html> (via useDoubutsu). Orthogonal to .dark;
+ * Activated by adding `.doubutsu` to the theme root (via usePalette).
+ * Orthogonal to .dark;
  * .doubutsu and .doubutsu.dark each remap the same shadcn-style tokens
  * the rest of the app already consumes, so existing components inherit
  * the bolder palette/radii/font without any per-component changes.
@@ -97,12 +98,13 @@
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
  *    -semibold/-bold/-black/-mono, [class*="backdrop-blur"].
  *
- * Token blocks below use `:root.doubutsu` (not `.doubutsu`) so they
- * outrank index.css's `:root` / `.dark` blocks by specificity. This
- * file is @imported before those rules, so order can't be relied on.
- * `[data-theme-scope]` rides beside :root at the same specificity so
- * the Settings picker can paint a swatch of any palette on an element
- * of its own (settings/ThemePicker.tsx), whatever <html> wears.
+ * Token blocks below use `[data-theme-scope].doubutsu` (not
+ * `.doubutsu`) so they outrank index.css's `[data-theme-scope]` /
+ * `.dark` blocks by specificity. This file is @imported before those
+ * rules, so order can't be relied on. Every theme root carries
+ * data-theme-scope: the window's (the app's #root, a scene's frame)
+ * and each swatch the Settings picker paints a palette on
+ * (settings/ThemePickerView.tsx), whatever the window wears.
  *
  * The two blocks here are the default palettes, cream and charcoal.
  * The other picks (renderer/palettes.css) override the same tokens
@@ -111,7 +113,7 @@
  * picks can't move it.
  * ====================================================================
  */
-:is(:root, [data-theme-scope]).doubutsu {
+[data-theme-scope].doubutsu {
   /*
    * Palette designed as a layered system, not a swatch grab. Five
    * distinct cream tints + one mint family carry every surface in the
@@ -257,7 +259,7 @@
   --doubutsu-project-tile-edge: 0.55 0.12;
 }
 
-:is(:root, [data-theme-scope]).doubutsu.dark {
+[data-theme-scope].doubutsu.dark {
   /* Same system, night. Not the cream tints darkened: warm brown at
      low lightness reads as khaki, and the leaf on top of it as olive.
      Night is a near-neutral charcoal instead (a touch cool, hue 250 at
@@ -748,7 +750,7 @@
    least as bold as the body, preserving hierarchy. Mono sits at 550:
    500 looks anemic next to Zen Maru's chunky strokes and 600 reads too
    loud. */
-.doubutsu body {
+[data-theme-scope].doubutsu {
   font-weight: 700;
 }
 .doubutsu .font-mono,
@@ -1205,7 +1207,7 @@
   }
 }
 
-/* Nobody is looking (boot.tsx keeps `.unfocused` on <html>), or the
+/* Nobody is looking (boot.tsx keeps `.unfocused` on the theme root), or the
    machine is on battery (usePauseAnimationsOnBattery keeps
    `.battery-pause`): pause the drift rather than remove it, so it
    resumes where it was instead of snapping to frame one. The layer

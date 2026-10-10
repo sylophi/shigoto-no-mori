@@ -11,8 +11,8 @@ export const SIDEBAR_MAX = 400;
 export const SIDEBAR_DEFAULT = 240;
 
 interface AppShellViewProps {
-  // The phone layout (usePhoneLayout), which the shell can't read for
-  // itself where there is no viewport.
+  // The phone layout (usePhoneLayout), which mounts a different shell,
+  // so the caller decides it rather than a stylesheet.
   phone: boolean;
   // The desktop window, which has a title bar to drag by and paints no
   // root background of its own (the sidebar's material shows through).
