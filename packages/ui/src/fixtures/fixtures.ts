@@ -10,6 +10,7 @@ import type {
   Project,
   Release,
   RunningScript,
+  StashEntry,
   Worktree,
 } from "@shigomori/contracts/schemas/index";
 
@@ -585,6 +586,18 @@ export const fakeRemoteUrls: Record<string, string> = {
   [SM_IDENTITY]: "git@github.com:sylophi/shigoto-no-mori.git",
   [PP_IDENTITY]: "git@github.com:sylophi/port-pool.git",
   [DF_IDENTITY]: "git@github.com:rin/dotfiles.git",
+};
+
+// The stashes a worktree holds: one on happy-hummingbird.
+export const fakeStashes: Record<string, StashEntry[]> = {
+  a10000000002: [
+    {
+      hash: "5ca1ab1",
+      message: "Badge merged projects with their devices",
+      named: false,
+      date: new Date(now - 3 * HOUR).toISOString(),
+    },
+  ],
 };
 
 export const forests: Record<string, DeviceForest> = {

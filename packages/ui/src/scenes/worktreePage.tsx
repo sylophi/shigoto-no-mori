@@ -40,12 +40,9 @@ import {
 import { WorktreeHeaderView } from "../views/worktreeDetail/WorktreeHeaderView.tsx";
 import { WorktreeLocationView } from "../views/worktreeDetail/WorktreeLocationView.tsx";
 import { WorktreeOptionsView } from "../views/worktreeDetail/WorktreeOptionsView.tsx";
-import type {
-  LauncherEntry,
-  PullRequest,
-  Worktree,
-} from "@shigomori/contracts/schemas/index";
-import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
+import type { PullRequest, Worktree } from "@shigomori/contracts/schemas/index";
+import { fakeStashes, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
+import { FAKE_LAUNCHERS } from "../fixtures/settingsFixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { pullRequestLead } from "./pullRequests.tsx";
@@ -70,14 +67,6 @@ const DESCRIPTION = `Lists every device's worktrees in one sidebar, each badged 
 
 - The daemons' lists merge by repo identity.
 - A peer that drops off keeps its last rows, faded.`;
-
-const TOOLS: LauncherEntry[] = [
-  { kind: "detected", id: "vscode", label: "VS Code", available: true },
-  { kind: "detected", id: "terminal", label: "Terminal", available: true },
-  { kind: "detected", id: "ghostty", label: "Ghostty", available: true },
-  { kind: "web", id: "github", label: "GitHub" },
-  { kind: "custom", id: "lazygit", label: "lazygit" },
-];
 
 function branchTitle(worktree: Worktree, subtitle: boolean) {
   return (
@@ -157,7 +146,9 @@ function footer(state: WorktreeFooterState, worktree = HUMMINGBIRD) {
   );
 }
 
-// happy-hummingbird's page: its PR open, named by the PR, launching.
+// happy-hummingbird's page: its PR open, named by the PR, launching, as
+// the fake host serves it (the marketing site's hero, whose live window
+// opens on this page).
 export function WorktreePageScene() {
   return (
     <SceneWindowFrame
@@ -234,7 +225,7 @@ export function WorktreePageScene() {
           <LaunchSectionView
             tools={
               <LauncherRowView
-                entries={TOOLS}
+                entries={FAKE_LAUNCHERS}
                 onLaunch={noop}
                 onChooseTools={noop}
                 onConfigure={noop}
@@ -248,7 +239,7 @@ export function WorktreePageScene() {
                     key={name}
                     name={name}
                     command={`pnpm ${name}`}
-                    busy={name === "dev"}
+                    busy={false}
                     disabled={false}
                     disabledReason={undefined}
                     onClick={noop}
@@ -259,7 +250,7 @@ export function WorktreePageScene() {
             }
           />
         }
-        git={gitSection(HUMMINGBIRD)}
+        git={gitSection(HUMMINGBIRD, fakeStashes[HUMMINGBIRD.id])}
         ports={portsSection()}
         scripts={scriptsSection()}
         footer={footer({

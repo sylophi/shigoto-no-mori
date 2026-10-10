@@ -1,0 +1,85 @@
+---
+// A window or a part of the app, drawn by the app's own views over the
+// fixture world (@shigomori/ui) at build time, at the size it lays out
+// at and scaled to the frame. A `live` frame becomes the real app on
+// that route as it nears the screen (scripts/frames.ts).
+import type { ComponentType } from "react";
+import {
+  DEFAULT_DARK_THEME,
+  DEFAULT_LIGHT_THEME,
+} from "@shigomori/ui/lib/themes.ts";
+
+interface Props {
+  // What it draws, with no props: a scene (src/frames/scenes.tsx).
+  Scene: ComponentType;
+  // The window's size in CSS pixels, which the views lay out at.
+  size: readonly [width: number, height: number];
+  // The part of it the frame shows, in the same pixels. All of it
+  // unless set.
+  crop?: readonly [x: number, y: number, width: number, height: number];
+  // The shell the root stands in for (data-shell): the desktop window,
+  // the web app (a phone), or a part on the page's background.
+  shell: "desktop" | "web" | "part";
+  // Whose theme it wears: the page's, following its toggle (theme.js),
+  // or one look of its own.
+  look?: "page" | "plain" | "dark";
+  // The route the live app opens on. A desktop window only.
+  live?: string;
+  frame: "window" | "phone" | "floating" | "card-shot" | "framed";
+  class?: string;
+  // Empty for a decorative frame, which is then hidden from screen
+  // readers.
+  alt: string;
+}
+const {
+  Scene,
+  size: [width, height],
+  crop = [0, 0, width, height],
+  shell,
+  look = "page",
+  live,
+  frame,
+  class: className,
+  alt,
+} = Astro.props;
+const [x, y, cropWidth, cropHeight] = crop;
+const dark = look === "dark";
+const palette =
+  look === "plain" ? undefined : dark ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME;
+---
+
+<figure
+  class:list={[frame, className]}
+  role={alt === "" ? undefined : "img"}
+  aria-label={alt === "" ? undefined : alt}
+  aria-hidden={alt === "" ? "true" : undefined}
+>
+  <div
+    class="screen"
+    style={`--w: ${width}; --h: ${height}; --x: ${x}; --y: ${y}; --cw: ${cropWidth}; --ch: ${cropHeight}`}
+  >
+    {/* The theme root, as the app's own (@shigomori/ui's root.tsx). */}
+    <div
+      data-theme-scope
+      data-shell={shell}
+      class:list={[look !== "plain" && "doubutsu", dark && "dark"]}
+      data-palette={palette}
+      data-page-theme={look === "page" ? "" : undefined}
+      data-live={live}
+      style={`color-scheme: ${dark ? "dark" : "light"}`}
+      inert
+    >
+      <Scene />
+    </div>
+    {
+      frame === "window" && shell === "desktop" && (
+        <span class="lights">
+          <i />
+          <i />
+          <i />
+        </span>
+      )
+    }
+  </div>
+  <slot />
+</figure>

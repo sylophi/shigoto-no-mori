@@ -1,4 +1,7 @@
 ---
+// The app's stylesheet, which the frames' views and the live app draw
+// with. It themes only inside a frame's root.
+import "shigoto-no-mori/renderer/app.css";
 import "../styles/global.css";
 // The two faces the first screen uses, preloaded under the same hashed
 // names the stylesheet asks for.
@@ -96,9 +99,11 @@ const ogImageAlt =
 
     <script>
       import { pointDownloadsAtLatestDmg } from "../scripts/download";
+      import { liveFramesNearScreen } from "../scripts/frames";
       import { pauseOffscreenWallpaper } from "../scripts/wallpaper";
       pointDownloadsAtLatestDmg();
       pauseOffscreenWallpaper();
+      liveFramesNearScreen();
     </script>
   </body>
 </html>

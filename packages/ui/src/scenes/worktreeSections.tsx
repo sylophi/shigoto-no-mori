@@ -155,12 +155,12 @@ const NAV = {
 };
 
 // The Git section of a worktree's page.
-export function gitSection(worktree: Worktree) {
+export function gitSection(worktree: Worktree, stashes = STASHES) {
   return (
     <GitSectionView
       worktree={worktree}
       files={FILES}
-      stashes={STASHES}
+      stashes={stashes}
       commits={worktree.recentCommits}
       branch={{ base: "origin/main", own: 2, more: false }}
       syncPills={

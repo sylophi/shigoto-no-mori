@@ -1,9 +1,11 @@
 // Everything the two fake host flavors share (vite.config.ts for the
 // desktop renderer tree, vite.web.config.ts for the web shell),
-// parameterized by the two things that actually differ. Its own module
-// rather than a named export beside a default one, which vite's config
-// bundler warns about.
-import { resolve } from "node:path";
+// parameterized by the two things that actually differ, and the pieces
+// the marketing site's build takes too. Its own module rather than
+// named exports beside a default one, which vite's config bundler
+// warns about.
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { reactCompiler } from "../../vite.reactCompiler";
 import { dedupe } from "../../vite.dedupe";
@@ -12,7 +14,24 @@ import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
 import type { UserConfig } from "vite";
 import { fixedDevServerPort } from "../../scripts/lib/portsEnvFile.mts";
 
-const appRoot = resolve(__dirname, "..", "..");
+const here = dirname(fileURLToPath(import.meta.url));
+const appRoot = resolve(here, "..", "..");
+
+// What any build of the renderer tree over the fixtures needs, the fake
+// host's and the marketing site's live frames (frames.tsx): the app's
+// aliases, Clerk's two flavors on the in-memory stub so the account UI
+// renders signed in without a network, and the build info.
+export const fixtureAliases = {
+  "@clerk/electron/react": resolve(here, "clerkStub.tsx"),
+  "@clerk/react": resolve(here, "clerkStub.tsx"),
+  "@": resolve(appRoot, "renderer"),
+  "@shared": resolve(appRoot, "shared"),
+};
+
+export const fixtureDefine = {
+  __APP_VERSION__: JSON.stringify("2.0.3"),
+  __APP_COMMIT__: JSON.stringify("fake-host"),
+};
 
 export function fakeHostBaseConfig(opts: {
   // Its port's key in .env.ports, so each worktree gets its own.
@@ -22,18 +41,13 @@ export function fakeHostBaseConfig(opts: {
   entry: string;
 }): UserConfig {
   return {
-    root: __dirname,
+    root: here,
     // Reuse the web client's public dir for the CSP-safe theme boot
     // script the HTML shell references.
     publicDir: resolve(appRoot, "web/public"),
     resolve: {
       dedupe,
-      alias: {
-        "@clerk/electron/react": resolve(__dirname, "clerkStub.tsx"),
-        "@clerk/react": resolve(__dirname, "clerkStub.tsx"),
-        "@": resolve(appRoot, "renderer"),
-        "@shared": resolve(appRoot, "shared"),
-      },
+      alias: fixtureAliases,
     },
     server: {
       port: fixedDevServerPort(opts.portKey),
@@ -49,10 +63,7 @@ export function fakeHostBaseConfig(opts: {
       entries: [opts.entry, "../../../packages/ui/src/**/*.{ts,tsx}"],
       exclude: ["@shigomori/contracts"],
     },
-    define: {
-      __APP_VERSION__: JSON.stringify("2.0.3"),
-      __APP_COMMIT__: JSON.stringify("fake-host"),
-    },
+    define: fixtureDefine,
     // The package's stylesheet stops at the theme root.
     css: { postcss: { plugins: [insideTheRoot()] } },
     plugins: [tailwindcss(), react(), reactCompiler()],
