@@ -202,10 +202,9 @@ export function DeviceRegistryRowView({
                   // row would make the page's rarest act its loudest.
                   // The armed banner below spells out what it does.
                   // (Self-removal is not offered: it would invalidate
-                  // this app's own credential, and with the Clerk
-                  // session still live ClerkAccountSync would re-enroll
-                  // the machine straight back. Sign out, on the
-                  // account line above, is the honest version.)
+                  // this app's own credential and leave its Clerk
+                  // session live with no device under it. Sign out, on
+                  // the account line above, is the honest version.)
                   variant="ghost-destructive"
                   size="xs"
                   className="text-muted-foreground"

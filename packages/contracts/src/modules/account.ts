@@ -68,9 +68,8 @@ export const accountContract = defineContract(
   // revokeDevice, including the self-revoke caveat: revoking THIS
   // device invalidates our own credential, so the local one is cleared
   // in the same breath (the desktop UI offers Sign out for this device
-  // instead, which ends the Clerk session first -- with the session
-  // still live ClerkAccountSync would see "signed in, not enrolled" and
-  // silently re-enroll, undoing the revoke).
+  // instead, which ends the Clerk session too, rather than leaving one
+  // live with no device under it).
   invoke("revokeDevice", DeviceIdSchema, VoidSchema),
   // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app
