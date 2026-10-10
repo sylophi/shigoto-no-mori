@@ -7,7 +7,8 @@
 // window focused last, or a new one if none is open. At a quit each
 // window's route and bounds are remembered (windows.json in userData)
 // and the next start opens them again, one window on the home route
-// when there is nothing to bring back. The app quits with its last
+// when there is nothing to bring back, or on the first run's page until
+// the install is past it (ClientConfig.welcomed). The app quits with its last
 // window (main/index.ts).
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, type Rectangle, screen } from "electron";
@@ -40,6 +41,8 @@ import {
 } from "./restartVisibility";
 
 const HOME_ROUTE = "/";
+// A fresh install's first run (renderer/lib/routePaths.ts).
+const WELCOME_ROUTE = "/welcome";
 
 // How far a new window sits from the one it opened from, so it does
 // not cover it exactly.
@@ -329,7 +332,12 @@ export function openWindowsAtStart(options: {
     options.restart === null
       ? {}
       : { restart: { visibility: options.restart, minimized } };
-  if (remembered.length === 0) create(HOME_ROUTE, restartOf(false));
+  if (remembered.length === 0) {
+    create(
+      readClientConfigSync().welcomed === true ? HOME_ROUTE : WELCOME_ROUTE,
+      restartOf(false),
+    );
+  }
   for (const record of remembered) {
     create(record.route, {
       bounds: record.bounds,
