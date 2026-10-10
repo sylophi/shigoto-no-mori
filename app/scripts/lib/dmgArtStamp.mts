@@ -16,11 +16,12 @@ const ROOT = join(import.meta.dirname, "..", "..");
 // and the webfont package (a bump reshapes every glyph in the window).
 // Not the render script, since editing that means running it.
 const INPUT_FILES = [
-  "renderer/doubutsu.css",
+  "../packages/ui/src/styles/doubutsu.css",
   "scripts/dmg-background.html",
   "shared/packaging/dmgLayout.mts",
 ];
-const FONT_PACKAGE = "node_modules/@fontsource/zen-maru-gothic/package.json";
+const FONT_PACKAGE =
+  "../packages/ui/node_modules/@fontsource/zen-maru-gothic/package.json";
 
 // The rendered art itself is hashed too, so a twin that goes missing or
 // gets reverted fails here rather than at someone's retina download,

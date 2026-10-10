@@ -12,7 +12,11 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/jetbrains-mono": "catalog:",
+    "@fontsource/zen-maru-gothic": "catalog:",
     "@shigomori/contracts": "workspace:*",
+    "@xterm/xterm": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "dompurify": "catalog:",
@@ -21,7 +25,9 @@
     "material-icon-theme": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tailwind-merge": "catalog:"
+    "tailwind-merge": "catalog:",
+    "tailwindcss": "catalog:",
+    "tw-animate-css": "catalog:"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",

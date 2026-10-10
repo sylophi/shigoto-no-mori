@@ -1,6 +1,6 @@
-// Verifies that every hook renderer/doubutsu.css depends on still
-// exists, so a v1 refactor (or a dependency upgrade) can't silently
-// strip parts of the doubutsu theme. Devs work in v1 by default, so without
+// Verifies that every hook doubutsu.css (packages/ui/src/styles)
+// depends on still exists, so a v1 refactor (or a dependency upgrade)
+// can't silently strip parts of the doubutsu theme. Devs work in v1 by default, so without
 // this check a renamed data-slot or a Base UI attribute change would
 // only be noticed by someone running with the theme on.
 //
@@ -11,7 +11,7 @@
 //   2. The `doubutsu-only` and `data-row-idx` app markers must exist.
 //   3. Upstream attributes (Base UI, cmdk, sonner) must still appear in
 //      the installed packages, which catches breaking upgrades.
-//   4. The one consumer outside renderer/ (the dmg artwork in
+//   4. The one consumer outside the renderer (the dmg artwork in
 //      scripts/dmg-background.html) must still find the tokens and
 //      the two rules it renders against. It ships as a committed png,
 //      so a stripped hook there is invisible until a release.
@@ -25,18 +25,19 @@ import { it } from "vitest";
 import { walk } from "./lib/checkKit.mts";
 
 const root = join(import.meta.dirname, "..");
+const styles = join(root, "..", "packages", "ui", "src", "styles");
 // Strip comments: only selectors are contract, prose may name anything.
-const readCss = (path: string) =>
-  readFileSync(join(root, path), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-const css = readCss("renderer/doubutsu.css");
+const readCss = (name: string) =>
+  readFileSync(join(styles, name), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const css = readCss("doubutsu.css");
 // The phone layout's sizing hooks the same way (data-slot, data-size),
 // so its selectors are held to check 1 as well.
 const HOOKING_CSS = [
   { name: "doubutsu.css", source: css },
-  { name: "phone.css", source: readCss("renderer/phone.css") },
+  { name: "phone.css", source: readCss("phone.css") },
   // The other palettes select the same scope hook and data-palette,
   // which the Settings picker's swatches set.
-  { name: "palettes.css", source: readCss("renderer/palettes.css") },
+  { name: "palettes.css", source: readCss("palettes.css") },
 ];
 
 let rendererSource = "";
@@ -233,7 +234,7 @@ const clerkSrc = readFileSync(
 // @theme inline never emits its declarations as runtime custom
 // properties (Tailwind inlines them into utilities), so strip those
 // blocks: a token that exists only there is NOT resolvable via var().
-const indexCss = readFileSync(join(root, "renderer/index.css"), "utf8").replace(
+const indexCss = readFileSync(join(styles, "index.css"), "utf8").replace(
   /@theme\s+inline[^{]*\{[^}]*\}/g,
   "",
 );
@@ -283,7 +284,7 @@ for (const [, name = ""] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
     }
   } else if (!indexCss.includes(`${name}:`)) {
     failures.push(
-      `clerkAppearance reads ${name} but renderer/index.css no longer ` +
+      `clerkAppearance reads ${name} but index.css no longer ` +
         "declares it as a runtime property (an @theme inline entry does " +
         "not count: Tailwind never emits those as custom properties)",
     );
@@ -291,7 +292,7 @@ for (const [, name = ""] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
 }
 
 // When one fails: either restore the hook, or update
-// renderer/doubutsu.css (and its CONTRACT header) to the new one.
+// doubutsu.css (and its CONTRACT header) to the new one.
 it("theme contract", () => {
   assert.deepEqual(failures, []);
 });
