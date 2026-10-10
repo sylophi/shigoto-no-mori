@@ -13,7 +13,8 @@ import {
 import * as Terrier from "@host/lib/terrier";
 import { fromPromise } from "@host/lib/util/fromPromise";
 import * as Effect from "effect/Effect";
-import { type ClearingWrite, writeGlobalConfig } from "@host/lib/engineCalls";
+import { writeGlobalConfig } from "@host/lib/engineCalls";
+import type { ClearingWrite } from "@host/lib/engineOps";
 
 // A patched value equal to the key's default is stored by omission, so
 // config.json stays tidy whichever device saved it. Values are plain

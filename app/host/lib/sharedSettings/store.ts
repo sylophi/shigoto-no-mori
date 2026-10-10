@@ -7,8 +7,6 @@
 // The rule a copy keeps (store and announce only what changed) is
 // shared/sharedSettings.ts's createSharedSettingsCopy. This file is its
 // storage.
-import * as SharedSettings from "@shigomori/engine/SharedSettings";
-import * as Effect from "effect/Effect";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   createSharedSettingsCopy,
@@ -17,6 +15,7 @@ import {
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
 import { getDeviceId } from "../config/deviceId";
 import * as Engine from "../engine";
+import * as Ops from "../engineOps";
 import { log } from "@shared/log";
 
 let held: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
@@ -24,11 +23,7 @@ let written: Promise<unknown> = Promise.resolve();
 
 // At launch, once the store is open.
 export async function loadSharedSettings(): Promise<void> {
-  held = await Engine.run(
-    Effect.gen(function* () {
-      return yield* (yield* SharedSettings.SharedSettings).read;
-    }),
-  );
+  held = await Engine.run(Ops.readSharedSettings);
 }
 
 // Settles once every change made so far is in the store.
@@ -38,13 +33,7 @@ export function sharedSettingsStored(): Promise<unknown> {
 
 function persist(doc: SharedSettingsDoc): void {
   written = written
-    .then(() =>
-      Engine.run(
-        Effect.gen(function* () {
-          yield* (yield* SharedSettings.SharedSettings).update(() => doc);
-        }),
-      ),
-    )
+    .then(() => Engine.run(Ops.storeSharedSettings(doc)))
     .catch((error: unknown) => {
       log.warn(
         `[sharedSettings] the copy wasn't stored: ${errorMessageOf(error)}`,

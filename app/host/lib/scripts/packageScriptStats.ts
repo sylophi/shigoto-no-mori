@@ -6,16 +6,15 @@ import type { PackageScriptSortMode } from "@shigomori/contracts/schemas";
 import * as Scripts from "@shigomori/engine/Scripts";
 import * as Effect from "effect/Effect";
 import * as Engine from "../engine";
+import * as Ops from "../engineOps";
 
+// The Promise face of the engine's Scripts (engineOps.ts), for the
+// callers not converted yet: goes in step 7's B4c PR (V3.md, the
+// host's Promise adapters).
 const onScripts = <A>(
   f: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<A>,
   change = false,
-): Promise<A> =>
-  (change ? Engine.change : Engine.call)(
-    Effect.gen(function* () {
-      return yield* f(yield* Scripts.Scripts);
-    }),
-  );
+): Promise<A> => Engine.run(Ops.onScripts(f, change));
 
 export async function readScriptSort(
   projectId: string,

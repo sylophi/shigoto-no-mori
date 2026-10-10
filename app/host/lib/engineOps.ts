@@ -1,0 +1,1405 @@
+// The app's calls into the engine that owns the data model: every
+// worktree and project mutation (create, adopt, delete, done, merge,
+// move, the shelf and auto-pull marks, agent sessions and hooks, project
+// add, remove and reorder)
+// and every read of what the engine owns (worktree rows and identities,
+// the project list and icons, the stored config, the launcher row,
+// package scripts). The app and a terminal run the same services, and
+// each function answers in the shape `sm --json` printed, decoded
+// against the shared schemas, so drift fails loudly here instead of
+// surfacing as undefined-flavored breakage in the renderer.
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
+import * as EngineConfig from "@shigomori/engine/Config";
+import * as Agents from "@shigomori/engine/Agents";
+import * as Bundle from "@shigomori/engine/Bundle";
+import * as Dirty from "@shigomori/engine/Dirty";
+import * as Doctor from "@shigomori/engine/Doctor";
+import { codeOf } from "@shigomori/engine/errorDocument";
+import type { MergeMethod } from "@shigomori/engine/GitHub";
+import * as Hygiene from "@shigomori/engine/Hygiene";
+import * as Icons from "@shigomori/engine/Icons";
+import * as Landing from "@shigomori/engine/Landing";
+import * as Open from "@shigomori/engine/Open";
+import * as Launchers from "@shigomori/engine/Launchers";
+import * as Projects from "@shigomori/engine/Projects";
+import * as Registry from "@shigomori/engine/Registry";
+import * as Scripts from "@shigomori/engine/Scripts";
+import * as SharedSettings from "@shigomori/engine/SharedSettings";
+import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
+import * as Usage from "@shigomori/engine/Usage";
+import * as WorktreeData from "@shigomori/engine/WorktreeData";
+import * as Worktrees from "@shigomori/engine/Worktrees";
+import * as WtFolder from "@shigomori/engine/WtFolder";
+import {
+  AgentHarnessStatusListSchema,
+  CarryOverReportSchema,
+  CleanupErrorSchema,
+  type CleanupError,
+  type CreateWorktreeResult,
+  type DeleteStackResult,
+  DetectedLauncherSchema,
+  type GlobalConfig,
+  LauncherEntrySchema,
+  type MergeOutcome,
+  MergeOutcomeSchema,
+  modeledKeyPaths,
+  PackageScriptsDocSchema,
+  type Project,
+  ProjectIconSchema,
+  ProjectRowSchema,
+  ProjectSchema,
+  type ScriptEvent,
+  ScriptEventSchema,
+  type ShigomoriConfig,
+  ShigomoriConfigSchema,
+  type ShigomoriWorktreeData,
+  StoredGlobalConfigSchema,
+  StoredShigomoriConfigSchema,
+  type Worktree,
+  type WorktreeCarryOverComplete,
+  type WorktreeDescription,
+  WorktreeDiskUsageSchema,
+  WorktreeIdentitySchema,
+  WorktreeLifecyclePhaseSchema,
+  type WorktreeLifecyclePhase,
+  WorktreeSchema,
+} from "@shigomori/contracts/schemas";
+import { DoctorReportSchema } from "@shigomori/contracts/modules/cli";
+import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
+import {
+  ConvertRefusedError,
+  isEntityGoneError,
+} from "@shigomori/contracts/errors";
+import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
+import {
+  clearCreateInflight,
+  cliScriptStream,
+  markCreateInflight,
+} from "@host/lib/scripts";
+import { shellQuote } from "@host/lib/util/shellQuote";
+import { log } from "@shared/log";
+import {
+  asCall,
+  asChange,
+  EngineCallError,
+  EngineRuns,
+  engineFailure,
+  locate,
+  projectById,
+  type Services,
+} from "./engine";
+
+// Renderer-bound emit callbacks supplied by the IPC handler, fed from
+// the engine's lifecycle events.
+interface WorktreeOperationNotifiers {
+  notifyPhase: (payload: WorktreeLifecyclePhase) => void;
+  notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
+  notifyScript: (payload: ScriptEvent) => void;
+}
+
+const decodeWorktree = Schema.decodeUnknownSync(WorktreeSchema);
+const decodeCarryOverReport = Schema.decodeUnknownSync(CarryOverReportSchema);
+const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
+const decodeScriptEvent = Schema.decodeUnknownSync(ScriptEventSchema);
+const decodePhase = Schema.decodeUnknownSync(
+  WorktreeLifecyclePhaseSchema.fields.phase,
+);
+
+// A "script" event, as the script event it carries (the event tag
+// itself is the reporter's, not the payload's).
+function scriptEventOf(
+  event: Extract<Worktrees.WorktreeEvent, { event: "script" }>,
+): ScriptEvent {
+  const { event: _event, ...scriptEvent } = event;
+  return decodeScriptEvent(scriptEvent);
+}
+
+// A reporter that forwards the scripts a removal runs and nothing else.
+const scriptReporter = (
+  scripts: ReturnType<typeof cliScriptStream>,
+): Landing.Reporter => ({
+  report: (event) =>
+    Effect.sync(() => {
+      if (event.event === "script") scripts.forward(scriptEventOf(event));
+    }),
+  color: true,
+});
+
+const quiet: Landing.Reporter = { report: () => Effect.void, color: true };
+
+// An unforced adopt stopped by its guard (the worktree's uncommitted
+// changes, or a status that can't be read), as the contract's
+// ConvertRefusedError.
+function guardRefusal(error: unknown): ConvertRefusedError | null {
+  const code = codeOf(error);
+  if (code === "uncommitted-changes" || code === "status-unreadable") {
+    return new ConvertRefusedError({ refusal: code });
+  }
+  return null;
+}
+
+// Streamed create/adopt: answer on the "created" event (the app
+// navigates immediately) and keep forwarding lifecycle events to the
+// renderer until the run ends, the run going on in the engine's scope
+// (EngineRuns). resolveOn "exit" waits out the WHOLE run instead
+// (carry-over and setup included) for callers that sequence more work
+// after the create, like the pull orchestration's dirty apply; a
+// post-created failure still answers with the worktree, matching the
+// early answer where such failures only surface as lifecycle events.
+//
+// `cancelled` (a move's cancel) interrupts the run, but only once the
+// "created" event is in: the worktree exists from that point and the
+// caller can remove it, where an interrupt during `git worktree add`
+// would leave a half-made checkout nobody can name. What precedes
+// "created" is that one git command, so the wait is short. A run
+// cancelled after "created" answers with the worktree like any run
+// whose lifecycle step failed, and the caller knows its own cancel to
+// roll back.
+type CreateFailure = ConvertRefusedError | ReturnType<typeof engineFailure>;
+
+const runStreamingCreate = Effect.fnUntraced(function* (
+  start: (
+    reporter: Worktrees.Reporter,
+  ) => Effect.Effect<unknown, unknown, Services>,
+  project: Project,
+  worktreeId: string | undefined,
+  notify: WorktreeOperationNotifiers,
+  resolveOn: "created" | "exit" = "created",
+  cancelled: Effect.Effect<void> = Effect.never,
+) {
+  const { scope } = yield* EngineRuns;
+  const ids = { projectId: project.id, worktreeId };
+  // The worktree once "created" is in, or why the run ended before it.
+  const made = yield* Deferred.make<Worktree, CreateFailure>();
+  let created: Worktree | null = null;
+  const scripts = cliScriptStream(notify.notifyScript);
+  // The host's create mark (which refuses a delete or move) opens and
+  // closes with the phases the page disables its delete button on,
+  // so the two agree. A run that dies mid-lifecycle never sends its
+  // "idle", so the end closes an open phase itself.
+  let phaseOpen = false;
+  const setPhase = (id: string, phase: WorktreeLifecyclePhase["phase"]) => {
+    if (phase === "idle") {
+      if (!phaseOpen) return;
+      phaseOpen = false;
+      clearCreateInflight(id);
+    } else if (!phaseOpen) {
+      phaseOpen = true;
+      markCreateInflight(id);
+    }
+    notify.notifyPhase({ projectId: project.id, worktreeId: id, phase });
+  };
+  const onEvent = (event: Worktrees.WorktreeEvent) => {
+    switch (event.event) {
+      case "created": {
+        created = decodeWorktree(event.worktree);
+        Deferred.doneUnsafe(made, Exit.succeed(created));
+        break;
+      }
+      case "phase": {
+        if (!created) break;
+        setPhase(created.id, decodePhase(event.phase));
+        break;
+      }
+      case "carryOver": {
+        if (!created) break;
+        notify.notifyCarryOverComplete({
+          projectId: project.id,
+          worktreeId: created.id,
+          report: decodeCarryOverReport(event.report),
+        });
+        break;
+      }
+      case "script":
+        scripts.forward(scriptEventOf(event));
+        break;
+    }
+  };
+  const reporter: Worktrees.Reporter = {
+    report: (event) =>
+      Effect.sync(() => {
+        // A schema mismatch before "created" fails the whole call;
+        // after it the caller has its answer, so it is logged instead
+        // of lost.
+        try {
+          onEvent(event);
+        } catch (error) {
+          if (created === null) {
+            Deferred.doneUnsafe(made, Exit.fail(engineFailure(error, ids)));
+          } else {
+            log.warn("[engine] mid-run event failed validation", error);
+          }
+        }
+      }),
+    color: true,
+  };
+  const run = asChange(Effect.result(start(reporter)), ids).pipe(
+    Effect.onExit((exit) =>
+      Effect.sync(() => {
+        scripts.end();
+        // Before the run ends, so a caller sequencing work after it (a
+        // rollback that deletes it) finds the mark cleared.
+        if (created !== null) {
+          setPhase(created.id, "idle");
+          return;
+        }
+        const failure: CreateFailure =
+          Exit.isSuccess(exit) && Result.isFailure(exit.value)
+            ? (guardRefusal(exit.value.failure) ??
+              engineFailure(exit.value.failure, ids))
+            : new EngineCallError({
+                reason: "The worktree was not created.",
+                cause: Exit.isFailure(exit) ? exit.cause : undefined,
+              });
+        Deferred.doneUnsafe(made, Exit.fail(failure));
+      }),
+    ),
+  );
+  const fiber = yield* Effect.forkIn(run, scope);
+  // A cancel reaches the run once "created" is in, while it runs.
+  yield* cancelled.pipe(
+    Effect.andThen(Deferred.await(made)),
+    Effect.andThen(Fiber.interrupt(fiber)),
+    Effect.ignore,
+    Effect.raceFirst(Fiber.await(fiber)),
+    Effect.forkIn(scope),
+  );
+  const worktree = yield* Deferred.await(made);
+  if (resolveOn === "exit") yield* Fiber.await(fiber);
+  return { worktree } satisfies CreateWorktreeResult;
+});
+
+export const createWorktree = (
+  project: Project,
+  input: {
+    worktreeName?: string;
+    branchName?: string;
+    base?: string;
+    checkout?: boolean;
+    // false has git write every tracked file instead of cloning them.
+    cloneFiles?: boolean;
+    // Leave the project's setup script out (carry-over and port
+    // provision still run): a mirror or transplant told not to set
+    // the copy up.
+    skipSetup?: boolean;
+  },
+  notify: WorktreeOperationNotifiers,
+  opts: {
+    resolveOn?: "created" | "exit";
+    cancelled?: Effect.Effect<void>;
+  } = {},
+) =>
+  runStreamingCreate(
+    (reporter) =>
+      Effect.gen(function* () {
+        const registered = yield* projectById(project.id);
+        return yield* (yield* Worktrees.Worktrees).create(
+          registered,
+          {
+            name: input.worktreeName || undefined,
+            branch: input.branchName || undefined,
+            base: input.base || undefined,
+            checkout: input.checkout,
+            skipSetup: input.skipSetup,
+            clone: input.cloneFiles !== false,
+          },
+          reporter,
+        );
+      }),
+    project,
+    undefined,
+    notify,
+    opts.resolveOn,
+    opts.cancelled,
+  );
+
+// force only once the user has seen the changes the convert wipes.
+// Unforced, adopt refuses a dirty worktree, untracked files included,
+// with the convert refusal guardRefusal maps.
+export const adoptWorktree = (
+  project: Project,
+  worktreeId: string,
+  force: boolean,
+  notify: WorktreeOperationNotifiers,
+) =>
+  runStreamingCreate(
+    (reporter) =>
+      Effect.gen(function* () {
+        const located = yield* locate(project.id, worktreeId);
+        return yield* (yield* Worktrees.Worktrees).adopt(
+          located,
+          { force },
+          reporter,
+        );
+      }),
+    project,
+    worktreeId,
+    notify,
+  );
+
+// A removal's account of a cleanup script that failed, which left the
+// worktree in place.
+type Removal =
+  | { ok: true; cleanupError?: undefined }
+  | { ok: false; cleanupError: CleanupError };
+
+// A cancelled move's rollback puts the removal on a clock (timeoutMs).
+export const deleteWorktree = Effect.fnUntraced(function* (
+  project: Project,
+  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+  opts: { timeoutMs?: number } = {},
+) {
+  const scripts = cliScriptStream(notify.notifyScript);
+  const removal = Effect.gen(function* () {
+    const located = yield* locate(project.id, input.worktreeId);
+    return yield* (yield* Worktrees.Worktrees)
+      .remove(
+        located,
+        {
+          force: input.force === true,
+          keepBranch: false,
+          skipCleanup: input.skipCleanup === true,
+        },
+        scriptReporter(scripts),
+      )
+      .pipe(
+        Effect.as<Removal>({ ok: true }),
+        Effect.catchTags({
+          CleanupFailed: (failed) =>
+            Effect.succeed<Removal>({
+              ok: false,
+              cleanupError: decodeCleanupError(
+                Worktrees.cleanupErrorOf(failed),
+              ),
+            }),
+        }),
+      );
+  });
+  return yield* asChange(
+    opts.timeoutMs === undefined
+      ? removal
+      : removal.pipe(Effect.timeout(opts.timeoutMs)),
+    { projectId: project.id, worktreeId: input.worktreeId },
+  ).pipe(Effect.ensuring(Effect.sync(scripts.end)));
+});
+
+// The merged layers of a stack, removed together from the highest
+// merged layer's worktree, which takes the worktrees of the merged
+// layers under it too. The document lists them: the worktree itself
+// under `removed`, the others under `stack.removed`, and on a cleanup
+// failure whatever went before it.
+export const deleteStack = Effect.fnUntraced(function* (
+  project: Project,
+  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+) {
+  const scripts = cliScriptStream(notify.notifyScript);
+  const doc = yield* asChange(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, input.worktreeId);
+      return yield* (yield* Landing.Landing).removeStack(
+        located,
+        {
+          force: input.force === true,
+          keepBranch: false,
+          skipCleanup: input.skipCleanup === true,
+        },
+        scriptReporter(scripts),
+      );
+    }),
+    { projectId: project.id, worktreeId: input.worktreeId },
+  ).pipe(Effect.ensuring(Effect.sync(scripts.end)));
+  const removed = removedIdsOf(doc);
+  if (doc["ok"] === true) {
+    return { ok: true, removed } satisfies DeleteStackResult;
+  }
+  if (doc["cleanupError"] !== undefined) {
+    return {
+      ok: false,
+      removed,
+      cleanupError: decodeCleanupError(doc["cleanupError"]),
+    } satisfies DeleteStackResult;
+  }
+  return yield* new EngineCallError({
+    reason:
+      typeof doc["error"] === "string"
+        ? doc["error"]
+        : "removing the stack failed",
+    cause: doc,
+  });
+});
+
+const RemovedIdSchema = Schema.Struct({ id: Schema.String });
+const decodeLandDocRemovals = Schema.decodeUnknownSync(
+  Schema.Struct({
+    removed: Schema.optional(RemovedIdSchema),
+    stack: Schema.optional(
+      Schema.Struct({ removed: Schema.Array(RemovedIdSchema) }),
+    ),
+  }),
+);
+
+// The worktree ids a stack removal's document says went, the lower
+// layers first and the worktree it ran from last, the order they were
+// removed in.
+function removedIdsOf(doc: Landing.Document): string[] {
+  const parsed = decodeLandDocRemovals(doc);
+  const ids = (parsed.stack?.removed ?? []).map((entry) => entry.id);
+  if (parsed.removed) ids.push(parsed.removed.id);
+  return ids;
+}
+
+// A removal that must happen (a nuke, the rollback of a failed or
+// cancelled move): forced, so the port-pool lease is released and the
+// teardown runs like any removal, and when that cleanup fails, again
+// without it, since leaving the worktree behind is not an option. A
+// cancelled move's rollback puts the cleanup on a clock too
+// (opts.timeoutMs): the user is cancelling something that hung, and a
+// teardown script that hangs the same way must not hold the cancel.
+export const forceRemoveWorktree = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  opts: { timeoutMs?: number } = {},
+) {
+  const silent = { notifyScript: () => {} };
+  // A run the clock stopped reads as a cleanup failure. A worktree that
+  // is not there is not retried.
+  const result = yield* deleteWorktree(
+    project,
+    { worktreeId, force: true },
+    silent,
+    opts,
+  ).pipe(
+    Effect.catchIf(
+      (error) => !isEntityGoneError(error),
+      () => Effect.succeed({ ok: false as const }),
+    ),
+  );
+  if (!result.ok) {
+    yield* deleteWorktree(
+      project,
+      { worktreeId, force: true, skipCleanup: true },
+      silent,
+    );
+  }
+});
+
+// Forced: the app's cleanup box appears in merged-PR context, so the UI
+// has already gated mergedness.
+export const finishWorktree = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+) {
+  const doc = yield* asChange(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      return yield* (yield* Landing.Landing).done(located, { force: true });
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return decodeWorktree(doc["worktree"]);
+});
+
+// `stack`: the PR and every open PR under it in its stack, which the
+// engine resolves and merges bottom first.
+export const mergePullRequest = Effect.fnUntraced(function* (
+  project: Project,
+  number: number,
+  method: MergeMethod,
+  options: { stack?: boolean } = {},
+) {
+  const doc = yield* asChange(
+    Effect.gen(function* () {
+      const registered = yield* projectById(project.id);
+      return yield* (yield* Landing.Landing).merge(
+        { project: registered, number },
+        { method, stack: options.stack === true },
+        quiet,
+      );
+    }),
+    { projectId: project.id },
+  );
+  return { outcome: mergeOutcomeOf(doc) };
+});
+
+const isMergeOutcome = Schema.is(MergeOutcomeSchema);
+
+// The document spells the outcome the way MergeOutcomeSchema does. A
+// document without one (a stack merge's) landed.
+function mergeOutcomeOf(doc: Landing.Document): MergeOutcome {
+  const outcome = doc["outcome"];
+  return isMergeOutcome(outcome) ? outcome : "merged";
+}
+
+export const setShelved = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  shelved: boolean,
+) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Worktrees.Worktrees).setShelved(located.worktree, shelved);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+});
+
+export const addProject = Effect.fnUntraced(function* (path: string) {
+  const project = yield* asChange(
+    Effect.flatMap(Projects.Projects, (projects) => projects.add(path)),
+  );
+  // A registration is the one moment a path's identity may have
+  // changed under the cache: a project removed and cloned again at the
+  // same path within the TTL would otherwise read as the old one.
+  forgetRepoIdentity(path);
+  return yield* Schema.decodeEffect(ProjectSchema)(project);
+});
+
+// The command that runs a worktree's package.json script, and the
+// SHIGOMORI_* values startScript can't derive, for the app's registry
+// to spawn (it keeps owning streaming, cancel, and quit-time reaping).
+// The engine picks the manager the lockfile selects and counts the run
+// in the use log.
+export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
+  projectId: string;
+  worktreeId: string;
+  scriptName: string;
+}) {
+  return yield* asChange(
+    Effect.gen(function* () {
+      const scripts = yield* Scripts.Scripts;
+      const located = yield* locate(args.projectId, args.worktreeId);
+      const { program, args: argv } = yield* scripts.command({
+        worktree: located.worktree,
+        script: args.scriptName,
+        extra: [],
+      });
+      const context = yield* (yield* Worktrees.Worktrees).scriptContext(
+        located,
+      );
+      yield* scripts.recordRun(located.project.id, args.scriptName);
+      return {
+        command: [program, ...argv].map(shellQuote).join(" "),
+        scriptEnv: {
+          projectBranch: context.projectBranch,
+          defaultBranch: context.defaultBranch,
+          title: context.title,
+          description: context.description,
+        },
+      };
+    }),
+    { projectId: args.projectId, worktreeId: args.worktreeId },
+  );
+});
+
+// Whole-document config writes, the same write path the terminal's
+// plumbing `write --data` verbs run (validation, the atomic merge, and
+// the in-project exclude side effect for project config). The payloads
+// were already parsed at the IPC boundary. The merge is NOT a plain
+// overlay: for every REGISTERED key the payload omits it CLEARS that
+// key (that is how a settings save serializes a default by omission),
+// so only UNREGISTERED keys the payload does not carry survive
+// untouched. A caller must therefore hand a COMPLETE base or a
+// registered key it left out is written away. A null clears any key.
+// Callers invalidate the TTL caches themselves.
+//
+// globalConfig carries device fields only, which the narrowed
+// GlobalConfigSchema enforces at the IPC boundary. The keep-unregistered
+// half of the merge is what keeps any legacy client keys (theme,
+// doubutsu) intact when a device-only payload lands.
+export const writeGlobalConfig = Effect.fnUntraced(function* (
+  config: ClearingWrite<GlobalConfig>,
+) {
+  yield* asChange(
+    Effect.flatMap(EngineConfig.Config, (engineConfig) =>
+      engineConfig.write({ kind: "device" }, config),
+    ),
+  );
+});
+
+// A config write payload where null clears the key.
+export type ClearingWrite<T> = { -readonly [K in keyof T]?: T[K] | null };
+
+// The renderer hands the whole project document and clears a field by
+// leaving it out, so every field the schema models goes in the payload,
+// nested objects field by field, as null where the document has none.
+// Fields the schema doesn't model stay out, and the merge keeps them.
+const PROJECT_KEY_PATHS = modeledKeyPaths(ShigomoriConfigSchema);
+function withModeledFields(config: ShigomoriConfig): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const path of PROJECT_KEY_PATHS) {
+    let from: unknown = config;
+    let into = payload;
+    path.forEach((key, depth) => {
+      from = (from as Record<string, unknown> | undefined)?.[key];
+      if (depth === path.length - 1) into[key] = from ?? null;
+      else into = (into[key] ??= {}) as Record<string, unknown>;
+    });
+  }
+  return payload;
+}
+
+// A project's settings scope.
+const projectScope = (projectId: string) =>
+  Effect.map(projectById(projectId), (project) => ({
+    kind: "project" as const,
+    projectId: project.id,
+    path: project.path,
+  }));
+
+export const writeProjectConfig = Effect.fnUntraced(function* (
+  projectId: string,
+  config: ShigomoriConfig,
+) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const scope = yield* projectScope(projectId);
+      yield* (yield* EngineConfig.Config).write(
+        scope,
+        withModeledFields(config),
+      );
+    }),
+    { projectId },
+  );
+});
+
+// Registry removal and per-project state deletion only; the app-side
+// extras (script reaping, icon cache) stay with the caller because
+// those registries live in the app's process.
+export const removeProject = Effect.fnUntraced(function* (projectId: string) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      yield* (yield* Projects.Projects).remove(project);
+    }),
+    { projectId },
+  );
+});
+
+// Repoints the registry entry at the moved repo and reconnects its
+// worktrees, answering the project at its new path.
+export const relocateProject = Effect.fnUntraced(function* (
+  projectId: string,
+  path: string,
+) {
+  const row = yield* asChange(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Worktrees.Worktrees).relocateProject(project, path);
+    }),
+    { projectId },
+  );
+  const project = yield* Schema.decodeEffect(ProjectSchema)(row);
+  // Like a registration, the identity cached for the path may be
+  // another repo's that once sat there.
+  forgetRepoIdentity(project.path);
+  return project;
+});
+
+// ---- Worktree marks and moves ----
+
+// A worktree's on/off mark, answered with the worktree's refreshed row.
+const setMark = Effect.fnUntraced(function* (
+  set: (
+    worktrees: Worktrees.Worktrees["Service"],
+  ) => (
+    worktree: Worktrees.WorktreeIdentity,
+    on: boolean,
+  ) => Effect.Effect<void, Worktrees.MarkRefused>,
+  project: Project,
+  worktreeId: string,
+  on: boolean,
+) {
+  const row = yield* asChange(
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const located = yield* locate(project.id, worktreeId);
+      yield* set(worktrees)(located.worktree, on);
+      return yield* worktrees.row(located);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return decodeWorktree(row);
+});
+
+// The auto-pull mark. The pull itself stays with the app's fetch sweep
+// (host/lib/worktrees/autoPullSweep.ts).
+export const setAutoPull = (
+  project: Project,
+  worktreeId: string,
+  autoPull: boolean,
+) =>
+  setMark((worktrees) => worktrees.setAutoPull, project, worktreeId, autoPull);
+
+// ---- Agent sessions and their harnesses' hooks (engine Agents) ----
+
+// A worktree's refreshed row after `edit` changed what is kept for it.
+const rowAfter = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  edit: (located: Worktrees.Located) => Effect.Effect<void, unknown, Services>,
+) {
+  const row = yield* asChange(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* edit(located);
+      return yield* (yield* Worktrees.Worktrees).row(located);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return decodeWorktree(row);
+});
+
+// Every agent session bound to the worktree goes idle.
+export const idleAgents = (project: Project, worktreeId: string) =>
+  rowAfter(project, worktreeId, (located) =>
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.idle(located.worktree),
+    ),
+  );
+
+// Unbinds one agent session from the worktree it is bound to.
+export const unbindAgent = (
+  project: Project,
+  worktreeId: string,
+  harness: string,
+  session: string,
+) =>
+  rowAfter(project, worktreeId, () =>
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.unbind({ harness, session }),
+    ),
+  );
+
+// Resumes one agent session in the worktree, in the user's terminal. It
+// writes no state, so it is no change the busy prompt counts, while
+// macOS may hold it on an Automation prompt.
+export const resumeAgent = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  harness: string,
+  session: string,
+) {
+  yield* asCall(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Agents.Agents).resume(located, { harness, session });
+    }),
+    { projectId: project.id, worktreeId },
+  );
+});
+
+const decodeHarnesses = Schema.decodeUnknownSync(AgentHarnessStatusListSchema);
+
+export const agentHarnesses = Effect.fnUntraced(function* () {
+  return [
+    ...decodeHarnesses(
+      yield* asCall(
+        Effect.flatMap(Effect.service(Agents.Agents), (a) => a.statuses),
+      ),
+    ),
+  ];
+});
+
+// Installs or removes one harness's hooks, answered with every
+// harness's status.
+export const setAgentHooks = Effect.fnUntraced(function* (
+  harness: string,
+  install: boolean,
+) {
+  return [
+    ...decodeHarnesses(
+      yield* asChange(
+        Effect.gen(function* () {
+          const agents = yield* Agents.Agents;
+          yield* agents.setHooks([harness], install);
+          return yield* agents.statuses;
+        }),
+      ),
+    ),
+  ];
+});
+
+// `git worktree move` plus the re-key of everything stored under the
+// worktree's path-derived id (marks, its data, a pending dirty capture).
+// The caller keeps the app-side guards around it (the running work it
+// refuses, the tombstone, the mirrors re-opened).
+export const moveWorktree = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  destinationPath: string,
+) {
+  const moved = yield* asChange(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      return yield* (yield* Worktrees.Worktrees).move(located, destinationPath);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return decodeWorktree(moved.worktree);
+});
+
+// A move to the same parent under a new folder name, checked as
+// create checks a custom name. The caller keeps the same guards as a
+// move's.
+export const renameWorktree = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  name: string,
+) {
+  const renamed = yield* asChange(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.rename(project, worktreeId, name),
+    ),
+    { projectId: project.id, worktreeId },
+  );
+  return decodeWorktree(renamed.worktree);
+});
+
+// The re-key half of a move, for the data folder move, which relocates
+// the checkouts itself (one rename of the whole data dir). Answers
+// with the id the worktree has at `toPath`.
+export const rekeyWorktree = Effect.fnUntraced(function* (
+  projectId: string,
+  fromId: string,
+  toPath: string,
+) {
+  return yield* asChange(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Worktrees.Worktrees).rekey(project, fromId, toPath);
+    }),
+    { projectId },
+  );
+});
+
+export const storeProjectOrder = Effect.fnUntraced(function* (ids: string[]) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      yield* registry.reorder(yield* registry.listed, ids);
+    }),
+  );
+});
+
+// ---- Reads ----
+
+// Where the v3 migration moved a v2 worktree folder, null when it
+// didn't.
+export const wtFolderMovedTo = Effect.fnUntraced(function* (fromPath: string) {
+  const moved = yield* asCall(
+    Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedTo(fromPath)),
+  );
+  return Option.getOrNull(moved);
+});
+
+const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
+const decodeWorktreeIdentities = Schema.decodeUnknownSync(
+  Schema.Array(WorktreeIdentitySchema),
+);
+
+// A project's rows, primary first: the sidebar's list. A project whose
+// checkouts git can't list reads as having none, as the terminal's
+// listing skips it.
+export const listWorktrees = Effect.fnUntraced(function* (projectId: string) {
+  const listing = yield* asCall(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Worktrees.Worktrees).list([project]);
+    }),
+    { projectId },
+  );
+  return decodeWorktrees(listing.rows);
+});
+
+// One row, freshly probed: what a mutation hands back to the renderer.
+export const describeWorktree = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+) {
+  const row = yield* asCall(
+    Effect.gen(function* () {
+      const located = yield* locate(projectId, worktreeId);
+      return yield* (yield* Worktrees.Worktrees).row(located, {
+        settle: true,
+      });
+    }),
+    { projectId, worktreeId },
+  );
+  return decodeWorktree(row);
+});
+
+// Identities without git probes (see WorktreeIdentitySchema): a
+// project's (or, with no projectId, every project's), or the one
+// `worktreeId` names. `primaryRef` adds the project's primary ref.
+export const listWorktreeIdentities = Effect.fnUntraced(function* (
+  scope: { projectId?: string; worktreeId?: string },
+  opts: { primaryRef?: boolean } = {},
+) {
+  const options = { primaryRef: opts.primaryRef === true };
+  const rows = yield* asCall(
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const at = yield* worktrees.here("/");
+      if (scope.worktreeId !== undefined) {
+        const located = yield* worktrees.resolve(at, scope);
+        return [yield* worktrees.identityRow(located, options)];
+      }
+      const projects =
+        scope.projectId === undefined
+          ? at.projects
+          : [yield* worktrees.resolveProjectById(at, scope.projectId)];
+      return (yield* worktrees.identityList(projects, options)).rows;
+    }),
+    scope,
+  );
+  return decodeWorktreeIdentities(rows);
+});
+
+const decodeProjectRows = Schema.decodeUnknownSync(
+  Schema.Array(ProjectRowSchema),
+);
+const decodeProjectIcon = Schema.decodeUnknownSync(
+  Schema.NullOr(ProjectIconSchema),
+);
+
+// Every registered project, terrier's merged in, decorated for the
+// sidebar. `refreshIcons` re-scans projects the icon cache remembers
+// as icon-less (the first list of a session).
+export const listProjects = Effect.fnUntraced(function* (
+  opts: { refreshIcons?: boolean } = {},
+) {
+  const rows = yield* asCall(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.rows({ rescanIconMisses: opts.refreshIcons === true }),
+    ),
+  );
+  return decodeProjectRows(rows);
+});
+
+// The icon's bytes, or null. A remembered miss is scanned again: the
+// renderer asks once per project per session, and an icon added since
+// the miss was cached must show.
+export const projectIcon = Effect.fnUntraced(function* (projectId: string) {
+  const icon = yield* asCall(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Icons.Icons).bytes(project.path, {
+        rescanMisses: true,
+      });
+    }),
+    { projectId },
+  );
+  return decodeProjectIcon(Option.getOrNull(icon));
+});
+
+const decodeWorktreeDestination = Schema.decodeUnknownSync(
+  Schema.Struct({
+    name: Schema.String,
+    path: Schema.String,
+    taken: Schema.Boolean,
+  }),
+);
+
+// Where a new worktree would land, and under what name: `name` when
+// given (then `taken` says whether a worktree already holds the name
+// or something the path), else a freshly picked free one.
+export const worktreeDestination = Effect.fnUntraced(function* (
+  projectId: string,
+  name?: string,
+) {
+  const destination = yield* asCall(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Worktrees.Worktrees).destination(
+        project,
+        name ?? "",
+      );
+    }),
+    { projectId },
+  );
+  return decodeWorktreeDestination(destination);
+});
+
+const decodeGlobalConfig = Schema.decodeUnknownSync(StoredGlobalConfigSchema);
+
+// The device's settings as stored: unknown keys kept, no defaults
+// filled in (callers apply their own, as they always have).
+export const readGlobalConfig = Effect.fnUntraced(function* () {
+  const stored = yield* asCall(
+    Effect.flatMap(EngineConfig.Config, (engineConfig) =>
+      engineConfig.read({ kind: "device" }),
+    ),
+  );
+  return decodeGlobalConfig(stored ?? {});
+});
+
+const decodeProjectConfig = Schema.decodeUnknownSync(
+  Schema.NullOr(StoredShigomoriConfigSchema),
+);
+
+// The project's settings as stored, or null when it has none.
+export const readProjectConfig = Effect.fnUntraced(function* (
+  projectId: string,
+) {
+  const stored = yield* asCall(
+    Effect.gen(function* () {
+      const scope = yield* projectScope(projectId);
+      return yield* (yield* EngineConfig.Config).read(scope);
+    }),
+    { projectId },
+  );
+  return decodeProjectConfig(stored);
+});
+
+const decodeDiskUsage = Schema.decodeUnknownSync(
+  WorktreeDiskUsageSchema.mapFields(Struct.omit(["worktreeId"])),
+);
+
+// One directory's disk footprint and what removing it would free,
+// stepping over the `exclude` directories (nested worktrees, measured as
+// rows of their own). Unreadable entries come back as `partial`.
+export const diskUsage = Effect.fnUntraced(function* (
+  path: string,
+  exclude: string[],
+) {
+  const usage = yield* asCall(
+    Effect.flatMap(Hygiene.Hygiene, (hygiene) =>
+      hygiene.measure(path, exclude),
+    ),
+  );
+  return decodeDiskUsage(usage);
+});
+
+const decodeLauncherRow = Schema.decodeUnknownSync(
+  Schema.Struct({
+    entries: Schema.Array(LauncherEntrySchema),
+    hiddenCount: Schema.Natural,
+  }),
+);
+
+// The project's launcher row: installed tools, the GitHub entry and
+// custom commands, hidden ones left out, most used first.
+export const launcherRow = Effect.fnUntraced(function* (projectId: string) {
+  const row = yield* asCall(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Launchers.Launchers).row(project);
+    }),
+    { projectId },
+  );
+  return decodeLauncherRow(row);
+});
+
+const decodeCatalog = Schema.decodeUnknownSync(
+  Schema.Array(DetectedLauncherSchema),
+);
+
+// Every tool the catalog knows, installed or not, by label.
+export const launcherCatalog = Effect.fnUntraced(function* () {
+  const apps = yield* asCall(
+    Effect.flatMap(Launchers.Launchers, (launchers) => launchers.catalog),
+  );
+  return decodeCatalog(apps);
+});
+
+const decodePackageScripts = Schema.decodeUnknownSync(PackageScriptsDocSchema);
+
+// The worktree's package.json scripts, or null when it has no readable
+// package.json. A worktree or project that is gone still fails.
+export const packageScripts = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+) {
+  const listed = yield* asCall(
+    Effect.gen(function* () {
+      const located = yield* locate(projectId, worktreeId);
+      // Missing and unparseable read the same: no scripts to offer.
+      return yield* (yield* Scripts.Scripts)
+        .list({
+          projectId: located.project.id,
+          worktreePath: located.worktree.path,
+        })
+        .pipe(
+          Effect.catchTags({
+            NoPackageJson: () => Effect.succeed(null),
+            UnreadablePackageJson: () => Effect.succeed(null),
+          }),
+        );
+    }),
+    { projectId, worktreeId },
+  );
+  return listed === null ? null : decodePackageScripts(listed);
+});
+
+// A wedged git or gh probe must not leave Settings' health check
+// spinning forever. A fix runs the checklist twice (before and after
+// the repairs), so it gets twice the budget.
+const DOCTOR_TIMEOUT_MS = 60_000;
+
+const decodeDoctorReport = Schema.decodeUnknownSync(DoctorReportSchema);
+
+// The doctor's checklist. `fix` applies every repair: the Repair
+// button's confirm is the consent the terminal asks for per repair.
+// `zdotdir` is the login shell's, so the shell-hook check reads the
+// .zshrc a terminal would; the doctor reads it once when it is built,
+// so a run with one builds a doctor of its own. `version` and
+// `executable` are the app's and its bundled `sm`'s, which the app
+// check compares against the installed bundle.
+export const runDoctor = Effect.fnUntraced(function* (
+  fix: boolean,
+  input: { version: string; executable: string; zdotdir?: string },
+) {
+  const doctor =
+    input.zdotdir === undefined
+      ? Effect.service(Doctor.Doctor)
+      : Effect.provide(
+          Effect.service(Doctor.Doctor),
+          Doctor.layer.pipe(
+            Layer.provide(NodeServices.layer),
+            Layer.provide(
+              ConfigProvider.layerAdd(
+                ConfigProvider.fromEnv({ env: { ZDOTDIR: input.zdotdir } }),
+                { asPrimary: true },
+              ),
+            ),
+          ),
+        );
+  const run = Effect.gen(function* () {
+    return yield* (yield* doctor).run({
+      version: input.version,
+      executable: input.executable,
+      terminal: false,
+      ...(fix
+        ? {
+            fix: {
+              approve: () => Effect.succeed(true),
+              failed: () => Effect.void,
+            },
+          }
+        : {}),
+    });
+  }).pipe(Effect.timeout(fix ? 2 * DOCTOR_TIMEOUT_MS : DOCTOR_TIMEOUT_MS));
+  const report = yield* fix ? asChange(run) : asCall(run);
+  return decodeDoctorReport(report);
+});
+
+// ---- The device-sync plumbing ----
+
+// The worktree's uncommitted changes as a commit under
+// refs/shigomori/dirty/<id>, for a move to carry. A clean worktree
+// captures nothing.
+export const dirtyCapture = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+) {
+  const captured = yield* asChange(
+    Effect.gen(function* () {
+      const { worktree } = yield* locate(project.id, worktreeId);
+      return yield* (yield* Dirty.Dirty).capture({
+        projectPath: project.path,
+        worktreePath: worktree.path,
+        worktreeId: worktree.id,
+      });
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return captured.captured
+    ? { captured: true, commit: captured.commit }
+    : { captured: false };
+});
+
+// The capture replayed onto the worktree, which must be on the commit
+// it was taken on, and the ref consumed.
+export const dirtyApply = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+) {
+  const applied = yield* asChange(
+    Effect.gen(function* () {
+      const { worktree } = yield* locate(project.id, worktreeId);
+      return yield* (yield* Dirty.Dirty).apply(
+        {
+          projectPath: project.path,
+          worktreePath: worktree.path,
+          worktreeId: worktree.id,
+        },
+        { force: false },
+      );
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return { applied: true, ...applied };
+});
+
+// The paths handed to bundle create and unpack are always app-chosen
+// temp paths (the source link, host/lib/sync/sourceLink.ts, owns them).
+export const bundleCreate = Effect.fnUntraced(function* (
+  project: Project,
+  outPath: string,
+  refs: string[],
+  haves: string[],
+) {
+  const made = yield* asCall(
+    Effect.gen(function* () {
+      return yield* (yield* Bundle.Bundle).create(
+        project.path,
+        outPath,
+        refs,
+        haves,
+      );
+    }),
+    { projectId: project.id },
+  );
+  return { bytes: made.bytes, refs: made.refs };
+});
+
+// Into a registered project, or into a repository by path: the clone
+// from a peer (host/lib/sync/cloneFromPeer.ts) unpacks into a folder
+// it registers only once it is a checkout.
+export const bundleUnpack = Effect.fnUntraced(function* (
+  target: Project | { path: string },
+  inPath: string,
+  refspecs: string[],
+) {
+  const fetched = yield* asChange(
+    Effect.gen(function* () {
+      return yield* (yield* Bundle.Bundle).unpack(
+        target.path,
+        inPath,
+        refspecs,
+      );
+    }),
+    "id" in target ? { projectId: target.id } : {},
+  );
+  return { fetched: [...fetched] };
+});
+
+// Launches a launcher-row entry (`app:…`, `custom:…`, `web:github`) in
+// the worktree, which also counts the use.
+export const openLauncher = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  launcherId: string,
+) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Open.Open).open(located, launcherId);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+});
+
+// ---- A worktree's own data (host/lib/config/project.ts) ----
+
+// The document as the renderer has always read it: each field present
+// only when set.
+export const readWorktreeData = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+) {
+  const data = yield* WorktreeData.WorktreeData;
+  const [described, ports] = yield* Effect.all([
+    data.description(projectId, worktreeId),
+    data.ports(projectId, worktreeId),
+  ]);
+  const doc: ShigomoriWorktreeData = {
+    ...(ports.length > 0 && { ports: [...ports] }),
+    ...(described.title !== "" && { title: described.title }),
+    ...(described.description !== "" && {
+      description: described.description,
+    }),
+    ...(described.describedAt > 0 && { describedAt: described.describedAt }),
+  };
+  return Object.keys(doc).length === 0 ? null : doc;
+});
+
+// The renderer's write: the custom ports, the title and description
+// kept.
+export const writeWorktreeData = (
+  projectId: string,
+  worktreeId: string,
+  { ports }: Pick<ShigomoriWorktreeData, "ports">,
+) =>
+  asChange(
+    Effect.flatMap(WorktreeData.WorktreeData, (data) =>
+      data.setPorts(projectId, worktreeId, ports ?? []),
+    ),
+  );
+
+// The title and description as a whole: what a worktree carries to its
+// copy on another device. Only a pair described after the one stored
+// lands, so a carry that read a stale side can't undo a newer describe.
+export const writeWorktreeDescription = (
+  projectId: string,
+  worktreeId: string,
+  { title, description, describedAt }: WorktreeDescription,
+) =>
+  asChange(
+    Effect.flatMap(WorktreeData.WorktreeData, (data) =>
+      data.carry(projectId, worktreeId, {
+        title: title ?? "",
+        description: description ?? "",
+        describedAt: describedAt ?? 0,
+      }),
+    ),
+  );
+
+// ---- This device, its usage log and its shared settings ----
+
+export const deviceId = Effect.flatMap(
+  Registry.Registry,
+  (registry) => registry.deviceId,
+);
+
+// One use of a project, for the sidebar's usage sorts.
+export const recordProjectUse = (projectId: string) =>
+  Effect.flatMap(Usage.Usage, (usage) =>
+    usage.record("project", projectId, ""),
+  );
+
+export const readSharedSettings = Effect.flatMap(
+  SharedSettings.SharedSettings,
+  (settings) => settings.read,
+);
+
+export const storeSharedSettings = (doc: SharedSettingsDoc) =>
+  Effect.flatMap(SharedSettings.SharedSettings, (settings) =>
+    settings.update(() => doc),
+  );
+
+// ---- The terminal's shell integration (host/lib/cli/shell.ts) ----
+
+// One of the shell integration's calls, on the login shell `shell`.
+export const onShell = <A, E>(
+  shell: ShellIntegration.HookShell,
+  f: (
+    integration: ShellIntegration.ShellIntegration["Service"],
+    shell: ShellIntegration.HookShell,
+  ) => Effect.Effect<A, E>,
+) =>
+  asCall(
+    Effect.flatMap(ShellIntegration.ShellIntegration, (integration) =>
+      f(integration, shell),
+    ),
+  );
+
+// ---- The package scripts' arrangement (host/lib/scripts/packageScriptStats.ts) ----
+
+export const onScripts = <A>(
+  f: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<A>,
+  change = false,
+) => (change ? asChange : asCall)(Effect.flatMap(Scripts.Scripts, f));

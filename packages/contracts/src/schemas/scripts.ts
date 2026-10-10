@@ -63,7 +63,6 @@ export const PackageScriptsDocSchema = Schema.Struct({
   sort: PackageScriptSortModeSchema,
   order: Schema.Array(Schema.String),
 });
-export type PackageScriptsDoc = typeof PackageScriptsDocSchema.Type;
 
 export const RunPackageScriptPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
