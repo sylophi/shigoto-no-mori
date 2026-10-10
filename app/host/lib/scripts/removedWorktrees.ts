@@ -16,6 +16,8 @@
 // watched exist. Nothing outlives the run it came from, and nothing is
 // held per project.
 import { existsSync } from "node:fs";
+import * as Effect from "effect/Effect";
+import { fromPromise } from "../util/fromPromise";
 import type { Project } from "@shigomori/contracts/schemas";
 import { listWorktreeIdentities } from "../git/worktrees";
 import { loadProjects } from "../projects";
@@ -81,52 +83,64 @@ function groupByProject(
 // Returns the worktrees that were actually reaped so the caller can
 // tell the renderer. Cheap when nothing is running: no scripts means no
 // candidates and no git calls at all.
-export async function reapScriptsForRemovedWorktrees(): Promise<
-  RunningScriptWorktree[]
-> {
-  // An app-initiated delete or relocate already owns its worktree under
-  // the tombstone protocol and has killed its scripts up front, so it
-  // can never be double-fired from here.
-  const inflight = getInflightDeleteIds();
-  const candidates = getRunningScriptWorktrees().filter(
-    (worktree) =>
-      !inflight.has(worktree.worktreeId) && !reaping.has(worktree.worktreeId),
-  );
-  if (candidates.length === 0) return [];
-
-  // Guard the whole pass, not just the confirmed-removed subset: the
-  // git enumeration below is itself async, so an overlapping watcher
-  // event must not be free to investigate the same candidates again
-  // while this pass is still deciding.
-  for (const worktree of candidates) reaping.add(worktree.worktreeId);
-  try {
-    const projects = loadProjects();
-    const perProject = await Promise.all(
-      Array.from(groupByProject(candidates), ([projectId, group]) => {
-        const project = projects.find((p) => p.id === projectId);
-        // The project itself was unregistered. projects.remove reaps its
-        // scripts on that path, and with no repo to ask there is nothing
-        // to conclude here.
-        return project ? findRemovedWorktrees(project, group) : [];
-      }),
+export const reapScriptsForRemovedWorktrees = Effect.fn("Scripts.reapRemoved")(
+  function* () {
+    // An app-initiated delete or relocate already owns its worktree under
+    // the tombstone protocol and has killed its scripts up front, so it
+    // can never be double-fired from here.
+    const inflight = getInflightDeleteIds();
+    const candidates = getRunningScriptWorktrees().filter(
+      (worktree) =>
+        !inflight.has(worktree.worktreeId) && !reaping.has(worktree.worktreeId),
     );
-    const removed = perProject.flat();
-    const removedIds = new Set(removed.map((worktree) => worktree.worktreeId));
-    // Candidates that turned out to still exist are done being
-    // investigated; release them now so a later, genuine removal isn't
-    // blocked behind this pass's guard.
-    for (const worktree of candidates) {
-      if (!removedIds.has(worktree.worktreeId)) {
-        reaping.delete(worktree.worktreeId);
+    if (candidates.length === 0) return [] as RunningScriptWorktree[];
+
+    // Guard the whole pass, not just the confirmed-removed subset: the
+    // git enumeration below is itself async, so an overlapping watcher
+    // event must not be free to investigate the same candidates again
+    // while this pass is still deciding.
+    for (const worktree of candidates) reaping.add(worktree.worktreeId);
+    const reap = Effect.gen(function* () {
+      const projects = loadProjects();
+      const perProject = yield* fromPromise(() =>
+        Promise.all(
+          Array.from(groupByProject(candidates), ([projectId, group]) => {
+            const project = projects.find((p) => p.id === projectId);
+            // The project itself was unregistered. projects.remove reaps
+            // its scripts on that path, and with no repo to ask there is
+            // nothing to conclude here.
+            return project ? findRemovedWorktrees(project, group) : [];
+          }),
+        ),
+      );
+      const removed = perProject.flat();
+      const removedIds = new Set(
+        removed.map((worktree) => worktree.worktreeId),
+      );
+      // Candidates that turned out to still exist are done being
+      // investigated; release them now so a later, genuine removal isn't
+      // blocked behind this pass's guard.
+      for (const worktree of candidates) {
+        if (!removedIds.has(worktree.worktreeId)) {
+          reaping.delete(worktree.worktreeId);
+        }
       }
-    }
-    if (removed.length === 0) return [];
+      if (removed.length === 0) return removed;
 
-    await Promise.all(
-      removed.map((worktree) => killScriptsForWorktree(worktree.worktreeId)),
+      yield* Effect.forEach(
+        removed,
+        (worktree) => killScriptsForWorktree(worktree.worktreeId),
+        { concurrency: "unbounded", discard: true },
+      );
+      return removed;
+    });
+    return yield* reap.pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          for (const worktree of candidates)
+            reaping.delete(worktree.worktreeId);
+        }),
+      ),
     );
-    return removed;
-  } finally {
-    for (const worktree of candidates) reaping.delete(worktree.worktreeId);
-  }
-}
+  },
+);

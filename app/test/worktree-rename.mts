@@ -35,19 +35,21 @@ it("refuses while a script runs there, then renames under a new id", async () =>
   const row = (await listWorktrees(projectId)).find((w) => w.path === worktree);
   assert.ok(row, "the worktree is listed");
 
-  startScript({
-    command: 'node -e "setTimeout(() => {}, 30000)"',
-    slot: { kind: "package", name: "sleep" },
-    worktree: { id: row.id, name: "fox", branch: "fox", path: worktree },
-    project: { id: projectId, path: project, name: "project" },
-    scriptEnv: {
-      projectBranch: "main",
-      defaultBranch: "main",
-      title: "",
-      description: "",
-    },
-    notify: () => {},
-  });
+  await runHost(
+    startScript({
+      command: 'node -e "setTimeout(() => {}, 30000)"',
+      slot: { kind: "package", name: "sleep" },
+      worktree: { id: row.id, name: "fox", branch: "fox", path: worktree },
+      project: { id: projectId, path: project, name: "project" },
+      scriptEnv: {
+        projectBranch: "main",
+        defaultBranch: "main",
+        title: "",
+        description: "",
+      },
+      notify: () => {},
+    }),
+  );
   try {
     await assert.rejects(
       async () =>
@@ -62,7 +64,7 @@ it("refuses while a script runs there, then renames under a new id", async () =>
     );
     assert.ok(existsSync(worktree), "a refused rename moves nothing");
   } finally {
-    await killScriptsForWorktree(row.id);
+    await runHost(killScriptsForWorktree(row.id));
   }
 
   const renamed = await runHost(

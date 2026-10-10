@@ -45,6 +45,7 @@ import { setMirrorImpl, type MirrorImpl } from "../host/mirror/registry.ts";
 import {
   engineDataDir,
   hostContext,
+  runHost,
   type Services as HostServices,
 } from "./lib/adapters.mts";
 import {
@@ -72,7 +73,7 @@ beforeAll(async () => {
   git(repo, "commit", "-q", "-m", "a");
 });
 afterAll(async () => {
-  await killAllScripts({ graceMs: 0 });
+  await runHost(killAllScripts({ graceMs: 0 }));
   await teardown();
 });
 
@@ -289,13 +290,17 @@ it("script runs: a run started shows, on scripts:changed", async () => {
       // The same list again says nothing.
       yield* push(channel(scriptsContract, "changed"));
       yield* quiet;
-      const runId = startScript({
-        command: "sleep 60",
-        slot: { kind: "package", name: "views" },
-        worktree: { id: "wt", name: "wt", branch: "main", path: repo },
-        project: { id: "p", path: repo, name: "p" },
-        notify: () => {},
-      });
+      const runId = yield* Effect.promise(() =>
+        runHost(
+          startScript({
+            command: "sleep 60",
+            slot: { kind: "package", name: "views" },
+            worktree: { id: "wt", name: "wt", branch: "main", path: repo },
+            project: { id: "p", path: repo, name: "p" },
+            notify: () => {},
+          }),
+        ),
+      );
       yield* push(channel(scriptsContract, "changed"));
       const after = yield* next;
       assert.deepEqual(

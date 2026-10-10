@@ -36,6 +36,8 @@ type RuntimeImpl = {
   // (it reaps every running script, and nobody here was asked), or
   // null when the host is idle.
   unattendedMoveRefusal: () => string | null;
+  // Every running script's kill chain, waited for.
+  killAllScripts: () => Promise<void>;
 };
 
 const { set: setRuntimeImpl, get: runtimeImpl } = implSlot<RuntimeImpl>(
@@ -74,6 +76,7 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
       let watchersStopped = false;
       try {
         await moveDataDir(parentDir, {
+          killAllScripts: runtimeImpl().killAllScripts,
           beforeMove: async () => {
             watchersStopped = true;
             await runtimeImpl().releaseStore();
@@ -107,8 +110,9 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
 
     nuke: async () => {
       try {
-        await nukeEverything((progress) =>
-          runtimeImpl().broadcastNukeProgress(progress),
+        await nukeEverything(
+          (progress) => runtimeImpl().broadcastNukeProgress(progress),
+          runtimeImpl().killAllScripts,
         );
       } finally {
         // A wipe that failed past the rm still took the files along.

@@ -12,16 +12,14 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { forceRemoveWorktree } from "@host/lib/engineCalls";
 import { listWorktreeIdentities, pruneStaleWorktrees } from "./git/worktrees";
 import { findProjectInsideDataDir, listProjects } from "./projects";
-import {
-  clearDeleteInflight,
-  killAllScripts,
-  markDeleteInflight,
-} from "./scripts";
+import { clearDeleteInflight, markDeleteInflight } from "./scripts";
 import { dataDir } from "./util/paths";
 import { log } from "@shared/log";
 
 export async function nukeEverything(
-  onProgress: (progress: NukeProgress) => void = () => {},
+  onProgress: (progress: NukeProgress) => void,
+  // Every script's kill chain, waited for (host/lib/scripts).
+  killAllScripts: () => Promise<void>,
 ): Promise<void> {
   const projects = await listProjects();
   // The final step rm -rf's the shigomori data dir. A trapped project repo

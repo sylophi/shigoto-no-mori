@@ -27,12 +27,40 @@ import {
   type ScriptRunSlot,
 } from "@shigomori/contracts/schemas";
 import { SCRIPT_ENV_KEYS } from "@shigomori/contracts/scriptEnv";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
-import * as Processes from "../util/processes";
 import { signalPidTree } from "./process";
-import { openRun, type PtyHandle, UNKILLABLE_WAIT_MS } from "./pty";
-import { log } from "@shared/log";
-import { closeMissingTerminals } from "../terminals/Terminals";
+import {
+  type PtyHandle,
+  ScriptRuns,
+  type Stopping,
+  UNKILLABLE_WAIT_MS,
+} from "./pty";
+import { Terminals } from "../terminals/Terminals";
+
+// A script that can't start here now, in words for the console.
+class ScriptRefusedError extends Schema.TaggedError<ScriptRefusedError>()(
+  "ScriptRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+// A delete or move of a worktree something else is already removing or
+// moving, in the caller's words.
+class WorktreeBusyError extends Schema.TaggedError<WorktreeBusyError>()(
+  "WorktreeBusyError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
@@ -204,7 +232,7 @@ interface Killable {
   stream: RunStream;
   // SIGTERM, then SIGKILL past the grace, then a bounded wait for the
   // tree to go.
-  stop: (graceMs: number) => Promise<void>;
+  stop: (graceMs: number) => Effect.Effect<void, never, KillServices>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
   // must call it first so it lands after the output that preceded it.
@@ -215,7 +243,7 @@ interface RunRecord extends Killable {
   pty: PtyHandle;
   // Closes the run's scope (./pty.ts): the kill chain, a hurried quit's
   // SIGTERM and no wait, or nothing for a run already over.
-  close: (stopping: { graceMs: number; wait: boolean }) => Promise<void>;
+  close: (stopping: Stopping) => Effect.Effect<void>;
   projectId: string;
   worktreeId: string;
   slot: ScriptRunSlot;
@@ -230,6 +258,10 @@ interface RunRecord extends Killable {
   command: string;
   startedAt: number;
 }
+
+// What stopping a run reaches: the signals a CLI-run script's tree is
+// sent through.
+type KillServices = Effect.Services<ReturnType<typeof signalPidTree>>;
 
 const runningScripts = new Map<string, RunRecord>();
 
@@ -391,13 +423,15 @@ export function clearCreateInflight(worktreeId: string): void {
 // in: another delete or move (with the caller's busy message), or its
 // create run, which removing or moving the folder would pull the
 // checkout out from under.
-export function assertWorktreeMutable(
+export const assertWorktreeMutable = (
   worktreeId: string,
   busyMessage: string,
-): void {
-  if (inflightDeleteCounts.has(worktreeId)) throw new Error(busyMessage);
-  if (inflightCreateIds.has(worktreeId)) throw new WorktreeSettingUpError();
-}
+): Effect.Effect<void, WorktreeBusyError | WorktreeSettingUpError> =>
+  inflightDeleteCounts.has(worktreeId)
+    ? Effect.fail(new WorktreeBusyError({ reason: busyMessage }))
+    : inflightCreateIds.has(worktreeId)
+      ? Effect.fail(new WorktreeSettingUpError())
+      : Effect.void;
 
 // The one place the tombstone protocol is spelled out: refuse a
 // concurrent mutation of the same worktree or one still being created
@@ -416,14 +450,12 @@ export function assertWorktreeMutable(
 // mutation answered: a delete stops them only when the worktree
 // actually went (a failed cleanup keeps it, and its mirror with it),
 // and a move carries them to the new path.
-export function withDeleteInflight<T>(
+export const withDeleteInflight = <A, E, R>(
   worktreeId: string,
   busyMessage: string,
-  run: () => Promise<T>,
-  mirrorsAfter: (result: T) => Promise<unknown>,
-): Promise<T> {
-  return withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter);
-}
+  run: Effect.Effect<A, E, R>,
+  mirrorsAfter: (result: A) => Effect.Effect<unknown, E, R>,
+) => withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter);
 
 // The protocol over several worktrees removed by one mutation (a stack
 // cleanup): every id is refused-if-busy and marked up front, the
@@ -431,28 +463,41 @@ export function withDeleteInflight<T>(
 // with the mirrors of the ones the mutation took. A mutation that
 // removes only some of them (a cleanup script failed partway) stops
 // only those mirrors.
-export async function withDeletesInflight<T>(
+export const withDeletesInflight = <A, E, R>(
   worktreeIds: readonly string[],
   busyMessage: string,
-  run: () => Promise<T>,
-  mirrorsAfter: (result: T) => Promise<unknown>,
-): Promise<T> {
-  for (const id of worktreeIds) assertWorktreeMutable(id, busyMessage);
-  worktreeIds.forEach(markDeleteInflight);
-  // The roots vanish under the mutation: the mirror bookkeeping leaves
-  // them to `mirrorsAfter` rather than read a move as a removal.
-  const releaseRoots = holdRootChecks(worktreeIds);
-  try {
-    await Promise.all(worktreeIds.map(killScriptsForWorktree));
-    const result = await run();
-    await closeMissingTerminals();
-    await mirrorsAfter(result);
-    return result;
-  } finally {
-    releaseRoots();
-    worktreeIds.forEach(clearDeleteInflight);
-  }
-}
+  run: Effect.Effect<A, E, R>,
+  mirrorsAfter: (result: A) => Effect.Effect<unknown, E, R>,
+) =>
+  Effect.gen(function* () {
+    for (const id of worktreeIds) {
+      yield* assertWorktreeMutable(id, busyMessage);
+    }
+    // The roots vanish under the mutation: the mirror bookkeeping leaves
+    // them to `mirrorsAfter` rather than read a move as a removal.
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => {
+        worktreeIds.forEach(markDeleteInflight);
+        return holdRootChecks(worktreeIds);
+      }),
+      () =>
+        Effect.gen(function* () {
+          yield* Effect.forEach(worktreeIds, killScriptsForWorktree, {
+            concurrency: "unbounded",
+            discard: true,
+          });
+          const result = yield* run;
+          yield* Effect.flatMap(Terminals, (it) => it.closeMissing);
+          yield* mirrorsAfter(result);
+          return result;
+        }),
+      (releaseRoots) =>
+        Effect.sync(() => {
+          releaseRoots();
+          worktreeIds.forEach(clearDeleteInflight);
+        }),
+    );
+  });
 
 // Project-level counterpart for projects.remove, which doesn't know its
 // worktree ids without a git call: blocks new renderer script runs
@@ -572,31 +617,27 @@ export function markShuttingDown(): void {
   shuttingDown = true;
 }
 
-async function waitWithTimeout(
-  promise: Promise<void>,
-  ms: number,
-): Promise<boolean> {
-  let timer: NodeJS.Timeout | null = null;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  const finished = promise.then(() => true);
-  const result = await Promise.race([finished, timeout]);
-  if (timer) clearTimeout(timer);
-  return result;
-}
+// Whether `done` settled within `ms`.
+const settledWithin = (done: Promise<void>, ms: number) =>
+  Effect.promise(() => done).pipe(
+    Effect.timeoutOption(Duration.millis(ms)),
+    Effect.map(Option.isSome),
+  );
 
 interface KillOptions {
   graceMs?: number;
   reason?: string;
 }
 
-async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
+const killRecord = Effect.fnUntraced(function* (
+  record: Killable,
+  opts: KillOptions,
+) {
   if (record.exited) return;
   if (record.cancelling) {
     // Another caller is already escalating. Wait for it, but bounded
     // so an unkillable child doesn't wedge this caller's chain too.
-    await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
+    yield* settledWithin(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
     return;
   }
   record.cancelling = true;
@@ -610,46 +651,53 @@ async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
     });
   }
 
-  await record.stop(opts.graceMs ?? DEFAULT_GRACE_MS);
-}
+  yield* record.stop(opts.graceMs ?? DEFAULT_GRACE_MS);
+});
 
 // The kill chain for a lifecycle script the CLI runs, which is no child
 // of ours: its pid and descendants, never its group (cliScriptStream).
-async function stopPidTree(
+const stopPidTree = Effect.fnUntraced(function* (
   pid: number,
   done: Promise<void>,
   graceMs: number,
-): Promise<void> {
-  await Processes.run(signalPidTree(pid, "SIGTERM"));
-  if (await waitWithTimeout(done, graceMs)) return;
-  await Processes.run(signalPidTree(pid, "SIGKILL"));
-  if (!(await waitWithTimeout(done, UNKILLABLE_WAIT_MS))) {
-    log.warn(
+) {
+  yield* signalPidTree(pid, "SIGTERM");
+  if (yield* settledWithin(done, graceMs)) return;
+  yield* signalPidTree(pid, "SIGKILL");
+  if (!(yield* settledWithin(done, UNKILLABLE_WAIT_MS))) {
+    yield* Effect.logWarning(
       `[scripts] lifecycle script (pid ${pid}) survived SIGKILL; giving up on this kill attempt`,
     );
   }
-}
+});
 
-export function startScript(args: RunArgs): string {
+export const startScript = Effect.fn("Scripts.start")(function* (
+  args: RunArgs,
+) {
+  const refuse = (reason: string) => new ScriptRefusedError({ reason });
   if (shuttingDown) {
-    throw new Error("App is shutting down; refusing to start a new script.");
+    return yield* refuse(
+      "App is shutting down; refusing to start a new script.",
+    );
   }
   // Runs must not land in a worktree that's mid-delete: the delete flow
   // snapshots running scripts once (killScriptsForWorktree), so a spawn
   // slipping in after that leaves a live dev server whose cwd is being
   // rm'd.
   if (inflightDeleteCounts.has(args.worktree.id)) {
-    throw new Error("This worktree is being deleted.");
+    return yield* refuse("This worktree is being deleted.");
   }
   if (inflightProjectDeleteIds.has(args.project.id)) {
-    throw new Error("This project is being removed.");
+    return yield* refuse("This project is being removed.");
   }
 
   // node-pty's helper does the chdir itself and exits 1 without a word
   // when it fails, which the console would show as a bare "exit 1".
   // Name the cause here instead.
   if (!existsSync(args.worktree.path)) {
-    throw new Error(`Worktree directory is missing: ${args.worktree.path}`);
+    return yield* refuse(
+      `Worktree directory is missing: ${args.worktree.path}`,
+    );
   }
 
   const runId = randomUUID();
@@ -677,15 +725,25 @@ export function startScript(args: RunArgs): string {
     }),
   };
 
-  // Throws when no process could be started. The caller's IPC rejection
+  // Fails when no process could be started. The caller's IPC rejection
   // carries the message into the console.
-  const { pty, close } = openRun({
-    command: args.command,
-    cwd: args.worktree.path,
-    env,
-    cols: DEFAULT_COLS,
-    rows: DEFAULT_ROWS,
-  });
+  const { pty, close } = yield* (yield* ScriptRuns)
+    .open({
+      command: args.command,
+      cwd: args.worktree.path,
+      env,
+      cols: DEFAULT_COLS,
+      rows: DEFAULT_ROWS,
+    })
+    .pipe(
+      Effect.tapError((error) =>
+        error.reason === "failed"
+          ? Effect.logWarning(
+              `[scripts] the PTY did not start: ${errorMessageOf(error.cause)}`,
+            )
+          : Effect.void,
+      ),
+    );
 
   // The PTY is one ordered byte stream (stdout and stderr share the
   // terminal), so the renderer's xterm sees exactly what a real
@@ -761,13 +819,10 @@ export function startScript(args: RunArgs): string {
     runningScripts.delete(runId);
     persistSnapshot();
     runningScriptsChanged();
-    // The run is over: its scope goes too, so the layer stops holding
-    // it. The release finds the child exited and signals nothing.
-    close({ graceMs: 0, wait: false }).catch(() => {});
   });
 
   return runId;
-}
+});
 
 // Keystrokes from the console. A no-op when the run isn't one of ours
 // (already exited, or a lifecycle script the CLI ran on the app's
@@ -791,48 +846,47 @@ export function resizeScript(runId: string, cols: number, rows: number): void {
 
 // The console's Stop: a run the app spawned, or a lifecycle script the
 // CLI is running on its behalf.
-export async function cancelScript(runId: string): Promise<boolean> {
+export const cancelScript = Effect.fn("Scripts.cancel")(function* (
+  runId: string,
+) {
   const record = runningScripts.get(runId) ?? cliScripts.get(runId);
   if (!record) return false;
-  await killRecord(record, { reason: "Cancelled by user" });
+  yield* killRecord(record, { reason: "Cancelled by user" });
   return true;
-}
+});
 
-async function killMatching(
+const killMatching = (
   predicate: (record: RunRecord) => boolean,
   reason: string,
   opts: KillOptions = {},
-): Promise<void> {
-  const targets = Array.from(runningScripts.values()).filter(
-    (r) => !r.exited && predicate(r),
+) =>
+  Effect.forEach(
+    Array.from(runningScripts.values()).filter(
+      (r) => !r.exited && predicate(r),
+    ),
+    (r) => killRecord(r, { reason, ...opts }),
+    { concurrency: "unbounded", discard: true },
   );
-  if (targets.length === 0) return;
-  await Promise.all(targets.map((r) => killRecord(r, { reason, ...opts })));
-}
 
-export async function killScriptsForWorktree(
-  worktreeId: string,
-): Promise<void> {
-  await killMatching((r) => r.worktreeId === worktreeId, "Worktree removed");
-}
+export const killScriptsForWorktree = (worktreeId: string) =>
+  killMatching((r) => r.worktreeId === worktreeId, "Worktree removed");
 
-export async function killScriptsForProject(projectId: string): Promise<void> {
-  await killMatching((r) => r.projectId === projectId, "Project removed");
-}
+export const killScriptsForProject = (projectId: string) =>
+  killMatching((r) => r.projectId === projectId, "Project removed");
 
 // The one caller that tunes the grace period is the quit path, which
 // can't wait out the default before Electron tears the process down.
-export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
-  await killMatching(() => true, "App quit", opts);
-}
+export const killAllScripts = (opts: KillOptions = {}) =>
+  killMatching(() => true, "App quit", opts);
 
 // One SIGTERM to every running script's tree and no waiting, for the
 // update-install quit path: the full kill chain would block the handoff
 // to the detached installer waiting on our exit, but well-behaved
 // scripts still get to clean up.
-export function signalAllScriptsBestEffort(): void {
-  for (const record of runningScripts.values()) {
-    if (record.exited) continue;
-    record.close({ graceMs: 0, wait: false }).catch(() => {});
-  }
-}
+export const signalAllScriptsBestEffort = Effect.suspend(() =>
+  Effect.forEach(
+    Array.from(runningScripts.values()).filter((record) => !record.exited),
+    (record) => record.close({ graceMs: 0, wait: false }),
+    { discard: true },
+  ),
+);

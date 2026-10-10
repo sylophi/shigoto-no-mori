@@ -24,7 +24,12 @@ import { onGlobalConfigChange } from "@host/lib/config/global";
 import { refreshProject, sweepForPeer } from "@host/lib/git/backgroundFetch";
 import { getBusyOperations } from "@host/lib/scripts";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
-import { publishLoopback, releaseStore, unpublishLoopback } from "./captures";
+import {
+  killAllScripts,
+  publishLoopback,
+  releaseStore,
+  unpublishLoopback,
+} from "./captures";
 import { hostFacts } from "./facts";
 import { shellCalls } from "./shell";
 import { broadcastAll, refreshDirectHost } from "./wires";
@@ -62,6 +67,7 @@ export function installHostImpls(): void {
     afterDataWipe: () => void publishLoopback(),
     relaunchAppUnattended: () => void shellCalls().relaunch(),
     unattendedMoveRefusal: () => busyRemoteRefusal(getBusyOperations(), "move"),
+    killAllScripts,
   });
   // This device's copy of the shared settings moved (a pick here, or a
   // peer's entries merged in): every window re-reads it off the push,

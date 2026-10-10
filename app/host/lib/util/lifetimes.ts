@@ -37,7 +37,7 @@ export const lifetime = (
   );
 
 // Nothing to start, something to undo when the graph closes.
-export const onQuit = (name: string, stop: Effect.Effect<void>) =>
+export const onQuit = <R>(name: string, stop: Effect.Effect<void, never, R>) =>
   Layer.effectDiscard(
     Effect.addFinalizer(() => stop.pipe(traced("stop", name))),
   );

@@ -69,6 +69,7 @@ import { type PeerChannels, setPeerReach } from "@host/ipc/peerSync";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import { runHost } from "./lib/adapters.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import {
   readShigomoriConfig,
@@ -1018,19 +1019,21 @@ it("transplant (scripts running): the teardown refuses with the scripts-running 
   const wt5Id = worktreeIdFromPath(wt5Path);
   // A REAL long-lived script through the app's registry (the registry
   // is what the refusal flag consults), reaped in the finally below.
-  startScript({
-    command: 'node -e "setTimeout(() => {}, 30000)"',
-    slot: { kind: "package", name: "sleep" },
-    worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
-    project: { id: sourceProjectId, path: sourceRepo, name: "source" },
-    scriptEnv: {
-      projectBranch: "main",
-      defaultBranch: "main",
-      title: "",
-      description: "",
-    },
-    notify: () => {},
-  });
+  await runHost(
+    startScript({
+      command: 'node -e "setTimeout(() => {}, 30000)"',
+      slot: { kind: "package", name: "sleep" },
+      worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
+      project: { id: sourceProjectId, path: sourceRepo, name: "source" },
+      scriptEnv: {
+        projectBranch: "main",
+        defaultBranch: "main",
+        title: "",
+        description: "",
+      },
+      notify: () => {},
+    }),
+  );
   try {
     const refusedTransplant = await transplant({
       sourceDeviceId: "A",
@@ -1062,7 +1065,7 @@ it("transplant (scripts running): the teardown refuses with the scripts-running 
       "the refused teardown must leave the source's scripts running",
     );
   } finally {
-    await killScriptsForWorktree(wt5Id);
+    await runHost(killScriptsForWorktree(wt5Id));
   }
 });
 

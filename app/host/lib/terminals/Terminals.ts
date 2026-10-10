@@ -40,7 +40,6 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "../util/processes";
-import * as PromiseAdapter from "../util/promiseAdapter";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/pty";
 import { type History, makeHistory } from "./history";
 
@@ -525,14 +524,3 @@ const make = (options: {
 
 export const layer = (options: Parameters<typeof make>[0]) =>
   Layer.effect(Terminals, make(options));
-
-// For the scripts' sweep of removed worktrees, which is not Effect yet.
-// Settles at once while the service is not up: there is nothing to
-// close then.
-const promiseAdapter = PromiseAdapter.forService(Terminals, "The terminals");
-export const adapter = promiseAdapter.layer;
-
-export const closeMissingTerminals = () =>
-  promiseAdapter.runIfOpen(
-    Effect.flatMap(Terminals, (terminals) => terminals.closeMissing),
-  );
