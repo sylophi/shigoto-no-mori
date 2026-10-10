@@ -32,6 +32,8 @@ import * as Engine from "../host/lib/engine.ts";
 import { setAutoPull, writeGlobalConfig } from "../host/lib/engineCalls.ts";
 import { writeWorktreeData } from "../host/lib/config/project.ts";
 import { readDeviceId } from "../host/lib/config/deviceId.ts";
+import type { HostServices } from "@host/process/services";
+import { hostServices } from "./lib/hostServices.mts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
 import * as Sharing from "../host/lib/sharing.ts";
 import { listWorktrees } from "../host/lib/git/worktrees.ts";
@@ -70,7 +72,10 @@ afterAll(async () => {
   await teardown();
 });
 
-type Services = StoreChanges.StoreChanges | HostPushes.HostPushes;
+type Services =
+  | StoreChanges.StoreChanges
+  | HostPushes.HostPushes
+  | HostServices;
 
 // A view watched: `next` is its next value, `push` makes a host push as
 // the broadcast seam would, `tick` moves the clock past the store's
@@ -109,7 +114,7 @@ const watch = <A,>(
       Effect.scoped,
       // The store's tick runs on the TestClock the body moves.
       Effect.provide(
-        Layer.mergeAll(StoreChanges.layer, HostPushes.layer).pipe(
+        Layer.mergeAll(StoreChanges.layer, HostPushes.layer, hostServices).pipe(
           Layer.provideMerge(TestClock.layer()),
         ),
       ),

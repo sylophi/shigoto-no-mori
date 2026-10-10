@@ -92,7 +92,6 @@ import {
 import * as HostPushes from "@host/lib/hostPushes";
 import * as Sharing from "@host/lib/sharing";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
-import type * as Views from "@host/lib/views";
 import type { HostServices } from "@host/process/services";
 import { type HostChannels, makeHostChannels } from "./channels";
 
@@ -271,7 +270,7 @@ type Served = (
   ctx: CallContext,
   input: unknown,
 ) => Effect.Effect<unknown, CallFailure, HostServices>;
-type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
 
 // What the app registers to serve: every remote handler and view, by
 // channel. The pushes it serves are the host's (HostPushes).

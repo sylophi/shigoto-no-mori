@@ -228,7 +228,7 @@ const portForwards = onQuit(
 
 // What the host answers from caches of other tools: gh, terrier and
 // port-pool.
-const toolAnswers = Layer.mergeAll(GithubCli.adapter, Ports.adapter).pipe(
+const toolAnswers = GithubCli.adapter.pipe(
   Layer.provideMerge(
     Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer),
   ),

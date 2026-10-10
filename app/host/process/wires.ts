@@ -49,7 +49,6 @@ import { readGlobalConfig } from "@host/lib/config/global";
 import { publishPush } from "@host/lib/hostPushes";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
-import type * as Views from "@host/lib/views";
 import * as Sharing from "@host/lib/sharing";
 import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
@@ -280,13 +279,13 @@ export function registerContract<M extends ContractModule>(
   });
 }
 
-type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
 
 // A module's views (contract.ts, view), served on the device link to
 // the peers its annotations admit, and on the loopback.
 export function registerViews<M extends ContractModule>(
   module: M,
-  views: ViewHandlers<M, Views.Services>,
+  views: ViewHandlers<M, HostServices>,
 ): void {
   for (const [key, view] of Object.entries(views)) {
     const channel = `${nameOf(module)}:${key}`;
