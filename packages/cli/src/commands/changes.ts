@@ -334,17 +334,19 @@ const throughApp = (
       );
   });
 
-// What a move or a rename prints, and the note for a shell left in the
-// old folder.
-const reportMoved = (located: Worktrees.Located, moved: Moved) =>
+// A move or a rename made, printed, with a note for a shell that stood
+// in the old folder (looked at before the move).
+const reportMoved = <E, R>(
+  located: Worktrees.Located,
+  move: Effect.Effect<Moved, E, R>,
+) =>
   Effect.gen(function* () {
     const { json } = yield* Effect.service(Output);
+    const wasInside = cwdInside(located.worktree.path);
+    const moved = yield* move;
     if (json) return yield* emit({ ok: true, ...moved });
     yield* out(moved.worktree.path);
-    if (
-      cwdInside(located.worktree.path) &&
-      moved.worktree.path !== located.worktree.path
-    ) {
+    if (wasInside && moved.worktree.path !== located.worktree.path) {
       yield* cdNote("the old location", moved.worktree.path);
     }
   });
@@ -374,7 +376,7 @@ export const move = Command.make(
       const worktrees = yield* Worktrees.Worktrees;
       yield* reportMoved(
         located,
-        yield* throughApp(
+        throughApp(
           located,
           "worktrees:relocate",
           { destinationPath: destination },
@@ -409,7 +411,7 @@ export const rename = Command.make(
       const worktrees = yield* Worktrees.Worktrees;
       yield* reportMoved(
         located,
-        yield* throughApp(
+        throughApp(
           located,
           "worktrees:rename",
           { name },
