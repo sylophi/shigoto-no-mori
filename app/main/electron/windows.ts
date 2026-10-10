@@ -10,13 +10,7 @@
 // when there is nothing to bring back. The app quits with its last
 // window (main/index.ts).
 import { join } from "node:path";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  type Rectangle,
-  screen,
-} from "electron";
+import { app, BrowserWindow, dialog, type Rectangle, screen } from "electron";
 import * as Schema from "effect/Schema";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { navContract } from "@shigomori/contracts/modules/nav";
@@ -72,6 +66,10 @@ type Held = {
   // The window's webContents id, kept past its destruction.
   readonly id: number;
   route: string;
+  // Where it is, kept as it moves: a window that closed is asked
+  // nothing.
+  bounds: Rectangle;
+  minimized: boolean;
   // A deep link it has not taken yet (renderer/hooks/ui/useDeepLinks.ts).
   deepLink: string | null;
   // Its renderer kept crashing and recovery gave up: a live handle on a
@@ -104,8 +102,8 @@ function find(windowId: number): Held | undefined {
 function recordOf(entry: Held): Remembered {
   return {
     route: entry.route,
-    bounds: entry.window.getNormalBounds(),
-    minimized: entry.window.isMinimized(),
+    bounds: entry.bounds,
+    minimized: entry.minimized,
   };
 }
 
@@ -115,7 +113,10 @@ function onScreen(bounds: Rectangle): boolean {
   return screen.getAllDisplays().some(({ workArea }) => {
     const left = Math.max(bounds.x, workArea.x);
     const top = Math.max(bounds.y, workArea.y);
-    const right = Math.min(bounds.x + bounds.width, workArea.x + workArea.width);
+    const right = Math.min(
+      bounds.x + bounds.width,
+      workArea.x + workArea.width,
+    );
     const bottom = Math.min(
       bounds.y + bounds.height,
       workArea.y + workArea.height,
@@ -151,7 +152,10 @@ function create(
   route: string,
   options: {
     readonly bounds?: Rectangle;
-    readonly restart?: { readonly visibility: RestartVisibility; readonly minimized: boolean };
+    readonly restart?: {
+      readonly visibility: RestartVisibility;
+      readonly minimized: boolean;
+    };
   } = {},
 ): Held {
   // Drive the native appearance from the saved theme before constructing
@@ -201,6 +205,8 @@ function create(
     window,
     id: window.webContents.id,
     route,
+    bounds: window.getNormalBounds(),
+    minimized: false,
     deepLink: null,
     dead: false,
   };
@@ -239,12 +245,18 @@ function create(
       noteWindowFocused(BrowserWindow.getFocusedWindow() !== null),
     );
   });
-  window.on("close", () => {
-    if (held.length === 1) lastClosed = recordOf(entry);
-  });
+  const place = () => {
+    entry.bounds = window.getNormalBounds();
+    entry.minimized = window.isMinimized();
+  };
+  window.on("resize", place);
+  window.on("move", place);
+  window.on("minimize", place);
+  window.on("restore", place);
   window.on("closed", () => {
     const at = held.indexOf(entry);
     if (at !== -1) held.splice(at, 1);
+    if (held.length === 0) lastClosed = recordOf(entry);
     forgetWindowMenu(entry.id);
   });
 
@@ -255,7 +267,7 @@ function create(
   attachRenderProcessRecovery(window, {
     isShuttingDown,
     recreateWindow: () => {
-      create(entry.route, { bounds: window.getNormalBounds() });
+      create(entry.route, { bounds: entry.bounds });
       if (!window.isDestroyed()) window.destroy();
     },
     onGiveUp: () => {
@@ -343,7 +355,9 @@ export function rememberWindows(): void {
   try {
     atomicWriteJsonSync(rememberedPath(), records);
   } catch (error) {
-    log.warn(`[windows] could not remember the windows: ${errorMessageOf(error)}`);
+    log.warn(
+      `[windows] could not remember the windows: ${errorMessageOf(error)}`,
+    );
   }
 }
 
