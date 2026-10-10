@@ -7,8 +7,7 @@
 export const GRANTS = {
   runCommands: {
     title: "Run commands as you",
-    detail:
-      "Edit and run setup, teardown and package.json scripts, and type into their terminals.",
+    detail: "Edit and run scripts, and open and type into terminals.",
     calls: [
       "packageScripts:run",
       "scripts:attach",
@@ -17,6 +16,12 @@ export const GRANTS = {
       "scripts:run",
       "scripts:write",
       "shigomori:write",
+      "terminals:attach",
+      "terminals:close",
+      "terminals:list",
+      "terminals:open",
+      "terminals:resize",
+      "terminals:write",
     ],
   },
   changeCode: {

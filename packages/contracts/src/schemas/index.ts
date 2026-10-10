@@ -17,6 +17,7 @@ export * from "./pullRequest.ts";
 export * from "./config.ts";
 export * from "./launchers.ts";
 export * from "./scripts.ts";
+export * from "./terminals.ts";
 export * from "./terrier.ts";
 export * from "./fs.ts";
 export * from "./shell.ts";
