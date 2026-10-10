@@ -370,13 +370,25 @@ export function reopenIfNone(): void {
   else create(record.route, { bounds: record.bounds });
 }
 
+// A new window on `route` where the windows with no page left were
+// (a renderer that crashed, or that recovery gave up on), which then
+// go, leaving no ghost behind.
+function replaceDead(route: string): void {
+  const dead = [...held];
+  const last = dead.at(-1);
+  create(route, last === undefined ? {} : { bounds: last.bounds });
+  for (const entry of dead) {
+    if (!entry.window.isDestroyed()) entry.window.destroy();
+  }
+}
+
 // Launching the app again while it runs is a request to see it: the
 // window focused last, or a new one when none has a page. Before the
 // boot's windows there is nothing to raise: they are on their way.
 export function surfaceWindow(): void {
   const entry = frontmost();
   if (entry === undefined) {
-    if (started) openWindow(HOME_ROUTE);
+    if (started) replaceDead(held.at(-1)?.route ?? HOME_ROUTE);
   } else {
     if (entry.window.isMinimized()) entry.window.restore();
     entry.window.show();
@@ -397,7 +409,7 @@ export function openDeepLink(route: string): void {
   }
   const entry = frontmost();
   if (entry === undefined) {
-    openWindow(route);
+    replaceDead(route);
   } else {
     // A later link replaces an untaken one: the user wants the page
     // they asked for last.
