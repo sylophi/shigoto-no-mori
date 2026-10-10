@@ -43,12 +43,17 @@ import {
   scopeOf,
 } from "@shigomori/contracts/contract";
 import { allContractModules } from "@shigomori/contracts/allModules";
-import { createSubscriberRegistry } from "@shared/remote/subscriberRegistry";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import type {
-  ClientTransport,
   HandlerContext,
+  Link,
   ServerTransport,
 } from "@shared/ipc/transport";
+import { pushFanOut } from "@shared/remote/rpcTransport";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import type { ViewObserver } from "@shigomori/contracts/types";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
@@ -65,6 +70,22 @@ import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 //     every theme flip.
 const STUB_ALLOWED = new Set(["window:previewTheme"]);
 
+// A host call the tab cannot answer, the browser having no host: one it
+// may not pretend to serve, or a read with no empty answer to give.
+class BrowserRefusal extends Schema.TaggedError<BrowserRefusal>()(
+  "BrowserRefusal",
+  {
+    channel: Schema.String,
+    reason: Schema.Literals(["unavailable", "noSafeAnswer"]),
+  },
+) {
+  override get message(): string {
+    return this.reason === "unavailable"
+      ? `${this.channel} is not available in the browser`
+      : `${this.channel} has no safe empty answer in the browser`;
+  }
+}
+
 // A view the page serves itself (hub:watchPeer), observed until the
 // returned stop.
 type LocalView = (
@@ -74,7 +95,7 @@ type LocalView = (
 
 export type LocalRegistrar = {
   server: ServerTransport;
-  client: ClientTransport;
+  link: Link;
   view: (channel: string, view: LocalView) => void;
 };
 
@@ -101,13 +122,13 @@ export function createLocalRegistrar(): LocalRegistrar {
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
-  const subscribers = createSubscriberRegistry("tab");
+  const fanOut = pushFanOut();
   const views = new Map<string, LocalView>();
   const invokeIndex = invokeIndexFor();
   // Fallback verdicts are computed once per channel: the policy is
   // deterministic and some stub outputs are sizeable object shapes. A
-  // verdict is either a resolvable stub value or the rejection message.
-  type FallbackVerdict = { stub: unknown } | { refusal: string };
+  // verdict is either a resolvable stub value or the refusal.
+  type FallbackVerdict = { stub: unknown } | { refusal: BrowserRefusal };
   const verdictCache = new Map<string, FallbackVerdict>();
 
   function fallbackVerdict(
@@ -119,7 +140,7 @@ export function createLocalRegistrar(): LocalRegistrar {
       // Mutations, and local channels that never classified themselves
       // as reads, must not pretend to succeed.
       return {
-        refusal: `${channel} is not available in the browser`,
+        refusal: new BrowserRefusal({ channel, reason: "unavailable" }),
       };
     }
     const stub = stubValueFor(outputOf(call), { fabricateArms: allowlisted });
@@ -127,7 +148,7 @@ export function createLocalRegistrar(): LocalRegistrar {
       // A read whose output demands a fabricated arm (an enum, a union,
       // a bounded scalar) gets no invented answer either.
       return {
-        refusal: `${channel} has no safe empty answer in the browser`,
+        refusal: new BrowserRefusal({ channel, reason: "noSafeAnswer" }),
       };
     }
     return { stub };
@@ -140,7 +161,7 @@ export function createLocalRegistrar(): LocalRegistrar {
   const context: HandlerContext = {
     notifier: (module, key) => (payload) => {
       const { channel, parsed } = resolveBroadcast(module, key, payload);
-      subscribers.emit(channel, parsed);
+      fanOut.emit(channel, parsed);
     },
     signal: pageLifetime.signal,
     connection: pageLifetime.signal,
@@ -151,22 +172,29 @@ export function createLocalRegistrar(): LocalRegistrar {
       handlers.set(channel, (ctx, raw) => fn(ctx, raw));
     },
     broadcastAll(channel, payload) {
-      subscribers.emit(channel, payload);
+      fanOut.emit(channel, payload);
     },
   };
 
-  const client: ClientTransport = {
+  const link: Link = {
     local: true,
-    invoke(channel, input) {
+    call(channel, input) {
       const handler = handlers.get(channel);
       if (handler !== undefined) {
-        // Wrapped in a resolved-promise chain so a synchronous throw in
-        // a handler rejects instead of escaping the transport contract.
-        return Promise.resolve().then(() => handler(context, input));
+        // What the handler rejects with (a contract error, any Error) is
+        // the call's failure as it is, and a synchronous throw is too.
+        return Effect.callback<unknown, unknown>((resume) => {
+          Promise.resolve()
+            .then(() => handler(context, input))
+            .then(
+              (value) => resume(Effect.succeed(value)),
+              (error: unknown) => resume(Effect.fail(error)),
+            );
+        });
       }
       const call = invokeIndex.get(channel);
       if (call === undefined) {
-        return Promise.reject(
+        return Effect.die(
           new Error(`no handler and no contract entry for channel ${channel}`),
         );
       }
@@ -175,27 +203,40 @@ export function createLocalRegistrar(): LocalRegistrar {
         verdict = fallbackVerdict(channel, call);
         verdictCache.set(channel, verdict);
       }
-      if ("refusal" in verdict) {
-        return Promise.reject(new Error(verdict.refusal));
-      }
-      return Promise.resolve(verdict.stub);
+      return "refusal" in verdict
+        ? Effect.fail(verdict.refusal)
+        : Effect.succeed(verdict.stub);
     },
-    subscribe(channel, handler) {
-      return subscribers.subscribe(channel, handler);
-    },
-    watch(channel, input, observer) {
+    pushes: fanOut.pushes,
+    view(channel, input) {
       const view = views.get(channel);
       if (view === undefined) {
-        observer.end(new Error(`${channel} is not available in the browser`));
-        return () => {};
+        return Stream.fail(
+          new BrowserRefusal({ channel, reason: "unavailable" }),
+        );
       }
-      return view(input, observer);
+      return Stream.callback<unknown, unknown>((queue) =>
+        Effect.acquireRelease(
+          Effect.sync(() =>
+            view(input, {
+              value: (value) => {
+                Queue.offerUnsafe(queue, value);
+              },
+              end: (failure) => {
+                if (failure === undefined) Queue.endUnsafe(queue);
+                else Queue.failCauseUnsafe(queue, Cause.fail(failure));
+              },
+            }),
+          ),
+          (stop) => Effect.sync(stop),
+        ),
+      );
     },
   };
 
   return {
     server,
-    client,
+    link,
     view: (channel, view) => {
       views.set(channel, view);
     },
