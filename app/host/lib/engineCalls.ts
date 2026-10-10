@@ -18,7 +18,9 @@ import { onAbort } from "@host/lib/util/abort";
 import { run, type Services } from "./engine";
 import * as Ops from "./engineOps";
 
-const face =
+// Also the Promise forms of the host's own lookups over the engine
+// (host/lib/projects, host/lib/git/worktrees), for the same callers.
+export const face =
   <Args extends unknown[], A, E>(
     op: (...args: Args) => Effect.Effect<A, E, Services>,
   ) =>
@@ -46,35 +48,19 @@ export const createWorktree = (
       cancelled: cancelledBy(opts.signal),
     }),
   );
-export const adoptWorktree = face(Ops.adoptWorktree);
-export const deleteWorktree = face(Ops.deleteWorktree);
-export const deleteStack = face(Ops.deleteStack);
 export const forceRemoveWorktree = face(Ops.forceRemoveWorktree);
-export const finishWorktree = face(Ops.finishWorktree);
 export const mergePullRequest = face(Ops.mergePullRequest);
 export const setShelved = face(Ops.setShelved);
-export const addProject = face(Ops.addProject);
 export const packageScriptLaunch = face(Ops.packageScriptLaunch);
 export const writeGlobalConfig = face(Ops.writeGlobalConfig);
 export const writeProjectConfig = face(Ops.writeProjectConfig);
-export const removeProject = face(Ops.removeProject);
-export const relocateProject = face(Ops.relocateProject);
 export const setAutoPull = face(Ops.setAutoPull);
-export const idleAgents = face(Ops.idleAgents);
-export const unbindAgent = face(Ops.unbindAgent);
-export const resumeAgent = face(Ops.resumeAgent);
 export const agentHarnesses = face(Ops.agentHarnesses);
 export const setAgentHooks = face(Ops.setAgentHooks);
-export const moveWorktree = face(Ops.moveWorktree);
-export const renameWorktree = face(Ops.renameWorktree);
 export const rekeyWorktree = face(Ops.rekeyWorktree);
-export const storeProjectOrder = face(Ops.storeProjectOrder);
 export const wtFolderMovedTo = face(Ops.wtFolderMovedTo);
 export const listWorktrees = face(Ops.listWorktrees);
-export const describeWorktree = face(Ops.describeWorktree);
 export const listWorktreeIdentities = face(Ops.listWorktreeIdentities);
-export const listProjects = face(Ops.listProjects);
-export const projectIcon = face(Ops.projectIcon);
 export const worktreeDestination = face(Ops.worktreeDestination);
 export const readGlobalConfig = face(Ops.readGlobalConfig);
 export const readProjectConfig = face(Ops.readProjectConfig);

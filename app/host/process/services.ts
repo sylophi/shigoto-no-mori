@@ -10,6 +10,7 @@ import type * as ScriptRuns from "@host/lib/scripts/pty";
 import type * as Sharing from "@host/lib/sharing";
 import type * as Terminals from "@host/lib/terminals/Terminals";
 import type * as Terrier from "@host/lib/terrier";
+import type * as Engine from "@host/lib/engine";
 import type * as Views from "@host/lib/views";
 import type * as Villagers from "@host/lib/villagers";
 
@@ -24,4 +25,5 @@ export type HostServices =
   | Sharing.Sharing
   | Terminals.Terminals
   | Terrier.Terrier
-  | Villagers.VillagerData;
+  | Villagers.VillagerData
+  | Engine.Services;

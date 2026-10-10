@@ -450,11 +450,11 @@ export const assertWorktreeMutable = (
 // mutation answered: a delete stops them only when the worktree
 // actually went (a failed cleanup keeps it, and its mirror with it),
 // and a move carries them to the new path.
-export const withDeleteInflight = <A, E, R>(
+export const withDeleteInflight = <A, E, R, E2, R2>(
   worktreeId: string,
   busyMessage: string,
   run: Effect.Effect<A, E, R>,
-  mirrorsAfter: (result: A) => Effect.Effect<unknown, E, R>,
+  mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
 ) => withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter);
 
 // The protocol over several worktrees removed by one mutation (a stack
@@ -463,11 +463,11 @@ export const withDeleteInflight = <A, E, R>(
 // with the mirrors of the ones the mutation took. A mutation that
 // removes only some of them (a cleanup script failed partway) stops
 // only those mirrors.
-export const withDeletesInflight = <A, E, R>(
+export const withDeletesInflight = <A, E, R, E2, R2>(
   worktreeIds: readonly string[],
   busyMessage: string,
   run: Effect.Effect<A, E, R>,
-  mirrorsAfter: (result: A) => Effect.Effect<unknown, E, R>,
+  mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
 ) =>
   Effect.gen(function* () {
     for (const id of worktreeIds) {
