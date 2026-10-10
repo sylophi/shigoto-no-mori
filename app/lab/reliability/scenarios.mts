@@ -893,13 +893,11 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   reloadAndThirdWindow,
   twoTabsRedial,
   tokenExpiry,
+  clockSkew,
 ];
 
-// clock-skew joins the soak once a skewed device connects (V3.md, the
-// reliability pass).
 export const ALL_SCENARIOS: readonly Scenario[] = [
   ...SOAK_SCENARIOS,
-  clockSkew,
   signOutWithSibling,
 ];
 
