@@ -91,21 +91,19 @@ export function BranchSwitcher({
       onOpenChange={onOpenChange}
       autoHighlight
     >
-      <SimpleTooltip tip="Switch branch">
-        <Combobox.Trigger
-          render={
-            <IconButton
-              aria-label="Switch branch"
-              className={cn(
-                className,
-                "data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100",
-              )}
-            />
-          }
-        >
-          <ChevronsUpDown aria-hidden className="size-3.5" />
-        </Combobox.Trigger>
-      </SimpleTooltip>
+      <Combobox.Trigger
+        render={
+          <IconButton
+            aria-label="Switch branch"
+            className={cn(
+              className,
+              "data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100",
+            )}
+          />
+        }
+      >
+        <ChevronsUpDown aria-hidden className="size-3.5" />
+      </Combobox.Trigger>
       <Combobox.Portal>
         <Combobox.Positioner
           anchor={anchorRef}

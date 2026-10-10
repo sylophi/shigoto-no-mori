@@ -7,6 +7,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
@@ -62,7 +63,13 @@ function TitledHeader({
   const stack = pr ? projectStack : null;
   const lineRef = useRef<HTMLDivElement>(null);
   const branchRef = useRef<HTMLDivElement>(null);
-  const showBase = useBaseFits(lineRef, branchRef, worktree.branch);
+  // The branch's buttons beside it come and go with control.
+  const { canCommand } = useCommandAccess();
+  const showBase = useBaseFits(
+    lineRef,
+    branchRef,
+    `${worktree.branch}:${canCommand}`,
+  );
   const stackName = stack
     ? `Stack, ${stack.index + 1} of ${stack.entries.length}`
     : undefined;
@@ -175,8 +182,9 @@ function TitledHeader({
 function useBaseFits(
   lineRef: React.RefObject<HTMLElement | null>,
   branchRef: React.RefObject<HTMLElement | null>,
-  // Read again for a renamed branch, which resizes nothing observed.
-  branchName: string,
+  // Read again for a renamed branch or a change to its buttons, which
+  // resize nothing observed.
+  branchKey: string,
 ): boolean {
   const [fits, setFits] = useState(true);
   const baseMin = useRef(0);
@@ -210,6 +218,6 @@ function useBaseFits(
     observer.observe(line);
     observer.observe(branch);
     return () => observer.disconnect();
-  }, [lineRef, branchRef, branchName]);
+  }, [lineRef, branchRef, branchKey]);
   return fits;
 }
