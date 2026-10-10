@@ -222,9 +222,8 @@ cloning exists.
 - **The tunnel data path needs asking for on one machine.** The LAN
   candidate always wins locally. Launch one profile with
   `SHIGOMORI_DIAL_KINDS=tunnel` and its session to the other rides that
-  device's tunnel, the way a web client's does (the other profile's log
-  says `deflating large frames for <device> (tunnel-borne)` when it
-  lands). The dev hub needs the tunnel secrets configured. The web
+  device's tunnel, the way a web client's does. The dev hub needs the
+  tunnel secrets configured. The web
   client (below) is the other way.
 
 

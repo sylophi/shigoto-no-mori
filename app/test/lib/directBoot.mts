@@ -6,6 +6,7 @@
 // direct-plane.mts so sync-transfer.mts and
 // port-forward.mts move their transfer scenarios onto a real
 // direct connection without a second copy of the plumbing.
+import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import * as DeviceLink from "@host/socket/server";
@@ -101,11 +102,12 @@ export type DirectListenerOpts = {
 export type DirectListener = {
   binding: WsServerBinding;
   tickets: ConnectTicketStore;
-  // `sweep: false` leaves the links be and `dropTickets: false` the
-  // tickets, for a check of what the hello does on its own.
+  rosterUnavailable(unavailable: boolean): void;
+  // `sweep: false` leaves the links and the tickets be, for a check of
+  // what the hello does on its own.
   rosterNow(
     online: readonly string[],
-    only?: { sweep?: boolean; dropTickets?: boolean },
+    only?: { sweep?: boolean },
   ): Promise<void>;
   acceptsCommands(): boolean;
   setAccepts(next: boolean): void;
@@ -132,6 +134,7 @@ export async function startDirectListener(
   // The roster's keys: the test keys (hubStub.mts) unless the check
   // names others, and none for a device a roster (rosterNow) left out.
   let roster: ReadonlySet<string> | null = null;
+  let rosterUnavailable = false;
   const rosterKey = (deviceId: string): Uint8Array | undefined =>
     roster !== null && !roster.has(deviceId)
       ? undefined
@@ -154,15 +157,18 @@ export async function startDirectListener(
               opens: {
                 check: (ticket, arrivedAs) => {
                   const deviceId = tickets.check(ticket, arrivedAs);
-                  const publicKey =
-                    deviceId === null ? undefined : rosterKey(deviceId);
-                  return deviceId === null || publicKey === undefined
+                  if (deviceId === null) return null;
+                  if (rosterUnavailable) return ROSTER_UNAVAILABLE;
+                  const publicKey = rosterKey(deviceId);
+                  return publicKey === undefined
                     ? null
                     : { deviceId, publicKey };
                 },
                 spend: (ticket, arrivedAs) =>
                   tickets.consume(ticket, arrivedAs),
-                keyOf: rosterKey,
+                keepDevices: (deviceIds) => tickets.keepDevices(deviceIds),
+                keyOf: (deviceId) =>
+                  rosterUnavailable ? ROSTER_UNAVAILABLE : rosterKey(deviceId),
                 localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
               },
               isCommandGranted: () => accepts,
@@ -249,11 +255,15 @@ export async function startDirectListener(
     binding,
     tickets,
     // What the host does as the hub's roster changes (host/process/
-    // wires.ts): the keys follow it, the dropped devices' tickets go,
-    // and their links close.
+    // wires.ts): the keys follow it, and the listener's sweep drops the
+    // dropped devices' tickets and closes their links.
+    // The hub out of reach, as the host reads it: no roster to check a
+    // key against.
+    rosterUnavailable: (unavailable) => {
+      rosterUnavailable = unavailable;
+    },
     rosterNow: async (online, only = {}) => {
       roster = new Set(online);
-      if (only.dropTickets !== false) tickets.keepDevices(online);
       if (only.sweep !== false) await binding.closePeersNotIn(online);
     },
     acceptsCommands: () => accepts,
