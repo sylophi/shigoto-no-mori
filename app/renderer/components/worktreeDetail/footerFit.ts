@@ -5,7 +5,7 @@
 // shares how far it collapsed. Each verb (FooterVerbView) hides its own
 // label and turns its tooltip on.
 import { type RefObject, useLayoutEffect, useState } from "react";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 const rankOf = (label: HTMLElement) => Number(label.dataset.labelRank);
 // A pixel of slack: the leading row shrinks to a fractional width, and
@@ -23,13 +23,14 @@ const overflows = (el: HTMLElement | null) =>
 // resizes, when anything inside it changes (a verb appears once its
 // query lands, a label turns into "Confirm delete?"), and when the
 // labels change width without either: a font finishes loading, or the
-// theme or layout on <html> switches. Returns how far it collapsed,
-// for the tooltips.
+// theme or layout on the window's root switches. Returns how far it
+// collapsed, for the tooltips.
 export function useFittedLabels(
   footerRef: RefObject<HTMLElement | null>,
   leadingRef: RefObject<HTMLElement | null>,
 ): number {
   const [through, setThrough] = useState(0);
+  const root = useWindowRoot();
   useLayoutEffect(() => {
     const footer = footerRef.current;
     if (!footer) return;
@@ -71,7 +72,7 @@ export function useFittedLabels(
       characterData: true,
       attributeFilter: ["data-label-rank"],
     });
-    mutation.observe(themeRoot(), {
+    mutation.observe(root, {
       attributeFilter: ["class"],
     });
     document.fonts.addEventListener("loadingdone", fit);
@@ -80,6 +81,6 @@ export function useFittedLabels(
       mutation.disconnect();
       document.fonts.removeEventListener("loadingdone", fit);
     };
-  }, [footerRef, leadingRef]);
+  }, [root, footerRef, leadingRef]);
   return through;
 }

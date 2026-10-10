@@ -7,7 +7,7 @@
 // shared components check against the same tree whichever shell
 // mounts them.
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   lazyRouteComponent,
@@ -33,7 +33,13 @@ import {
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
 
-const rootRoute = createRootRoute({
+// The window the router serves: its theme root, which the phone
+// layout is measured on.
+interface WindowContext {
+  root: HTMLElement;
+}
+
+const rootRoute = createRootRouteWithContext<WindowContext>()({
   component: AppShell,
   notFoundComponent: NotFoundPage,
 });
@@ -47,10 +53,10 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  beforeLoad: () => {
+  beforeLoad: ({ context }) => {
     if (!hasLocalHost) {
       throw redirect({
-        to: isPhoneLayout() ? "/forest/$view" : "/account",
+        to: isPhoneLayout(context.root) ? "/forest/$view" : "/account",
         params: { view: "inbox" },
         replace: true,
       });
@@ -365,10 +371,11 @@ function RouteErrorFallback({
 }
 
 // The shell's one choice: which history the tree rides.
-export function createAppRouter(history: RouterHistory) {
+export function createAppRouter(history: RouterHistory, root: HTMLElement) {
   return createRouter({
     routeTree,
     history,
+    context: { root },
     defaultPreload: false,
     defaultErrorComponent: RouteErrorFallback,
   });

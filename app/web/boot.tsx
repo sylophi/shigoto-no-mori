@@ -3,9 +3,14 @@
 // renderer/index.tsx, which is the desktop window's.
 import { ClerkProvider } from "@clerk/react";
 import { createBrowserHistory } from "@tanstack/react-router";
-import { bootApp } from "@/boot";
+import { mountWindow, startApp } from "@/boot";
+import { pageRoot } from "@/lib/themeRoot";
 import type { ClientLinks } from "@/lib/runtime/ClientLinks";
 
 export function bootWeb(links: ClientLinks["Service"]): void {
-  bootApp({ ClerkProvider, history: createBrowserHistory(), links });
+  mountWindow(startApp({ links }), {
+    element: pageRoot(),
+    ClerkProvider,
+    history: createBrowserHistory(),
+  });
 }

@@ -38,7 +38,7 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -134,8 +134,8 @@ function ForestKeepalive() {
 // which reads as a broken layout, is off. The desktop window stays
 // transparent.
 function usePageCanvas(phone: boolean): void {
+  const root = useWindowRoot();
   useEffect(() => {
-    const root = themeRoot();
     if (root.dataset["shell"] !== "web") return;
     const page = document.documentElement;
     page.style.overscrollBehaviorY = phone ? "none" : "";
@@ -151,5 +151,5 @@ function usePageCanvas(phone: boolean): void {
     const observer = new MutationObserver(paint);
     observer.observe(root, { attributeFilter: ["class", "data-palette"] });
     return () => observer.disconnect();
-  }, [phone]);
+  }, [root, phone]);
 }

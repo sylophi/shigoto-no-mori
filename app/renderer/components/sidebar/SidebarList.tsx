@@ -16,6 +16,7 @@ import {
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
 import { SidebarListView } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 interface SidebarListProps {
   rows: SidebarRow[];
@@ -57,12 +58,13 @@ export function SidebarList({
   // children) so ProjectRow keeps its actions visible. Lives here, not in
   // Sidebar: a hover only ever repaints rows.
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const root = useWindowRoot();
 
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollerRef.current,
     estimateSize: (index) =>
-      rowSizeHint(rows[index]?.kind ?? "worktree", isPhoneLayout()),
+      rowSizeHint(rows[index]?.kind ?? "worktree", isPhoneLayout(root)),
     overscan: 12,
     getItemKey: (index) => rows[index]?.key ?? index,
   });

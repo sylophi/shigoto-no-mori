@@ -11,10 +11,18 @@ import type { AppRouter } from "./router";
 // broadcasts reach the query cache from boot, not from here: one
 // watchHost per device (lib/hostWatch.ts), called by renderer/boot.tsx
 // for this machine and by the remote device sync for each peer.
-export function App({ router }: { router: AppRouter }) {
+export function App({
+  router,
+  themeFromRoot,
+}: {
+  router: AppRouter;
+  // The window wears its root's theme, set by the page around it, in
+  // place of the settings' (ThemeProvider).
+  themeFromRoot: boolean;
+}) {
   return (
-    <ThemeProvider>
-      <PaletteProvider>
+    <ThemeProvider fromRoot={themeFromRoot}>
+      <PaletteProvider fromRoot={themeFromRoot}>
         <ErrorBoundary FallbackComponent={AppErrorFallback}>
           <OverlaysProvider>
             <RouterProvider router={router} />

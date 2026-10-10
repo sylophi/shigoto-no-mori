@@ -10,13 +10,13 @@ import { useClientConfig } from "../config/useClientConfig";
 import { usePauseAnimationsOnBattery } from "./usePauseAnimationsOnBattery";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useTheme } from "./useTheme";
-import { themeRoot } from "@/lib/themeRoot";
+import { useWindowRoot } from "@/lib/themeRoot";
 
 interface PaletteState {
   // Persisted values from clientConfig.json: what Settings considers
   // "saved".
   saved: DoubutsuPicks;
-  // Live values, `override` over `saved` field by field. What <html>
+  // Live values, `override` over `saved` field by field. What the root
   // wears follows from them: the `.doubutsu` class from the switch,
   // `data-palette` from the resolved appearance's pick.
   applied: DoubutsuPicks;
@@ -49,7 +49,15 @@ function readBootHint(): DoubutsuPicks {
   });
 }
 
-export function PaletteProvider({ children }: { children: ReactNode }) {
+export function PaletteProvider({
+  fromRoot,
+  children,
+}: {
+  // The root's look is the page's around it (ThemeProvider's fromRoot).
+  fromRoot: boolean;
+  children: ReactNode;
+}) {
+  const root = useWindowRoot();
   const { data: config, isLoading } = useClientConfig();
   const { resolved } = useTheme();
   // Avoid a one-frame flash of the wrong look while clientConfig
@@ -64,7 +72,7 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
     null,
   );
   // A field at a time: a light pick staged while a dark pick is already
-  // staged keeps the dark one, so the form and <html> agree until Save.
+  // staged keeps the dark one, so the form and the root agree until Save.
   const setOverride = (next: Partial<DoubutsuPicks> | null) => {
     setOverrideState((prev) => (next === null ? null : { ...prev, ...next }));
   };
@@ -91,20 +99,20 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const root = themeRoot();
+    if (fromRoot) return;
     root.classList.toggle("doubutsu", applied.doubutsu);
     if (active) root.dataset.palette = active;
     else delete root.dataset.palette;
-  }, [applied.doubutsu, active]);
+  }, [fromRoot, root, applied.doubutsu, active]);
 
   // Mirror the saved values into localStorage so the next launch can
   // paint without waiting for clientConfig to load.
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || fromRoot) return;
     writeStored(STORAGE_KEYS.doubutsu, saved.doubutsu ? "true" : "false");
     writeStored(STORAGE_KEYS.light, saved.light);
     writeStored(STORAGE_KEYS.dark, saved.dark);
-  }, [isLoading, saved.doubutsu, saved.light, saved.dark]);
+  }, [isLoading, fromRoot, saved.doubutsu, saved.light, saved.dark]);
 
   return (
     <PaletteContext value={{ saved, applied, setOverride }}>
