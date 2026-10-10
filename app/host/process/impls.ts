@@ -24,8 +24,7 @@ import { onGlobalConfigChange } from "@host/lib/config/global";
 import { refreshProject, sweepForPeer } from "@host/lib/git/backgroundFetch";
 import { getBusyOperations } from "@host/lib/scripts";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
-import { releaseStore } from "@host/lib/storeChanges";
-import { loopback } from "@host/socket/loopback";
+import { publishLoopback, releaseStore, unpublishLoopback } from "./captures";
 import { hostFacts } from "./facts";
 import { shellCalls } from "./shell";
 import { broadcastAll, refreshDirectHost } from "./wires";
@@ -57,10 +56,10 @@ export function installHostImpls(): void {
     uninstallCliEverything,
     releaseStore,
     stopUpdaterBridge: () => void shellCalls().stopUpdaterBridge(),
-    unpublishLoopback: loopback.unpublish,
+    unpublishLoopback,
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
-    afterDataWipe: () => void loopback.publish(),
+    afterDataWipe: () => void publishLoopback(),
     relaunchAppUnattended: () => void shellCalls().relaunch(),
     unattendedMoveRefusal: () => busyRemoteRefusal(getBusyOperations(), "move"),
   });

@@ -5,12 +5,7 @@
 // preload for a port, the preload asks here (attach), and a page that
 // goes takes its port with it.
 import { channelOf, isBroadcast } from "@shigomori/contracts/contract";
-import {
-  errorCodeOf,
-  errorMessageOf,
-  isContractError,
-  RemoteCallError,
-} from "@shigomori/contracts/errors";
+import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -168,13 +163,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
                 },
                 payload,
               ),
-            catch: (error) =>
-              isContractError(error)
-                ? error
-                : new RemoteCallError({
-                    text: errorMessageOf(error),
-                    code: errorCodeOf(error),
-                  }),
+            catch: callFailureOf,
           }),
         );
 

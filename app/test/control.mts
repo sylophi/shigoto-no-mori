@@ -87,7 +87,7 @@ import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { registerContract } from "@shared/ipc/registerContract";
+import { registerHostContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import {
@@ -169,7 +169,7 @@ async function startLoopback(options: {
   readonly run: <A, E>(effect: Effect.Effect<A, E, never>) => Promise<A>;
 }) {
   const registrar = createLinkRegistrar();
-  registerContract(
+  registerHostContract(
     controlContract,
     options.handlers,
     {

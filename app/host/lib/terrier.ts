@@ -15,14 +15,23 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import * as Processes from "./util/processes";
-import * as PromiseAdapter from "./util/promiseAdapter";
+
+// terrier refused the add, in its words.
+class TerrierAddError extends Schema.TaggedError<TerrierAddError>()(
+  "TerrierAddError",
+  { reason: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `terrier add failed: ${this.reason}`;
+  }
+}
 
 export class Terrier extends Context.Service<
   Terrier,
   {
     readonly readiness: Effect.Effect<TerrierReadiness>;
     // Registers a repo in terrier. Already registered is a success there.
-    readonly add: (path: string) => Effect.Effect<void, Processes.CommandError>;
+    readonly add: (path: string) => Effect.Effect<void, TerrierAddError>;
     // For the global-config write flipping the toggle: the next read
     // re-asks instead of serving up to a TTL of the pre-write world.
     readonly invalidate: Effect.Effect<void>;
@@ -90,6 +99,17 @@ const make = Effect.gen(function* () {
         timeout: TERRIER_SPAWN_TIMEOUT_MS,
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.catchTags({
+          CommandError: (cause) =>
+            Effect.fail(
+              new TerrierAddError({
+                reason:
+                  Processes.stderrOf(cause).replace(/^Error: /, "") ||
+                  cause.message,
+                cause,
+              }),
+            ),
+        }),
       );
     }),
     invalidate: Cache.invalidateAll(cache).pipe(
@@ -99,24 +119,3 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(Terrier, make);
-
-// The Promise face, for the terrier, projects and global-config
-// handlers.
-const promiseAdapter = PromiseAdapter.forService(Terrier, "terrier");
-export const adapter = promiseAdapter.layer;
-
-export const terrierReadiness = () =>
-  promiseAdapter.call((terrier) => terrier.readiness);
-// A refusal throws what terrier said, not the command's exit.
-export const terrierAdd = (path: string): Promise<void> =>
-  promiseAdapter
-    .call((terrier) => terrier.add(path))
-    .catch((error: unknown) => {
-      if (!Processes.isCommandError(error)) throw error;
-      const reason =
-        Processes.stderrOf(error).replace(/^Error: /, "") || error.message;
-      throw new Error(`terrier add failed: ${reason}`, { cause: error });
-    });
-// Settles at once when the graph is not up, with nothing cached.
-export const invalidateTerrierReadiness = () =>
-  promiseAdapter.runIfOpen(Effect.flatMap(Terrier, (t) => t.invalidate));

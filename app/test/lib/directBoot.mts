@@ -9,8 +9,10 @@
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import * as DeviceLink from "@host/socket/server";
+import { invokeInCallSpan, withParentSpan } from "@host/lib/util/trace";
 import type { WsServerStartOpts } from "@host/socket/server";
 import * as Effect from "effect/Effect";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
@@ -34,8 +36,17 @@ import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
-import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
-import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
+import {
+  broadcastAll,
+  registerHostContract,
+} from "@shared/ipc/registerContract";
+import type { HostServices } from "@host/process/services";
+import { hostContext } from "./adapters.mts";
+import type {
+  ClientTransport,
+  HandlerContext,
+  ServerTransport,
+} from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import { WebSocket as WsClient } from "ws";
 import { type DeviceConnection, openDevice } from "@shared/remote/deviceLink";
@@ -43,22 +54,25 @@ import { startStubHub, type StubHub } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
 
-// The listener as a proof drives it: the registrar it serves (a
-// ServerTransport, for registerContract and broadcastAll), and the
-// listener's own state.
-type WsServerBinding = DeviceLink.LinkRegistrar & {
-  // A push from the host, as main's broadcastAll publishes it.
-  broadcastAll(
-    channel: string,
-    payload: unknown,
-    opts?: { remote?: boolean },
-  ): void;
-  status(): { listening: boolean; port: number | null };
-  closePeersNotIn(online: readonly string[]): Promise<void>;
-  // Brings the listener to `opts` (null stops it), as main's refresh
-  // does.
-  reconcile(opts: WsServerStartOpts | null): Promise<void>;
-};
+// The listener as a proof drives it: the registrar it serves, its calls
+// Promise handlers (a ServerTransport, for registerContract and
+// broadcastAll), and the listener's own state.
+type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
+  Pick<ServerTransport, "handle"> & {
+    // A call as the host serves it, an effect (registerHostContract).
+    serve: DeviceLink.LinkRegistrar["handle"];
+    // A push from the host, as main's broadcastAll publishes it.
+    broadcastAll(
+      channel: string,
+      payload: unknown,
+      opts?: { remote?: boolean },
+    ): void;
+    status(): { listening: boolean; port: number | null };
+    closePeersNotIn(online: readonly string[]): Promise<void>;
+    // Brings the listener to `opts` (null stops it), as main's refresh
+    // does.
+    reconcile(opts: WsServerStartOpts | null): Promise<void>;
+  };
 
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;
@@ -108,6 +122,7 @@ export async function startDirectListener(
   let accepts = false;
   const sharing = Effect.runSync(SubscriptionRef.make(true));
   const registrar = DeviceLink.createLinkRegistrar();
+  const host = await hostContext();
   const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       DeviceLink.layer({
@@ -123,6 +138,8 @@ export async function startDirectListener(
         seesPush: opts.seesPush ?? (() => false),
       }),
       Layer.mergeAll(
+        // The host's services, beneath the stand-ins below.
+        Layer.succeedContext(host),
         HostPushes.layer,
         Layer.succeed(
           Sharing.Sharing,
@@ -149,6 +166,22 @@ export async function startDirectListener(
   let current = await onLink((link) => link.status);
   const binding: WsServerBinding = {
     ...registrar,
+    serve: registrar.handle,
+    // Each call's signal aborts when the call is interrupted, and its
+    // span is the parent of the handler's, as the host's are.
+    handle: (channel, fn, handleOpts) =>
+      registrar.handle(
+        channel,
+        (ctx, raw) =>
+          Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
+            Effect.tryPromise({
+              try: (signal) =>
+                withParentSpan(span, () => fn({ ...ctx, signal }, raw)),
+              catch: callFailureOf,
+            }),
+          ),
+        handleOpts,
+      ),
     broadcastAll: (channel, payload, broadcastOpts) =>
       runtime.runSync(
         Effect.flatMap(HostPushes.HostPushes, (pushes) =>
@@ -287,7 +320,7 @@ export async function bootBrokeredPair(
 }
 
 export type ServedContracts<C extends readonly ContractModule[]> = {
-  [I in keyof C]: readonly [C[I], Handlers<C[I], HandlerContext>];
+  [I in keyof C]: readonly [C[I], Handlers<C[I], HandlerContext, HostServices>];
 };
 
 export type DirectWire = {
@@ -325,10 +358,16 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     deviceId: "A",
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
-        registerContract(contract, handlers, binding, {
-          validateOutputs: true,
-          onUsageTracked: () => {},
-        });
+        registerHostContract(
+          contract,
+          handlers,
+          { handle: binding.serve, broadcastAll: binding.broadcastAll },
+          {
+            validateOutputs: true,
+            onUsageTracked: () => {},
+            invoke: invokeInCallSpan,
+          },
+        );
       }
     },
   });

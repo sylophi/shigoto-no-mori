@@ -23,14 +23,17 @@ import {
   ownBranchPullRequest,
   ownBranchPullRequests,
 } from "@shigomori/ui/lib/pullRequest.ts";
-import {
-  getWorktreePullRequest,
-  refreshProjectPullRequests,
-} from "@host/lib/githubCli/pullRequests";
+import * as PullRequests from "@host/lib/githubCli/pullRequests";
 import { it } from "vitest";
 import { hostEngine } from "./lib/smBinary.mts";
+import { runHost } from "./lib/adapters.mts";
 import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
+
+const getWorktreePullRequest = (cwd: string, branch: string) =>
+  runHost(PullRequests.getWorktreePullRequest(cwd, branch));
+const refreshProjectPullRequests = (cwd: string) =>
+  runHost(PullRequests.refreshProjectPullRequests(cwd));
 
 scrubProcessGitEnv();
 
