@@ -90,7 +90,6 @@ const PENDING = [
   "live/",
   "newWorktree/",
   "palette/",
-  "scriptConsole/",
 ];
 
 // An intrinsic element opening (<div, <span ...>), not a type argument
