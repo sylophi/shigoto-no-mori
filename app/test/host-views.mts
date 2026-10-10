@@ -376,11 +376,16 @@ it("one read per view and input: a second subscriber joins it on the current val
       assert.equal(yield* second.next, 1);
       assert.equal(reads, 3, "one read for the change");
 
+      // The first gone, the read goes on for the second.
       yield* first.end;
+      value = 2;
+      yield* push(bump);
+      assert.equal(yield* second.next, 2);
+      assert.equal(reads, 4);
       yield* second.end;
       const again = yield* subscribe("test:a");
-      assert.equal(yield* again.next, 1);
-      assert.equal(reads, 4, "the last one gone, the next reads afresh");
+      assert.equal(yield* again.next, 2);
+      assert.equal(reads, 5, "the last one gone, the next reads afresh");
       yield* again.end;
     }),
   );
