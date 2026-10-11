@@ -47,7 +47,8 @@ export function KeyboardSectionView({
           </Button>
         }
       >
-        Click a shortcut, then press the keys you want for it. Esc cancels.
+        Click a shortcut, then press the keys you want for it. Esc or a click
+        elsewhere cancels.
       </SectionIntro>
       {groups.map((group) => (
         <div key={group.label} className="space-y-1">

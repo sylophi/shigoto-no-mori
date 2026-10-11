@@ -64,8 +64,17 @@ export function KeyboardSection({
       }
       bind(recording, chord);
     };
+    // A click anywhere but on the keys being recorded stops recording.
+    const onPointer = (e: PointerEvent) => {
+      if (!(e.target instanceof Element)) return;
+      if (!e.target.closest('[aria-pressed="true"]')) setRecording(null);
+    };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
   });
 
   return (
