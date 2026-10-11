@@ -88,6 +88,7 @@ import {
   createViaCli,
   deleteStackViaCli,
   deleteViaCli,
+  describeViaCli,
   doneViaCli,
   moveViaCli,
   setAutoPullViaCli,
@@ -298,6 +299,12 @@ export const worktreesHandlers: Handlers<
       }
     }
   },
+
+  describe: async ({ projectId, worktreeId, title, description }) =>
+    describeViaCli(await findProjectOrThrow(projectId), worktreeId, {
+      title,
+      description,
+    }),
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
     mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>

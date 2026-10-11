@@ -455,6 +455,15 @@ export const RenameBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   newBranch: GitRefNameSchema,
 });
 
+// A new title, description or both for the worktree (`sm describe`).
+// One left out stays as it is, and an empty one clears it.
+export const DescribeWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend(
+  {
+    title: z.string().optional(),
+    description: z.string().optional(),
+  },
+);
+
 export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
   shelved: z.boolean(),
 });

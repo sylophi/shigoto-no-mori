@@ -848,6 +848,23 @@ export const setAutoPullViaCli = (
     worktreeId,
   );
 
+// `sm describe`, which refuses while an open PR holds them. Inline
+// values, so text that starts with a dash isn't read as a flag.
+export const describeViaCli = (
+  project: Project,
+  worktreeId: string,
+  { title, description }: { title?: string; description?: string },
+) =>
+  worktreeRowViaCli(
+    [
+      "describe",
+      ...(title === undefined ? [] : [`--title=${title}`]),
+      ...(description === undefined ? [] : [`--description=${description}`]),
+    ],
+    project,
+    worktreeId,
+  );
+
 export const idleAgentsViaCli = (project: Project, worktreeId: string) =>
   worktreeRowViaCli(["agents", "idle"], project, worktreeId);
 

@@ -444,6 +444,18 @@ export function useSetShelved() {
   );
 }
 
+// The worktree's own title or description, as edited on its page. An
+// empty one clears it. Not optimistic: the editor stays open until the
+// save lands, so one `sm describe` refuses keeps its text.
+export function useDescribeWorktree(errorTitle: string) {
+  return useWorktreeRowMutation(
+    (api, input: WorktreeVars & { title?: string; description?: string }) =>
+      api.worktrees.describe(input),
+    (w) => w,
+    errorTitle,
+  );
+}
+
 // Every agent session bound to a worktree goes idle, for a turn whose
 // end no hook reported.
 export function useIdleAgents() {

@@ -458,6 +458,15 @@ function hostHandlersFor(
       return worktree;
     },
     "worktrees:resumeAgent": () => undefined,
+    "worktrees:describe": ({ worktreeId, title, description }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      if (title !== undefined) worktree.title = title || undefined;
+      if (description !== undefined) {
+        worktree.description = description || undefined;
+      }
+      return worktree;
+    },
     "agents:status": () => agentHarnesses,
     "agents:setHooks": async ({ harness, install }) => {
       await sleep(400);
