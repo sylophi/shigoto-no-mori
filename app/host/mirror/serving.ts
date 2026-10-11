@@ -88,8 +88,8 @@ function forgetServing(key: string): void {
 // named worktree, spoken to over its stdio. The child dies with the
 // channel: a peer reset, an end from both sides or the socket dying all
 // kill it, and a child that exits on its own ends the channel the
-// ordinary way. The root path the peer's Mutagen side names travels
-// inside the protocol, which this does not read.
+// ordinary way. The child serves the worktree's path alone: the root
+// the peer's Mutagen side names in the protocol is replaced by it.
 export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   { projectId, worktreeId, channelId, peerWorktreeId }: MirrorOpenStreamPayload,
   ctx: HandlerContext,
@@ -102,6 +102,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   // caches and staging land in ~/.mutagen, shared with any real
   // Mutagen install and with every other build and profile here.
   const child = yield* (yield* FileSync).serve(
+    worktreePath,
     { MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve") },
     Deferred.await(closed),
   );
