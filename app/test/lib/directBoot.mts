@@ -1,11 +1,10 @@
-// Shared fixtures for the checks that run a REAL direct data plane
-// beside the stub device hub (test/lib/hubStub.mts): a direct ws
-// listener (host/socket/server.ts), the connectInfo server on a hub
-// host device, and the REAL shared composition
-// (shared/hub/directPlane.ts) a client drives. Extracted from
-// direct-plane.mts so sync-transfer.mts and
-// port-forward.mts move their transfer scenarios onto a real
-// direct connection without a second copy of the plumbing.
+// The direct sandbox: two devices on a REAL direct link, beside the
+// stub device hub (hubStub.mts). The listener is a REAL direct ws
+// listener (host/socket/server.ts) with its ticket store and switches,
+// answering connectInfo through the hub as the host does. The dialer
+// drives the REAL shared composition (shared/hub/directPlane.ts) or
+// dials the listener straight. What each proof adds is its own
+// handlers and what it asserts (README.md, "Shared fakes").
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
@@ -50,10 +49,24 @@ import type {
   ServerTransport,
 } from "@shared/ipc/transport";
 import { WebSocket as WsClient } from "ws";
-import { type DeviceConnection, openDevice } from "@shared/remote/deviceLink";
+import type { KeyPair } from "@shared/crypto/noise";
+import {
+  type DeviceConnection,
+  type DeviceLinkOptions,
+  openDevice,
+} from "@shared/remote/deviceLink";
 import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
+
+// The two devices, named by their part in the link: the one that dials
+// and the one that listens. Each seals with its test key (hubStub.mts).
+export const DIALER = "dialer";
+export const LISTENER = "listener";
+
+// How long a dial may take before it fails, unless a check shortens it
+// to see a failure settle.
+const DIAL_DEADLINE_MS = 3000;
 
 // The listener as a proof drives it: the registrar it serves, its calls
 // Promise handlers (a ServerTransport, for registerContract and
@@ -77,6 +90,7 @@ type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
 
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;
+  // LISTENER unless a check stands up another device's listener.
   deviceId?: string;
   // The key the roster names for a dialing device, where it is not
   // its test key (a web profile's, from its stored envelope).
@@ -100,6 +114,7 @@ export type DirectListenerOpts = {
 };
 
 export type DirectListener = {
+  deviceId: string;
   binding: WsServerBinding;
   tickets: ConnectTicketStore;
   rosterUnavailable(unavailable: boolean): void;
@@ -130,6 +145,7 @@ export async function startDirectListener(
   track: Track,
   opts: DirectListenerOpts = {},
 ): Promise<DirectListener> {
+  const listenerId = opts.deviceId ?? LISTENER;
   const tickets = createConnectTicketStore(opts.ticketOpts);
   // The roster's keys: the test keys (hubStub.mts) unless the check
   // names others, and none for a device a roster (rosterNow) left out.
@@ -152,8 +168,8 @@ export async function startDirectListener(
             services: Effect.succeed(services),
             registrar,
             auth: {
-              // The roster's keys are the test keys (hubStub.mts), the
-              // listener's its device id's.
+              // The roster's keys are the test keys (hubStub.mts), and
+              // the listener seals with its own.
               opens: {
                 check: (ticket, arrivedAs) => {
                   const deviceId = tickets.check(ticket, arrivedAs);
@@ -169,7 +185,7 @@ export async function startDirectListener(
                 keepDevices: (deviceIds) => tickets.keepDevices(deviceIds),
                 keyOf: (deviceId) =>
                   rosterUnavailable ? ROSTER_UNAVAILABLE : rosterKey(deviceId),
-                localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
+                localKey: () => testDeviceKey(listenerId).pair,
               },
               isCommandGranted: () => accepts,
               ...(opts.isInvited === undefined
@@ -244,7 +260,7 @@ export async function startDirectListener(
   await binding.reconcile({
     port: 0,
     bindAddress: "127.0.0.1",
-    deviceId: opts.deviceId ?? "B",
+    deviceId: listenerId,
     appVersion: "2.0.0",
     helloTimeoutMs: 1000,
     ...opts.start,
@@ -252,6 +268,7 @@ export async function startDirectListener(
   const port = binding.status().port;
   assert.ok(port !== null, "the listener did not bind");
   return {
+    deviceId: listenerId,
     binding,
     tickets,
     // What the host does as the hub's roster changes (host/process/
@@ -321,31 +338,48 @@ export function mintTicket(
 export type BrokerListener = Pick<DirectListener, "tickets" | "listenerPort"> &
   Partial<Pick<DirectListener, "acceptsCommands" | "sharesData">>;
 
-export type BrokeredPairOpts = {
-  hostDeviceId?: string;
-  clientDeviceId?: string;
+export type BridgeOpts = {
+  // The listener's hub device, LISTENER unless a check names another.
+  listenerId?: string;
   onMinted?: (tickets: string[]) => void;
   candidateAddresses?: () => string[];
   tunnelUrl?: () => string | null;
-  clientOnChange?: () => void;
+  onStatusChange?: DirectPlaneDeps["broadcastStatus"];
+  onPeerPush?: DirectPlaneDeps["broadcastPeerPush"];
+  dialableKinds?: DirectPlaneDeps["dialableKinds"];
+  deadlineMs?: number;
+  keeper?: DirectPlaneDeps["keeper"];
+  // The plane's presence path wired to the dialer's hub connection as
+  // production wires it (late-bound, plus one catch-up call for the
+  // roster that connected before the plane existed), so the keeper
+  // dials the listener on its own. Off, a check dials by hand.
+  supervised?: boolean;
 };
 
-export type BrokeredPair = { host: BootedDevice; client: BootedDevice };
+export type Bridged = {
+  stub: StubHub;
+  dialer: BootedDevice;
+  plane: DirectPlane;
+  bridge: HubHandlers;
+};
 
-// Boots the hub pair: B answers connectInfo with the REAL server (the
-// ONLY thing the hub wire answers, wired as the host wires it), A is the
-// dialing client. The two devices are independent, so they boot
-// concurrently.
-export async function bootBrokeredPair(
-  stub: Pick<StubHub, "hubUrl">,
+// The dialer bridged to `listener` through a stub device hub of its
+// own: the listener's hub device answers connectInfo with the REAL
+// server (the ONLY thing the hub wire answers, wired as the host wires
+// it), and the dialer's REAL direct plane asks it. The plane stops with
+// the test, closing its sessions.
+export async function bridgeTo(
   track: Track,
   listener: BrokerListener,
-  opts: BrokeredPairOpts = {},
-): Promise<BrokeredPair> {
-  const [host, client] = await Promise.all([
+  opts: BridgeOpts = {},
+): Promise<Bridged> {
+  const stub = await startStubHub(track);
+  let onPlaneChange: (() => void) | null = null;
+  // The two devices are independent, so they boot concurrently.
+  const [, dialer] = await Promise.all([
     bootDevice(
       stub,
-      opts.hostDeviceId ?? "B",
+      opts.listenerId ?? LISTENER,
       {
         serveConnectInfo: makeConnectInfo({
           listenerPort: listener.listenerPort,
@@ -368,14 +402,15 @@ export async function bootBrokeredPair(
       },
       track,
     ),
-    bootDevice(
-      stub,
-      opts.clientDeviceId ?? "A",
-      { onChange: opts.clientOnChange },
-      track,
-    ),
+    bootDevice(stub, DIALER, { onChange: () => onPlaneChange?.() }, track),
   ]);
-  return { host, client };
+  const { plane, bridge } = makeDirectBridge(dialer, opts);
+  track(() => plane.stop());
+  if (opts.supervised === true) {
+    onPlaneChange = () => plane.handleConnectionChange();
+    plane.handleConnectionChange();
+  }
+  return { stub, dialer, plane, bridge };
 }
 
 export type ServedContracts<C extends readonly ContractModule[]> = {
@@ -385,32 +420,24 @@ export type ServedContracts<C extends readonly ContractModule[]> = {
   ];
 };
 
-export type DirectWire = {
-  stub: StubHub;
+export type DirectWire = Bridged & {
   listener: DirectListener;
-  client: BootedDevice;
-  plane: DirectPlane;
-  bridge: HubHandlers;
-  peerA: PeerTransport;
+  toListener: PeerTransport;
 };
 
 // The whole direct wire the transfer checks share, exactly as
-// production composes it: the stub device hub, a REAL direct
-// listener on device A serving the check's contracts, the brokered hub
-// pair (A answering connectInfo, B the dialing client), the REAL shared
-// composition as B's bridge, and a counting peer transport aimed at A.
-// The plane's presence path is wired to the client connection exactly
-// as production wires it (late-bound, plus one catch-up call for the
-// roster that connected before the plane existed), so the KEEPER is
-// what establishes the B->A session -- eagerly, before any invoke,
-// which is the supervised model the transfer checks now ride.
+// production composes it: a REAL direct listener serving the check's
+// contracts, the dialer's REAL direct plane supervised over the stub
+// device hub (bridgeTo), and a counting peer transport aimed at the
+// listener. The keeper establishes the session eagerly, before any
+// invoke, which is the supervised model the transfer checks ride.
 // Everything registers its teardown on the caller's tracker.
-// `opts.contracts` lists the [contract, handlers] pairs A serves, each
-// registered with output validation and a no-op usage hook: the hook is
-// the host's concern, and the registrar only calls it for
-// defs marked tracksProjectUsage (and requires it for a module that has
-// one), so passing it everywhere satisfies the registrar and changes
-// nothing else.
+// `opts.contracts` lists the [contract, handlers] pairs the listener
+// serves, each registered with output validation and a no-op usage
+// hook: the hook is the host's concern, and the registrar only calls it
+// for defs marked tracksProjectUsage (and requires it for a module that
+// has one), so passing it everywhere satisfies the registrar and
+// changes nothing else.
 export async function bootDirectWire<const C extends readonly ContractModule[]>(
   track: Track,
   opts: {
@@ -418,9 +445,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     provide?: DirectListenerOpts["provide"];
   } = {},
 ): Promise<DirectWire> {
-  const stub = await startStubHub(track);
   const listener = await startDirectListener(track, {
-    deviceId: "A",
     ...(opts.provide === undefined ? {} : { provide: opts.provide }),
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
@@ -436,54 +461,45 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
       }
     },
   });
-  let onPlaneChange: (() => void) | null = null;
-  const { client } = await bootBrokeredPair(stub, track, listener, {
-    hostDeviceId: "A",
-    clientDeviceId: "B",
-    clientOnChange: () => onPlaneChange?.(),
-  });
-  // A's pushes on the session, as the host's peer-push fan-out hands them
-  // on (host/process/wires.ts onPeerPush), for the peer transport's
-  // subscribe.
+  // The listener's pushes on the session, as the host's peer-push
+  // fan-out hands them on (host/process/wires.ts onPeerPush), for the
+  // peer transport's subscribe.
   const pushListeners = new Set<(push: HubPeerPush) => void>();
-  const { plane, bridge } = makeDirectBridge(client, {
-    localDeviceId: "B",
+  const bridged = await bridgeTo(track, listener, {
+    supervised: true,
     onPeerPush: (push) => {
       for (const hear of pushListeners) hear(push);
     },
   });
-  track(() => plane.stop());
-  onPlaneChange = () => plane.handleConnectionChange();
-  plane.handleConnectionChange();
   await waitFor(
-    () => bridge.directPeerVersions().A !== undefined,
-    "the keeper to establish the direct session to A",
+    () => bridged.bridge.directPeerVersions()[LISTENER] !== undefined,
+    "the keeper to establish the direct session to the listener",
   );
-  const peerA = bridgePeerTransport(bridge, "A", pushListeners);
-  return { stub, listener, client, plane, bridge, peerA };
+  const toListener = bridgePeerTransport(
+    bridged.bridge,
+    LISTENER,
+    pushListeners,
+  );
+  return { ...bridged, listener, toListener };
 }
 
-export type DirectBridgeOpts = {
-  localDeviceId?: string;
-  onStatusChange?: DirectPlaneDeps["broadcastStatus"];
-  onPeerPush?: DirectPlaneDeps["broadcastPeerPush"];
-  dialableKinds?: DirectPlaneDeps["dialableKinds"];
-  deadlineMs?: number;
-  keeper?: DirectPlaneDeps["keeper"];
-};
+export type DirectBridgeOpts = Pick<
+  BridgeOpts,
+  "onStatusChange" | "onPeerPush" | "dialableKinds" | "deadlineMs" | "keeper"
+>;
 
-// The client-side composition under test: the REAL direct plane
-// (dialer over the connection's connectInfo ask, bridge cache over the
-// dialer) exactly as the host and the web bridge assemble it. The fan-out
-// sinks are observation seams the scenarios read, and the deadline
-// is shrunk so failure scenarios settle fast.
+// The dialer's composition under test: the REAL direct plane (dialer
+// over the connection's connectInfo ask, bridge cache over the dialer)
+// exactly as the host and the web bridge assemble it, over any hub
+// connection, for a check whose peer is no listener (a wedged or raw
+// one). The fan-out sinks are observation seams the scenarios read.
 export function makeDirectBridge(
-  client: Pick<BootedDevice, "connection">,
+  dialer: Pick<BootedDevice, "connection">,
   opts: DirectBridgeOpts = {},
 ): { plane: DirectPlane; bridge: HubHandlers } {
   const plane = createDirectPlane({
-    connection: () => client.connection,
-    localDeviceId: () => opts.localDeviceId ?? "A",
+    connection: () => dialer.connection,
+    localDeviceId: () => DIALER,
     localAppVersion: () => "1.0.0",
     broadcastStatus: (status) => opts.onStatusChange?.(status),
     broadcastPeerPush: (push) => opts.onPeerPush?.(push),
@@ -492,7 +508,7 @@ export function makeDirectBridge(
     // the errno detail the seam exists for rather than the bare 1006
     // of Node's global.
     openSocket: (url) => new WsClient(url),
-    deadlineMs: opts.deadlineMs ?? 3000,
+    deadlineMs: opts.deadlineMs ?? DIAL_DEADLINE_MS,
     // The keeper's clock/ladder seam, so retry scenarios advance a
     // TestClock instead of sleeping the real ladder out.
     keeper: opts.keeper,
@@ -541,28 +557,64 @@ function bridgePeerTransport(
   };
 }
 
-// One link to a listener, dialed straight at its port with a ticket
-// minted for `deviceId`, closed with the test.
-export async function dialListener(
-  track: Track,
-  listener: Pick<DirectListener, "port" | "tickets">,
-  opts: { deviceId?: string; hostDeviceId?: string } = {},
-): Promise<DeviceConnection> {
-  const deviceId = opts.deviceId ?? "client";
-  const connection = await openDevice({
-    url: `ws://127.0.0.1:${listener.port}`,
-    ticket: mintTicket(listener.tickets, deviceId),
+export type DialOpts = {
+  // Who dials: DIALER unless a check plays another device.
+  dialer?: string;
+  // The identity the dial pins: the listener's own unless a check means
+  // to reach the wrong one.
+  expects?: string;
+  // Minted for the dialer unless a check presents its own.
+  ticket?: string;
+  // The key the dialer seals with: its test key unless a check names
+  // another.
+  localKey?: KeyPair;
+  // ws://127.0.0.1:<the listener's port> unless the dial goes another
+  // way (a proxy, a shaped link).
+  url?: string;
+  deadlineMs?: number;
+  // The socket the dial opens: plain ws unless a check hooks it (a
+  // header, a frame counter).
+  openSocket?: DeviceLinkOptions["openSocket"];
+  onClose?: () => void;
+  protocolVersion?: number;
+  deviceKind?: "desktop" | "web";
+};
+
+// A dial straight at a listener, sealed with the test keys, before its
+// handshake: `.authenticate()` links it or fails.
+export function dialing(
+  listener: Pick<DirectListener, "port" | "tickets" | "deviceId">,
+  opts: DialOpts = {},
+) {
+  const dialer = opts.dialer ?? DIALER;
+  const expects = opts.expects ?? listener.deviceId;
+  return openDevice({
+    url: opts.url ?? `ws://127.0.0.1:${listener.port}`,
+    ticket: opts.ticket ?? mintTicket(listener.tickets, dialer),
     seal: {
-      localKey: testDeviceKey(deviceId).pair,
-      remoteKey: testDeviceKey(opts.hostDeviceId ?? "B").pair.publicKey,
+      localKey: opts.localKey ?? testDeviceKey(dialer).pair,
+      remoteKey: testDeviceKey(expects).pair.publicKey,
     },
     appVersion: "1.0.0",
-    localDeviceId: deviceId,
-    expectedDeviceId: opts.hostDeviceId ?? "B",
-    onClose: () => {},
-    openSocket: (url) => new WsClient(url),
-    deadlineMs: 3000,
-  }).authenticate();
+    localDeviceId: dialer,
+    expectedDeviceId: expects,
+    onClose: opts.onClose ?? (() => {}),
+    openSocket: opts.openSocket ?? ((url) => new WsClient(url)),
+    deadlineMs: opts.deadlineMs ?? DIAL_DEADLINE_MS,
+    ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
+    ...(opts.protocolVersion === undefined
+      ? {}
+      : { protocolVersion: opts.protocolVersion }),
+  });
+}
+
+// One link to a listener, closed with the test.
+export async function dialListener(
+  track: Track,
+  listener: Pick<DirectListener, "port" | "tickets" | "deviceId">,
+  opts: DialOpts = {},
+): Promise<DeviceConnection> {
+  const connection = await dialing(listener, opts).authenticate();
   track(() => connection.close());
   return connection;
 }
