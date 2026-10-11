@@ -20,6 +20,7 @@ Commands and paths are relative to `app/`. The repo root's
 | [`devices.md`](devices.md) | Check the real thing: dev apps as devices on this machine, moving and mirroring worktrees between them for real |
 | [`bridge.md`](bridge.md) | Ask a device window what it knows (`window.api`), or run the same verbs from the CLI |
 | [`dev-app.md`](dev-app.md) | Look up how the dev app is built, where it keeps its state, and how dev profiles work |
+| [`relaunch.mts`](relaunch.mts) | Prove a packaged build's relaunch (the migration's restart, a data-folder move, a nuke) leaves a live window: `node lab/relaunch.mts "<path to the .app>"` on a build from `pnpm package` (`SM_FLAVOR=test` for one that runs beside the installed app) |
 | [`weblab.md`](weblab.md) | Know what weblab can do (read, click, ask, capture, film) and how it starts and stops things here |
 
 ## Sharing the machine
