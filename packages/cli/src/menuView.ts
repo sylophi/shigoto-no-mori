@@ -68,6 +68,10 @@ function Menu(
     ),
   );
   const [ended, setEnded] = useState(false);
+  // The help line shows once the menu takes keys. The effect setting
+  // it runs after useInput's, which attach the menu to stdin, and a
+  // key typed before then would land nowhere.
+  const [listening, setListening] = useState(false);
   const visible = matching(props.names, state.query);
 
   // The last frame is empty, so the menu leaves no trace but the echo.
@@ -124,6 +128,7 @@ function Menu(
     }
     if (input === "/") update({ filtering: true });
   });
+  useEffect(() => setListening(true), []);
 
   if (ended) return null;
   const { bold, dim } = props.paint;
@@ -147,13 +152,15 @@ function Menu(
   }
   const rest = visible.length - state.offset - rows;
   if (rest > 0) lines.push(dim(`  ↓ ${rest} more`));
-  lines.push(
-    dim(
-      state.filtering
-        ? "type to filter · enter select · esc clear"
-        : "↑/↓ move · / filter · enter select · esc cancel",
-    ),
-  );
+  if (listening) {
+    lines.push(
+      dim(
+        state.filtering
+          ? "type to filter · enter select · esc clear"
+          : "↑/↓ move · / filter · enter select · esc cancel",
+      ),
+    );
+  }
   return h(
     Box,
     { flexDirection: "column" },

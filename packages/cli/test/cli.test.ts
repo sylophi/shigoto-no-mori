@@ -480,9 +480,14 @@ describe("transfer", () => {
 });
 
 describe("at a terminal", () => {
+  // What the menu's help line says in either mode. The menu draws it
+  // once its keys reach it, so a key typed after it lands in the menu.
+  const HELP = "enter select";
+
   // The built binary in a terminal of its own (BSD script's pty), each
-  // key typed once the screen shows the text paired with it: what it
-  // showed, stdout and stderr together, escapes and all.
+  // key typed once the screen shows the text paired with it, and after
+  // it the help line of a menu ready for the key: what it showed,
+  // stdout and stderr together, escapes and all.
   const inTerminal = async (
     args: ReadonlyArray<string>,
     keys: ReadonlyArray<readonly [shown: string, key: string]>,
@@ -497,28 +502,43 @@ describe("at a terminal", () => {
       stdio: ["pipe", "pipe", "ignore"],
     });
     let shown = "";
-    child.stdout.on("data", (chunk: Buffer) => (shown += chunk));
-    const ended = new Promise((resolve) => child.on("close", resolve));
-    const waitFor = async (
-      text: string,
-      from: number,
-      deadline: number,
-    ): Promise<void> => {
-      if (shown.slice(from).includes(text)) return;
-      if (Date.now() > deadline) {
-        throw new Error(`Never showed ${text}:\n${shown}`);
-      }
-      await sleep(50);
-      return waitFor(text, from, deadline);
+    let closed = false;
+    // Each check runs again on every chunk the screen gets and once the
+    // binary ends.
+    const checks = new Set<() => void>();
+    const recheck = () => {
+      for (const check of checks) check();
     };
+    child.stdout.on("data", (chunk: Buffer) => {
+      shown += chunk;
+      recheck();
+    });
+    const ended = new Promise((resolve) =>
+      child.on("close", () => {
+        closed = true;
+        recheck();
+        resolve(undefined);
+      }),
+    );
+    // Where `text` shows from `from` on, once it does.
+    const showing = (text: string, from: number) =>
+      new Promise<number>((resolve, reject) => {
+        const check = () => {
+          const at = shown.indexOf(text, from);
+          if (at !== -1) resolve(at);
+          else if (closed) reject(new Error(`Never showed ${text}:\n${shown}`));
+          else return;
+          checks.delete(check);
+        };
+        checks.add(check);
+        check();
+      });
     const type = async (
       steps: ReadonlyArray<readonly [string, string]>,
     ): Promise<void> => {
       const [step, ...rest] = steps;
       if (step === undefined) return;
-      await waitFor(step[0], shown.length, Date.now() + 10_000);
-      // Past the frame, so the key lands in the menu that drew it.
-      await sleep(150);
+      await showing(HELP, await showing(step[0], shown.length));
       child.stdin.write(step[1]);
       return type(rest);
     };
@@ -532,7 +552,6 @@ describe("at a terminal", () => {
     }
   };
   const DOWN = "\u001b[B";
-  const HELP = "enter select";
 
   // Two projects, beta with a worktree "fox".
   const projects = () => {
