@@ -1,7 +1,9 @@
-// Native application menu. Owns the keyboard shortcuts so the renderer doesn't
-// have to register window-level listeners. Accelerators here fire regardless of
-// which element has focus, and Electron dispatches them through the menu before
-// the renderer sees them.
+// Native application menu. Its items' keys are the focused window's
+// keymap (renderer/hooks/ui/useKeymap.ts), which each window hands over
+// as it binds them (setChords), so an item has none until a window has.
+// Accelerators here fire regardless of which element has focus, and
+// Electron dispatches them through the menu before the renderer sees
+// them.
 import {
   app,
   Menu,
@@ -19,10 +21,10 @@ import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
 import { openWindow } from "./windows";
 
-// ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
+// The keymap's launch tools are nine; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
 
-// The File menu's ⌘1..⌘9, each window's own. The renderer owns
+// The File menu's launch tools, each window's own. The renderer owns
 // ordering (it ships whatever its visible LauncherRow is showing) so
 // the menu and the row can never disagree, and the menu shows the
 // focused window's. The click handler sends the id (not the index) so
@@ -41,6 +43,24 @@ function shownLaunchTools(): LaunchTools {
     : (launchToolsByWindow.get(focusedWindowId) ?? NO_LAUNCH_TOOLS);
 }
 
+// Each window's keys for the menu's actions, by the keymap's ids.
+type Chords = Readonly<Record<string, string>>;
+const chordsByWindow = new Map<number, Chords>();
+
+function shownChords(): Chords {
+  return focusedWindowId === null
+    ? {}
+    : (chordsByWindow.get(focusedWindowId) ?? {});
+}
+
+function sameChords(a: Chords, b: Chords): boolean {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => a[key] === b[key])
+  );
+}
+
 function entriesEqual(
   a: readonly LaunchToolMenuEntry[],
   b: readonly LaunchToolMenuEntry[],
@@ -57,9 +77,15 @@ function sameLaunchTools(a: LaunchTools, b: LaunchTools): boolean {
 
 // Rebuilds the menu when what it shows changed.
 function showing(change: () => void): void {
-  const before = shownLaunchTools();
+  const tools = shownLaunchTools();
+  const chords = shownChords();
   change();
-  if (!sameLaunchTools(before, shownLaunchTools())) buildAppMenu();
+  if (
+    !sameLaunchTools(tools, shownLaunchTools()) ||
+    !sameChords(chords, shownChords())
+  ) {
+    buildAppMenu();
+  }
 }
 
 function setLaunchToolsEnabled(
@@ -81,8 +107,12 @@ function setLaunchToolsEnabled(
   );
 }
 
+function setChords(windowId: number, chords: Chords): void {
+  showing(() => chordsByWindow.set(windowId, chords));
+}
+
 export function installMenuImpl(): void {
-  setMenuImpl(setLaunchToolsEnabled);
+  setMenuImpl({ setLaunchToolsEnabled, setChords });
 }
 
 // The menu follows the focused window's tools.
@@ -95,6 +125,7 @@ export function noteMenuWindowFocused(windowId: number): void {
 export function forgetWindowMenu(windowId: number): void {
   showing(() => {
     launchToolsByWindow.delete(windowId);
+    chordsByWindow.delete(windowId);
     if (focusedWindowId === windowId) focusedWindowId = null;
   });
 }
@@ -116,13 +147,14 @@ function clickBroadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 
 function launchToolMenuItems(): MenuItemConstructorOptions[] {
   const { enabled, entries } = shownLaunchTools();
+  const chords = shownChords();
   if (entries.length === 0) return [];
   return [
     { type: "separator" },
     ...entries.map(
       (entry, i): MenuItemConstructorOptions => ({
         label: entry.label,
-        accelerator: `Cmd+${i + 1}`,
+        accelerator: chords[`launchTool${i + 1}`],
         enabled,
         click: clickBroadcast(navContract, "launchById", entry.id),
       }),
@@ -145,6 +177,7 @@ function devViewMenu(): MenuItemConstructorOptions[] {
 }
 
 export function buildAppMenu(): void {
+  const chords = shownChords();
   const template: MenuItemConstructorOptions[] = [
     {
       label: app.name,
@@ -153,7 +186,7 @@ export function buildAppMenu(): void {
         { type: "separator" },
         {
           label: "Settings…",
-          accelerator: "Cmd+,",
+          accelerator: chords.settings,
           click: clickBroadcast(navContract, "openSettings", undefined),
         },
         { type: "separator" },
@@ -171,13 +204,13 @@ export function buildAppMenu(): void {
       submenu: [
         {
           label: "New Window",
-          accelerator: "Cmd+N",
+          accelerator: chords.newWindow,
           click: () => openWindow("/"),
         },
         { type: "separator" },
         {
           label: "Add project…",
-          accelerator: "Shift+Cmd+N",
+          accelerator: chords.addProject,
           click: clickBroadcast(navContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),

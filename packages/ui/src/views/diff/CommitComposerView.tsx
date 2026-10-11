@@ -10,6 +10,7 @@ import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { Kbd } from "../../primitives/kbd.tsx";
+import type { Binding } from "../../lib/keymap.ts";
 import { Textarea } from "../../primitives/textarea.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "../../lib/pluralize.ts";
@@ -51,6 +52,7 @@ export function CommitComposerView({
   amend,
   addToLast,
   onCommit,
+  commitKeys,
 }: {
   files: readonly ChangedFile[];
   // How many of them are ticked.
@@ -64,6 +66,8 @@ export function CommitComposerView({
   // The last commit's subject, when the ticked files can go into it.
   addToLast: { subject: string; onAdd: () => void } | null;
   onCommit: () => void;
+  // The keys that commit from either field (the keymap's).
+  commitKeys: Binding;
 }) {
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   // The description sits one line tall, as tall as what it holds, until
@@ -93,11 +97,11 @@ export function CommitComposerView({
   // goes on to the description, the way a message is written in an
   // editor, rather than committing: Enter there is usually a reflex.
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-    if (e.metaKey || e.ctrlKey) {
+    if (e.nativeEvent.isComposing) return;
+    if (commitKeys.matches(e)) {
       e.preventDefault();
       submit();
-    } else if (e.target instanceof HTMLInputElement) {
+    } else if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
       e.preventDefault();
       descriptionRef.current?.focus();
     }
@@ -261,7 +265,7 @@ export function CommitComposerView({
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {canCommit && (
               <Kbd className="bg-primary-foreground/20 text-primary-foreground">
-                ⌘↵
+                {commitKeys.label}
               </Kbd>
             )}
           </Button>

@@ -55,6 +55,8 @@ export interface PalettePage {
   parent?: string;
   // What else it goes by ("Devices" for the account).
   aliases?: readonly string[];
+  // The keys that open it from anywhere (Settings' ⌘,).
+  keys?: string;
   open: () => void;
 }
 

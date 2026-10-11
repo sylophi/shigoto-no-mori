@@ -77,3 +77,10 @@ export const SetLaunchToolsEnabledPayloadSchema = Schema.Struct({
   // ⌘1..⌘9 always mirror the visible launcher row. Omit when disabling.
   entries: Schema.optional(Schema.Array(LaunchToolMenuEntrySchema)),
 });
+
+// The keys of the menu's actions (newWindow, addProject, settings,
+// launchTool1..9) as the calling window binds them, as Electron
+// accelerators. An action left out has none.
+export const SetMenuChordsPayloadSchema = Schema.Struct({
+  chords: Schema.Record(Schema.String, Schema.String),
+});

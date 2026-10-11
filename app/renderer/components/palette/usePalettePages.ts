@@ -15,6 +15,7 @@ import {
   TIDY_SECTION,
 } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
+import { useKeymap } from "@/hooks/ui/useKeymap";
 import { hasLocalHost } from "@/lib/localHost";
 import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
@@ -24,6 +25,7 @@ import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts"
 // this window offers them.
 export function usePalettePages(): PalettePage[] {
   const navigate = useNavigate();
+  const settingsKeys = useKeymap().get("settings");
   const villageLife = useVillageLife();
   const { client, host } = settingsSections(false, villageLife, hasLocalHost);
   const devices = useDeviceTabs().filter(
@@ -80,6 +82,7 @@ export function usePalettePages(): PalettePage[] {
     key: "page:settings",
     label: "Settings",
     icon: SettingsIcon,
+    keys: settingsKeys?.label,
     open: () => void navigate({ to: "/settings" }),
   });
   for (const section of [...client, ...host]) {

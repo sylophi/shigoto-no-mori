@@ -19,9 +19,9 @@ import {
   AddProjectNoDeviceView,
 } from "@shigomori/ui/views/AddProjectModalView.tsx";
 
-// Standalone host for the add-project flow (File → Add project…, ⌘N, and
-// the sidebar ＋ button). The shortcut is a native menu accelerator in
-// main/electron/menu.ts that broadcasts over IPC.
+// Standalone host for the add-project flow (File → Add project… and
+// the sidebar ＋ button). The menu item's keys are the keymap's, an
+// accelerator in main/electron/menu.ts that broadcasts over IPC.
 export function AddProjectModal() {
   const { addProjectOpen, addProjectRequest, openAddProject } = useOverlays();
 

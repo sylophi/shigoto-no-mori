@@ -8,22 +8,22 @@ import { PROJECT_ACTION_HOOKS, SIDEBAR_ICON_BUTTON } from "./sidebarChrome.ts";
 // The primitive, not just its classes: doubutsu restyles that row by its
 // data-slot/data-variant. The bare one borrows a project header's phone
 // hooks, since a phone has no hover to reveal its fill.
-//
-// ⌘N is a native menu accelerator, so only the desktop app has it.
 export function AddProjectButtonView({
   outline = false,
-  hasLocalHost,
+  keys,
   onClick,
 }: {
   outline?: boolean;
-  hasLocalHost: boolean;
+  // Its keys, for aria-keyshortcuts: the menu's, so only the desktop
+  // app has them.
+  keys: string | undefined;
   onClick: () => void;
 }) {
   const props = {
     type: "button",
     onClick,
     "aria-label": "Add project",
-    "aria-keyshortcuts": hasLocalHost ? "Meta+N" : undefined,
+    "aria-keyshortcuts": keys,
   } as const;
   const icon = <FolderPlus className="size-3.5" />;
   return outline ? (

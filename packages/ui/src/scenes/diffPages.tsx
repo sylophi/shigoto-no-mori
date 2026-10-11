@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { ArrowUp } from "lucide-react";
 import { BranchBarView } from "../views/diff/BranchBarView.tsx";
 import type { DiffChangesControls } from "../views/diff/changesControls.ts";
+import { defaultBinding } from "../lib/keymap.ts";
 import { CommitComposerView } from "../views/diff/CommitComposerView.tsx";
 import { CommitDetailsView } from "../views/diff/CommitDetailsView.tsx";
 import {
@@ -216,6 +217,7 @@ export function ChangesPageScene() {
                 amend={null}
                 addToLast={last ? { subject: last.subject, onAdd: noop } : null}
                 onCommit={noop}
+                commitKeys={defaultBinding("commit")}
               />
             }
             readOnlyNote={null}
@@ -388,7 +390,10 @@ export function DiffPartsScene() {
               message={
                 <CleanTreeMessageView
                   owed="2 commits not pushed yet."
-                  shortcut="to push"
+                  shortcut={{
+                    keys: defaultBinding("commit").label,
+                    does: "to push",
+                  }}
                 />
               }
               virtualizer={null}

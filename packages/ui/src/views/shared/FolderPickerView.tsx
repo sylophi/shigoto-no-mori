@@ -1,3 +1,4 @@
+import type { Binding } from "../../lib/keymap.ts";
 import type { KeyboardEvent } from "react";
 import { Command } from "cmdk";
 import { Folder } from "lucide-react";
@@ -55,6 +56,7 @@ export function FolderPickerView({
   setHighlighted,
   browse,
   onOpenFinder,
+  confirmKeys,
 }: FolderPickerProps & {
   query: string;
   setQuery: (value: string) => void;
@@ -64,6 +66,9 @@ export function FolderPickerView({
   // The native dialog, this machine's window manager's: absent on a
   // peer's picker, which keeps the typed listing alone.
   onOpenFinder?: () => void;
+  // The keys that pick what is typed past a highlighted row (the
+  // keymap's).
+  confirmKeys: Binding;
 }) {
   const {
     browseDir,
@@ -96,7 +101,7 @@ export function FolderPickerView({
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && e.metaKey) {
+    if (confirmKeys.matches(e)) {
       e.preventDefault();
       e.stopPropagation();
       confirm();
@@ -127,7 +132,7 @@ export function FolderPickerView({
   };
 
   const canBrowseUp = canNavigateUp(query);
-  const confirmKbd = hasHighlighted ? "⌘↩" : "↩";
+  const confirmKbd = hasHighlighted ? confirmKeys.label : "↩";
 
   return (
     <Command

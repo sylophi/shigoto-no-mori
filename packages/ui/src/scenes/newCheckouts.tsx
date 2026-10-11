@@ -2,6 +2,7 @@
 // (from a pull request, and branched off a source) over shigoto-no-mori's
 // fixtures, and the Add project dialog's three tabs with the stages
 // between them.
+import { defaultBinding } from "../lib/keymap.ts";
 import { createRef, type ReactNode } from "react";
 import { FolderGit2, FolderPlus } from "lucide-react";
 import {
@@ -245,6 +246,7 @@ export function AddProjectScene() {
               onAdd={noop}
               terrierOptIn={terrierOptIn}
               onPickFolder={noop}
+              confirmKeys={defaultBinding("confirm").label}
             />,
           )}
         </SceneDialog>
@@ -321,6 +323,7 @@ export function AddProjectPartsScene() {
           onAdd={async () => {}}
           bulkAdding={false}
           onKeyDown={noop}
+          confirmKeys={defaultBinding("confirm").label}
           terrierOptIn={terrierOptIn}
         />
       </ModalBox>

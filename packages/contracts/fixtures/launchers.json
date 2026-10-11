@@ -202,5 +202,28 @@
         ]
       }
     ]
+  },
+  "SetMenuChordsPayloadSchema": {
+    "accepts": [
+      {
+        "chords": {
+          "settings": "Cmd+,",
+          "newWindow": "Cmd+N",
+          "addProject": "Cmd+Shift+N",
+          "launchTool1": "Cmd+1"
+        }
+      },
+      {
+        "chords": {}
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "chords": {
+          "settings": 1
+        }
+      }
+    ]
   }
 }

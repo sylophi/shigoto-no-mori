@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
 import { hasLocalHost } from "@/lib/localHost";
 import { openWorktreeInNewWindow } from "@/lib/newWindow";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -113,6 +114,7 @@ function WorktreeVerbs({
   settled: boolean;
 }) {
   const { worktree, pr } = entry;
+  const changesKeys = useBinding("paletteChanges");
   const deviceId = entry.device?.deviceId;
   const api = useRemoteDeviceApi(deviceId);
   const reachable = deviceId === undefined || api !== undefined;
@@ -128,7 +130,7 @@ function WorktreeVerbs({
       key: "diff",
       label: "Open changes",
       icon: iconOf(FileDiff),
-      listKeys: "⌘↩",
+      listKeys: changesKeys.label,
       run: () => actions.go(entry, "diff"),
     },
   ];
@@ -196,7 +198,7 @@ function WorktreeVerbs({
   );
 }
 
-// Its tools, ⌘1..⌘9 in the order drawn.
+// Its tools, the keymap's launch tools (⌘1..⌘9) in the order drawn.
 function LauncherVerbs({
   entry,
   query,
@@ -209,6 +211,7 @@ function LauncherVerbs({
   launchers: readonly LauncherEntry[];
 }) {
   const { mutate: launch } = useLaunch();
+  const keymap = useKeymap();
   return (
     <VerbGroupView
       heading="Launch"
@@ -218,7 +221,7 @@ function LauncherVerbs({
         label: launcher.label,
         search: `Open in ${launcher.label}`,
         icon: <LauncherIconView entry={launcher} />,
-        keys: i < 9 ? `⌘${i + 1}` : undefined,
+        keys: keymap.get(`launchTool${i + 1}`)?.label,
         run: () => {
           launch({
             projectId: entry.worktree.projectId,

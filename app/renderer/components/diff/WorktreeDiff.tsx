@@ -24,7 +24,7 @@ import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
-import { isOverlayOpen } from "@/lib/dom";
+import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
@@ -242,8 +242,9 @@ function WorktreeChanges({
   // commit, which is where the next move (push, amend, undo) lives.
   const showComposer =
     canCommand && (loading || list.length > 0 || amending) && !failed;
-  // With nothing to commit, ⌘↵ sends the commits instead: the push (or
-  // the publish) the branch bar offers.
+  // With nothing to commit, the commit keys send the commits instead:
+  // the push (or the publish) the branch bar offers.
+  const commitKeys = useBinding("commit");
   const sendShortcut = usePushShortcut(
     worktree,
     canCommand && !showComposer && !failed && list.length === 0,
@@ -321,6 +322,7 @@ function WorktreeChanges({
             included={countIncluded(picks, list)}
             draft={draft}
             onDraftChange={setDraft}
+            commitKeys={commitKeys}
             pending={commit.isPending}
             error={commit.error}
             amend={
@@ -376,13 +378,17 @@ function WorktreeChanges({
   );
 }
 
-// ⌘↵ (or Ctrl+↵) on a page with nothing to commit: run the branch's
-// send, a push or a publish, the move the commit box's chord leads to
-// anyway. Only those two: they send commits and touch nothing here.
-// Answers with what the chord runs ("Push"), or null while it runs
-// nothing.
-function usePushShortcut(worktree: Worktree, enabled: boolean): string | null {
+// The commit keys (⌘↩) on a page with nothing to commit: run the
+// branch's send, a push or a publish, the move the commit box's keys
+// lead to anyway. Only those two: they send commits and touch nothing
+// here. Answers with the keys and what they run ("to push"), or null
+// while they run nothing.
+function usePushShortcut(
+  worktree: Worktree,
+  enabled: boolean,
+): { keys: string; does: string } | null {
   const mutations = useSyncMoveMutations();
+  const keys = useBinding("commit");
   const move = worktreeSyncView(worktree).move;
   const send =
     enabled &&
@@ -393,18 +399,17 @@ function usePushShortcut(worktree: Worktree, enabled: boolean): string | null {
       : null;
   const mutation = send ? mutations[send.key] : null;
   const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
-  useEffect(() => {
-    if (!mutation) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
-      if (e.isComposing || e.defaultPrevented || mutation.isPending) return;
-      // A dialog or menu open over the page keeps ⌘↵ for itself.
-      if (isOverlayOpen()) return;
-      e.preventDefault();
+  useKeymapAction(
+    "commit",
+    () => {
+      if (!mutation || mutation.isPending) return false;
       mutation.mutate(scope);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-  return send && (send.key === "push" ? "to push" : "to publish");
+    },
+    { enabled: mutation !== null },
+  );
+  if (!send) return null;
+  return {
+    keys: keys.label,
+    does: send.key === "push" ? "to push" : "to publish",
+  };
 }

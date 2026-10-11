@@ -1,9 +1,8 @@
-import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ClientConfig, SidebarView } from "@shigomori/contracts/schemas";
-import { isBareKeyEvent } from "@/lib/dom";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
+import { useKeymapAction } from "@/hooks/ui/useKeymap";
 import { queryKeys } from "@/lib/queryKeys";
 
 // Which layout the sidebar shows. A preference of the window showing
@@ -30,7 +29,8 @@ export function useSetSidebarView() {
   );
 }
 
-// Tab flips the layout without reaching for the footer toggle. It lives
+// The keymap's sidebarLayout (Tab) flips the layout without reaching
+// for the footer toggle. It lives
 // here, with the read and the write, so the two-way flip sits next to
 // the default it alternates around and doesn't depend on which
 // component happens to paint the toggle.
@@ -39,18 +39,16 @@ export function useSetSidebarView() {
 // Arrange mode is a projects-tree affordance, so the tree can't be
 // swapped out from under a drag.
 //
-// Worth knowing: this is a bare key, and preventDefault on Tab costs
+// Worth knowing: Tab is a bare key, and taking it costs
 // forward focus traversal for the whole window, not just the sidebar.
 // Shift+Tab still walks backwards, and pointer focus is untouched.
 export function useSidebarViewHotkey(enabled: boolean): void {
   const queryClient = useQueryClient();
   const { mutate: setView } = useSetSidebarView();
 
-  useEffect(() => {
-    if (!enabled) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Tab" || !isBareKeyEvent(e)) return;
-      e.preventDefault();
+  useKeymapAction(
+    "sidebarLayout",
+    () => {
       // Read at press time rather than closing over the rendered value:
       // the optimistic write lands in the cache a microtask after the
       // press, but the rendered value only catches up a re-render
@@ -61,9 +59,7 @@ export function useSidebarViewHotkey(enabled: boolean): void {
         queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig())
           ?.sidebarView ?? "projects";
       setView(view === "inbox" ? "projects" : "inbox");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure per render, and the handler only reads the cache, so re-subscribing each render would be churn.
-  }, [enabled, queryClient]);
+    },
+    { enabled },
+  );
 }

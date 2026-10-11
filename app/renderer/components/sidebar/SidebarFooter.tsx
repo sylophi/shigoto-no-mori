@@ -1,6 +1,7 @@
 // The sidebar's footer (SidebarFooterView): the layout toggle, and the
 // app-level actions. A hostless client has no local tree to arrange,
 // so its bar carries the toggle and the page-nav cluster.
+import { useBinding } from "@/hooks/ui/useKeymap";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useMarkAgentsWaiting } from "@/hooks/config/useSidebarMarks";
 import { useLiveCount } from "@/hooks/live/useLiveActivity";
@@ -29,6 +30,7 @@ export function SidebarFooter({
 }: SidebarFooterProps) {
   const view = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
+  const layoutKeys = useBinding("sidebarLayout");
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const updateReady = Object.keys(useStagedUpdates()).length > 0;
@@ -40,7 +42,13 @@ export function SidebarFooter({
       onDoneArranging={
         hasLocalHost && arrangeMode ? onToggleArrange : undefined
       }
-      toggle={<SidebarViewToggleView view={view} onChange={setView} />}
+      toggle={
+        <SidebarViewToggleView
+          view={view}
+          onChange={setView}
+          keys={layoutKeys.aria}
+        />
+      }
       actions={
         <SidebarNavActionsView
           hasLocalHost={hasLocalHost}
