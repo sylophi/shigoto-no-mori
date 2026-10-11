@@ -3521,7 +3521,7 @@
   },
   {
     "name": "electron",
-    "version": "43.1.0",
+    "version": "43.7.7",
     "licenses": "MIT",
     "repository": "https://github.com/electron/electron",
     "publisher": "",
@@ -6601,7 +6601,7 @@
   },
   {
     "name": "undici",
-    "version": "7.28.0",
+    "version": "7.29.1",
     "licenses": "MIT",
     "repository": "https://github.com/nodejs/undici",
     "publisher": "",
