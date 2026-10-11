@@ -13,11 +13,17 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
 - `components/<area>/`: the containers, by area, each binding its data
   to a view from `@shigomori/ui` under the plain name the view drops
   `View` from. A container draws no markup of its own.
-- `hooks/<area>/`: where a container's data comes from. A host view (a
+- `hooks/<area>/`: where a container's data comes from, unless one
+  container alone reads it, which may ask in place. A host view (a
   stream the host serves) is an atom (`lib/runtime/atoms.ts`, read
   through `lib/runtime/viewHooks.ts`); a request is a React Query query
   whose key comes from `lib/queryKeys.ts`. A hook under
-  `hooks/remote/` scopes its calls to a device (`useHostScope`).
+  `hooks/remote/` scopes its calls to a device (`useHostScope`). A hook
+  of the page's own logic (which device is picked, where a click goes,
+  what a menu offers) sits with the containers of the area it belongs
+  to (`components/shared/DeviceTabs.tsx`'s `useDeviceTabs`,
+  `components/sidebar/openProject.ts`), and another area imports it
+  from there.
 - `lib/runtime/`: the client's runtime, one per window or tab, built
   from its links as the page boots and disposed as it goes
   (EFFECT.md, section 3): `client.ts`, the links (`ClientLinks.ts`,
