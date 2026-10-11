@@ -126,6 +126,17 @@ done
    deep-link back. The most recently launched worktree owns the
    `shigomori-dev://` scheme.
 
+Flags the profile options don't take go on to electron-forge, so
+`pnpm dev --profile <name> --inspect-electron` starts the main process
+under Node's inspector. `pnpm device` takes only its own flags.
+
+The native menu, the dock and the system dialogs are outside any page.
+weblab drives them through the main process: a session that attaches
+to the window with `mainProcess` set runs an `electron` step there, so
+walking `Menu.getApplicationMenu().items` to an item by its label and
+calling its `click` is a step like any other. Shoot the attached window (`shot`), not the
+screen, which an agent's session has no permission to capture.
+
 ## Environment variables
 
 | Variable                           | Effect                                                                        |

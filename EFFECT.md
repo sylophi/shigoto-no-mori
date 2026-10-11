@@ -3,7 +3,9 @@
 How Effect is written in this repo. Every TypeScript package follows
 it: the engine, the host, the desktop and web shells, the contracts,
 the hub, and the renderer's data layer. A review holds the lines a
-PR changes to these rules, not older code.
+PR changes to these rules, not older code. The shell's Electron-facing
+modules (the menu, windows, deep links) are plain Electron code;
+`app/main/README.md` says which of the shell is Effect.
 
 Effect is pinned to one exact version, the latest stable release (the
 workspace catalog). The source of that version, `node_modules/effect`
