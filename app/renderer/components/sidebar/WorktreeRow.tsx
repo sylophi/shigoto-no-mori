@@ -7,6 +7,7 @@ import type { PullRequest, Worktree } from "@shared/schemas";
 import type { StackPosition, StackRail } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 import { WorktreeEntry } from "./WorktreeEntry";
+import { WorktreeMenu } from "./WorktreeMenu";
 
 interface WorktreeRowProps {
   worktree: Worktree;
@@ -86,6 +87,7 @@ function StackRailMark({
 // the same row plus its device badge. Everything else reads as local:
 // the PR off the peer's own map, script activity off its run store,
 // and a click opens the worktree's page under its device's route.
+// Right-click opens the worktree's menu (WorktreeMenu).
 export function WorktreeRow({
   worktree,
   device,
@@ -103,18 +105,27 @@ export function WorktreeRow({
     worktreeId: mirrorWorktreeId,
   });
   return (
-    <WorktreeEntry
+    <WorktreeMenu
       worktree={worktree}
       pr={pr}
-      stack={stack}
-      device={device}
-      mirror={mirror}
-      state={state}
-      shelf={shelf}
-      hideStackPosition={stackRail?.whole}
-      className={cn(stackRail && "ml-4.5 w-[calc(100%-var(--spacing)*4.5)]")}
-    >
-      <StackRailMark rail={stackRail} pr={pr} />
-    </WorktreeEntry>
+      deviceId={device?.deviceId}
+      row={
+        <WorktreeEntry
+          worktree={worktree}
+          pr={pr}
+          stack={stack}
+          device={device}
+          mirror={mirror}
+          state={state}
+          shelf={shelf}
+          hideStackPosition={stackRail?.whole}
+          className={cn(
+            stackRail && "ml-4.5 w-[calc(100%-var(--spacing)*4.5)]",
+          )}
+        >
+          <StackRailMark rail={stackRail} pr={pr} />
+        </WorktreeEntry>
+      }
+    />
   );
 }

@@ -9,6 +9,20 @@ import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CleanupError, Worktree } from "@shared/schemas";
 
+// Why the worktree can't be deleted right now, if it can't. Delete
+// waits out the create run (carry-over, setup, port provision), which
+// the host refuses to race. Local only: the create phases stream to
+// this machine alone, so a peer's page can't see them and relies on
+// that refusal.
+export function useDeleteBlockedReason(worktree: Worktree): string | undefined {
+  const { remote } = useHostScope();
+  const settingUp =
+    useWorktreeCreatePhase(remote ? null : worktree.id) !== null;
+  return settingUp
+    ? "Can't delete while the worktree is being set up"
+    : undefined;
+}
+
 interface DeleteOpts {
   force?: boolean;
   skipCleanup?: boolean;
@@ -23,13 +37,7 @@ interface DeleteOpts {
 export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   const nav = useWorktreeNav();
   const deleteMutation = useDeleteWorktree();
-  // Delete waits out the create run (carry-over, setup, port
-  // provision), which the host refuses to race. Local only: the create
-  // phases stream to this machine alone, so a peer's page can't see
-  // them and relies on that refusal.
-  const { remote } = useHostScope();
-  const settingUp =
-    useWorktreeCreatePhase(remote ? null : worktree.id) !== null;
+  const deleteBlockedReason = useDeleteBlockedReason(worktree);
   const [needsForce, setNeedsForce] = useState(false);
   const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
 
@@ -107,9 +115,7 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
     needsForce,
     cleanupError,
     runDelete,
-    deleteBlockedReason: settingUp
-      ? "Can't delete while the worktree is being set up"
-      : undefined,
+    deleteBlockedReason,
     cancelForce,
     // For a removal made another way (a stack cleanup) that took this
     // worktree with it: the same move off the page.

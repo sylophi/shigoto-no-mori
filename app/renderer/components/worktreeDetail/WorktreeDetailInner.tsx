@@ -22,7 +22,10 @@ import {
 } from "@/hooks/scripts/useScriptRuns";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import {
+  useTakeWorktreeDialog,
+  useWorktreeNav,
+} from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeTitle } from "@/hooks/worktrees/useWorktreeTitle";
 import {
   scriptKey,
@@ -98,6 +101,13 @@ export function WorktreeDetailInner({
   // dialog is open.
   const Transfers = remote ? RemoteTransferActions : PeerTransferActions;
   const [transferDialog, setTransferDialog] = useState<TransferDialog>(null);
+  // Or asked for off the page (the sidebar's worktree menu), as is the
+  // running mirror's, which its button opens.
+  const [mirrorAsked, setMirrorAsked] = useState(false);
+  useTakeWorktreeDialog((dialog) => {
+    if (dialog === "mirroring") setMirrorAsked(true);
+    else setTransferDialog(dialog);
+  });
   const transfers = {
     worktree,
     project,
@@ -349,7 +359,11 @@ export function WorktreeDetailInner({
         leading={
           <>
             <FilesButton worktree={worktree} />
-            <MirrorAction worktree={worktree} />
+            <MirrorAction
+              worktree={worktree}
+              asked={mirrorAsked}
+              onOpened={() => setMirrorAsked(false)}
+            />
             <Transfers part="footer" {...transfers} />
           </>
         }

@@ -293,6 +293,15 @@ export function isManagedWorktree(
   return !worktree.isPrimary && !worktree.isExternal;
 }
 
+// Whether auto-pull can be switched: it needs a branch that tracks an
+// upstream, and once on it stays switchable even if the upstream
+// vanishes, so it can be turned off again.
+export function canSetAutoPull(
+  worktree: Pick<Worktree, "autoPull" | "hasUpstream" | "detached">,
+): boolean {
+  return worktree.autoPull || (worktree.hasUpstream && !worktree.detached);
+}
+
 // Whether a working agent session files the worktree on its shelf:
 // only once the window allows it (useAllowAgentWorking). Otherwise the
 // shelf ignores it everywhere.

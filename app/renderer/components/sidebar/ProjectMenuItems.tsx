@@ -18,30 +18,12 @@ import type { Project } from "@shared/schemas";
 
 interface ProjectMenuItemsProps {
   project: Project;
-  // What sits under the cursor when the menu opens. Next to a worktree,
-  // "Remove" reads as "delete this worktree", so the items that could be
-  // taken either way name their target. Next to the project itself the
-  // short forms are unambiguous.
-  subject: "project" | "worktree";
   // The two-step remove confirm, owned by the menu's host so it can be
   // reset the moment the menu closes (see useProjectMenuRemoveArm).
   removeArm: ProjectMenuRemoveArm;
 }
 
 export type ProjectMenuRemoveArm = ReturnType<typeof useConfirmTwiceKeyed>;
-
-const LABELS = {
-  project: {
-    quickCreate: "Quick create",
-    configure: "Configure",
-    remove: "Remove",
-  },
-  worktree: {
-    quickCreate: "Quick create worktree",
-    configure: "Configure project",
-    remove: "Remove project",
-  },
-};
 
 // Two-step confirm so accidentally landing on "Remove" doesn't drop the
 // project. Menu stays open while armed; second click within the timeout
@@ -62,10 +44,7 @@ export function useProjectMenuRemoveArm() {
 // The create pair that leads the list. Its own component so a header
 // spanning devices can mount it under the device its `+` creates on
 // while the rest of the list stays with the device the menu opened for.
-export function ProjectCreateMenuItems({
-  project,
-  subject,
-}: Pick<ProjectMenuItemsProps, "project" | "subject">) {
+export function ProjectCreateMenuItems({ project }: { project: Project }) {
   const {
     quickCreate,
     openCreateForm,
@@ -79,7 +58,7 @@ export function ProjectCreateMenuItems({
         disabled={creating}
         onClick={() => void quickCreate(project.id)}
       >
-        {LABELS[subject].quickCreate}
+        Quick create
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => openCreateForm(project.id)}>
         New worktree from…
@@ -92,10 +71,7 @@ export function ProjectCreateMenuItems({
 // The project pages, behind the create pair. Each leads to a page with
 // a device tab bar of its own (ProjectDevicePage), so the device the
 // menu opened for is only where that page starts.
-export function ProjectPageMenuItems({
-  project,
-  subject,
-}: Pick<ProjectMenuItemsProps, "project" | "subject">) {
+export function ProjectPageMenuItems({ project }: { project: Project }) {
   const { toProjectPage } = useProjectNav();
   if (project.pathExists === false) return null;
 
@@ -111,7 +87,7 @@ export function ProjectPageMenuItems({
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={() => goTo("configure")}>
-        {LABELS[subject].configure}
+        Configure
       </DropdownMenuItem>
     </>
   );
@@ -124,7 +100,6 @@ export function ProjectPageMenuItems({
 // in that submenu is.
 export function ProjectRemoveMenuItem({
   project,
-  subject,
   removeArm,
   device,
 }: ProjectMenuItemsProps & {
@@ -163,22 +138,7 @@ export function ProjectRemoveMenuItem({
         removeArm.trigger(armKey, () => removeProject.mutate(project.id));
       }}
     >
-      {armed ? "Click again to confirm" : (deviceRow ?? LABELS[subject].remove)}
+      {armed ? "Click again to confirm" : (deviceRow ?? "Remove")}
     </DropdownMenuItem>
-  );
-}
-
-// The whole action list under one scope, as the inbox row's right-click
-// menu shows it (the project header composes the parts itself, across
-// devices). Scope-aware through its hooks: mounted under a peer's
-// HostScopeProvider every item acts on and links into that device.
-export function ProjectMenuItems(props: ProjectMenuItemsProps) {
-  const { project, subject } = props;
-  return (
-    <>
-      <ProjectCreateMenuItems project={project} subject={subject} />
-      <ProjectPageMenuItems project={project} subject={subject} />
-      <ProjectRemoveMenuItem {...props} />
-    </>
   );
 }
