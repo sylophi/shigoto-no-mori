@@ -26,7 +26,6 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { coalesce } from "@host/lib/util/coalesce";
 import {
-  GitStateCoreSchema,
   MirrorEventSchema,
   MirrorWorktreePayloadSchema,
   mirrorContract,
@@ -132,6 +131,7 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import { peerClient, setPeerReach } from "@host/ipc/peerSync";
 import { createPortForwardEngine } from "@host/portForward/engine";
 import * as MirrorDaemon from "@host/mirror/daemon";
+import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import { createMirrorGateway } from "@host/mirror/gateway";
 import { createMirrorHistory } from "@host/mirror/history";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
@@ -221,15 +221,8 @@ const broadcastMirrorChanged = coalesce(() => {
   );
 }, 150);
 const fileSyncDir = () => join(dataDir(), "file-sync");
-// The git follower's agreed states, one file beside the engine's data.
-const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
-const GitFollowStoreSchema = Schema.Struct({
-  agreed: Schema.Record(Schema.String, GitStateCoreSchema).pipe(
-    Schema.withDecodingDefault(Effect.succeed({})),
-  ),
-});
 // The mirrors' event threads (host/mirror/history.ts), one file
-// beside the follower's, fed by every daemon snapshot and follower
+// beside the engine's data, fed by every daemon snapshot and follower
 // verdict below and by the handlers' control ops.
 const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
 const MirrorHistoryStoreSchema = Schema.Struct({
@@ -483,16 +476,10 @@ export const mirrorLayer = Layer.effectDiscard(
       const follower = yield* makeGitFollower({
         sessions: mirrorSessions(mirrorImpl),
         followDescription: true,
-        // The states both sides last agreed on, beside the engine's own
-        // data so a restart resumes the follow rule rather than falling
-        // back to ancestry.
-        agreedStore: {
-          load: () =>
-            readJsonOrNullSync(gitFollowStorePath(), GitFollowStoreSchema)
-              ?.agreed ?? {},
-          save: (agreed) =>
-            atomicWriteJsonSync(gitFollowStorePath(), { agreed }),
-        },
+        // The states both sides last agreed on, in the store so a
+        // restart resumes the follow rule rather than falling back to
+        // ancestry.
+        agreedStore: yield* MirrorAgreements.MirrorAgreements,
         onChange: () => {
           broadcastMirrorChanged();
           void Graph.run(observeMirrorHistory).catch(() => {});

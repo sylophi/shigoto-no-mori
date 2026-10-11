@@ -16,6 +16,8 @@ import {
 } from "./migrations/importJson.ts";
 import { agentSessions } from "./migrations/agentSessions.ts";
 import { changes } from "./migrations/changes.ts";
+import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
+import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
 import { unshelvedAt } from "./migrations/unshelvedAt.ts";
@@ -123,6 +125,11 @@ export const layer = (
             "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
             "6_terminals": terminals,
             "7_wt_folder": wtFolder,
+            "8_running_scripts": runningScripts,
+            "9_mirror_agreements": Effect.provideContext(
+              mirrorAgreements,
+              platform,
+            ),
           }),
         }).pipe(Effect.provideService(SqlClient.SqlClient, client));
         yield* importing("done");
@@ -172,6 +179,7 @@ export const fromFiles = (
           "4_changes": changes,
           "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
           "7_wt_folder": wtFolder,
+          "8_running_scripts": runningScripts,
         }),
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, client),

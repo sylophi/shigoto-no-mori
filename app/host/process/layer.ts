@@ -38,7 +38,7 @@ import * as Villagers from "@host/lib/VillagerData";
 import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
-import * as OrphanSweep from "@host/lib/scripts/persistence";
+import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
@@ -259,9 +259,8 @@ const scriptsAndFoundation = (options: {
   FileSyncRunner.layer.pipe(
     Layer.provideMerge(scripts(options.hurried)),
     // A crash, a force quit or an OOM skips the quit's reap, so what the
-    // last run left running is reaped here. It claims the record file
-    // synchronously, before any script can spawn, and kills in the
-    // background.
+    // last run left running is reaped here. It claims the records before
+    // any script can spawn, and kills in the background.
     Layer.provideMerge(OrphanSweep.layer),
     // Every terminal, each saved for the next start as it closes with
     // the quit.

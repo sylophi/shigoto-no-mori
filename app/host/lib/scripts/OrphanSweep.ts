@@ -4,19 +4,17 @@
 // server running, reparented to launchd, still holding its port, with
 // no UI left to stop it.
 //
-// So every spawn and every settle mirrors the live map into
-// <dataDir>/running-scripts.json, and the next boot sweeps whatever the
-// previous session left behind. The file is disposable: a missing,
-// stale, or unreadable one degrades to sweeping nothing. It never
-// fails a boot, a spawn, or an exit.
+// So every spawn is recorded in the store (the engine's RunningScripts)
+// until its exit, and the next boot sweeps whatever the previous session
+// left behind. The record is disposable: a store that can't be read or
+// written degrades to sweeping nothing. It never fails a boot, a spawn,
+// or an exit.
 //
 // The dangerous half is the sweep. It works from a record that may be
 // days old, and a pid that has been recycled belongs to a stranger by
 // then, so isSameProcess below has to prove the pid is still ours
 // before anything is signaled. Every inconclusive answer leaves the
 // process alone.
-import { readFileSync } from "node:fs";
-import { basename, join } from "node:path";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -25,16 +23,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
-import { atomicWriteJsonSync } from "../util/atomicJson";
-import { isENOENT, dataDir } from "../util/paths";
+import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Processes from "../util/processes";
 import { signalTree } from "./process";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { log } from "@shared/log";
-
-const FILE = "running-scripts.json";
 
 // `ps` reports a start time to the second and we stamp startedAt just
 // after spawn returns, so the two differ by that rounding plus spawn
@@ -47,83 +39,7 @@ const START_TOLERANCE_MS = 5_000;
 const ORPHAN_GRACE_MS = 2_000;
 const EXIT_POLL_MS = 100;
 
-const ProcessIdSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(2));
-
-const PersistedScriptSchema = Schema.Struct({
-  runId: Schema.NonEmptyString,
-  // gte(2): the sweep signals the record's process *group* as -pid, and
-  // kill(-1, ...) is "every process you may signal". No real child ever
-  // has pid 1, but this file is untrusted input everywhere else, so the
-  // one value that would broadcast a signal is refused at the schema.
-  pid: ProcessIdSchema,
-  projectId: Schema.NonEmptyString,
-  worktreeId: Schema.NonEmptyString,
-  startedAt: Schema.Int.check(Schema.isGreaterThan(0)),
-  command: Schema.String,
-});
-
-// ownerPid is the app instance that wrote the file. Two instances
-// pointed at the same data dir (a dev build launched with SHIGOMORI_DATA_DIR
-// aimed at the packaged data dir) would otherwise have the second one's
-// boot sweep kill the first one's live scripts out from under its
-// window.
-const SnapshotSchema = Schema.Struct({
-  // Same floor as the script pids: pid 1 is launchd, which is always
-  // alive, so an ownerPid of 1 would read as a live sibling instance
-  // and permanently disable the boot sweep.
-  ownerPid: ProcessIdSchema,
-  scripts: Schema.Array(PersistedScriptSchema),
-});
-
-export type PersistedScript = typeof PersistedScriptSchema.Type;
-type Snapshot = typeof SnapshotSchema.Type;
-const decodeSnapshot = Schema.decodeUnknownSync(SnapshotSchema);
-
-function filePath(): string {
-  return join(dataDir(), FILE);
-}
-
-// Replaces the file with our whole in-memory set. Sync: the payload is
-// a handful of records, and the settle path can run while the app is
-// already tearing down, where a pending async write would never land.
-export function persistRunningScripts(
-  scripts: readonly PersistedScript[],
-): void {
-  const path = filePath();
-  const snapshot: Snapshot = { ownerPid: process.pid, scripts };
-  try {
-    atomicWriteJsonSync(path, snapshot);
-  } catch (error) {
-    // Losing the record costs the next boot's sweep and nothing else.
-    // A script run must not fail over it.
-    log.warn(
-      `[scripts] couldn't record running scripts: ${errorMessageOf(error)}`,
-    );
-  }
-}
-
-// Lock-free: the rename above keeps the file itself always whole.
-function readSnapshot(): Snapshot | null {
-  let raw: string;
-  try {
-    raw = readFileSync(filePath(), "utf8");
-  } catch (error) {
-    // A missing file is the ordinary first-run case. Anything else is
-    // worth saying out loud. Neither is evidence that nothing was
-    // running, which is why both return null (nothing to sweep) rather
-    // than an empty record set.
-    if (!isENOENT(error)) {
-      log.warn(`[scripts] couldn't read ${FILE}: ${errorMessageOf(error)}`);
-    }
-    return null;
-  }
-  try {
-    return decodeSnapshot(JSON.parse(raw));
-  } catch (error) {
-    log.warn(`[scripts] ignoring unusable ${FILE}: ${errorMessageOf(error)}`);
-    return null;
-  }
-}
+type RecordedScript = RunningScripts.RunningScript;
 
 function isProcessAlive(pid: number): boolean {
   try {
@@ -199,7 +115,9 @@ function commandMatches(recorded: string, live: string): boolean {
   if (live.includes(trimmed)) return true;
   const head = (trimmed.split(/\s+/)[0] ?? "").replace(/['"]/g, "");
   if (head === "") return false;
-  return live.includes(head) || live.includes(basename(head));
+  return (
+    live.includes(head) || live.includes(head.slice(head.lastIndexOf("/") + 1))
+  );
 }
 
 // The identity proof. A live pid says nothing on its own, so three
@@ -208,7 +126,7 @@ function commandMatches(recorded: string, live: string): boolean {
 // setsid survives an exec), it started when we recorded that it
 // started, and its command line still looks like the one we launched.
 function isSameProcess(
-  record: PersistedScript,
+  record: RecordedScript,
   live: LiveProcess | undefined,
 ): boolean {
   if (!live) return false;
@@ -232,7 +150,7 @@ const waitForExit = (pid: number, ms: number) =>
     Effect.map(Option.isSome),
   );
 
-const killOrphan = Effect.fnUntraced(function* (record: PersistedScript) {
+const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
   yield* signalTree(record.pid, "SIGTERM");
   if (yield* waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
   // Still alive after the grace period, or the number was freed and
@@ -257,7 +175,7 @@ const killOrphan = Effect.fnUntraced(function* (record: PersistedScript) {
 // UI shows is what is running. Killing also frees the ports the next
 // run of the same script needs.
 const reapOrphans = Effect.fnUntraced(function* (
-  records: readonly PersistedScript[],
+  records: readonly RecordedScript[],
 ) {
   const none: OrphanScriptReport = { stopped: 0 };
   if (records.length === 0) return none;
@@ -274,33 +192,14 @@ const reapOrphans = Effect.fnUntraced(function* (
   return { stopped } satisfies OrphanScriptReport;
 });
 
-// Reads what the previous session left behind, then, unless another
-// live instance owns it, immediately claims the file for this
-// instance. Nothing can have spawned yet at boot, so the empty
-// snapshot is accurate once claimed, and from here on every write is a
-// full replace of our own state. The ownership check has to run before
-// the claim, not after: writing first would overwrite a live sibling
-// instance's record of its own running scripts before we've confirmed
-// they aren't ours to touch.
-function claimOrphanRecords(): readonly PersistedScript[] {
-  const previous = readSnapshot();
-  if (
-    previous &&
-    previous.ownerPid !== process.pid &&
-    isProcessAlive(previous.ownerPid)
-  ) {
-    // Another app instance is running those scripts right now, with a
-    // window attached to them. Not ours to reap, and not ours to claim.
-    return [];
-  }
-  persistRunningScripts([]);
-  return previous?.scripts ?? [];
-}
-
 // The sweep of what a crash, a force quit or an OOM left running, which
-// skipped the quit's reap: its layer claims the record file at boot,
-// before any script can spawn (the claim is sync, so the file is ours
-// before the window opens), and kills in the background.
+// skipped the quit's reap, and the record it sweeps from. Its layer
+// claims the previous sessions' records at boot, before any script can
+// spawn, and kills in the background. Another live instance's records
+// are not ours: two instances pointed at the same data dir (a dev build
+// launched with SHIGOMORI_DATA_DIR aimed at the packaged data dir) would
+// otherwise have the second one's sweep kill the first one's live
+// scripts out from under its window.
 export class OrphanSweep extends Context.Service<
   OrphanSweep,
   {
@@ -310,15 +209,46 @@ export class OrphanSweep extends Context.Service<
     // report that came back empty for that reason would drop the
     // notice. Every later ask answers nothing stopped.
     readonly takeReport: Effect.Effect<OrphanScriptReport>;
+    // Records a script this instance started, until `exit` says it is
+    // gone.
+    readonly record: (
+      script: Omit<RecordedScript, "ownerPid">,
+      exit: Effect.Effect<unknown>,
+    ) => Effect.Effect<void>;
   }
 >()("sm/host/OrphanSweep") {}
+
+// Losing the record costs the next boot's sweep and nothing else.
+const recordFailure = (what: string) =>
+  Effect.catchCause((cause) =>
+    Effect.logWarning(`[scripts] couldn't ${what} running scripts`, cause),
+  );
 
 export const layer = Layer.effect(
   OrphanSweep,
   Effect.gen(function* () {
-    const records = claimOrphanRecords();
+    const recorded = yield* RunningScripts.RunningScripts;
+    const scope = yield* Effect.scope;
+    const ownerPid = process.pid;
+    // Ours: a dead instance's, or this pid's from a session before. A
+    // live instance's are running right now, with a window attached.
+    const left = yield* recorded.list.pipe(
+      Effect.map((records) =>
+        records.filter(
+          (record) =>
+            record.ownerPid === ownerPid || !isProcessAlive(record.ownerPid),
+        ),
+      ),
+      Effect.tap((records) => recorded.remove(records.map((r) => r.runId))),
+      Effect.catchCause((cause) =>
+        Effect.logWarning(
+          "[scripts] couldn't read running scripts",
+          cause,
+        ).pipe(Effect.as([])),
+      ),
+    );
     const done = yield* Deferred.make<OrphanScriptReport>();
-    yield* reapOrphans(records).pipe(
+    yield* reapOrphans(left).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("[scripts] orphan sweep failed", cause).pipe(
           Effect.as({ stopped: 0 }),
@@ -335,6 +265,19 @@ export const layer = Layer.effect(
         ),
         Effect.withSpan("OrphanSweep.takeReport"),
       ),
+      record: Effect.fn("OrphanSweep.record")(function* (
+        script: Omit<RecordedScript, "ownerPid">,
+        exit: Effect.Effect<unknown>,
+      ) {
+        yield* recorded
+          .add({ ...script, ownerPid })
+          .pipe(recordFailure("record"));
+        yield* exit.pipe(
+          Effect.andThen(recorded.remove([script.runId])),
+          recordFailure("update"),
+          Effect.forkIn(scope),
+        );
+      }),
     });
   }),
 );

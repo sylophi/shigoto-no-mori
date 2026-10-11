@@ -33,7 +33,7 @@ import * as Terrier from "../../host/lib/terrier.ts";
 import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
-import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
+import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
 import * as Views from "../../host/lib/views.ts";
 import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
@@ -119,13 +119,9 @@ const runtime = ManagedRuntime.make(
             setWindowFocused: () => {},
           }),
         ),
-        // Nothing a previous run left behind to sweep.
-        Layer.succeed(
-          OrphanSweep.OrphanSweep,
-          OrphanSweep.OrphanSweep.of({
-            takeReport: Effect.succeed({ stopped: 0 }),
-          }),
-        ),
+        // Over the file's fresh store, with nothing a previous run left
+        // behind to sweep.
+        OrphanSweep.layer,
       ),
     ),
     Layer.provideMerge(

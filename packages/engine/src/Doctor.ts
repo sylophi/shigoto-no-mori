@@ -65,6 +65,7 @@ import { StoreImportError } from "./migrations/importJson.ts";
 import { errnoText, isAbsent, isNotFound } from "./platformErrors.ts";
 import { pidAlive } from "./processes.ts";
 import * as Registry from "./Registry.ts";
+import * as RunningScripts from "./RunningScripts.ts";
 import {
   CD_FILE_ENV,
   collapseHome,
@@ -202,6 +203,7 @@ type StoreServices =
   | Config.Config
   | Layout.Layout
   | Registry.Registry
+  | RunningScripts.RunningScripts
   | Terrier.Terrier
   | Worktrees.Worktrees
   | WorktreeData.WorktreeData
@@ -294,23 +296,6 @@ const INCOMING_REF_STALE_MS = 60 * 60 * 1000;
 const SCRIPT_START_TOLERANCE_MS = 5_000;
 
 const INCOMING_PREFIX = "refs/shigomori/incoming/";
-
-// running-scripts.json: the dev servers and scripts the app started,
-// with the app instance that owns them.
-const RunningScripts = Schema.fromJsonString(
-  Schema.Struct({
-    ownerPid: Schema.optional(Schema.Finite),
-    scripts: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          pid: Schema.optional(Schema.Finite),
-          startedAt: Schema.optional(Schema.Finite),
-          command: Schema.optional(Schema.String),
-        }),
-      ),
-    ),
-  }),
-);
 
 // A JSON file the store imports, read as an object.
 const JsonObjectText = Schema.fromJsonString(
@@ -1349,23 +1334,18 @@ const make = Effect.gen(function* () {
   });
 
   // The dev servers and scripts the app started outlive a crashed app
-  // until its next launch stops them, holding their ports.
+  // until its next launch stops them, holding their ports. Read from
+  // the store, so a run that can't open it leaves them out.
   const checkOrphanScripts = Effect.gen(function* () {
-    const file = Option.flatMap(
-      yield* readText(path.join(dataDir, "running-scripts.json")),
-      Schema.decodeOption(RunningScripts),
-    );
-    if (Option.isNone(file)) return [];
-    const ownerPid = file.value.ownerPid ?? 0;
-    const scripts = file.value.scripts ?? [];
-    if (scripts.length === 0 || ownerPid < 2 || (yield* pidAlive(ownerPid))) {
-      return [];
+    const recorded = yield* (yield* RunningScripts.RunningScripts).list;
+    const owners = [...new Set(recorded.map(({ ownerPid }) => ownerPid))];
+    const gone = new Set<number>();
+    for (const owner of owners) {
+      if (!(yield* pidAlive(owner))) gone.add(owner);
     }
-    const pids = scripts
-      .map(({ pid }) => pid ?? 0)
-      .filter((pid) => pid >= 2)
-      .map(String);
-    if (pids.length === 0) return [];
+    const scripts = recorded.filter(({ ownerPid }) => gone.has(ownerPid));
+    if (scripts.length === 0) return [];
+    const pids = scripts.map(({ pid }) => String(pid));
     // Non-zero when none are alive.
     const ps = yield* capture(
       "ps",
@@ -1376,19 +1356,19 @@ const make = Effect.gen(function* () {
       Option.match(ps, { onNone: () => "", onSome: ({ stdout }) => stdout }),
     );
     const orphans = scripts.filter(({ pid, startedAt }) => {
-      const started = live.get(pid ?? 0);
+      const started = live.get(pid);
       // A recycled pid started at another time.
       return (
         started !== undefined &&
-        Math.abs(started - (startedAt ?? 0)) <= SCRIPT_START_TOLERANCE_MS
+        Math.abs(started - startedAt) <= SCRIPT_START_TOLERANCE_MS
       );
     });
     if (orphans.length === 0) return [];
     const n = orphans.length;
     return [
       check("Processes", "scripts", "scripts").warn(
-        `${n} script${plural(n)} the app started ${pluralize(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command ?? "").join(", ")}), holding ${pluralize(n, "its", "their")} ports`,
-        `Open the app, which stops them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid ?? 0)).join(" ")}\`.`,
+        `${n} script${plural(n)} the app started ${pluralize(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command).join(", ")}), holding ${pluralize(n, "its", "their")} ports`,
+        `Open the app, which stops them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid)).join(" ")}\`.`,
       ),
     ];
   });
@@ -2335,17 +2315,17 @@ const make = Effect.gen(function* () {
   // --- without the store ---
 
   // The checks that need no state: the environment, the data dir's own
-  // lines (locks and what an update left) and what a crash left running.
-  // `failed` says the store wouldn't open, which is a line of its own
-  // unless the data dir's line already says why. Skipped, since they
-  // read what the store keeps: config.json's and registry.json's lines,
-  // the port pool, launchers, terrier, dormant state, worktree marks and
-  // every project.
+  // lines (locks and what an update left) and a tunnel a crash left
+  // running. `failed` says the store wouldn't open, which is a line of
+  // its own unless the data dir's line already says why. Skipped, since
+  // they read what the store keeps: config.json's and registry.json's
+  // lines, the port pool, launchers, terrier, dormant state, worktree
+  // marks, the scripts a crash left running and every project.
   const checkWithoutState = (input: RunInput, failed: boolean) =>
     Effect.gen(function* () {
       const environment = yield* checkEnvironment(input);
       const dir = yield* checkDataDir;
-      const processes = yield* checkProcesses;
+      const processes = yield* checkOrphanTunnel;
       if (!dir.usable) return [...environment, dir.entry, ...processes];
       const holder = yield* stagingHolder(stagingLock);
       return [

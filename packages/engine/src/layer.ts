@@ -23,10 +23,12 @@ import * as Landing from "./Landing.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import * as Migration from "./Migration.ts";
+import * as MirrorAgreements from "./MirrorAgreements.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
+import * as RunningScripts from "./RunningScripts.ts";
 import * as SavedTerminals from "./SavedTerminals.ts";
 import * as Scripts from "./Scripts.ts";
 import * as ShellIntegration from "./ShellIntegration.ts";
@@ -96,6 +98,8 @@ const services = (options: EngineOptions) =>
         Icons.layer,
         SharedSettings.layer,
         SavedTerminals.layer,
+        RunningScripts.layer,
+        MirrorAgreements.layer,
       ),
     ),
     Layer.provideMerge(Git.layer),
@@ -122,7 +126,13 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
     ),
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(
-      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
+      Layer.mergeAll(
+        Config.layer,
+        Usage.layer,
+        Identity.layer,
+        Icons.layer,
+        RunningScripts.layer,
+      ),
     ),
     Layer.provideMerge(store),
   );

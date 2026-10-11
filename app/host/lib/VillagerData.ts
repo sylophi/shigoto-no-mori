@@ -38,6 +38,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Random from "effect/Random";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -64,7 +65,6 @@ import {
   WIKI_API,
   WIKI_USER_AGENT,
 } from "@shared/villagers/wiki";
-import { tempPathFor } from "./util/atomicJson";
 import { dataDir } from "./util/paths";
 
 // Villagers per API request (the API's cap on titles), and faces in
@@ -178,7 +178,7 @@ const make = ({
     const writeWhole = (file: string, data: Uint8Array | string) =>
       Effect.gen(function* () {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-        const temp = tempPathFor(file);
+        const temp = `${file}.tmp.${(yield* Random.nextInt).toString(36)}`;
         yield* typeof data === "string"
           ? fs.writeFileString(temp, data)
           : fs.writeFile(temp, data);
