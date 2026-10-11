@@ -9,7 +9,7 @@ import {
   parseSemver,
   releaseChannel,
   type Semver,
-} from "./semver.ts";
+} from "@shigomori/contracts/semver";
 
 // What a feed said about the release to move to.
 export type ReleaseInfo = {

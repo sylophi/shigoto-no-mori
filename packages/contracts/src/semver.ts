@@ -1,8 +1,9 @@
-// Just enough semver 2.0.0 for the updater: parsing, precedence, and the
-// channel a prerelease belongs to, to rank the release list
-// (updateFeed.ts pickRelease). Written to the rules 2.x
-// releases used rather than taken from a library, so a tag reads the
-// same as it did.
+// Just enough semver 2.0.0 for releases: parsing, precedence, and the
+// channel a prerelease belongs to. The engine's updater ranks the
+// release list with it (updateFeed.ts pickRelease) and its doctor a
+// staged update, and the app's changelog compares builds with it
+// (releaseVersions.ts). Written to the rules 2.x releases used rather
+// than taken from a library, so a tag reads the same as it did.
 
 export type Semver = {
   readonly major: bigint;

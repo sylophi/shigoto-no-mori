@@ -15,6 +15,7 @@ import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -612,14 +613,6 @@ const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const chunksOf = <T>(items: readonly T[]): T[][] => {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += PATHSPEC_CHUNK) {
-    chunks.push(items.slice(i, i + PATHSPEC_CHUNK));
-  }
-  return chunks;
-};
-
 // Reads a pipe to its end. Past `limit` bytes it fails with
 // `tooLarge`, or without one keeps the first `limit` bytes and drains
 // the rest (stderr, whose volume a hook decides).
@@ -739,7 +732,7 @@ const make = Effect.gen(function* () {
     paths: readonly string[],
     options?: RunOptions,
   ) =>
-    Effect.forEach(chunksOf(paths), (chunk) =>
+    Effect.forEach(Arr.chunksOf(paths, PATHSPEC_CHUNK), (chunk) =>
       run(worktree, ["--literal-pathspecs", ...args, "--", ...chunk], options),
     );
 

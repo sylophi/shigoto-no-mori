@@ -21,8 +21,8 @@ const StuckWorktreeSchema = Schema.Struct({
 // moves are made, and the one under way.
 const WorktreeMoveStepSchema = Schema.Struct({
   state: MigrationStepStateSchema,
-  moved: Schema.Number,
-  total: Schema.Number,
+  moved: Schema.Finite,
+  total: Schema.Finite,
   current: Schema.NullOr(Schema.String),
   stuck: Schema.Array(StuckWorktreeSchema),
 });

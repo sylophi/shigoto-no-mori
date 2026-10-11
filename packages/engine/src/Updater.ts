@@ -54,7 +54,7 @@ import {
   isPrerelease,
   parseSemver,
   type Semver,
-} from "./semver.ts";
+} from "@shigomori/contracts/semver";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
