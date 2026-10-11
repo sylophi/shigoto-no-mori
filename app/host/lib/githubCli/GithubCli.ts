@@ -6,6 +6,7 @@
 import type {
   GhUnavailableReason,
   GithubCliReadiness,
+  PullRequestOptions,
   RepoMergeConfig,
 } from "@shigomori/contracts/schemas";
 import * as Cache from "effect/Cache";
@@ -69,6 +70,15 @@ export class GithubCli extends Context.Service<
       string | null,
       GhUnavailableError | Processes.CommandError
     >;
+    // Who and what a new pull request can name: the signed-in user, the
+    // repo's assignable people and its labels. Ungated, for the action
+    // that reads it to gate.
+    readonly pullRequestOptions: (
+      cwd: string,
+    ) => Effect.Effect<
+      PullRequestOptions,
+      Processes.CommandError | Schema.SchemaError
+    >;
   }
 >()("sm/host/GithubCli") {}
 
@@ -82,6 +92,9 @@ const KNOWN_HOSTS_TTL = Duration.hours(1);
 const REPO_TTL = Duration.minutes(5);
 // Merge-button settings barely change within a session.
 const MERGE_CONFIG_TTL = Duration.hours(1);
+// A repo's people and labels change rarely, and the create pull request
+// dialog reopens often.
+const PULL_REQUEST_OPTIONS_TTL = Duration.minutes(5);
 
 // One GraphQL read: `gh repo view --json` has the three method flags
 // but not autoMergeAllowed. gh fills {owner} and {repo} from the
@@ -100,6 +113,44 @@ const decodeRepoMergeConfig = Schema.decodeUnknownEffect(
           squashMergeAllowed: Schema.Boolean,
           rebaseMergeAllowed: Schema.Boolean,
           autoMergeAllowed: Schema.Boolean,
+        }),
+      }),
+    }),
+  ),
+);
+
+// One read for the create pull request dialog's pickers, filled in the
+// same way. A list GitHub couldn't resolve an entry of answers a null in
+// its place.
+const PULL_REQUEST_OPTIONS_QUERY =
+  "query($owner: String!, $name: String!) { viewer { login } " +
+  "repository(owner: $owner, name: $name) { " +
+  "assignableUsers(first: 100) { nodes { login name } } " +
+  "labels(first: 100, orderBy: {field: NAME, direction: ASC}) " +
+  "{ nodes { name color description } } } }";
+
+const nodesOf = <S extends Schema.Top>(node: S) =>
+  Schema.Struct({ nodes: Schema.Array(Schema.NullOr(node)) });
+
+const decodePullRequestOptions = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      data: Schema.Struct({
+        viewer: Schema.Struct({ login: Schema.String }),
+        repository: Schema.Struct({
+          assignableUsers: nodesOf(
+            Schema.Struct({
+              login: Schema.String,
+              name: Schema.NullOr(Schema.String),
+            }),
+          ),
+          labels: nodesOf(
+            Schema.Struct({
+              name: Schema.String,
+              color: Schema.String,
+              description: Schema.NullOr(Schema.String),
+            }),
+          ),
         }),
       }),
     }),
@@ -193,6 +244,36 @@ const make = Effect.gen(function* () {
     { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
   );
 
+  const pullRequestOptions = yield* Cache.makeWith(
+    (cwd: string) =>
+      gh(
+        [
+          "api",
+          "graphql",
+          "-F",
+          "owner={owner}",
+          "-F",
+          "name={repo}",
+          "-f",
+          `query=${PULL_REQUEST_OPTIONS_QUERY}`,
+        ],
+        { cwd },
+      ).pipe(
+        Effect.flatMap(({ stdout }) => decodePullRequestOptions(stdout)),
+        Effect.map(
+          ({ data: { viewer, repository } }): PullRequestOptions => ({
+            viewer: viewer.login,
+            people: repository.assignableUsers.nodes.flatMap((n) =>
+              n ? [n] : [],
+            ),
+            labels: repository.labels.nodes.flatMap((n) => (n ? [n] : [])),
+          }),
+        ),
+        withSpawner,
+      ),
+    { capacity: Infinity, timeToLive: answersFor(PULL_REQUEST_OPTIONS_TTL) },
+  );
+
   // Read once per launch and keyed by the repo (host/owner/repo), so
   // clones of one repo share it: an About is rarely edited, and one that is can wait.
   const descriptions = yield* Cache.makeWith(
@@ -271,6 +352,9 @@ const make = Effect.gen(function* () {
         `${info.host}/${info.owner}/${info.repo}`,
       );
     }),
+    pullRequestOptions: Effect.fn("GithubCli.pullRequestOptions")((cwd) =>
+      Cache.get(pullRequestOptions, cwd),
+    ),
   });
 });
 

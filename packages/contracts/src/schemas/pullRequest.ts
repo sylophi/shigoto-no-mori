@@ -1,6 +1,10 @@
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { ProjectScopedPayloadSchema } from "./payloads.ts";
+import { isWebUrl } from "../predicates/webUrl.ts";
+import {
+  ProjectScopedPayloadSchema,
+  WorktreeScopedPayloadSchema,
+} from "./payloads.ts";
 
 const PullRequestNumberSchema = Schema.Int.check(Schema.isGreaterThan(0));
 
@@ -388,6 +392,143 @@ export const SetPullRequestDraftPayloadSchema = Schema.Struct({
   number: PullRequestNumberSchema,
   draft: Schema.Boolean,
 });
+
+// What the create pull request dialog starts from, read once as it
+// opens. The base a stacked branch belongs on (the nearest branch below
+// it with an open PR of its own), null for the primary branch. The
+// title and body gh's --fill would give the branch's commits against
+// that base. And the repo's PR template, null without one.
+export const PullRequestDraftSchema = Schema.Struct({
+  suggestedBase: Schema.NullOr(Schema.String),
+  fill: Schema.Struct({ title: Schema.String, body: Schema.String }),
+  template: Schema.NullOr(Schema.String),
+});
+export type PullRequestDraft = typeof PullRequestDraftSchema.Type;
+
+// What a PR into `base` would hold: how many commits the branch has
+// since it left the base, and what they change together. The base is a
+// branch name, compared at its remote-tracking ref when there is one.
+export const PullRequestComparePayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  base: Schema.NonEmptyString,
+});
+export const PullRequestCompareSchema = Schema.Struct({
+  commits: Schema.Natural,
+  files: Schema.Natural,
+  additions: Schema.Natural,
+  deletions: Schema.Natural,
+});
+export type PullRequestCompare = typeof PullRequestCompareSchema.Type;
+
+// Who and what a new PR can name, from the repo: the signed-in user,
+// the people it can be assigned to (reviewers are picked from the same
+// list, less the viewer), and its labels.
+export const PullRequestOptionsSchema = Schema.Struct({
+  viewer: Schema.String,
+  people: Schema.Array(
+    Schema.Struct({ login: Schema.String, name: Schema.NullOr(Schema.String) }),
+  ),
+  labels: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      // Hex without the hash, as GitHub stores it.
+      color: Schema.String,
+      description: Schema.NullOr(Schema.String),
+    }),
+  ),
+});
+export type PullRequestOptions = typeof PullRequestOptionsSchema.Type;
+
+// A file the description refers to as `./<name>`, staged on the host a
+// chunk at a time as it is pasted in (stageAttachment), and uploaded
+// by gh's --attach when the PR is created. The id is the renderer's.
+export const AttachmentIdSchema = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{16}$/),
+);
+export const AttachmentNameSchema = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/),
+);
+
+// What gh's --attach uploads, by the extension it reads the type from
+// (cli/cli internal/attachments/userasset.go), and how big: GitHub's
+// limit for an image, and gh's for a video (the plan decides the rest).
+export const ATTACHMENT_IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+export const ATTACHMENT_VIDEO_EXTENSIONS: Readonly<Record<string, string>> = {
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+};
+export const MAX_ATTACHMENT_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_VIDEO_BYTES = 100 * 1024 * 1024;
+
+// An image or video on the web, fetched by the host into the staging
+// folder like a pasted file, so the PR keeps its own copy on GitHub.
+// Its name is `<stem>.<extension of the type it came as>`, which the
+// host answers with.
+export const StageAttachmentFromUrlPayloadSchema = Schema.Struct({
+  id: AttachmentIdSchema,
+  stem: Schema.String.check(
+    Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/),
+  ),
+  url: Schema.String.check(
+    Schema.makeFilter((url: string) => isWebUrl(url) || "Not a web URL"),
+  ),
+});
+export const StagedAttachmentSchema = Schema.Struct({
+  name: AttachmentNameSchema,
+  type: Schema.String,
+});
+export type StagedAttachment = typeof StagedAttachmentSchema.Type;
+
+// One chunk of an attachment, its bytes as base64. Chunks go in order,
+// each at the offset the ones before it end at, small enough that a
+// peer's call carries one comfortably.
+export const ATTACHMENT_CHUNK_BYTES = 512 * 1024;
+export const StageAttachmentPayloadSchema = Schema.Struct({
+  id: AttachmentIdSchema,
+  name: AttachmentNameSchema,
+  offset: Schema.Natural,
+  base64: Schema.String.check(
+    Schema.isMaxLength(Math.ceil(ATTACHMENT_CHUNK_BYTES / 3) * 4),
+  ),
+});
+
+export const DiscardAttachmentPayloadSchema = Schema.Struct({
+  id: AttachmentIdSchema,
+});
+
+// A new PR from the worktree's branch into `base`, with GitHub's own
+// limits on the title and body. Each attachment must be staged in full,
+// and is referenced in the body as `./<name>`.
+export const CreatePullRequestPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  base: Schema.NonEmptyString,
+  title: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
+  body: Schema.String.check(Schema.isMaxLength(65536)),
+  draft: Schema.Boolean,
+  reviewers: Schema.Array(Schema.NonEmptyString),
+  assignees: Schema.Array(Schema.NonEmptyString),
+  labels: Schema.Array(Schema.NonEmptyString),
+  attachments: Schema.Array(
+    Schema.Struct({ id: AttachmentIdSchema, name: AttachmentNameSchema }),
+  ),
+});
+export type CreatePullRequestPayload =
+  typeof CreatePullRequestPayloadSchema.Type;
+
+// The new PR's URL, and what went wrong after it was made (an
+// attachment that didn't upload), null when nothing did.
+export const CreatePullRequestResultSchema = Schema.Struct({
+  url: UrlSchema,
+  warning: Schema.NullOr(Schema.String),
+});
+export type CreatePullRequestResult = typeof CreatePullRequestResultSchema.Type;
 
 export const DisablePullRequestAutoMergePayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,

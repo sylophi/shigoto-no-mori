@@ -1073,5 +1073,270 @@
   "GithubRepoListSchema": {
     "accepts": [["sylophi/shigoto-no-mori", "acme/tools"], []],
     "rejects": [[1], "sylophi/shigoto-no-mori"]
+  },
+  "PullRequestDraftSchema": {
+    "accepts": [
+      {
+        "suggestedBase": "exp/terrier-sync",
+        "fill": {
+          "title": "Retry a busy lease",
+          "body": ""
+        },
+        "template": null
+      },
+      {
+        "suggestedBase": null,
+        "fill": {
+          "title": "",
+          "body": ""
+        },
+        "template": "## What changed\n"
+      }
+    ],
+    "rejects": [
+      {
+        "suggestedBase": null,
+        "fill": {
+          "title": ""
+        },
+        "template": null
+      }
+    ]
+  },
+  "PullRequestComparePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "base": "main"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "base": ""
+      }
+    ]
+  },
+  "PullRequestCompareSchema": {
+    "accepts": [
+      {
+        "commits": 2,
+        "files": 3,
+        "additions": 10,
+        "deletions": 1
+      }
+    ],
+    "rejects": [
+      {
+        "commits": -1,
+        "files": 3,
+        "additions": 10,
+        "deletions": 1
+      },
+      {
+        "commits": 1.5,
+        "files": 3,
+        "additions": 10,
+        "deletions": 1
+      }
+    ]
+  },
+  "PullRequestOptionsSchema": {
+    "accepts": [
+      {
+        "viewer": "sylophi",
+        "people": [
+          {
+            "login": "rin",
+            "name": "Rin Takeda"
+          },
+          {
+            "login": "mossgrove",
+            "name": null
+          }
+        ],
+        "labels": [
+          {
+            "name": "bug",
+            "color": "d73a4a",
+            "description": null
+          }
+        ]
+      }
+    ],
+    "rejects": [
+      {
+        "viewer": "sylophi",
+        "people": [
+          {
+            "login": "rin"
+          }
+        ],
+        "labels": []
+      }
+    ]
+  },
+  "AttachmentIdSchema": {
+    "accepts": ["0123456789abcdef"],
+    "rejects": ["0123456789ABCDEF", "0123"]
+  },
+  "AttachmentNameSchema": {
+    "accepts": ["shot.png", "clip-2.mp4"],
+    "rejects": [
+      ".hidden",
+      "a/b.png",
+      "",
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ]
+  },
+  "StageAttachmentFromUrlPayloadSchema": {
+    "accepts": [
+      {
+        "id": "0123456789abcdef",
+        "stem": "shot",
+        "url": "https://example.com/shot.png"
+      }
+    ],
+    "rejects": [
+      {
+        "id": "0123456789abcdef",
+        "stem": "shot",
+        "url": "file:///etc/passwd"
+      },
+      {
+        "id": "0123456789abcdef",
+        "stem": "-x",
+        "url": "https://example.com/x.png"
+      }
+    ]
+  },
+  "StagedAttachmentSchema": {
+    "accepts": [
+      {
+        "name": "shot.png",
+        "type": "image/png"
+      }
+    ],
+    "rejects": [
+      {
+        "name": "../shot.png",
+        "type": "image/png"
+      }
+    ]
+  },
+  "StageAttachmentPayloadSchema": {
+    "accepts": [
+      {
+        "id": "0123456789abcdef",
+        "name": "shot.png",
+        "offset": 0,
+        "base64": "UE5H"
+      }
+    ],
+    "rejects": [
+      {
+        "id": "0123456789abcdef",
+        "name": "shot.png",
+        "offset": -1,
+        "base64": ""
+      },
+      {
+        "id": "0123456789abcdef",
+        "name": "../x.png",
+        "offset": 0,
+        "base64": ""
+      }
+    ]
+  },
+  "DiscardAttachmentPayloadSchema": {
+    "accepts": [
+      {
+        "id": "0123456789abcdef"
+      }
+    ],
+    "rejects": [
+      {
+        "id": "x"
+      }
+    ]
+  },
+  "CreatePullRequestPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "base": "main",
+        "title": "Retry a busy lease",
+        "body": "![shot](./shot.png)",
+        "draft": false,
+        "reviewers": ["rin"],
+        "assignees": [],
+        "labels": ["bug"],
+        "attachments": [
+          {
+            "id": "0123456789abcdef",
+            "name": "shot.png"
+          }
+        ]
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "base": "main",
+        "title": "",
+        "body": "",
+        "draft": false,
+        "reviewers": [],
+        "assignees": [],
+        "labels": [],
+        "attachments": []
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "base": "main",
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "body": "",
+        "draft": false,
+        "reviewers": [],
+        "assignees": [],
+        "labels": [],
+        "attachments": []
+      }
+    ]
+  },
+  "CreatePullRequestResultSchema": {
+    "accepts": [
+      {
+        "url": "https://github.com/o/r/pull/7",
+        "warning": null
+      },
+      {
+        "url": "https://github.com/o/r/pull/8",
+        "warning": "failed to upload clip.mp4: HTTP 500"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "url": " https://github.com/o/r/pull/7\n",
+          "warning": null
+        },
+        "output": {
+          "url": "https://github.com/o/r/pull/7",
+          "warning": null
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "url": "not a url",
+        "warning": null
+      }
+    ]
   }
 }

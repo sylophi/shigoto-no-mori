@@ -1,6 +1,9 @@
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke } from "../contract.ts";
 import {
+  CreatePullRequestPayloadSchema,
+  CreatePullRequestResultSchema,
+  DiscardAttachmentPayloadSchema,
   DisablePullRequestAutoMergePayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
@@ -11,6 +14,14 @@ import {
   MergePullRequestResultSchema,
   ProjectScopedPayloadSchema,
   PullRequestCandidateListSchema,
+  PullRequestComparePayloadSchema,
+  PullRequestCompareSchema,
+  PullRequestDraftSchema,
+  PullRequestOptionsSchema,
+  StageAttachmentFromUrlPayloadSchema,
+  StageAttachmentPayloadSchema,
+  StagedAttachmentSchema,
+  WorktreeScopedPayloadSchema,
   PullRequestCheckoutRefSchema,
   PullRequestDetailSchema,
   PublishRepoPayloadSchema,
@@ -113,6 +124,62 @@ export const githubCliContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
+  // The create pull request dialog's starting point (PullRequestDraftSchema).
+  invoke(
+    "pullRequestDraft",
+    WorktreeScopedPayloadSchema,
+    PullRequestDraftSchema,
+    {
+      remote: true,
+      gated: false,
+    },
+  ),
+  // What a PR from the worktree's branch into a base would hold.
+  invoke(
+    "pullRequestCompare",
+    PullRequestComparePayloadSchema,
+    PullRequestCompareSchema,
+    { remote: true, gated: false },
+  ),
+  // The people and labels a new PR can name.
+  invoke(
+    "pullRequestOptions",
+    ProjectScopedPayloadSchema,
+    PullRequestOptionsSchema,
+    { remote: true, gated: false },
+  ),
+  // Writes a chunk of a file pasted into a new PR's description, kept
+  // on the host until the PR is created.
+  invoke("stageAttachment", StageAttachmentPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  // Fetches an image or video dropped or pasted in as a link.
+  invoke(
+    "stageAttachmentFromUrl",
+    StageAttachmentFromUrlPayloadSchema,
+    StagedAttachmentSchema,
+    { remote: true, gated: true, grant: "changeCode" },
+  ),
+  // Drops a staged file taken out of the description.
+  invoke("discardAttachment", DiscardAttachmentPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  // Pushes the worktree's branch and opens a PR from it.
+  invoke(
+    "createPullRequest",
+    CreatePullRequestPayloadSchema,
+    CreatePullRequestResultSchema,
+    {
+      tracksProjectUsage: true,
+      remote: true,
+      gated: true,
+      grant: "changeCode",
+    },
+  ),
   // Turns an armed auto-merge off, so the PR waits for a person again.
   invoke(
     "disablePullRequestAutoMerge",

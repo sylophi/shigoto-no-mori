@@ -4,7 +4,7 @@
 // --end-of-options pins them to the revision slot anyway, matching the
 // house argv discipline (see the engine's Dirty.ts).
 import * as Effect from "effect/Effect";
-import { run } from "./core";
+import { GitRefusal, run } from "./core";
 
 // The ref must not exist, in update-ref's compare-and-set vocabulary.
 export const ZERO_SHA = "0".repeat(40);
@@ -58,6 +58,41 @@ export const verifyRev = (cwd: string, rev: string) =>
     run(cwd, ["rev-parse", "--verify", "--end-of-options", rev]),
     (out) => out.trim(),
   );
+
+// The commit `ref` names, or a refusal that says so.
+export const resolveCommit = (cwd: string, ref: string) =>
+  Effect.flatMap(refTip(cwd, `${ref}^{commit}`), (hash) =>
+    hash
+      ? Effect.succeed(hash)
+      : Effect.fail(
+          new GitRefusal({
+            reason: `There is no branch or commit named ${ref}.`,
+          }),
+        ),
+  );
+
+// HEAD, refused where it has moved on from `expectHead`: what a move
+// made from a loaded page pins, so it can't land on a branch that has
+// changed since.
+export const headAt = Effect.fnUntraced(function* (
+  cwd: string,
+  expectHead: string | undefined,
+) {
+  const [head, expected] = yield* Effect.all(
+    [
+      verifyRev(cwd, "HEAD"),
+      expectHead ? verifyRev(cwd, expectHead) : Effect.succeed(undefined),
+    ],
+    { concurrency: 2 },
+  );
+  if (expected !== undefined && head !== expected) {
+    return yield* new GitRefusal({
+      reason:
+        "The branch has moved on since this was loaded. Reload and try again.",
+    });
+  }
+  return head;
+});
 
 // The upstream by its name ("origin/feature"), or null without one.
 export const upstreamName = (cwd: string) =>

@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { onIndex } from "./changes";
 import { GitRefusal, run, runLenient } from "./core";
 import { conflictedPaths, refuseMidOperation } from "./operation";
-import { isAncestor, verifyRev } from "./refs";
+import { headAt, isAncestor } from "./refs";
 
 // --- revert and cherry-pick -------------------------------------------
 
@@ -143,16 +143,7 @@ const rewriteLine = (
     worktreePath,
     Effect.gen(function* () {
       yield* refuseMidOperation(worktreePath);
-      const [head, expected] = yield* Effect.all(
-        [verifyRev(worktreePath, "HEAD"), verifyRev(worktreePath, expectHead)],
-        { concurrency: 2 },
-      );
-      if (head !== expected) {
-        return yield* new GitRefusal({
-          reason:
-            "The branch has moved on since this was loaded. Reload and try again.",
-        });
-      }
+      const head = yield* headAt(worktreePath, expectHead);
       if (!(yield* isAncestor(worktreePath, oldest, head))) {
         return yield* new GitRefusal({
           reason: "That commit isn't on this branch's history.",

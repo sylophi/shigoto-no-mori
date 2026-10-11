@@ -70,7 +70,10 @@ import {
 import { LivePageScene, LiveQuietScene } from "./live.tsx";
 import { PalettePickedScene, PaletteScene } from "./palette.tsx";
 import { GuidePartsScene } from "./guide.tsx";
-import { PullRequestPartsScene } from "./pullRequests.tsx";
+import {
+  CreatePullRequestScene,
+  PullRequestPartsScene,
+} from "./pullRequests.tsx";
 import { SidebarPartsScene } from "./sidebarParts.tsx";
 import { TerminalPartsScene } from "./terminal.tsx";
 import {
@@ -110,8 +113,9 @@ export const scenes = {
   sidebarParts: { Scene: SidebarPartsScene, size: [920, 560] },
   worktreePage: { Scene: WorktreePageScene, ...DESKTOP },
   worktreePageParts: { Scene: WorktreePagePartsScene, size: [1100, 900] },
-  worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1000] },
+  worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1200] },
   pullRequestParts: { Scene: PullRequestPartsScene, size: [1100, 1300] },
+  createPullRequest: { Scene: CreatePullRequestScene, size: [960, 900] },
   transplantReview: { Scene: TransplantReviewScene, size: [960, 780] },
   mirrorReview: { Scene: MirrorReviewScene, size: [960, 640] },
   flowSteps: { Scene: FlowStepsScene, size: [1800, 1300] },

@@ -167,7 +167,8 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string,
       ref: string,
       headHash: string | undefined,
-    ) => host("mergePreview", projectId, worktreeId, ref, headHash),
+      countsOnly: boolean,
+    ) => host("mergePreview", projectId, worktreeId, ref, headHash, countsOnly),
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),
@@ -217,6 +218,13 @@ function buildQueryKeys(deviceId: string) {
       host("githubCli", "repoDescription", projectId),
     pullRequestDiff: (projectId: string, number: number | undefined) =>
       host("githubCli", "pullRequestDiff", projectId, number),
+    // The create pull request dialog's reads.
+    pullRequestDraft: (projectId: string, worktreeId: string, branch: string) =>
+      host("githubCli", "pullRequestDraft", projectId, worktreeId, branch),
+    pullRequestCompare: (projectId: string, worktreeId: string, base: string) =>
+      host("githubCli", "pullRequestCompare", projectId, worktreeId, base),
+    pullRequestOptions: (projectId: string) =>
+      host("githubCli", "pullRequestOptions", projectId),
     // PR queries share a project-scoped prefix so invalidating
     // pullRequestsForProject cascades to both projectPullRequests and
     // any open worktreePullRequest.

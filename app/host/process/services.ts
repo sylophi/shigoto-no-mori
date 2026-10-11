@@ -1,6 +1,7 @@
 // What the host's handlers and views may reach: the services of the
 // layer graph (layer.ts) below the wires that serve them, and the
 // platform the graph runs on.
+import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as FileSync from "@host/fileSync/FileSync";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
@@ -17,6 +18,7 @@ import type * as Villagers from "@host/lib/VillagerData";
 
 export type HostServices =
   | ChildProcessSpawner.ChildProcessSpawner
+  | FileSystem.FileSystem
   | FileSync.FileSync
   | GithubCli.GithubCli
   | Views.Services

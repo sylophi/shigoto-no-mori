@@ -450,10 +450,33 @@
       "leaseMs": -5e-323
     }
   },
+  "githubCli:createPullRequest": {
+    "payload": {
+      "projectId": ")",
+      "worktreeId": "s",
+      "base": "😀",
+      "title": "Xk",
+      "body": "\n",
+      "draft": false,
+      "reviewers": ["!"],
+      "assignees": [],
+      "labels": ["0", "😀"],
+      "attachments": []
+    },
+    "success": {
+      "url": "Qd:!x",
+      "warning": null
+    }
+  },
   "githubCli:disablePullRequestAutoMerge": {
     "payload": {
       "projectId": "😀",
       "number": 3
+    }
+  },
+  "githubCli:discardAttachment": {
+    "payload": {
+      "id": "58a145cbff3dc50b"
     }
   },
   "githubCli:mergePullRequest": {
@@ -495,12 +518,60 @@
       "reason": "gh-missing"
     }
   },
+  "githubCli:pullRequestCompare": {
+    "payload": {
+      "projectId": "Q",
+      "worktreeId": "L",
+      "base": "[K"
+    },
+    "success": {
+      "commits": 2,
+      "files": 2,
+      "additions": 1,
+      "deletions": 4
+    }
+  },
   "githubCli:pullRequestDiff": {
     "payload": {
       "projectId": "\udc00",
       "number": 1
     },
     "success": ""
+  },
+  "githubCli:pullRequestDraft": {
+    "payload": {
+      "projectId": "-1",
+      "worktreeId": "@"
+    },
+    "success": {
+      "suggestedBase": "",
+      "fill": {
+        "title": "wG",
+        "body": "0"
+      },
+      "template": "TS"
+    }
+  },
+  "githubCli:pullRequestOptions": {
+    "payload": {
+      "projectId": "\"8"
+    },
+    "success": {
+      "viewer": "^",
+      "people": [
+        {
+          "login": "-1",
+          "name": "1"
+        }
+      ],
+      "labels": [
+        {
+          "name": "\u0000",
+          "color": "c",
+          "description": " "
+        }
+      ]
+    }
   },
   "githubCli:readiness": {
     "success": {
@@ -538,6 +609,25 @@
       "projectId": "r",
       "number": 1,
       "draft": false
+    }
+  },
+  "githubCli:stageAttachment": {
+    "payload": {
+      "id": "6f0c875bbff45da7",
+      "name": "KN",
+      "offset": 1,
+      "base64": ""
+    }
+  },
+  "githubCli:stageAttachmentFromUrl": {
+    "payload": {
+      "id": "0123456789abcdef",
+      "stem": "shot",
+      "url": "https://example.com/shot.png"
+    },
+    "success": {
+      "name": "I1",
+      "type": ".f"
     }
   },
   "githubCli:worktreePullRequest": {
@@ -3733,6 +3823,40 @@
       "detached": true,
       "shelved": true,
       "autoPull": true
+    }
+  },
+  "worktrees:resetHard": {
+    "payload": {
+      "projectId": "0Z",
+      "worktreeId": " ",
+      "ref": "3"
+    },
+    "success": {
+      "previousHead": "a057",
+      "head": "63eb",
+      "snapshot": null,
+      "worktree": {
+        "id": ".4",
+        "projectId": "\u0000",
+        "name": "\udc00",
+        "branch": "",
+        "path": "",
+        "ahead": 2,
+        "behind": 3,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": true,
+        "behindPrimary": 4,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": true,
+        "changedCount": 0,
+        "recentCommits": [],
+        "isPrimary": true,
+        "isExternal": false,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      }
     }
   },
   "worktrees:resetSoft": {

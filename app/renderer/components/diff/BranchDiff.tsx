@@ -3,7 +3,7 @@ import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
-import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
+import { GitPageActions } from "@/components/worktreeDetail/git/GitPageActions";
 import { DiffPage } from "./DiffPage";
 import { BranchDiffSubtitleView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 
@@ -36,7 +36,7 @@ export function BranchDiff() {
           base={history?.base?.ref ?? worktree.primaryRef}
         />
       }
-      sidebarActions={<MergeButton worktree={worktree} />}
+      sidebarActions={<GitPageActions worktree={worktree} />}
       renderSidebar={() => (
         <GitPageSidebar worktree={worktree} tab="history" selected="branch" />
       )}

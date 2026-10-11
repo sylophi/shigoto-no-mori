@@ -20,22 +20,15 @@ import {
   readOperation,
   refuseMidOperation,
 } from "./operation";
-import { countCommits, ownCommitCounts, refTip } from "./refs";
+import { countCommits, ownCommitCounts, resolveCommit } from "./refs";
 
-const resolveCommit = (worktreePath: string, ref: string) =>
-  Effect.flatMap(refTip(worktreePath, `${ref}^{commit}`), (hash) =>
-    hash
-      ? Effect.succeed(hash)
-      : Effect.fail(
-          new GitRefusal({
-            reason: `There is no branch or commit named ${ref}.`,
-          }),
-        ),
-  );
-
+// `countsOnly` leaves out the merge's conflicts and the incoming
+// subject, for a move that makes no merge (a hard reset): the trial
+// merge is the slow part.
 export const readMergePreview = Effect.fnUntraced(function* (
   worktreePath: string,
   ref: string,
+  countsOnly = false,
 ) {
   const target = yield* resolveCommit(worktreePath, ref);
   const [incoming, ownCounts, merged] = yield* Effect.all(
@@ -45,20 +38,22 @@ export const readMergePreview = Effect.fnUntraced(function* (
       // The tree a merge would make, then the paths it left conflicted.
       // Exit 1 on a conflict, so read leniently. Unrelated histories fail
       // outright, and the merge itself says why.
-      runLenient(worktreePath, [
-        "merge-tree",
-        "--write-tree",
-        "--name-only",
-        "--no-messages",
-        "-z",
-        "HEAD",
-        target,
-      ]),
+      countsOnly
+        ? Effect.succeed("")
+        : runLenient(worktreePath, [
+            "merge-tree",
+            "--write-tree",
+            "--name-only",
+            "--no-messages",
+            "-z",
+            "HEAD",
+            target,
+          ]),
     ],
     { concurrency: "unbounded" },
   );
   const incomingSubject =
-    incoming === 1
+    incoming === 1 && !countsOnly
       ? (yield* run(worktreePath, [
           "log",
           "-1",

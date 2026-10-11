@@ -73,6 +73,7 @@ export function CommitDetails({
       }}
       canCommand={actions.canCommand}
       onNewWorktree={() => actions.newWorktreeFrom(commit)}
+      onHardReset={() => actions.hardResetTo(commit)}
       dialog={actions.dialog}
     />
   );
