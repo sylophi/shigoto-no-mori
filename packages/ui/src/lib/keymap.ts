@@ -4,7 +4,9 @@
 // hints and the window's listener all read this table, through the
 // device's bindings (`keybindings` in the client config). A control's
 // own keys (Enter in a field, the arrows in a list, Escape out of a
-// dialog) are the control's and stay out.
+// dialog) are the control's and stay out, and so are the switches for
+// what is still an experiment: the dev builds' theme keys and the
+// palettes' hidden variants (usePaletteVariantHotkey).
 //
 // A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere, and
 // the key is the physical one, named as on a US keyboard
@@ -74,12 +76,6 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     id: "sidebarLayout",
     label: "Switch the sidebar's layout",
     chord: "Tab",
-    scope: "window",
-  },
-  {
-    id: "paletteVariant",
-    label: "Next variant of the light palette",
-    chord: "Ctrl+Alt+Shift+L",
     scope: "window",
   },
   // Ctrl on every platform: ⌘` cycles an app's windows on macOS.

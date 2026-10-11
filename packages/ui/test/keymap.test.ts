@@ -84,7 +84,7 @@ it("matches Mod to ⌘ on macOS and to Ctrl elsewhere", () => {
   );
   expect(mac.get("addProject")?.label).toBe("⇧⌘N");
   expect(other.get("addProject")?.label).toBe("Ctrl+Shift+N");
-  expect(mac.get("paletteVariant")?.label).toBe("⌃⌥⇧L");
+  expect(chordLabel(chord("Ctrl+Alt+Shift+L"), true)).toBe("⌃⌥⇧L");
   expect(mac.get("terminal")?.aria).toBe("Control+`");
   expect(chordAccelerator(chord("Mod+Shift+N"))).toBe("Cmd+Shift+N");
 });
