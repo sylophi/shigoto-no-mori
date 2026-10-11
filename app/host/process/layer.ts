@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as DeviceId from "@host/lib/config/DeviceId";
+import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as Shell from "@host/lib/Shell";
 import * as Loopback from "@host/socket/loopback";
@@ -33,6 +34,7 @@ import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as Views from "@host/lib/views";
 import * as Ports from "@host/lib/Ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
+import * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { terminalStart } from "@host/ipc/scriptRun";
 import * as Terrier from "@host/lib/terrier";
@@ -250,6 +252,9 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // This device's id, which the wires above name themselves by, read
     // from the store once.
     Layer.provideMerge(DeviceId.layer),
+    // The account as the shell last reported it, which the wires above
+    // follow.
+    Layer.provideMerge(HostAccount.layer),
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Engine.layer(engine)),
@@ -278,6 +283,8 @@ const scriptsAndFoundation = (options: {
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     // The scripts' changed push, which outlives the quit's kills.
     Layer.provideMerge(scriptsChangedLayer),
+    // Every script start and end, which the push above reads.
+    Layer.provideMerge(ScriptChanges.layer),
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.layer),

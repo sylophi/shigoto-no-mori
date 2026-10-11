@@ -14,6 +14,7 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Tunnel from "@host/direct/cloudflared";
+import type * as HostAccount from "@host/lib/HostAccount";
 import type * as MirrorDaemon from "@host/mirror/daemon";
 import type * as Loopback from "@host/socket/loopback";
 import type * as DeviceLink from "@host/socket/server";
@@ -22,6 +23,7 @@ import type { HostServices } from "./services";
 // What the root's callbacks reach beyond what the handlers do.
 export type GraphServices =
   | HostServices
+  | HostAccount.HostAccount
   | DeviceLink.DeviceLink
   | Loopback.Loopback
   | Tunnel.Tunnel

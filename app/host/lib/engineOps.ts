@@ -126,7 +126,7 @@ function scriptEventOf(
 
 // A reporter that forwards the scripts a removal runs and nothing else.
 const scriptReporter = (
-  scripts: ReturnType<typeof cliScriptStream>,
+  scripts: Effect.Success<ReturnType<typeof cliScriptStream>>,
 ): Landing.Reporter => ({
   report: (event) =>
     Effect.sync(() => {
@@ -182,7 +182,7 @@ const runStreamingCreate = Effect.fnUntraced(function* (
   // The worktree once "created" is in, or why the run ended before it.
   const made = yield* Deferred.make<Worktree, CreateFailure>();
   let created: Worktree | null = null;
-  const scripts = cliScriptStream(notify.notifyScript);
+  const scripts = yield* cliScriptStream(notify.notifyScript);
   // The host's create mark (which refuses a delete or move) opens and
   // closes with the phases the page disables its delete button on,
   // so the two agree. A run that dies mid-lifecycle never sends its
@@ -360,7 +360,7 @@ export const deleteWorktree = Effect.fnUntraced(function* (
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
   opts: { timeoutMs?: number } = {},
 ) {
-  const scripts = cliScriptStream(notify.notifyScript);
+  const scripts = yield* cliScriptStream(notify.notifyScript);
   const removal = Effect.gen(function* () {
     const located = yield* locate(project.id, input.worktreeId);
     return yield* (yield* Worktrees.Worktrees)
@@ -404,7 +404,7 @@ export const deleteStack = Effect.fnUntraced(function* (
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ) {
-  const scripts = cliScriptStream(notify.notifyScript);
+  const scripts = yield* cliScriptStream(notify.notifyScript);
   const doc = yield* asChange(
     Effect.gen(function* () {
       const located = yield* locate(project.id, input.worktreeId);

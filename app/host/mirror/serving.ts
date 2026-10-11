@@ -22,6 +22,7 @@ import { findProjectAndWorktree, findWorktreePath } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
+import { MirrorSignals } from "./MirrorSignals";
 
 // The mirror streams this host currently serves, keyed by the calling
 // device and the channel id it minted (unique per connection, so the
@@ -33,34 +34,6 @@ import { log } from "@shared/log";
 // learn from the git-directory watcher.
 type Served = { entry: MirrorServing; stopIndexWatch: (() => void) | null };
 const serving = new Map<string, Served>();
-let onServingChange: (() => void) | null = null;
-let onServingGitChange:
-  | ((change: { projectId: string; worktreeId: string }) => void)
-  | null = null;
-// A peer's follower landed its side's git state on a worktree here: a
-// ref move by the app's own git, which the root announces at once,
-// beside the git-directory watcher's own ping.
-let onGitApplied: ((projectId: string) => void) | null = null;
-
-export function setMirrorGitAppliedListener(
-  listener: ((projectId: string) => void) | null,
-): void {
-  onGitApplied = listener;
-}
-
-// The root installs the two broadcast hooks at boot. Before that (and in
-// checks that never mount them) changes are simply unannounced.
-export function setMirrorServingListener(listener: (() => void) | null): void {
-  onServingChange = listener;
-}
-
-export function setMirrorGitChangedListener(
-  listener:
-    | ((change: { projectId: string; worktreeId: string }) => void)
-    | null,
-): void {
-  onServingGitChange = listener;
-}
 
 export function listMirrorServing(): MirrorServing[] {
   return [...serving.values()].map((served) => served.entry);
@@ -68,20 +41,20 @@ export function listMirrorServing(): MirrorServing[] {
 
 // The mirror list changed without a session doing so (a stop's copy
 // removal finished).
-export function announceServingChange(): void {
-  onServingChange?.();
-}
+export const announceServingChange = Effect.map(MirrorSignals, (signals) =>
+  signals.servingChanged(),
+);
 
 function servingKey(ctx: HandlerContext, channelId: string): string {
   return `${ctx.callerDeviceId ?? ""}:${channelId}`;
 }
 
-function forgetServing(key: string): void {
+function forgetServing(signals: MirrorSignals["Service"], key: string): void {
   const served = serving.get(key);
   if (served === undefined) return;
   served.stopIndexWatch?.();
   serving.delete(key);
-  onServingChange?.();
+  signals.servingChanged();
 }
 
 // A mirror stream: the far end is a fresh `file-sync serve` for the
@@ -95,6 +68,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   ctx: HandlerContext,
 ) {
   requireChannels(ctx, channelId);
+  const signals = yield* MirrorSignals;
   const worktreePath = yield* findWorktreePath({ projectId, worktreeId });
   // The child ends when its channel does.
   const closed = yield* Deferred.make<void>();
@@ -120,7 +94,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       attachFarEnd(ctx, channelId, child.stream, {
         onClosed: () => {
           stopChild();
-          forgetServing(key);
+          forgetServing(signals, key);
         },
       }),
     // The connection died or the id was claimed during the lookup
@@ -145,7 +119,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   serving.set(key, served);
   yield* Effect.forkDetach(
     watchIndexFile(worktreePath, () =>
-      onServingGitChange?.({ projectId, worktreeId }),
+      signals.gitChanged({ projectId, worktreeId }),
     ).pipe(
       Effect.tap((stop) =>
         Effect.sync(() => {
@@ -156,7 +130,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       Effect.ignore,
     ),
   );
-  onServingChange?.();
+  signals.servingChanged();
 });
 
 // The git half, read or applied in place.
@@ -190,6 +164,6 @@ export const applyServedGitState = ({
     if (!result.applied) {
       return { applied: false as const, reason: result.reason };
     }
-    onGitApplied?.(project.id);
+    (yield* MirrorSignals).gitApplied(project.id);
     return { applied: true as const };
   });

@@ -383,10 +383,9 @@ export const stopMirror = (session: string, force: boolean) =>
     });
     yield* stopAndRemoveCopy(daemon, session, raw).pipe(
       Effect.ensuring(
-        Effect.sync(() => {
-          stopping.delete(session);
-          announceServingChange();
-        }),
+        Effect.sync(() => stopping.delete(session)).pipe(
+          Effect.andThen(announceServingChange),
+        ),
       ),
     );
     return { removedCopy: true };
