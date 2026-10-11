@@ -10,6 +10,7 @@ import {
   serveRendererOverScheme,
 } from "./electron/clerk";
 import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
+import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { finishPendingNuke } from "./core/nuke/finish";
@@ -257,6 +258,7 @@ app.on("ready", async () => {
             `../renderer/${MAIN_WINDOW_VITE_NAME}`,
           ),
         },
+    clerkPublishableKey(),
   );
   // The rebuilt environment (module top), before the first spawn.
   await shellEnvReady;

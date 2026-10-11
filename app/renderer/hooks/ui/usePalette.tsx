@@ -27,8 +27,8 @@ interface PaletteState {
 }
 
 const PaletteContext = createContext<PaletteState | null>(null);
-// The localStorage mirrors the boot scripts read (index.html,
-// web/public/boot-theme.js): the switch, and a pick per appearance.
+// The localStorage mirrors the boot script reads
+// (web/public/boot-theme.js): the switch, and a pick per appearance.
 const STORAGE_KEYS = {
   doubutsu: "shigomori.doubutsu",
   light: "shigomori.lightTheme",
