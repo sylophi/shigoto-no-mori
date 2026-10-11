@@ -55,11 +55,30 @@ export type Start = {
 };
 
 const DEFAULT_SIZE: Size = { cols: 120, rows: 40 };
+
+// `data` in chunks of at most CHUNK_MAX, never between the two halves
+// of a surrogate pair.
+function pieces(data: string): string[] {
+  const out: string[] = [];
+  let at = 0;
+  while (at < data.length) {
+    let end = Math.min(data.length, at + CHUNK_MAX);
+    const last = data.charCodeAt(end - 1);
+    if (end < data.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+    out.push(data.slice(at, end));
+    at = end;
+  }
+  return out;
+}
 // Reads within a frame go out as one chunk (as a script's output does).
 const BATCH = Duration.millis(16);
 // Chunks a client may fall behind by before the shell's output waits
 // for it.
 const CLIENT_BACKLOG = 64;
+// The most one chunk holds, in UTF-16 code units: at most 768 KiB as
+// UTF-8, so a chunk fits a message of the stream it goes out on
+// (host/socket/boundedMessages.ts). A batch past it goes as several.
+const CHUNK_MAX = 256 * 1024;
 // Output read from the PTY and not yet sent, past which the PTY is
 // paused, and below which it reads again.
 const PAUSE_AT = 1024 * 1024;
@@ -244,14 +263,14 @@ const make = <R>(options: {
             backlog.paused = false;
             session.pty.resume();
           }
-          if (data.length > 0) {
+          for (const piece of pieces(data)) {
             session.seq += 1;
-            session.history.append(session.seq, data);
+            session.history.append(session.seq, piece);
             session.changedAt = yield* Clock.currentTimeMillis;
             session.changed.openUnsafe();
             yield* PubSub.publish(session.events, {
               kind: "output",
-              data,
+              data: piece,
               seq: session.seq,
             });
           }
