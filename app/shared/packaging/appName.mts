@@ -61,12 +61,15 @@ export function devProfileFromEnv(
   return raw;
 }
 
+// The folder in the plain dev userData that holds the profiles'.
+export const DEV_PROFILES_DIR = "profiles";
+
 // Where a profile's userData lives, under the plain dev userData.
 export function devProfileUserData(
   devUserData: string,
   profile: string,
 ): string {
-  return join(devUserData, "profiles", profile);
+  return join(devUserData, DEV_PROFILES_DIR, profile);
 }
 
 // What a profile adds to the app name (menu bar label, safeStorage

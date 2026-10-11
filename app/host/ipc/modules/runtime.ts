@@ -7,7 +7,9 @@ import type { NukeProgress } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
-import { nukeEverything } from "@host/lib/nuke";
+import * as Ops from "@host/lib/engineOps";
+import { leftIf, nukeEverything } from "@host/lib/nuke";
+import * as Terminals from "@host/lib/terminals/Terminals";
 import { moveDataDir } from "@host/lib/dataDirMove";
 import { killAllScripts } from "@host/lib/scripts";
 import { implSlot } from "@host/lib/util/implSlot";
@@ -31,9 +33,6 @@ type RuntimeImpl = {
   // new one.
   unpublishLoopback: Effect.Effect<void>;
   broadcastNukeProgress: (progress: NukeProgress) => void;
-  // The data dir was wiped and reseeded under the running app: put back
-  // the plumbing files this process keeps there.
-  afterDataWipe: () => void;
   relaunchAppUnattended: () => void;
   // Why a move asked for by another device must not start right now
   // (it reaps every running script, and nobody here was asked), or
@@ -127,19 +126,23 @@ export const runtimeHandlers = {
     }),
 
   nuke: () =>
-    Effect.gen(function* () {
-      yield* nukeEverything(
-        (progress) => runtimeImpl().broadcastNukeProgress(progress),
-        killAllScripts(),
-      ).pipe(
-        // A wipe that failed past the rm still took the files along.
-        Effect.ensuring(Effect.sync(() => runtimeImpl().afterDataWipe())),
-      );
-      // Nuke means "remove everything shigomori put on this machine";
-      // the CLI links and the shell-integration hooks are part of that.
-      // Settings offers a fresh install afterwards.
-      yield* uninstallCliEverything;
-    }),
+    Effect.flatMap(Terminals.Terminals, (terminals) =>
+      nukeEverything({
+        onProgress: (progress) => runtimeImpl().broadcastNukeProgress(progress),
+        killAllScripts: killAllScripts(),
+        closeTerminals: terminals.closeEvery,
+        uninstall: Effect.map(
+          Effect.all([
+            leftIf(
+              "The terminal command and its shell hooks",
+              uninstallCliEverything,
+            ),
+            leftIf("The agent hooks", Ops.removeAllAgentHooks),
+          ]),
+          (lists) => lists.flat(),
+        ),
+      }),
+    ),
 } satisfies EffectHandlers<
   typeof runtimeContract,
   HandlerContext,

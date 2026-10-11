@@ -1,28 +1,36 @@
-// "Nuke everything" implementation: removes every worktree shigomori created
-// (forced, so each one's port-pool lease is released and
-// its teardown runs like any other removal) and wipes the shigomori data
-// dir so state, global config, and any orphan worktree directories all go
-// away.
+// The host's half of "Nuke everything": what needs the store or a
+// running host. It stops every script and terminal, removes every
+// worktree the app created (forced, so each one's port-pool lease is
+// released, its teardown runs and the managed folders it leaves empty
+// go, like any removal), and takes this flavor's terminal command,
+// shell hooks and agent hooks off the machine. The files (the data dir,
+// userData, the logs) go at the next start, before anything opens them
+// (main/electron/nuke.ts), so nothing is deleted under a running store.
 //
-// The original project repos on disk are untouched. We only act on data
-// shigomori itself owns.
-import { rm } from "node:fs/promises";
-import type { NukeProgress, Project } from "@shigomori/contracts/schemas";
-import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
+// It refuses only for a trap: a data dir that would take the user's own
+// files with it. Otherwise it does what it can and reports what it
+// could not, with why. Every step reads what is there now, so a second
+// run after an interrupted one finishes the job. The projects' repos,
+// external worktrees and terrier's registry are never touched.
+import { homedir } from "node:os";
+import type {
+  NukeProgress,
+  NukeReport,
+  Project,
+} from "@shigomori/contracts/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
 import { pruneStaleWorktrees } from "./git/worktrees";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { clearDeleteInflight, markDeleteInflight } from "./scripts";
 import { dataDir } from "./util/paths";
-import { log } from "@shared/log";
 
-// A step on the file system, its failure as it crosses a wire.
-const fsStep = <A>(run: () => Promise<A>) =>
-  Effect.tryPromise({ try: run, catch: callFailureOf });
-
-class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
+export class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
   { reason: Schema.String },
 ) {
@@ -31,36 +39,71 @@ class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   }
 }
 
-export const nukeEverything = Effect.fnUntraced(function* <R>(
-  onProgress: (progress: NukeProgress) => void,
-  // Every script's kill chain, waited for (host/lib/scripts).
-  killAllScripts: Effect.Effect<void, never, R>,
-) {
-  const projects = yield* freshProjects;
-  // The final step rm -rf's the shigomori data dir. A trapped project repo
-  // would be wiped with it: .git, uncommitted work, everything.
-  // Refuse up front, before any script kill or worktree removal.
-  const trapped = findProjectInsideDataDir(projects);
-  if (trapped) {
-    return yield* new NukeRefusedError({
-      reason:
-        `Refusing to nuke: project "${trapped.name}" lives inside ` +
-        `${dataDir()}, which would be deleted with it. ` +
-        "Move the repository out first.",
-    });
-  }
-  // Reap every running script first. Dev servers and watchers may have
-  // their cwd inside the worktrees we're about to force-remove. Skipping
-  // this would orphan them with deleted working directories, still
-  // holding their ports, exactly what the per-worktree delete path
-  // guards against via killScriptsForWorktree.
-  onProgress({ phase: "scripts" });
-  yield* killAllScripts;
+type Left = NukeReport["left"][number];
 
-  // List every project's worktrees up front so all targets can be
-  // marked delete-inflight for the whole wipe. Skip externals:
-  // shigomori didn't create them, so we shouldn't delete them when
-  // wiping our own state. (sm rm filters their branches the same way.)
+// Why the data dir can't go without the user's files: a project inside
+// it, or the home folder (or above) as the data dir. Null when it can.
+export function nukeTrap(
+  projects: readonly Project[],
+  root: string,
+  home: string,
+): string | null {
+  if (isSameOrInside(home, root)) {
+    return (
+      `Refusing to nuke: the data folder is ${root}, which holds your ` +
+      "home folder. Point SHIGOMORI_DATA_DIR or the data folder elsewhere first."
+    );
+  }
+  const trapped = findProjectInsideDataDir(projects);
+  if (trapped !== undefined) {
+    return (
+      `Refusing to nuke: project "${trapped.name}" lives inside ${root}, ` +
+      "which would be deleted with it. Move the repository out first."
+    );
+  }
+  return null;
+}
+
+// What `run` couldn't do, named `what`, or nothing when it did.
+export const leftIf = <R>(
+  what: string,
+  run: Effect.Effect<unknown, unknown, R>,
+): Effect.Effect<ReadonlyArray<Left>, never, R> =>
+  Effect.map(Effect.exit(run), (exit) =>
+    Exit.isFailure(exit)
+      ? [{ what, why: errorMessageOf(Cause.squash(exit.cause)) }]
+      : [],
+  );
+
+export const nukeEverything = Effect.fnUntraced(function* <R, U>(options: {
+  readonly onProgress: (progress: NukeProgress) => void;
+  // Every script's kill chain, waited for (host/lib/scripts).
+  readonly killAllScripts: Effect.Effect<void, never, R>;
+  // Every terminal closed, none saved for the next start.
+  readonly closeTerminals: Effect.Effect<void>;
+  // Takes off what this flavor installed outside its folders (the
+  // terminal command and its shell hooks, the agent hooks), answering
+  // what it couldn't (leftIf).
+  readonly uninstall: Effect.Effect<ReadonlyArray<Left>, never, U>;
+  readonly home?: string;
+}) {
+  const { onProgress } = options;
+  const projects = yield* freshProjects;
+  // Refuse up front, before any script is stopped or worktree removed.
+  const trap = nukeTrap(projects, dataDir(), options.home ?? homedir());
+  if (trap !== null) return yield* new NukeRefusedError({ reason: trap });
+  const left: Left[] = [];
+
+  // Dev servers and watchers may have their cwd inside the worktrees
+  // about to go: reap them first, or they'd hold their ports with their
+  // directories deleted. The terminals likewise.
+  onProgress({ phase: "scripts" });
+  yield* options.killAllScripts;
+  yield* options.closeTerminals;
+
+  // Every project's worktrees the app made, listed up front so all of
+  // them are marked delete-inflight for the whole removal. Externals
+  // were never the app's to delete.
   const perProject = yield* Effect.forEach(
     projects,
     (project) =>
@@ -69,18 +112,18 @@ export const nukeEverything = Effect.fnUntraced(function* <R>(
           project,
           targets: identities.filter((i) => !i.isPrimary && !i.isExternal),
         })),
-        // Project repo might have moved or been deleted; nothing to clean
-        // via git for this one. The data dir wipe below still happens.
-        Effect.orElseSucceed(() => ({ project, targets: [] })),
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            left.push({
+              what: `The worktrees of ${project.name}`,
+              why: errorMessageOf(error),
+            });
+            return { project, targets: [] };
+          }),
+        ),
       ),
     { concurrency: "unbounded" },
   );
-  // Same inflight marking as the per-worktree delete: blocks a renderer
-  // script run from landing in a directory mid-removal and keeps the
-  // busy-quit prompt honest during the wipe. Held through the data dir rm
-  // below. Clearing each id right after its removal
-  // would leave a window where a script could spawn into a directory
-  // the rm is about to take out.
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
   for (const id of marked) markDeleteInflight(id);
   yield* Effect.gen(function* () {
@@ -91,27 +134,31 @@ export const nukeEverything = Effect.fnUntraced(function* <R>(
     yield* Effect.forEach(
       perProject,
       ({ project, targets }) =>
-        Effect.forEach(
-          targets,
-          (target) =>
-            removeForNuke(project, target.id).pipe(
-              Effect.andThen(
-                Effect.sync(() => {
-                  removed += 1;
-                  onProgress({
-                    phase: "worktrees",
-                    done: removed,
-                    total: marked.length,
-                  });
-                }),
-              ),
-            ),
-          { discard: true },
-        ),
+        Effect.gen(function* () {
+          for (const target of targets) {
+            const failed = yield* Ops.forceRemoveWorktree(
+              project,
+              target.id,
+            ).pipe(
+              Effect.as(null),
+              Effect.catch((error) => Effect.succeed(errorMessageOf(error))),
+            );
+            // One inside the data dir goes with it at the next start.
+            if (failed !== null && !isSameOrInside(target.path, dataDir())) {
+              left.push({ what: target.path, why: failed });
+            }
+            removed += 1;
+            onProgress({
+              phase: "worktrees",
+              done: removed,
+              total: marked.length,
+            });
+          }
+          // A failed one's admin entry, whose folder may be gone.
+          yield* Effect.ignore(pruneStaleWorktrees(project.path));
+        }),
       { concurrency: "unbounded", discard: true },
     );
-    onProgress({ phase: "wipe" });
-    yield* fsStep(() => rm(dataDir(), { recursive: true, force: true }));
   }).pipe(
     Effect.ensuring(
       Effect.sync(() => {
@@ -119,25 +166,8 @@ export const nukeEverything = Effect.fnUntraced(function* <R>(
       }),
     ),
   );
-  // The data dir rm wipes any managed-root worktree dirs whose removal
-  // failed above, leaving stale admin entries behind. Sweep them per
-  // project now that the dirs are gone.
-  yield* Effect.forEach(
-    projects,
-    (p) => Effect.ignore(pruneStaleWorktrees(p.path)),
-    { concurrency: "unbounded", discard: true },
-  );
-});
 
-// Through forceRemoveWorktree: the branch goes per the
-// deleteBranchOnRemove setting, as with any removal. Best effort: the
-// data dir wipe that follows takes whatever is left under the managed
-// root.
-const removeForNuke = (project: Project, worktreeId: string) =>
-  Ops.forceRemoveWorktree(project, worktreeId).pipe(
-    Effect.catch((error) =>
-      Effect.sync(() =>
-        log.warn(`[nuke] ${project.name}: ${errorMessageOf(error)}`),
-      ),
-    ),
-  );
+  onProgress({ phase: "hooks" });
+  left.push(...(yield* options.uninstall));
+  return { left } satisfies NukeReport;
+});

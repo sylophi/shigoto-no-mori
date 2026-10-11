@@ -38,6 +38,12 @@ prod's, so dogfooding v3 leaves the installed `sm` alone. It starts on
 an empty `~/.smt`: the v3 migration imports what v2 left in a data
 dir, and a test build has none.
 
+Settings' Danger zone (Nuke everything) returns a build to a fresh
+install: its worktrees, its `sm` links and hooks, its device on the
+hub, and then, at the next start, everything in the rows above but the
+lock, the bundle and the scheme. On the plain dev instance it leaves
+the profiles in its userData alone.
+
 A device is made of two folders:
 
 - **Data dir.** Projects and worktrees: `registry.json` (projects
