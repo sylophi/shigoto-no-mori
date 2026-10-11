@@ -150,6 +150,9 @@ const deadPid = () => {
 // --- bundles and zips ---
 
 const APP = "Shigoto no Mori.app";
+// The requirement a candidate is held to, from the installed app's team
+// and identifier, as makeBundle's defaults have them.
+const REQUIREMENT = `-R=anchor apple generic and certificate leaf[subject.OU] = "TEAM1" and identifier "test.shigomori"`;
 
 type BundleOptions = {
   readonly team?: string | null;
@@ -924,7 +927,7 @@ describe("staging", () => {
     assert.deepEqual(
       calls().toSorted(),
       [
-        `codesign --verify --deep --strict -R=anchor apple generic -- ${box.updates}/extract/${APP}`,
+        `codesign --verify --deep --strict ${REQUIREMENT} -- ${box.updates}/extract/${APP}`,
         `codesign -dvv -- ${box.installed}`,
         `codesign -dvv -- ${box.updates}/extract/${APP}`,
       ].toSorted(),
@@ -1066,12 +1069,30 @@ describe("staging", () => {
       words(await errorFor({ identifier: "test.shigomori.test" })),
       "The downloaded update is a different app (test.shigomori.test, installed app: test.shigomori). Refusing to install.",
     );
+    // Served as 2.0.0, and an older release of ours inside.
     assert.equal(
       words(await errorFor({ bundleVersion: "1.0.0" })),
-      "The downloaded update is version 1.0.0, which is not newer than this build. Refusing to install.",
+      "The downloaded update is version 1.0.0, not the release it was offered as. Refusing to install.",
     );
     assert.equal(existsSync(join(box.updates, "extract")), false);
     assert.deepEqual(manifestOf(box), { version: "1.5.0", bundleName: APP });
+  });
+
+  it("refuses when the installed app names no identifier, whatever the update names", async () => {
+    const box = newBox("1.0.0", { identifier: "" });
+    const error = await failure(
+      {
+        box,
+        http: network(
+          serverFor("2.0.0", zipOf([{ version: "2.0.0", identifier: "" }])),
+        ).client,
+      },
+      (u) => u.stage({ running: running(box) }),
+    );
+    assert.equal(
+      words(error),
+      `codesign reported no Identifier for ${box.installed}.`,
+    );
   });
 
   it("refuses when the installed app has no team to compare against", async () => {
@@ -1101,9 +1122,9 @@ describe("staging", () => {
     );
     assert.match(
       words(plain),
-      /^The downloaded update failed code-signature verification: .*code object is not signed at all/,
+      /^Couldn't read the code signature of .*code object is not signed at all/,
     );
-    // Ad hoc signatures carry no certificate Apple issued, so they refuse too.
+    // Ad hoc signatures carry no team, so they refuse too.
     const box = newBox();
     execFileSync("/usr/bin/codesign", ["-s", "-", "--deep", box.installed]);
     const dir = mkdtempSync(join(zips, "adhoc-"));
@@ -1119,9 +1140,9 @@ describe("staging", () => {
       },
       (u) => u.stage({ running: running(box) }),
     );
-    assert.match(
+    assert.equal(
       words(adhoc),
-      /^The downloaded update failed code-signature verification: .*code failed to satisfy specified code requirement/,
+      "The installed app has no Team ID to verify the update against. Refusing to install.",
     );
   });
 });
@@ -1358,7 +1379,7 @@ describe("installing", () => {
     // Verified again where it was placed.
     assert.ok(
       calls().includes(
-        `codesign --verify --deep --strict -R=anchor apple generic -- ${dirname(box.installed)}/.${APP}.new-${process.pid}`,
+        `codesign --verify --deep --strict ${REQUIREMENT} -- ${dirname(box.installed)}/.${APP}.new-${process.pid}`,
       ),
     );
   });
@@ -1525,6 +1546,20 @@ describe("finishing an install for the app", () => {
       "finish-install: installed 2.0.0 and relaunched",
     ]);
     assert.equal(calls().at(-1), `open ${box.installed}`);
+  });
+
+  it("won't put a staged release over a newer app installed since", async () => {
+    const { box, http } = await readyBox();
+    makeBundle(box.installed, "3.0.0");
+    const error = await failure({ box, http }, (u) =>
+      u.finishInstall({ running: running(box), appPid: deadPid() }),
+    );
+    assert.match(
+      words(error),
+      /The update is version 2\.0\.0, which is not newer than the app it would replace/,
+    );
+    assert.equal(versionAt(box.installed), "3.0.0");
+    assert.deepEqual(apps(box), [APP]);
   });
 
   it("gives up on an app that won't quit", async () => {
