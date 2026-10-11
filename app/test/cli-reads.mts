@@ -11,7 +11,8 @@
 //     registered behind the host's back resolves after one refresh, and
 //     an unknown id is the entity-gone error.
 //   - worktrees:list, a mutation's describe, the auto-pull and shelf
-//     marks and relocate (marks and the title carried to the new id) all
+//     marks, relocate (marks and the title carried to the new id) and
+//     the page's title and description edits (`sm describe`) all
 //     answer with the CLI's rows, and an unknown worktree is the
 //     entity-gone error.
 //   - hygiene:diskUsage measures through `sm disk-usage`, and a file
@@ -491,6 +492,30 @@ async function main() {
           ),
         /primary checkout can't be relocated/,
       );
+    },
+  );
+
+  await check(
+    "describe: the page's edit goes through `sm describe`, a dash-led text included, and one left out stays",
+    async () => {
+      const worktreeId = worktreeIdFromPath(join(managedBase, "alpha-moved"));
+      const described = await worktreesHandlers.describe(
+        {
+          projectId,
+          worktreeId,
+          title: "-t edited",
+          description: "- one\n- two",
+        },
+        ctx,
+      );
+      assert.equal(described.title, "-t edited");
+      assert.equal(described.description, "- one\n- two");
+      const cleared = await worktreesHandlers.describe(
+        { projectId, worktreeId, title: "" },
+        ctx,
+      );
+      assert.equal(cleared.title, undefined);
+      assert.equal(cleared.description, "- one\n- two");
     },
   );
 
