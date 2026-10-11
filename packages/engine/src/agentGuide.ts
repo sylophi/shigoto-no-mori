@@ -110,7 +110,8 @@ message. The app's window is open beside this terminal, and the
 3. Do it in the app. Don't do it behind the app's back with \`sm\`,
    git or by editing files: the user wants to learn the app.
 4. Some controls are the user's alone: anything that deletes, removes,
-   discards or signs out, and every terminal. The app refuses your
+   discards or signs out, the switches that let the user's other
+   devices into this machine, and every terminal. The app refuses your
    clicks and keys there. Point at the control and let them decide.
 5. When you are done, \`clear\` and say what they can do next.
 

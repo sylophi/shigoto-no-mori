@@ -1,6 +1,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 
+import { destructiveMark } from "../lib/usersAlone.ts";
 import { cn } from "../lib/utils.ts";
 import type { WithoutTitle } from "./tooltip.tsx";
 
@@ -67,6 +68,7 @@ function Button({
       data-variant={variant}
       // Size likewise, for the phone layout's control minimums (phone.css).
       data-size={size}
+      {...destructiveMark(variant)}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
