@@ -34,7 +34,7 @@ import type {
 } from "../../../lib/commitRewrite.ts";
 import { pluralize } from "../../../lib/pluralize.ts";
 import { cn } from "../../../lib/utils.ts";
-import type { CommitSummary } from "@shigomori/contracts/schemas/index";
+import type { CommitSummary } from "@shigomori/contracts/schemas";
 
 // The row the Git page shows, `branch` or `commit:<hash>`, marked in
 // the History tab's list. A pick replaces the page's entry, so Back

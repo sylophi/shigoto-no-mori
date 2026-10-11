@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   CancelScriptPayloadSchema,
   OrphanScriptReportSchema,
@@ -61,7 +61,7 @@ export const scriptsContract = defineContract(
   // The set of running scripts changed (one started or ended), on
   // every wire, so a list on screen re-reads. Payload-free like
   // portForward:changed: the list read is cheap.
-  broadcast("changed", VoidSchema, { remote: true }),
+  push("changed", VoidSchema, { remote: true }),
   // Joins a run this window did not start (another window's or
   // device's, or its own from before a reload): its output so far, and
   // every event from then on over `event`, as if it had started it.
@@ -79,12 +79,12 @@ export const scriptsContract = defineContract(
     ),
     { remote: true, gated: true, grant: "runCommands" },
   ),
-  broadcast("event", ScriptEventSchema, { remote: true }),
+  push("event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
   // the app reaped them (see host/lib/scripts/removedWorktrees.ts). The
   // run's own console goes away with the worktree row, so this is the
   // only place the stop can still be reported.
-  broadcast("stoppedForRemovedWorktree", RemovedWorktreeScriptsSchema, {
+  push("stoppedForRemovedWorktree", RemovedWorktreeScriptsSchema, {
     remote: true,
   }),
   // One-shot: the renderer asks once at startup whether the boot sweep

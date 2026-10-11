@@ -11,6 +11,10 @@ import {
   type Semver,
 } from "@shigomori/contracts/semver";
 
+// The app's repo on GitHub, which the feeds and the guide's source come
+// from (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
+export const APP_REPO = "sylophi/shigoto-no-mori";
+
 // What a feed said about the release to move to.
 export type ReleaseInfo = {
   readonly url: string;

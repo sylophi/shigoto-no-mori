@@ -564,6 +564,41 @@
       }
     }
   },
+  "guide:ask": {
+    "payload": {
+      "harness": "codex",
+      "question": "\ud800"
+    }
+  },
+  "guide:changed": {
+    "payload": {
+      "harness": "codex",
+      "point": null
+    }
+  },
+  "guide:read": {
+    "success": {
+      "harness": "codex",
+      "point": {
+        "say": " ",
+        "seq": -3
+      }
+    }
+  },
+  "guide:stop": {},
+  "guideDrive:drive": {
+    "payload": {
+      "session": "TA)gV[Dp0S}J78tB",
+      "action": {
+        "_tag": "navigate",
+        "route": "/"
+      }
+    },
+    "success": {
+      "route": "y",
+      "png": "bG"
+    }
+  },
   "hub:invokePeer": {
     "payload": {
       "deviceId": "26",
@@ -1335,6 +1370,7 @@
     }
   },
   "nav:addProject": {},
+  "nav:askHow": {},
   "nav:deepLink": {},
   "nav:launchById": {
     "payload": "\udc00"
@@ -1783,6 +1819,13 @@
       "inflightDeletes": 1
     }
   },
+  "session:guideLaunch": {
+    "payload": {
+      "session": "n80D$PJ9Ebstno7q",
+      "harness": "claude",
+      "question": "\u0000"
+    }
+  },
   "session:quit": {
     "payload": {
       "hurried": false
@@ -1895,6 +1938,18 @@
       "storeReport": "e"
     }
   },
+  "shellCalls:guide": {
+    "payload": {
+      "session": "P%wpdwD=WUHC`rU%",
+      "action": {
+        "_tag": "screenshot"
+      }
+    },
+    "success": {
+      "route": "^h",
+      "tree": "|"
+    }
+  },
   "shellCalls:migration": {
     "payload": {
       "planned": true,
@@ -1914,7 +1969,8 @@
     "payload": {
       "port": 3369,
       "token": "88fcac20d24e7d5e65b787879fea76c6",
-      "deviceId": "😀"
+      "deviceId": "😀",
+      "shellToken": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
     }
   },
   "shellCalls:relaunch": {},

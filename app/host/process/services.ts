@@ -16,6 +16,15 @@ import type * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import type * as Engine from "@host/lib/engine";
 import type * as Views from "@host/lib/views";
 import type * as Villagers from "@host/lib/VillagerData";
+import type * as Worktrees from "@host/lib/Worktrees";
+import type * as AccountPeers from "@host/lib/control/AccountPeers";
+import type * as DeviceId from "@host/lib/config/DeviceId";
+import type * as DataDirHolders from "@host/lib/DataDirHolders";
+import type * as HostFacts from "@host/lib/HostFacts";
+import type * as Shell from "@host/lib/Shell";
+import type * as PeerReach from "@host/ipc/PeerReach";
+import type * as MirrorEngine from "@host/mirror/MirrorEngine";
+import type * as PortForwards from "@host/portForward/PortForwards";
 
 export type HostServices =
   | ChildProcessSpawner.ChildProcessSpawner
@@ -31,5 +40,14 @@ export type HostServices =
   | Terminals.Terminals
   | Terrier.Terrier
   | Villagers.VillagerData
+  | Worktrees.Worktrees
   | Engine.Services
-  | BackgroundFetch.BackgroundFetch;
+  | BackgroundFetch.BackgroundFetch
+  | HostFacts.HostFacts
+  | Shell.Shell
+  | DeviceId.DeviceId
+  | PeerReach.PeerReach
+  | AccountPeers.AccountPeers
+  | MirrorEngine.MirrorEngine
+  | PortForwards.PortForwards
+  | DataDirHolders.DataDirHolders;

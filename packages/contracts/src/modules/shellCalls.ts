@@ -1,7 +1,9 @@
 import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "../contract.ts";
+import { HexId32Schema } from "../schemas/hexId.ts";
 import { MigrationSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
+import { GuideDrivePayloadSchema, GuideReplySchema } from "./guide.ts";
 import { HostAddressSchema } from "./window.ts";
 
 // What the host asks of the shell that started it (the updater and the
@@ -15,8 +17,18 @@ export const shellCallsContract = defineContract(
   "shellCalls",
   "client",
   // The host is up: where its loopback listens, for the shell to dial
-  // and to hand its windows.
-  invoke("ready", HostAddressSchema, VoidSchema),
+  // and to hand its windows, and the token that opens the shell's own
+  // session calls, which the shell keeps.
+  invoke(
+    "ready",
+    strict(
+      Schema.Struct({
+        ...HostAddressSchema.struct.fields,
+        shellToken: HexId32Schema,
+      }),
+    ),
+    VoidSchema,
+  ),
   // The host could not start: why, with what the engine's doctor found
   // when it was the store.
   invoke(
@@ -43,4 +55,7 @@ export const shellCallsContract = defineContract(
   // Stop the bridge `sm update` asks the updater through, before a wipe
   // of the data folder it lives in.
   invoke("stopUpdaterBridge", VoidSchema, VoidSchema),
+  // An action of `sm guide mcp`'s, which the shell runs in the window
+  // its session is bound to.
+  invoke("guide", GuideDrivePayloadSchema, GuideReplySchema),
 );

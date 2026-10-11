@@ -12,7 +12,7 @@ import type {
   RunningScript,
   StashEntry,
   Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 export const FAKE_ACCOUNT_ID = "user_2rin8xk3";
 export const FAKE_APP_VERSION = "2.0.3";

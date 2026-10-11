@@ -8,7 +8,7 @@ import { WorktreeKindIconView } from "../shared/WorktreeKindIconView.tsx";
 import { BirthdayBadgeView } from "../villagers/BirthdayBadgeView.tsx";
 import type { Resident } from "../../lib/villagerVoice.ts";
 import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
-import type { PullRequest, Worktree } from "@shigomori/contracts/schemas/index";
+import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import { ActivityIconView } from "./ActivityIconView.tsx";
 import { AgentWaitingMarkView } from "./AgentWaitingMarkView.tsx";
 import {

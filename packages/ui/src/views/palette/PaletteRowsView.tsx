@@ -1,6 +1,6 @@
 import { Kbd } from "../../primitives/kbd.tsx";
 import { Fragment, type ReactNode } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, MessageCircleQuestion, Plus } from "lucide-react";
 import { BranchLabel } from "../../primitives/branch-label.tsx";
 import {
   DeviceBadgeView,
@@ -15,7 +15,7 @@ import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { pluralize } from "../../lib/pluralize.ts";
 import { cn } from "../../lib/utils.ts";
 import { worktreeTitle } from "../../lib/worktreeTitle.ts";
-import { worktreeLastActivityAt } from "@shigomori/contracts/schemas/index";
+import { worktreeLastActivityAt } from "@shigomori/contracts/schemas";
 import type {
   PaletteEntry,
   PalettePage,
@@ -189,6 +189,39 @@ export function CreateRowView({
         </>
       }
       detail={`in ${projectName}${base ? `, from ${base}` : ""}`}
+    />
+  );
+}
+
+// A question for the user's agent, which shows them the answer in the
+// app.
+export function AskRowView({
+  question,
+  harnessLabel,
+  asking,
+}: {
+  question: string;
+  // The agent ↩ opens.
+  harnessLabel: string;
+  asking: boolean;
+}) {
+  const Icon = asking ? Loader2 : MessageCircleQuestion;
+  return (
+    <PaletteRowLayoutView
+      icon={
+        <span className="inline-flex size-4 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+          <Icon
+            aria-hidden
+            className={cn("size-3", asking && "animate-spin")}
+          />
+        </span>
+      }
+      title={question}
+      detail={
+        asking
+          ? `Opening ${harnessLabel}…`
+          : `${harnessLabel} shows you how, in the app`
+      }
     />
   );
 }

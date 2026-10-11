@@ -28,7 +28,7 @@ import {
   peerSyncFor,
   peerWorktree,
   peerWorktreesFor,
-} from "@host/ipc/peerSync";
+} from "@host/ipc/PeerReach";
 import * as Ops from "@host/lib/engineOps";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";

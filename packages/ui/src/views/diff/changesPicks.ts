@@ -5,7 +5,7 @@ import {
   type CommitPicks,
   type FileHunks,
   type LineChange,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { changedFilePaths } from "./changesControls.ts";
 
 // What the changes page has ticked. The page holds it rather than

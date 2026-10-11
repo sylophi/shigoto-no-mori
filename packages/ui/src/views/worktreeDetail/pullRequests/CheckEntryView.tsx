@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import { cn } from "../../../lib/utils.ts";
 import { useOutside } from "../../../outside.tsx";
-import type { PullRequestCheck } from "@shigomori/contracts/schemas/index";
+import type { PullRequestCheck } from "@shigomori/contracts/schemas";
 import { CHECK_BUCKET_ICON } from "./pullRequestShared.ts";
 import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";

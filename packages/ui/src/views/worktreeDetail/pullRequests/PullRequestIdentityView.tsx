@@ -1,7 +1,7 @@
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import type { Ref } from "react";
 import { formatRelativeTime } from "../../../lib/relativeTime.ts";
-import type { PullRequestDetail } from "@shigomori/contracts/schemas/index";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { DiffButtonView } from "../DiffButtonView.tsx";
 import { PullRequestStateLabelView } from "./PullRequestStateLabelView.tsx";
 import { MERGE_VERB } from "./pullRequestShared.ts";

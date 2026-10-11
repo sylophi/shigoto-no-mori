@@ -26,6 +26,8 @@
 // and driven here over the same session, so every engine scenario
 // exercises the full chain: a plain local TCP client -> engine
 // listener -> channel -> host handler -> loopback fixture. Asserts:
+//   - the changed signal goes out once per burst, 150 ms after the
+//     burst's first member,
 //   - a local dial round-trips an echo through the whole chain, and a
 //     duplicate startForward returns the existing forward (taking on
 //     the worktree it names), while one naming a different local port
@@ -51,6 +53,9 @@ import { randomBytes } from "node:crypto";
 import type { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import {
   CommandRefusedError,
   isChannelRefusedError,
@@ -62,7 +67,7 @@ import type { Client } from "@shigomori/contracts/types";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import { mintHexId } from "@host/lib/hexId";
 import {
-  createPortForwardEngine,
+  makePortForwardEngine,
   MAX_CONNS_PER_DEVICE,
   type PortForwardEngine,
 } from "../host/portForward/engine.ts";
@@ -71,6 +76,7 @@ import {
   type LoopbackServer,
   makeTracker,
   startLoopbackServer,
+  testClock,
   waitFor,
 } from "./lib/checkKit.mts";
 import {
@@ -412,16 +418,26 @@ it("end state: a fresh channel opens and round-trips after full teardown", async
   again.reset();
 });
 
-it("engine: a local dial round-trips through the whole chain, and a duplicate start returns the existing forward", async () => {
+it("engine: a local dial round-trips through the whole chain, a duplicate start returns the existing forward, and the changed signal goes out once per burst", async () => {
   // ---- The client engine over the same wire ----
 
   // The engine on the dialer, its forward api the SAME peer client the
   // direct scenarios drove, so nothing on the forward path is a
   // double. deviceId is ignored on purpose: this check has one peer.
-  engine = createPortForwardEngine({
-    forwardApiFor: () => forward,
-    channelsFor: () => toListener.channels,
-  });
+  // Its changed signal runs in a scope of the proof's, on a test clock.
+  const clock = testClock();
+  const scope = Scope.makeUnsafe();
+  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  let changes = 0;
+  engine = await Effect.runPromise(
+    makePortForwardEngine({
+      forwardApiFor: () => forward,
+      channelsFor: () => toListener.channels,
+      onChange: () => {
+        changes += 1;
+      },
+    }).pipe(Scope.provide(scope), Effect.provide(clock.context)),
+  );
   // Tracked last, so the finally's teardown stops it first: an
   // assertion failure mid-scenario must not leave its listeners
   // holding the process open.
@@ -447,6 +463,23 @@ it("engine: a local dial round-trips through the whole chain, and a duplicate st
   assert.equal(dup.localPort, started.localPort);
   assert.equal(engine.listForwards().length, 1);
   assert.deepEqual(engine.listForwards()[0]?.worktree, fromWorktree);
+  // The start and the claim are one burst: one signal, 150 ms after
+  // the start. One after it is a burst of its own.
+  await clock.settle();
+  assert.equal(changes, 0, "the signal waits out its window");
+  await clock.advance(149);
+  assert.equal(changes, 0, "the signal waits out its window");
+  await clock.advance(1);
+  assert.equal(changes, 1, "the burst goes out as one signal");
+  await engine.startForward({
+    deviceId: LISTENER,
+    remotePort: echo.port,
+    worktree: fromWorktree,
+  });
+  await clock.advance(149);
+  assert.equal(changes, 1, "a later change opens a window of its own");
+  await clock.advance(1);
+  assert.equal(changes, 2, "a later change opens a window of its own");
   const enginePing = await dialAndCollect(
     started.localPort,
     Buffer.from("engine ping"),

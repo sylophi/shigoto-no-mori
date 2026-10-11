@@ -104,7 +104,8 @@ Rules that keep both themes cheap to maintain:
 - **No outlines in doubutsu.** No border, hairline or ring draws an
   edge: fills set surfaces apart, and a floating one stands on a hard,
   blur-less drop (`--doubutsu-sticker-shadow`). Keyboard focus rings
-  are the one exception. So rows that v1 rules off say what they are
+  are the one exception, and the guide's ring around what it points
+  at, a pointer like focus (`data-slot="guide-ring"`). So rows that v1 rules off say what they are
   instead: a search strip carries `data-slot="search-row"` (it becomes
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
   muted band).
@@ -135,8 +136,10 @@ Rules that keep both themes cheap to maintain:
 Every component is one of two things. A **view** takes data and
 callbacks as props and only draws; it imports nothing that needs the
 running app (no queries, atoms, stores, router, `window.api`). A
-**container** binds data to a view and has no markup of its own beyond
-composing views. Views live in `@shigomori/ui` (`packages/ui/src/views`),
+**container** binds data to a view and has no markup of its own: it
+writes no element, only views and the primitives they are built from
+(a menu's items, a modal's shell, a status dot), with the props those
+take, a class among them (`app/test/containers.mts` holds it). Views live in `@shigomori/ui` (`packages/ui/src/views`),
 which cannot import the app: what a view needs from the app's hooks or
 store is a type defined in the package, and a link it opens goes
 through `useOutside`. Containers stay in `renderer/components`. The
@@ -155,9 +158,11 @@ that reaches for the runtime fails the commit.
   class constants with the live one.
 - The theme rides the theme root, not `<html>` (the theming section
   above), so a view keeps its look wherever it is mounted.
-- A view or a primitive reads no global: what it needs of the page comes
-  through an element's own document (`el.ownerDocument`), and a listener
-  on `document` or `window` lives in a hook that owns its lifetime. It
+- A view or a primitive reads no global while it draws: what it needs of
+  the page comes through an element's own document (`el.ownerDocument`),
+  and a listener on `document` or `window` lives in a hook that owns its
+  lifetime. A handler a click runs may write the clipboard
+  (`navigator.clipboard`, as `CopyButton` does), which draws nothing. It
   lays out by the window's width, a container query (`@min-[48rem]:`),
   never the viewport's (`md:`). The host API comes through the runtime,
   not `window.api`. `@shigomori/ui`'s boundary proof holds all three.

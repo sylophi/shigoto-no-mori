@@ -9,7 +9,7 @@ import {
   type Project,
   type PullRequest,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
 import { ActivityIconView } from "../ActivityIconView.tsx";
 import {

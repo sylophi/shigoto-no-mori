@@ -4,7 +4,7 @@
 // window the port was handed to. Every window that loads asks the
 // preload for a port, the preload asks here (attach), and a page that
 // goes takes its port with it.
-import { channelOf, isBroadcast } from "@shigomori/contracts/contract";
+import { channelOf, isPush } from "@shigomori/contracts/contract";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -189,7 +189,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
     const handlers: Record<string, unknown> = {};
     for (const call of group.requests.values()) {
       const channel = channelOf(call);
-      if (isBroadcast(call)) {
+      if (isPush(call)) {
         handlers[channel] = push(channel);
         continue;
       }

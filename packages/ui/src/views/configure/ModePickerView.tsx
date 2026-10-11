@@ -1,6 +1,6 @@
 import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
-import type { CarryOverEntry } from "@shigomori/contracts/schemas/index";
+import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 
 interface ModePickerProps {
   mode: CarryOverEntry["mode"];

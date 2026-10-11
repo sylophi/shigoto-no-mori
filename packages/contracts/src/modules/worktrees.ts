@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import type { ContractSchema } from "../codec.ts";
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   AgentSessionPayloadSchema,
   ApplyStashPayloadSchema,
@@ -359,11 +359,11 @@ export const worktreesContract = defineContract(
   worktreeMutation("pullAndPush"),
   worktreeMutation("syncWithPrimary"),
   worktreeMutation("switchToPrimaryAndDeleteBranch"),
-  broadcast("lifecyclePhase", WorktreeLifecyclePhaseSchema, { remote: true }),
-  broadcast("carryOverComplete", WorktreeCarryOverCompleteSchema, {
+  push("lifecyclePhase", WorktreeLifecyclePhaseSchema, { remote: true }),
+  push("carryOverComplete", WorktreeCarryOverCompleteSchema, {
     remote: true,
   }),
-  broadcast("removal", WorktreeRemovalSchema, {
+  push("removal", WorktreeRemovalSchema, {
     remote: true,
   }),
 );

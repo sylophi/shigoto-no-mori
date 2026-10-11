@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils.ts";
 import type {
   CarryOverEntry,
   CarryOverStat,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { ModePickerView } from "./ModePickerView.tsx";
 import { OnlyInWorktreesView } from "./OnlyInWorktreesView.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";

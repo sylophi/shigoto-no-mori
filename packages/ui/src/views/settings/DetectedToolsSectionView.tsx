@@ -2,7 +2,7 @@ import { Button } from "../../primitives/button.tsx";
 import { LauncherIconView } from "../shared/LauncherIconView.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { cn } from "../../lib/utils.ts";
-import type { DetectedLauncher } from "@shigomori/contracts/schemas/index";
+import type { DetectedLauncher } from "@shigomori/contracts/schemas";
 
 interface DetectedToolsSectionProps {
   // Detected AND available; the not-installed remainder is its own section.

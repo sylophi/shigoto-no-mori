@@ -5,8 +5,8 @@ import type * as Stream from "effect/Stream";
 import type * as Tracer from "effect/Tracer";
 import type { LinkChannels } from "@shigomori/contracts/link";
 import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
+  PushKeys,
+  PushProducerPayload,
   ViewObserver,
 } from "@shigomori/contracts/types";
 
@@ -72,10 +72,10 @@ export type InvokeOptions = {
 // interrupts its call. Delivery semantics (drop once the peer is gone)
 // live in the server transport binding.
 export type HandlerContext = {
-  notifier<M extends ContractModule, K extends BroadcastKeys<M>>(
+  notifier<M extends ContractModule, K extends PushKeys<M>>(
     module: M,
     key: K,
-  ): (payload: BroadcastProducerPayload<M, K>) => void;
+  ): (payload: PushProducerPayload<M, K>) => void;
   // Aborts when the caller's link is gone. One per connection, so a
   // stream a caller joins can tell a connection that already hears it
   // from a new one.

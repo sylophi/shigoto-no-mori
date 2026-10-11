@@ -7,7 +7,7 @@ import type {
   Worktree,
   WorktreeDiskUsage,
   WorktreeHygiene,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 const MB = 1024 * 1024;
 

@@ -43,7 +43,7 @@ import {
   MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
 } from "@shigomori/contracts/modules/mirror";
-import { peerMirrorFor } from "@host/ipc/peerSync";
+import { type PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import { findProject } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
 import {
@@ -187,7 +187,10 @@ const failureOf = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
 // What the reconciles reach: the engine and git.
-type FollowServices = Engine.Services | ChildProcessSpawner.ChildProcessSpawner;
+type FollowServices =
+  | Engine.Services
+  | ChildProcessSpawner.ChildProcessSpawner
+  | PeerReach;
 
 const reconcileOf = (
   deps: Parameters<typeof makeGitFollower>[0],

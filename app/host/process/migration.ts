@@ -6,16 +6,17 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { onShell, shellCalls } from "./shell";
+import * as Shell from "@host/lib/Shell";
 
 export const tellShell = Layer.effectDiscard(
   Effect.gen(function* () {
     const migration = yield* Migration.Migration;
+    const shell = yield* Shell.Shell;
     const watching = yield* Deferred.make<void>();
     yield* migration.changes.pipe(
       Stream.tap(() => Deferred.succeed(watching, undefined)),
       Stream.runForEach((progress) =>
-        onShell(() => shellCalls().migration(progress)).pipe(Effect.ignore),
+        shell.migration(progress).pipe(Effect.ignore),
       ),
       Effect.forkScoped,
     );

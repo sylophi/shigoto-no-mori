@@ -7,7 +7,7 @@ import type {
   ChangedFile,
   CommitPicks,
   CommitSummary,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import type { FakeWorktree } from "./fixtures.ts";
 

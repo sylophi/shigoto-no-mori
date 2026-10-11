@@ -3,7 +3,7 @@ import { errorMessageOf } from "../errors.ts";
 import { MIRROR_IGNORES_LIMIT } from "../mirrorIgnores.ts";
 import { isValidWorktreeDirName } from "../predicates/worktreeDirName.ts";
 import { isSafeRelPath } from "../predicates/relPath.ts";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import {
   CloneFolderNameSchema,
@@ -622,5 +622,5 @@ export const syncContract = defineContract(
   ),
   // Untagged (local-only): the move runs on the device whose renderer
   // invoked it, and the notifier hands the frames back to that caller.
-  broadcast("pullProgress", SyncPullProgressSchema),
+  push("pullProgress", SyncPullProgressSchema),
 );

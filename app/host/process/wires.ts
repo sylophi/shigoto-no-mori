@@ -6,6 +6,7 @@
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as HostPushes from "@host/lib/hostPushes";
 import type { HostServices } from "./services";
@@ -22,8 +23,8 @@ import {
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
+  PushKeys,
+  PushProducerPayload,
   ViewHandlers,
 } from "@shigomori/contracts/types";
 import {
@@ -38,7 +39,6 @@ import type {
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import { logFailure } from "@shared/log";
-import * as Layer from "effect/Layer";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
@@ -49,7 +49,7 @@ import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
 import { LayerDownError, layerLatch } from "@host/lib/util/layerLatch";
-import { getDeviceId } from "@host/lib/config/deviceId";
+import * as DeviceId from "@host/lib/config/DeviceId";
 import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
@@ -175,15 +175,27 @@ export const tunnelLayer = () =>
 // machine: the windows, the shell, and the terminal's control ops.
 const loopbackRegistrar = DeviceLink.createLinkRegistrar();
 export const loopbackLayer = () =>
-  Loopback.layer({
-    registrar: loopbackRegistrar,
-    deviceId: () => getDeviceId(),
-    appVersion: hostFacts().appVersion,
-    file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
-    // The window's own page dials it, from the renderer scheme.
-    allowedOrigin: hostFacts().rendererOrigin,
-    services: Graph.services,
-  });
+  Layer.unwrap(
+    Effect.map(DeviceId.current, (deviceId) =>
+      Loopback.layer({
+        registrar: loopbackRegistrar,
+        deviceId: () => deviceId,
+        appVersion: hostFacts().appVersion,
+        file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
+        // The window's own page dials it, from the renderer scheme.
+        allowedOrigin: hostFacts().rendererOrigin,
+        services: Graph.services,
+      }),
+    ),
+  );
+
+// This device's id, for the root's synchronous callbacks, which run
+// once the graph is up.
+let deviceId: string | undefined;
+const deviceIdNow = () =>
+  (deviceId ??= Graph.readNow(DeviceId.current, () => {
+    throw new Error("The device id was asked before launch read it.");
+  }));
 
 // The host's own consumers of peer pushes (the mirror's git follower
 // reacts to a peer's git:projectChanged and mirror:gitChanged), beside
@@ -215,7 +227,7 @@ const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = linkStatus();
     return current.listening && current.port !== null
-      ? devFrontPort(current.port)
+      ? devFrontPort(current.port, hostFacts().packaged)
       : null;
   },
   mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
@@ -257,7 +269,7 @@ export const remotePlanesLayer = Layer.effectDiscard(
     Effect.gen(function* () {
       const plane: DirectPlane.DirectPlane = yield* DirectPlane.make({
         connection: () => hub,
-        localDeviceId: () => getDeviceId(),
+        localDeviceId: deviceIdNow,
         localAppVersion: () => hostFacts().appVersion,
         broadcastStatus: (status) =>
           broadcastAll(hubContract, "statusChanged", status),
@@ -272,7 +284,7 @@ export const remotePlanesLayer = Layer.effectDiscard(
         // two identically. No permessage-deflate: the link's frames are
         // ciphertext, which does not compress.
         openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
-        dialableKinds: devDialKinds(),
+        dialableKinds: devDialKinds(hostFacts().packaged),
         host: {
           // A device the roster dropped loses its links and the tickets
           // it was handed but has not spent (DeviceLink.closePeersNotIn).
@@ -391,10 +403,11 @@ export function registerLoopbackContract<M extends ContractModule>(
 // and, when annotated `remote`, to the device link's peers. A push of a
 // shell module annotated `remote` is the host's to send its peers too
 // (account:commandAccessChanged, as the switch the shell reported).
-export function broadcastAll<
-  M extends ContractModule,
-  K extends BroadcastKeys<M>,
->(module: M, key: K, payload: BroadcastProducerPayload<M, K>): void {
+export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
+  module: M,
+  key: K,
+  payload: PushProducerPayload<M, K>,
+): void {
   broadcastAllCore(module, key, payload, hostServer);
 }
 
@@ -406,23 +419,25 @@ export function broadcastAll<
 // that triggered it.
 export async function refreshHubConnection(): Promise<void> {
   await Graph.run(
-    Effect.flatMap(remote.get, ({ hub }) =>
-      hub.refresh(
-        Effect.sync(() => {
-          const inputs = hubConnectInputs();
-          if (inputs === null) return null;
-          return {
-            hubUrl: inputs.hubUrl,
-            // A different account rotates the credential, so accountId is
-            // in the opts to force a reconnect onto the new account's
-            // object instead of leaving the old socket live.
-            accountId: inputs.accountId,
-            deviceKey: inputs.deviceKey,
-            mintTicket: inputs.mintTicket,
-            deviceId: getDeviceId(),
-          };
-        }),
-      ),
+    Effect.flatMap(
+      Effect.all([remote.get, DeviceId.current]),
+      ([{ hub }, thisDevice]) =>
+        hub.refresh(
+          Effect.sync(() => {
+            const inputs = hubConnectInputs();
+            if (inputs === null) return null;
+            return {
+              hubUrl: inputs.hubUrl,
+              // A different account rotates the credential, so accountId is
+              // in the opts to force a reconnect onto the new account's
+              // object instead of leaving the old socket live.
+              accountId: inputs.accountId,
+              deviceKey: inputs.deviceKey,
+              mintTicket: inputs.mintTicket,
+              deviceId: thisDevice,
+            };
+          }),
+        ),
     ).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("[hub] connection refresh failed", cause),
@@ -474,7 +489,7 @@ export async function refreshDirectHost(): Promise<void> {
             return {
               port: 0,
               bindAddress: "::",
-              deviceId: getDeviceId(),
+              deviceId: await Graph.run(DeviceId.current),
               appVersion: hostFacts().appVersion,
               accountId: inputs.accountId,
               // The web client's origin, so a browser can dial the wss tunnel
@@ -494,7 +509,7 @@ export async function refreshDirectHost(): Promise<void> {
     const listener = linkStatus();
     const wanted =
       listener.listening && listener.port !== null
-        ? { port: devFrontPort(listener.port) }
+        ? { port: devFrontPort(listener.port, hostFacts().packaged) }
         : null;
     // Nothing to reconcile once the app is quitting: the layer's close
     // has stopped the child.

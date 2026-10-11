@@ -40,7 +40,9 @@ import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/Ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
 import * as Villagers from "../../host/lib/VillagerData.ts";
+import * as Worktrees from "../../host/lib/Worktrees.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
+import * as HostStandIns from "./hostStandIns.mts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -106,6 +108,7 @@ const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         Ports.layer,
         Terrier.layer,
+        Worktrees.layer,
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
@@ -129,6 +132,8 @@ const runtime = ManagedRuntime.make(
     ),
     // The copy of the shared settings, read from the store.
     Layer.provideMerge(SharedSettingsStore.layer),
+    // What the app's root provides from its own wiring.
+    Layer.provideMerge(HostStandIns.layer),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),

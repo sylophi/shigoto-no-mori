@@ -12,10 +12,7 @@ import {
 } from "electron";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import { navContract } from "@shigomori/contracts/modules/nav";
-import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
-} from "@shigomori/contracts/types";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
@@ -134,10 +131,10 @@ export function forgetWindowMenu(windowId: number): void {
 // the callback's window as BaseWindow (no webContents); every window
 // this app creates is a BrowserWindow, so narrow once here. No-op when
 // no window has focus.
-function clickBroadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
+function clickBroadcast<M extends ContractModule, K extends PushKeys<M>>(
   module: M,
   key: K,
-  payload: BroadcastProducerPayload<M, K>,
+  payload: PushProducerPayload<M, K>,
 ): MenuItemConstructorOptions["click"] {
   return (_item, focusedWindow) => {
     const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
@@ -236,6 +233,15 @@ export function buildAppMenu(): void {
         { role: "close" },
         { type: "separator" },
         { role: "front" },
+      ],
+    },
+    {
+      role: "help",
+      submenu: [
+        {
+          label: "Ask How…",
+          click: clickBroadcast(navContract, "askHow", undefined),
+        },
       ],
     },
   ];

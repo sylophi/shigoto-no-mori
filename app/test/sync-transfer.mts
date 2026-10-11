@@ -66,9 +66,10 @@ import * as Layer from "effect/Layer";
 import * as Tracer from "effect/Tracer";
 import {
   type PeerChannels,
+  type PeerReach,
   peerSyncFor,
-  setPeerReach,
-} from "@host/ipc/peerSync";
+} from "@host/ipc/PeerReach";
+import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -148,7 +149,7 @@ const withPeerSource = <T, E>(
 const offerSource = <T, E>(
   project: Parameters<typeof offer>[1],
   worktreeId: string,
-  openOnPeer: (channelId: string) => Effect.Effect<T, E>,
+  openOnPeer: (channelId: string) => Effect.Effect<T, E, PeerReach>,
 ) => runHost(offer(LISTENER, project, worktreeId, openOnPeer));
 const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
 
@@ -375,11 +376,11 @@ beforeAll(async () => {
   // The peer as the orchestrations reach it: the sync surface plus
   // the session's byte channels, observed.
   observed = observedChannels(toListener.channels);
-  setPeerReach({
+  standInPeers({
     transportFor: () => toListener.transport,
     channelsFor: () => observed.channels,
-    thisDeviceId: () => DIALER,
   });
+  standInDeviceId(DIALER);
   worktreeRef = { projectId: sourceProjectId, worktreeId };
   targetProject = await findProjectOrThrow(targetProjectId);
 });
@@ -715,7 +716,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
   // tests drove. Everything in between -- the tip, the
   // capture, the bundle, `sm create`, the capture re-key, `sm dirty
   // apply` -- is production code against real git.
-  setPeerReach({
+  standInPeers({
     transportFor: (deviceId) => {
       assert.equal(
         deviceId,
@@ -753,7 +754,6 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
       assert.equal(deviceId, LISTENER, "the move dialed an unexpected device");
       return observed.channels;
     },
-    thisDeviceId: () => DIALER,
   });
   pullCtx = handlerCtx();
   const repoIdentity = await repoIdentityOf(sourceRepo);

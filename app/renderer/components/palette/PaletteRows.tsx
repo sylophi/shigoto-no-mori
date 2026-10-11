@@ -18,6 +18,7 @@ import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.
 import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
 import {
+  AskRowView,
   CreateRowView,
   PageRowView,
   ProjectRowView,
@@ -29,11 +30,13 @@ export function PaletteRowContent({
   query,
   now,
   creating,
+  asking,
 }: {
   row: PaletteRow;
   query: string;
   now: number;
   creating: boolean;
+  asking: boolean;
 }) {
   switch (row.kind) {
     case "worktree":
@@ -44,6 +47,14 @@ export function PaletteRowContent({
       return <PageRowView page={row.page} query={query} />;
     case "create":
       return <CreateRow row={row} creating={creating} />;
+    case "ask":
+      return (
+        <AskRowView
+          question={row.question}
+          harnessLabel={row.harnesses[0].label}
+          asking={asking}
+        />
+      );
   }
 }
 

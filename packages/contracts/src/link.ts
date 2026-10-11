@@ -19,7 +19,7 @@ import {
   callsOf,
   channelOf,
   type ContractModule,
-  isBroadcast,
+  isPush,
   Remote,
   nameOf,
   scopeOf,
@@ -31,10 +31,11 @@ import {
   RemoteCallError,
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
+import { guideDriveContract } from "./modules/guide.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract } from "./modules/link.ts";
-import type { BroadcastKeys, BroadcastProducerPayload } from "./types.ts";
+import type { PushKeys, PushProducerPayload } from "./types.ts";
 
 // One end of a byte channel, as the side that attached it sees it.
 export type ChannelEndpoint = {
@@ -97,10 +98,10 @@ export class LinkPeer extends Context.Service<
     readonly channels: LinkChannels;
     // A push for this peer alone (a move's progress), on the stream
     // the peer reads that push from.
-    readonly notify: <M extends ContractModule, K extends BroadcastKeys<M>>(
+    readonly notify: <M extends ContractModule, K extends PushKeys<M>>(
       module: M,
       key: K,
-      payload: BroadcastProducerPayload<M, K>,
+      payload: PushProducerPayload<M, K>,
     ) => void;
   }
 >()("sm/remote/LinkPeer") {}
@@ -162,7 +163,7 @@ const remoteCalls = [linkContract, ...allContractModules].flatMap((module) =>
   callsOf(module).filter(
     (call) =>
       annotation(call, Remote) === true ||
-      (isBroadcast(call) && scopeOf(module) === "host"),
+      (isPush(call) && scopeOf(module) === "host"),
   ),
 );
 
@@ -177,13 +178,16 @@ export const LinkGroup = handshakeOf(remoteCalls).merge(
 // app's own credential admits (the terminal `sm`, the app's windows and
 // its shell). It serves the link's own calls, every call of every
 // host-scope module, remote or not, with its pushes and views, the
-// control contract's ops and the shell's session.
+// control contract's ops, the guide's drive and the shell's session,
+// which only a hello with the shell's own token opens
+// (host/socket/loopback.ts).
 const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules
     .filter((module) => isHostSide(module))
     .flatMap((module) => callsOf(module)),
   ...callsOf(controlContract),
+  ...callsOf(guideDriveContract),
   ...callsOf(sessionContract),
 ];
 

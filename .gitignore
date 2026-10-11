@@ -61,3 +61,5 @@ macfs/macfs
 app/lab/scene-compare/report/
 # The reliability harness's report (app/lab/reliability)
 app/lab/reliability/report/
+# The guide's how-tos' report (app/lab/guide-eval)
+app/lab/guide-eval/report/

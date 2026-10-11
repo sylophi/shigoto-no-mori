@@ -1,5 +1,5 @@
 // The shell's app place (shared/packaging/bundledBinary.mts), and the
-// facts the host is handed at start beside it (host/process/facts.ts).
+// facts the host is handed at start beside it (host/lib/HostFacts.ts).
 import { app } from "electron";
 import type { AppPlace } from "@shared/packaging/bundledBinary.mts";
 

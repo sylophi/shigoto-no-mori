@@ -30,7 +30,7 @@ import {
   VillagerSaysView,
 } from "../views/shared/VillagerSaysView.tsx";
 import { ModalBox } from "../primitives/modal-shell.tsx";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   forests,
   LOCAL_DEVICE_ID,

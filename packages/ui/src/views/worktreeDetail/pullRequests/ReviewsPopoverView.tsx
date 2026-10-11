@@ -17,7 +17,7 @@ import {
   type PullRequestTone,
   sortReviewersWorstFirst,
 } from "../../../lib/pullRequest.ts";
-import type { PullRequestDetail } from "@shigomori/contracts/schemas/index";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { REVIEWER_STATE } from "./pullRequestShared.ts";
 import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 

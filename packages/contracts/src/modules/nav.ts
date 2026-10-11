@@ -1,17 +1,19 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
 export const navContract = defineContract(
   "nav",
   "client",
-  broadcast("openSettings", VoidSchema),
-  broadcast("addProject", VoidSchema),
-  broadcast("launchById", Schema.String),
+  push("openSettings", VoidSchema),
+  push("addProject", VoidSchema),
+  push("launchById", Schema.String),
+  // The Help menu's Ask: the palette, to ask the guide.
+  push("askHow", VoidSchema),
   // A deep link arrived. Only a nudge: main holds the link until the
   // renderer takes it below, so a link that lands before the renderer
   // listens (one that launched the app) is not lost.
-  broadcast("deepLink", VoidSchema),
+  push("deepLink", VoidSchema),
   // The pending deep link's path (`/devices/<id>/projects/<id>/...`,
   // the part after `<scheme>://open`), or null. Taking clears it.
   invoke("takeDeepLink", VoidSchema, Schema.NullOr(Schema.String)),

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Moon, Sun, SunMoon } from "lucide-react";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
-import type { Theme } from "@shigomori/contracts/schemas/index";
+import type { Theme } from "@shigomori/contracts/schemas";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import { cn } from "../../lib/utils.ts";
 

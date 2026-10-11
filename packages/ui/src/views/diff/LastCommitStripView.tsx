@@ -2,7 +2,7 @@ import { GitCommitHorizontal, PencilLine, Undo2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { RelativeDate } from "../../primitives/relative-date.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import type { CommitSummary } from "@shigomori/contracts/schemas/index";
+import type { CommitSummary } from "@shigomori/contracts/schemas";
 
 // The commit HEAD is on, with the two things the changes page can do
 // to it: fold the next commit into it, or take it apart again. Shown

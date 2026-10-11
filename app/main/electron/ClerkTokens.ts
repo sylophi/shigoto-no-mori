@@ -122,7 +122,7 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
                 fs.writeFileString(
                   temp,
                   JSON.stringify(Object.fromEntries(entries), undefined, "\t"),
-                  { mode: 0o666 },
+                  { mode: 0o600 },
                 ),
               ),
               Effect.andThen(fs.rename(temp, file)),
