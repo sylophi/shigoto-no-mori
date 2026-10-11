@@ -2,23 +2,19 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import { atoi, parseProcessTable, plural, pluralize } from "../doctorParse.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
 import { pidAlive } from "../processes.ts";
-import {
-  RunningScripts,
-  SCRIPT_START_TOLERANCE_MS,
-  check,
-} from "./documents.ts";
+import * as RunningScripts from "../RunningScripts.ts";
+import { SCRIPT_START_TOLERANCE_MS, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
 
 export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const { home, dataDir, flavor } = paths;
+    const { home, flavor } = paths;
     const names = flavorNames(flavor);
     const { capture, readText } = reads;
     // --- what a crash left running ---
@@ -63,23 +59,18 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     });
 
     // The dev servers and scripts the app started outlive a crashed app
-    // until its next launch stops them, holding their ports.
+    // until its next launch stops them, holding their ports. Read from
+    // the store, so a run that can't open it leaves them out.
     const checkOrphanScripts = Effect.gen(function* () {
-      const file = Option.flatMap(
-        yield* readText(path.join(dataDir, "running-scripts.json")),
-        Schema.decodeOption(RunningScripts),
-      );
-      if (Option.isNone(file)) return [];
-      const ownerPid = file.value.ownerPid ?? 0;
-      const scripts = file.value.scripts ?? [];
-      if (scripts.length === 0 || ownerPid < 2 || (yield* pidAlive(ownerPid))) {
-        return [];
+      const recorded = yield* (yield* RunningScripts.RunningScripts).list;
+      const owners = [...new Set(recorded.map(({ ownerPid }) => ownerPid))];
+      const gone = new Set<number>();
+      for (const owner of owners) {
+        if (!(yield* pidAlive(owner))) gone.add(owner);
       }
-      const pids = scripts
-        .map(({ pid }) => pid ?? 0)
-        .filter((pid) => pid >= 2)
-        .map(String);
-      if (pids.length === 0) return [];
+      const scripts = recorded.filter(({ ownerPid }) => gone.has(ownerPid));
+      if (scripts.length === 0) return [];
+      const pids = scripts.map(({ pid }) => String(pid));
       // Non-zero when none are alive.
       const ps = yield* capture(
         "ps",
@@ -90,19 +81,19 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         Option.match(ps, { onNone: () => "", onSome: ({ stdout }) => stdout }),
       );
       const orphans = scripts.filter(({ pid, startedAt }) => {
-        const started = live.get(pid ?? 0);
+        const started = live.get(pid);
         // A recycled pid started at another time.
         return (
           started !== undefined &&
-          Math.abs(started - (startedAt ?? 0)) <= SCRIPT_START_TOLERANCE_MS
+          Math.abs(started - startedAt) <= SCRIPT_START_TOLERANCE_MS
         );
       });
       if (orphans.length === 0) return [];
       const n = orphans.length;
       return [
         check("Processes", "scripts", "scripts").warn(
-          `${n} script${plural(n)} the app started ${pluralize(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command ?? "").join(", ")}), holding ${pluralize(n, "its", "their")} ports`,
-          `Open the app, which stops them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid ?? 0)).join(" ")}\`.`,
+          `${n} script${plural(n)} the app started ${pluralize(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command).join(", ")}), holding ${pluralize(n, "its", "their")} ports`,
+          `Open the app, which stops them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid)).join(" ")}\`.`,
         ),
       ];
     });

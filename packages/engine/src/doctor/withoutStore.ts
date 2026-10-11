@@ -28,21 +28,21 @@ export const makeWithoutStore = ({
       checkStagingLock,
       checkUpdateLeftovers,
     } = dataDirChecks;
-    const { checkEnvironment, checkProcesses } = checklist;
+    const { checkEnvironment, checkOrphanTunnel } = checklist;
     // --- without the store ---
 
     // The checks that need no state: the environment, the data dir's own
-    // lines (locks and what an update left) and what a crash left running.
-    // `failed` says the store wouldn't open, which is a line of its own
-    // unless the data dir's line already says why. Skipped, since they
-    // read what the store keeps: config.json's and registry.json's lines,
-    // the port pool, launchers, terrier, dormant state, worktree marks and
-    // every project.
+    // lines (locks and what an update left) and a tunnel a crash left
+    // running. `failed` says the store wouldn't open, which is a line of
+    // its own unless the data dir's line already says why. Skipped, since
+    // they read what the store keeps: config.json's and registry.json's
+    // lines, the port pool, launchers, terrier, dormant state, worktree
+    // marks, the scripts a crash left running and every project.
     const checkWithoutState = (input: RunInput, failed: boolean) =>
       Effect.gen(function* () {
         const environment = yield* checkEnvironment(input);
         const dir = yield* checkDataDir;
-        const processes = yield* checkProcesses;
+        const processes = yield* checkOrphanTunnel;
         if (!dir.usable) return [...environment, dir.entry, ...processes];
         const holder = yield* stagingHolder(stagingLock);
         return [

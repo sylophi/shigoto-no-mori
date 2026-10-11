@@ -18,7 +18,7 @@ import {
   findProjectAndWorktree,
   findWorktreePath,
 } from "@host/lib/projects";
-import { cancelMove } from "@host/lib/sync/moves";
+import * as Moves from "@host/lib/sync/Moves";
 import {
   attachLinkFarEnd,
   serveSource,
@@ -90,7 +90,11 @@ export const syncHandlers = {
   // start) or lands for the calling peer. Keyed like the progress the
   // caller is watching. False once there is nothing left to cancel.
   cancelMove: ({ sourceWorktreeId }, ctx) =>
-    Effect.sync(() => ({ cancelled: cancelMove(ctx, sourceWorktreeId) })),
+    Effect.flatMap(Moves.Moves, (moves) =>
+      Effect.map(moves.cancel(ctx, sourceWorktreeId), (cancelled) => ({
+        cancelled,
+      })),
+    ),
 
   // The git follower's push: the peer opened the link, and this host
   // asks it for the one bundle and unpacks it under refs/shigomori/.

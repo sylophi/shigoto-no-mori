@@ -5,8 +5,8 @@
 // conflict appearing, the git halves diverging and agreeing again).
 // Keyed by the LOCAL worktree, not the session: an ignore change opens
 // a fresh session on the same pair, and the thread must not restart
-// with it. Bounded per worktree and persisted beside the engine's own
-// data, so a restart keeps the recent past. Electron-free like the
+// with it. Bounded per worktree and persisted in the store (the engine's
+// MirrorHistory), so a restart keeps the recent past. Electron-free like the
 // daemon: the store is injected.
 import {
   isHaltedStatus,
@@ -52,6 +52,8 @@ export type MirrorHistoryStore = {
   load: () => Record<string, readonly MirrorEvent[]>;
   save: (events: Record<string, readonly MirrorEvent[]>) => void;
 };
+
+export type MirrorHistory = ReturnType<typeof createMirrorHistory>;
 
 export function createMirrorHistory(deps: {
   store: MirrorHistoryStore;

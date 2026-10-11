@@ -142,6 +142,9 @@ import * as Logger from "effect/Logger";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
+import type * as Context from "effect/Context";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
 import {
@@ -164,7 +167,7 @@ import {
   isTerminalDialError,
   NoDialableCandidateError,
 } from "@shared/hub/directDial";
-import { createDirectKeeper } from "@shared/hub/directKeeper";
+import { make as makeDirectKeeper } from "@shared/hub/directKeeper";
 import {
   applyDirectPresence,
   type DirectPresenceDeps,
@@ -172,7 +175,7 @@ import {
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
-  createSupervisor,
+  supervise,
   STABLE_CONNECTION_MS,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
@@ -208,7 +211,7 @@ import {
 } from "@shigomori/contracts/hubProtocol";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
-import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
+import { make as createWebConnection } from "../web/hub/connection.ts";
 import {
   boundPort,
   entryAt,
@@ -316,17 +319,30 @@ function fakeAskDialer(
 // of running both. Dials fail until succeed() flips them, so a
 // scenario can walk a failure streak into an established session
 // without rebuilding the keeper.
+// What a scoped constructor makes on `context`, its scope closed with
+// the test.
+function madeOn<A>(
+  context: Context.Context<never>,
+  make: Effect.Effect<A, never, Scope.Scope>,
+): A {
+  const scope = Scope.makeUnsafe();
+  trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  return Effect.runSyncWith(context)(Scope.provide(scope)(make));
+}
+
 function stubKeeper(rejectWith: unknown) {
   const clock = testClock();
   const dials: Array<{ deviceId: string; at: number }> = [];
   let dialSucceeds = false;
-  const keeper = createDirectKeeper({
-    context: clock.context,
-    dial: (deviceId) => {
-      dials.push({ deviceId, at: clock.now() });
-      return dialSucceeds ? Promise.resolve() : Promise.reject(rejectWith);
-    },
-  });
+  const keeper = madeOn(
+    clock.context,
+    makeDirectKeeper({
+      dial: (deviceId) => {
+        dials.push({ deviceId, at: clock.now() });
+        return dialSucceeds ? Promise.resolve() : Promise.reject(rejectWith);
+      },
+    }),
+  );
   return {
     keeper,
     clock,
@@ -749,7 +765,6 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
     2,
     "a lockout parked the peer instead of retrying it",
   );
-  keeper.stop();
 });
 
 it("a genuine ticket refusal is blocked and terminal, and the keeper asks again on the refusal ladder, never faster than the host's lockout allows", async () => {
@@ -814,7 +829,6 @@ it("a genuine ticket refusal is blocked and terminal, and the keeper asks again 
   succeed();
   await clock.advance(60_000);
   assert.equal(dials.length, 7);
-  keeper.stop();
 });
 
 it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema and never dialed, its ticket unspent", async () => {
@@ -1386,14 +1400,14 @@ it("mid-dial sweeps: a peer leaving the roster while its dial is in flight has t
   assert.deepEqual(quit.handlers.directPeerVersions(), {});
 });
 
-it("supervised and eager: presence alone establishes the session (no invoke anywhere), a host-side drop is redialed by the keeper on the shared ladder, and quit's stop() latches the schedule", async () => {
+it("supervised and eager: presence alone establishes the session (no invoke anywhere), a host-side drop is redialed by the keeper on the shared ladder, and the plane's close latches the schedule", async () => {
   const listener = await startDirectListener(trackTest);
   // Supervised as production wires it, with the keeper on a TestClock
   // so the ladder is advanced by hand instead of slept out.
   const clock = testClock();
-  const { plane, bridge } = await bridgeTo(trackTest, listener, {
+  const { bridge, stop } = await bridgeTo(trackTest, listener, {
     supervised: true,
-    keeper: { context: clock.context },
+    context: clock.context,
   });
   // Presence alone: the roster names the listener, so the keeper dials it
   // with no invoke and no ensure in sight.
@@ -1423,11 +1437,11 @@ it("supervised and eager: presence alone establishes the session (no invoke anyw
     await invokeListener(bridge, ECHO, echoOf("recovered")),
     "recovered",
   );
-  // Quit: stop() is BOTH halves in the order that matters (latch,
-  // then close every cached session), so the cache empties on the
-  // call and nothing a drop or a pending timer does afterwards can
-  // dial a fresh session into the teardown.
-  plane.stop();
+  // Quit: the plane's close is BOTH halves in the order that matters
+  // (latch, then close every cached session), so the cache is empty
+  // once it is done and nothing a drop or a pending timer does
+  // afterwards can dial a fresh session into the teardown.
+  await stop();
   assert.deepEqual(bridge.directPeerVersions(), {});
   listener.binding.closePeersNotIn([]);
   await clock.advance(lastOf(BACKOFF_LADDER_MS) * 4);
@@ -1435,7 +1449,7 @@ it("supervised and eager: presence alone establishes the session (no invoke anyw
   assert.deepEqual(
     bridge.directPeerVersions(),
     {},
-    "a latched keeper still redialed after stop()",
+    "a latched keeper still redialed after the close",
   );
 });
 
@@ -1905,7 +1919,6 @@ it("a listener-less peer is a TERMINAL verdict: the browser binding's no-listene
   keeper.reconcile([LISTENER]);
   await clock.settle();
   assert.equal(dials.length, 2, "the roster round trip did not redial");
-  keeper.stop();
 });
 
 it("dial now: the network coming back ends a peer's wait on the shared ladder, and the hub supervisor's backoff, at once; outside a wait it does nothing", async () => {
@@ -1929,30 +1942,31 @@ it("dial now: the network coming back ends a peer's wait on the shared ladder, a
   assert.equal(dials.length, climbed + 1);
   await clock.advance(1);
   assert.equal(dials.length, climbed + 2);
-  keeper.stop();
 
   const hubClock = testClock();
   let connects = 0;
   const statuses: SupervisorStatus[] = [];
-  const supervisor = createSupervisor({
-    context: hubClock.context,
-    classifyClose: () => null,
-    connect: () => {
-      connects += 1;
-      return Promise.reject(new Error("hub unreachable"));
-    },
-    onStatus: (status) => statuses.push(status),
-  });
-  // Outside a backoff (nothing started yet) it does nothing.
+  const supervisor = madeOn(
+    hubClock.context,
+    supervise({
+      classifyClose: () => null,
+      // Failing a turn later, as a real dial does.
+      connect: () => {
+        connects += 1;
+        return Effect.andThen(Effect.yieldNow, Effect.fail("hub unreachable"));
+      },
+      onStatus: (status) => statuses.push(status),
+    }),
+  );
+  // Outside a backoff (the first attempt not yet failed) it does
+  // nothing.
   supervisor.dialNow();
-  supervisor.start();
   await hubClock.settle();
   assert.equal(connects, 1);
   assert.equal(statuses.at(-1)?.phase, "backoff");
   supervisor.dialNow();
   await hubClock.settle();
   assert.equal(connects, 2, "the supervisor waited out its backoff");
-  supervisor.stop();
 });
 
 it("keeper discipline: eager dial on roster entry, the exact shared ladder on transient failures (capped, forever), roster exit cancels, and a stable session's drop resets the ladder", async () => {
@@ -2028,7 +2042,6 @@ it("keeper discipline: eager dial on roster entry, the exact shared ladder on tr
     connectedAt + 2,
     "the unstable drop never redialed",
   );
-  keeper.stop();
 });
 
 it("keeper parks on a peer with no listener with NO timer, and the peer's roster round trip is what redials it", async () => {
@@ -2059,7 +2072,6 @@ it("keeper parks on a peer with no listener with NO timer, and the peer's roster
   await clock.settle();
   assert.equal(dials.length, 2, "the roster round trip did not redial");
   assert.equal(keeper.unavailableReason(LISTENER), null);
-  keeper.stop();
 });
 
 const resolveBinary = (

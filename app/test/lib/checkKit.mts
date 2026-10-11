@@ -319,15 +319,13 @@ export function entryAt<T>(list: readonly T[], index: number): T {
 }
 
 // What a handler gets from the wire when a check calls it directly: a
-// live signal nobody aborts and a notifier that drops every frame.
+// connection nobody ends and a notifier that drops every frame.
 // `overrides` supplies the caller, a frame sink, channels.
 export function handlerCtx(
   overrides: Partial<HandlerContext> = {},
 ): HandlerContext {
-  const signal = new AbortController().signal;
   return {
-    signal,
-    connection: signal,
+    connection: new AbortController().signal,
     notifier: () => () => {},
     ...overrides,
   };

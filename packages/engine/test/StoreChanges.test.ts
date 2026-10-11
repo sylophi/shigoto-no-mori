@@ -99,11 +99,15 @@ const unwatched = new Set([
   "clone_verified",
   "saved_terminals",
   "terminal_folder",
+  "running_scripts",
+  "mirror_agreements",
+  "mirror_history",
+  "mirror_invites",
   "wt_moves",
   "wt_move_scan",
 ]);
 
-it("watches every table but the caches, the saved terminals and the wt/ move's", () =>
+it("watches every table but the caches, the host's own (terminals, running scripts, the mirrors' state) and the wt/ move's", () =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

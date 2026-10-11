@@ -21,8 +21,6 @@ is here is the app's own.
   `cloneDestination.ts`, `cloneUrl.ts` (the add-project flow's reading
   of a pasted string, over `predicates/remoteUrl.ts` in the contracts),
   `releases.ts`, `ports/`, `villagers/`.
-- `util/`: `limit`, the hub connection's, which goes with it (V3.md,
-  step 7, Leftover mechanisms).
 - `packaging/`: the build's own modules (the flavor's names, the
   bundled binaries, signing, the dmg), run by forge and the scripts.
 

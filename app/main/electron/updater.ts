@@ -32,19 +32,21 @@ import {
   StagedManifestSchema,
   UpdateStageResultSchema,
 } from "@shigomori/contracts/schemas";
-import { readJsonOrNull } from "@host/lib/util/atomicJson";
-import { pathExists, dataDir } from "@host/lib/util/paths";
+import { dataDir } from "@host/lib/util/paths";
+import { readJson } from "../core/files/jsonFile";
 import { busyRemoteRefusal } from "@shared/busy";
 import { host, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
-import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
+import { publishUpdaterState, updaterBridge } from "./updaterBridge";
 import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
+import * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import { spawn } from "node:child_process";
@@ -92,7 +94,7 @@ function setState(next: UpdaterState): void {
   // Mirror every state to disk so `sm update` can follow along
   // (updaterBridge.ts). Fire-and-forget: transitions are seconds apart,
   // and a lost write only stales the CLI's view until the next one.
-  void publishUpdaterState(state);
+  fork?.(publishUpdaterState(state));
 }
 
 const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
@@ -102,23 +104,35 @@ const stagedDir = () => join(dataDir(), "updates", "staged");
 
 // null unless a well-formed manifest describes a bundle that is
 // actually on disk.
-async function readStagedManifest(): Promise<StagedManifest | null> {
-  const manifest = await readJsonOrNull(
+const readStagedManifest = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const manifest = yield* readJson(
     join(stagedDir(), "manifest.json"),
     StagedManifestSchema,
-  ).catch(() => null);
+  ).pipe(Effect.orElseSucceed(() => null));
   if (manifest === null) return null;
-  if (!(await pathExists(join(stagedDir(), manifest.bundleName)))) return null;
-  return manifest;
-}
+  const there = yield* fs
+    .exists(join(stagedDir(), manifest.bundleName))
+    .pipe(Effect.orElseSucceed(() => false));
+  return there ? manifest : null;
+});
 
 // The staged update, if it's one this build can restart into. A
 // manifest matching our own version is debris from an install that
 // crashed between swap and cleanup. Offering it would restart-loop
 // into the same version. The next stage run clears it.
-async function readInstallableStaged(): Promise<StagedManifest | null> {
-  const staged = await readStagedManifest();
-  return staged !== null && staged.version !== app.getVersion() ? staged : null;
+const installableStaged: Effect.Effect<
+  StagedManifest | null,
+  never,
+  FileSystem.FileSystem
+> = Effect.map(readStagedManifest, (staged) =>
+  staged !== null && staged.version !== app.getVersion() ? staged : null,
+);
+
+// The same, from the Promise code below: nothing while the updater's
+// layer is down.
+function readInstallableStaged(): Promise<StagedManifest | null> {
+  return run === null ? Promise.resolve(null) : run(installableStaged);
 }
 
 // The app as the updater sees it: the bundled `sm` sits in the bundle
@@ -169,8 +183,12 @@ function readyStateFrom(manifest: {
 // A check, started from outside the updater's layer (the host's call,
 // updateNow, a staged arm): on the layer's own runtime, nothing while
 // it is down.
+type UpdaterServices = Updater.Updater | FileSystem.FileSystem | Path.Path;
 let fork:
-  | ((effect: Effect.Effect<void, never, Updater.Updater>) => void)
+  | ((effect: Effect.Effect<void, never, UpdaterServices>) => void)
+  | null = null;
+let run:
+  | (<A>(effect: Effect.Effect<A, never, UpdaterServices>) => Promise<A>)
   | null = null;
 function checkForUpdates(): void {
   fork?.(runCheck);
@@ -212,7 +230,7 @@ const stage = (shown: UpdaterState | null) =>
     }),
   ).pipe(Effect.timeout(STAGE_TIMEOUT_MS));
 
-const runCheck: Effect.Effect<void, never, Updater.Updater> = Effect.gen(
+const runCheck: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
   function* () {
     if (!started || checkInFlight) return;
     if (state.kind === "downloading") return;
@@ -238,7 +256,7 @@ const runCheck: Effect.Effect<void, never, Updater.Updater> = Effect.gen(
     if (
       failed &&
       shown !== null &&
-      (yield* Effect.promise(readInstallableStaged))?.version === shown.version
+      (yield* installableStaged)?.version === shown.version
     ) {
       next = shown;
     }
@@ -386,28 +404,31 @@ export const updaterCalls = {
 // bridge that will never start.
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
+    const runFork = yield* FiberSet.makeRuntime<UpdaterServices>();
+    const runPromise = yield* FiberSet.makeRuntimePromise<UpdaterServices>();
+    fork = (effect) => void runFork(effect);
+    run = runPromise;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        fork = null;
+        run = null;
+      }),
+    );
     if (!app.isPackaged) {
       setState({ kind: "unsupported" });
       return;
     }
-    const runFork = yield* FiberSet.makeRuntime<Updater.Updater>();
-    fork = (effect) => void runFork(effect);
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        fork = null;
-      }),
-    );
     started = true;
     // The only bridge request is "install" (UpdateRequestSchema). The
     // CLI runs at this machine's own terminal, so it is attended.
-    startUpdaterBridge(() => void installUpdate(false));
+    yield* updaterBridge(() => void installUpdate(false));
     yield* Effect.forkScoped(
       Effect.gen(function* () {
         // Seed from disk before any network work: an update staged
         // earlier (a previous run, or `sm update --stage` in a
         // terminal) is ready immediately, before any check. The first
         // check still runs, in case a newer release has shipped since.
-        const staged = yield* Effect.promise(readInstallableStaged);
+        const staged = yield* installableStaged;
         if (staged !== null) setState(readyStateFrom(staged));
         yield* Effect.sleep(FIRST_CHECK_DELAY_MS);
         yield* runCheck;

@@ -126,7 +126,7 @@ export function startStubHub(
     let forwarded = 0;
     // The liveness pair the real DO answers through its auto-response.
     // A test flips answerPings off to play a hub whose socket died
-    // silently, and reads pingsFrom to assert a device heartbeats.
+    // silently, and reads pingsFrom to assert a device pings.
     let answerPings = true;
     const pings = new Map<string, number>();
 
