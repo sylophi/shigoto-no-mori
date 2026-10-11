@@ -15,7 +15,8 @@
 // no direct listener, no cloudflared).
 //
 // Pure aside from the injected deps (no electron, no node builtins),
-// like the pieces it composes.
+// like the pieces it composes. It lives as long as the scope it is made
+// in (quit, a tab's teardown).
 
 import type { KeyPair } from "@shared/crypto/noise";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
@@ -28,13 +29,11 @@ import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
 import { makeHubHandlers, type HubHandlers } from "@shared/hub/bridgeHandlers";
 import { createDirectDialer, type DirectDialer } from "@shared/hub/directDial";
-import {
-  createDirectKeeper,
-  type DirectKeeper,
-} from "@shared/hub/directKeeper";
+import * as DirectKeeper from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
 import type { OpenClientSocket } from "@shared/remote/deviceLink";
-import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 
 // The peer's command-access switch flipping, as its direct listener
 // pushes it. The bridge records it on the peer's session so the status
@@ -47,7 +46,7 @@ const SHARING_CHANGED = callOf(sharingContract, "changed");
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one
 // (web/hub/connection.ts). askConnectInfo is consumed by the dialer
-// ONLY (see createDirectPlane below).
+// ONLY (see make below).
 type DirectPlaneConnection = {
   status(): HubConnectionStatus;
   localKey(): KeyPair | null;
@@ -87,10 +86,6 @@ export type DirectPlaneDeps = {
   // shrink it so failure scenarios settle fast, real owners omit it
   // and take the dialer's HELLO_TIMEOUT_MS default.
   deadlineMs?: number;
-  // What the keeper's loops run in, a check seam too: the direct-plane
-  // check drives retries on a TestClock instead of sleeping the real
-  // ladder out. Real owners omit it and take real time.
-  keeper?: { context?: Context.Context<never> };
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own
   // tunnel endpoint state for the status snapshot.
@@ -102,7 +97,7 @@ export type DirectPlaneDeps = {
 
 export type DirectPlane = {
   // The renderer-facing hub bridge, for the contract registration.
-  // Teardown is stop() below, not a call in here.
+  // Teardown is the plane's scope closing, not a call in here.
   handlers: HubHandlers;
   // The status snapshot: the connection's own status plus the direct
   // surface (peerAppVersions, whose keys are the live direct sessions,
@@ -124,152 +119,154 @@ export type DirectPlane = {
   // back or the network does, so both planes get their verdict in
   // seconds.
   probe(): void;
-  // Tears the whole plane down (quit, tab teardown): latches the
-  // keeper, then closes every cached direct session. The ORDER is the
-  // point and it lives here rather than in each owner: the keeper
-  // supervises a session per rostered peer with pending redial timers,
-  // and an unlatched timer firing during the close would dial fresh
-  // sessions into a teardown. Owners call this alone -- both halves
-  // are here, so neither can forget one.
-  stop(): void;
 };
 
-export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
-  // ONE dialer instance, created lazily because it captures the
-  // identity facts.
-  let dialer: DirectDialer | null = null;
-  function getDialer(): DirectDialer {
-    dialer ??= createDirectDialer({
-      // The ONLY consumer of the hub connection's ask. The bridge
-      // below never sees it, and it carries one question only, so
-      // contract traffic structurally cannot ride the device hub.
-      askConnectInfo: (deviceId, input, timeoutMs) =>
-        deps.connection().askConnectInfo(deviceId, input, timeoutMs),
-      localDeviceId: deps.localDeviceId(),
-      localAppVersion: deps.localAppVersion(),
-      localKey: () => deps.connection().localKey(),
-      peerKey: (deviceId) => deps.connection().peerKey(deviceId),
-      // Pushes received on a direct connection are the ONLY peer
-      // pushes there are (the device hub carries none), tagged with the
-      // peer's deviceId and fanned through the owner's peerPush sink
-      // so the renderer's subscriber registry stays wire-agnostic.
-      onAnyPush: (deviceId, channel, payload) => {
-        if (channel === channelOf(COMMAND_ACCESS_CHANGED)) {
-          const accepts = safeDecode(
-            payloadOf(COMMAND_ACCESS_CHANGED),
-            payload,
-          );
-          if (accepts.success) {
-            handlers.setPeerAcceptsCommands(deviceId, accepts.data);
+// The plane, until its scope closes, which latches the keeper and then
+// closes every cached direct session.
+export const make = (
+  deps: DirectPlaneDeps,
+): Effect.Effect<DirectPlane, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    // ONE dialer instance, created lazily because it captures the
+    // identity facts.
+    let dialer: DirectDialer | null = null;
+    function getDialer(): DirectDialer {
+      dialer ??= createDirectDialer({
+        // The ONLY consumer of the hub connection's ask. The bridge
+        // below never sees it, and it carries one question only, so
+        // contract traffic structurally cannot ride the device hub.
+        askConnectInfo: (deviceId, input, timeoutMs) =>
+          deps.connection().askConnectInfo(deviceId, input, timeoutMs),
+        localDeviceId: deps.localDeviceId(),
+        localAppVersion: deps.localAppVersion(),
+        localKey: () => deps.connection().localKey(),
+        peerKey: (deviceId) => deps.connection().peerKey(deviceId),
+        // Pushes received on a direct connection are the ONLY peer
+        // pushes there are (the device hub carries none), tagged with the
+        // peer's deviceId and fanned through the owner's peerPush sink
+        // so the renderer's subscriber registry stays wire-agnostic.
+        onAnyPush: (deviceId, channel, payload) => {
+          if (channel === channelOf(COMMAND_ACCESS_CHANGED)) {
+            const accepts = safeDecode(
+              payloadOf(COMMAND_ACCESS_CHANGED),
+              payload,
+            );
+            if (accepts.success) {
+              handlers.setPeerAcceptsCommands(deviceId, accepts.data);
+            }
           }
-        }
-        if (channel === channelOf(SHARING_CHANGED)) {
-          const shares = safeDecode(payloadOf(SHARING_CHANGED), payload);
-          if (shares.success) {
-            handlers.setPeerSharesData(deviceId, shares.data);
+          if (channel === channelOf(SHARING_CHANGED)) {
+            const shares = safeDecode(payloadOf(SHARING_CHANGED), payload);
+            if (shares.success) {
+              handlers.setPeerSharesData(deviceId, shares.data);
+            }
           }
-        }
-        deps.broadcastPeerPush({ deviceId, channel, payload });
-      },
-      dialableKinds: deps.dialableKinds,
-      deviceKind: deps.deviceKind,
-      openSocket: deps.openSocket,
-      deadlineMs: deps.deadlineMs,
-    });
-    return dialer;
-  }
-
-  function buildStatus(current: HubConnectionStatus): HubStatus {
-    return {
-      socket: current.socket,
-      onlineDeviceIds: current.onlineDeviceIds,
-      // Folded into the snapshot so the renderer stops polling
-      // peerInfo per device on every reconcile. Every data
-      // session is direct now, so the direct sessions'
-      // welcome-confirmed versions are the whole surface, and
-      // membership here IS the direct-session set (the renderer
-      // derives connectedness from the keys).
-      peerAppVersions: handlers.directPeerVersions(),
-      peerAcceptsCommands: handlers.directPeerAccess(),
-      peerSharesData: handlers.directPeerSharing(),
-      // THIS device's tunnel endpoint state. The
-      // state only, never the hostname or token. Absent without a host
-      // half (the web bridge runs no cloudflared). HubStatus is the
-      // remote-plane snapshot (hub control plane plus the direct data
-      // plane it brokers), which is why the tunnel and direct surfaces
-      // ride it.
-      ...(deps.host === undefined ? {} : { tunnel: deps.host.tunnelState() }),
-    };
-  }
-
-  function status(): HubStatus {
-    return buildStatus(deps.connection().status());
-  }
-
-  function notifyStatusChanged(): void {
-    deps.broadcastStatus(status());
-  }
-
-  // openPeer is direct or nothing: the bridge
-  // gets the dialer and nothing else, and a direct session opening or
-  // closing fires the same statusChanged fan-out a device hub
-  // transition does so the snapshot stays live.
-  const handlers = makeHubHandlers({
-    status,
-    connectDirect: (deviceId, opts) =>
-      getDialer().connectDirect(deviceId, opts),
-    onDirectChange: notifyStatusChanged,
-    // The keeper's redial signal and its no-session explanation. Both
-    // close over the binding below (created after the handlers because
-    // the keeper's dial IS dialPeer), which is resolved lazily and
-    // only ever fires after creation.
-    onPeerDropped: (deviceId) => keeper.peerDropped(deviceId),
-    peerUnavailableReason: (deviceId) => keeper.unavailableReason(deviceId),
-  });
-
-  // The supervisor of the data plane: the ONLY caller of
-  // dialPeer, so every direct session exists because presence said the
-  // device does, never because a renderer asked.
-  const keeper: DirectKeeper = createDirectKeeper({
-    dial: (deviceId) => handlers.dialPeer(deviceId),
-    ...deps.keeper,
-  });
-
-  return {
-    handlers,
-    status,
-    notifyStatusChanged,
-    handleConnectionChange: () => {
-      // One status read serves both halves of a connection transition:
-      // the statusChanged fan-out and the presence reconcile.
-      const current = deps.connection().status();
-      deps.broadcastStatus(buildStatus(current));
-      // Presence scopes the data plane: on every hub transition,
-      // close direct sessions for peers no longer in a LIVE roster and
-      // hand the roster to the keeper as its desired set (which dials
-      // newly present peers at once). The rule itself (including the
-      // do-nothing-when-our-hub-is-down gate, and the close-everything
-      // verdict of a stopped or revoked socket) lives in
-      // directPresence.ts, where the direct-plane check pins it. The
-      // host half is narrowed once here, so its absence (the web
-      // bridge) passes plain undefined through.
-      const host = deps.host;
-      applyDirectPresence(current.socket, current.onlineDeviceIds, {
-        closeHostPeersNotIn:
-          host === undefined
-            ? undefined
-            : (online) => host.closeHostPeersNotIn(online),
-        dropClientPeersNotIn: (online) => handlers.dropDirectPeersNotIn(online),
-        reconcilePeers: (online) => keeper.reconcile(online),
+          deps.broadcastPeerPush({ deviceId, channel, payload });
+        },
+        dialableKinds: deps.dialableKinds,
+        deviceKind: deps.deviceKind,
+        openSocket: deps.openSocket,
+        deadlineMs: deps.deadlineMs,
       });
-    },
-    probe: () => {
-      handlers.probeDirectPeers();
-      keeper.dialNow();
-    },
-    stop: () => {
-      keeper.stop();
-      handlers.closeDirectPeers();
-    },
-  };
-}
+      return dialer;
+    }
+
+    function buildStatus(current: HubConnectionStatus): HubStatus {
+      return {
+        socket: current.socket,
+        onlineDeviceIds: current.onlineDeviceIds,
+        // Folded into the snapshot so the renderer stops polling
+        // peerInfo per device on every reconcile. Every data
+        // session is direct now, so the direct sessions'
+        // welcome-confirmed versions are the whole surface, and
+        // membership here IS the direct-session set (the renderer
+        // derives connectedness from the keys).
+        peerAppVersions: handlers.directPeerVersions(),
+        peerAcceptsCommands: handlers.directPeerAccess(),
+        peerSharesData: handlers.directPeerSharing(),
+        // THIS device's tunnel endpoint state. The
+        // state only, never the hostname or token. Absent without a host
+        // half (the web bridge runs no cloudflared). HubStatus is the
+        // remote-plane snapshot (hub control plane plus the direct data
+        // plane it brokers), which is why the tunnel and direct surfaces
+        // ride it.
+        ...(deps.host === undefined ? {} : { tunnel: deps.host.tunnelState() }),
+      };
+    }
+
+    function status(): HubStatus {
+      return buildStatus(deps.connection().status());
+    }
+
+    function notifyStatusChanged(): void {
+      deps.broadcastStatus(status());
+    }
+
+    // openPeer is direct or nothing: the bridge
+    // gets the dialer and nothing else, and a direct session opening or
+    // closing fires the same statusChanged fan-out a device hub
+    // transition does so the snapshot stays live.
+    const handlers = makeHubHandlers({
+      status,
+      connectDirect: (deviceId, opts) =>
+        getDialer().connectDirect(deviceId, opts),
+      onDirectChange: notifyStatusChanged,
+      // The keeper's redial signal and its no-session explanation. Both
+      // close over the binding below (created after the handlers because
+      // the keeper's dial IS dialPeer), which is resolved lazily and
+      // only ever fires after creation.
+      onPeerDropped: (deviceId) => keeper.peerDropped(deviceId),
+      peerUnavailableReason: (deviceId) => keeper.unavailableReason(deviceId),
+    });
+
+    // The close's two halves, in the order that matters: registered
+    // first, so the sessions close once the keeper (whose scope closes
+    // first) is latched. The keeper supervises a session per rostered
+    // peer with pending redial timers, and an unlatched timer firing
+    // during the close would dial fresh sessions into a teardown.
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => handlers.closeDirectPeers()),
+    );
+
+    // The supervisor of the data plane: the ONLY caller of
+    // dialPeer, so every direct session exists because presence said the
+    // device does, never because a renderer asked.
+    const keeper = yield* DirectKeeper.make({
+      dial: (deviceId) => handlers.dialPeer(deviceId),
+    });
+
+    return {
+      handlers,
+      status,
+      notifyStatusChanged,
+      handleConnectionChange: () => {
+        // One status read serves both halves of a connection transition:
+        // the statusChanged fan-out and the presence reconcile.
+        const current = deps.connection().status();
+        deps.broadcastStatus(buildStatus(current));
+        // Presence scopes the data plane: on every hub transition,
+        // close direct sessions for peers no longer in a LIVE roster and
+        // hand the roster to the keeper as its desired set (which dials
+        // newly present peers at once). The rule itself (including the
+        // do-nothing-when-our-hub-is-down gate, and the close-everything
+        // verdict of a stopped or revoked socket) lives in
+        // directPresence.ts, where the direct-plane check pins it. The
+        // host half is narrowed once here, so its absence (the web
+        // bridge) passes plain undefined through.
+        const host = deps.host;
+        applyDirectPresence(current.socket, current.onlineDeviceIds, {
+          closeHostPeersNotIn:
+            host === undefined
+              ? undefined
+              : (online) => host.closeHostPeersNotIn(online),
+          dropClientPeersNotIn: (online) =>
+            handlers.dropDirectPeersNotIn(online),
+          reconcilePeers: (online) => keeper.reconcile(online),
+        });
+      },
+      probe: () => {
+        handlers.probeDirectPeers();
+        keeper.dialNow();
+      },
+    } satisfies DirectPlane;
+  });

@@ -55,9 +55,8 @@ import {
   deviceLinkLayer,
   loopbackLayer,
   pushesLayer,
+  remotePlanesLayer,
   sharingLayer,
-  stopDirectHost,
-  stopHubConnection,
   tunnelLayer,
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
@@ -178,19 +177,12 @@ const gitWatcher = logged(
   }),
 );
 
-// The hub socket and the device link's listener, which follows the
-// same enrollment condition. Both come up on the account's first report
-// from the shell and reconcile on every one after (handlers.ts
-// applyAccount). The closes are fire and forget: the hub close frame
-// flushes or the Durable Object notices the dead socket, and the
-// outbound links close. The listener closes with its own layer, below.
-const remotePlanes = onQuit(
-  "the hub connection",
-  Effect.sync(() => {
-    void stopHubConnection();
-    stopDirectHost();
-  }),
-);
+// The hub socket and the direct plane, and the device link's listener,
+// which follows the same enrollment condition. Both connect on the
+// account's first report from the shell and reconcile on every one
+// after (handlers.ts applyAccount). The listener closes with its own
+// layer, below.
+const remotePlanes = logged("the device hub", remotePlanesLayer);
 
 // The mirror engine: the git follower, the daemon, and the gateway the
 // daemon dials peers through. The daemon resumes persisted sessions the

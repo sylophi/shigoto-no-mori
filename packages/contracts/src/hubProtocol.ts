@@ -139,7 +139,7 @@ const DevicePublicKeySchema = Schema.String.check(
 );
 
 // The hub socket's liveness pair: the device sends the bare text
-// HUB_PING on the hub connection's heartbeat (shared/hub/heartbeat.ts)
+// HUB_PING on the hub connection's pings (shared/hub/connection.ts)
 // and the Durable Object answers HUB_PONG through the
 // hibernation runtime's auto-response, so a ping never wakes the
 // object and never costs a request. Bare text rather than an envelope

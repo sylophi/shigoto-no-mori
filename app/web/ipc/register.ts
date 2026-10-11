@@ -13,10 +13,12 @@
 // browser global read at module scope, so the headless bridge check
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
-import { logFailure } from "@shared/log";
 import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
 import type { ClientApi } from "@/lib/runtime/Api";
@@ -32,7 +34,8 @@ import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shigomori/contracts/types";
-import { createDirectPlane } from "@shared/hub/directPlane";
+import * as DirectPlane from "@shared/hub/directPlane";
+import type { HubConnection } from "@shared/hub/connection";
 import { fetchReleases } from "@shared/releases";
 import {
   type SharedSettingsDoc,
@@ -53,7 +56,7 @@ import {
   updateDevice,
   type DeviceFields,
 } from "@shared/account/enroll";
-import { createHubConnection } from "../hub/connection";
+import * as WebHub from "../hub/connection";
 import { createHubTrace } from "../hub/trace";
 import {
   isConfigured,
@@ -147,26 +150,32 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // (web/hub/connection.ts), and no host half (no direct listener, no cloudflared, so the
   // status snapshot carries no tunnel state).
   const traceHub = createHubTrace();
-  const directPlane = createDirectPlane({
-    connection: () => connection,
-    localDeviceId: () => deviceId,
-    localAppVersion: () => deps.appVersion,
-    broadcastStatus: (status) => {
-      traceHub(status);
-      broadcastAll(hubContract, "statusChanged", status, tab.server);
-    },
-    broadcastPeerPush: (push) =>
-      broadcastAll(hubContract, "peerPush", push, tab.server),
-    dialableKinds: deps.dialableKinds ?? ["tunnel"],
-    // One device per browser profile, a link per tab: a host keeps a set
-    // of links per web device, and the hub relays to each.
-    deviceKind: "web",
-  });
+  // Both live until the bridge stops.
+  const hubScope = Scope.makeUnsafe();
+  const { directPlane, connection } = Effect.runSync(
+    Effect.gen(function* () {
+      const plane: DirectPlane.DirectPlane = yield* DirectPlane.make({
+        connection: () => hub,
+        localDeviceId: () => deviceId,
+        localAppVersion: () => deps.appVersion,
+        broadcastStatus: (status) => {
+          traceHub(status);
+          broadcastAll(hubContract, "statusChanged", status, tab.server);
+        },
+        broadcastPeerPush: (push) =>
+          broadcastAll(hubContract, "peerPush", push, tab.server),
+        dialableKinds: deps.dialableKinds ?? ["tunnel"],
+        // One device per browser profile, a link per tab: a host keeps a set
+        // of links per web device, and the hub relays to each.
+        deviceKind: "web",
+      });
+      const hub: HubConnection = yield* WebHub.make({
+        onChange: () => plane.handleConnectionChange(),
+      });
+      return { directPlane: plane, connection: hub };
+    }).pipe(Scope.provide(hubScope)),
+  );
   const hubHandlers = directPlane.handlers;
-
-  const connection = createHubConnection({
-    onChange: () => directPlane.handleConnectionChange(),
-  });
 
   // Mirrors main/ipc/register.ts refreshHubConnection: reconcile the
   // socket with the account state, resolving inside the serialized
@@ -177,27 +186,39 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // deterministic refusal must not loop), which the device pages show
   // as the socket's blocked phase.
   function refreshHub(): Promise<void> {
-    return logFailure("[hub] connection refresh failed", () =>
-      connection.refresh(async () => {
-        if (!isConfigured(config)) return null;
-        const record = store.read();
-        if (record === null) return null;
-        return {
-          hubUrl: config.hubUrl,
-          accountId: record.accountId,
-          deviceId,
-          deviceKey: record.deviceKey,
-          mintTicket: async (connectionId, signal) => {
-            const fresh = store.read();
-            if (fresh === null) {
-              throw new Error("signed out, no hub credential");
-            }
-            return (
-              await service.mintTicket(fresh.credential, connectionId, signal)
-            ).ticket;
-          },
-        };
-      }),
+    return Effect.runPromise(
+      connection
+        .refresh(
+          Effect.sync(() => {
+            if (!isConfigured(config)) return null;
+            const record = store.read();
+            if (record === null) return null;
+            return {
+              hubUrl: config.hubUrl,
+              accountId: record.accountId,
+              deviceId,
+              deviceKey: record.deviceKey,
+              mintTicket: async (connectionId, signal) => {
+                const fresh = store.read();
+                if (fresh === null) {
+                  throw new Error("signed out, no hub credential");
+                }
+                return (
+                  await service.mintTicket(
+                    fresh.credential,
+                    connectionId,
+                    signal,
+                  )
+                ).ticket;
+              },
+            };
+          }),
+        )
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("[hub] connection refresh failed", cause),
+          ),
+        ),
     );
   }
 
@@ -515,8 +536,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     },
 
     stop: async () => {
-      directPlane.stop();
-      await connection.stop();
+      await Effect.runPromise(Scope.close(hubScope, Exit.void));
       await client.dispose();
     },
   };

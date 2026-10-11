@@ -1,4 +1,4 @@
-// The app's own JSON files (the running scripts, the mirror files, the
+// The app's own JSON files (the mirror's history and invitations, the
 // windows and the updater bridge, userData's client config):
 // whole-file writes through a temp sibling, so a reader never sees one
 // half written, and schema-checked reads. The projects, worktrees and
@@ -75,7 +75,7 @@ export function readJsonOrNullSync<S extends ContractSchema>(
 // the pid for a second app instance.
 let tempCounter = 0;
 
-export function tempPathFor(filePath: string): string {
+function tempPathFor(filePath: string): string {
   return `${filePath}.tmp.${process.pid}.${Date.now()}.${tempCounter++}`;
 }
 
