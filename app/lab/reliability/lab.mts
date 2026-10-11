@@ -545,6 +545,12 @@ export class Lab {
       channel: "chrome",
       headless: !this.options.headed,
       viewport: { width: 1440, height: 900 },
+      // The harness's own handler cleans up on a signal: Playwright's
+      // would close the browser under it and end the run before the
+      // apps are stopped.
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
       proxy: {
         server: `http://127.0.0.1:${this.browserSwitch.port}`,
         bypass: "localhost,127.0.0.1",
@@ -685,11 +691,12 @@ export class Lab {
         await step(`signing ${app.profile} out`, () => app.revoke());
       }
     }
-    await step("the browser", () => this.context?.close());
-    // B and C before A, whose launcher serves their renderer.
+    // B and C before A, whose launcher serves their renderer, and every
+    // app before the browser, the one a signal is most likely to cut.
     for (const app of apps) {
       await step(`stopping ${app.profile}`, () => app.stop());
     }
+    await step("the browser", () => this.context?.close());
     await step("the switches", () => this.network.stop());
     if (this.webServer?.pid !== undefined) {
       killGroup(this.webServer.pid, "SIGTERM");
