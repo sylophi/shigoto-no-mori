@@ -1969,7 +1969,8 @@
     "payload": {
       "port": 3369,
       "token": "88fcac20d24e7d5e65b787879fea76c6",
-      "deviceId": "😀"
+      "deviceId": "😀",
+      "shellToken": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
     }
   },
   "shellCalls:relaunch": {},

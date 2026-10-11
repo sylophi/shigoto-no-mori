@@ -134,10 +134,12 @@ import * as HostPushes from "@host/lib/hostPushes";
 import * as Views from "@host/lib/views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
@@ -194,6 +196,10 @@ async function startLoopback(options: {
   for (const [key, transfer] of Object.entries(options.transfers)) {
     registrar.view(`control:${key}`, transfer);
   }
+  // One call of the shell's session, which only the shell's token opens.
+  registrar.handle("session:busy", () =>
+    Effect.succeed({ runningScripts: 0, inflightDeletes: 0 }),
+  );
   // The proof file's host services, which the handlers and transfers
   // answer on.
   const host = await hostContext();
@@ -258,6 +264,39 @@ const callWithoutHello = (port: number) =>
         payload: unknown,
       ) => Effect.Effect<unknown, unknown>;
       return yield* Effect.flip(client("control:devices", {}));
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Socket.layerWebSocketConstructorGlobal),
+    ),
+  );
+
+// A call on the loopback after a hello with `token`: how it ended.
+const callAfterHello = (port: number, token: string, tag: string) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const socket = yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`);
+      const protocol = yield* RpcClient.makeProtocolSocket().pipe(
+        Effect.provideService(Socket.Socket, socket),
+        Effect.provide(RpcSerialization.layerSchemaBinary()),
+      );
+      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
+      const client = (yield* RpcClient.make(LoopbackGroup, {
+        flatten: true,
+      }).pipe(
+        Effect.provideService(RpcClient.Protocol, protocol),
+      )) as unknown as (
+        tag: string,
+        payload: unknown,
+      ) => Effect.Effect<unknown, unknown>;
+      yield* client("link:hello", {
+        deviceId: DIALER,
+        deviceKind: "desktop",
+        connectionId: "c".repeat(32),
+        appVersion: "9.9.9",
+        protocolVersion: PROTOCOL_VERSION,
+        token,
+      });
+      return yield* Effect.exit(client(tag, undefined));
     }).pipe(
       Effect.scoped,
       Effect.provide(Socket.layerWebSocketConstructorGlobal),
@@ -491,7 +530,7 @@ it("no loopback.json, a dead pid and a dead port all read as app-not-running", a
   await refused(["devices"], "app-not-running");
 });
 
-it("loopback.json is owner-only, a call before the hello is refused, and a stale token reads as app-not-running and locks no one out", async () => {
+it("loopback.json is owner-only, a call before the hello is refused, a stale token reads as app-not-running and locks no one out, and the shell's session answers the shell's token alone", async () => {
   // Each device's mirror engine. The dialer's is the slot's own. The peer
   // runs the mirrors whose original it holds (mirror --from), on its
   // own engine: the slot is process-wide, so a mirror call on the listener's
@@ -674,6 +713,27 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   );
   control.ready();
   assert.equal((await early).code, 0);
+
+  // The shell's session answers the shell's token alone, which the
+  // published file does not hold.
+  const { shellToken } = Effect.runSync(control.loopback.address);
+  assert.ok(!readFileSync(loopbackFile, "utf8").includes(shellToken));
+  const port = published["port"] as number;
+  const stranger = await callAfterHello(
+    port,
+    published["token"] as string,
+    "session:busy",
+  );
+  assert.ok(
+    Exit.isFailure(stranger) &&
+      Cause.squash(stranger.cause) instanceof LinkUnauthenticatedError,
+    "a loopback-token holder reached the shell's session",
+  );
+  const answered = await callAfterHello(port, shellToken, "session:busy");
+  assert.deepEqual(
+    answered,
+    Exit.succeed({ runningScripts: 0, inflightDeletes: 0 }),
+  );
 });
 
 it("devices: names the peers, skips the browser, and reports offline, not-sharing, no-grant and ready for the repo", async () => {

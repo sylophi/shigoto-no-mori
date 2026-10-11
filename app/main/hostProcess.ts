@@ -43,6 +43,10 @@ type Address = {
   readonly deviceId: string;
 };
 
+// The host's address as the host reports it: the windows' token, and
+// the shell's own, which no window is handed.
+type Reported = Address & { readonly shellToken: string };
+
 // A promise and its resolve, settled by whoever learns the value.
 function deferred<A>(): { promise: Promise<A>; resolve: (value: A) => void } {
   let resolve!: (value: A) => void;
@@ -81,7 +85,7 @@ let started = false;
 const crashes: number[] = [];
 // The current host's address, once it is up. Replaced as a host forks,
 // so a window redialing meanwhile waits for the next one.
-let address = deferred<Address>();
+let address = deferred<Reported>();
 let onFailed: (failure: HostFailure) => void = () => {};
 
 const session = () => buildClient(sessionContract, link);
@@ -158,7 +162,7 @@ function fork(): void {
     child = null;
     if (quitting) return;
     log.warn(`[host] exited unasked (code ${code}), starting it again`);
-    address = deferred<Address>();
+    address = deferred<Reported>();
     const now = Date.now();
     crashes.push(now);
     while (crashes[0] !== undefined && crashes[0] < now - CRASH_WINDOW_MS) {
@@ -182,7 +186,12 @@ export function startHostProcess(options: {
 }): void {
   onFailed = options.failed;
   link = connectHost({
-    address: () => address.promise,
+    // The shell dials with its own token, which opens its session.
+    address: () =>
+      address.promise.then(({ shellToken, ...rest }) => ({
+        ...rest,
+        token: shellToken,
+      })),
     appVersion: app.getVersion(),
     // The `ws` package, like the host's own peer dials. It sends no
     // Origin, which the loopback admits.
@@ -197,7 +206,11 @@ export function host(): ReturnType<typeof session> {
 }
 
 export function hostAddress(): Promise<Address> {
-  return address.promise;
+  return address.promise.then(({ port, token, deviceId }) => ({
+    port,
+    token,
+    deviceId,
+  }));
 }
 
 // The updater moved. A host that is not up yet hears it as it starts.
