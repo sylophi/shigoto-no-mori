@@ -80,11 +80,19 @@ export function SidebarToolbar({ onArrange, open }: SidebarToolbarProps) {
     // changes what the list shows sits left, the action sits right.
     <div className="flex items-center gap-1 px-2 pb-1">
       {open ? (
-        <BackButton label="Projects" onClick={open.onBack} className="ml-0" />
+        // Stretches up to the controls on the right, so the whole row
+        // reads as the way back.
+        <BackButton
+          label="Projects"
+          onClick={open.onBack}
+          className="ml-0 w-auto flex-1 justify-start"
+        />
       ) : (
-        <ProjectSortMenu onArrange={onArrange} />
+        <>
+          <ProjectSortMenu onArrange={onArrange} />
+          <div className="flex-1" />
+        </>
       )}
-      <div className="flex-1" />
       {open && <WorktreeSortMenu groupKey={open.groupKey} sort={open.sort} />}
       <AddProjectButton />
     </div>
