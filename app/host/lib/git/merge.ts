@@ -16,16 +16,7 @@ import {
   readOperation,
   refuseMidOperation,
 } from "./operation";
-import { countCommits, ownCommitCounts, refTip } from "./refs";
-
-async function resolveCommit(
-  worktreePath: string,
-  ref: string,
-): Promise<string> {
-  const hash = await refTip(worktreePath, `${ref}^{commit}`);
-  if (!hash) throw new Error(`There is no branch or commit named ${ref}.`);
-  return hash;
-}
+import { countCommits, ownCommitCounts, resolveCommit } from "./refs";
 
 export async function readMergePreview(
   worktreePath: string,

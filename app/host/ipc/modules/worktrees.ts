@@ -7,6 +7,7 @@ import {
   discardChanges,
   listChangesForPage,
   readCommitMessage,
+  resetHard,
   resetSoft,
   restoreDiscard,
 } from "@host/lib/git/changes";
@@ -389,6 +390,13 @@ export const worktreesHandlers: Handlers<
       (wt) => resetSoft(wt.path, input.target, input.expectHead),
     );
     return { previousHead, worktree };
+  },
+
+  resetHard: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+      resetHard(wt.path, input.ref, input.expectHead, input.restore),
+    );
+    return { ...result, worktree };
   },
 
   commitDiff: async (input) =>

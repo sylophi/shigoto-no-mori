@@ -1,13 +1,13 @@
-import { useState, type ReactNode } from "react";
-import { Check, GitMerge, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/inline-error";
+import { Warning } from "@/components/ui/warning";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
-import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useMergeBranch,
   useMergePreview,
@@ -27,31 +27,12 @@ const METHODS: { value: IntegrateMethod; label: string }[] = [
   { value: "fastForward", label: "Fast-forward" },
 ];
 
-// The Git page's way to bring another branch in, opening the dialog.
-// None on a peer that takes no commands from here.
-export function MergeButton({ worktree }: { worktree: Worktree }) {
-  const [open, setOpen] = useState(false);
-  const { canCommand } = useCommandAccess();
-  if (!canCommand) return null;
-  return (
-    <>
-      <Button variant="ghost" size="xs" onClick={() => setOpen(true)}>
-        <GitMerge />
-        Merge
-      </Button>
-      {open && (
-        <MergeDialog worktree={worktree} onClose={() => setOpen(false)} />
-      )}
-    </>
-  );
-}
-
 // Another branch's work into this one, the four ways git has, each
 // saying what it will do before it runs: how many commits come in, and
 // which files would conflict. A merge, squash or rebase that conflicts
 // stops for the Changes tab to settle, where the banner continues it.
 // Otherwise the History tab opens on what it made.
-function MergeDialog({
+export function MergeDialog({
   worktree,
   onClose,
 }: {
@@ -282,15 +263,6 @@ function Outcome({
         </Warning>
       )}
     </div>
-  );
-}
-
-function Warning({ children }: { children: ReactNode }) {
-  return (
-    <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-      <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-      <span className="min-w-0 wrap-anywhere">{children}</span>
-    </p>
   );
 }
 

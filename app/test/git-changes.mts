@@ -4,7 +4,8 @@
 // (a rename included, a file deleted since skipped, on an unborn branch,
 // and a merge still committing as one), amend with the message read
 // back or kept as it was, undo and redo along HEAD's line with every refusal
-// (moved HEAD, a commit off the line, a merge), and discard with its
+// (moved HEAD, a commit off the line, a merge), a hard reset to any
+// ref with its snapshot of what it threw away, and discard with its
 // snapshot ref, the way back through restoreDiscard, the nested-repo
 // refusal and the snapshot prune.
 //
@@ -48,6 +49,7 @@ const {
   listChangedFiles,
   listChangesForPage,
   readCommitMessage,
+  resetHard,
   resetSoft,
   restoreDiscard,
 } = await import("../host/lib/git/changes.ts");
@@ -435,6 +437,77 @@ async function main() {
       );
       assert.equal(rev(repo, "HEAD~1"), second);
       assert.equal(read(repo, "side.txt"), "side\n");
+    },
+  );
+
+  await check(
+    "hard reset moves anywhere, snapshots what it throws away, and undoes",
+    async (track) => {
+      const { repo, root, second } = await seedWithSecond(track);
+      git(repo, "checkout", "-q", "-b", "side", root);
+      write(repo, "side.txt", "side\n");
+      git(repo, "add", "side.txt");
+      git(repo, "commit", "-q", "-m", "side");
+      const side = rev(repo, "HEAD");
+      git(repo, "checkout", "-q", "main");
+
+      // Clean: nothing to snapshot.
+      assert.deepEqual(await resetHard(repo, root, undefined, undefined), {
+        previousHead: second,
+        snapshot: null,
+      });
+      git(repo, "reset", "-q", "--hard", second);
+
+      write(repo, "b.txt", "bee edited\n");
+      // Untracked, and tracked on `side`: the reset overwrites it.
+      write(repo, "side.txt", "mine\n");
+      write(repo, "loose.txt", "loose\n");
+      const { previousHead, snapshot } = await resetHard(
+        repo,
+        "side",
+        undefined,
+        undefined,
+      );
+      assert.equal(previousHead, second);
+      assert.ok(snapshot);
+      assert.equal(rev(repo, "HEAD"), side);
+      assert.equal(read(repo, "a.txt"), "one\ntwo\nthree\n");
+      assert.equal(read(repo, "b.txt"), "bee\n");
+      assert.equal(read(repo, "side.txt"), "side\n");
+      assert.equal(read(repo, "loose.txt"), "loose\n", "untracked stays");
+
+      // The undo: back, pinned to where the reset left HEAD, and the
+      // snapshot put back.
+      await assert.rejects(
+        resetHard(repo, previousHead, second, undefined),
+        /branch has moved on/,
+      );
+      await resetHard(repo, previousHead, side, snapshot);
+      assert.equal(rev(repo, "HEAD"), second);
+      assert.equal(read(repo, "a.txt"), "second\n");
+      assert.equal(read(repo, "b.txt"), "bee edited\n");
+      assert.equal(read(repo, "side.txt"), "mine\n");
+
+      await assert.rejects(
+        resetHard(repo, "nowhere", undefined, undefined),
+        /no branch or commit named nowhere/,
+      );
+
+      // An ignored file where the target tracks one: the snapshot can't
+      // hold it, so the reset refuses and leaves everything be.
+      git(repo, "checkout", "-q", "-b", "env", root);
+      write(repo, ".env", "committed\n");
+      git(repo, "add", ".env");
+      git(repo, "commit", "-q", "-m", "env");
+      git(repo, "checkout", "-q", "main");
+      write(repo, ".gitignore", ".env\n");
+      write(repo, ".env", "secret\n");
+      await assert.rejects(
+        resetHard(repo, "env", undefined, undefined),
+        /ignored local file\(s\) that env tracks: \.env/,
+      );
+      assert.equal(rev(repo, "HEAD"), second);
+      assert.equal(read(repo, ".env"), "secret\n");
     },
   );
 

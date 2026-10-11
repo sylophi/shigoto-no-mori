@@ -107,6 +107,25 @@ export const ResetSoftResultSchema = z.object({
 });
 export type ResetSoftResult = z.infer<typeof ResetSoftResultSchema>;
 
+// Move the branch, the index and the working tree to `ref`, wherever it
+// is. The undo pins where HEAD must still be (`expectHead`) and puts
+// the reset's snapshot back after (`restore`).
+export const ResetHardPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  ref: GitRefNameSchema,
+  expectHead: CommitHashSchema.optional(),
+  restore: CommitHashSchema.optional(),
+});
+
+export const ResetHardResultSchema = z.object({
+  // Where HEAD was before the move, what an undo resets back to.
+  previousHead: CommitHashSchema,
+  // The uncommitted files, snapshotted before the reset for
+  // restoreDiscard. Null with nothing uncommitted.
+  snapshot: CommitHashSchema.nullable(),
+  worktree: WorktreeSchema,
+});
+export type ResetHardResult = z.infer<typeof ResetHardResultSchema>;
+
 export const CommitChangesResultSchema = z.object({
   hash: CommitHashSchema,
   worktree: WorktreeSchema,

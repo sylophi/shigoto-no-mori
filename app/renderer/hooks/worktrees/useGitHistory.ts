@@ -9,6 +9,7 @@ import type {
   MergeBranchResult,
   IntegrateMethod,
   MergePreview,
+  ResetHardResult,
   StashEntry,
   Worktree,
 } from "@shared/schemas";
@@ -237,4 +238,35 @@ export function useMergeBranch() {
     },
     meta: { silentError: true },
   });
+}
+
+// The reset dialog says a failure in place, so no toast.
+export function useResetHard() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<ResetHardResult, Error, Scope & { ref: string }>({
+    mutationFn: (input) => api.worktrees.resetHard(input),
+    onSuccess: (data, vars) =>
+      invalidateWorkingTree(queryClient, keys, vars, data.worktree),
+    meta: { silentError: true },
+  });
+}
+
+// A hard reset undone: the branch back where it was, refused once it
+// has moved on from `at`, and the uncommitted files it threw away.
+export function useUndoResetHard() {
+  return useWorkingTreeMutation<
+    Scope & { previousHead: string; at: string; snapshot: string | null },
+    ResetHardResult
+  >(
+    (api, { previousHead, at, snapshot, ...scope }) =>
+      api.worktrees.resetHard({
+        ...scope,
+        ref: previousHead,
+        expectHead: at,
+        restore: snapshot ?? undefined,
+      }),
+    (data) => data.worktree,
+    "Couldn't undo the hard reset",
+  );
 }

@@ -8,7 +8,7 @@ import { NO_REWRITE } from "@/lib/commitRewrite";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitDetails } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
-import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
+import { GitPageActions } from "@/components/worktreeDetail/git/GitPageActions";
 import { DiffView } from "./DiffView";
 
 export function CommitDiff() {
@@ -66,7 +66,7 @@ export function CommitDiff() {
           />
         )
       }
-      sidebarActions={<MergeButton worktree={worktree} />}
+      sidebarActions={<GitPageActions worktree={worktree} />}
       renderSidebar={() => (
         <GitPageSidebar
           worktree={worktree}

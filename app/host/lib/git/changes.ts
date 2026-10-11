@@ -14,7 +14,7 @@ import { isUntracked } from "@shared/schemas";
 import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
 import { refuseMidOperation } from "./operation";
-import { verifyRev } from "./refs";
+import { headAt, resolveCommit, verifyRev } from "./refs";
 
 // Discard snapshots kept per repository. Pruned by count rather than
 // age, so a repo you touch monthly keeps as useful a tail as one you
@@ -324,15 +324,7 @@ export function resetSoft(
 ): Promise<string> {
   return onIndex(worktreePath, async () => {
     await refuseMidOperation(worktreePath);
-    const [head, expected] = await Promise.all([
-      verifyRev(worktreePath, "HEAD"),
-      expectHead ? verifyRev(worktreePath, expectHead) : undefined,
-    ]);
-    if (expected !== undefined && head !== expected) {
-      throw new Error(
-        "The branch has moved on since this was loaded. Reload and try again.",
-      );
-    }
+    const head = await headAt(worktreePath, expectHead);
     const backwards = await isAncestor(worktreePath, target, head);
     const forwards =
       !backwards && expectHead !== undefined
@@ -372,6 +364,90 @@ export function resetSoft(
     }
     await run(worktreePath, ["reset", "--soft", "--end-of-options", target]);
     return head;
+  });
+}
+
+// Refuses a `reset --hard` to `target` that would overwrite an ignored
+// file. Ignored files never appear in `status`, but the reset
+// overwrites them all the same where `target` tracks a file at their
+// path (e.g. a carried-over `.env` colliding with a committed one), and
+// their content was never in git, so nothing can recover it. The only
+// paths that can collide are those `target` tracks and HEAD doesn't
+// (an ignored file can't be tracked): one divergence-sized listing
+// instead of two whole-tree ones. `--no-renames` matters because
+// rename detection would report a rename as R, not A, and its
+// destination path would slip through.
+// git itself then says which candidates are ignored files on disk
+// (`ls-files -o -i` with the candidates as pathspecs): a plain
+// exists-check would false-positive on case-insensitive APFS, where a
+// case-only rename "exists" locally as the tracked file under its old
+// casing. That is a state `reset --hard` handles fine, and this guard
+// must not turn into a dead end.
+async function refuseIgnoredCollisions(
+  worktreePath: string,
+  target: string,
+  ref: string,
+): Promise<void> {
+  const added = splitZ(
+    await run(worktreePath, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "--diff-filter=A",
+      "-z",
+      "HEAD",
+      target,
+    ]),
+  );
+  const collisions = (
+    await runChunked(
+      worktreePath,
+      ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
+      added,
+    )
+  ).flatMap(splitZ);
+  if (collisions.length > 0) {
+    const shown = collisions.slice(0, 3).join(", ");
+    const rest =
+      collisions.length > 3 ? ` (+${collisions.length - 3} more)` : "";
+    throw new Error(
+      `This would replace ignored local file(s) that ${ref} tracks: ${shown}${rest}. Move them aside first.`,
+    );
+  }
+}
+
+// `git reset --hard`: the branch, the index and the working tree all
+// move to `ref`, wherever it is. What it throws away can come back:
+// the commits through the previous HEAD it returns, and the
+// uncommitted files (untracked ones too, which the reset overwrites
+// where `ref` tracks the same path) through a discard snapshot taken
+// first, for restoreDiscard. An ignored file it would overwrite can't
+// come back, so that refuses. The undo pins HEAD where the reset left
+// it (`expectHead`) and puts the snapshot back after (`restore`), in
+// one go.
+export function resetHard(
+  worktreePath: string,
+  ref: string,
+  expectHead: string | undefined,
+  restore: string | undefined,
+): Promise<{ previousHead: string; snapshot: string | null }> {
+  return onIndex(worktreePath, async () => {
+    // `status` is the costliest read, and a refusal only wastes it.
+    const [, head, target, changed] = await Promise.all([
+      refuseMidOperation(worktreePath),
+      headAt(worktreePath, expectHead),
+      resolveCommit(worktreePath, ref),
+      listChangedFiles(worktreePath, { untracked: "all" }),
+    ]);
+    await refuseIgnoredCollisions(worktreePath, target, ref);
+    const paths = changed.flatMap((f) =>
+      f.prevPath ? [f.path, f.prevPath] : [f.path],
+    );
+    const snapshot =
+      paths.length > 0 ? await snapshotPaths(worktreePath, paths) : null;
+    await run(worktreePath, ["reset", "--hard", "--end-of-options", target]);
+    if (restore) await restoreSnapshot(worktreePath, restore);
+    return { previousHead: head, snapshot };
   });
 }
 
@@ -515,41 +591,46 @@ export function restoreDiscard(
   worktreePath: string,
   snapshot: string,
 ): Promise<void> {
-  return onIndex(worktreePath, async () => {
-    // `--root` makes a parentless snapshot (an unborn-branch discard)
-    // diff against the empty tree instead of printing nothing.
-    // `--no-commit-id` keeps the hash out of the output.
-    const stdout = await run(worktreePath, [
-      "diff-tree",
-      "-r",
-      "-z",
-      "--root",
-      "--no-commit-id",
-      "--no-renames",
-      "--name-status",
-      "--end-of-options",
-      snapshot,
-      "--",
-    ]);
-    const fields = splitZ(stdout);
-    const restore: string[] = [];
-    const remove: string[] = [];
-    for (let i = 0; i + 1 < fields.length; i += 2) {
-      const status = fields[i];
-      const path = fields[i + 1];
-      if (!status || !path) continue;
-      if (status.startsWith("D")) remove.push(path);
-      else restore.push(path);
-    }
-    if (restore.length > 0) {
-      await runChunked(
-        worktreePath,
-        ["restore", "--worktree", `--source=${snapshot}`],
-        restore,
-      );
-    }
-    await Promise.all(
-      remove.map((path) => rm(join(worktreePath, path), { force: true })),
+  return onIndex(worktreePath, () => restoreSnapshot(worktreePath, snapshot));
+}
+
+async function restoreSnapshot(
+  worktreePath: string,
+  snapshot: string,
+): Promise<void> {
+  // `--root` makes a parentless snapshot (an unborn-branch discard)
+  // diff against the empty tree instead of printing nothing.
+  // `--no-commit-id` keeps the hash out of the output.
+  const stdout = await run(worktreePath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--root",
+    "--no-commit-id",
+    "--no-renames",
+    "--name-status",
+    "--end-of-options",
+    snapshot,
+    "--",
+  ]);
+  const fields = splitZ(stdout);
+  const restore: string[] = [];
+  const remove: string[] = [];
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const status = fields[i];
+    const path = fields[i + 1];
+    if (!status || !path) continue;
+    if (status.startsWith("D")) remove.push(path);
+    else restore.push(path);
+  }
+  if (restore.length > 0) {
+    await runChunked(
+      worktreePath,
+      ["restore", "--worktree", `--source=${snapshot}`],
+      restore,
     );
-  });
+  }
+  await Promise.all(
+    remove.map((path) => rm(join(worktreePath, path), { force: true })),
+  );
 }
