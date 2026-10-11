@@ -176,9 +176,9 @@ export class DevApp {
   }
 
   // Every process of the app: the Electron processes, which name the
-  // profile's userData, and what they run (cloudflared, file-sync,
-  // shells). Not the launcher, whose renderer server other apps of the
-  // worktree load from.
+  // profile's userData, their main process, which does not, and what
+  // they run (cloudflared, file-sync, shells). Not the launcher, whose
+  // renderer server other apps of the worktree load from.
   appPids(): number[] {
     const rows = psTable("pid=,ppid=,command=").map((row) => {
       const [pid = "", ppid = "", ...command] = row.trim().split(/\s+/);
@@ -197,6 +197,12 @@ export class DevApp {
         )
         .map((row) => row.pid),
     );
+    const byPid = new Map(rows.map((row) => [row.pid, row]));
+    const mains = rows
+      .filter((row) => ours.has(row.pid))
+      .map((row) => byPid.get(row.ppid))
+      .filter((parent) => parent?.command.includes("/Contents/MacOS/Electron"));
+    for (const main of mains) if (main !== undefined) ours.add(main.pid);
     for (let grew = true; grew;) {
       grew = false;
       for (const row of rows) {
