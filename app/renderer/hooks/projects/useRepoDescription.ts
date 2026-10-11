@@ -1,12 +1,13 @@
 import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
 import type { HostScope } from "@/hooks/remote/useHostScope";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
+import { forestRead } from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // A project's GitHub About text, scoped to (device, project) and kept
 // as the icon is (projectIconQueryOptions): once per launch, as the
 // host reads it.
-function repoDescriptionQueryOptions(
+export function repoDescriptionQueryOptions(
   projectId: string,
   scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
 ) {
@@ -16,7 +17,10 @@ function repoDescriptionQueryOptions(
     queryFn:
       api === undefined
         ? skipToken
-        : () => api.githubCli.repoDescription({ projectId }),
+        : () =>
+            forestRead(deviceId, () =>
+              api.githubCli.repoDescription({ projectId }),
+            ),
     retry: false,
     staleTime: Infinity,
     gcTime: Infinity,

@@ -3,6 +3,7 @@
 // runs on any device. Both default to the local machine, so a
 // scope-less call reads this machine's, and a peer's data caches under
 // its own id.
+import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import { localDeviceId } from "@/lib/queryKeys";
 import type { HostApi, HostScope } from "@/hooks/remote/useHostScope";
 
@@ -22,6 +23,47 @@ export function resolveForestScope(scope: HostForestScope): {
     deviceId: scope.deviceId ?? localDeviceId,
     api: "api" in scope ? scope.api : window.api,
   };
+}
+
+// How many of the per-project reads (a project's pull requests, its
+// config, its icon, its GitHub description) go to one device at once.
+// The sidebar and the projects page ask them of every project, four
+// calls a project, and a host takes
+// MAX_IN_FLIGHT_PER_PEER calls at once from a connection and refuses
+// the rest. A first run that turns terrier on lists every repo the
+// person has in one go, past the cap at about twenty. A quarter of it,
+// so the page's own calls still go.
+const FOREST_READS_PER_DEVICE = MAX_IN_FLIGHT_PER_PEER / 4;
+
+const forestQueues = new Map<
+  string,
+  { active: number; waiting: (() => void)[] }
+>();
+
+// Runs a per-project read for `deviceId` once fewer than
+// FOREST_READS_PER_DEVICE of them are out, first come first served.
+export async function forestRead<A>(
+  deviceId: string,
+  read: () => Promise<A>,
+): Promise<A> {
+  let queue = forestQueues.get(deviceId);
+  if (queue === undefined) {
+    queue = { active: 0, waiting: [] };
+    forestQueues.set(deviceId, queue);
+  }
+  if (queue.active >= FOREST_READS_PER_DEVICE) {
+    await new Promise<void>((resolve) => queue.waiting.push(resolve));
+  } else {
+    queue.active += 1;
+  }
+  try {
+    return await read();
+  } finally {
+    // The slot passes straight to the next read, or frees.
+    const next = queue.waiting.shift();
+    if (next === undefined) queue.active -= 1;
+    else next();
+  }
 }
 
 // A fan-out's results as the fields consumers read, through
