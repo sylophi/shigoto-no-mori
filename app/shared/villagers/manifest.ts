@@ -2,7 +2,7 @@
 // scripts/fetch-doubutsu-names.mts): for every villager in the
 // doubutsu name pool, where its profile and face live on Nookipedia.
 // References only. The app downloads what they point at when its user
-// asks (host/lib/villagers.ts) and checks each face against its size
+// asks (host/lib/VillagerData.ts) and checks each face against its size
 // and sha1 here.
 import manifestJson from "./manifest.json";
 

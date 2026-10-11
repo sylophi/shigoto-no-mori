@@ -36,9 +36,9 @@ import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
 import * as Views from "../../host/lib/views.ts";
 import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
-import * as Ports from "../../host/lib/ports.ts";
+import * as Ports from "../../host/lib/Ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
-import * as Villagers from "../../host/lib/villagers.ts";
+import * as Villagers from "../../host/lib/VillagerData.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.

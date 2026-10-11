@@ -12,7 +12,7 @@ import { queryKeys } from "@/lib/queryKeys";
 // progress. Nothing else moves it on its own.
 const DOWNLOADING_POLL_MS = 500;
 
-// This device's villager data (host/lib/villagers.ts): absent,
+// This device's villager data (host/lib/VillagerData.ts): absent,
 // downloading, ready or failed. Never asked on a web client, which has
 // no device of its own and offers no Village life.
 export function useVillagerDataStatus({ enabled = true } = {}) {

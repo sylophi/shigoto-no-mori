@@ -1,5 +1,5 @@
 // Downloads the villager data, every villager's face and profile from
-// Nookipedia, with the app's own downloader (host/lib/villagers.ts)
+// Nookipedia, with the app's own downloader (host/lib/VillagerData.ts)
 // into a folder: by default lab/fake-host/villager-data, which the
 // fake host serves (lab/fake-host/villagerData.ts). The folder is
 // gitignored: the data never enters the repo. Run again, it resumes a
@@ -9,15 +9,21 @@
 // Run: pnpm villagers:fetch [folder]
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Villagers from "../host/lib/villagers.ts";
+import * as Villagers from "../host/lib/VillagerData.ts";
 import { appRoot } from "./lib/appRoot.mts";
 
 const folder = resolve(
   process.argv[2] ?? join(appRoot, "lab", "fake-host", "villager-data"),
 );
-const runtime = ManagedRuntime.make(Villagers.layer({ dir: () => folder }));
+const runtime = ManagedRuntime.make(
+  Villagers.layer({ dir: () => folder }).pipe(
+    Layer.provide(NodeServices.layer),
+  ),
+);
 const on = <A,>(
   f: (data: Villagers.VillagerData["Service"]) => Effect.Effect<A>,
 ) =>

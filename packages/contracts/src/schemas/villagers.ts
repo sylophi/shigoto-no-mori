@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 
 // The villager data a device holds: each doubutsu villager's face and
 // profile, downloaded from Nookipedia when the user asks and served
-// from the device's data dir from then on (host/lib/villagers.ts).
+// from the device's data dir from then on (host/lib/VillagerData.ts).
 
 // A villager's name slug, as in the worktree name pool: plain
 // kebab-case, so it is also safe as a file name.

@@ -478,7 +478,7 @@ export const ClientConfigSchema = Schema.Struct({
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir
-  // (host/lib/villagers.ts), so only the desktop offers it: a web
+  // (host/lib/VillagerData.ts), so only the desktop offers it: a web
   // client has no device of its own. Off by default (absent = off),
   // explicit `true` is the opt-in. Nothing on a device reads it.
   villageLife: Schema.optional(Schema.Boolean),
