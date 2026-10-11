@@ -25,6 +25,8 @@ import {
   SettingsAppearanceScene,
   SettingsDialogsScene,
   SettingsGeneralScene,
+  SettingsKeyboardScene,
+  SettingsKeyboardStatesScene,
   SettingsPartsScene,
 } from "./settings.tsx";
 import { VillagersPartsScene, VisitorsScene } from "./villagers.tsx";
@@ -119,6 +121,11 @@ export const scenes = {
   settingsGeneral: { Scene: SettingsGeneralScene, ...DESKTOP },
   settingsAppearance: { Scene: SettingsAppearanceScene, ...DESKTOP },
   settingsParts: { Scene: SettingsPartsScene, size: [1200, 2050] },
+  settingsKeyboard: { Scene: SettingsKeyboardScene, ...DESKTOP },
+  settingsKeyboardStates: {
+    Scene: SettingsKeyboardStatesScene,
+    size: [1500, 1250],
+  },
   settingsDialogs: { Scene: SettingsDialogsScene, size: [1500, 900] },
   visitors: { Scene: VisitorsScene, ...DESKTOP },
   villagersParts: { Scene: VillagersPartsScene, size: [1200, 1100] },

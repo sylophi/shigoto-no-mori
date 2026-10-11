@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import {
@@ -7,15 +8,17 @@ import {
   nextVariant,
 } from "@shigomori/ui/lib/themes.ts";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
+import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { queryKeys } from "@/lib/queryKeys";
-import { useKeymapAction } from "./useKeymap";
 import { usePalette } from "./usePalette";
 import { useTheme } from "./useTheme";
 
-// The keymap's paletteVariant (Ctrl+Alt+Shift+L), the hidden way to a
-// palette's variants
+// Ctrl+Alt+Shift+L, the hidden way to a palette's variants
 // (packages/ui/src/lib/themes.ts): steps the saved light pick through its
-// swatch's cycle and saves it at once. Every build has it. It acts only
+// swatch's cycle and saves it at once. Every build has it. The variants
+// wait off the picker while their fate is open, so this is an
+// experiment's switch and stays outside the keymap (lib/keymap.ts), like
+// the dev builds' theme keys. It listens only
 // while the window shows that saved pick (light, doubutsu on, no preview
 // staged over it) and the caller enables it, which AppShell does off
 // Settings, whose form keeps a staged copy of the pick its Save would write
@@ -35,18 +38,32 @@ export function usePaletteVariantHotkey(enabled: boolean): void {
     applied.light === saved.light &&
     nextVariant(LIGHT_THEMES, saved.light) !== null;
 
-  useKeymapAction(
-    "paletteVariant",
-    () => {
+  useEffect(() => {
+    if (!listening) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.code !== "KeyL" ||
+        !(e.ctrlKey && e.altKey && e.shiftKey) ||
+        e.metaKey ||
+        e.repeat ||
+        e.isComposing
+      ) {
+        return;
+      }
+      if (isEditableTarget(e.target) || isRawKeySurface(e.target)) return;
+      if (isOverlayOpen()) return;
       // Read at press time, as useSidebarViewHotkey does: two quick
       // presses off the rendered pick would both write the same step.
       const current =
         queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig())
           ?.lightTheme ?? DEFAULT_LIGHT_THEME;
       const next = nextVariant(LIGHT_THEMES, current);
-      if (next === null) return false;
+      if (next === null) return;
+      e.preventDefault();
       mutate(next);
-    },
-    { enabled: listening },
-  );
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutate is a fresh closure per render, and the handler reads the pick from the cache, so re-subscribing each render would be churn.
+  }, [listening, queryClient]);
 }

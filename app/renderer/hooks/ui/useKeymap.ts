@@ -5,6 +5,12 @@
 // and shows its keys with useBinding. The menu's actions are the
 // shell's: their keys go to its menu (useMenuChords), which runs them.
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
+import {
+  createExternalStore,
+  useExternalStore,
+} from "@shigomori/ui/lib/externalStore.ts";
 import {
   type Binding,
   chordAccelerator,
@@ -14,14 +20,32 @@ import {
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { hasLocalHost } from "@/lib/localHost";
+import { queryKeys } from "@/lib/queryKeys";
 
 // ⌘ or Ctrl: which key `Mod` is here. A phone or tablet browser counts
 // as a Mac, whose glyphs its keyboards print.
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+
+// `stored` (the client config's keybindings, or a form's) over the
+// defaults, for this window.
+export const keymapOf = (
+  stored: Readonly<Record<string, string>> | undefined,
+) => resolveKeymap(stored, { mac: isMac, desktop: hasLocalHost });
 
 export function useKeymap(): ReadonlyMap<string, Binding> {
-  const stored = useClientConfig().data?.keybindings;
-  return resolveKeymap(stored, { mac: isMac, desktop: hasLocalHost });
+  return keymapOf(useClientConfig().data?.keybindings);
+}
+
+// While Settings records an action's keys, nothing else hears them:
+// the listener stands aside and the menu holds no keys.
+const recording = createExternalStore(false);
+
+export function useKeymapRecording(on: boolean): void {
+  useEffect(() => {
+    if (!on) return;
+    recording.publish(true);
+    return () => recording.publish(false);
+  }, [on]);
 }
 
 // An action's keys here. Every window has every action but the menu's,
@@ -94,7 +118,10 @@ const TERMINAL_ACTIONS = new Set(
 // control that spent the key (an editor's Escape) keeps it.
 export function useKeymapListener(): void {
   const keymap = useKeymap();
+  const paused = useExternalStore(recording);
+  useKeymapFollowsOtherWindows();
   useEffect(() => {
+    if (paused) return;
     const run = (
       e: KeyboardEvent,
       found: { id: string; handler: Handler }[],
@@ -131,22 +158,47 @@ export function useKeymapListener(): void {
       window.removeEventListener("keydown", fromTerminal, true);
       window.removeEventListener("keydown", fromPage);
     };
-  }, [keymap]);
-  useMenuChords(keymap);
+  }, [keymap, paused]);
+  useMenuChords(keymap, paused);
+}
+
+// Another window's Settings may have saved new keys: a window takes the
+// stored ones as it gains focus, the keys of the menu with them.
+function useKeymapFollowsOtherWindows(): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!hasLocalHost) return;
+    return window.api.window.onFocused(() => {
+      void window.api.clientConfig.read().then(({ keybindings }) => {
+        const key = queryKeys.clientConfig();
+        const cached = queryClient.getQueryData<ClientConfig>(key);
+        if (!cached) return;
+        if (
+          JSON.stringify(cached.keybindings) === JSON.stringify(keybindings)
+        ) {
+          return;
+        }
+        queryClient.setQueryData<ClientConfig>(key, { ...cached, keybindings });
+      });
+    });
+  }, [queryClient]);
 }
 
 // The menu's actions' keys, handed to the shell's menu, which shows the
 // focused window's.
-function useMenuChords(keymap: ReadonlyMap<string, Binding>): void {
+function useMenuChords(
+  keymap: ReadonlyMap<string, Binding>,
+  paused: boolean,
+): void {
   useEffect(() => {
     if (!hasLocalHost) return;
     const chords: Record<string, string> = {};
-    for (const action of KEYMAP_ACTIONS) {
+    for (const action of paused ? [] : KEYMAP_ACTIONS) {
       const binding = keymap.get(action.id);
       if (action.menu && binding) {
         chords[action.id] = chordAccelerator(binding.chord);
       }
     }
     void window.api.menu.setChords({ chords });
-  }, [keymap]);
+  }, [keymap, paused]);
 }

@@ -6,6 +6,7 @@ import {
   APPEARANCE_TAB,
   GENERAL_TAB,
   isHostTab,
+  KEYBOARD_TAB,
   LAUNCH_TAB,
   settingsPanelId,
   type SettingsTab,
@@ -52,7 +53,13 @@ const FALLBACK_TAB = hasLocalHost ? GENERAL_TAB : APPEARANCE_TAB;
 export function useActiveSettingsTab(): SettingsTab {
   const selected = useSelectedSettingsTab();
   const villageLife = useVillageLife();
-  if (selected === APPEARANCE_TAB || isHostTab(selected)) return selected;
+  if (
+    selected === APPEARANCE_TAB ||
+    selected === KEYBOARD_TAB ||
+    isHostTab(selected)
+  ) {
+    return selected;
+  }
   if (selected === VISITORS_TAB && villageLife) return selected;
   if (hasLocalHost && selected === LAUNCH_TAB) return selected;
   return FALLBACK_TAB;

@@ -92,6 +92,10 @@ Rules that keep both themes cheap to maintain:
   neither does an option in a picker (device pills and tabs, the
   device icon grid): a tip that repeats a control's name or explains a
   plain label is noise.
+- **A shortcut's keys come from the keymap** (`lib/keymap.ts`, through
+  the app's `useBinding`), drawn beside the verb they run wherever the
+  verb shows (a palette verb, a button's `Kbd`, a hint, a tip), and
+  never spelled at a call site: a device can bind them elsewhere.
 - **doubutsu.css may only select**: theme tokens, `data-slot` /
   `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream
   library attributes (Base UI `data-highlighted` etc.), and plain

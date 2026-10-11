@@ -5,6 +5,7 @@ import {
   BookHeart,
   CircleUserRound,
   GitBranch,
+  Keyboard,
   Palette,
   Plug,
   Rocket,
@@ -15,6 +16,7 @@ import {
 
 export const APPEARANCE_TAB = "appearance";
 export const LAUNCH_TAB = "launch";
+export const KEYBOARD_TAB = "keyboard";
 // Who has visited (components/visitors), offered while this window's
 // Village life shows.
 export const VISITORS_TAB = "visitors";
@@ -38,6 +40,7 @@ export function isHostTab(tab: string): tab is HostTab {
 export type SettingsTab =
   | typeof APPEARANCE_TAB
   | typeof LAUNCH_TAB
+  | typeof KEYBOARD_TAB
   | typeof VISITORS_TAB
   | HostTab;
 
@@ -64,7 +67,7 @@ export interface SettingsSection {
 // groups, since the split is the page's whole point: "client" is what
 // this window shows, "host" is what each machine stores, edited one
 // machine at a time. A hostless client has no machine behind the
-// window, so its client group is Appearance alone. Visitors joins the
+// window, so its client group is Appearance and Keyboard. Visitors joins the
 // client group while Village life shows, which it never does on a
 // hostless client.
 export function settingsSections(
@@ -83,6 +86,7 @@ export function settingsSections(
   });
   const client = [section(APPEARANCE_TAB, Palette)];
   if (desktop) client.push(section(LAUNCH_TAB, Rocket));
+  client.push(section(KEYBOARD_TAB, Keyboard));
   if (villageLife) client.push(section(VISITORS_TAB, BookHeart));
   const host = [
     { ...section(GENERAL_TAB, SlidersHorizontal), update },
@@ -96,6 +100,7 @@ export function settingsSections(
 export const SECTION_LABELS: Readonly<Record<SettingsTab, string>> = {
   [APPEARANCE_TAB]: "Appearance",
   [LAUNCH_TAB]: "Launch tools",
+  [KEYBOARD_TAB]: "Keyboard",
   [VISITORS_TAB]: "Visitors",
   [GENERAL_TAB]: "General",
   [WORKTREES_TAB]: "Worktrees",

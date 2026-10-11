@@ -14,8 +14,8 @@ import {
 import { villageNewsEnabled } from "./villageLife.ts";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first thirteen fields are client config (appearance), the rest
-// are device config.
+// the first fifteen fields are client config (appearance, the keymap),
+// the rest are device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
@@ -33,6 +33,9 @@ export interface SettingsFormState {
   notifyAgentWaiting: boolean;
   notifyAgentDone: boolean;
   inlineWorktrees: boolean;
+  // The keymap's actions bound to keys other than their defaults
+  // (lib/keymap.ts), as the client config stores them.
+  keybindings: Readonly<Record<string, string>>;
   launchers: readonly LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -73,6 +76,7 @@ export function fromConfig(
     notifyAgentWaiting: clientConfig.notifyAgentWaiting ?? true,
     notifyAgentDone: clientConfig.notifyAgentDone ?? false,
     inlineWorktrees: clientConfig.inlineWorktrees ?? false,
+    keybindings: clientConfig.keybindings ?? {},
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
