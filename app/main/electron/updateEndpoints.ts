@@ -29,9 +29,9 @@ export function updateEndpoints(): {
   };
 }
 
-// app.relaunch() starts the new process with our environment, so the
-// overrides go back in just before it, or a relaunched test build
-// would check the real feeds.
-export function restoreUpdateEndpointOverrides(): void {
-  for (const [name, value] of taken) process.env[name] = value;
+// The overrides as `open --env` takes them, for the relaunch
+// (electron/relaunch.ts), or a relaunched test build would check the
+// real feeds.
+export function updateEndpointOverrideEnv(): string[] {
+  return [...taken].flatMap(([name, value]) => ["--env", `${name}=${value}`]);
 }

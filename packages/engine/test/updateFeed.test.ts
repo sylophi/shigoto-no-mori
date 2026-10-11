@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
-import { parseSemver, type Semver } from "../src/semver.ts";
+import { parseSemver, type Semver } from "@shigomori/contracts/semver";
 import {
   formatKitchen,
   isRateLimited,

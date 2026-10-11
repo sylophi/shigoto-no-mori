@@ -9,7 +9,7 @@ import {
   parseSemver,
   releaseChannel,
   type Semver,
-} from "./semver.ts";
+} from "@shigomori/contracts/semver";
 
 // The app's repo on GitHub, which the feeds and the guide's source come
 // from (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).

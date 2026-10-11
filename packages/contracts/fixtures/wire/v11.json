@@ -770,19 +770,6 @@
       }
     }
   },
-  "migration:read": {
-    "success": {
-      "planned": false,
-      "import": null,
-      "worktrees": {
-        "state": "done",
-        "moved": 1.986711582562313e-9,
-        "total": 9.4e-323,
-        "current": "\t",
-        "stuck": []
-      }
-    }
-  },
   "mirror:applyGitState": {
     "payload": {
       "projectId": "\ud800",
@@ -1712,7 +1699,12 @@
   },
   "runtime:nuke": {
     "success": {
-      "left": [{ "what": "H", "why": "0" }]
+      "left": [
+        {
+          "what": "H",
+          "why": "0"
+        }
+      ]
     }
   },
   "runtime:nukeProgress": {
@@ -2366,7 +2358,12 @@
   },
   "window:nuke": {
     "success": {
-      "left": [{ "what": "0", "why": "" }]
+      "left": [
+        {
+          "what": "0",
+          "why": ""
+        }
+      ]
     }
   },
   "window:open": {
@@ -2664,6 +2661,14 @@
     }
   },
   "worktrees:commit": {
+    "payload": {
+      "projectId": "0",
+      "worktreeId": "😀",
+      "summary": "?崥8$Y",
+      "paths": [],
+      "hunks": [],
+      "amend": false
+    },
     "success": {
       "hash": "e9a1",
       "worktree": {
@@ -2705,14 +2710,6 @@
         "shelved": true,
         "autoPull": false
       }
-    },
-    "payload": {
-      "projectId": "0",
-      "worktreeId": "😀",
-      "summary": "?崥8$Y",
-      "paths": [],
-      "hunks": [],
-      "amend": false
     }
   },
   "worktrees:commitDiff": {

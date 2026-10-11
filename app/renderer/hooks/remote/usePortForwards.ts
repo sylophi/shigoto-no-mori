@@ -14,9 +14,9 @@
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   errorMessageOf,
+  isChannelRefusedError,
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
-import { CHANNEL_OPEN_TOO_MANY } from "@shigomori/contracts/channelRefusals";
 import type {
   PortForwardSummary,
   PortForwardWorktree,
@@ -88,7 +88,7 @@ export function describeForwardError(
   if (message.includes("EACCES")) {
     return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
   }
-  if (message.startsWith(CHANNEL_OPEN_TOO_MANY)) {
+  if (isChannelRefusedError(error) && error.reason === "too-many-conns") {
     return "That device already has as many forwarded connections open as it allows.";
   }
   return message;

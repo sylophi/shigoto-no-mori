@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,6 +71,22 @@ it("opens the database in WAL mode", async () => {
     (sql) => sql<{ journal_mode: string }>`PRAGMA journal_mode`,
   );
   assert.equal(row?.journal_mode, "wal");
+});
+
+it("keeps the database and its journal files the owner's alone, an older build's included", async () => {
+  write("store.db", "");
+  chmodSync(join(dataDir, "store.db"), 0o644);
+  // The journal files live while the store is open.
+  const modes = await query((sql) =>
+    sql`SELECT 1`.pipe(
+      Effect.map(() =>
+        ["store.db", "store.db-wal", "store.db-shm"].map(
+          (file) => statSync(join(dataDir, file)).mode & 0o777,
+        ),
+      ),
+    ),
+  );
+  assert.deepEqual(modes, [0o600, 0o600, 0o600]);
 });
 
 it("leaves the settings alone in a data dir something has used", async () => {

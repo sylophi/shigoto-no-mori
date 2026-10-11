@@ -1,7 +1,8 @@
-// The updater's semver: the 2.x table cases,
+// Release semver, the updater's and the changelog's: the 2.x table cases,
 // then properties over generated versions and generated junk.
 import assert from "node:assert/strict";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import {
@@ -11,7 +12,30 @@ import {
   releaseChannel,
   type Semver,
 } from "../src/semver.ts";
-import { holds, textOf } from "./lib/properties.ts";
+
+// A property that holds for every generated value, or the shrunk input
+// that broke it.
+const holds = async <A>(
+  arbitrary: Arbitrary.Arbitrary<A>,
+  property: (value: A) => boolean,
+  runs = 1000,
+) => {
+  const result = await Effect.runPromise(
+    Arbitrary.checkEffect(arbitrary, property, { runs }),
+  );
+  assert.equal(Arbitrary.formatCheckFailure(result), undefined);
+};
+
+// Strings built from the pieces a version is made of, so generated text
+// hits the characters the parser cares about.
+const textOf = (
+  pieces: readonly [string, ...string[]],
+  length: { readonly minLength?: number; readonly maxLength: number },
+) =>
+  Arbitrary.map(
+    Arbitrary.array(Arbitrary.schema(Schema.Literals(pieces)), length),
+    (parts) => parts.join(""),
+  );
 
 const parsed = (raw: string): Semver => {
   const version = parseSemver(raw);

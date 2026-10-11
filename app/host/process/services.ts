@@ -4,7 +4,7 @@
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as FileSync from "@host/fileSync/FileSync";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
-import type * as Ports from "@host/lib/ports";
+import type * as Ports from "@host/lib/Ports";
 import type * as OrphanSweep from "@host/lib/scripts/persistence";
 import type * as ScriptRuns from "@host/lib/scripts/pty";
 import type * as Sharing from "@host/lib/sharing";
@@ -13,7 +13,7 @@ import type * as Terrier from "@host/lib/terrier";
 import type * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import type * as Engine from "@host/lib/engine";
 import type * as Views from "@host/lib/views";
-import type * as Villagers from "@host/lib/villagers";
+import type * as Villagers from "@host/lib/VillagerData";
 
 export type HostServices =
   | ChildProcessSpawner.ChildProcessSpawner

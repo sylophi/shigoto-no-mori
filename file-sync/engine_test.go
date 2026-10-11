@@ -29,9 +29,11 @@ import (
 	"time"
 )
 
-// The gateway stand-in: every accepted socket is one mirror stream.
-// Records each preface so the test can pin what the daemon announces.
-func startTestGateway(t *testing.T) (addr string, prefaces func() []mirrorPreface) {
+// The gateway stand-in: every accepted socket is one mirror stream,
+// served at root as the host serves the worktree it opened the stream
+// for. Records each preface so the test can pin what the daemon
+// announces.
+func startTestGateway(t *testing.T, root string) (addr string, prefaces func() []mirrorPreface) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -67,7 +69,7 @@ func startTestGateway(t *testing.T) (addr string, prefaces func() []mirrorPrefac
 					return
 				}
 				io.WriteString(conn, "ok\n")
-				_ = serveMirrorEndpoint(conn, io.Discard)
+				_ = serveMirrorEndpoint(conn, root, io.Discard)
 			}()
 		}
 	}()
@@ -212,10 +214,10 @@ func fileAbsent(path string) bool {
 }
 
 func TestMirrorTwoWayOverGateway(t *testing.T) {
-	gateway, prefaces := startTestGateway(t)
 	dataDir := filepath.Join(t.TempDir(), "mirror-data")
 	local := filepath.Join(t.TempDir(), "local")
 	remote := filepath.Join(t.TempDir(), "remote")
+	gateway, prefaces := startTestGateway(t, remote)
 	for _, dir := range []string{local, remote} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -437,10 +439,10 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 // instead of standing as a conflict, what only the remote holds goes,
 // and an ignored path on the remote is left alone.
 func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
-	gateway, _ := startTestGateway(t)
 	dataDir := filepath.Join(t.TempDir(), "mirror-data")
 	local := t.TempDir()
 	remote := t.TempDir()
+	gateway, _ := startTestGateway(t, remote)
 	writeFileT(t, filepath.Join(local, "src", "a.txt"), "original\n")
 	writeFileT(t, filepath.Join(local, ".env"), "FROM=original\n")
 	writeFileT(t, filepath.Join(remote, "src", "a.txt"), "made by the create\n")
@@ -475,12 +477,45 @@ func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
 	<-d.done
 }
 
+// The serving side reaches the worktree it was opened for and nothing
+// else: a session naming another folder there, here a replica, which
+// would empty it, syncs into the worktree, and the folder it named is
+// never touched.
+func TestMirrorServeHoldsTheStreamToItsRoot(t *testing.T) {
+	remote := t.TempDir()
+	gateway, _ := startTestGateway(t, remote)
+	local := t.TempDir()
+	named := t.TempDir()
+	writeFileT(t, filepath.Join(local, "a.txt"), "from the session\n")
+	writeFileT(t, filepath.Join(named, "keep.txt"), "not the peer's\n")
+	d := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "mirror-data"))
+	created := d.call(mirrorRequest{
+		ID: "1", Op: "create",
+		LocalRoot:  local,
+		DeviceID:   "peer-1",
+		WorktreeID: "0123456789ab",
+		RemoteRoot: named,
+		Replica:    true,
+	})
+	if created["ok"] != true {
+		t.Fatalf("create failed: %v", created["error"])
+	}
+	waitForT(t, 30*time.Second, "the session to reach the served root", func() bool {
+		return fileEquals(filepath.Join(remote, "a.txt"), "from the session\n")
+	})
+	if !fileEquals(filepath.Join(named, "keep.txt"), "not the peer's\n") || !fileAbsent(filepath.Join(named, "a.txt")) {
+		t.Fatal("the session reached the folder it named")
+	}
+	d.requests.Close()
+	<-d.done
+}
+
 // A label value outside Mutagen's alphabet would make the session
 // vanish on the next daemon start (the load-time check), and the app
 // reads identity out of the labels, so the create refuses instead of
 // folding the value.
 func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
-	gateway, _ := startTestGateway(t)
+	gateway, _ := startTestGateway(t, t.TempDir())
 	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))
 	created := daemon.call(mirrorRequest{
 		ID: "1", Op: "create",
@@ -501,10 +536,10 @@ func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
 }
 
 func TestMirrorCreateRefusesUnreachablePeer(t *testing.T) {
-	gateway, _ := startTestGateway(t)
 	dataDir := filepath.Join(t.TempDir(), "mirror-data")
 	local := t.TempDir()
 	remote := t.TempDir()
+	gateway, _ := startTestGateway(t, remote)
 	d := startTestDaemon(t, gateway, dataDir)
 	// The gateway refuses any device but peer-1, standing in for a peer
 	// that is offline or ungranted: create must fail with the gateway's
@@ -597,10 +632,10 @@ func TestMirrorDaemonExitsOnCancelWithStdinOpen(t *testing.T) {
 // branch name, slash included) must still be there after the daemon
 // restarts: persistence is the whole point of the daemon's data dir.
 func TestMirrorSessionSurvivesDaemonRestart(t *testing.T) {
-	gateway, _ := startTestGateway(t)
 	dataDir := filepath.Join(t.TempDir(), "mirror-data")
 	local := t.TempDir()
 	remote := t.TempDir()
+	gateway, _ := startTestGateway(t, remote)
 	writeFileT(t, filepath.Join(local, "a.txt"), "a\n")
 
 	first := startTestDaemon(t, gateway, dataDir)
@@ -745,10 +780,10 @@ func TestRelabelV2Sessions(t *testing.T) {
 // A session a v2 daemon created, its kind in v2's labels, comes back
 // from a restart running, its labels rewritten into a mode.
 func TestMirrorV2SessionLoadsRelabelled(t *testing.T) {
-	gateway, _ := startTestGateway(t)
 	dataDir := filepath.Join(t.TempDir(), "mirror-data")
 	local := t.TempDir()
 	remote := t.TempDir()
+	gateway, _ := startTestGateway(t, remote)
 	writeFileT(t, filepath.Join(local, "a.txt"), "a\n")
 
 	first := startTestDaemon(t, gateway, dataDir)

@@ -13,7 +13,8 @@
 // control layer asks of it. Asserts:
 //   - with no loopback.json, a dead pid, a dead port or a wrong token,
 //     the CLI says the app isn't running (coded app-not-running), and
-//     the loopback serves nothing before a hello.
+//     the loopback serves nothing before a hello. Wrong tokens lock
+//     no one out of it.
 //   - a loopback.json wiped under the running app comes back.
 //   - `devices` names the peers, leaves a browser out, and reports
 //     offline, not-sharing, no-grant and ready per device for the
@@ -490,7 +491,7 @@ it("no loopback.json, a dead pid and a dead port all read as app-not-running", a
   await refused(["devices"], "app-not-running");
 });
 
-it("loopback.json is owner-only, a call before the hello is refused, and a stale token reads as app-not-running", async () => {
+it("loopback.json is owner-only, a call before the hello is refused, and a stale token reads as app-not-running and locks no one out", async () => {
   // Each device's mirror engine. The dialer's is the slot's own. The peer
   // runs the mirrors whose original it holds (mirror --from), on its
   // own engine: the slot is process-wide, so a mirror call on the listener's
@@ -656,7 +657,11 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     loopbackFile,
     JSON.stringify({ ...published, token: "stale-token" }),
   );
-  await refused(["devices"], "app-not-running");
+  // Past the device link's lockout threshold, which the loopback keeps
+  // no count toward: the right token still links after.
+  await Promise.all(
+    Array.from({ length: 6 }, () => refused(["devices"], "app-not-running")),
+  );
   writeFileSync(loopbackFile, JSON.stringify(published));
 
   // A call that comes before the services are handed over waits for
