@@ -1,7 +1,7 @@
 import { portPoolContract } from "@shigomori/contracts/modules/portPool";
 import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
-import * as Ports from "@host/lib/ports";
+import * as Ports from "@host/lib/Ports";
 
 export const portPoolHandlers = {
   isActive: (worktree) =>

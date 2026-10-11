@@ -45,8 +45,17 @@ config runs every proof that imports the kit. That includes
 creates and deletes itself, and CI runners are thrown away after each
 run.
 
-To add one, add `<name>.mts` here, with a covers line for anything it
-depends on without importing it.
+To add one, add `<name>.mts` here, named for what it proves (the
+module or the behaviour: `clone.mts`, `git-watcher.mts`), with a
+covers line for anything it depends on without importing it. A rule
+that lives in a package (a contracts predicate, an engine service) is
+tested in that package's suite; a proof here tests what the app does
+with it.
+
+A case that waits on real git, processes or sockets runs slower on a
+loaded machine. One that fails under load and passes alone is waiting
+on a deadline too short for that: give it one that fits, or wait on
+the condition (`waitFor`), rather than retrying.
 
 ## Shared fakes
 
@@ -78,7 +87,11 @@ what it alone is about.
   (`rawMirrorSession`, `mirrorEndpoint`) and a mirror impl with nothing
   behind it (`inertMirrorImpl`), for a proof to fill in with what it is
   about.
-- `hostRuntime.mts`: the host's services, up for every proof's file.
+- `hostRuntime.mts`: the host's services, up for every proof's file
+  (`hostSetup.mts`, vitest's setup file). A proof runs a handler on
+  them with `runHost(handlers.call(input))`, and one that drives the
+  host's engine calls points the host's data dir at the file's engine
+  first (`initDataDirAt(engineDataDir)`).
 
 A proof of something on the direct link starts from the listener and
 adds its handlers:

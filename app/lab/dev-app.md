@@ -145,6 +145,13 @@ done
 | `SHIGOMORI_UPDATE_FEED_URL`        | App only. Stand-in for the update server, the fallback for the release list. |
 | `SHIGOMORI_UPDATE_RELEASES_URL`    | App only. Stand-in for the GitHub release list.                              |
 
+`.env.local` holds the dev hub's URL and the dev Clerk instance's
+publishable key, neither a secret, and is not in the repo: a worktree
+`sm` makes carries it over from the primary checkout (the project's
+carry-over setting), and a checkout made any other way copies it from
+there. Without both values the account reads as unconfigured: the
+web client never dials its hub socket, and Sign in stays off.
+
 The app passes the two update stand-ins to its own update check and
 removes them from its environment, so scripts it runs don't inherit
 them. `sm update` refuses to run with either set. From a terminal,

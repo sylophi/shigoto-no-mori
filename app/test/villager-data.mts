@@ -1,4 +1,4 @@
-// Durable proof for the villager data download (host/lib/villagers.ts)
+// Durable proof for the villager data download (host/lib/VillagerData.ts)
 // and the Settings control's words for it
 // (ui's views/settings/villagerDataView.ts). The download runs
 // against a fake wiki injected as `fetch`: no real network.
@@ -35,9 +35,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Villagers from "@host/lib/villagers";
+import * as Villagers from "@host/lib/VillagerData";
 import type {
   VillagerDataStatus,
   VillagerKind,
@@ -249,7 +251,9 @@ function town(characters = TOWN, dir = freshDir()) {
   const wiki = fakeWiki(characters);
   const manifest = manifestFor(characters);
   const runtime = ManagedRuntime.make(
-    Villagers.layer({ dir: () => dir, manifest, fetch: wiki.fetch }),
+    Villagers.layer({ dir: () => dir, manifest, fetch: wiki.fetch }).pipe(
+      Layer.provide(NodeServices.layer),
+    ),
   );
   runtimes.push(runtime);
   const on = <A,>(

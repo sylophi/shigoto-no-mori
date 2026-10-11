@@ -1,7 +1,7 @@
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
 import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
-import { VillagerData } from "@host/lib/villagers";
+import { VillagerData } from "@host/lib/VillagerData";
 
 const onData = <A, E>(
   f: (data: VillagerData["Service"]) => Effect.Effect<A, E>,

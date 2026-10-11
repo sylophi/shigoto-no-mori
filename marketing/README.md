@@ -10,10 +10,18 @@ repo root, run its scripts from here.
 ```sh
 pnpm install  # from the repo root
 pnpm dev      # local preview with reload
-pnpm check    # type-check the pages, components and scripts (build runs it too)
+pnpm typecheck # astro check: the pages, components and scripts (build runs it too)
 pnpm build    # static output in dist/
+pnpm preview  # serve dist/ as it deploys
 pnpm og       # shoot public/img/og.jpg from dist/ (after a build)
 ```
+
+Lint and format are the repo's (`pnpm lint`, `pnpm format` at the
+root), and `pnpm typecheck` at the root runs this package's with
+every other package's, as CI does. The page
+follows the system's light or dark until its toggle is used
+(`theme.js`); a browser's emulated color scheme, or the toggle, shows
+the other.
 
 TypeScript stays on 6.x for now: `astro check` needs its programmatic
 API, which the native TypeScript 7 compiler doesn't ship yet.
@@ -51,6 +59,13 @@ The production build follows `main`.
 is its own file. That keeps the page inside the strict CSP in
 `vercel.json`, and lets everything under `/_astro/` cache for a year.
 
+A band is a `Band` (`src/components/Band.astro`): a `color` (`mint`,
+`sand`, `amber`, `sky`, `pink`, `wood`, or none for the page's own
+cream), a `wall`paper (`leaf`, `apple`, `square`, `flower`,
+`triangle`) and a `kanji` watermark from `src/assets/kanji/`. In
+`index.astro` no two neighbours wear the same color, and a band
+without one sits between tinted ones, so each reads as its own room.
+
 ## The frames
 
 A frame draws a window or a part of the app with the app's views over
@@ -71,7 +86,10 @@ the app into the frame's root, all the live frames on one client. Its
 scene is what the app shows first on that route, so the frame keeps
 its picture as it goes live. Only windows go live; parts, the phone
 (the web app needs a client of its own) and Devices (Settings holds it
-in the app) stay as drawn at build time.
+in the app) stay as drawn at build time. So a part shows only what
+React renders on a server: one whose view draws in a client effect,
+like the terminal's panes (xterm), is blank here and needs a static
+view first (`packages/ui/README.md`, "Adding a scene").
 
 The build takes the app's stylesheet once, for the frames drawn at
 build time, and the app's boot takes it from the page rather than
