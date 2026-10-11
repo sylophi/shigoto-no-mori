@@ -235,6 +235,15 @@ export function buildAppMenu(): void {
         { role: "front" },
       ],
     },
+    {
+      role: "help",
+      submenu: [
+        {
+          label: "Ask How…",
+          click: clickBroadcast(navContract, "askHow", undefined),
+        },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

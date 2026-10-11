@@ -8,6 +8,8 @@ export const navContract = defineContract(
   push("openSettings", VoidSchema),
   push("addProject", VoidSchema),
   push("launchById", Schema.String),
+  // The Help menu's Ask: the palette, to ask the guide.
+  push("askHow", VoidSchema),
   // A deep link arrived. Only a nudge: main holds the link until the
   // renderer takes it below, so a link that lands before the renderer
   // listens (one that launched the app) is not lost.

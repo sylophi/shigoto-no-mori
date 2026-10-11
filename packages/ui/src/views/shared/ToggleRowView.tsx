@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Switch } from "../../primitives/switch.tsx";
 import { cn } from "../../lib/utils.ts";
 
@@ -21,6 +22,10 @@ export function ToggleRowView({
   switchClassName,
   dense = false,
 }: ToggleRowProps) {
+  // The switch is a span with a role, which the label around it doesn't
+  // name: it takes its name and description from the row's text.
+  const labelId = useId();
+  const descriptionId = useId();
   return (
     // The hover fill bleeds past the row on a negative margin, which
     // would beat the gap a space-y parent gives the row. A flow-root box
@@ -42,10 +47,13 @@ export function ToggleRowView({
             onCheckedChange={onCheckedChange}
             disabled={disabled}
             className={switchClassName}
+            aria-labelledby={labelId}
+            aria-describedby={description ? descriptionId : undefined}
           />
         </span>
         <div className="flex min-w-0 flex-col">
           <span
+            id={labelId}
             className={cn(
               dense ? "text-xs" : "text-sm",
               disabled && "opacity-50",
@@ -55,6 +63,7 @@ export function ToggleRowView({
           </span>
           {description && (
             <span
+              id={descriptionId}
               className={cn(
                 dense ? "text-2xs leading-snug" : "text-xs",
                 "text-muted-foreground",

@@ -51,6 +51,7 @@ import {
 import { describe } from "./commands/describe.ts";
 import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
+import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
 import { doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
@@ -142,6 +143,7 @@ const sm = Command.make("sm").pipe(
     devices.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
+    guideCommand.pipe(Command.provide(services)),
   ]),
 );
 

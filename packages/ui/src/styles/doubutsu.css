@@ -50,6 +50,7 @@
  *      dropdown-menu-content/-item/-separator   primitives/dropdown-menu.tsx
  *      dropdown-menu-sub-trigger (+ data-variant)   primitives/dropdown-menu.tsx
  *      popover-content           primitives/popover.tsx
+ *      guide-callout-box, guide-ring   guide/GuideView.tsx
  *      sidebar-project-row       sidebar/ProjectRow.tsx
  *      sidebar-project-pick      sidebar/ProjectHeaderView.tsx
  *      project-tile              shared/ProjectIcon.tsx
@@ -432,6 +433,7 @@
   :is(
     [data-slot="dropdown-menu-content"],
     [data-slot="popover-content"],
+    [data-slot="guide-callout-box"],
     [data-slot="combobox-popup"],
     [data-slot="modal-shell"],
     [data-slot="sheet-content"],
@@ -440,6 +442,12 @@
     [data-slot="villager-letter-paper"]
   ) {
   box-shadow: var(--doubutsu-sticker-shadow) !important;
+}
+
+/* The guide's ring around what it points at is the other: a pointer,
+   like focus, not an edge. */
+.doubutsu [data-slot="guide-ring"] {
+  box-shadow: 0 0 0 3px var(--color-sky-500) !important;
 }
 
 /* Keyboard focus keeps its ring, the one outline doubutsu draws. A

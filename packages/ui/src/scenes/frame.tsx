@@ -44,8 +44,7 @@ export function SceneWindowFrame({
   // The page the phone's tab bar lights.
   pathname?: string;
   // Over the window, outside the sidebar and the page, where the live
-  // app portals its menus and dialogs. With them the window is
-  // positioned, to be the block they are placed in.
+  // app portals its menus and dialogs.
   overlays?: ReactNode;
   // The page.
   children?: ReactNode;
@@ -65,7 +64,6 @@ export function SceneWindowFrame({
         />
       }
       overlays={overlays}
-      className={cn(overlays !== undefined && "relative")}
     >
       {children}
     </AppShellView>

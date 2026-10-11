@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { lifetime } from "@host/lib/util/lifetimes";
 import { host } from "./hostProcess";
+import * as Guide from "./electron/guide";
 import * as Updater from "./electron/updater";
 import { shellLinkLayer } from "./ipc/register";
 
@@ -24,4 +25,5 @@ export const layer = Layer.mergeAll(
   resumeProbe,
   // The windows' links to the shell (ipc/shellLink.ts).
   shellLinkLayer,
+  Guide.layer,
 );

@@ -31,6 +31,7 @@ import {
   RemoteCallError,
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
+import { guideDriveContract } from "./modules/guide.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract } from "./modules/link.ts";
@@ -177,13 +178,14 @@ export const LinkGroup = handshakeOf(remoteCalls).merge(
 // app's own credential admits (the terminal `sm`, the app's windows and
 // its shell). It serves the link's own calls, every call of every
 // host-scope module, remote or not, with its pushes and views, the
-// control contract's ops and the shell's session.
+// control contract's ops, the guide's drive and the shell's session.
 const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules
     .filter((module) => isHostSide(module))
     .flatMap((module) => callsOf(module)),
   ...callsOf(controlContract),
+  ...callsOf(guideDriveContract),
   ...callsOf(sessionContract),
 ];
 

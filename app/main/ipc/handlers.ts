@@ -7,6 +7,7 @@
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import { dialogContract } from "@shigomori/contracts/modules/dialog";
+import { guideContract } from "@shigomori/contracts/modules/guide";
 import { menuContract } from "@shigomori/contracts/modules/menu";
 import { migrationContract } from "@shigomori/contracts/modules/migration";
 import { navContract } from "@shigomori/contracts/modules/nav";
@@ -22,6 +23,7 @@ import {
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import { clientConfigHandlers } from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
+import { guideHandlers } from "./modules/guide";
 import { menuHandlers } from "./modules/menu";
 import { migrationHandlers } from "./modules/migration";
 import { navHandlers } from "./modules/nav";
@@ -105,4 +107,5 @@ export function registerShellHandlers(): void {
   registerContract(shellContract, shellHandlers);
   registerContract(releasesContract, releasesHandlers);
   registerContract(menuContract, menuHandlers);
+  registerContract(guideContract, guideHandlers);
 }
