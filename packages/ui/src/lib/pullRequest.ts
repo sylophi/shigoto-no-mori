@@ -24,7 +24,7 @@ import {
   type PullRequestSourceUnavailable,
   type RepoMergeConfig,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 export type PullRequestTone = "emerald" | "violet" | "rose" | "slate" | "amber";
 

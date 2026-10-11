@@ -27,7 +27,7 @@ import { pullRequestStackFor } from "@shigomori/contracts/pullRequestStack";
 import type {
   PullRequest,
   PullRequestDetail,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
 import {
   FAKE_REPO_MERGE_CONFIG,

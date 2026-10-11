@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { DeviceIdSchema } from "../hubProtocol.ts";
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
 // The renderer's bridge onto this machine's hub socket. The single hub
@@ -151,8 +151,8 @@ export const hubContract = defineContract(
   ),
   // Fan-out on every supervisor or presence transition, carrying the
   // fresh snapshot so listeners never need a follow-up status call.
-  broadcast("statusChanged", HubStatusSchema),
+  push("statusChanged", HubStatusSchema),
   // Fan-out of every push frame received from any peer, see
   // HubPeerPushSchema.
-  broadcast("peerPush", HubPeerPushSchema),
+  push("peerPush", HubPeerPushSchema),
 );

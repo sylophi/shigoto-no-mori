@@ -3,10 +3,7 @@ import type { ReactNode, Ref } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { InlineError } from "../../primitives/inline-error.tsx";
 import { assertNever } from "../../lib/utils.ts";
-import {
-  type CleanupError,
-  type Worktree,
-} from "@shigomori/contracts/schemas/index";
+import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
 import { peerReadOnlyNote } from "../../lib/commandAccessCopy.ts";
 import {
   CollapsedThroughProvider,

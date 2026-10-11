@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
@@ -32,8 +32,8 @@ const RoutePayloadSchema = strict(Schema.Struct({ route: RouteSchema }));
 export const windowContract = defineContract(
   "window",
   "client",
-  broadcast("focused", VoidSchema),
-  broadcast("blurred", VoidSchema),
+  push("focused", VoidSchema),
+  push("blurred", VoidSchema),
   // Non-persisting theme preview for unsaved Settings staging and the
   // dev hotkeys. It drives nativeTheme only, so a reload snaps back to
   // the saved value. Saves land through the clientConfig module.

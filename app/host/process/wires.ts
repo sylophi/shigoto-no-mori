@@ -23,8 +23,8 @@ import {
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
+  PushKeys,
+  PushProducerPayload,
   ViewHandlers,
 } from "@shigomori/contracts/types";
 import {
@@ -378,10 +378,11 @@ export function registerLoopbackContract<M extends ContractModule>(
 // and, when annotated `remote`, to the device link's peers. A push of a
 // shell module annotated `remote` is the host's to send its peers too
 // (account:commandAccessChanged, as the switch the shell reported).
-export function broadcastAll<
-  M extends ContractModule,
-  K extends BroadcastKeys<M>,
->(module: M, key: K, payload: BroadcastProducerPayload<M, K>): void {
+export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
+  module: M,
+  key: K,
+  payload: PushProducerPayload<M, K>,
+): void {
   broadcastAllCore(module, key, payload, hostServer);
 }
 

@@ -1,7 +1,7 @@
 import {
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // A project's primary opt-in off its config query's data: undefined
 // while the config is unread, and false for a project with no config.

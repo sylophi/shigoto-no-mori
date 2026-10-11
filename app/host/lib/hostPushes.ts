@@ -2,10 +2,7 @@
 // payload, what the wires call a broadcast), as one stream: the
 // host's view streams re-read off it, and the device link serves it.
 import type { ContractModule } from "@shigomori/contracts/contract";
-import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
-} from "@shigomori/contracts/types";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -64,10 +61,10 @@ export const layerOn = (pubsub: PubSub.PubSub<Push>) =>
 
 // A push from an effect, checked against its schema as the root's are
 // (process/wires.ts broadcastAll).
-export const push = <M extends ContractModule, K extends BroadcastKeys<M>>(
+export const push = <M extends ContractModule, K extends PushKeys<M>>(
   module: M,
   key: K,
-  payload: BroadcastProducerPayload<M, K>,
+  payload: PushProducerPayload<M, K>,
 ) =>
   Effect.flatMap(HostPushes, (pushes) =>
     Effect.suspend(() => {

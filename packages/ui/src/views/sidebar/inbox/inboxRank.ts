@@ -1,7 +1,7 @@
 import {
   type Worktree,
   worktreeLastActivityAt,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // Where a worktree ranks within one of the inbox's boxes: one whose
 // agent waits on you comes first while its mark shows (pinWaiting, the

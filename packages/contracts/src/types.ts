@@ -17,7 +17,7 @@ import type {
 } from "./contract.ts";
 
 type InvokesOf<M> = Exclude<CallsOf<M>, Streaming>;
-type BroadcastsOf<M> = Extract<CallsOf<M>, Pushing>;
+type PushesOf<M> = Extract<CallsOf<M>, Pushing>;
 type ViewsOf<M> = Exclude<Extract<CallsOf<M>, Streaming>, Pushing>;
 
 type KeyOf<Tag> = Tag extends `${string}:${infer K}` ? K : never;
@@ -86,8 +86,8 @@ export type Client<M extends ContractModule> = {
     ...args: Args<Encoded<InputOf<R>>>
   ) => Promise<Decoded<OutputOf<R>>>;
 } & {
-  [R in BroadcastsOf<M> as `on${Capitalize<KeyOf<R["_tag"]>>}`]: (
-    handler: (payload: BroadcastPayload<R>) => void,
+  [R in PushesOf<M> as `on${Capitalize<KeyOf<R["_tag"]>>}`]: (
+    handler: (payload: PushPayload<R>) => void,
   ) => () => void;
 };
 
@@ -109,17 +109,15 @@ export type HostApiOf<M extends ContractModule> = Api<
 >;
 
 // What a push's subscriber receives.
-type BroadcastPayload<R> = Decoded<PayloadOf<R>>;
+type PushPayload<R> = Decoded<PayloadOf<R>>;
 
-export type BroadcastKeys<M extends ContractModule> = KeyOf<
-  BroadcastsOf<M>["_tag"]
->;
+export type PushKeys<M extends ContractModule> = KeyOf<PushesOf<M>["_tag"]>;
 
-export type BroadcastProducerPayload<
+export type PushProducerPayload<
   M extends ContractModule,
   K extends string,
 > = Encoded<
-  PayloadOf<Extract<BroadcastsOf<M>, { readonly _tag: `${string}:${K}` }>>
+  PayloadOf<Extract<PushesOf<M>, { readonly _tag: `${string}:${K}` }>>
 >;
 
 // The invokes of M keyed by channel instead of call name, as one table:

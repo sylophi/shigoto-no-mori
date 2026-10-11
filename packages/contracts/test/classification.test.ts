@@ -16,7 +16,7 @@ import {
   Gated,
   Grant,
   Invitable,
-  isBroadcast,
+  isPush,
   isInvoke,
   Remote,
   scopeOf,
@@ -33,7 +33,7 @@ const classify = (module: ContractModule) =>
     channelOf(call),
     Object.fromEntries(
       Object.entries({
-        kind: isInvoke(call) ? "invoke" : isBroadcast(call) ? "push" : "view",
+        kind: isInvoke(call) ? "invoke" : isPush(call) ? "push" : "view",
         scope: scopeOf(module),
         remote: annotation(call, Remote),
         gated: annotation(call, Gated),

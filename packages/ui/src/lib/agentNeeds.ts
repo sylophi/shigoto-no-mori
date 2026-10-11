@@ -8,7 +8,7 @@ import {
   ShieldQuestion,
   SquareTerminal,
 } from "lucide-react";
-import type { AgentSession } from "@shigomori/contracts/schemas/index";
+import type { AgentSession } from "@shigomori/contracts/schemas";
 import { pluralize } from "./pluralize.ts";
 import { AGENT_STATE_VIEW, harnessLabel } from "./agentSessions.ts";
 

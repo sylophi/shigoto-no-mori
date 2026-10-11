@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../primitives/dropdown-menu.tsx";
-import type { PackageScriptSortMode } from "@shigomori/contracts/schemas/index";
+import type { PackageScriptSortMode } from "@shigomori/contracts/schemas";
 
 const SORT_OPTIONS: ReadonlyArray<{
   value: PackageScriptSortMode;

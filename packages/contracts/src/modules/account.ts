@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema, DeviceInfoSchema } from "../hubProtocol.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { DeviceIconSchema } from "../deviceIcon.ts";
@@ -112,10 +112,7 @@ export const accountContract = defineContract(
   // the windows' shell ports. Carries the account now signed in (null
   // when signed out) so a listener can tell a rename from a sign-out
   // or an account switch without a status read of its own.
-  broadcast(
-    "changed",
-    Schema.Struct({ accountId: Schema.NullOr(Schema.String) }),
-  ),
+  push("changed", Schema.Struct({ accountId: Schema.NullOr(Schema.String) })),
   // Fan-out after the command-access switch flips (or the account
   // under it changes), carrying the switch. Kept separate from
   // `changed` so the toggle does not thrash the account status and
@@ -124,7 +121,7 @@ export const accountContract = defineContract(
   // switch is this host's answer to its peers: the direct listener
   // pushes it to every connected peer too, whose bridge records it as
   // HubStatus.peerAcceptsCommands (shared/hub/directPlane.ts).
-  broadcast("commandAccessChanged", Schema.Boolean, {
+  push("commandAccessChanged", Schema.Boolean, {
     remote: true,
   }),
 );

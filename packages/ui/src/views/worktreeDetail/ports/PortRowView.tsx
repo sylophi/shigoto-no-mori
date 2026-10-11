@@ -9,10 +9,7 @@
 // and sets the band in under the label instead.
 import { useState, type ReactNode } from "react";
 import { Pencil, X } from "lucide-react";
-import type {
-  CustomPort,
-  WorktreePort,
-} from "@shigomori/contracts/schemas/index";
+import type { CustomPort, WorktreePort } from "@shigomori/contracts/schemas";
 import { Button } from "../../../primitives/button.tsx";
 import { RowTag } from "../../../primitives/row-tag.tsx";
 import { StatusDot } from "../../../primitives/status-dot.tsx";

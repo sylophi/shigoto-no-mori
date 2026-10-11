@@ -16,7 +16,7 @@ import { useLauncherListEditor } from "../../hooks/useLauncherListEditor.ts";
 import type {
   CarryOverEntry,
   LauncherCommand,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import { CustomLauncherInputView } from "../shared/CustomLauncherInputView.tsx";
 import { ScriptEnvPopoverView } from "../shared/ScriptEnvPopoverView.tsx";

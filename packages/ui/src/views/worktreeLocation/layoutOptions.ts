@@ -2,7 +2,7 @@
 // page's summary can name the saved layout without pulling the location
 // form into its chunk.
 import type { DeviceLayoutInputs } from "@shigomori/contracts/git/worktreeLayout";
-import type { WorktreeLayout } from "@shigomori/contracts/schemas/index";
+import type { WorktreeLayout } from "@shigomori/contracts/schemas";
 
 // What a device's layout previews are drawn from: its paths and its
 // settings, with its home folder to spell paths under. The app's

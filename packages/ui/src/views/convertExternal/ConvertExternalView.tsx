@@ -2,7 +2,7 @@ import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import type { RowStatus } from "../../primitives/row-status.tsx";
 import { PAGE_BODY } from "../shared/PageShellView.tsx";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { ConvertRowView } from "./ConvertRowView.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 

@@ -13,10 +13,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import type {
-  PullRequestDetail,
-  Worktree,
-} from "@shigomori/contracts/schemas/index";
+import type { PullRequestDetail, Worktree } from "@shigomori/contracts/schemas";
 import { DeviceGlyphView } from "../../shared/DeviceGlyphView.tsx";
 import { Button } from "../../../primitives/button.tsx";
 import {

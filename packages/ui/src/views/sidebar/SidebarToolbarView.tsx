@@ -3,7 +3,7 @@ import { ArrowUpDown, Check } from "lucide-react";
 import type {
   ProjectSortMode,
   WorktreeSortMode,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { BackButton } from "../../primitives/back-button.tsx";
 import { cn } from "../../lib/utils.ts";
 import {

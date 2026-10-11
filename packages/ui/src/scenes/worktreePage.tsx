@@ -44,7 +44,7 @@ import {
 import { WorktreeHeaderView } from "../views/worktreeDetail/WorktreeHeaderView.tsx";
 import { WorktreeLocationView } from "../views/worktreeDetail/WorktreeLocationView.tsx";
 import { WorktreeOptionsView } from "../views/worktreeDetail/WorktreeOptionsView.tsx";
-import type { PullRequest, Worktree } from "@shigomori/contracts/schemas/index";
+import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import { fakeStashes, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { FAKE_LAUNCHERS } from "../fixtures/settingsFixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";

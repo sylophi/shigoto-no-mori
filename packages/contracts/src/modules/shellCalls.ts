@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "../contract.ts";
+import { HexId32Schema } from "../schemas/hexId.ts";
 import { MigrationSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 import { GuideDrivePayloadSchema, GuideReplySchema } from "./guide.ts";
@@ -16,8 +17,18 @@ export const shellCallsContract = defineContract(
   "shellCalls",
   "client",
   // The host is up: where its loopback listens, for the shell to dial
-  // and to hand its windows.
-  invoke("ready", HostAddressSchema, VoidSchema),
+  // and to hand its windows, and the token that opens the shell's own
+  // session calls, which the shell keeps.
+  invoke(
+    "ready",
+    strict(
+      Schema.Struct({
+        ...HostAddressSchema.struct.fields,
+        shellToken: HexId32Schema,
+      }),
+    ),
+    VoidSchema,
+  ),
   // The host could not start: why, with what the engine's doctor found
   // when it was the store.
   invoke(

@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useState } from "react";
-import { digitsOnly } from "@shigomori/contracts/schemas/index";
+import { digitsOnly } from "@shigomori/contracts/schemas";
 import type { SettingsFormState } from "../../lib/settingsForm.ts";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import { Input } from "../../primitives/input.tsx";

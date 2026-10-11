@@ -34,10 +34,11 @@ import { WebSocket, WebSocketServer } from "ws";
 import {
   annotation,
   callOf,
+  callsOf,
   channelOf,
   type ContractCall,
   Gated,
-  isBroadcast,
+  isPush,
   isInvoke,
   Remote,
 } from "@shigomori/contracts/contract";
@@ -54,6 +55,7 @@ import {
 } from "@shigomori/contracts/errors";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
+import { sessionContract } from "@shigomori/contracts/modules/session";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { boundedMessages } from "./boundedMessages";
@@ -111,7 +113,8 @@ export type WsServerTicketAuth = {
   // it opened with, for the path the connection arrived on, and names
   // the device the ticket was minted for with the key the hub's roster
   // holds for it, or null; `localKey` is this device's own pair. The
-  // loopback's is its token, which the hello carries.
+  // loopback's is its token, which the hello carries, or the shell's,
+  // which alone opens the shell's session calls.
   readonly opens:
     | {
         // What a ticket opens, spending nothing: the device it was
@@ -142,7 +145,7 @@ export type WsServerTicketAuth = {
         ) => Uint8Array | undefined | typeof ROSTER_UNAVAILABLE;
         readonly localKey: () => KeyPair | null;
       }
-    | { readonly token: string };
+    | { readonly token: string; readonly shellToken?: string };
   // Whether this host runs gated calls from its peers at all: every
   // ticketed peer is a device of the same account, so this one switch
   // is the whole verdict. Read at every call and every channel write,
@@ -162,6 +165,10 @@ type LinkSharing = Pick<Sharing.Sharing["Service"], "current" | "changes"> & {
   // sharing:changed: what a mirror this host invited follows.
   readonly seesPush: (peerDeviceId: string, payload: unknown) => boolean;
 };
+
+// The calls the shell makes of its host (modules/session.ts), which no
+// other caller on the loopback may.
+const SHELL_SESSION = new Set(callsOf(sessionContract).map(channelOf));
 
 const COMMAND_ACCESS_CHANGED = channelOf(
   callOf(accountContract, "commandAccessChanged"),
@@ -416,6 +423,8 @@ type Connection = {
     readonly publicKey: Uint8Array;
   } | null;
   helloSeen: boolean;
+  // The loopback's: whether the hello carried the shell's token.
+  shell: boolean;
   deviceId: string | null;
   connectionId: string | null;
   inFlight: number;
@@ -623,9 +632,13 @@ export const make = (options: {
                 text: "The account's device list is unavailable. Try again.",
               });
             }
+            const shell =
+              "token" in opens &&
+              opens.shellToken !== undefined &&
+              secretsMatch(payload.token ?? "", opens.shellToken);
             const admitted =
               "token" in opens
-                ? secretsMatch(payload.token ?? "", opens.token)
+                ? shell || secretsMatch(payload.token ?? "", opens.token)
                 : opened !== null &&
                   payload.deviceId === opened.deviceId &&
                   sameKey(rosterKey, opened.publicKey) &&
@@ -659,6 +672,7 @@ export const make = (options: {
               held.set(payload.connectionId, connection);
               byDevice.set(payload.deviceId, held);
             }
+            connection.shell = shell;
             connection.deviceId = payload.deviceId;
             connection.connectionId = payload.connectionId;
             return { deviceId: opts.deviceId, appVersion: opts.appVersion };
@@ -772,7 +786,7 @@ export const make = (options: {
         for (const call of group.requests.values()) {
           const tag = channelOf(call);
           if (tag in handlers) continue;
-          if (isBroadcast(call)) {
+          if (isPush(call)) {
             handlers[tag] = push(
               tag,
               local || annotation(call, Remote) === true,
@@ -801,6 +815,13 @@ export const make = (options: {
               return Effect.fail(new LinkUnauthenticatedError());
             }
             const deviceId = connection.deviceId;
+            // The shell's session is the shell's alone.
+            if (
+              SHELL_SESSION.has(channelOf(rpc as ContractCall)) &&
+              !connection.shell
+            ) {
+              return Effect.fail(new LinkUnauthenticatedError());
+            }
             // A stream (a push, a view) lives as long as its reader
             // wants it, and a channel's bytes are bounded per channel
             // (CHANNEL_CALLS_IN_FLIGHT), so neither holds a place.
@@ -869,16 +890,40 @@ export const make = (options: {
                   }),
                 );
               }
-              if (!auth.isCommandGranted()) {
-                return yield* new CommandRefusedError();
-              }
-              // A call or a view under way ends as the switch turns off.
-              const off = hostPushes.stream(COMMAND_ACCESS_CHANGED).pipe(
-                Stream.filter(() => !auth.isCommandGranted()),
-                Stream.runHead,
-                Effect.andThen(Effect.fail(new CommandRefusedError())),
+              // Subscribed before the switch is read, so a flip in
+              // between is heard: a call or a view under way ends as the
+              // switch turns off, and what it set going (a script's
+              // console) reaches the peer only while it is on.
+              return yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const pushes = yield* hostPushes.subscribe;
+                  if (!auth.isCommandGranted()) {
+                    return yield* new CommandRefusedError();
+                  }
+                  const off = pushes.pipe(
+                    Stream.filter(
+                      (published) =>
+                        published.channel === COMMAND_ACCESS_CHANGED &&
+                        !auth.isCommandGranted(),
+                    ),
+                    Stream.runHead,
+                    Effect.andThen(Effect.fail(new CommandRefusedError())),
+                  );
+                  return yield* Effect.raceFirst(
+                    effect.pipe(
+                      Effect.provideService(LinkPeer, {
+                        ...peer,
+                        notify: (module, key, said) => {
+                          if (auth.isCommandGranted()) {
+                            peer.notify(module, key, said);
+                          }
+                        },
+                      }),
+                    ),
+                    off,
+                  );
+                }),
               );
-              return yield* Effect.raceFirst(effect, off);
             }),
         );
 
@@ -890,7 +935,7 @@ export const make = (options: {
               const tag = channelOf(rpc);
               if (
                 tag.startsWith("link:") ||
-                isBroadcast(rpc as ContractCall) ||
+                isPush(rpc as ContractCall) ||
                 (peer.deviceId !== undefined &&
                   auth.isInvited?.(peer.deviceId, tag, payload) === true)
               ) {
@@ -899,13 +944,27 @@ export const make = (options: {
               if (sharing === undefined || !(yield* sharing.current)) {
                 return yield* new NotSharingError();
               }
-              // A call or a view under way ends as the switch turns off.
-              const off = sharing.changes.pipe(
+              const shared = sharing;
+              // A call or a view under way ends as the switch turns off,
+              // and what it set going reaches the peer only while it is on.
+              const off = shared.changes.pipe(
                 Stream.filter((on) => !on),
                 Stream.runHead,
                 Effect.andThen(Effect.fail(new NotSharingError())),
               );
-              return yield* Effect.raceFirst(effect, off);
+              return yield* Effect.raceFirst(
+                effect.pipe(
+                  Effect.provideService(LinkPeer, {
+                    ...peer,
+                    notify: (module, key, said) => {
+                      if (Effect.runSync(shared.current)) {
+                        peer.notify(module, key, said);
+                      }
+                    },
+                  }),
+                ),
+                off,
+              );
             }),
         );
 
@@ -1081,6 +1140,7 @@ export const make = (options: {
                 parser: serialization.makeUnsafe(),
                 opened: null,
                 helloSeen: false,
+                shell: false,
                 deviceId: null,
                 connectionId: null,
                 inFlight: 0,

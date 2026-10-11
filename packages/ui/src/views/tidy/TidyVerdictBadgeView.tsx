@@ -9,7 +9,7 @@ import {
 import {
   HYGIENE_VERDICT_LABEL,
   type HygieneVerdictKind,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { ToneTag } from "../../primitives/row-tag.tsx";
 import type { StatusTone } from "../../primitives/status-dot.tsx";
 

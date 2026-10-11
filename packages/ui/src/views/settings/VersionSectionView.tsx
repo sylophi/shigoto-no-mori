@@ -6,7 +6,7 @@ import {
   ScrollText,
   Sparkles,
 } from "lucide-react";
-import type { UpdaterState } from "@shigomori/contracts/schemas/index";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";

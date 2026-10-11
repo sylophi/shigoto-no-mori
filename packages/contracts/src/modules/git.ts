@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { ProjectScopedPayloadSchema, VoidSchema } from "../schemas/index.ts";
 
 export const gitContract = defineContract(
@@ -24,10 +24,10 @@ export const gitContract = defineContract(
     remote: true,
     gated: false,
   }),
-  broadcast("refsRefreshed", ProjectScopedPayloadSchema, {
+  push("refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),
-  broadcast(
+  push(
     "fetchActive",
     Schema.Struct({
       ...ProjectScopedPayloadSchema.fields,
@@ -39,14 +39,14 @@ export const gitContract = defineContract(
   // invalidates its requests. Refetch-on-focus
   // can't cover this, since the window may already be focused while an
   // agent works in a terminal beside it.
-  broadcast("externalChange", VoidSchema, { remote: true }),
+  push("externalChange", VoidSchema, { remote: true }),
   // One project's git state moved (a commit, checkout, branch or ref
   // change made by any tool, observed by the host's git-directory
   // watcher, host/lib/GitWatcher.ts). Narrower than
   // externalChange on purpose: the viewer invalidates that project's
   // rows only, on every device, so the ping stays cheap enough to be
   // redundant beside an app-driven mutation's own invalidation.
-  broadcast("projectChanged", ProjectScopedPayloadSchema, {
+  push("projectChanged", ProjectScopedPayloadSchema, {
     remote: true,
   }),
 );
