@@ -79,16 +79,15 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 
 	in := runEnvInputs(target, script.Name)
 
-	tool, argv := manager, runArgv(manager, script.Name, extra)
-	if script.runner != "" {
-		tool, argv = script.runner, append([]string{script.runner, script.Label}, extra...)
+	tool, argv := script.runner, append([]string{script.runner, script.Label}, extra...)
+	why := ""
+	if script.runner == "" {
+		tool, argv = manager, runArgv(manager, script.Name, extra)
+		why = fmt.Sprintf(" (the %s lockfile selects it)", target.worktree.Name)
 	}
 	toolPath, lookErr := exec.LookPath(tool)
 	if lookErr != nil {
-		if script.runner != "" {
-			return 1, errf("%s isn't on PATH.", tool)
-		}
-		return 1, errf("%s isn't on PATH (the %s lockfile selects it).", tool, target.worktree.Name)
+		return 1, errf("%s isn't on PATH%s.", tool, why)
 	}
 	// The worktree root, not the cwd: a nested package.json (monorepo
 	// subpackage) must not retarget the run. The scripts listed and
@@ -213,35 +212,44 @@ func listPackageScripts(proj project, manager string, files []string, scripts []
 // which the app's panel reads as "no scripts section", not as a
 // failure.
 func readWorktreeScripts(dir string) ([]packageScript, []string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, nil, errf("cannot read %s: %v", dir, err)
+	}
+	var present []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			present = append(present, entry.Name())
+		}
+	}
 	var scripts []packageScript
 	files := []string{}
-	pkg, err := readWorktreePackageScripts(dir)
-	switch {
-	case err == nil:
-		scripts = pkg
-		files = append(files, "package.json")
-	case errorKindOf(err) != "no-package-json":
-		return nil, nil, err
-	}
 	for _, source := range []struct {
-		file  string
-		parse func(string) []packageScript
+		find  func([]string) string
+		parse func([]byte) ([]packageScript, error)
 	}{
-		{findJustfile(dir), parseJustfile},
-		{findMakefile(dir), parseMakefile},
+		{findPackageJSON, parsePackageScripts},
+		{findJustfile, textParser(parseJustfile)},
+		{findMakefile, textParser(parseMakefile)},
 	} {
-		if source.file == "" {
+		file := source.find(present)
+		if file == "" {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, source.file))
+		path := filepath.Join(dir, file)
+		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, nil, errf("%s: %v", source.file, err)
+			return nil, nil, errf("%s: %v", path, err)
 		}
-		for _, script := range source.parse(string(raw)) {
-			script.File = source.file
+		parsed, err := source.parse(raw)
+		if err != nil {
+			return nil, nil, errf("%s: %v", path, err)
+		}
+		for _, script := range parsed {
+			script.File = file
 			scripts = append(scripts, script)
 		}
-		files = append(files, source.file)
+		files = append(files, file)
 	}
 	if len(files) == 0 {
 		return nil, nil, codedErrf("no-scripts", "No package.json, justfile or Makefile in %s.", dir)
@@ -249,25 +257,13 @@ func readWorktreeScripts(dir string) ([]packageScript, []string, error) {
 	return scripts, files, nil
 }
 
-// package.json's scripts in manifest order: only string-valued
-// entries count, and a missing or non-object scripts block means "no
-// scripts". A missing or unparseable file is an error with the path in
-// it (coded no-package-json for the missing case).
-func readWorktreePackageScripts(dir string) ([]packageScript, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, codedErrf("no-package-json", "No package.json in %s.", dir)
-		}
-		return nil, errf("package.json: %v", err)
-	}
-	scripts, parseErr := parsePackageScripts(raw)
-	if parseErr != nil {
-		return nil, errf("%s: %v", filepath.Join(dir, "package.json"), parseErr)
-	}
-	return scripts, nil
+func textParser(parse func(string) []packageScript) func([]byte) ([]packageScript, error) {
+	return func(raw []byte) ([]packageScript, error) { return parse(string(raw)), nil }
 }
 
+// package.json's scripts in manifest order: only string-valued
+// entries count, and a missing or non-object scripts block means "no
+// scripts".
 func parsePackageScripts(raw []byte) ([]packageScript, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &top); err != nil {
@@ -296,7 +292,7 @@ func parsePackageScripts(raw []byte) ([]packageScript, error) {
 		}
 		var command string
 		if json.Unmarshal(value, &command) == nil {
-			scripts = append(scripts, packageScript{Name: key, Command: command, File: "package.json", Label: key})
+			scripts = append(scripts, packageScript{Name: key, Command: command, Label: key})
 		}
 	}
 	return scripts, nil

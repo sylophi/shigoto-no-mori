@@ -22,9 +22,9 @@ func TestParsePackageScriptsKeepsManifestOrder(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	want := []packageScript{
-		{Name: "zeta", Command: "run z", File: "package.json", Label: "zeta"},
-		{Name: "alpha", Command: "run a", File: "package.json", Label: "alpha"},
-		{Name: "mid", Command: "run m", File: "package.json", Label: "mid"},
+		{Name: "zeta", Command: "run z", Label: "zeta"},
+		{Name: "alpha", Command: "run a", Label: "alpha"},
+		{Name: "mid", Command: "run m", Label: "mid"},
 	}
 	if !reflect.DeepEqual(scripts, want) {
 		t.Fatalf("got %v, want %v", scripts, want)
@@ -38,8 +38,8 @@ func TestParsePackageScriptsDropsNonStrings(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	want := []packageScript{
-		{Name: "ok", Command: "x", File: "package.json", Label: "ok"},
-		{Name: "ok2", Command: "y", File: "package.json", Label: "ok2"},
+		{Name: "ok", Command: "x", Label: "ok"},
+		{Name: "ok2", Command: "y", Label: "ok2"},
 	}
 	if !reflect.DeepEqual(scripts, want) {
 		t.Fatalf("got %v, want %v", scripts, want)

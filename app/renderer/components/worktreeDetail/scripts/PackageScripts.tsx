@@ -31,7 +31,7 @@ import type { PackageScriptsResult, Worktree } from "@shared/schemas";
 import { ArrangeScriptRow, ScriptDragPreview } from "./ArrangeScriptRow";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
-import { scriptGroups, type ScriptGroup } from "./scriptGroups";
+import { labelOf, scriptGroups, type ScriptGroup } from "./scriptGroups";
 import type { SortableEntry } from "./sortPackageScripts";
 import { SortMenu } from "../SortMenu";
 
@@ -58,14 +58,15 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   // switching away) drops out of it instead of dragging a list whose
   // order won't follow.
   const arranging = canCommand && arrangeRequested && sortMode === "manual";
-  const groups = scriptGroups(pkg).map((group) => ({
-    group,
-    entries: sorted.filter((e) => e.name in group.labels),
-  }));
-  const shown = groups
-    .map(({ group, entries }) => ({
+  // Arranging clears the search, so it always sees every group whole.
+  const shown = scriptGroups(pkg)
+    .map((group) => ({
       group,
-      entries: rankByScore(query, entries, (e) => group.labels[e.name] ?? ""),
+      entries: rankByScore(
+        query,
+        sorted.filter((e) => e.name in group.labels),
+        (e) => labelOf(group, e.name),
+      ),
     }))
     .filter(({ entries }) => entries.length > 0);
 
@@ -139,14 +140,14 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
         </div>
       )}
 
-      {!arranging && shown.length === 0 ? (
+      {shown.length === 0 ? (
         <p className="p-1 text-xs text-muted-foreground/70">No matches.</p>
       ) : (
-        (arranging ? groups : shown).map(({ group, entries }) => (
+        shown.map(({ group, entries }) => (
           <FileScripts
             key={group.file}
             worktree={worktree}
-            pkg={pkg}
+            launchRow={pkg.launchRow}
             group={group}
             entries={entries}
             arranging={arranging}
@@ -160,7 +161,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
 
 interface FileScriptsProps {
   worktree: Worktree;
-  pkg: PackageScriptsResult;
+  launchRow: readonly string[];
   group: ScriptGroup;
   entries: readonly SortableEntry[];
   arranging: boolean;
@@ -171,7 +172,7 @@ interface FileScriptsProps {
 // name it goes by in that file.
 function FileScripts({
   worktree,
-  pkg,
+  launchRow,
   group,
   entries,
   arranging,
@@ -180,8 +181,7 @@ function FileScripts({
   const [expanded, setExpanded] = useState(true);
   const [dragging, setDragging] = useState<string | null>(null);
   const setLaunchRow = useSetLaunchRowScript(worktree.projectId);
-  const labelOf = (name: string) => group.labels[name] ?? name;
-  const pinnedOf = (name: string) => pkg.launchRow.includes(name);
+  const pinnedOf = (name: string) => launchRow.includes(name);
   const names = entries.map((e) => e.name);
 
   // distance: 5 lets a quick click focus a cell without picking it up.
@@ -238,7 +238,7 @@ function FileScripts({
                   <ArrangeScriptRow
                     key={name}
                     name={name}
-                    label={labelOf(name)}
+                    label={labelOf(group, name)}
                     pinned={pinnedOf(name)}
                     onPin={(onRow) =>
                       setLaunchRow.mutate({ scriptName: name, onRow })
@@ -250,7 +250,7 @@ function FileScripts({
             <DragOverlay>
               {dragging !== null && (
                 <ScriptDragPreview
-                  label={labelOf(dragging)}
+                  label={labelOf(group, dragging)}
                   pinned={pinnedOf(dragging)}
                 />
               )}
@@ -263,7 +263,7 @@ function FileScripts({
                 key={entry.name}
                 worktree={worktree}
                 slot={{ kind: "package", name: entry.name }}
-                label={labelOf(entry.name)}
+                label={labelOf(group, entry.name)}
                 command={entry.command}
               />
             ))}

@@ -9,43 +9,37 @@ package main
 // the manual order, the launch row).
 
 import (
-	"os"
 	"regexp"
+	"slices"
 	"strings"
 )
 
-// The file each runner reads in a directory, by its own lookup rules:
-// just matches "justfile" and ".justfile" in any case, make tries
-// GNUmakefile, makefile, then Makefile. "" when there is none.
-func findJustfile(dir string) string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !entry.IsDir() && (strings.EqualFold(name, "justfile") || strings.EqualFold(name, ".justfile")) {
+// The file each runner reads among a directory's files, by its own
+// lookup rules: just matches "justfile" and ".justfile" in any case,
+// make tries GNUmakefile, makefile, then Makefile. "" when there is
+// none. Matched against the listing rather than stat'ed, which on a
+// case-insensitive disk would answer for the wrong spelling.
+func findJustfile(files []string) string {
+	for _, name := range files {
+		if strings.EqualFold(name, "justfile") || strings.EqualFold(name, ".justfile") {
 			return name
 		}
 	}
 	return ""
 }
 
-func findMakefile(dir string) string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-	}
-	present := map[string]bool{}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			present[entry.Name()] = true
-		}
-	}
+func findMakefile(files []string) string {
 	for _, name := range []string{"GNUmakefile", "makefile", "Makefile"} {
-		if present[name] {
+		if slices.Contains(files, name) {
 			return name
 		}
+	}
+	return ""
+}
+
+func findPackageJSON(files []string) string {
+	if slices.Contains(files, "package.json") {
+		return "package.json"
 	}
 	return ""
 }
@@ -115,7 +109,7 @@ func parseMakefile(raw string) []packageScript {
 	var scripts []packageScript
 	index := map[string]int{}
 	hasRecipe := map[string]bool{}
-	lines := strings.Split(strings.ReplaceAll(raw, "\\\r\n", "\\\n"), "\n")
+	lines := strings.Split(raw, "\n")
 	// Continued lines read as one.
 	var joined []string
 	for i := 0; i < len(lines); i++ {

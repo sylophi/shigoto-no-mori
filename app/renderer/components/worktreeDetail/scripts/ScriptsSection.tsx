@@ -7,7 +7,6 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { PackageScripts } from "./PackageScripts";
-import { scriptGroups } from "./scriptGroups";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
 
@@ -43,6 +42,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
 
   const setupCommand = config?.scripts?.setup?.trim() ?? "";
   const teardownCommand = config?.scripts?.teardown?.trim() ?? "";
+  const pkgHasScripts = pkg && Object.keys(pkg.scripts).length > 0;
 
   const lifecycleRows: { slot: ScriptSlot; label: string; command: string }[] =
     [];
@@ -79,7 +79,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
     <div className="space-y-4">
       {/* Keyed so arranging (and the search) stays with the worktree it
           started in rather than following the page to the next one. */}
-      {pkg && scriptGroups(pkg).length > 0 && (
+      {pkg && pkgHasScripts && (
         <PackageScripts key={worktree.id} worktree={worktree} pkg={pkg} />
       )}
 
