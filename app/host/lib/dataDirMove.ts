@@ -240,7 +240,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       } else {
         await rename(pointerTmp, pointerFile);
       }
-      await unlinkIfExists(legacyPointerFile);
+      if (legacyPointerFile !== null) await unlinkIfExists(legacyPointerFile);
       if (copied) {
         await rm(oldDir, { recursive: true, force: true }).catch(
           () => undefined,

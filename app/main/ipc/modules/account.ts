@@ -53,6 +53,7 @@ import {
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
 import { log } from "@shared/log";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerShellHandlers runs before
@@ -324,6 +325,26 @@ export async function retryParkedSignOut(): Promise<void> {
     store: store(),
     deviceId: getDeviceId(),
   });
+}
+
+// A nuke's sign-out: this device revoked on the hub and its credential
+// dropped. Answers why the revoke didn't land when it was parked for
+// later (offline, the hub down), since the parking goes with userData
+// at the next start; null when it landed, the hub had already let the
+// device go, or there was nothing to revoke.
+export async function signOutForNuke(): Promise<string | null> {
+  const config = serviceConfig();
+  let failure = "";
+  await signOutDevice({
+    config,
+    service: createAccountService({ baseUrl: config.hubUrl }),
+    store: store(),
+    deviceId: getDeviceId(),
+    onRevokeFailure: (error) => {
+      failure = errorMessageOf(error);
+    },
+  });
+  return store().readParked() === null ? null : failure;
 }
 
 export function makeAccountHandlers(

@@ -9,6 +9,6 @@ The terminal `sm`: the entrypoint on `effect/cli` over the engine, compiled with
 - `src/handOver.ts`: a program given the terminal (`run`'s script, `cd`'s subshell): signals passed on, and sm ends as it did, dying of its signal (`Killed`, which `main.ts` raises on the way out).
 - `src/build.ts`: the flavor and version the build gives this binary.
 - `src/output.ts`, `src/errors.ts`: how a command prints, the Go `sm`'s way. `--json` and `--verbose` are global wherever they sit up to a `--`. A failure under `--json` is the engine's error document (`errorDocument`) with `ok: false`, and a person gets `sm: <message>` on stderr. A usage error exits 2, any other 1, and a command that has said all it has to ends with its own code (`ExitCode`).
-- `build.mts`: `node build.mts [outfile] [--prod] [--version=<v>]` builds `dist/smd` (dev) or `dist/sm` (prod): Bun bytecode, ad hoc signed.
+- `build.mts`: `node build.mts [outfile] [--flavor=prod|test|dev] [--version=<v>]` builds `dist/smd` (dev, the default), `dist/smt` (test) or `dist/sm` (prod): Bun bytecode, ad hoc signed.
 - `test/`: the built binary on a sandbox data dir: how a command line is refused, a person at a terminal, the shell's config and wrapper, and a script handed the terminal (`pnpm run check:cli` from the root). It needs Bun, and Go for the darwin helper.
 

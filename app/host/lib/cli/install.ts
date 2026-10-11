@@ -14,6 +14,7 @@
 // Naming and path policy lives in @shared/packaging/cliDist.mts; this
 // module owns the link state machine and the "is that link ours?"
 // judgment.
+import type { Flavor } from "@shigomori/engine/flavor";
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import {
@@ -33,8 +34,8 @@ import { hostFacts } from "@host/process/facts";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
 
-function cliFlavor(): "prod" | "dev" {
-  return hostFacts().packaged ? "prod" : "dev";
+function cliFlavor(): Flavor {
+  return hostFacts().flavor;
 }
 
 function cliName(): string {

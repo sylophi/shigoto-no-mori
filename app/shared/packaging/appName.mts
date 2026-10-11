@@ -1,25 +1,12 @@
-// Single source for the dev flavor's display-name suffix. The base
-// name is package.json's productName everywhere already: Electron
-// derives app.name from it at runtime, forge derives the packaged
-// bundle's naming from it, and the dev bundle script reads it
-// directly. The suffix is the only spelling that could drift between
-// its consumers (main/index.ts app.setName, and the dev bundle's
-// CFBundleName/CFBundleDisplayName/CFBundleURLName in
-// scripts/lib/devBundle.mts), and on Linux and Windows it also names
-// the dev safeStorage keychain item, so a drift would silently split
-// labels or re-key dev tokens with no build error.
+// The dev launchers' names for what a dev instance keeps: its profiles
+// and the files main and the launchers both read in userData. The
+// flavors' own names (app name, userData folder) are the flavor table's
+// (packages/engine/src/flavor.ts).
 //
 // Like shared/packaging/cliDist.mts: node-builtin imports only, so
 // plain `node scripts/*.mts` can load it without a loader shim, and
 // never imported from the renderer.
 import { join } from "node:path";
-
-export const DEV_NAME_SUFFIX = " (Dev)";
-
-// The dev flavor's userData suffix (main/index.ts), spelled here so
-// the dev launchers (scripts/lib/devProfile.mts) can find the folder
-// a profile's data lives in without a running app.
-export const DEV_USER_DATA_SUFFIX = " (dev)";
 
 // The Clerk bridge's token store in userData, minus the .json the SDK
 // appends (main/electron/clerk.ts names it, the dev launchers copy it
@@ -74,12 +61,15 @@ export function devProfileFromEnv(
   return raw;
 }
 
+// The folder in the plain dev userData that holds the profiles'.
+export const DEV_PROFILES_DIR = "profiles";
+
 // Where a profile's userData lives, under the plain dev userData.
 export function devProfileUserData(
   devUserData: string,
   profile: string,
 ): string {
-  return join(devUserData, "profiles", profile);
+  return join(devUserData, DEV_PROFILES_DIR, profile);
 }
 
 // What a profile adds to the app name (menu bar label, safeStorage

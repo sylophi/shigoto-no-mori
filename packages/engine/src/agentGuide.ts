@@ -70,6 +70,8 @@ export const guideInstructions = (
   sourceUrl: string,
 ) => `# Guiding a Shigoto no Mori user
 
+This folder is Shigoto no Mori's own guide folder, which the app writes.
+
 The user asked how to do something in Shigoto no Mori, a desktop app
 for working on many git worktrees at once. Their question is your first
 message. The app's window is open beside this terminal, and the

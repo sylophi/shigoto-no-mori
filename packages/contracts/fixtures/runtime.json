@@ -110,6 +110,20 @@
       }
     ]
   },
+  "NukeReportSchema": {
+    "accepts": [
+      { "left": [] },
+      {
+        "left": [
+          {
+            "what": "This device on your account",
+            "why": "The hub didn't answer. Remove it from another device's account page."
+          }
+        ]
+      }
+    ],
+    "rejects": [{}, { "left": [{ "what": "The agent hooks" }] }]
+  },
   "NukeProgressSchema": {
     "accepts": [
       {
@@ -121,7 +135,7 @@
         "total": 12
       },
       {
-        "phase": "wipe"
+        "phase": "hooks"
       }
     ],
     "normalizes": [

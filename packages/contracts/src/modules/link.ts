@@ -61,16 +61,19 @@ const ChannelSchema = strict(Schema.Struct({ channelId: HexId32Schema }));
 
 // The most one write carries, and one read answers. A writer splits
 // larger pieces, and a read answers what the far end has queued, up to
-// this.
-export const CHANNEL_MAX_WRITE_BYTES = 256 * 1024;
-export const CHANNEL_MAX_READ_BYTES = 256 * 1024;
+// this. Small, so a channel's frames interleave finely with the link's
+// other traffic: 32 KB is 13 ms on a 20 Mbit/s uplink.
+export const CHANNEL_MAX_WRITE_BYTES = 32 * 1024;
+export const CHANNEL_MAX_READ_BYTES = 32 * 1024;
 
 // Each direction of a channel is numbered calls, from 0 per channel and
-// direction, at most this many in flight; the far end answers them in
-// that order and refuses one further ahead. So a long link is not one
-// round trip per piece, and a peer holds a bounded number of calls on
-// each channel, which is why these leave the link's in-flight cap.
-export const CHANNEL_CALLS_IN_FLIGHT = 8;
+// direction, at most this many in flight (a window of 2 MiB); the far
+// end answers them in that order and refuses one further ahead. How
+// many a side keeps in flight below that is its own (the dialer sizes
+// it to the link, shared/remote/channels.ts). A peer holds a bounded
+// number of calls on each channel, which is why these leave the link's
+// in-flight cap.
+export const CHANNEL_CALLS_IN_FLIGHT = 64;
 
 // A plain struct, where the link's other calls are strict: the binary
 // layout carries only the fields it declares, and bytes have no JSON

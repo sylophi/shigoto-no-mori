@@ -5,7 +5,7 @@
 // dir, proves the token in the link's handshake, and the loopback
 // serves the REAL control handlers (host/ipc/modules/control.ts), which
 // run the REAL send and pull
-// orchestrators over a REAL direct websocket to device A, which run
+// orchestrators over a REAL direct websocket to the listener, which run
 // the engine for every git step against real fixture repos.
 // The account's device registry is the one double (it is an HTTP read
 // of the hub), and the mirror engine is a recording stand-in: its real
@@ -113,7 +113,6 @@ import {
   isTransferSession,
   setMirrorImpl,
   type MirrorCreateInput,
-  type MirrorImpl,
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
 import { projectsHandlers } from "@host/ipc/modules/projects";
@@ -155,7 +154,8 @@ import {
 import { secondEngine } from "./lib/smBinary.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
-import { bootDirectWire } from "./lib/directBoot.mts";
+import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
+import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 
 const fixture = cliSandbox("sm-control-check-");
 const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
@@ -212,7 +212,7 @@ async function startLoopback(options: {
           if (options.late !== true) ready();
           return Loopback.layer({
             registrar,
-            deviceId: () => "B",
+            deviceId: () => DIALER,
             appVersion: "9.9.9",
             file: () => options.file,
             services: Deferred.await(handedOver),
@@ -363,47 +363,32 @@ function fakeMirrorEngine() {
     git: MirrorGitStatus["status"];
   } = { created: [], terminated: [], git: "following" };
   let next = 0;
-  const endpoint = {
-    connected: true,
-    scanned: true,
-    directories: 0,
-    files: 0,
-    symbolicLinks: 0,
-    totalFileSize: 0,
-    problems: [],
-    excludedProblems: 0,
-  };
-  const impl: MirrorImpl = {
-    status: Effect.succeed("running"),
+  const impl = inertMirrorImpl({
     sessions: Effect.sync(() => [...sessions.values()]),
     create: (input) =>
       Effect.sync(() => {
         next += 1;
         const session = `sync_fake${next}`;
         state.created.push(input);
-        sessions.set(session, {
+        sessions.set(
           session,
-          name: input.name,
-          labels: input.labels,
-          localRoot: input.localRoot,
-          deviceId: input.deviceId,
-          projectId: input.projectId,
-          worktreeId: input.worktreeId,
-          remoteRoot: input.remoteRoot,
-          paused: false,
-          ignores: [...input.ignores],
-          createdAt: Date.now(),
-          status: "watching",
-          statusText: "Watching for changes",
-          successfulCycles: 1,
-          conflicts: [],
-          excludedConflicts: 0,
-          local: endpoint,
-          remote: endpoint,
-        });
+          rawMirrorSession({
+            session,
+            name: input.name,
+            labels: input.labels,
+            localRoot: input.localRoot,
+            deviceId: input.deviceId,
+            projectId: input.projectId,
+            worktreeId: input.worktreeId,
+            remoteRoot: input.remoteRoot,
+            ignores: [...input.ignores],
+            createdAt: Date.now(),
+            statusText: "Watching for changes",
+            successfulCycles: 1,
+          }),
+        );
         return session;
       }),
-    recreate: () => Effect.die(new Error("not in this check")),
     terminate: (session) =>
       Effect.sync(() => {
         state.terminated.push(session);
@@ -423,11 +408,7 @@ function fakeMirrorEngine() {
       }),
     gitStatus: () => ({ status: state.git, detail: "" }),
     refreshGit: () => Effect.succeed({ status: state.git, detail: "" }),
-    history: () => [],
-    noteEvent: () => {},
-    forgetHistory: () => {},
-    moveHistory: () => {},
-  };
+  });
   return { state, impl };
 }
 
@@ -447,9 +428,9 @@ let inPath: string;
 let targetProjectId: string;
 let sourceProjectId: string;
 let engine: ReturnType<typeof fakeMirrorEngine>;
-let engineA: ReturnType<typeof fakeMirrorEngine>;
+let listenerEngine: ReturnType<typeof fakeMirrorEngine>;
 let listener: Awaited<ReturnType<typeof bootDirectWire>>["listener"];
-let peerA: Awaited<ReturnType<typeof bootDirectWire>>["peerA"];
+let toListener: Awaited<ReturnType<typeof bootDirectWire>>["toListener"];
 let connected: string[];
 // What the hub's device list fails with, null while it answers.
 let registryFails: unknown = null;
@@ -464,15 +445,11 @@ let mirrorsCreated: () => MirrorCreateInput[];
 beforeAll(async () => {
   await fixture.buildSm();
 
-  // Source repo (this device, B) and its clone (the peer, A), one repo
+  // Source repo (this device, the dialer) and its clone (the peer, the listener), one repo
   // identity between them.
-  sourceRepo = join(sandbox, "source");
-  await git(sandbox, ["init", "-q", "-b", "main", "source"]);
-  await fixture.disableAutoGc(sourceRepo);
+  sourceRepo = await fixture.initRepo("source");
   await fixture.commitFile(sourceRepo, "readme.txt", "base\n", "base");
-  targetRepo = join(sandbox, "target");
-  await git(sandbox, ["clone", "-q", "--", sourceRepo, "target"]);
-  await fixture.disableAutoGc(targetRepo);
+  targetRepo = await fixture.cloneRepo(sourceRepo, "target");
   sendPath = await addWorktree(sourceRepo, "wt-send", "feat-send", "s.txt");
   writeFileSync(join(sendPath, "draft.txt"), "uncommitted\n");
   tearPath = await addWorktree(sourceRepo, "wt-tear", "feat-tear", "t.txt");
@@ -514,44 +491,44 @@ it("no loopback.json, a dead pid and a dead port all read as app-not-running", a
 });
 
 it("loopback.json is owner-only, a call before the hello is refused, and a stale token reads as app-not-running", async () => {
-  // Each device's mirror engine. B's is the slot's own. The peer
+  // Each device's mirror engine. The dialer's is the slot's own. The peer
   // runs the mirrors whose original it holds (mirror --from), on its
-  // own engine: the slot is process-wide, so a mirror call on A's
-  // wire swaps A's in for its duration. The calls come one at a
-  // time (each CLI run is awaited), B's side idle meanwhile.
+  // own engine: the slot is process-wide, so a mirror call on the listener's
+  // wire swaps the listener's in for its duration. The calls come one at a
+  // time (each CLI run is awaited), the dialer's side idle meanwhile.
   engine = fakeMirrorEngine();
-  engineA = fakeMirrorEngine();
-  engineA.state.git = "synced";
+  listenerEngine = fakeMirrorEngine();
+  listenerEngine.state.git = "synced";
   setMirrorImpl(engine.impl);
-  // A's engine is swapped in for the run of each of A's handlers.
-  const asA =
+  // The listener's engine is swapped in for the run of each of the listener's handlers.
+  const onListener =
     <I, A, E, R>(
       run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, R>,
     ) =>
     (input: I, ctx: HandlerContext) =>
       Effect.acquireUseRelease(
-        Effect.sync(() => setMirrorImpl(engineA.impl)),
+        Effect.sync(() => setMirrorImpl(listenerEngine.impl)),
         () => run(input, ctx),
         () => Effect.sync(() => setMirrorImpl(engine.impl)),
       );
-  const mirrorOnA: EffectHandlers<
+  const listenerMirror: EffectHandlers<
     typeof mirrorContract,
     HandlerContext,
     HostServices
   > = {
-    list: asA(mirrorHandlers.list),
-    startTo: asA(mirrorHandlers.startTo),
-    startFrom: asA(mirrorHandlers.startFrom),
-    stop: asA(mirrorHandlers.stop),
-    release: asA(mirrorHandlers.release),
-    pause: asA(mirrorHandlers.pause),
-    resume: asA(mirrorHandlers.resume),
-    setIgnores: asA(mirrorHandlers.setIgnores),
-    history: asA(mirrorHandlers.history),
+    list: onListener(mirrorHandlers.list),
+    startTo: onListener(mirrorHandlers.startTo),
+    startFrom: onListener(mirrorHandlers.startFrom),
+    stop: onListener(mirrorHandlers.stop),
+    release: onListener(mirrorHandlers.release),
+    pause: onListener(mirrorHandlers.pause),
+    resume: onListener(mirrorHandlers.resume),
+    setIgnores: onListener(mirrorHandlers.setIgnores),
+    history: onListener(mirrorHandlers.history),
     // The stream is served apart from the engine slot.
     openStream: mirrorHandlers.openStream,
-    gitState: asA(mirrorHandlers.gitState),
-    applyGitState: asA(mirrorHandlers.applyGitState),
+    gitState: onListener(mirrorHandlers.gitState),
+    applyGitState: onListener(mirrorHandlers.applyGitState),
   };
   const runtimeFacts: Omit<RuntimeInfo, "homedir"> = {
     dataDir,
@@ -559,12 +536,12 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     atDefaultDataDir: false,
     canonicalDataDirName: ".smd",
   };
-  ({ listener, peerA } = await bootDirectWire(track, {
+  ({ listener, toListener } = await bootDirectWire(track, {
     contracts: [
       [syncContract, syncHandlers],
       [worktreesContract, worktreesHandlers],
       [projectsContract, projectsHandlers],
-      [mirrorContract, mirrorOnA],
+      [mirrorContract, listenerMirror],
       [shigomoriContract, shigomoriHandlers],
       [worktreeDataContract, worktreeDataHandlers],
       // The peer's home, which a send's default clone place reads.
@@ -585,10 +562,10 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   }));
   // The account as the hub would list it: this device, the peer, a
   // machine that is signed in but away, and a browser.
-  connected = ["A"];
+  connected = [LISTENER];
   const registry = [
-    registered("B", "Agent Box"),
-    registered("A", "Studio Mac"),
+    registered(DIALER, "Agent Box"),
+    registered(LISTENER, "Studio Mac"),
     registered("C", "Studio Laptop"),
     registered("W", "Chrome on macOS", "web"),
   ];
@@ -599,9 +576,9 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   // peer's worktree living in the source and landing in the target.
   peerOwns = targetProjectId;
   const peerTransport: ClientTransport = {
-    ...peerA.transport,
+    ...toListener.transport,
     invoke: async (channel, input) => {
-      const result = await peerA.transport.invoke(channel, input);
+      const result = await toListener.transport.invoke(channel, input);
       return channel === "projects:list"
         ? // Loose: the host under test gets the peer's rows as sent.
           looseRows(result).toSorted(
@@ -632,8 +609,8 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   // channels, which a move's source link rides.
   setPeerReach({
     transportFor: () => peerTransport,
-    channelsFor: () => peerA.channels,
-    thisDeviceId: () => "B",
+    channelsFor: () => toListener.channels,
+    thisDeviceId: () => DIALER,
   });
   // The delete's removal, as the host fans it out to every window and
   // peer. Each record notes which sessions had ended by then: the
@@ -643,7 +620,10 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   setWorktreeRemovalBroadcaster((payload) =>
     removals.push({
       ...payload,
-      endedThen: [...engine.state.terminated, ...engineA.state.terminated],
+      endedThen: [
+        ...engine.state.terminated,
+        ...listenerEngine.state.terminated,
+      ],
     }),
   );
   removalsOf = (worktreeId: string) =>
@@ -697,7 +677,7 @@ it("devices: names the peers, skips the browser, and reports offline, not-sharin
     devicesDoc(await sm("devices", ...args));
   const ungranted = await devicesOf("-p", "source");
   assert.deepEqual(ungranted.thisDevice, {
-    deviceId: "B",
+    deviceId: DIALER,
     name: "Agent Box",
   });
   assert.deepEqual(
@@ -824,7 +804,7 @@ it("send --source teardown: the local source is removed once the copy holds it",
       "-p",
       "source",
       "--to",
-      "A",
+      LISTENER,
       "--source",
       "teardown",
     ),
@@ -934,7 +914,10 @@ it("list --remote names the peer's worktrees, and bring: points there when given
   );
   assert.deepEqual(shelved.source, { fate: "shelve", done: true });
   assert.deepEqual(shelved.caveats, []);
-  const peerList = await buildClient(worktreesContract, peerA.transport).list({
+  const peerList = await buildClient(
+    worktreesContract,
+    toListener.transport,
+  ).list({
     projectId: sourceProjectId,
   });
   assert.equal(
@@ -1029,7 +1012,10 @@ it("unmirror of a mirror whose copy was already deleted on the peer ends the ses
   const gone = transferDoc(
     await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
   );
-  const removed = await buildClient(worktreesContract, peerA.transport).delete({
+  const removed = await buildClient(
+    worktreesContract,
+    toListener.transport,
+  ).delete({
     projectId: gone.worktree.projectId,
     worktreeId: gone.worktree.id,
     force: true,
@@ -1056,9 +1042,9 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
     "-p",
     "target",
     "--to",
-    "A",
+    LISTENER,
     "--from",
-    "A",
+    LISTENER,
   ]);
   assert.equal(usageBoth.code, 2, "--to with --from is a usage error");
   // An unset shell variable must not turn the bring into a send.
@@ -1089,7 +1075,11 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
     "Studio Mac",
   ]);
   assert.notEqual(collided.code, 0, "a landing on a taken branch is refused");
-  assert.equal(engineA.state.created.length, 0, "the peer started nothing");
+  assert.equal(
+    listenerEngine.state.created.length,
+    0,
+    "the peer started nothing",
+  );
   assert.deepEqual(
     listMirrorInvites(),
     [],
@@ -1115,10 +1105,10 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
     createdHereBefore,
     "the session runs on the peer, not here",
   );
-  const inboundInput = engineA.state.created.at(-1);
+  const inboundInput = listenerEngine.state.created.at(-1);
   assert.ok(inboundInput);
   assert.equal(inboundInput.localRoot, inPath, "on the original");
-  assert.equal(inboundInput.deviceId, "B");
+  assert.equal(inboundInput.deviceId, DIALER);
   assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
   assert.equal(inboundInput.labels[MIRROR_LABEL_MODE], "mirror");
   // The ask's invitation, for the peer and its original. It stays
@@ -1130,7 +1120,12 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
       peerDeviceId,
       sourceWorktreeId,
     })),
-    [{ peerDeviceId: "A", sourceWorktreeId: inboundInput.localWorktreeId }],
+    [
+      {
+        peerDeviceId: LISTENER,
+        sourceWorktreeId: inboundInput.localWorktreeId,
+      },
+    ],
     "the ask left an invitation for the peer's original",
   );
   const inboundSteps = new Set(progressOf(inboundRun).map((doc) => doc.step));
@@ -1148,7 +1143,7 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
   assert.equal(inboundRow.device.name, "Studio Mac");
   // Asked again from either end, the answer is the running mirror
   // and the copy that is HERE, never a second start.
-  const sessionsBefore = engineA.state.created.length;
+  const sessionsBefore = listenerEngine.state.created.length;
   const repeats = await Promise.all(
     [
       ["feat-in", "-p", "target", "--from", "Studio Mac"],
@@ -1161,7 +1156,7 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
     assert.equal(asked.copySide, "local");
     assert.equal(asked.worktree.path, inbound.worktree.path);
   }
-  assert.equal(engineA.state.created.length, sessionsBefore);
+  assert.equal(listenerEngine.state.created.length, sessionsBefore);
   const inboundStop = stopDoc(
     await sm("worktrees", "unmirror", inbound.worktree.path),
   );
@@ -1209,7 +1204,7 @@ it("mirror --from of the peer's primary: lands as a worktree on mirror/main in m
   assert.equal(fromPrimary.worktree.name, "mirror-source");
   assert.equal(fromPrimary.worktree.isPrimary, false);
   assert.equal(fromPrimary.copySide, "local");
-  const fromPrimaryInput = engineA.state.created.at(-1);
+  const fromPrimaryInput = listenerEngine.state.created.at(-1);
   assert.ok(fromPrimaryInput);
   assert.equal(fromPrimaryInput.localRoot, sourceRepo);
   assert.equal(fromPrimaryInput.remoteRoot, fromPrimary.worktree.path);

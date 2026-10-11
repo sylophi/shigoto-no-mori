@@ -245,6 +245,57 @@ describe("the service", () => {
     }
   });
 
+  it("a client that falls behind a flood is handed it in chunks no larger than a chunk's most, with nothing lost", async () => {
+    const app = launch();
+    try {
+      const { terminalId } = await withTerminals(app, (terminals) =>
+        terminals.open({ owner: { kind: "device" } }),
+      );
+      // Slow enough that the shell's output waits, and piles up past a
+      // chunk's most while it does.
+      const sizes: number[] = [];
+      let output = "";
+      const fiber = app.runFork(
+        Effect.flatMap(Terminals.Terminals, (terminals) =>
+          terminals.attach(terminalId).pipe(
+            Stream.runForEach((event) =>
+              Effect.andThen(
+                Effect.sync(() => {
+                  if (event.kind !== "output") return;
+                  sizes.push(event.data.length);
+                  output += event.data;
+                }),
+                Effect.sleep("40 millis"),
+              ),
+            ),
+          ),
+        ),
+      );
+      await withTerminals(app, (terminals) =>
+        terminals.write(
+          terminalId,
+          "head -c 4000000 /dev/zero | tr '\\0' y; echo; echo flooded-$((40+2))\r",
+        ),
+      );
+      await waitFor(
+        () => output.includes("flooded-42"),
+        "the flood's end",
+        120_000,
+      );
+      assert.ok(
+        Math.max(...sizes) <= 256 * 1024,
+        `a chunk of ${Math.max(...sizes)}`,
+      );
+      assert.ok(Math.max(...sizes) > 64 * 1024, "the flood never piled up");
+      // The flood's, beside the few the echoed command line holds.
+      assert.ok((output.match(/y/g)?.length ?? 0) >= 4_000_000);
+      await app.runPromise(Fiber.interrupt(fiber));
+      await withTerminals(app, (terminals) => terminals.close(terminalId));
+    } finally {
+      await app.dispose();
+    }
+  });
+
   it("an exit ends the attach with its code", async () => {
     const app = launch();
     try {

@@ -6,17 +6,43 @@ profiles make several devices of one machine. The reference behind
 
 ## Builds and data folders
 
-The app has two builds. Each keeps its own state.
+The app has three builds, its flavors: prod is what ships, test is a
+`v*-test.N` prerelease the owner runs beside prod, and dev is `pnpm dev`.
+Each keeps its own state and never reads another's, so all three run on
+one machine at once as three devices. Every name below comes from one
+table, `packages/engine/src/flavor.ts`. A packaged build's flavor is
+baked in when it is built (`SM_FLAVOR`, which the release workflow
+sets from the tag) and main reads it in one place (`main/flavor.ts`),
+which hands it to the host.
 
-|                       | Packaged app                                    | Dev app (`pnpm dev`)                                  |
-| --------------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| Data dir              | `~/.sm`                                         | `~/.smd`                                              |
-| Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-dev/data-dir`                    |
-| userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)` |
-| CLI                   | `sm` (bundled)                                  | `smd` (`dist-cli/smd`, built by `pnpm dev`)           |
-| Renderer scheme       | `shigomori://app`                               | `shigomori-dev://app`                                 |
-| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
-| Hub and Clerk config  | Baked in at build time                          | `.env.local` (`hub-dev.shigomori.com`)                |
+|                       | Prod                                            | Test                                                   | Dev (`pnpm dev`)                                      |
+| --------------------- | ----------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| App and dock name     | Shigoto no Mori                                 | Shigoto no Mori (Test)                                 | Shigoto no Mori (Dev)                                 |
+| Bundle id             | `com.sylophi.shigomori`                         | `com.sylophi.shigomori.test`                           | `com.sylophi.shigomori.dev.<worktree>`                |
+| Renderer scheme       | `shigomori://app`                               | `shigomori-test://app`                                 | `shigomori-dev://app`                                 |
+| Data dir              | `~/.sm`                                         | `~/.smt`                                               | `~/.smd`                                              |
+| On a project's drive  | `/Volumes/<drive>/.sm/wt`                       | `/Volumes/<drive>/.smt/wt`                             | `/Volumes/<drive>/.smd/wt`                            |
+| Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-test/data-dir`                    | `~/.config/shigomori-dev/data-dir`                    |
+| userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (Test)` | `~/Library/Application Support/Shigoto no Mori (dev)` |
+| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Test)/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
+| Keychain item         | `Shigoto no Mori Safe Storage`                  | `Shigoto no Mori (Test) Safe Storage`                  | none on macOS (mock keychain)                         |
+| file-sync state       | `<data dir>/file-sync`                          | `<data dir>/file-sync`                                 | `<data dir>/file-sync`                                |
+| Single-instance lock  | in its userData                                 | in its userData                                        | in its userData                                       |
+| CLI                   | `sm`, `shigomori` (bundled)                     | `smt`, `shigomori-test` (bundled)                      | `smd`, `shigomori-dev` (`dist-cli/smd`)               |
+| Updates               | full releases, and its own rc line              | the test prereleases alone                             | none                                                  |
+| Hub and Clerk config  | Baked in at build time                          | Baked in at build time (the dev hub until the cutover) | `.env.local` (`hub-dev.shigomori.com`)                |
+
+A test build's terminal command, shell hook and agent hooks are its
+own (`smt`, markers and entries named for `shigomori-test`), beside
+prod's, so dogfooding v3 leaves the installed `sm` alone. It starts on
+an empty `~/.smt`: the v3 migration imports what v2 left in a data
+dir, and a test build has none.
+
+Settings' Danger zone (Nuke everything) returns a build to a fresh
+install: its worktrees, its `sm` links and hooks, its device on the
+hub, and then, at the next start, everything in the rows above but the
+lock, the bundle and the scheme. On the plain dev instance it leaves
+the profiles in its userData alone.
 
 A device is made of two folders:
 
@@ -266,11 +292,11 @@ removed one the next time they read the registry. A relaunch after
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
   `hub/.dev.vars`, see `hub/README.md`, "Develop and test".
-- **Packaged build** (`pnpm make`). The only way to test the prod
-  scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
+- **Packaged build** (`pnpm make`, `SM_FLAVOR=test` for a test one).
+  The only way to test a packaged scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
   environment the bundle is unsigned and, like dev, runs on
   Chromium's mock keychain: the real keychain is exercised only by a
-  Developer-ID-signed build (the release workflow). Such a local
+  Developer-ID-signed build (the release workflow). A local prod
   build shares the installed app's userData, and tokens it writes are
   under the mock key, so switching between it and the installed app
   signs the other out once.

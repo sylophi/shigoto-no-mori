@@ -836,6 +836,16 @@ export const setAgentHooks = Effect.fnUntraced(function* (
   ];
 });
 
+// Removes every harness's hooks this flavor installed (a nuke). A
+// harness not set up here is skipped.
+export const removeAllAgentHooks = Effect.suspend(() =>
+  asChange(
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.setHooks([], false),
+    ),
+  ),
+);
+
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data, a pending dirty capture).
 // The caller keeps the app-side guards around it (the running work it

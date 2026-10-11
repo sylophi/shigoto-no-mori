@@ -128,7 +128,7 @@ export function dataDirPointerPath(): string {
   return pointerPathFor(movableFlavor());
 }
 
-export function legacyDataDirPointerPath(): string {
+export function legacyDataDirPointerPath(): string | null {
   return legacyPointerPathFor(movableFlavor());
 }
 

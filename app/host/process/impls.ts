@@ -39,8 +39,6 @@ export function installHostImpls(): void {
     ),
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
-    afterDataWipe: () =>
-      void Graph.runIfUp(Effect.flatMap(Loopback.Loopback, (it) => it.publish)),
     relaunchAppUnattended: () => void shellCalls().relaunch(),
     unattendedMoveRefusal: () => busyRemoteRefusal(getBusyOperations(), "move"),
   });

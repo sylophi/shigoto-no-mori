@@ -38,22 +38,12 @@ import * as TestClock from "effect/testing/TestClock";
 import * as FileSync from "@host/fileSync/FileSync";
 import * as MirrorDaemon from "../host/mirror/daemon.ts";
 import { it } from "vitest";
+import { rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
-const endpoint = {
-  connected: true,
-  scanned: true,
-  directories: 1,
-  files: 2,
-  symbolicLinks: 0,
-  totalFileSize: 10,
-  problems: [],
-  excludedProblems: 0,
-};
-
 // One session the way mirrorSessionStateOf writes it.
-function session(id: string) {
-  return {
+const session = (id: string) =>
+  rawMirrorSession({
     session: id,
     name: "mirror-w",
     labels: { localProjectId: "p", localWorktreeId: "w" },
@@ -62,18 +52,10 @@ function session(id: string) {
     projectId: "p",
     worktreeId: "w",
     remoteRoot: "/b",
-    paused: false,
-    ignores: [],
     createdAt: 1,
-    status: "watching",
     statusText: "Watching for changes",
     successfulCycles: 3,
-    conflicts: [],
-    excludedConflicts: 0,
-    local: endpoint,
-    remote: endpoint,
-  };
-}
+  });
 
 // Lets the supervisor read a line, and a request write its own: a few
 // turns of the event loop.

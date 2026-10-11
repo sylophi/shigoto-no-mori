@@ -3,6 +3,7 @@
 // asks Electron nothing, so its version, where
 // its binaries are and the page origin its loopback admits all come
 // from here.
+import type { Flavor } from "@shigomori/engine/flavor";
 import * as Schema from "effect/Schema";
 import {
   bundledBinaryPath,
@@ -24,6 +25,9 @@ export const HostFactsSchema = Schema.Struct({
   logsPath: Schema.String,
   // The desktop window's page origin, which the loopback admits.
   rendererOrigin: Schema.String,
+  // The build's flavor (main/flavor.ts), which names the data dir and
+  // the binaries.
+  flavor: Schema.Literals(["prod", "test", "dev"]),
 });
 export type HostFacts = typeof HostFactsSchema.Type;
 
@@ -36,9 +40,7 @@ const { set: setHostFacts, get: hostFacts } = implSlot<HostFacts>(
 );
 export { hostFacts, setHostFacts };
 
-// The build flavor, which names the data dir and the binaries.
-export const flavorOf = (facts: HostFacts): "prod" | "dev" =>
-  facts.packaged ? "prod" : "dev";
+export const flavorOf = (facts: HostFacts): Flavor => facts.flavor;
 
 export const hostBinaryPath = (devDistDir: string, name: string): string =>
   bundledBinaryPath(hostFacts(), devDistDir, name);

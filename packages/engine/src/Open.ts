@@ -11,6 +11,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Launchers from "./Launchers.ts";
 import * as Lifecycle from "./Lifecycle.ts";
+import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
 import { scriptEnv, shellQuote } from "./Lifecycle.ts";
@@ -57,9 +58,6 @@ export class NoDevApp extends Schema.TaggedError<NoDevApp>()("NoDevApp", {}) {
     return "This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
   }
 }
-
-// The installed app's bundle id, which still finds it renamed or moved.
-const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
 // How each terminal runs a command line, as an AppleScript taking it as
 // its one argument: into a new window, or into the first one a terminal
@@ -353,11 +351,13 @@ const make = Effect.gen(function* () {
   // A cold launch gets this environment, which the app rebuilds at
   // startup, less the shell hook's directive file, as every launcher.
   const app = Effect.gen(function* () {
-    if (flavor !== "prod") return yield* new NoDevApp();
+    if (flavor === "dev") return yield* new NoDevApp();
     const code = yield* Effect.scoped(
       Effect.flatMap(
         spawner.spawn(
-          ChildProcess.make("open", ["-b", APP_BUNDLE_ID], {
+          // The installed app's bundle id, which still finds it renamed
+          // or moved.
+          ChildProcess.make("open", ["-b", flavorNames(flavor).bundleId], {
             stdin: "ignore",
             env: { [CD_FILE_ENV]: undefined },
             extendEnv: true,

@@ -1710,7 +1710,11 @@
       "parentDir": "k9"
     }
   },
-  "runtime:nuke": {},
+  "runtime:nuke": {
+    "success": {
+      "left": [{ "what": "H", "why": "0" }]
+    }
+  },
   "runtime:nukeProgress": {
     "payload": {
       "phase": "scripts"
@@ -2358,6 +2362,11 @@
       "title": "😀",
       "body": "0",
       "route": "["
+    }
+  },
+  "window:nuke": {
+    "success": {
+      "left": [{ "what": "0", "why": "" }]
     }
   },
   "window:open": {

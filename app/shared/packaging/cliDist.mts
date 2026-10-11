@@ -1,63 +1,45 @@
-// Single source of truth for the CLI's flavor system: what each
-// flavor's binary is called, which data dir it targets, where user
-// binaries get linked, and how links are (re)pointed. Every boundary
-// that needs the policy imports it: the host (host/lib/cli), the CLI itself,
-// the build scripts, and forge.config.ts. A rename or relocation is
-// then a one-file change.
+// The CLI's paths: what each flavor's binary is called and which data
+// dir it targets (the flavor table's, packages/engine/src/flavor.ts),
+// where user binaries get linked, and how links are (re)pointed. The
+// host (host/lib/cli), the build scripts and forge.config.ts import it.
 //
-// .mts with node-builtin imports only: plain `node scripts/*.mts` must
-// be able to load it without the CLI's loader shim or a bundler. Never
-// import this from the renderer.
+// .mts importing node builtins and the import-free flavor table only:
+// plain `node scripts/*.mts` must be able to load it without the CLI's
+// loader shim or a bundler. Never import this from the renderer.
 import { mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
-
-// Mirrors the app's packaged/dev split (app.isPackaged): prod is what
-// ships with the app and touches real state; dev is what `pnpm dev`
-// links and can only ever touch dev state.
-export type CliFlavor = "prod" | "dev";
+import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
 
 // Repo-relative directory compiled binaries land in (gitignored).
 export const CLI_DIST_DIR = "dist-cli";
-
-// The packaged app's bundle id: forge.config.ts stamps it into the
-// bundle and build-cli.mts injects it into the CLI (`sm app` opens the
-// app by bundle id), so the two can never disagree.
-export const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
 // The update feed's repo, from its import-free home so the renderer
 // can read it too.
 export { UPDATE_FEED_NAME, UPDATE_FEED_OWNER } from "./updateFeed.mts";
 
-export function cliBinaryName(flavor: CliFlavor): string {
-  return flavor === "prod" ? "sm" : "smd";
+export function cliBinaryName(flavor: Flavor): string {
+  return flavorNames(flavor).binaryName;
 }
 
 // Second command name installed beside the short one: the app's full
 // name spelled out, for discoverability and for shells where `sm` is
 // taken.
-export function cliAliasName(flavor: CliFlavor): string {
-  return flavor === "prod" ? "shigomori" : "shigomori-dev";
+export function cliAliasName(flavor: Flavor): string {
+  return flavorNames(flavor).alias;
 }
 
 // The data dir: the directory under $HOME holding the flavor's on-disk
 // state (its store, projects/, managed worktrees). Short and
 // dot-hidden on purpose: every managed worktree
 // path starts with it, so it is in every prompt an agent sees.
-export function cliDataDirName(flavor: CliFlavor): string {
-  return flavor === "prod" ? ".sm" : ".smd";
+export function cliDataDirName(flavor: Flavor): string {
+  return flavorNames(flavor).dataDir;
 }
 
-// The flavor's directory name under $XDG_CONFIG_HOME (default
-// ~/.config). Frozen: every user's pointer file lives under it, so it
-// must not follow a rename of the CLI alias it happens to match.
-function cliConfigDirName(flavor: CliFlavor): string {
-  return flavor === "prod" ? "shigomori" : "shigomori-dev";
-}
-
-function configDir(flavor: CliFlavor): string {
+function configDir(flavor: Flavor): string {
   const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  return join(configHome, cliConfigDirName(flavor));
+  return join(configHome, flavorNames(flavor).configDir);
 }
 
 // The data dir pointer file: one line holding an absolute path that
@@ -65,18 +47,16 @@ function configDir(flavor: CliFlavor): string {
 // outside the data dir (nothing inside it can say where it is).
 // Read at boot by the engine (Paths.ts), and written by the app when
 // the user moves the data folder. SHIGOMORI_DATA_DIR beats it.
-const DATA_DIR_POINTER_FILE = "data-dir";
-// The pointer's filename before 2.0. Readers fall back to it only when
-// the current file is absent. Nothing writes it any more, and the
-// data-folder move deletes it.
-const LEGACY_DATA_DIR_POINTER_FILE = "root";
-
-export function dataDirPointerPath(flavor: CliFlavor): string {
-  return join(configDir(flavor), DATA_DIR_POINTER_FILE);
+export function dataDirPointerPath(flavor: Flavor): string {
+  return join(configDir(flavor), flavorNames(flavor).pointer);
 }
 
-export function legacyDataDirPointerPath(flavor: CliFlavor): string {
-  return join(configDir(flavor), LEGACY_DATA_DIR_POINTER_FILE);
+// The pointer's filename before 2.0, none for a flavor that never had
+// one. Readers fall back to it only when the current file is absent.
+// Nothing writes it any more, and the data-folder move deletes it.
+export function legacyDataDirPointerPath(flavor: Flavor): string | null {
+  const legacy = flavorNames(flavor).legacyPointer;
+  return legacy === null ? null : join(configDir(flavor), legacy);
 }
 
 // Where user-facing executables get linked. The XDG spec's location
