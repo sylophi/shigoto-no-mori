@@ -1,5 +1,5 @@
-// The package.json scripts (PackageScriptsView), sorted and arranged on
-// the worktree's host.
+// The worktree's scripts (PackageScriptsView), grouped by the file they
+// come from, sorted and arranged on the worktree's host.
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useSetLaunchRowScript,
@@ -30,6 +30,7 @@ export function PackageScripts({
     <PackageScriptsView
       sortMode={sortMode}
       sorted={sorted}
+      groups={pkg.groups}
       launchRow={pkg.launchRow}
       canCommand={canCommand}
       onSort={(mode) => setSortMode.mutate(mode)}
@@ -39,12 +40,12 @@ export function PackageScripts({
       }}
       onReorder={(names) => setOrder.mutate([...names])}
       onPin={(scriptName, onRow) => setLaunchRow.mutate({ scriptName, onRow })}
-      renderRow={(entry) => (
+      renderRow={(entry, label) => (
         <ScriptRow
           key={entry.name}
           worktree={worktree}
           slot={{ kind: "package", name: entry.name }}
-          label={entry.name}
+          label={label}
           command={entry.command}
         />
       )}

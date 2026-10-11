@@ -7,10 +7,11 @@ import {
   titledByPullRequest,
   worktreeTitle,
 } from "@shigomori/ui/lib/worktreeTitle.ts";
-import type {
-  PullRequest,
-  PullRequestDetail,
-  Worktree,
+import {
+  hasWorktreeData,
+  type PullRequest,
+  type PullRequestDetail,
+  type Worktree,
 } from "@shigomori/contracts/schemas";
 
 // The open worktree's title and description, its open PR's while it
@@ -20,11 +21,15 @@ import type {
 // rather than flash the local one it is about to replace.
 //
 // `pullRequest` is the PR when the title is its title, so the page can
-// lead with the PR itself instead of naming it twice.
+// lead with the PR itself instead of naming it twice. `editable` is
+// whether the worktree's own pair can be changed here: not while an
+// open PR holds them, and not on an external checkout, which keeps no
+// data for them.
 export function useWorktreeTitle(worktree: Worktree): {
   title: string | null;
   description: string | null;
   pullRequest: PullRequest | PullRequestDetail | null;
+  editable: boolean;
 } {
   const { data: detail } = useWorktreePullRequest(
     worktree.projectId,
@@ -43,6 +48,7 @@ export function useWorktreeTitle(worktree: Worktree): {
       : (shownText(worktree.description) ??
         (isOwnPullRequest(worktree, pr) ? body : null)),
     pullRequest: titledByPullRequest(worktree, pr) ? pr : null,
+    editable: hasWorktreeData(worktree) && !pullRequestOwnsTitle(worktree, pr),
   };
 }
 

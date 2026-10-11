@@ -45,13 +45,12 @@ export interface InboxRowProps {
 //   feat/the-branch
 //   [kind] dirname                             ±3  ↑2  #142
 //
-// Right-click opens the project's menu, the same list the tree hangs
-// off a project header's `…`. The inbox has no project headers, so this
-// is the only place its project-level actions can live. A peer's row
-// wears its device badge beside the project name, opens under that
-// device's route, and scopes that menu to the peer. Asleep, or taking no
-// commands from here, it keeps the row (last known state) and drops the
-// menu, as the tree's project header drops its actions.
+// Right-click opens the worktree's menu (WorktreeMenuView), led by the
+// way to its project in the tree, where the project's own actions hang
+// off its header. A peer's row wears its device badge beside the
+// project name, opens under that device's route, and scopes the menu to
+// the peer. Asleep, or taking no commands from here, it keeps the row
+// (last known state) and the menu only what reads it.
 export function InboxRowView({
   worktree,
   project,

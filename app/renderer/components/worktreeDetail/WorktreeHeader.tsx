@@ -1,8 +1,10 @@
 // The worktree page's header (WorktreeHeaderView): the title the work
-// goes by, or its branch alone when it has none.
+// goes by, or its branch alone when it has none. A title of the
+// worktree's own is edited in place (useOwnTitleEdit).
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
+import { useOwnTitleEdit } from "@/hooks/worktrees/useOwnTitleEdit";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import type {
@@ -52,6 +54,7 @@ function TitledHeader({
   const branchRef = useRef<HTMLDivElement>(null);
   // The branch's buttons beside it come and go with control.
   const { canCommand } = useCommandAccess();
+  const titleEdit = useOwnTitleEdit(worktree, title);
   const showBase = useBaseFits(
     lineRef,
     branchRef,
@@ -60,6 +63,7 @@ function TitledHeader({
   return (
     <WorktreeHeaderView
       title={title}
+      titleEdit={titleEdit}
       pr={
         pr
           ? {

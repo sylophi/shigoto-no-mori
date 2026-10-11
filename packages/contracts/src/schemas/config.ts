@@ -286,7 +286,7 @@ const GlobalConfigSchema = Schema.Struct({
   // harmless to keep.
   hiddenLaunchers: Schema.optional(Schema.Array(Schema.String)),
   // When true, the Launch section carries a second row of the worktree's
-  // top package.json scripts, as many as fit on one line, ordered by the
+  // top scripts, as many as fit on one line, ordered by the
   // project's script sort. On by default; absent = on, explicit `false` is
   // the opt-out.
   launchScripts: Schema.optional(Schema.Boolean),

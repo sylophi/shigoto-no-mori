@@ -23,8 +23,8 @@ const catalog = (names: Names) => {
       ],
       [
         "run [<script>] [<args>...]",
-        "Run a package.json script here",
-        "Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them; with --json that list is {ok, packageManager, scripts: [{name, command}] in package.json order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where sort and order are the project's saved script sort and manual order.",
+        "Run a package.json, justfile or Makefile script here",
+        "Works inside any registered project's checkout or worktree. The scripts are package.json's, then the justfile's recipes as `just <recipe>` and the Makefile's targets as `make <target>`. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` (or `just <recipe>`, `make <target>`) at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them; with --json that list is {ok, packageManager, scripts: [{name, command, file, label}] in file order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where packageManager is null without a package.json, file and label are the file a script comes from and its name there (\"build\" for \"just build\"), and sort and order are the project's saved script sort and manual order.",
       ],
       [
         "launchers [-p <project>] [--catalog]",

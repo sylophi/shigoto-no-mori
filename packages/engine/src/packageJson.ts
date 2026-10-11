@@ -4,7 +4,7 @@
 // would put integer-like names first and keep one of each duplicate,
 // so after it vouches for the text, the members are walked in order.
 
-export type PackageScript = { readonly name: string; readonly command: string };
+type PackageScript = { readonly name: string; readonly command: string };
 
 const WHITESPACE = new Set([" ", "\t", "\n", "\r"]);
 

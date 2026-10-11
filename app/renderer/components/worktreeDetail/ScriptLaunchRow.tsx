@@ -32,7 +32,7 @@ interface ScriptLaunchRowProps {
 }
 
 // The scripts the row offers, empty while it has nothing to show (still
-// loading, switched off in Settings, or no package.json scripts). Read by
+// loading, switched off in Settings, or no scripts). Read by
 // LaunchSection, which hands them down and decides whether to exist on them.
 // `loading` is the scripts read still in flight with the row switched on.
 // `pinned`: the candidates are the scripts pinned to the row, so the row
@@ -69,7 +69,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   };
 }
 
-// A second row in the Launch section: the top package.json scripts, in the
+// A second row in the Launch section: the top scripts, in the
 // same order the Scripts section shows them (the project's sort mode,
 // most-used by default), trimmed to whatever fits on one line. Off-row
 // scripts stay reachable in the Scripts section; this row is a shortcut,

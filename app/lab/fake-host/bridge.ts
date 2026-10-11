@@ -549,6 +549,15 @@ function hostHandlersFor(
       return worktree;
     },
     "worktrees:resumeAgent": () => undefined,
+    "worktrees:describe": ({ worktreeId, title, description }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      if (title !== undefined) worktree.title = title || undefined;
+      if (description !== undefined) {
+        worktree.description = description || undefined;
+      }
+      return worktree;
+    },
     "agents:status": () => agentHarnesses,
     "agents:setHooks": async ({ harness, install }) => {
       await sleep(400);
@@ -777,6 +786,12 @@ function hostHandlersFor(
         "theme:check": "node scripts/check-theme-contract.mjs",
       },
       packageManager: "pnpm",
+      groups: [
+        {
+          file: "package.json",
+          labels: { dev: "dev", test: "test", "theme:check": "theme:check" },
+        },
+      ],
       usage: {
         dev: { lastUsed: Date.now() - 12 * 60_000, recentCount: 9 },
         test: { lastUsed: Date.now() - 26 * 60_000, recentCount: 3 },

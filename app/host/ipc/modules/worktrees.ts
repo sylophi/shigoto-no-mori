@@ -479,6 +479,14 @@ export const worktreesHandlers = {
       Ops.resumeAgent(project, worktreeId, harness, session),
     ),
 
+  describe: ({ projectId, worktreeId, title, description }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.describe(project, worktreeId, {
+        ...(title === undefined ? {} : { title }),
+        ...(description === undefined ? {} : { description }),
+      }),
+    ),
+
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),
 

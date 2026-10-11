@@ -1420,6 +1420,14 @@
     "grant": "changeCode",
     "tracksProjectUsage": true
   },
+  "worktrees:describe": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
   "worktrees:discardChanges": {
     "kind": "invoke",
     "scope": "host",

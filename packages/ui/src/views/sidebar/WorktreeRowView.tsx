@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { describePullRequest } from "../../lib/pullRequest.ts";
 import { cn } from "../../lib/utils.ts";
 import { TONE_MARK } from "../../primitives/status-dot.tsx";
@@ -89,7 +90,9 @@ function StackRailMark({
 // the same row plus its device badge. Everything else reads as local:
 // the PR off the peer's own map, script activity off its run store,
 // and a click opens the worktree's page under its device's route
-// (WorktreeRow reads them, useWorktreeEntry).
+// (WorktreeRow reads them, useWorktreeEntry). Right-click opens the
+// worktree's menu (WorktreeMenuView), which passes its trigger's props
+// through here.
 export function WorktreeRowView({
   worktree,
   device,
@@ -99,9 +102,13 @@ export function WorktreeRowView({
   stackRail,
   shelf,
   entry,
-}: Omit<WorktreeRowProps, "mirrorWorktreeId"> & { entry: WorktreeEntry }) {
+  ...button
+}: Omit<WorktreeRowProps, "mirrorWorktreeId"> & {
+  entry: WorktreeEntry;
+} & Omit<ComponentProps<"button">, "children">) {
   return (
     <WorktreeEntryView
+      {...button}
       worktree={worktree}
       pr={pr}
       stack={stack}

@@ -17,7 +17,7 @@ const SORT_OPTIONS: ReadonlyArray<{
   { value: "frequent", label: "Most used" },
   { value: "recent", label: "Most recently used" },
   { value: "alphabetical", label: "Alphabetical" },
-  { value: "manifest", label: "package.json" },
+  { value: "manifest", label: "File order" },
   { value: "manual", label: "Manual order" },
 ];
 
@@ -52,8 +52,7 @@ export function SortMenuView({
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        {/* Sized like the radio items above, which are text-sm. */}
-        <DropdownMenuItem onClick={onArrange} className="pl-1.5 text-sm">
+        <DropdownMenuItem onClick={onArrange}>
           Set manual order
         </DropdownMenuItem>
       </DropdownMenuContent>

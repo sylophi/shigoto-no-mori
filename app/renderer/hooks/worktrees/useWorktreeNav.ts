@@ -2,13 +2,20 @@
 // page lives under /devices/$deviceId, so its internal links target the
 // device the current host scope names. The paths themselves come from
 // lib/routePaths so the route tree and these links cannot drift apart.
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useEffect } from "react";
+import {
+  useMatchRoute,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
 import { inboxTopRow } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   routeDeviceId,
   rowDeviceId,
   WORKTREE_ROUTE_PATHS,
+  type WorktreeDialog,
 } from "@/lib/routePaths";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import { drawerKey, openScriptTab } from "@/store/terminalDrawer";
@@ -39,6 +46,7 @@ interface WorktreePageParams {
 
 export function useWorktreeNav() {
   const navigate = useNavigate();
+  const matchRoute = useMatchRoute();
   const { deviceId } = useHostScope();
 
   // `on` names the device whose page to open. The router can only
@@ -81,7 +89,23 @@ export function useWorktreeNav() {
 
   return {
     toWorktree(projectId: string, worktreeId: string, replace = false) {
-      go("detail", { projectId, worktreeId }, replace);
+      go("detail", { projectId, worktreeId }, replace, {});
+    },
+
+    // The worktree's page with `dialog` up, from off the page. Replacing
+    // the page when it is the one on screen, so Back doesn't land on it
+    // twice.
+    toWorktreeDialog(
+      projectId: string,
+      worktreeId: string,
+      dialog: WorktreeDialog,
+    ) {
+      const onScreen =
+        matchRoute({
+          to: WORKTREE_ROUTE_PATHS.detail,
+          params: { deviceId, projectId, worktreeId },
+        } as never) !== false;
+      go("detail", { projectId, worktreeId }, onScreen, { dialog });
     },
 
     // `amend` opens the changes page already set to rewrite the last
@@ -213,4 +237,24 @@ export function useWorktreeNav() {
       }
     },
   };
+}
+
+// Hands the page the dialog asked for in its route, and takes the ask
+// back off the URL, so Back or a reload doesn't open it again. The
+// page itself holds the open dialog: the dialogs close on their way to
+// another page, which a close that navigated would undo.
+export function useTakeWorktreeDialog(
+  open: (dialog: WorktreeDialog) => void,
+): void {
+  const { dialog } = useSearch({ strict: false }) as {
+    dialog?: WorktreeDialog;
+  };
+  const { projectId, worktreeId } = useScopedWorktreeParams();
+  const nav = useWorktreeNav();
+  useEffect(() => {
+    if (dialog === undefined) return;
+    open(dialog);
+    nav.toWorktree(projectId, worktreeId, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per ask: `open` and `nav` are fresh closures per render.
+  }, [dialog]);
 }

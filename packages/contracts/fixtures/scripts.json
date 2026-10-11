@@ -68,6 +68,16 @@
           "test": "vitest run"
         },
         "packageManager": "pnpm",
+        "groups": [
+          {
+            "file": "package.json",
+            "labels": {
+              "dev": "dev",
+              "build": "build",
+              "test": "test"
+            }
+          }
+        ],
         "usage": {
           "dev": {
             "lastUsed": 1791380000000,
@@ -87,8 +97,32 @@
       {
         "scripts": {},
         "packageManager": "bun",
+        "groups": [],
         "usage": {},
         "launchRow": []
+      },
+      {
+        "scripts": {
+          "just build": "go build ./...",
+          "make test": "go test ./..."
+        },
+        "packageManager": null,
+        "groups": [
+          {
+            "file": "justfile",
+            "labels": {
+              "just build": "build"
+            }
+          },
+          {
+            "file": "Makefile",
+            "labels": {
+              "make test": "test"
+            }
+          }
+        ],
+        "usage": {},
+        "launchRow": ["just build"]
       }
     ],
     "normalizes": [
@@ -98,6 +132,14 @@
             "dev": "vite"
           },
           "packageManager": "yarn",
+          "groups": [
+            {
+              "file": "package.json",
+              "labels": {
+                "dev": "dev"
+              }
+            }
+          ],
           "usage": {
             "dev": {
               "lastUsed": 1791380000000,
@@ -113,6 +155,14 @@
             "dev": "vite"
           },
           "packageManager": "yarn",
+          "groups": [
+            {
+              "file": "package.json",
+              "labels": {
+                "dev": "dev"
+              }
+            }
+          ],
           "usage": {
             "dev": {
               "lastUsed": 1791380000000,
@@ -127,6 +177,7 @@
       {
         "scripts": {},
         "packageManager": "deno",
+        "groups": [],
         "usage": {},
         "launchRow": []
       },
@@ -135,6 +186,7 @@
           "dev": "vite"
         },
         "packageManager": "npm",
+        "groups": [],
         "usage": {
           "dev": {
             "lastUsed": -1,
@@ -148,6 +200,7 @@
           "dev": "vite"
         },
         "packageManager": "npm",
+        "groups": [],
         "usage": {
           "dev": {
             "lastUsed": 0,
@@ -159,7 +212,16 @@
       {
         "scripts": {},
         "packageManager": "npm",
+        "groups": [],
         "usage": {}
+      },
+      {
+        "scripts": {
+          "dev": "vite"
+        },
+        "packageManager": "pnpm",
+        "usage": {},
+        "launchRow": []
       }
     ]
   },
@@ -174,11 +236,15 @@
         "scripts": [
           {
             "name": "dev",
-            "command": "vite"
+            "command": "vite",
+            "file": "package.json",
+            "label": "dev"
           },
           {
             "name": "build",
-            "command": "vite build"
+            "command": "vite build",
+            "file": "package.json",
+            "label": "build"
           }
         ],
         "usage": {
@@ -189,6 +255,20 @@
         },
         "sort": "manual",
         "order": ["build", "dev"]
+      },
+      {
+        "packageManager": null,
+        "scripts": [
+          {
+            "name": "just build",
+            "command": "go build ./...",
+            "file": "justfile",
+            "label": "build"
+          }
+        ],
+        "usage": {},
+        "sort": "frequent",
+        "order": []
       }
     ],
     "normalizes": [
@@ -199,7 +279,9 @@
             {
               "name": "dev",
               "command": "vite",
-              "description": "Start the dev server"
+              "description": "Start the dev server",
+              "file": "package.json",
+              "label": "dev"
             }
           ],
           "usage": {},
@@ -212,7 +294,9 @@
           "scripts": [
             {
               "name": "dev",
-              "command": "vite"
+              "command": "vite",
+              "file": "package.json",
+              "label": "dev"
             }
           ],
           "usage": {},
@@ -234,6 +318,18 @@
         "scripts": [],
         "usage": {},
         "sort": "manifest"
+      },
+      {
+        "packageManager": "pnpm",
+        "scripts": [
+          {
+            "name": "dev",
+            "command": "vite"
+          }
+        ],
+        "usage": {},
+        "sort": "manifest",
+        "order": []
       }
     ]
   },
