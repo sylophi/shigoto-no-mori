@@ -11,9 +11,11 @@
 // coming back should find the same project open. Session-only, since
 // the project of the page on screen opens on its own (below).
 import { useEffect } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import type { Project } from "@shared/schemas";
+import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { rowDeviceId } from "@/lib/routePaths";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { projectGroupKey } from "./buildSidebarRows";
@@ -31,6 +33,26 @@ const store = createExternalStore<{
 export function setOpenProject(groupKey: string | null): void {
   const { key, followed } = store.get();
   if (key !== groupKey) store.publish({ key: groupKey, followed });
+}
+
+// The tree, open on a project: the inbox's way from a worktree to its
+// project. `deviceId` is the peer holding the project, undefined for
+// this machine's. On a phone the tree is a tab of its own.
+export function useGoToProject(): (
+  project: Project,
+  deviceId: string | undefined,
+) => void {
+  const phone = usePhoneLayout();
+  const navigate = useNavigate();
+  const { mutate: setView } = useSetSidebarView();
+  return (project, deviceId) => {
+    setOpenProject(projectGroupKey(project, deviceId));
+    if (phone) {
+      void navigate({ to: "/forest/$view", params: { view: "projects" } });
+    } else {
+      setView("projects");
+    }
+  };
 }
 
 // The open project, following the page on screen: the project a page

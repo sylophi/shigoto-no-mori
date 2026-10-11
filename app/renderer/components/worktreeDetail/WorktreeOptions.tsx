@@ -15,7 +15,11 @@ import {
   useSetAutoPull,
   useSetShelved,
 } from "@/hooks/worktrees/useWorktreeMutations";
-import { isManagedWorktree, type Worktree } from "@shared/schemas";
+import {
+  canSetAutoPull,
+  isManagedWorktree,
+  type Worktree,
+} from "@shared/schemas";
 import { FooterVerb, LABEL_RANK } from "./footerFit";
 
 export function WorktreeOptions({
@@ -32,10 +36,7 @@ export function WorktreeOptions({
   const setAutoPull = useSetAutoPull();
   const setShelved = useSetShelved();
   const target = { projectId: worktree.projectId, worktreeId: worktree.id };
-  // Once on, auto-pull stays switchable even if the upstream vanishes,
-  // so it can be turned off again.
-  const canAutoPull =
-    worktree.autoPull || (worktree.hasUpstream && !worktree.detached);
+  const canAutoPull = canSetAutoPull(worktree);
   // The primary checkout is the project itself, never on a shelf.
   const canShelve = isManagedWorktree(worktree);
   // Set when a row hands off to a dialog: focus then stays out of the

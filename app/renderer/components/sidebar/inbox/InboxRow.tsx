@@ -1,10 +1,3 @@
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { MaybeHostScope } from "@/hooks/remote/useHostScope";
-import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {
@@ -20,7 +13,6 @@ import {
   type SidebarDeviceBadge,
 } from "../DeviceBadge";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import type { StackPosition } from "@shared/pullRequestStack";
 import {
   activityMark,
@@ -28,6 +20,7 @@ import {
   type WorktreeRowState,
 } from "../useWorktreeRowState";
 import { WorktreeEntry } from "../WorktreeEntry";
+import { WorktreeMenu } from "../WorktreeMenu";
 import type { InboxShelf } from "../sidebarRow";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
@@ -54,13 +47,12 @@ interface InboxRowProps {
 //   feat/the-branch
 //   [kind] dirname                             ±3  ↑2  #142
 //
-// Right-click opens the project's menu, the same list the tree hangs
-// off a project header's `…`. The inbox has no project headers, so this
-// is the only place its project-level actions can live. A peer's row
-// wears its device badge beside the project name, opens under that
-// device's route, and scopes that menu to the peer. Asleep, or taking no
-// commands from here, it keeps the row (last known state) and drops the
-// menu, as the tree's project header drops its actions.
+// Right-click opens the worktree's menu (WorktreeMenu), led by the way
+// to its project in the tree, where the project's own actions hang off
+// its header. A peer's row wears its device badge beside the
+// project name, opens under that device's route, and scopes the menu to
+// the peer. Asleep, or taking no commands from here, it keeps the row
+// (last known state) and the menu only what reads it.
 export function InboxRow({
   worktree,
   project,
@@ -75,10 +67,7 @@ export function InboxRow({
     deviceId: mirror?.deviceId,
     worktreeId: mirrorWorktreeId,
   });
-  const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
-  const peerApi = useCommandableDeviceApi(device?.deviceId);
 
-  // An element for the trigger to `render`, so it wraps no extra div.
   const row = (
     <WorktreeEntry
       worktree={worktree}
@@ -107,20 +96,14 @@ export function InboxRow({
     />
   );
 
-  if (device !== undefined && peerApi === undefined) return row;
   return (
-    <ContextMenu onOpenChange={onOpenChange}>
-      <ContextMenuTrigger render={row} />
-      <ContextMenuContent>
-        <MaybeHostScope deviceId={device?.deviceId ?? ""} api={peerApi}>
-          <ProjectMenuItems
-            project={project}
-            subject="worktree"
-            removeArm={removeArm}
-          />
-        </MaybeHostScope>
-      </ContextMenuContent>
-    </ContextMenu>
+    <WorktreeMenu
+      worktree={worktree}
+      pr={pr}
+      deviceId={device?.deviceId}
+      row={row}
+      project={project}
+    />
   );
 }
 

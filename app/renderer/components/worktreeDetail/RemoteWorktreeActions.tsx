@@ -19,9 +19,13 @@
 // does the local footer's (PeerTransferActions.tsx).
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { RefreshCw, Shovel } from "lucide-react";
-import type { TransferPartProps } from "./PeerTransferActions";
+import {
+  hasManageableMirror,
+  type TransferOffers,
+  type TransferPartProps,
+} from "./PeerTransferActions";
 import { OptionAction } from "./WorktreeOptions";
-import { isRealBranch, type Project } from "@shared/schemas";
+import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
@@ -48,14 +52,10 @@ export function RemoteTransferActions(props: TransferPartProps) {
   const transferable =
     granted && !worktree.detached && isRealBranch(worktree.branch);
   if (!transferable && open === null) return null;
-  return <TransferActions {...props} buttons={transferable} />;
+  return <TransferActions {...props} />;
 }
 
-// Whether the buttons show: a dialog held open past the grant shows
-// alone.
-type ButtonsProps = TransferPartProps & { buttons: boolean };
-
-function TransferActions(props: ButtonsProps) {
+function TransferActions(props: TransferPartProps) {
   const { project, part } = props;
   const localProject = useLocalProjectForIdentity(project.identity);
   // A project git couldn't identify can never match a local one, so no
@@ -96,31 +96,54 @@ function NoIdentityNote() {
   );
 }
 
+// A peer's worktree with a transferSource, under the peer's scope
+// (TransferOffers): the transfers also wait on the grant. A dialog held
+// open past it shows alone.
+export function useRemoteTransferOffers(
+  worktree: Worktree,
+): TransferOffers & { deviceLabel: string } {
+  const { granted } = useCommandAccess();
+  const { deviceId } = useHostScope();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
+  const links = useWorktreeMirrorLinks(worktree);
+  const mirrorBlocker = useMirrorHereBlocker(deviceLabel);
+  // The branch is checked again for a dialog held open past it (the
+  // buttons show with the dialog only while it still holds).
+  const canOpen =
+    granted &&
+    !worktree.detached &&
+    isRealBranch(worktree.branch) &&
+    links.length === 0;
+  return {
+    deviceLabel,
+    // Mirror is the peer's send followed by a live two-way mirror, see
+    // below. It only exists in the app.
+    mirror: canOpen && canForwardPorts,
+    mirrorBlocker,
+    transplant: canOpen && !worktree.isPrimary,
+    mirroring: hasManageableMirror(links),
+  };
+}
+
 function TransferButtons({
   worktree,
   project,
   part,
   open,
   setOpen,
-  buttons,
   sourceIdentity,
   localProject,
-}: ButtonsProps & {
+}: TransferPartProps & {
   sourceIdentity: string;
   localProject: Project | undefined;
 }) {
-  const { deviceId } = useHostScope();
-  const deviceLabel = useRemoteDeviceLabel(deviceId);
-  const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
-  const blocker = useMirrorHereBlocker(deviceLabel);
+  const offers = useRemoteTransferOffers(worktree);
+  const { deviceLabel } = offers;
   if (part === "option") {
     // Transplant is destructive on the remote side, so it opens the
-    // review dialog: the dialog is the confirmation. Not while
-    // mirrored, like the local footer's.
+    // review dialog: the dialog is the confirmation.
     return (
-      buttons &&
-      !worktree.isPrimary &&
-      !mirrored && (
+      offers.transplant && (
         <OptionAction
           icon={<Shovel />}
           label="Transplant"
@@ -149,13 +172,13 @@ function TransferButtons({
           withdraws the button, not an OPEN dialog: the mirror it
           starts is what withdraws it, and the dialog's last step (the
           report) must stay up. */}
-      {buttons && canForwardPorts && !mirrored && (
+      {offers.mirror && (
         <FooterActionButton
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror"
           tip="Keep a live copy of this worktree on this device"
-          disabledReason={blocker}
+          disabledReason={offers.mirrorBlocker}
           onClick={() => setOpen("mirror")}
         />
       )}

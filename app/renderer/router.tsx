@@ -27,7 +27,12 @@ import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
-import { PROJECT_ROUTE_PATHS, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import {
+  PROJECT_ROUTE_PATHS,
+  WORKTREE_DIALOGS,
+  WORKTREE_ROUTE_PATHS,
+  type WorktreeDialog,
+} from "@/lib/routePaths";
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -186,6 +191,15 @@ function validateDiffSearch(search: Record<string, unknown>): { amend?: true } {
   return search["amend"] === true ? { amend: true } : {};
 }
 
+// `dialog` opens the worktree page with one of its dialogs up
+// (useTakeWorktreeDialog).
+function validateDetailSearch(search: Record<string, unknown>): {
+  dialog?: WorktreeDialog;
+} {
+  const dialog = WORKTREE_DIALOGS.find((d) => d === search["dialog"]);
+  return dialog === undefined ? {} : { dialog };
+}
+
 // The device pages: every worktree and project page, for this machine
 // and every peer alike, under /devices/$deviceId. withDeviceScope
 // resolves the device (this machine's id to window.api, a peer's to its
@@ -203,6 +217,7 @@ const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.detail,
   component: withDeviceScope(WorktreeDetail),
+  validateSearch: validateDetailSearch,
   remountDeps: ({ params }) => params,
 });
 

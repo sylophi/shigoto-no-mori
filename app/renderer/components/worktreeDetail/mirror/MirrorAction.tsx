@@ -10,7 +10,7 @@
 // whose session is not in hand. A runner with no session up leaves the
 // button disabled, saying so: nothing to drive the mirror through, but
 // the worktree is still mirrored.
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
@@ -33,8 +33,21 @@ import { cn } from "@/lib/utils";
 import { MirrorManageDialog } from "./MirrorManageDialog";
 import { useMirrorView } from "./useMirrorView";
 
-export function MirrorAction({ worktree }: { worktree: Worktree }) {
+export function MirrorAction({
+  worktree,
+  asked,
+  onOpened,
+}: {
+  worktree: Worktree;
+  // The page was asked to open the running mirror's dialog (the
+  // sidebar's worktree menu), which the first one it can drive takes.
+  asked: boolean;
+  onOpened: () => void;
+}) {
   const links = useWorktreeMirrorLinks(worktree);
+  const first = links.find(
+    (link) => link.session !== undefined && link.runnerApi !== undefined,
+  );
   return links.map((link) =>
     link.session === undefined ? null : (
       <MirrorLinkAction
@@ -42,6 +55,8 @@ export function MirrorAction({ worktree }: { worktree: Worktree }) {
         worktree={worktree}
         link={link}
         session={link.session}
+        asked={asked && link === first}
+        onOpened={onOpened}
       />
     ),
   );
@@ -51,10 +66,14 @@ function MirrorLinkAction({
   worktree,
   link,
   session,
+  asked,
+  onOpened,
 }: {
   worktree: Worktree;
   link: WorktreeMirrorLink;
   session: MirrorSession;
+  asked: boolean;
+  onOpened: () => void;
 }) {
   const { deviceId: pageDeviceId } = useHostScope();
   const nav = useWorktreeNav();
@@ -62,6 +81,13 @@ function MirrorLinkAction({
   // re-opens the session under a new one, and the dialog stays. A stop
   // ends with the link leaving the page and the dialog with it.
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!asked) return;
+    setOpen(true);
+    onOpened();
+    // Once per ask: `onOpened` is a fresh closure per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked]);
   // A runner that went away takes the dialog with it, and it stays
   // closed when the runner is back.
   if (open && link.runnerApi === undefined) setOpen(false);
