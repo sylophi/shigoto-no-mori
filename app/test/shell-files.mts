@@ -8,7 +8,9 @@
 //     to read, and the exit path's mode is kept,
 //   - the bridge publishes the updater's state, consumes a request
 //     waiting at its start and one the CLI writes later, drops a stale
-//     one, and leaves no claimed file behind.
+//     one, and leaves no claimed file behind,
+//   - a fresh request written while the bridge's first consume is still
+//     reading a stale one is handled, not deleted with the stale one.
 //
 // Run: pnpm test shell-files.
 import assert from "node:assert/strict";
@@ -17,6 +19,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -24,12 +27,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { afterEach, beforeEach, it, vi } from "vitest";
-import { initDataDirAt } from "@host/lib/util/paths";
+import * as Stream from "effect/Stream";
+import { afterAll, afterEach, beforeEach, it, vi } from "vitest";
+import { dataDir, initDataDirAt } from "@host/lib/util/paths";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
@@ -48,6 +54,16 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "shell-files-"));
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+// The bridge's data dir, once per process like the app's.
+initDataDirAt(mkdtempSync(join(tmpdir(), "shell-files-data-")));
+afterAll(() => rmSync(dataDir(), { recursive: true, force: true }));
+// `sm update` asking, at the time given.
+const request = (requestedAt: number) =>
+  writeFileSync(
+    join(dataDir(), "updater-request.json"),
+    JSON.stringify({ action: "install", requestedAt }),
+  );
 
 const onPlatform = <A, E>(
   effect: Effect.Effect<A, E, NodeServices.NodeServices>,
@@ -80,15 +96,9 @@ it("the running files: whole on FileSystem, checked, absent as null", async () =
 });
 
 it("the updater's bridge: publishes the state, consumes a waiting request and a later one, drops a stale one", async () => {
-  initDataDirAt(dir);
-  const request = (requestedAt: number) =>
-    writeFileSync(
-      join(dir, "updater-request.json"),
-      JSON.stringify({ action: "install", requestedAt }),
-    );
   await onPlatform(publishUpdaterState({ kind: "idle" }));
   assert.deepEqual(
-    JSON.parse(readFileSync(join(dir, "updater.json"), "utf8")),
+    JSON.parse(readFileSync(join(dataDir(), "updater.json"), "utf8")),
     { pid: process.pid, appVersion: "9.9.9", state: { kind: "idle" } },
   );
   const asked: string[] = [];
@@ -100,17 +110,99 @@ it("the updater's bridge: publishes the state, consumes a waiting request and a 
       updaterBridge((action) => asked.push(action)).pipe(Scope.provide(scope)),
     );
     assert.deepEqual(asked, [], "a stale request was acted on");
-    assert.equal(existsSync(join(dir, "updater-request.json")), false);
+    assert.equal(existsSync(join(dataDir(), "updater-request.json")), false);
     // The CLI asks while the app runs.
     request(Date.now());
     await waitFor(() => asked.length === 1, "the request to be consumed");
     assert.deepEqual(asked, ["install"]);
     await waitFor(
       () =>
-        !existsSync(join(dir, "updater-request.json")) &&
-        !existsSync(join(dir, "updater-request.json.consuming")),
+        !existsSync(join(dataDir(), "updater-request.json")) &&
+        !existsSync(join(dataDir(), "updater-request.json.consuming")),
       "the claimed request to go",
     );
+  } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+});
+
+it("the updater's bridge: a request written while the first consume reads a stale one is still handled", async () => {
+  const requestPath = join(dataDir(), "updater-request.json");
+  const claimed = `${requestPath}.consuming`;
+  request(Date.now() - 10 * 60_000);
+  const asked: string[] = [];
+  const scope = Scope.makeUnsafe();
+  try {
+    await onPlatform(
+      Effect.gen(function* () {
+        const real = yield* FileSystem.FileSystem;
+        const fresh = yield* Deferred.make<void>();
+        const heard = yield* Deferred.make<void>();
+        const firstRemoved = yield* Deferred.make<void>();
+        let reads = 0;
+        // The real file system, with the first consume's read held open:
+        // it has read the stale request when the CLI writes a fresh one,
+        // and it finishes once the watch has heard that. Renames are
+        // synchronous so a consume that claims doesn't wait on the disk,
+        // and a later read waits for the first consume's cleanup, the
+        // order that loses the fresh request when the two overlap.
+        const fs: FileSystem.FileSystem = {
+          ...real,
+          rename: (from, to) =>
+            Effect.suspend(() => {
+              try {
+                renameSync(from, to);
+                return Effect.void;
+              } catch {
+                return real.rename(from, to);
+              }
+            }),
+          readFileString: (path, encoding) =>
+            path !== claimed
+              ? real.readFileString(path, encoding)
+              : ++reads === 1
+                ? Effect.gen(function* () {
+                    const stale = readFileSync(path, "utf8");
+                    request(Date.now());
+                    yield* Deferred.succeed(fresh, undefined);
+                    yield* Deferred.await(heard);
+                    return stale;
+                  })
+                : Deferred.await(firstRemoved).pipe(
+                    Effect.andThen(real.readFileString(path, encoding)),
+                  ),
+          remove: (path, options) =>
+            real
+              .remove(path, options)
+              .pipe(
+                Effect.ensuring(
+                  path === claimed
+                    ? Deferred.succeed(firstRemoved, undefined)
+                    : Effect.void,
+                ),
+              ),
+          // The watch hears the fresh request, and nothing else.
+          watch: () =>
+            Stream.fromEffect(
+              Deferred.await(fresh).pipe(
+                Effect.andThen(Deferred.succeed(heard, undefined)),
+                Effect.as<FileSystem.WatchEvent>({
+                  _tag: "Create",
+                  path: "updater-request.json",
+                }),
+              ),
+            ).pipe(Stream.concat(Stream.never)),
+        };
+        yield* updaterBridge((action) => asked.push(action)).pipe(
+          Scope.provide(scope),
+          Effect.provideService(FileSystem.FileSystem, fs),
+        );
+      }),
+    );
+    await waitFor(() => asked.length === 1, "the fresh request to be consumed");
+    assert.deepEqual(asked, ["install"]);
+    assert.equal(existsSync(requestPath), false);
+    assert.equal(existsSync(claimed), false);
   } finally {
     await Effect.runPromise(Scope.close(scope, Exit.void));
   }

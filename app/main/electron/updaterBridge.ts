@@ -67,6 +67,9 @@ export const updaterBridge = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const consumingPath = () => updateRequestPath() + ".consuming";
+    // The boot's consume and the watch's share one claimed file, so they
+    // take turns.
+    const turns = yield* Semaphore.make(1);
     const consume = Effect.gen(function* () {
       yield* fs.rename(updateRequestPath(), consumingPath());
       const request = yield* readJson(
@@ -82,6 +85,7 @@ export const updaterBridge = (
       // Nothing to consume, or a dropped request: the CLI times out and
       // says so.
       Effect.ignore,
+      turns.withPermits(1),
     );
     // A data dir that is missing or goes (a nuke) ends the watch; the
     // next launch watches afresh. Watched before the first consume, so
