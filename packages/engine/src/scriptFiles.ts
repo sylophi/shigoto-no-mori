@@ -21,9 +21,11 @@ type RunnerScript = {
 // lookup rules: just matches "justfile" and ".justfile" in any case,
 // make tries GNUmakefile, makefile, then Makefile. Undefined when there
 // is none. Matched against the listing rather than stat'ed, which on a
-// case-insensitive disk would answer for the wrong spelling.
+// case-insensitive disk would answer for the wrong spelling. The listing
+// is taken in name order, so two spellings side by side always pick the
+// same one (".justfile" first).
 export const findJustfile = (files: ReadonlyArray<string>) =>
-  files.find((name) => {
+  files.toSorted().find((name) => {
     const lower = name.toLowerCase();
     return lower === "justfile" || lower === ".justfile";
   });
