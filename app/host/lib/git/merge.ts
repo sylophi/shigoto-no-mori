@@ -18,9 +18,13 @@ import {
 } from "./operation";
 import { countCommits, ownCommitCounts, resolveCommit } from "./refs";
 
+// `countsOnly` leaves out the merge's conflicts and the incoming
+// subject, for a move that makes no merge (a hard reset): the trial
+// merge is the slow part.
 export async function readMergePreview(
   worktreePath: string,
   ref: string,
+  countsOnly = false,
 ): Promise<MergePreview> {
   const target = await resolveCommit(worktreePath, ref);
   const [incoming, ownCounts, merged] = await Promise.all([
@@ -29,18 +33,20 @@ export async function readMergePreview(
     // The tree a merge would make, then the paths it left conflicted.
     // Exit 1 on a conflict, so read leniently. Unrelated histories fail
     // outright, and the merge itself says why.
-    runLenient(worktreePath, [
-      "merge-tree",
-      "--write-tree",
-      "--name-only",
-      "--no-messages",
-      "-z",
-      "HEAD",
-      target,
-    ]),
+    countsOnly
+      ? ""
+      : runLenient(worktreePath, [
+          "merge-tree",
+          "--write-tree",
+          "--name-only",
+          "--no-messages",
+          "-z",
+          "HEAD",
+          target,
+        ]),
   ]);
   const incomingSubject =
-    incoming === 1
+    incoming === 1 && !countsOnly
       ? (
           await run(worktreePath, ["log", "-1", "--format=%s", target, "--"])
         ).trim()

@@ -172,7 +172,8 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string,
       ref: string,
       headHash: string | undefined,
-    ) => host("mergePreview", projectId, worktreeId, ref, headHash),
+      countsOnly: boolean,
+    ) => host("mergePreview", projectId, worktreeId, ref, headHash, countsOnly),
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),

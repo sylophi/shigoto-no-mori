@@ -517,7 +517,11 @@ export const worktreesHandlers: Handlers<
       resolveConflict(wt.path, input.path, input.side),
     ),
   mergePreview: async (input) =>
-    readMergePreview(await findWorktreePathOrThrow(input), input.ref),
+    readMergePreview(
+      await findWorktreePathOrThrow(input),
+      input.ref,
+      input.countsOnly,
+    ),
   mergeBranch: async (input) => {
     const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
       mergeBranch(wt.path, input.ref, input.method, input.message),

@@ -367,87 +367,95 @@ export function resetSoft(
   });
 }
 
-// Refuses a `reset --hard` to `target` that would overwrite an ignored
-// file. Ignored files never appear in `status`, but the reset
-// overwrites them all the same where `target` tracks a file at their
-// path (e.g. a carried-over `.env` colliding with a committed one), and
-// their content was never in git, so nothing can recover it. The only
-// paths that can collide are those `target` tracks and HEAD doesn't
-// (an ignored file can't be tracked): one divergence-sized listing
-// instead of two whole-tree ones. `--no-renames` matters because
-// rename detection would report a rename as R, not A, and its
-// destination path would slip through.
-// git itself then says which candidates are ignored files on disk
-// (`ls-files -o -i` with the candidates as pathspecs): a plain
-// exists-check would false-positive on case-insensitive APFS, where a
-// case-only rename "exists" locally as the tracked file under its old
-// casing. That is a state `reset --hard` handles fine, and this guard
-// must not turn into a dead end.
-async function refuseIgnoredCollisions(
-  worktreePath: string,
-  target: string,
-  ref: string,
-): Promise<void> {
-  const added = splitZ(
-    await run(worktreePath, [
-      "diff",
-      "--name-only",
-      "--no-renames",
-      "--diff-filter=A",
-      "-z",
-      "HEAD",
-      target,
-    ]),
-  );
-  const collisions = (
-    await runChunked(
-      worktreePath,
-      ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
-      added,
-    )
-  ).flatMap(splitZ);
-  if (collisions.length > 0) {
-    const shown = collisions.slice(0, 3).join(", ");
-    const rest =
-      collisions.length > 3 ? ` (+${collisions.length - 3} more)` : "";
-    throw new Error(
-      `This would replace ignored local file(s) that ${ref} tracks: ${shown}${rest}. Move them aside first.`,
-    );
-  }
-}
-
 // `git reset --hard`: the branch, the index and the working tree all
 // move to `ref`, wherever it is. What it throws away can come back:
-// the commits through the previous HEAD it returns, and the
-// uncommitted files (untracked ones too, which the reset overwrites
-// where `ref` tracks the same path) through a discard snapshot taken
-// first, for restoreDiscard. An ignored file it would overwrite can't
-// come back, so that refuses. The undo pins HEAD where the reset left
-// it (`expectHead`) and puts the snapshot back after (`restore`), in
-// one go.
+// the commits through the previous HEAD it returns, and the files it
+// overwrites through a discard snapshot taken first, for
+// restoreDiscard. Those are the uncommitted changes to tracked files,
+// and the untracked files where `ref` tracks the same path. Every
+// other untracked file stays as it is. `expectHead` pins HEAD to where
+// the page that asked last saw it.
+//
+// The only paths the reset can overwrite untracked are those `ref`
+// tracks and HEAD doesn't, so one divergence-sized listing finds them.
+// `--no-renames` matters because rename detection would report a
+// rename as R, not A, and its destination path would slip through. Git
+// itself then says which of those are on disk (`ls-files -o` with them
+// as pathspecs): a plain exists-check would false-positive on
+// case-insensitive APFS, where a case-only rename "exists" locally as
+// the tracked file under its old casing, a state `reset --hard`
+// handles fine. An ignored file among them (a carried-over `.env`
+// colliding with a committed one) never was in git, and a snapshot
+// can't hold it either, so that refuses.
+//
+// The undo resets back to the previous HEAD, pinned to where this one
+// left it, and puts the snapshot back (`restore`). Anything changed
+// since would be overwritten by it, so that refuses too.
 export function resetHard(
   worktreePath: string,
   ref: string,
   expectHead: string | undefined,
   restore: string | undefined,
-): Promise<{ previousHead: string; snapshot: string | null }> {
+): Promise<{ previousHead: string; head: string; snapshot: string | null }> {
   return onIndex(worktreePath, async () => {
-    // `status` is the costliest read, and a refusal only wastes it.
-    const [, head, target, changed] = await Promise.all([
+    const [, previousHead, target, changed] = await Promise.all([
       refuseMidOperation(worktreePath),
       headAt(worktreePath, expectHead),
       resolveCommit(worktreePath, ref),
-      listChangedFiles(worktreePath, { untracked: "all" }),
+      listChangedFiles(worktreePath),
     ]);
-    await refuseIgnoredCollisions(worktreePath, target, ref);
-    const paths = changed.flatMap((f) =>
-      f.prevPath ? [f.path, f.prevPath] : [f.path],
+    const added = splitZ(
+      await run(worktreePath, [
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--diff-filter=A",
+        "-z",
+        "HEAD",
+        target,
+      ]),
     );
+    const others = (extra: string[]) =>
+      runChunked(
+        worktreePath,
+        ["ls-files", "-z", "--others", "--exclude-standard", ...extra],
+        added,
+      ).then((out) => out.flatMap(splitZ));
+    const [overwritten, ignored] = await Promise.all([
+      others([]),
+      others(["--ignored"]),
+    ]);
+    if (ignored.length > 0) {
+      const shown = ignored.slice(0, 3).join(", ");
+      const rest = ignored.length > 3 ? ` (+${ignored.length - 3} more)` : "";
+      throw new Error(
+        `This would replace ignored local file(s) that ${ref} tracks: ${shown}${rest}. Move them aside first.`,
+      );
+    }
+    const paths = [
+      ...changed
+        .filter((f) => !isUntracked(f))
+        .flatMap((f) => (f.prevPath ? [f.path, f.prevPath] : [f.path])),
+      ...overwritten,
+    ];
+    if (restore && paths.length > 0) {
+      throw new Error(
+        "Files changed since the hard reset. Commit, stash, or discard them first.",
+      );
+    }
     const snapshot =
       paths.length > 0 ? await snapshotPaths(worktreePath, paths) : null;
-    await run(worktreePath, ["reset", "--hard", "--end-of-options", target]);
+    try {
+      await run(worktreePath, ["reset", "--hard", "--end-of-options", target]);
+    } catch (err) {
+      if (!snapshot) throw err;
+      throw new Error(
+        `${(err as Error).message}\nThe uncommitted changes were snapshotted first, as ${snapshot}.`,
+        { cause: err },
+      );
+    }
     if (restore) await restoreSnapshot(worktreePath, restore);
-    return { previousHead: head, snapshot };
+    return { previousHead, head: target, snapshot };
   });
 }
 

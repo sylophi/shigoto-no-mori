@@ -33,7 +33,7 @@ export function HardResetDialog({
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId, branch } = worktree;
   const [ref, setRef] = useState(initialRef);
-  const preview = useMergePreview(worktree, ref);
+  const preview = useMergePreview(worktree, ref, true);
   const { data: operation } = useWorktreeOperation(worktree);
   const reset = useResetHard();
   const undo = useUndoResetHard();
@@ -51,14 +51,20 @@ export function HardResetDialog({
 
   const submit = () => {
     if (!ready) return;
+    // Pinned to the HEAD the preview counted from.
+    const expectHead = worktree.recentCommits[0]?.hash;
     reset.mutate(
-      { projectId, worktreeId, ref },
+      { projectId, worktreeId, ref, expectHead },
       {
-        onSuccess: ({ previousHead, snapshot, worktree: after }) => {
+        onSuccess: ({ previousHead, head, snapshot, worktree: after }) => {
           onClose();
-          const head = after.recentCommits[0]?.hash;
-          if (!head) return;
-          nav.toCommit(projectId, worktreeId, head, true);
+          // The page's own hash for it, which the History list marks.
+          nav.toCommit(
+            projectId,
+            worktreeId,
+            after.recentCommits[0]?.hash ?? head,
+            true,
+          );
           toast(`Hard reset ${branch} to ${ref}`, {
             duration: UNDO_TOAST_MS,
             action: {

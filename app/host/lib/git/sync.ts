@@ -74,12 +74,12 @@ export async function overwriteFromUpstream(
       "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
     );
   }
-  await resetHard(
-    worktreePath,
-    await upstreamRef(worktreePath),
-    undefined,
-    undefined,
-  );
+  // By its full name: a branch or tag called "origin/feature" would
+  // shadow the short one.
+  const upstream = (
+    await run(worktreePath, ["rev-parse", "--symbolic-full-name", "@{u}"])
+  ).trim();
+  await resetHard(worktreePath, upstream, undefined, undefined);
 }
 
 // Publish: push the current branch to the first configured remote with

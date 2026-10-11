@@ -454,6 +454,7 @@ async function main() {
       // Clean: nothing to snapshot.
       assert.deepEqual(await resetHard(repo, root, undefined, undefined), {
         previousHead: second,
+        head: root,
         snapshot: null,
       });
       git(repo, "reset", "-q", "--hard", second);
@@ -462,31 +463,46 @@ async function main() {
       // Untracked, and tracked on `side`: the reset overwrites it.
       write(repo, "side.txt", "mine\n");
       write(repo, "loose.txt", "loose\n");
-      const { previousHead, snapshot } = await resetHard(
+      const { previousHead, head, snapshot } = await resetHard(
         repo,
         "side",
         undefined,
         undefined,
       );
       assert.equal(previousHead, second);
+      assert.equal(head, side);
       assert.ok(snapshot);
       assert.equal(rev(repo, "HEAD"), side);
+      // Only what the reset overwrote, not what it left alone.
+      assert.deepEqual(
+        git(repo, "diff", "--name-only", `${second}`, snapshot)
+          .split("\n")
+          .filter(Boolean),
+        ["b.txt", "side.txt"],
+      );
       assert.equal(read(repo, "a.txt"), "one\ntwo\nthree\n");
       assert.equal(read(repo, "b.txt"), "bee\n");
       assert.equal(read(repo, "side.txt"), "side\n");
       assert.equal(read(repo, "loose.txt"), "loose\n", "untracked stays");
 
       // The undo: back, pinned to where the reset left HEAD, and the
-      // snapshot put back.
+      // snapshot put back. Not over a later edit, which it would lose.
       await assert.rejects(
-        resetHard(repo, previousHead, second, undefined),
+        resetHard(repo, previousHead, second, snapshot),
         /branch has moved on/,
       );
+      write(repo, "b.txt", "later\n");
+      await assert.rejects(
+        resetHard(repo, previousHead, side, snapshot),
+        /changed since the hard reset/,
+      );
+      git(repo, "checkout", "--", "b.txt");
       await resetHard(repo, previousHead, side, snapshot);
       assert.equal(rev(repo, "HEAD"), second);
       assert.equal(read(repo, "a.txt"), "second\n");
       assert.equal(read(repo, "b.txt"), "bee edited\n");
       assert.equal(read(repo, "side.txt"), "mine\n");
+      assert.equal(read(repo, "loose.txt"), "loose\n");
 
       await assert.rejects(
         resetHard(repo, "nowhere", undefined, undefined),

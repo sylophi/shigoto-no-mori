@@ -196,9 +196,14 @@ export function useAbortOperation() {
   );
 }
 
-// How the worktree's branch and `ref` stand, for the merge dialog. A
-// ref that names nothing is the dialog's to say, not a toast's.
-export function useMergePreview(worktree: Worktree, ref: string) {
+// How the worktree's branch and `ref` stand, for the merge and hard
+// reset dialogs. A ref that names nothing is the dialog's to say, not a
+// toast's.
+export function useMergePreview(
+  worktree: Worktree,
+  ref: string,
+  countsOnly = false,
+) {
   const { api, keys } = useHostScope();
   const { projectId, id: worktreeId } = worktree;
   return useQuery<MergePreview>({
@@ -207,9 +212,16 @@ export function useMergePreview(worktree: Worktree, ref: string) {
       worktreeId,
       ref,
       worktree.recentCommits[0]?.hash,
+      countsOnly,
     ),
     queryFn: ref
-      ? () => api.worktrees.mergePreview({ projectId, worktreeId, ref })
+      ? () =>
+          api.worktrees.mergePreview({
+            projectId,
+            worktreeId,
+            ref,
+            countsOnly,
+          })
       : skipToken,
     retry: false,
     meta: { silentError: true },
@@ -244,7 +256,11 @@ export function useMergeBranch() {
 export function useResetHard() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<ResetHardResult, Error, Scope & { ref: string }>({
+  return useMutation<
+    ResetHardResult,
+    Error,
+    Scope & { ref: string; expectHead?: string }
+  >({
     mutationFn: (input) => api.worktrees.resetHard(input),
     onSuccess: (data, vars) =>
       invalidateWorkingTree(queryClient, keys, vars, data.worktree),
