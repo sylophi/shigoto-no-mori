@@ -3,7 +3,7 @@
 // channel of a REAL DIRECT websocket between the two fixtures,
 // brokered by the stub device hub exactly as production does
 // (test/lib/directBoot.mts). Nothing here is a double on the sync path
-// itself: device A registers the REAL sync contract and handlers on a
+// itself: the listener registers the REAL sync contract and handlers on a
 // real direct listener, the handlers run the REAL engine in-process,
 // which runs REAL git against fixture repos,
 // and the receiver drives the REAL link helpers (host/lib/sync/
@@ -102,7 +102,12 @@ import {
   waitFor,
 } from "./lib/checkKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
-import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
+import {
+  bootDirectWire,
+  DIALER,
+  type DirectWire,
+  LISTENER,
+} from "./lib/directBoot.mts";
 import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { addProject, secondEngine } from "./lib/smBinary.mts";
 
@@ -132,17 +137,18 @@ const sendWorktreeHere = (
 ) => runHost(syncHandlers.sendWorktree(...args));
 const sendWorktree = (...args: Parameters<typeof sendWorktreeOn>) =>
   runHost(sendWorktreeOn(...args));
-// The source link to device A's worktree, for the length of `use`.
+// The source link to the listener's worktree, for the length of `use`.
 const withPeerSource = <T, E>(
   worktree: { projectId: string; worktreeId: string },
   use: (source: WorktreeSource) => Effect.Effect<T, E, Services>,
-) => runHost(Effect.scoped(Effect.flatMap(peerSource("A", worktree), use)));
-// A link this device offers device A, opened there by `openOnPeer`.
+) =>
+  runHost(Effect.scoped(Effect.flatMap(peerSource(LISTENER, worktree), use)));
+// A link this device offers the listener, opened there by `openOnPeer`.
 const offerSource = <T, E>(
   project: Parameters<typeof offer>[1],
   worktreeId: string,
   openOnPeer: (channelId: string) => Effect.Effect<T, E>,
-) => runHost(offer("A", project, worktreeId, openOnPeer));
+) => runHost(offer(LISTENER, project, worktreeId, openOnPeer));
 const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
@@ -152,7 +158,7 @@ const decodePullProgresses = Schema.decodeUnknownSync(
   Schema.Array(SyncPullProgressSchema),
 );
 
-// Every span either device makes, A's listener's included.
+// Every span either device makes, the listener's included.
 const spans: Tracer.NativeSpan[] = [];
 const tracer = Tracer.make({
   span: (options) => {
@@ -256,7 +262,7 @@ let targetProjectId: string;
 let sourceProjectId: string;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
-let peerA: DirectWire["peerA"];
+let toListener: DirectWire["toListener"];
 let sync: ReturnType<typeof buildClient<typeof syncContract>>;
 let worktreesOverWire: ReturnType<typeof buildClient<typeof worktreesContract>>;
 let dirtyRef: string;
@@ -299,18 +305,14 @@ beforeAll(async () => {
   // Source repo: base commit on main, a "feature" branch carrying
   // ~2.7 MB of incompressible bytes (so the thin bundle still crosses
   // in >= 4 chunks), a linked worktree for the dirty capture.
-  sourceRepo = join(sandbox, "source");
-  await git(sandbox, ["init", "-q", "-b", "main", "source"]);
-  await fixture.disableAutoGc(sourceRepo);
+  sourceRepo = await fixture.initRepo("source");
   await git(sourceRepo, ["commit", "-q", "--allow-empty", "-m", "init"]);
   await commitFile(sourceRepo, "readme.txt", "base\n", "base");
   baseSha = await gitOut(sourceRepo, "rev-parse", "HEAD");
 
   // Target repo: a clone holding only the base history -- the
   // receiving device's copy of the same project.
-  targetRepo = join(sandbox, "target");
-  await git(sandbox, ["clone", "-q", "--", sourceRepo, "target"]);
-  await fixture.disableAutoGc(targetRepo);
+  targetRepo = await fixture.cloneRepo(sourceRepo, "target");
 
   await git(sourceRepo, ["checkout", "-q", "-b", "feature"]);
   await commitFile(
@@ -349,33 +351,33 @@ beforeAll(async () => {
   targetProjectId = await projectIdOf(targetRepo);
   sourceProjectId = await projectIdOf(sourceRepo);
 
-  // ---- The direct wire: A hosts the real sync surface on a real
-  // listener, B receives through the real dialer and
+  // ---- The direct wire: the listener serves the real sync surface,
+  // the dialer receives through the real dialer and
   // bridge cache, with the stub device hub carrying ONLY the broker
   // exchange (bootDirectWire, the shared fixture). Teardowns collect
   // on the shared tracker for the afterAll below.
-  ({ stub, listener, peerA } = await bootDirectWire(track, {
+  ({ stub, listener, toListener } = await bootDirectWire(track, {
     provide: Layer.succeed(Tracer.Tracer, tracer),
     contracts: [
       [syncContract, syncHandlers],
       // The teardown half of the transplant proof: the REAL worktrees
-      // surface on A's wire, beside the sync surface. The usage hook is
+      // surface on the listener's wire, beside the sync surface. The usage hook is
       // the Electron binding's concern, so a no-op satisfies the
       // registrar.
       [worktreesContract, worktreesHandlers],
     ],
   }));
-  sync = buildClient(syncContract, peerA.transport);
-  worktreesOverWire = buildClient(worktreesContract, peerA.transport);
+  sync = buildClient(syncContract, toListener.transport);
+  worktreesOverWire = buildClient(worktreesContract, toListener.transport);
   dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
 
   // The peer as the orchestrations reach it: the sync surface plus
   // the session's byte channels, observed.
-  observed = observedChannels(peerA.channels);
+  observed = observedChannels(toListener.channels);
   setPeerReach({
-    transportFor: () => peerA.transport,
+    transportFor: () => toListener.transport,
     channelsFor: () => observed.channels,
-    thisDeviceId: () => "B",
+    thisDeviceId: () => DIALER,
   });
   worktreeRef = { projectId: sourceProjectId, worktreeId };
   targetProject = await findProjectOrThrow(targetProjectId);
@@ -404,7 +406,7 @@ it("ungranted peer: openSource, receiveBundle, receiveWorktree and worktrees:del
   await assert.rejects(
     () =>
       offerSource(targetProject, worktreeId, (channelId) =>
-        peerSyncFor("A").receiveBundle({
+        peerSyncFor(LISTENER).receiveBundle({
           projectId: sourceProjectId,
           refs: ["refs/heads/main"],
           haves: [],
@@ -416,7 +418,7 @@ it("ungranted peer: openSource, receiveBundle, receiveWorktree and worktrees:del
   await assert.rejects(
     () =>
       offerSource(targetProject, worktreeId, (channelId) =>
-        peerSyncFor("A").receiveWorktree({
+        peerSyncFor(LISTENER).receiveWorktree({
           identity: "root:0000000000000000000000000000000000000000",
           branch: "feature",
           sourceWorktreeId: worktreeId,
@@ -577,7 +579,7 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
     () => observed.seen.ids.every((channelId) => !observed.has(channelId)),
     "every finished link to be gone here",
   );
-  const mux = await peerA.channels();
+  const mux = await toListener.channels();
   const manualLink = async (channelId = mintHexId()) => {
     const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
     await sync.openSource({ ...worktreeRef, channelId });
@@ -679,7 +681,7 @@ it("push: a >2.5 MB bundle crosses on a link the pusher opened and lands under r
     targetProject,
     worktreeIdFromPath(targetRepo),
     (channelId) =>
-      peerSyncFor("A").receiveBundle({
+      peerSyncFor(LISTENER).receiveBundle({
         projectId: sourceProjectId,
         refs: ["refs/heads/pushed"],
         haves: [baseSha],
@@ -706,7 +708,7 @@ it("push: a >2.5 MB bundle crosses on a link the pusher opened and lands under r
 
 it("pull round trip (clean): the branch crosses the direct wire and the worktree lands on it, its title and description with it, with the incoming ref swept", async () => {
   // ---- The pull orchestration, end to end. The handler runs HERE
-  // as device B (the registered surface above is A's), with its two
+  // as the dialer (the registered surface above is the listener's), with its two
   // real seams injected: the engine (already up) and the peer
   // reach, which is the SAME direct wire and channels the transfer
   // tests drove. Everything in between -- the tip, the
@@ -714,15 +716,19 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
   // apply` -- is production code against real git.
   setPeerReach({
     transportFor: (deviceId) => {
-      assert.equal(deviceId, "A", "a peer call dialed an unexpected device");
+      assert.equal(
+        deviceId,
+        LISTENER,
+        "a peer call dialed an unexpected device",
+      );
       return {
-        ...peerA.transport,
+        ...toListener.transport,
         invoke: async (channel, input, options) => {
           // No mirror is asked for here (that is control.mts's).
           if (channel.startsWith("mirror:")) {
             throw new Error("this proof asks for no mirror");
           }
-          // The title's carry. Both devices share the data dir, so A's
+          // The title's carry. Both devices share the data dir, so the listener's
           // handlers answer in-process.
           if (channel === "worktreeData:read") {
             return runHost(
@@ -738,15 +744,15 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
               ),
             );
           }
-          return peerA.transport.invoke(channel, input, options);
+          return toListener.transport.invoke(channel, input, options);
         },
       };
     },
     channelsFor: (deviceId) => {
-      assert.equal(deviceId, "A", "the move dialed an unexpected device");
+      assert.equal(deviceId, LISTENER, "the move dialed an unexpected device");
       return observed.channels;
     },
-    thisDeviceId: () => "B",
+    thisDeviceId: () => DIALER,
   });
   pullCtx = handlerCtx();
   const repoIdentity = await repoIdentityOf(sourceRepo);
@@ -772,7 +778,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
     syncHandlers
       .pullWorktree(
         {
-          sourceDeviceId: "A",
+          sourceDeviceId: LISTENER,
           sourceProjectId,
           sourceWorktreeId: worktreeIdFromPath(worktree2Path),
           sourceIdentity: identity,
@@ -782,7 +788,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
       )
       .pipe(Effect.withTracer(tracer)),
   );
-  // One trace: the source's answers, served on A for the link B's pull
+  // One trace: the source's answers, served on the listener for the link the dialer's pull
   // opened, continue the pull's trace.
   const pull = spans.find((span) => span.name === "Sync.pull");
   const answers = spans.filter((span) => span.name === "SourceLink.answer");
@@ -827,7 +833,7 @@ it("mirror: the title and description follow whichever side was described last, 
     title: "Renamed there",
     describedAt: 9,
   });
-  await followDescription("A", copy, original);
+  await followDescription(LISTENER, copy, original);
   assert.deepEqual(await readWorktreeData(copy.projectId, copy.worktreeId), {
     title: "Renamed there",
     describedAt: 9,
@@ -837,7 +843,7 @@ it("mirror: the title and description follow whichever side was described last, 
     description: "And described.",
     describedAt: 12,
   });
-  await followDescription("A", copy, original);
+  await followDescription(LISTENER, copy, original);
   assert.deepEqual(
     await readWorktreeData(original.projectId, original.worktreeId),
     {
@@ -856,7 +862,7 @@ it("mirror: the title and description follow whichever side was described last, 
     title: "Tie there",
     describedAt: 20,
   });
-  await followDescription("A", copy, original);
+  await followDescription(LISTENER, copy, original);
   assert.deepEqual(
     await readWorktreeData(original.projectId, original.worktreeId),
     { title: "Tie here", describedAt: 21 },
@@ -874,7 +880,7 @@ it("pull round trip (dirty): no branch bundle for a locally-known tip, and the c
   // to the new local one, and lands unstaged.
   const dirtyPull = await pullWorktree(
     {
-      sourceDeviceId: "A",
+      sourceDeviceId: LISTENER,
       sourceProjectId,
       sourceWorktreeId: worktreeId,
       sourceIdentity: identity,
@@ -918,7 +924,7 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
     async () =>
       pullWorktree(
         {
-          sourceDeviceId: "A",
+          sourceDeviceId: LISTENER,
           sourceProjectId,
           sourceWorktreeId: worktreeId,
           sourceIdentity: identity,
@@ -934,7 +940,7 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
     async () =>
       pullWorktree(
         {
-          sourceDeviceId: "A",
+          sourceDeviceId: LISTENER,
           sourceProjectId,
           sourceWorktreeId: worktreeId,
           sourceIdentity: "root:0000000000000000000000000000000000000000",
@@ -948,7 +954,7 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
 
 it("transplant (clean): the worktree lands here and the source worktree, its sm data, and its branch are torn down", async () => {
   // ---- The transplant: the pull above plus tearing the
-  // source worktree down on A through its wire-served
+  // source worktree down on the listener through its wire-served
   // worktrees:delete, gated by the pull's receipt. Fresh worktrees
   // per scenario, since the earlier tests consumed wt and wt2.
 
@@ -976,7 +982,7 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
   // teardown's sweep of it is observable.
   await writeWorktreeData(sourceProjectId, wt3Id, { ports: [{ port: 4321 }] });
   const cleanTransplant = await transplant({
-    sourceDeviceId: "A",
+    sourceDeviceId: LISTENER,
     sourceProjectId,
     sourceWorktreeId: wt3Id,
     sourceIdentity: identity,
@@ -1030,7 +1036,7 @@ it("transplant (dirty): the capture lands applied and force removes the still-di
   writeFileSync(join(wt4Path, "committed.txt"), "committed, then edited\n");
   writeFileSync(join(wt4Path, "untracked.txt"), "untracked\n");
   const dirtyTransplant = await transplant({
-    sourceDeviceId: "A",
+    sourceDeviceId: LISTENER,
     sourceProjectId,
     sourceWorktreeId: worktreeIdFromPath(wt4Path),
     sourceIdentity: identity,
@@ -1081,7 +1087,7 @@ it("transplant (scripts running): the teardown refuses with the scripts-running 
   );
   try {
     const refusedTransplant = await transplant({
-      sourceDeviceId: "A",
+      sourceDeviceId: LISTENER,
       sourceProjectId,
       sourceWorktreeId: wt5Id,
       sourceIdentity: identity,
@@ -1126,7 +1132,7 @@ it("teardownSource: refuses without a receipt, refuses a source that changed aft
         syncHandlers.teardownSource(
           {
             direction: "pull",
-            deviceId: "A",
+            deviceId: LISTENER,
             projectId: sourceProjectId,
             worktreeId: "0123456789ab",
           },
@@ -1141,7 +1147,7 @@ it("teardownSource: refuses without a receipt, refuses a source that changed aft
         syncHandlers.teardownSource(
           {
             direction: "pull",
-            deviceId: "A",
+            deviceId: LISTENER,
             projectId: sourceProjectId,
             worktreeId: wt3Id,
           },
@@ -1162,13 +1168,13 @@ it("teardownSource: refuses without a receipt, refuses a source that changed aft
   const wt6Id = worktreeIdFromPath(wt6Path);
   const wt6Source: SyncMoveRef = {
     direction: "pull",
-    deviceId: "A",
+    deviceId: LISTENER,
     projectId: sourceProjectId,
     worktreeId: wt6Id,
   };
   const latePull = await pullWorktree(
     {
-      sourceDeviceId: "A",
+      sourceDeviceId: LISTENER,
       sourceProjectId,
       sourceWorktreeId: wt6Id,
       sourceIdentity: identity,
@@ -1212,13 +1218,13 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
   );
   writeFileSync(join(wt7Path, "draft.txt"), "sent draft\n");
   const wt7 = {
-    targetDeviceId: "A",
+    targetDeviceId: LISTENER,
     projectId: sourceProjectId,
     worktreeId: worktreeIdFromPath(wt7Path),
   };
   const wt7Sent: SyncMoveRef = {
     direction: "send",
-    deviceId: "A",
+    deviceId: LISTENER,
     projectId: sourceProjectId,
     worktreeId: wt7.worktreeId,
   };
@@ -1295,7 +1301,7 @@ it("sendWorktree from a primary: refuses a branch named mirror in the way, then 
   await git(sourceRepo, ["checkout", "-q", "-b", "primary-branch"]);
   writeFileSync(join(sourceRepo, "sent-draft.txt"), "sent from primary\n");
   const primarySend = {
-    targetDeviceId: "A",
+    targetDeviceId: LISTENER,
     projectId: sourceProjectId,
     worktreeId: worktreeIdFromPath(sourceRepo),
   };
@@ -1458,7 +1464,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
   const wtBesidePath = await addWorktree(sourceRepo, "wt-beside", "beside");
   const beside = await pullWorktree(
     {
-      sourceDeviceId: "A",
+      sourceDeviceId: LISTENER,
       sourceProjectId,
       sourceWorktreeId: worktreeIdFromPath(wtBesidePath),
       sourceIdentity: identity,
@@ -1545,7 +1551,7 @@ describe("cancelMove", () => {
     const cancelledPull = Promise.resolve(
       pullWorktree(
         {
-          sourceDeviceId: "A",
+          sourceDeviceId: LISTENER,
           sourceProjectId,
           sourceWorktreeId: wtCancelId,
           sourceIdentity: identity,
@@ -1581,7 +1587,7 @@ describe("cancelMove", () => {
     // And the source is exactly as it was: the same pull lands.
     const retried = await pullWorktree(
       {
-        sourceDeviceId: "A",
+        sourceDeviceId: LISTENER,
         sourceProjectId,
         sourceWorktreeId: wtCancelId,
         sourceIdentity: identity,
@@ -1605,7 +1611,7 @@ describe("cancelMove", () => {
     const cancelledSend = Promise.resolve(
       sendWorktreeHere(
         {
-          targetDeviceId: "A",
+          targetDeviceId: LISTENER,
           projectId: sourceProjectId,
           worktreeId: wtCancel2Id,
         },
@@ -1641,7 +1647,7 @@ describe("cancelMove", () => {
           syncHandlers.teardownSource(
             {
               direction: "send",
-              deviceId: "A",
+              deviceId: LISTENER,
               projectId: sourceProjectId,
               worktreeId: wtCancel2Id,
             },
@@ -1666,7 +1672,7 @@ describe("cancelMove", () => {
     const abandonedPull = Promise.resolve(
       pullWorktree(
         {
-          sourceDeviceId: "A",
+          sourceDeviceId: LISTENER,
           sourceProjectId,
           sourceWorktreeId: wtCancel3Id,
           sourceIdentity: identity,
@@ -1695,7 +1701,7 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
   // finds the sender's own checkout: the sending side's effects run
   // on a second engine over a second data dir (asOtherDevice), where
   // the lone repo is
-  // registered. The landing side (A, the shared registry) has never
+  // registered. The landing side (the listener, the shared registry) has never
   // seen it.
   const otherDataDir = join(sandbox, "data-other");
   mkdirSync(otherDataDir);
@@ -1709,9 +1715,7 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
   const asOtherDevice = <A, E>(effect: Effect.Effect<A, E, Services>) =>
     runHost(Effect.provide(effect, otherContext));
   try {
-    const loneRepo = join(sandbox, "lone-source");
-    await git(sandbox, ["init", "-q", "-b", "main", "lone-source"]);
-    await fixture.disableAutoGc(loneRepo);
+    const loneRepo = await fixture.initRepo("lone-source");
     await commitFile(loneRepo, "root.txt", "root\n", "root");
     const loneMainTip = await gitOut(loneRepo, "rev-parse", "HEAD");
     const loneWtPath = await addWorktree(
@@ -1725,7 +1729,7 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     writeFileSync(join(loneWtPath, "lone-draft.txt"), "lone draft\n");
     const { id: loneProjectId } = await addProject(otherCli.sm, loneRepo);
     const loneWt = {
-      targetDeviceId: "A",
+      targetDeviceId: LISTENER,
       projectId: loneProjectId,
       worktreeId: worktreeIdFromPath(loneWtPath),
     };
@@ -1788,7 +1792,7 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
       syncHandlers.teardownSource(
         {
           direction: "send",
-          deviceId: "A",
+          deviceId: LISTENER,
           projectId: loneProjectId,
           worktreeId: loneWt.worktreeId,
         },

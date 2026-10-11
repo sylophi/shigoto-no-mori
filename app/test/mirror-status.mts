@@ -13,43 +13,30 @@ import assert from "node:assert/strict";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { it } from "vitest";
+import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
 
-const endpoint = {
-  connected: true,
-  scanned: true,
-  directories: 1,
-  files: 1,
-  symbolicLinks: 0,
-  totalFileSize: 1,
-  problems: [],
-  excludedProblems: 0,
-};
+// One file at each end, as a session that has made its first pass.
+const endpoint = mirrorEndpoint({ directories: 1, files: 1, totalFileSize: 1 });
 
 const view = (status: MirrorStatus, successfulCycles: number) =>
   describeMirror({
-    session: "s",
-    name: "s",
-    labels: {},
-    localRoot: "/a",
+    ...rawMirrorSession({
+      session: "s",
+      localRoot: "/a",
+      deviceId: "B",
+      projectId: "p",
+      worktreeId: "w",
+      remoteRoot: "/b",
+      local: endpoint,
+      remote: endpoint,
+      status,
+      successfulCycles,
+    }),
     localProjectId: "p",
     localWorktreeId: "w",
-    deviceId: "B",
-    projectId: "p",
-    worktreeId: "w",
-    remoteRoot: "/b",
-    ignores: [],
     ignoreMode: "everything",
-    createdAt: 0,
-    paused: false,
-    statusText: "",
     lastError: "",
-    conflicts: [],
-    excludedConflicts: 0,
-    local: endpoint,
-    remote: endpoint,
     git: { status: "synced", detail: "" },
-    status,
-    successfulCycles,
   });
 
 const CHECKING: MirrorStatus[] = [

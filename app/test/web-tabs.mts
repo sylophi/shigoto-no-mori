@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { it } from "vitest";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
-import { startDirectListener } from "./lib/directBoot.mts";
+import { LISTENER, startDirectListener } from "./lib/directBoot.mts";
 import { bootDevice } from "./lib/hubBoot.mts";
 import { startStubHub, testDeviceKey } from "./lib/hubStub.mts";
 import { memoryStorage, waitFor } from "./lib/checkKit.mts";
@@ -44,10 +44,11 @@ const STORED_ENVELOPE = JSON.stringify({
 async function boot() {
   const track = trackTest;
   const stub = await startStubHub(track, (deviceId) =>
-    deviceId === "A" ? testDeviceKey("A").publicKey : PROFILE_KEY.publicKey,
+    deviceId === LISTENER
+      ? testDeviceKey(LISTENER).publicKey
+      : PROFILE_KEY.publicKey,
   );
   const listener = await startDirectListener(track, {
-    deviceId: "A",
     peerKey: () => PROFILE_KEY.pair.publicKey,
     registerHandlers: (binding) => {
       binding.handle(
@@ -59,7 +60,7 @@ async function boot() {
   // The host, answering connectInfo over the hub with its listener.
   await bootDevice(
     stub,
-    "A",
+    LISTENER,
     {
       serveConnectInfo: makeConnectInfo({
         listenerPort: listener.listenerPort,
@@ -115,14 +116,15 @@ async function boot() {
 // The tab's call to the host, over its own link.
 const echo = (tab: WebBridge, value: string) =>
   tab.api.hub.invokePeer({
-    deviceId: "A",
+    deviceId: LISTENER,
     channel: ECHO,
     input: { projectId: value },
   });
 
 const linked = (tab: WebBridge) =>
   waitFor(
-    async () => (await tab.api.hub.status()).peerAppVersions.A !== undefined,
+    async () =>
+      (await tab.api.hub.status()).peerAppVersions[LISTENER] !== undefined,
     "the tab to link to the host",
   );
 
