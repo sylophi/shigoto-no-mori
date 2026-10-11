@@ -73,10 +73,12 @@ import {
 } from "./gitState";
 import { log } from "@shared/log";
 
-// Where the agreed states live between runs: one entry per session id.
+// Where the agreed states live between runs: one entry per session id
+// (the engine's MirrorAgreements). Read once as the follower comes up,
+// and written whole as an entry changes.
 export type AgreedStore = {
-  load(): Record<string, GitStateCore>;
-  save(entries: Record<string, GitStateCore>): void;
+  readonly load: Effect.Effect<Record<string, GitStateCore>>;
+  readonly save: (entries: Record<string, GitStateCore>) => Effect.Effect<void>;
 };
 
 type FollowRecord = {
@@ -142,9 +144,27 @@ export const makeGitFollower = (deps: {
     const inbox = yield* Queue.unbounded<Effect.Effect<void>>();
     const scope = yield* Effect.scope;
     const context = yield* Effect.context<FollowServices>();
-    const follower = makeFollower(deps, (work) => {
-      Queue.offerUnsafe(inbox, work);
-    });
+    const warn = deps.log ?? ((message: string) => log.warn(message));
+    const stored =
+      deps.agreedStore === undefined
+        ? {}
+        : yield* deps.agreedStore.load.pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => {
+                warn(
+                  `[mirror] git follow: agreed store unreadable: ${errorMessageOf(Cause.squash(cause))}`,
+                );
+                return {};
+              }),
+            ),
+          );
+    const follower = makeFollower(
+      deps,
+      (work) => {
+        Queue.offerUnsafe(inbox, work);
+      },
+      stored,
+    );
     // The inbox's worker: each signal's work in turn, a reconcile it
     // starts running on its own in the scope.
     yield* Effect.forkScoped(Effect.forever(Effect.flatten(Queue.take(inbox))));
@@ -360,6 +380,9 @@ const reconcileOf = (
 function makeFollower(
   deps: Parameters<typeof makeGitFollower>[0],
   post: (work: Effect.Effect<void>) => void,
+  // The agreed states by session id, as the store had them at start,
+  // written back only when an entry actually changes.
+  stored: Record<string, GitStateCore>,
 ) {
   const records = new Map<string, FollowRecord>();
   const copyGoneAt = new Map<string, number>();
@@ -373,23 +396,6 @@ function makeFollower(
     scope: Scope.Scope;
     context: Context.Context<FollowServices>;
   } | null = null;
-  // The agreed states by session id, loaded on the first look and
-  // written back only when an entry actually changes.
-  let stored: Record<string, GitStateCore> = {};
-  let loaded = false;
-
-  function loadStored(): void {
-    if (loaded) return;
-    loaded = true;
-    try {
-      stored = deps.agreedStore?.load() ?? {};
-    } catch (error) {
-      warn(
-        `[mirror] git follow: agreed store unreadable: ${errorMessageOf(error)}`,
-      );
-    }
-  }
-
   function setStatus(record: FollowRecord, status: MirrorGitStatus): void {
     if (
       record.status.status === status.status &&
@@ -401,14 +407,23 @@ function makeFollower(
     deps.onChange?.();
   }
 
+  // Posted, so the writes land in the order the entries changed.
   function persist(): void {
-    try {
-      deps.agreedStore?.save(stored);
-    } catch (error) {
-      warn(
-        `[mirror] git follow: agreed store unwritable: ${errorMessageOf(error)}`,
-      );
-    }
+    const store = deps.agreedStore;
+    if (store === undefined) return;
+    post(
+      store
+        .save({ ...stored })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() =>
+              warn(
+                `[mirror] git follow: agreed store unwritable: ${errorMessageOf(Cause.squash(cause))}`,
+              ),
+            ),
+          ),
+        ),
+    );
   }
 
   function setAgreed(record: FollowRecord, agreed: GitStateCore): void {
@@ -514,7 +529,6 @@ function makeFollower(
   // starts from the replaced one's. A record waiting for its files is
   // triggered here the moment the engine reports them idle.
   const syncSessions = Effect.gen(function* () {
-    loadStored();
     const current = new Map((yield* deps.sessions).map((s) => [s.session, s]));
     let changed = false;
     for (const [id, record] of records) {
@@ -609,7 +623,6 @@ function makeFollower(
     },
     // The session was terminated on purpose: its agreement goes too.
     forget(session: string): void {
-      loadStored();
       if (session in stored) {
         delete stored[session];
         persist();
@@ -621,7 +634,6 @@ function makeFollower(
     // agreement the new id already holds (inherited through its
     // replaces label, or reached since) is newer and stays.
     rename(from: string, to: string): void {
-      loadStored();
       const agreed = stored[from];
       if (agreed === undefined) return;
       delete stored[from];

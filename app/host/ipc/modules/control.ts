@@ -32,7 +32,7 @@ export const controlHandlers = {
 
 // A transfer as its caller follows it: each step of its progress as the
 // op notifies it, then its answer, on one stream. Interrupting the
-// stream (the caller gone) aborts the op's signal.
+// stream (the caller gone) interrupts the op.
 export const followTransfer =
   <I>(
     op: (
@@ -52,7 +52,6 @@ export const followTransfer =
         const abort = new AbortController();
         yield* Effect.addFinalizer(() => Effect.sync(() => abort.abort()));
         const ctx: HandlerContext = {
-          signal: abort.signal,
           connection: abort.signal,
           notifier: () => (progress) =>
             Queue.offerUnsafe(queue, {

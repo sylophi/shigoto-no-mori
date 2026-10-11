@@ -21,7 +21,6 @@ import { decode, encode } from "@shigomori/contracts/codec";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import type {
-  CallContext,
   EffectServerTransport,
   HandlerContext,
   ServerTransport,
@@ -78,8 +77,7 @@ const attempt = <A>(run: () => A) =>
 
 // The same, as an effect for a server built in a layer graph: a handler
 // answers with an effect on the graph's services, which runs where the
-// call is served. Its context's signal aborts when the call is
-// interrupted.
+// call is served, and is interrupted with the call.
 function wrapEffectCall<Services>(
   call: ContractCall,
   handler: (
@@ -88,7 +86,7 @@ function wrapEffectCall<Services>(
   ) => Effect.Effect<unknown, unknown, Services>,
   opts: RegisterContractOpts,
 ): (
-  ctx: CallContext,
+  ctx: HandlerContext,
   raw: unknown,
 ) => Effect.Effect<unknown, CallFailure, Services> {
   const onSuccess =
@@ -98,12 +96,8 @@ function wrapEffectCall<Services>(
   return (ctx, raw) =>
     Effect.gen(function* () {
       const input = yield* attempt(() => decode(inputOf(call), raw));
-      const controller = new AbortController();
-      const result = yield* Effect.suspend(() =>
-        handler(input, { ...ctx, signal: controller.signal }),
-      ).pipe(
+      const result = yield* Effect.suspend(() => handler(input, ctx)).pipe(
         Effect.mapError(callFailureOf),
-        Effect.onInterrupt(() => Effect.sync(() => controller.abort())),
       );
       onSuccess?.(input);
       return opts.validateOutputs

@@ -4,35 +4,36 @@
 // stays with the host and the CLI. This file is owned by the main
 // process alone and the CLI never touches it.
 //
-// Reads are synchronous because the boot path needs the saved theme
-// before the BrowserWindow exists (main/index.ts applies it via
-// applyThemeSource below, which is what keeps the vibrancy material
-// from flashing the wrong variant on first paint).
-import { app, nativeTheme } from "electron";
+// Read once as the shell's graph comes up (layer below), which the boot
+// waits on before its first window: the saved theme is applied before
+// the BrowserWindow exists (main/index.ts, via applyThemeSource below),
+// which is what keeps the vibrancy material from flashing the wrong
+// variant on first paint. Reads after that are this module's memory,
+// and writes go through FileSystem.
 import { join } from "node:path";
+import { app, nativeTheme } from "electron";
+import type * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import type * as Path from "effect/Path";
 import {
   type ClientConfig,
   ClientConfigSchema,
   StoredClientConfigSchema,
   type Theme,
 } from "@shigomori/contracts/schemas";
-import {
-  atomicWriteJson,
-  readJsonOrNull,
-  readJsonOrNullSync,
-} from "@host/lib/util/atomicJson";
 import { log } from "@shared/log";
+import { readJson, writeJson } from "../core/files/jsonFile";
 
 function clientConfigPath(): string {
   return join(app.getPath("userData"), "clientConfig.json");
 }
 
-// This module is the store's only writer, so a read is valid until the
-// next writeClientConfig in this process updates it. An external
-// mutation path would need a change hook here (the
-// globalConfigChanged precedent in host/lib/config/global.ts),
-// but none exists today.
-let memo: ClientConfig | null = null;
+// This module is the store's only writer, so what it read is valid
+// until the next writeClientConfig in this process updates it.
+let memo: ClientConfig = {};
 
 // A store that
 // stays broken is hit on every boot and every save, so warn once per
@@ -49,19 +50,42 @@ function noteCorruptStore(file: string, error: unknown): void {
 // Corrupt or unreadable content reads as empty defaults (not as an
 // absent file), so a broken store can never block startup and never
 // gets silently reseeded over by the migration's absence probe.
-function readStoredDoc(): ClientConfig {
-  try {
-    return (
-      readJsonOrNullSync(clientConfigPath(), StoredClientConfigSchema) ?? {}
-    );
-  } catch (error) {
-    noteCorruptStore(clientConfigPath(), error);
-    return {};
-  }
-}
+const readStoredDoc = Effect.suspend(() =>
+  readJson(clientConfigPath(), StoredClientConfigSchema),
+).pipe(
+  Effect.map((doc): Record<string, unknown> => doc ?? {}),
+  Effect.catchTags({
+    JsonFileError: (error) =>
+      Effect.sync(() => {
+        noteCorruptStore(error.path, error.cause);
+        return {};
+      }),
+  }),
+);
+
+// The platform the reads and writes run on, once the shell's graph has
+// built the layer below.
+const platform =
+  Deferred.makeUnsafe<Context.Context<FileSystem.FileSystem | Path.Path>>();
+
+// Read, and the platform kept for the writes. The boot waits on it
+// (clientConfigRead) before its first window.
+export const layer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    memo = (yield* Effect.provideContext(
+      readStoredDoc,
+      context,
+    )) as ClientConfig;
+    yield* Deferred.succeed(platform, context);
+  }),
+);
+
+// Settles once the layer above has read the store.
+export const clientConfigRead = (): Promise<void> =>
+  Effect.runPromise(Effect.asVoid(Deferred.await(platform)));
 
 export function readClientConfigSync(): ClientConfig {
-  memo ??= readStoredDoc();
   return memo;
 }
 
@@ -71,27 +95,26 @@ export function readClientConfigSync(): ClientConfig {
 // A full replace would erase keys a newer build wrote. Omission of a
 // modeled key still clears it (the omit-on-default serialization).
 // Corruption merges over {} instead (warned once above), the same
-// default reset the read side applies. Async so saves stop blocking
-// the main thread. Only the boot read above stays sync.
-export async function writeClientConfig(config: ClientConfig): Promise<void> {
-  let onDisk: Record<string, unknown>;
-  try {
-    onDisk =
-      (await readJsonOrNull(clientConfigPath(), StoredClientConfigSchema)) ??
-      {};
-  } catch (error) {
-    noteCorruptStore(clientConfigPath(), error);
-    onDisk = {};
-  }
-  const merged: Record<string, unknown> = { ...onDisk };
-  for (const key of Object.keys(ClientConfigSchema.fields)) {
-    delete merged[key];
-  }
-  for (const [key, value] of Object.entries(config)) {
-    if (value !== undefined) merged[key] = value;
-  }
-  await atomicWriteJson(clientConfigPath(), merged);
-  memo = config;
+// default reset the read side applies.
+export function writeClientConfig(config: ClientConfig): Promise<void> {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const context = yield* Deferred.await(platform);
+      const onDisk = yield* Effect.provideContext(readStoredDoc, context);
+      const merged: Record<string, unknown> = { ...onDisk };
+      for (const key of Object.keys(ClientConfigSchema.fields)) {
+        delete merged[key];
+      }
+      for (const [key, value] of Object.entries(config)) {
+        if (value !== undefined) merged[key] = value;
+      }
+      yield* Effect.provideContext(
+        writeJson(clientConfigPath(), merged),
+        context,
+      );
+      memo = config;
+    }),
+  );
 }
 
 // The one place nativeTheme.themeSource is set, and the single home of

@@ -153,16 +153,14 @@ export function createLocalRegistrar(): LocalRegistrar {
     return { stub };
   }
 
-  // One handler context for the page's lifetime. The signal seam exists
-  // for callers that outlive their peer; in-page the caller IS the
-  // peer, so it never aborts.
+  // One handler context for the page's lifetime. In-page the caller IS
+  // the peer, so its connection never ends.
   const pageLifetime = new AbortController();
   const context: HandlerContext = {
     notifier: (module, key) => (payload) => {
       const { channel, parsed } = resolveBroadcast(module, key, payload);
       fanOut.emit(channel, parsed);
     },
-    signal: pageLifetime.signal,
     connection: pageLifetime.signal,
   };
 

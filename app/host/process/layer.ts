@@ -41,7 +41,8 @@ import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
-import * as OrphanSweep from "@host/lib/scripts/persistence";
+import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
+import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
@@ -60,9 +61,8 @@ import {
   deviceLinkLayer,
   loopbackLayer,
   pushesLayer,
+  remotePlanesLayer,
   sharingLayer,
-  stopDirectHost,
-  stopHubConnection,
   tunnelLayer,
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
@@ -184,19 +184,12 @@ const gitWatcher = logged(
   }),
 );
 
-// The hub socket and the device link's listener, which follows the
-// same enrollment condition. Both come up on the account's first report
-// from the shell and reconcile on every one after (handlers.ts
-// applyAccount). The closes are fire and forget: the hub close frame
-// flushes or the Durable Object notices the dead socket, and the
-// outbound links close. The listener closes with its own layer, below.
-const remotePlanes = onQuit(
-  "the hub connection",
-  Effect.sync(() => {
-    void stopHubConnection();
-    stopDirectHost();
-  }),
-);
+// The hub socket and the direct plane, and the device link's listener,
+// which follows the same enrollment condition. Both connect on the
+// account's first report from the shell and reconcile on every one
+// after (handlers.ts applyAccount). The listener closes with its own
+// layer, below.
+const remotePlanes = logged("the device hub", remotePlanesLayer);
 
 // The mirror engine: the git follower, the daemon, and the gateway the
 // daemon dials peers through. The daemon resumes persisted sessions the
@@ -277,9 +270,8 @@ const scriptsAndFoundation = (options: {
   FileSyncRunner.layer.pipe(
     Layer.provideMerge(scripts(options.hurried)),
     // A crash, a force quit or an OOM skips the quit's reap, so what the
-    // last run left running is reaped here. It claims the record file
-    // synchronously, before any script can spawn, and kills in the
-    // background.
+    // last run left running is reaped here. It claims the records before
+    // any script can spawn, and kills in the background.
     Layer.provideMerge(OrphanSweep.layer),
     // Every terminal, each saved for the next start as it closes with
     // the quit.
@@ -341,5 +333,7 @@ export const layer = (options: {
     Layer.provideMerge(
       logged("the shared settings", SharedSettingsStore.layer),
     ),
+    // The moves in flight, each one the quit comes before rolled back.
+    Layer.provideMerge(Moves.layer),
     Layer.provideMerge(scriptsAndFoundation(options)),
   );

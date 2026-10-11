@@ -13,7 +13,7 @@ import { log } from "@shared/log";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
-} from "@host/lib/util/atomicJson";
+} from "../core/files/exitFiles";
 
 // Whether the app was hidden. Which windows were minimized is each
 // window's own (main/electron/windows.ts remembers it).
