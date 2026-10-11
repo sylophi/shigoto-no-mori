@@ -6,6 +6,7 @@ import {
   Ellipsis,
   FolderGit2,
   GitBranchPlus,
+  ListRestart,
   PencilLine,
   RotateCcw,
   TextCursorInput,
@@ -264,6 +265,14 @@ export function CommitMenuItems({
       >
         <FolderGit2 />
         New worktree from here
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        variant="destructive"
+        disabled={busy}
+        onClick={() => actions.hardResetTo(commit)}
+      >
+        <ListRestart />
+        Hard reset to here…
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       {copyHash}

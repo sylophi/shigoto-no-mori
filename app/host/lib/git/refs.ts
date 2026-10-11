@@ -70,6 +70,32 @@ export async function verifyRev(cwd: string, rev: string): Promise<string> {
   ).trim();
 }
 
+// The commit `ref` names, or a refusal that says so.
+export async function resolveCommit(cwd: string, ref: string): Promise<string> {
+  const hash = await refTip(cwd, `${ref}^{commit}`);
+  if (!hash) throw new Error(`There is no branch or commit named ${ref}.`);
+  return hash;
+}
+
+// HEAD, refused where it has moved on from `expectHead`: what a move
+// made from a loaded page pins, so it can't land on a branch that has
+// changed since.
+export async function headAt(
+  cwd: string,
+  expectHead: string | undefined,
+): Promise<string> {
+  const [head, expected] = await Promise.all([
+    verifyRev(cwd, "HEAD"),
+    expectHead ? verifyRev(cwd, expectHead) : undefined,
+  ]);
+  if (expected !== undefined && head !== expected) {
+    throw new Error(
+      "The branch has moved on since this was loaded. Reload and try again.",
+    );
+  }
+  return head;
+}
+
 // The upstream by its name ("origin/feature"), or null without one.
 export async function upstreamName(cwd: string): Promise<string | null> {
   try {

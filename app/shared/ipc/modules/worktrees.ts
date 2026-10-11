@@ -37,6 +37,8 @@ import {
   ResolveConflictPayloadSchema,
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
+  ResetHardPayloadSchema,
+  ResetHardResultSchema,
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
   RestoreStashPayloadSchema,
@@ -233,6 +235,12 @@ export const worktreesContract = defineContract("host", {
     "worktrees:resetSoft",
     ResetSoftPayloadSchema,
     ResetSoftResultSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  resetHard: invoke(
+    "worktrees:resetHard",
+    ResetHardPayloadSchema,
+    ResetHardResultSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   commitDiff: invoke(

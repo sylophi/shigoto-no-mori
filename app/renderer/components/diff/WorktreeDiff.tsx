@@ -30,7 +30,7 @@ import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { Kbd } from "@/components/ui/kbd";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
-import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
+import { GitPageActions } from "@/components/worktreeDetail/git/GitPageActions";
 import { BranchBar } from "./BranchBar";
 import { changedFilePaths, type DiffChangesControls } from "./changesControls";
 import {
@@ -361,7 +361,7 @@ function ChangesView({
         )
       }
       changes={controls}
-      sidebarActions={<MergeButton worktree={worktree} />}
+      sidebarActions={<GitPageActions worktree={worktree} />}
       renderSidebar={(fileList) => (
         <GitPageSidebar worktree={worktree} tab="changes" changes={fileList} />
       )}

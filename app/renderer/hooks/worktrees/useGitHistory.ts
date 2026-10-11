@@ -9,6 +9,7 @@ import type {
   MergeBranchResult,
   IntegrateMethod,
   MergePreview,
+  ResetHardResult,
   StashEntry,
   Worktree,
 } from "@shared/schemas";
@@ -195,9 +196,14 @@ export function useAbortOperation() {
   );
 }
 
-// How the worktree's branch and `ref` stand, for the merge dialog. A
-// ref that names nothing is the dialog's to say, not a toast's.
-export function useMergePreview(worktree: Worktree, ref: string) {
+// How the worktree's branch and `ref` stand, for the merge and hard
+// reset dialogs. A ref that names nothing is the dialog's to say, not a
+// toast's.
+export function useMergePreview(
+  worktree: Worktree,
+  ref: string,
+  countsOnly = false,
+) {
   const { api, keys } = useHostScope();
   const { projectId, id: worktreeId } = worktree;
   return useQuery<MergePreview>({
@@ -206,9 +212,16 @@ export function useMergePreview(worktree: Worktree, ref: string) {
       worktreeId,
       ref,
       worktree.recentCommits[0]?.hash,
+      countsOnly,
     ),
     queryFn: ref
-      ? () => api.worktrees.mergePreview({ projectId, worktreeId, ref })
+      ? () =>
+          api.worktrees.mergePreview({
+            projectId,
+            worktreeId,
+            ref,
+            countsOnly,
+          })
       : skipToken,
     retry: false,
     meta: { silentError: true },
@@ -237,4 +250,39 @@ export function useMergeBranch() {
     },
     meta: { silentError: true },
   });
+}
+
+// The reset dialog says a failure in place, so no toast.
+export function useResetHard() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<
+    ResetHardResult,
+    Error,
+    Scope & { ref: string; expectHead?: string }
+  >({
+    mutationFn: (input) => api.worktrees.resetHard(input),
+    onSuccess: (data, vars) =>
+      invalidateWorkingTree(queryClient, keys, vars, data.worktree),
+    meta: { silentError: true },
+  });
+}
+
+// A hard reset undone: the branch back where it was, refused once it
+// has moved on from `at`, and the uncommitted files it threw away.
+export function useUndoResetHard() {
+  return useWorkingTreeMutation<
+    Scope & { previousHead: string; at: string; snapshot: string | null },
+    ResetHardResult
+  >(
+    (api, { previousHead, at, snapshot, ...scope }) =>
+      api.worktrees.resetHard({
+        ...scope,
+        ref: previousHead,
+        expectHead: at,
+        restore: snapshot ?? undefined,
+      }),
+    (data) => data.worktree,
+    "Couldn't undo the hard reset",
+  );
 }

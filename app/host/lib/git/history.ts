@@ -4,7 +4,7 @@
 import { onIndex } from "./changes";
 import { run, runLenient } from "./core";
 import { conflictedPaths, refuseMidOperation } from "./operation";
-import { isAncestor, verifyRev } from "./refs";
+import { headAt, isAncestor } from "./refs";
 
 // --- revert and cherry-pick -------------------------------------------
 
@@ -129,15 +129,7 @@ async function rewriteLine(
 ): Promise<void> {
   await onIndex(worktreePath, async () => {
     await refuseMidOperation(worktreePath);
-    const [head, expected] = await Promise.all([
-      verifyRev(worktreePath, "HEAD"),
-      verifyRev(worktreePath, expectHead),
-    ]);
-    if (head !== expected) {
-      throw new Error(
-        "The branch has moved on since this was loaded. Reload and try again.",
-      );
-    }
+    const head = await headAt(worktreePath, expectHead);
     if (!(await isAncestor(worktreePath, oldest, head))) {
       throw new Error("That commit isn't on this branch's history.");
     }
