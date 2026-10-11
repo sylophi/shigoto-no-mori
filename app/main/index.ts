@@ -12,6 +12,7 @@ import {
 import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
+import { finishPendingNuke } from "./core/nuke/finish";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
@@ -91,9 +92,6 @@ function devProfile(): string | null {
   app.setName(`${names.appName}${devProfileSuffix()}`);
 }
 
-// After the rename above, which names the log folder.
-captureConsoleToFile();
-
 // The dev launcher's Electron-resolution override must never leak into
 // processes the host spawns (launchers, script runs, the CLI): any
 // other Electron project started from here would silently boot our
@@ -116,7 +114,15 @@ takeUpdateEndpointOverrides();
 // the running window is what launching the app asked for.
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
+} else {
+  // A nuke's files (main/electron/nuke.ts), before anything opens one:
+  // with the lock held, so no other instance is using them.
+  finishPendingNuke(app.getPath("userData"));
 }
+
+// After the rename above, which names the log folder, and the nuke's
+// deletion of it.
+captureConsoleToFile();
 
 // A packaged launch starts from its launcher's environment, Finder's
 // stripped one or a terminal's (or an agent's) whole one: rebuild it

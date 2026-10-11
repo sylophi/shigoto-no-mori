@@ -255,8 +255,10 @@ export function SettingsGeneralScene() {
             root="~/.sm"
             nuking={false}
             progress={null}
+            left={null}
             armed={false}
             onNuke={noop}
+            onRelaunch={noop}
           />
         </>,
       )}

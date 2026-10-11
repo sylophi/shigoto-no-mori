@@ -26,8 +26,8 @@ export const MoveDataDirPayloadSchema = Schema.Struct({
 });
 
 // Progress broadcast while `runtime:nuke` runs, driving the renderer's
-// blocking overlay: reap scripts → remove worktrees (with a counter) →
-// wipe the data dir.
+// blocking overlay: stop scripts and terminals → remove worktrees (with
+// a counter) → remove the terminal command and the hooks.
 export const NukeProgressSchema = Schema.Union([
   Schema.Struct({ phase: Schema.Literal("scripts") }),
   Schema.Struct({
@@ -35,9 +35,19 @@ export const NukeProgressSchema = Schema.Union([
     done: Schema.Natural,
     total: Schema.Natural,
   }),
-  Schema.Struct({ phase: Schema.Literal("wipe") }),
+  Schema.Struct({ phase: Schema.Literal("hooks") }),
 ]);
 export type NukeProgress = typeof NukeProgressSchema.Type;
+
+// What a nuke's live half could not do, each with why: the host's
+// (`runtime:nuke`) and the shell's (`window:nuke`). The files go at
+// the next start whatever this says.
+export const NukeReportSchema = Schema.Struct({
+  left: Schema.Array(
+    Schema.Struct({ what: Schema.String, why: Schema.String }),
+  ),
+});
+export type NukeReport = typeof NukeReportSchema.Type;
 
 // In-app updater state. The engine owns the update pipeline
 // (Updater.ts), and the app mirrors its progress into this machine.
