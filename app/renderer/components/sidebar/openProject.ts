@@ -13,9 +13,11 @@
 // window follows its own page, and the windows of one page (the
 // marketing site's frames) share the open project.
 import { useEffect } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
+import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import {
@@ -38,6 +40,26 @@ const store = createExternalStore<{
 export function setOpenProject(groupKey: string | null): void {
   const state = store.get();
   if (state.key !== groupKey) store.publish({ ...state, key: groupKey });
+}
+
+// The tree, open on a project: the inbox's way from a worktree to its
+// project. `deviceId` is the peer holding the project, undefined for
+// this machine's. On a phone the tree is a tab of its own.
+export function useGoToProject(): (
+  project: Project,
+  deviceId: string | undefined,
+) => void {
+  const phone = usePhoneLayout();
+  const navigate = useNavigate();
+  const { mutate: setView } = useSetSidebarView();
+  return (project, deviceId) => {
+    setOpenProject(projectGroupKey(project, deviceId));
+    if (phone) {
+      void navigate({ to: "/forest/$view", params: { view: "projects" } });
+    } else {
+      setView("projects");
+    }
+  };
 }
 
 function withFollowed(root: HTMLElement, page: string | null) {

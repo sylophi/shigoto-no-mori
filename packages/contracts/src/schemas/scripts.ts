@@ -19,7 +19,11 @@ export const RunScriptPayloadSchema = Schema.Struct({
   script: ScriptNameSchema,
 });
 
-const PackageManagerSchema = Schema.Literals(["bun", "pnpm", "yarn", "npm"]);
+// Null without a package.json (a worktree with only a justfile or a
+// Makefile).
+const PackageManagerSchema = Schema.NullOr(
+  Schema.Literals(["bun", "pnpm", "yarn", "npm"]),
+);
 
 const PackageScriptUsageSchema = Schema.Struct({
   // Epoch ms of the most recent run; 0 when the script has never been run.
@@ -31,9 +35,23 @@ const PackageScriptUsageSchema = Schema.Struct({
 });
 export type PackageScriptUsage = typeof PackageScriptUsageSchema.Type;
 
+// The files with scripts in them, each a group of its own in the
+// Scripts section: the file, and each of its scripts' names mapped to
+// the one it goes by there ("build" for "just build").
+const ScriptGroupSchema = Schema.Struct({
+  file: Schema.String,
+  labels: Schema.Record(Schema.String, Schema.String),
+});
+export type ScriptGroup = typeof ScriptGroupSchema.Type;
+
+// A worktree's scripts: package.json's by their own names, then a
+// justfile's recipes as "just <recipe>" and a Makefile's targets as
+// "make <target>" (the engine's scriptFiles.ts).
 export const PackageScriptsResultSchema = Schema.Struct({
   scripts: Schema.Record(Schema.String, Schema.String),
   packageManager: PackageManagerSchema,
+  // The scripts by the file they come from, in file order.
+  groups: Schema.Array(ScriptGroupSchema),
   usage: Schema.Record(Schema.String, PackageScriptUsageSchema),
   // The scripts picked for the launch row under the "manual" sort,
   // project-wide (see readLaunchRow). Rides the listing rather than a
@@ -51,18 +69,26 @@ export const PackageScriptSortModeSchema = Schema.Literals([
 ]);
 export type PackageScriptSortMode = typeof PackageScriptSortModeSchema.Type;
 
-// `sm run --json` with no script: the worktree's package.json scripts
-// in manifest order, the manager its lockfile selects, each script's
-// use stats, and the project's saved sort and manual order.
+// `sm run --json` with no script: the worktree's scripts in file
+// order with the file each comes from and its name there, the manager
+// its lockfile selects, each script's use stats, and the project's
+// saved sort and manual order.
 export const PackageScriptsDocSchema = Schema.Struct({
   packageManager: PackageManagerSchema,
   scripts: Schema.Array(
-    Schema.Struct({ name: Schema.String, command: Schema.String }),
+    Schema.Struct({
+      name: Schema.String,
+      command: Schema.String,
+      file: Schema.String,
+      label: Schema.String,
+    }),
   ),
   usage: Schema.Record(Schema.String, PackageScriptUsageSchema),
   sort: PackageScriptSortModeSchema,
   order: Schema.Array(Schema.String),
 });
+
+export type PackageScriptsDoc = typeof PackageScriptsDocSchema.Type;
 
 export const RunPackageScriptPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
@@ -76,7 +102,7 @@ export const SetPackageScriptSortPayloadSchema = Schema.Struct({
 
 // "manual" is newer than the other modes, and a client from before it
 // has no case for it. getSort only answers "manual" to a caller that
-// says it knows the mode. Anyone else gets the package.json order.
+// says it knows the mode. Anyone else gets the file order.
 export const GetPackageScriptSortPayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
   knowsManual: Schema.optional(Schema.Boolean),
@@ -84,8 +110,8 @@ export const GetPackageScriptSortPayloadSchema = Schema.Struct({
 
 // The "manual" sort's order, as script names. Project-wide while the
 // scripts themselves are per worktree, so it can name scripts a given
-// worktree's package.json lacks (those are skipped), and a script it
-// doesn't name trails the list in package.json order.
+// worktree lacks (those are skipped), and a script it doesn't name
+// trails the list in file order.
 export const PackageScriptOrderSchema = Schema.Array(Schema.NonEmptyString);
 
 // One worktree's scripts, all of them, in the order they were arranged
@@ -167,8 +193,8 @@ export const ScriptEventSchema = Schema.Union([
 export type ScriptEvent = typeof ScriptEventSchema.Type;
 
 // The slot a run occupies on its worktree, in the renderer's terms
-// (store/scriptSlot.ts): a lifecycle script, or a package.json script
-// by name.
+// (store/scriptSlot.ts): a lifecycle script, or a package.json,
+// justfile or Makefile script by name.
 const ScriptRunSlotSchema = Schema.Union([
   ...LifecycleSlotSchema.members,
   Schema.Struct({ kind: Schema.Literal("package"), name: Schema.String }),

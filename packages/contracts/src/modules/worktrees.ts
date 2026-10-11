@@ -19,6 +19,7 @@ import {
   DeleteStackResultSchema,
   DeleteWorktreePayloadSchema,
   DeleteWorktreeResultSchema,
+  DescribeWorktreePayloadSchema,
   DiscardChangesPayloadSchema,
   DiscardChangesResultSchema,
   DiscardHunksPayloadSchema,
@@ -132,6 +133,13 @@ export const worktreesContract = defineContract(
     grant: "changeCode",
   }),
   invoke("renameBranch", RenameBranchPayloadSchema, WorktreeSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  // The worktree's own title and description, edited on its page.
+  invoke("describe", DescribeWorktreePayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,

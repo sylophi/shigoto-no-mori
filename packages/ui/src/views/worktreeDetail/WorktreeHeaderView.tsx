@@ -6,7 +6,8 @@
 // its number and state beside the title, and on the branch's line
 // where it lands, where it sits in a stack (its list in a popover),
 // and its diff. That line never wraps: the base gives way first, then
-// the branch. What the work is and what to do about its PR follow
+// the branch. A title of the worktree's own is edited in place
+// (OwnTitleView). What the work is and what to do about its PR follow
 // under the header. The project map's slim PR draws all of it but the
 // diff at once, so the header doesn't grow when the lookup answers.
 import type { ReactNode, Ref } from "react";
@@ -20,9 +21,11 @@ import {
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { DiffButtonView } from "./DiffButtonView.tsx";
+import { type OwnTitleEdit, OwnTitleView } from "./OwnTitleView.tsx";
 
 export function WorktreeHeaderView({
   title,
+  titleEdit,
   pr,
   branchTitle,
   stack,
@@ -32,6 +35,8 @@ export function WorktreeHeaderView({
   showBase = true,
 }: {
   title: string;
+  // Editing the title, while no PR names the work.
+  titleEdit?: OwnTitleEdit;
   // The PR that names the work: its number linked (PullRequestTitleLinkView),
   // its state (PullRequestStateLabelView), and the base it lands on.
   pr?: {
@@ -61,15 +66,21 @@ export function WorktreeHeaderView({
       {/* One line too: the title truncates beside its number, and the
           state keeps its place at the end. */}
       <div className="mb-1 flex min-w-0 items-center gap-3">
-        <h1 className="flex min-w-0 items-baseline gap-1.5 text-2xl font-medium tracking-tight select-text">
-          <SimpleTooltip whenTruncated tip={title}>
-            <span className="min-w-0 truncate">{title}</span>
-          </SimpleTooltip>
-          {pr?.titleLink}
-        </h1>
-        {/* At the row's end, where a status sits. */}
-        {pr && (
-          <span className="ml-auto inline-flex shrink-0">{pr.stateLabel}</span>
+        {pr ? (
+          <>
+            <h1 className="flex min-w-0 items-baseline gap-1.5 text-2xl font-medium tracking-tight select-text">
+              <SimpleTooltip whenTruncated tip={title}>
+                <span className="min-w-0 truncate">{title}</span>
+              </SimpleTooltip>
+              {pr.titleLink}
+            </h1>
+            {/* At the row's end, where a status sits. */}
+            <span className="ml-auto inline-flex shrink-0">
+              {pr.stateLabel}
+            </span>
+          </>
+        ) : (
+          <OwnTitleView title={title} edit={titleEdit} />
         )}
       </div>
       {/* One line however narrow. The base gives way first, and goes

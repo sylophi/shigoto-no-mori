@@ -6,40 +6,68 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "./executables.ts";
-import { type PackageScript, packageScripts } from "./packageJson.ts";
+import { packageScripts } from "./packageJson.ts";
+import {
+  findJustfile,
+  findMakefile,
+  findPackageJson,
+  parseJustfile,
+  parseMakefile,
+  type Runner,
+} from "./scriptFiles.ts";
 import * as Usage from "./Usage.ts";
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 
-// What the scripts panel reads for one worktree: its package.json
-// scripts in manifest order, the manager its lockfile picks, each
-// script's use stats, and the project's sort and manual order.
-export type PackageScriptsList = {
-  readonly packageManager: PackageManager;
-  readonly scripts: ReadonlyArray<PackageScript>;
+// One script of a worktree's: package.json's by its own name, a
+// justfile recipe as "just <recipe>" and a Makefile target as "make
+// <target>". `file` is the file it comes from and `label` the name it
+// goes by there ("build" for "just build").
+export type Script = {
+  readonly name: string;
+  readonly command: string;
+  readonly file: string;
+  readonly label: string;
+};
+
+// A script as read, with the runner that runs a recipe or target
+// (none for package.json's, which its manager runs).
+type FoundScript = Script & { readonly runner: Runner | undefined };
+
+// What the scripts panel reads for one worktree: its scripts in file
+// order (package.json's, then the justfile's, then the Makefile's), the
+// files they were read from, the manager its lockfile picks (none
+// without a package.json), each script's use stats, and the project's
+// sort and manual order.
+export type ScriptsList = {
+  readonly packageManager: PackageManager | null;
+  readonly scripts: ReadonlyArray<Script>;
+  readonly files: ReadonlyArray<string>;
   readonly usage: Readonly<Record<string, Usage.UseStat>>;
   // A PackageScriptSortMode, or a mode a newer build stored.
   readonly sort: string;
   readonly order: ReadonlyArray<string>;
 };
 
-// The panel reads this as "no scripts", not as a failure.
-export class NoPackageJson extends Schema.TaggedError<NoPackageJson>()(
-  "NoPackageJson",
-  { dir: Schema.String },
-) {
+// No package.json, justfile or Makefile. The panel reads this as "no
+// scripts", not as a failure.
+export class NoScripts extends Schema.TaggedError<NoScripts>()("NoScripts", {
+  dir: Schema.String,
+}) {
   override get message(): string {
-    return `No package.json in ${this.dir}.`;
+    return `No package.json, justfile or Makefile in ${this.dir}.`;
   }
 }
 
-// A package.json that can't be read (permissions, a directory), or that
-// isn't a JSON object.
-export class UnreadablePackageJson extends Schema.TaggedError<UnreadablePackageJson>()(
-  "UnreadablePackageJson",
+// A script file that can't be read (permissions, a directory), or a
+// package.json that isn't a JSON object. Only when no other script file
+// reads: one that does hides the failure.
+export class UnreadableScripts extends Schema.TaggedError<UnreadableScripts>()(
+  "UnreadableScripts",
   {
     path: Schema.String,
     stage: Schema.Literals(["read", "parse"]),
@@ -54,27 +82,34 @@ export class UnreadablePackageJson extends Schema.TaggedError<UnreadablePackageJ
 }
 
 // A script `sm run` can't start: the worktree has none, none by that
-// name, or the manager its lockfile picks isn't on PATH.
+// name, or the tool that runs it (the manager its lockfile picks, just
+// or make) isn't on PATH.
 export class ScriptRefused extends Schema.TaggedError<ScriptRefused>()(
   "ScriptRefused",
   {
-    reason: Schema.Literals(["no-scripts", "unknown-script", "no-manager"]),
+    reason: Schema.Literals(["no-scripts", "unknown-script", "no-tool"]),
     script: Schema.String,
-    // The worktree's path and name, its scripts and its manager.
+    // The worktree's path and name, its scripts and the files they come
+    // from.
     dir: Schema.String,
     worktree: Schema.String,
     scripts: Schema.Array(Schema.String),
-    manager: Schema.String,
+    files: Schema.Array(Schema.String),
+    // The tool that runs the script, and whether the lockfile picked it.
+    tool: Schema.String,
+    byLockfile: Schema.Boolean,
   },
 ) {
   override get message(): string {
     switch (this.reason) {
       case "no-scripts":
-        return `package.json in ${this.dir} has no scripts.`;
+        return `${this.files.join(", ")} in ${this.dir} has no scripts.`;
       case "unknown-script":
         return `No script named ${JSON.stringify(this.script)}. Scripts: ${this.scripts.join(", ")}.`;
-      case "no-manager":
-        return `${this.manager} isn't on PATH (the ${this.worktree} lockfile selects it).`;
+      case "no-tool":
+        return this.byLockfile
+          ? `${this.tool} isn't on PATH (the ${this.worktree} lockfile selects it).`
+          : `${this.tool} isn't on PATH.`;
     }
   }
 }
@@ -85,32 +120,39 @@ export class Scripts extends Context.Service<
     readonly list: (input: {
       readonly projectId: string;
       readonly worktreePath: string;
-    }) => Effect.Effect<
-      PackageScriptsList,
-      NoPackageJson | UnreadablePackageJson
-    >;
+    }) => Effect.Effect<ScriptsList, NoScripts | UnreadableScripts>;
     // The project's sort and manual order alone, which no worktree's
-    // package.json is needed for.
+    // scripts are needed for.
     readonly arrangement: (projectId: string) => Effect.Effect<{
       readonly sort: string;
       readonly order: ReadonlyArray<string>;
     }>;
-    // The manager's command that runs the worktree's script `script` with
-    // `extra` after it, the manager found on PATH.
+    // The command that runs the worktree's script `script` with `extra`
+    // after it, the tool found on PATH: the manager its lockfile picks
+    // for a package.json script, just or make for a recipe or target.
+    // From a terminal a recipe can be named as two words (`just build`),
+    // which takes the first of `extra`; `script` is the name it resolved
+    // to.
     readonly command: (input: {
       readonly worktree: { readonly path: string; readonly name: string };
       readonly script: string;
       readonly extra: ReadonlyArray<string>;
     }) => Effect.Effect<
-      { readonly program: string; readonly args: ReadonlyArray<string> },
-      NoPackageJson | UnreadablePackageJson | ScriptRefused
+      {
+        readonly program: string;
+        readonly args: ReadonlyArray<string>;
+        readonly script: string;
+      },
+      NoScripts | UnreadableScripts | ScriptRefused
     >;
-    // The scripts of the package.json in `dir`, in manifest order.
-    readonly readScripts: (
-      dir: string,
-    ) => Effect.Effect<
-      ReadonlyArray<PackageScript>,
-      NoPackageJson | UnreadablePackageJson
+    // The scripts at the root of `dir`, in file order, and the files
+    // they were read from.
+    readonly readScripts: (dir: string) => Effect.Effect<
+      {
+        readonly scripts: ReadonlyArray<Script>;
+        readonly files: ReadonlyArray<string>;
+      },
+      NoScripts | UnreadableScripts
     >;
     // Counts a run of the project's script.
     readonly recordRun: (
@@ -168,6 +210,34 @@ const runArgs = (
   ...extra,
 ];
 
+// The script the positionals name and the args left for it. A script
+// is named whole ("just build" is one argument from the app), or, typed
+// in a terminal, as `sm run just build`: the runner and the recipe as
+// two words, unless package.json has a script called "just" itself.
+export function findScript<
+  S extends { readonly name: string; readonly runner: Runner | undefined },
+>(
+  scripts: ReadonlyArray<S>,
+  positionals: ReadonlyArray<string>,
+): { readonly script: S; readonly extra: ReadonlyArray<string> } | undefined {
+  const [first, second] = positionals;
+  const whole = scripts.find(({ name }) => name === first);
+  if (whole !== undefined)
+    return { script: whole, extra: positionals.slice(1) };
+  if (second === undefined) return undefined;
+  const split = scripts.find(({ name }) => name === `${first} ${second}`);
+  return split?.runner === undefined
+    ? undefined
+    : { script: split, extra: positionals.slice(2) };
+}
+
+const publicScript = ({ name, command, file, label }: FoundScript): Script => ({
+  name,
+  command,
+  file,
+  label,
+});
+
 export function mergeArrangedOrder(
   stored: ReadonlyArray<string>,
   arranged: ReadonlyArray<string>,
@@ -215,6 +285,14 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  // The manager, none without a package.json.
+  const packageManagerOf = (dir: string) =>
+    present(path.join(dir, "package.json")).pipe(
+      Effect.flatMap((found) =>
+        found ? Effect.asSome(packageManager(dir)) : Effect.succeedNone,
+      ),
+    );
+
   const storedList = (projectId: string, listName: "order" | "launchRow") =>
     sql<{ name: string }>`SELECT name FROM script_lists
       WHERE project_id = ${projectId} AND list = ${listName}
@@ -242,27 +320,99 @@ const make = Effect.gen(function* () {
           )}`,
     ]);
 
-  // The scripts of the package.json in `dir`, in manifest order.
-  const readScripts = (dir: string) =>
-    Effect.gen(function* () {
-      const manifest = path.join(dir, "package.json");
-      const text = yield* fs.readFileString(manifest).pipe(
-        Effect.mapError((cause) =>
-          Predicate.isTagged(cause.reason, "NotFound")
-            ? new NoPackageJson({ dir })
-            : new UnreadablePackageJson({
-                path: manifest,
-                stage: "read",
-                cause,
-              }),
+  // The parsers by file, package.json's first. Only package.json's can
+  // fail: the others take any text.
+  const sources: ReadonlyArray<{
+    readonly find: (files: ReadonlyArray<string>) => string | undefined;
+    readonly parse: (text: string) => ReadonlyArray<Omit<FoundScript, "file">>;
+  }> = [
+    {
+      find: findPackageJson,
+      parse: (text) =>
+        packageScripts(text).map(({ name, command }) => ({
+          name,
+          command,
+          label: name,
+          runner: undefined,
+        })),
+    },
+    { find: findJustfile, parse: parseJustfile },
+    { find: findMakefile, parse: parseMakefile },
+  ];
+
+  // Every script the root of `dir` offers, package.json's first, then
+  // the justfile's recipes and the Makefile's targets, and the files
+  // they came from. A file that doesn't read or parse (a package.json
+  // caught mid-edit) is left out rather than hiding the others, and
+  // fails the read only when no other file is there.
+  const readFound = Effect.fn("Scripts.readScripts")(function* (dir: string) {
+    const entries = yield* fs
+      .readDirectory(dir)
+      .pipe(
+        Effect.mapError(
+          (cause) => new UnreadableScripts({ path: dir, stage: "read", cause }),
         ),
       );
-      return yield* Effect.try({
-        try: () => packageScripts(text),
-        catch: (cause) =>
-          new UnreadablePackageJson({ path: manifest, stage: "parse", cause }),
-      });
-    });
+    const read = yield* Effect.forEach(
+      sources,
+      ({ find, parse }) =>
+        Effect.gen(function* () {
+          const file = find(entries);
+          if (file === undefined) return undefined;
+          const at = path.join(dir, file);
+          // A directory by the name is no script file.
+          const info = yield* fs.stat(at).pipe(Effect.option);
+          if (Option.isSome(info) && info.value.type === "Directory") {
+            return undefined;
+          }
+          return yield* fs.readFileString(at).pipe(
+            Effect.mapError(
+              (cause) =>
+                new UnreadableScripts({ path: at, stage: "read", cause }),
+            ),
+            Effect.flatMap((text) =>
+              Effect.try({
+                try: () =>
+                  parse(text).map(({ name, command, label, runner }) => ({
+                    name,
+                    command,
+                    file,
+                    label,
+                    runner,
+                  })),
+                catch: (cause) =>
+                  new UnreadableScripts({ path: at, stage: "parse", cause }),
+              }),
+            ),
+            Effect.map((scripts) => ({ file, scripts })),
+            Effect.result,
+          );
+        }),
+      { concurrency: "unbounded" },
+    );
+    const found = read.filter(Predicate.isNotUndefined);
+    const files = found.flatMap((result) =>
+      Result.isSuccess(result) ? [result.success] : [],
+    );
+    if (files.length === 0) {
+      const failure = found.find(Result.isFailure);
+      return yield* failure === undefined
+        ? new NoScripts({ dir })
+        : failure.failure;
+    }
+    return {
+      scripts: files.flatMap(({ scripts }) => scripts),
+      files: files.map(({ file }) => file),
+    };
+  });
+
+  const readScripts = (dir: string) =>
+    readFound(dir).pipe(
+      Effect.map(({ scripts, files }) => ({
+        scripts: scripts.map(publicScript),
+        files,
+      })),
+    );
 
   // A mode a newer build stored is passed on, and an empty one is the
   // default.
@@ -284,18 +434,19 @@ const make = Effect.gen(function* () {
     readonly projectId: string;
     readonly worktreePath: string;
   }) {
-    const scripts = yield* readScripts(input.worktreePath);
+    const { scripts, files } = yield* readScripts(input.worktreePath);
     const { manager, stats, arranged } = yield* Effect.all(
       {
-        manager: packageManager(input.worktreePath),
+        manager: packageManagerOf(input.worktreePath),
         stats: usage.stats("script", input.projectId),
         arranged: arrangement(input.projectId),
       },
       { concurrency: "unbounded" },
     );
     return {
-      packageManager: manager,
+      packageManager: Option.getOrNull(manager),
       scripts,
+      files,
       usage: Object.fromEntries(
         scripts.map(({ name }) => [
           name,
@@ -311,29 +462,49 @@ const make = Effect.gen(function* () {
     readonly script: string;
     readonly extra: ReadonlyArray<string>;
   }) {
-    const scripts = yield* readScripts(input.worktree.path);
+    const { scripts, files } = yield* readFound(input.worktree.path);
     const manager = yield* packageManager(input.worktree.path);
-    const refused = (reason: ScriptRefused["reason"]) =>
+    const refused = (
+      reason: ScriptRefused["reason"],
+      tool: { readonly name: string; readonly byLockfile: boolean } = {
+        name: manager,
+        byLockfile: true,
+      },
+    ) =>
       new ScriptRefused({
         reason,
         script: input.script,
         dir: input.worktree.path,
         worktree: input.worktree.name,
         scripts: scripts.map(({ name }) => name),
-        manager,
+        files,
+        tool: tool.name,
+        byLockfile: tool.byLockfile,
       });
-    if (!scripts.some(({ name }) => name === input.script)) {
+    const found = findScript(scripts, [input.script, ...input.extra]);
+    if (found === undefined) {
       return yield* refused(
         scripts.length === 0 ? "no-scripts" : "unknown-script",
       );
     }
-    const program = yield* findExecutable(manager);
-    if (Option.isNone(program)) return yield* refused("no-manager");
+    const { script, extra } = found;
+    const tool = script.runner ?? manager;
+    const program = yield* findExecutable(tool);
+    if (Option.isNone(program)) {
+      return yield* refused("no-tool", {
+        name: tool,
+        byLockfile: script.runner === undefined,
+      });
+    }
     return {
       // An empty or relative PATH entry is the cwd's, and the script
       // runs elsewhere.
       program: path.resolve(program.value),
-      args: runArgs(manager, input.script, input.extra),
+      args:
+        script.runner === undefined
+          ? runArgs(manager, script.name, extra)
+          : [script.label, ...extra],
+      script: script.name,
     };
   });
 
@@ -397,14 +568,7 @@ const make = Effect.gen(function* () {
   return Scripts.of({
     list,
     arrangement,
-    packageManager: (dir) =>
-      present(path.join(dir, "package.json")).pipe(
-        Effect.flatMap((found) =>
-          found
-            ? Effect.map(packageManager(dir), Option.some)
-            : Effect.succeed(Option.none()),
-        ),
-      ),
+    packageManager: packageManagerOf,
     command: (input) => command(input).pipe(Effect.provideContext(platform)),
     readScripts,
     recordRun,

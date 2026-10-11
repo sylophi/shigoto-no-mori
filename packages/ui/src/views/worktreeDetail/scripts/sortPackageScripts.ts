@@ -35,7 +35,7 @@ export function sortEntries(
       return mapped;
     case "manual": {
       // Named scripts in their stored places, then the rest (added since
-      // the last arrange, or never arranged) in package.json order.
+      // the last arrange, or never arranged) in file order.
       const rank = new Map(order.map((name, i) => [name, i]));
       const unranked = order.length;
       return mapped.toSorted(

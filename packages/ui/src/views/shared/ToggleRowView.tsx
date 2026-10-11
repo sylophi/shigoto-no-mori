@@ -8,6 +8,8 @@ interface ToggleRowProps {
   description?: React.ReactNode;
   disabled?: boolean;
   switchClassName?: string;
+  // Menu-sized type, for a row in a popover.
+  dense?: boolean;
 }
 
 export function ToggleRowView({
@@ -17,6 +19,7 @@ export function ToggleRowView({
   description,
   disabled = false,
   switchClassName,
+  dense = false,
 }: ToggleRowProps) {
   return (
     // The hover fill bleeds past the row on a negative margin, which
@@ -42,11 +45,23 @@ export function ToggleRowView({
           />
         </span>
         <div className="flex min-w-0 flex-col">
-          <span className={cn("text-sm", disabled && "opacity-50")}>
+          <span
+            className={cn(
+              dense ? "text-xs" : "text-sm",
+              disabled && "opacity-50",
+            )}
+          >
             {label}
           </span>
           {description && (
-            <span className="text-xs text-muted-foreground">{description}</span>
+            <span
+              className={cn(
+                dense ? "text-2xs leading-snug" : "text-xs",
+                "text-muted-foreground",
+              )}
+            >
+              {description}
+            </span>
           )}
         </div>
       </label>

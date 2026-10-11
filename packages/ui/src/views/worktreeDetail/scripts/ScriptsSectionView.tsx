@@ -1,6 +1,6 @@
 // The worktree page's Scripts section (ScriptsSection binds it): the
-// package.json scripts, then the lifecycle scripts the project runs
-// around a worktree's life.
+// package.json, justfile and Makefile scripts, then the lifecycle
+// scripts the project runs around a worktree's life.
 import type { ReactNode } from "react";
 import { Skeleton } from "../../../primitives/skeleton.tsx";
 import { ScriptListView } from "./ScriptListView.tsx";
@@ -13,7 +13,8 @@ export function ScriptsSectionView({
 }: {
   // The config or the scripts are still being read.
   loading: boolean;
-  // The package.json scripts (PackageScripts), when there are any.
+  // The package.json, justfile and Makefile scripts (PackageScripts),
+  // when there are any.
   packageScripts?: ReactNode;
   // The lifecycle rows (ScriptRow): setup, the port pool, teardown.
   lifecycle: ReactNode[];

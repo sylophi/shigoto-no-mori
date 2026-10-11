@@ -1,5 +1,5 @@
 // The worktree page's Launch section (LaunchSection binds it): the
-// launch tools on this device, and the package.json scripts.
+// launch tools on this device, and the worktree's scripts.
 import type { ReactNode } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { Skeleton } from "../../primitives/skeleton.tsx";

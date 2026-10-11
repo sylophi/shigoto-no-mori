@@ -546,6 +546,9 @@ function DevicePickView({
           {toPeer.targets.map((candidate) => (
             <DropdownMenuRadioItem
               key={candidate.deviceId}
+              // Sized like the device names on the cards it picks for,
+              // not a step under them like other menus.
+              className="pl-1.5 text-sm"
               value={candidate.deviceId}
               disabled={!candidate.ready}
             >
