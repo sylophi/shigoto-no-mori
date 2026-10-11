@@ -9,7 +9,7 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
-import { peerWorktreesFor } from "@host/ipc/peerSync";
+import { type PeerReach, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { findProject } from "@host/lib/projects";
 import {
   localSource,
@@ -89,7 +89,7 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
   if (changed !== undefined) {
     return { sourceRemoved: false, sourceError: changed } as const;
   }
-  const result = yield* tearDown(
+  const result = yield* tearDown<R | PeerReach>(
     receipt,
     pulled ? "here" : "on the other device",
     (force) => {

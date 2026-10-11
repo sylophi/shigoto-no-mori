@@ -49,12 +49,12 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
+  PeerReach,
   peerMirrorFor,
-  peerClient,
   peerWorktree,
   peerWorktreesFor,
-  thisDeviceId,
-} from "@host/ipc/peerSync";
+} from "@host/ipc/PeerReach";
+import * as DeviceId from "@host/lib/config/DeviceId";
 import { runMove } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { inviteMirror, listMirrorInvites } from "./invites";
@@ -68,17 +68,16 @@ import {
 import {
   endMirrorKeepingCopy,
   endMirrorsIntoGoneCopy,
-  engine,
   engineOrNull,
   findSession,
   localWorktreeIdOf,
-  MirrorError,
   type MirrorSessionRaw,
   mirrorSessions,
   ORIGINAL_GONE_DETAIL,
   requireRunningEngine,
   rootExists,
 } from "./registry";
+import { MirrorEngine, MirrorError } from "./MirrorEngine";
 import { announceServingChange, listMirrorServing } from "./serving";
 import { log } from "@shared/log";
 
@@ -87,7 +86,7 @@ const decodeMirrorStartToResult = Schema.decodeUnknownSync(
   MirrorStartToResultSchema,
 );
 
-type Daemon = ReturnType<typeof engine>;
+type Daemon = MirrorEngine["Service"];
 
 // Ignore changes in flight, by session: two at once (both devices'
 // pages) would each open a session on the pair.
@@ -112,8 +111,9 @@ let lastListed: MirrorSession[] = [];
 
 // A device's mirror picture: what mirror:list answers and what
 // mirror:changed carries. The same for every caller.
-export const mirrorList = (daemon: Daemon = engine()) =>
+export const mirrorList = (given?: Daemon) =>
   Effect.gen(function* () {
+    const daemon = given ?? (yield* MirrorEngine);
     const status = yield* daemon.status;
     const running = status === "running";
     const sessions = running
@@ -136,8 +136,7 @@ export const mirrorList = (daemon: Daemon = engine()) =>
 // The list for the changed broadcast, or undefined, which a reader
 // answers by asking. Before the daemon is wired there is none to send.
 // A list that fails to build is said so.
-export const currentMirrorList = Effect.suspend(() => {
-  const daemon = engineOrNull();
+export const currentMirrorList = Effect.flatMap(engineOrNull, (daemon) => {
   if (daemon === null) return Effect.succeed(undefined);
   return mirrorList(daemon).pipe(
     Effect.catchCause((cause) =>
@@ -283,10 +282,11 @@ export const startMirrorFrom = (
     ...rule
   } = input;
   return Effect.acquireUseRelease(
-    Effect.sync(() => {
+    Effect.map(PeerReach, (reach) => {
       const notify = ctx.notifier(syncContract, "pullProgress");
-      return peerClient(syncContract, sourceDeviceId).onPullProgress(
-        (frame) => {
+      return reach
+        .client(syncContract, sourceDeviceId)
+        .onPullProgress((frame) => {
           const parsed = decodePullProgress(frame);
           if (
             Option.isSome(parsed) &&
@@ -294,8 +294,7 @@ export const startMirrorFrom = (
           ) {
             notify(parsed.value);
           }
-        },
-      );
+        });
     }),
     // A move like the others (runMove), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a
@@ -314,7 +313,7 @@ export const startMirrorFrom = (
           });
           const started = yield* peerMirrorFor(sourceDeviceId)
             .startTo({
-              targetDeviceId: thisDeviceId(),
+              targetDeviceId: yield* DeviceId.current,
               projectId,
               worktreeId,
               ...rule,
@@ -342,7 +341,7 @@ export const startMirrorFrom = (
 // never removed, forced or not.
 export const stopMirror = (session: string, force: boolean) =>
   Effect.gen(function* () {
-    const daemon = engine();
+    const daemon = yield* MirrorEngine;
     const raw = yield* findSession(daemon, session);
     if (raw === undefined) {
       return yield* new MirrorError({
@@ -467,7 +466,7 @@ export const endMirrorIfCopyGone = (session: {
 // way, its loop started again.
 export const pauseOrResume = (session: string, verb: "pause" | "resume") =>
   Effect.gen(function* () {
-    const daemon = engine();
+    const daemon = yield* MirrorEngine;
     yield* daemon[verb](session).pipe(
       Effect.catch((error) =>
         Effect.gen(function* () {
@@ -486,7 +485,7 @@ export const pauseOrResume = (session: string, verb: "pause" | "resume") =>
   });
 
 // The engine cannot re-configure a live session, so a change of
-// ignores re-opens it on the same pair (MirrorImpl.recreate, which
+// ignores re-opens it on the same pair (MirrorEngine's recreate, which
 // keeps the old one until the new one is up and carries the git
 // follower's agreement across), the labels carried over. The pair's
 // files are already in agreement, so the new session's first cycle
@@ -503,7 +502,7 @@ export const reopenMirror = (
   ignores: readonly string[],
 ) =>
   Effect.gen(function* () {
-    const daemon = engine();
+    const daemon = yield* MirrorEngine;
     const raw = yield* findSession(daemon, session);
     if (raw === undefined) {
       return yield* new MirrorError({

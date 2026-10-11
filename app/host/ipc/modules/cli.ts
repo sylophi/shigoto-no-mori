@@ -15,7 +15,7 @@ import {
 import * as Ops from "@host/lib/engineOps";
 import { loadProjects, refresh } from "@host/lib/projects";
 import { killScriptsForProject } from "@host/lib/scripts";
-import { hostFacts } from "@host/process/facts";
+import * as HostFacts from "@host/lib/HostFacts";
 import type { HostServices } from "@host/process/services";
 import * as Effect from "effect/Effect";
 
@@ -24,11 +24,14 @@ import * as Effect from "effect/Effect";
 // check's .zshrc. XDG_CONFIG_HOME also places the data dir pointer, and
 // the doctor must inspect the data dir the app runs on, not the one a
 // shell would find.
-const doctorInput = Effect.map(Effect.promise(hookPathEnv), ({ ZDOTDIR }) => ({
-  version: hostFacts().appVersion,
-  executable: requireCliBinary(),
-  ...(ZDOTDIR === undefined ? {} : { zdotdir: ZDOTDIR }),
-}));
+const doctorInput = Effect.gen(function* () {
+  const { ZDOTDIR } = yield* Effect.promise(hookPathEnv);
+  return {
+    version: (yield* HostFacts.HostFacts).appVersion,
+    executable: yield* requireCliBinary,
+    ...(ZDOTDIR === undefined ? {} : { zdotdir: ZDOTDIR }),
+  };
+});
 
 export const cliHandlers = {
   status: () => cliLinkStatus,

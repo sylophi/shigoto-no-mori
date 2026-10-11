@@ -21,28 +21,21 @@ import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync"
 import { listIgnoredPaths } from "../git/branches";
 import { chunked, runLenient } from "../git/core";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import * as Cache from "effect/Cache";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type * as Engine from "../engine";
 import * as Ops from "../engineOps";
+import type { GitError } from "../git/core";
 import type { WorktreeIdentity } from "../git/worktrees";
-import { ttlEffectCache } from "../util/ttlCache";
+import { answersFor } from "../util/cacheTtl";
 
 export type CarryOverCheckout = Pick<
   WorktreeIdentity,
   "name" | "path" | "isPrimary"
 >;
-
-// Falls back to the primary alone when the worktree list can't be read.
-// A bare repo flags no identity as primary, so the first checkout stands
-// in.
-export const listCarryOverCheckouts = (
-  projectId: string,
-  projectPath: string,
-) =>
-  Ops.listWorktreeIdentities({ projectId }).pipe(
-    Effect.orElseSucceed((): readonly WorktreeIdentity[] => []),
-    Effect.map((identities) => primaryFirst(identities, projectPath)),
-  );
 
 function primaryFirst(
   identities: readonly WorktreeIdentity[],
@@ -63,12 +56,10 @@ function primaryFirst(
 // The picker re-lists on every folder step while the ignored set of a
 // checkout barely changes. One walk per checkout every few seconds is
 // plenty.
-const ignoredPathsCache = ttlEffectCache(10_000, listIgnoredPaths);
+const IGNORED_PATHS_TTL = Duration.seconds(10);
 
-// The same walk for the sync handler's ignored-paths read, so a
-// dialog listing a worktree and its picker browsing it share one.
-export const cachedIgnoredPaths = (worktreePath: string) =>
-  ignoredPathsCache.get(worktreePath);
+// A checkout's ignored walk, cached (makeCarryOver below).
+type IgnoredPaths = (checkoutPath: string) => Effect.Effect<string[], GitError>;
 
 // An entry of `relative` as a root-relative path.
 function pathOf(relative: string, name: string): string {
@@ -79,7 +70,7 @@ function pathOf(relative: string, name: string): string {
 // root-relative path: the ignored walk, plus (with `ruleIgnored`) the
 // folders a rule names that the walk passes over (ruleIgnoredFolders
 // below). Throws when the folder can't be read.
-class FolderReadError extends Schema.TaggedError<FolderReadError>()(
+export class FolderReadError extends Schema.TaggedError<FolderReadError>()(
   "FolderReadError",
   { reason: Schema.String },
 ) {
@@ -89,6 +80,7 @@ class FolderReadError extends Schema.TaggedError<FolderReadError>()(
 }
 
 const readFolderVerdicts = Effect.fnUntraced(function* (
+  ignoredPaths: IgnoredPaths,
   checkoutPath: string,
   relative: string,
   ruleIgnored: boolean,
@@ -101,7 +93,7 @@ const readFolderVerdicts = Effect.fnUntraced(function* (
         catch: (error) =>
           new FolderReadError({ reason: errorMessageOf(error) }),
       }),
-      ignoredPathsCache.get(checkoutPath),
+      ignoredPaths(checkoutPath),
     ],
     { concurrency: 2 },
   );
@@ -137,7 +129,8 @@ function foldersFirst(
 // tracking it always copies it. `ruleIgnored` adds the verdict of
 // ruleIgnoredFolders below, for the leave-out picker: carry-over must
 // not take it, since such a folder holds a file git tracks.
-export const listCarryOverCandidates = Effect.fnUntraced(function* (
+const listCarryOverCandidates = Effect.fnUntraced(function* (
+  ignoredPaths: IgnoredPaths,
   checkouts: readonly CarryOverCheckout[],
   relative: string,
   { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
@@ -145,7 +138,12 @@ export const listCarryOverCandidates = Effect.fnUntraced(function* (
   const listed = yield* Effect.forEach(
     checkouts,
     (checkout) =>
-      readFolderVerdicts(checkout.path, relative, ruleIgnored).pipe(
+      readFolderVerdicts(
+        ignoredPaths,
+        checkout.path,
+        relative,
+        ruleIgnored,
+      ).pipe(
         Effect.map(({ entries, isIgnored }) => ({
           checkout,
           entries,
@@ -234,12 +232,14 @@ const ruleIgnoredFolders = (worktreePath: string, folders: readonly string[]) =>
 // (packages/contracts/src/modules/sync.ts worktreeFolder). Folders
 // first, then alphabetical, like the carry-over listing, and .git left
 // out for the same reason.
-export const listWorktreeFolder = Effect.fnUntraced(function* (
+const listWorktreeFolder = Effect.fnUntraced(function* (
+  ignoredPaths: IgnoredPaths,
   worktreePath: string,
   relative: string,
   ruleIgnored: boolean,
 ) {
   const { entries, isIgnored } = yield* readFolderVerdicts(
+    ignoredPaths,
     worktreePath,
     relative,
     ruleIgnored,
@@ -278,12 +278,6 @@ export const listWorktreeFolder = Effect.fnUntraced(function* (
     .toSorted(foldersFirst);
 });
 
-// Where each configured path currently exists.
-export const statCarryOverPaths = (
-  checkouts: readonly CarryOverCheckout[],
-  paths: readonly string[],
-) => Effect.promise(() => statPaths(checkouts, paths));
-
 async function statPaths(
   checkouts: readonly CarryOverCheckout[],
   paths: readonly string[],
@@ -313,3 +307,70 @@ async function statPaths(
   );
   return stats;
 }
+
+// The Worktrees service's carry-over reads (host/lib/Worktrees.ts).
+export const makeCarryOver = Effect.gen(function* () {
+  const context = yield* Effect.context<
+    Engine.Services | ChildProcessSpawner.ChildProcessSpawner
+  >();
+
+  // The same walk serves the sync handler's ignored-paths read, so a
+  // dialog listing a worktree and its picker browsing it share one.
+  const ignored = yield* Cache.makeWith(listIgnoredPaths, {
+    capacity: Infinity,
+    timeToLive: answersFor(IGNORED_PATHS_TTL),
+  });
+  const ignoredPaths: IgnoredPaths = (checkoutPath) =>
+    Cache.get(ignored, checkoutPath);
+
+  return {
+    // Falls back to the primary alone when the worktree list can't be
+    // read. A bare repo flags no identity as primary, so the first
+    // checkout stands in.
+    carryOverCheckouts: Effect.fn("Worktrees.carryOverCheckouts")(function* (
+      projectId: string,
+      projectPath: string,
+    ) {
+      const identities = yield* Ops.listWorktreeIdentities({ projectId }).pipe(
+        Effect.orElseSucceed((): readonly WorktreeIdentity[] => []),
+        Effect.provide(context),
+      );
+      return primaryFirst(identities, projectPath);
+    }),
+    carryOverCandidates: Effect.fn("Worktrees.carryOverCandidates")(function* (
+      checkouts: readonly CarryOverCheckout[],
+      relative: string,
+      options?: { ruleIgnored?: boolean },
+    ) {
+      return yield* listCarryOverCandidates(
+        ignoredPaths,
+        checkouts,
+        relative,
+        options,
+      ).pipe(Effect.provide(context));
+    }),
+    // Where each configured path currently exists.
+    carryOverStats: Effect.fn("Worktrees.carryOverStats")(function* (
+      checkouts: readonly CarryOverCheckout[],
+      paths: readonly string[],
+    ) {
+      return yield* Effect.promise(() => statPaths(checkouts, paths));
+    }),
+    worktreeFolder: Effect.fn("Worktrees.worktreeFolder")(function* (
+      worktreePath: string,
+      relative: string,
+      ruleIgnored: boolean,
+    ) {
+      return yield* listWorktreeFolder(
+        ignoredPaths,
+        worktreePath,
+        relative,
+        ruleIgnored,
+      ).pipe(Effect.provide(context));
+    }),
+    ignoredPaths: (worktreePath: string) =>
+      ignoredPaths(worktreePath).pipe(
+        Effect.withSpan("Worktrees.ignoredPaths"),
+      ),
+  };
+});

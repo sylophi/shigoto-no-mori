@@ -13,8 +13,10 @@
 // teardown) lives in bridge.ts, shared with the mirror gateway. This
 // file owns the listeners, the per-device conn cap and the forward
 // registry.
-import { coalesce } from "@host/lib/util/coalesce";
 import { createServer, type Server, type Socket } from "node:net";
+import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import {
   type forwardContract,
   isForwardConnectFailedError,
@@ -44,11 +46,11 @@ export type ForwardApi = Client<typeof forwardContract>;
 // Exported so the port-forward check's cap scenario tracks this value.
 export const MAX_CONNS_PER_DEVICE = 16;
 
-// Trailing coalesce for the changed signal: opens and closes arrive
-// in bursts (one page load moves ~a dozen conns), and each signal
-// triggers a renderer list refetch, so burst members collapse into one
-// signal shortly after the first.
-const CHANGE_COALESCE_MS = 150;
+// The changed signal's window: opens and closes arrive in bursts (one
+// page load moves ~a dozen conns), and each signal triggers a renderer
+// list refetch, so a burst goes out as one signal this long after its
+// first member.
+const CHANGE_WINDOW_MS = 150;
 
 type Forward = {
   forwardId: string;
@@ -67,16 +69,26 @@ type Forward = {
   channels: PeerChannels;
 };
 
-export type PortForwardEngine = ReturnType<typeof createPortForwardEngine>;
+export type PortForwardEngine = Effect.Success<
+  ReturnType<typeof makePortForwardEngine>
+>;
 
-export function createPortForwardEngine(deps: {
+// The changed signal runs in the caller's scope.
+export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   forwardApiFor: (deviceId: string) => ForwardApi;
   // The peer session's byte channels (bridge.ts PeerChannels).
   channelsFor: (deviceId: string) => PeerChannels;
   onChange?: () => void;
 }) {
   const forwards = new Map<string, Forward>();
-  const changed = coalesce(() => deps.onChange?.(), CHANGE_COALESCE_MS);
+  // A change waiting to go out: one is all a burst needs.
+  const changes = yield* Queue.sliding<void>(1);
+  const changed = () => void Queue.offerUnsafe(changes, undefined);
+  yield* Stream.fromQueue(changes).pipe(
+    Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
+    Stream.runForEach(() => Effect.sync(() => deps.onChange?.())),
+    Effect.forkScoped,
+  );
 
   function findForward(
     deviceId: string,
@@ -257,4 +269,4 @@ export function createPortForwardEngine(deps: {
   }
 
   return { startForward, stopForward, listForwards, stopAll, stopForwardsTo };
-}
+});
