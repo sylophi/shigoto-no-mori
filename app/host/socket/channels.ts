@@ -14,6 +14,7 @@
 // ahead than CHANNEL_CALLS_IN_FLIGHT is refused, so a channel holds a
 // bounded number of them, and at most that many writes' bytes.
 import {
+  ChannelRefusedError,
   RemoteCallError,
   type CallFailureSchema,
 } from "@shigomori/contracts/errors";
@@ -30,11 +31,6 @@ import {
 } from "@shigomori/contracts/modules/link";
 import { CHANNEL_WINDOW_BYTES } from "@shared/remote/channels";
 import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
-import {
-  CHANNEL_OPEN_NO_CHANNELS,
-  CHANNEL_OPEN_TAKEN,
-  CHANNEL_OPEN_TOO_MANY,
-} from "@shigomori/contracts/channelRefusals";
 
 // How long a call naming a channel waits for its open to attach it. An
 // open that dials a port or spawns a serve child answers well within.
@@ -209,10 +205,11 @@ export function makeHostChannels(): HostChannels {
 
   return {
     attach(channelId, endpoint, opts) {
-      if (dead) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
-      if (channels.has(channelId)) throw new Error(CHANNEL_OPEN_TAKEN);
+      if (dead) throw new ChannelRefusedError({ reason: "no-byte-channels" });
+      if (channels.has(channelId))
+        throw new ChannelRefusedError({ reason: "channel-taken" });
       if (channels.size >= MAX_CHANNELS_PER_LINK) {
-        throw new Error(CHANNEL_OPEN_TOO_MANY);
+        throw new ChannelRefusedError({ reason: "too-many-conns" });
       }
       const channel: Channel = {
         endpoint,

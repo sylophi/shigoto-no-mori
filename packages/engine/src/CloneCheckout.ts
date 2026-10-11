@@ -22,6 +22,7 @@
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -209,14 +210,6 @@ const sameConversions = (a: Conversions, b: Conversions) =>
   JSON.stringify(a.sourceConfig) === JSON.stringify(b.sourceConfig);
 
 const RECORDS_PER_STATEMENT = 1000;
-
-const chunksOf = <A>(items: ReadonlyArray<A>): A[][] => {
-  const chunks: A[][] = [];
-  for (let i = 0; i < items.length; i += RECORDS_PER_STATEMENT) {
-    chunks.push(items.slice(i, i + RECORDS_PER_STATEMENT));
-  }
-  return chunks;
-};
 
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
@@ -424,11 +417,11 @@ const make = Effect.gen(function* () {
             .filter(([file, record]) => !current(file, record))
             .map(([file]) => file);
           // In chunks, under SQLite's limit on a statement's parameters.
-          for (const chunk of chunksOf(stale)) {
+          for (const chunk of Arr.chunksOf(stale, RECORDS_PER_STATEMENT)) {
             yield* sql`DELETE FROM clone_verified WHERE source_id = ${sourceId}
               AND ${sql.in("path", chunk)}`;
           }
-          for (const chunk of chunksOf([...added])) {
+          for (const chunk of Arr.chunksOf([...added], RECORDS_PER_STATEMENT)) {
             yield* sql`INSERT INTO clone_verified ${sql.insert(
               chunk.map(([file, record]) => ({
                 source_id: sourceId,

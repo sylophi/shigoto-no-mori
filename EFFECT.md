@@ -93,8 +93,8 @@ export const layer = Layer.effect(Registry, make);
 
 - `ManagedRuntime.make`, `Effect.runPromise`, `runPromiseExit` and
   their kin belong only at the edges: React, Electron callbacks, the
-  terminal entrypoint, a Promise-facing adapter during the migration.
-  Never inside a service, a store module or a constructor.
+  terminal entrypoint, a proof. Never inside a service, a store module
+  or a constructor.
 - Each process composes one layer graph, per subsystem, in its own
   module: the engine's, the host's, the shell's, the terminal's. No
   module builds a runtime to hand out, and no feature gets a runtime
@@ -110,39 +110,14 @@ export const layer = Layer.effect(Registry, make);
   (`registerHostContract`), and a view reads with one (`Views.view`).
   Its handler table `satisfies` the contract's `Handlers`, so each
   method keeps its own type for a caller in the host.
-- During the migration a converted subsystem keeps its Promise
-  interface for unconverted callers through one named adapter next to
-  its layer. The adapter is deleted when the last caller moves.
-  `PromiseAdapter.make` (`app/host/lib/util/promiseAdapter.ts`) builds
-  it: a layer that goes into the graph beside the subsystem's, which
-  captures the context when it is built and turns calls away once it
-  is closed, and a `run` that the Promise functions callers already
-  import go through. A call made before the graph is up waits for it.
-  The proofs bring every adapter's layer up for each file
-  (`app/test/lib/adapters.mts`), with the services the host's
-  handlers answer on (`runHost`). A subsystem that is one service
-  takes `PromiseAdapter.forService`, whose `call` runs one of the
-  service's methods. The other way, an effect calls a Promise function
-  not converted yet through `fromPromise`
-  (`app/host/lib/util/fromPromise.ts`), and a handler not converted
-  yet still answers with a Promise. Both are scaffolding that goes with
-  the last Promise caller.
-
-  ```ts
-  const promiseAdapter = PromiseAdapter.forService(Terminals, "The terminals");
-  export const adapter = promiseAdapter.layer;
-
-  export const closeMissingTerminals = () =>
-    promiseAdapter.runIfOpen(
-      Effect.flatMap(Terminals, (terminals) => terminals.closeMissing),
-    );
-  ```
-
-- The host's composition root reaches its services from the callbacks
-  it hands code that is not Effect yet (the broadcast seam, the hub
-  connection, the data-folder move) through its own captures
-  (`app/host/process/bridge.ts`, `captures.ts`), each beside its
-  service in the graph. Nothing outside `app/host/process/` uses them.
+- The host's composition root reaches its graph from the callbacks it
+  hands code that is not Effect (the hub connection, the account
+  fan-out, the store changes) through one door,
+  `app/host/process/graph.ts`: a layer on top of the graph, so a run
+  made before every service is up waits for it, and one made after the
+  graph closed is turned away. Nothing outside `app/host/process/`
+  uses it. The proofs bring the host's services up for each file
+  (`app/test/lib/hostRuntime.mts`) and run on them with `runHost`.
 
 ## 4. Errors
 
@@ -251,11 +226,13 @@ export const layer = Layer.effect(Registry, make);
   external dependencies (git, the hub, a peer, the clock); the logic
   under test is never mocked.
 - Time is `TestClock`. A test that needs a sleep or a wall-clock
-  timeout to pass is wrong. Today's proofs wait with `waitFor` and
-  `fakeClock`; each moves over as its subsystem converts.
-- `@effect/vitest` provides `it.effect` and layer sharing. A proof that
-  spawns real git or the real `sm` keeps the forks pool and no file
-  parallelism.
+  timeout to pass is wrong. A proof gets one from `testClock()`
+  (`app/test/lib/checkKit.mts`) and waits on a condition with
+  `waitFor`, never on a fixed delay.
+- Tests are plain vitest cases that run their effects on the runtime
+  of the thing under test: the engine sandbox's `box.engine(effect)`,
+  the proofs' `runHost(effect)`. A proof that spawns real git or the
+  real `sm` keeps the forks pool and no file parallelism.
 - A boundary test (the differential clone test,
   the golden wire fixtures, the measurements) is a proof like any other
   and lives beside the code it guards.

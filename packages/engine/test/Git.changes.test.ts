@@ -20,7 +20,7 @@ import {
   tempDir,
   withGit,
   write,
-} from "./sandbox.ts";
+} from "./lib/gitRepos.ts";
 
 const read = (repo: string, path: string): string =>
   readFileSync(join(repo, path), "utf8");

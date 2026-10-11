@@ -16,7 +16,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `hub/` | The device hub, a Cloudflare Worker |
 | `marketing/` | The shigomori.com site, built with Astro |
 | `lint/` | The repo's own oxlint rules, with their tests |
-| `packages/` | The packages the v3 refactor moves code into (`contracts`, `engine`, `host`, `ui`, `cli`), each empty until its step (`V3.md`) |
+| `packages/` | The workspace packages: `contracts` (what crosses a wire), `engine` (the data model, the store and git), `ui` (the views and the fixture world), and `cli` (the terminal `sm`) |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
 | `macfs/` | The macOS filesystem calls Node lacks (clone, flags, xattrs, private size, filesystem type), a Go module bundled into the app |
 | `skills/` | Agent skills for the `sm` workflow (below) |
@@ -37,8 +37,10 @@ Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
 [`app/lab/README.md`](app/lab/README.md) how to test it by hand on the
 real UI, [`app/test/README.md`](app/test/README.md) its programmatic
-checks, [`hub/README.md`](hub/README.md) the device hub, and
-[`lint/README.md`](lint/README.md) the repo's lint rules.
+checks, [`hub/README.md`](hub/README.md) the device hub,
+[`marketing/README.md`](marketing/README.md) the site,
+[`lint/README.md`](lint/README.md) the repo's lint rules, and each
+package under `packages/` has a README of its own.
 
 While the `release/v3` branch lives, [`V3.md`](V3.md) is its charter and
 checklist and [`EFFECT.md`](EFFECT.md) the conventions every Effect
