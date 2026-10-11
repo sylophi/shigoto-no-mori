@@ -684,7 +684,8 @@
   "link:ping": {},
   "link:read": {
     "payload": {
-      "channelId": "49f1c16a9e40610b8eb75db553ec394b"
+      "channelId": "49f1c16a9e40610b8eb75db553ec394b",
+      "seq": 3
     },
     "success": "AQID"
   },

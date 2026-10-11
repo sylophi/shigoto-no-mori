@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
-import { runHost } from "./lib/adapters.mts";
+import { runHost } from "./lib/hostRuntime.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 
 const fixture = cliSandbox("sm-rename-");

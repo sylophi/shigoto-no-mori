@@ -24,7 +24,7 @@ scrubProcessGitEnv();
 
 const { cloneRepo: cloneEffect } = await import("../host/lib/git/clone.ts");
 const { GithubCli } = await import("../host/lib/githubCli/GithubCli.ts");
-const { runHost } = await import("./lib/adapters.mts");
+const { runHost } = await import("./lib/hostRuntime.mts");
 const { flatMap } = await import("effect/Effect");
 const cloneRepo = (source: string, parentDir: string, name: string) =>
   runHost(cloneEffect(source, parentDir, name));

@@ -38,6 +38,7 @@
 //
 // covers: app/test/read-surface.golden.json app/host/process/wires.ts
 import assert from "node:assert/strict";
+import { mintHexId } from "@host/lib/hexId";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
@@ -119,7 +120,7 @@ import {
 } from "@host/mirror/invites";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import type { ChannelHandle } from "@shigomori/contracts/link";
-import { type Track, waitFor } from "./lib/checkKit.mts";
+import { delay, type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {
   type DirectListener,
@@ -921,6 +922,73 @@ it("byte channels: bytes cross both ways in order, and an end on each side compl
   handle.end();
   await waitFor(() => ended && completed, "both ends to finish");
   assert.equal(connection.channels.has(id), false);
+});
+
+it("byte channels: a reader that holds its pieces holds back its own channel alone, and the link's calls still answer", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dial(track, listener);
+  const id = "abcdefabcdefabcdefabcdefabcdef34";
+  // A reader busy elsewhere, as a send's source is while it writes its
+  // bundle: the echo's pieces wait untaken.
+  const held: (() => void)[] = [];
+  const got: string[] = [];
+  const handle = connection.channels.attach(id, {
+    onData: (data, consumed) => {
+      got.push(Buffer.from(data).toString());
+      held.push(consumed);
+    },
+    onEnd: () => {},
+    onReset: () => assert.fail("the channel reset"),
+    onWritable: () => {},
+  });
+  await invoke(connection, "forward:open", { port: 2, channelId: id });
+  for (let n = 0; n < 200; n++) handle.write(Buffer.from(`${n},`));
+  await waitFor(() => held.length > 0, "the first echoed piece");
+  // Past where a reader's stalled stream once stopped the whole socket.
+  await delay(200);
+  const answered = await Promise.race([
+    invoke(connection, "git:sweep").then(() => true),
+    delay(3_000).then(() => false),
+  ]);
+  assert.equal(answered, true, "a call on the link answers past the stall");
+  const want = Array.from({ length: 200 }, (_, n) => `${n},`).join("");
+  for (let turn = 0; got.join("") !== want; turn++) {
+    assert.ok(turn < 500, "the held pieces to come through once taken");
+    for (const consumed of held.splice(0)) consumed();
+    // oxlint-disable-next-line no-await-in-loop -- the reader takes in turn
+    await delay(10);
+  }
+});
+
+it("byte channels: the reads idle channels hold take no place under the in-flight cap", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dial(track, listener);
+  // Twelve channels with nothing to say, each holding its reads ahead
+  // on the host: past the cap's 64 calls.
+  let resets = 0;
+  const ids: string[] = [];
+  for (let n = 0; n < 12; n++) {
+    const id = mintHexId();
+    ids.push(id);
+    connection.channels.attach(id, {
+      onData: (_data, consumed) => consumed(),
+      onEnd: () => {},
+      onReset: () => {
+        resets += 1;
+      },
+      onWritable: () => {},
+    });
+    // oxlint-disable-next-line no-await-in-loop -- one open at a time
+    await invoke(connection, "forward:open", { port: 2, channelId: id });
+  }
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  await delay(200);
+  assert.equal(resets, 0, "no channel was refused its reads");
+  assert.ok(ids.every((id) => connection.channels.has(id)));
 });
 
 it("interruption: a call its caller cancels is interrupted on the host, its handler's signal aborted", async () => {

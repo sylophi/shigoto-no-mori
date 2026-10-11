@@ -1,7 +1,5 @@
-import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
-import { defineContract, Gated, invoke, Remote } from "../contract.ts";
-import { CallFailureSchema } from "../errors.ts";
+import { defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { VoidSchema } from "../schemas/void.ts";
@@ -61,11 +59,19 @@ const WelcomeSchema = strict(
 // sync:openSource, sync:receiveBundle).
 const ChannelSchema = strict(Schema.Struct({ channelId: HexId32Schema }));
 
-// The most one write carries. A writer splits larger pieces.
+// The most one write carries, and one read answers. A writer splits
+// larger pieces, and a read answers what the far end has queued, up to
+// this.
 export const CHANNEL_MAX_WRITE_BYTES = 256 * 1024;
+export const CHANNEL_MAX_READ_BYTES = 256 * 1024;
 
-// A writer keeps several writes in flight, numbered from 0 per
-// channel, and the far end takes them in that order.
+// Each direction of a channel is numbered calls, from 0 per channel and
+// direction, at most this many in flight; the far end answers them in
+// that order and refuses one further ahead. So a long link is not one
+// round trip per piece, and a peer holds a bounded number of calls on
+// each channel, which is why these leave the link's in-flight cap.
+export const CHANNEL_CALLS_IN_FLIGHT = 8;
+
 // A plain struct, where the link's other calls are strict: the binary
 // layout carries only the fields it declares, and bytes have no JSON
 // form a strict struct's could pass through.
@@ -77,17 +83,20 @@ const WriteSchema = Schema.Struct({
   ),
 });
 
-// The far end's bytes, pulled: the next piece goes out once the reader
-// has taken the last, so a slow reader holds the far end back. Ends
-// with the far end's direction.
-const read = Rpc.make("read", {
-  payload: ChannelSchema,
-  success: Schema.Uint8Array,
-  error: CallFailureSchema,
-  stream: true,
-})
-  .annotate(Remote, true)
-  .annotate(Gated, false);
+const ReadSchema = strict(
+  Schema.Struct({
+    channelId: HexId32Schema,
+    seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
+);
+
+// The far end's next bytes, once it has some: never empty while its
+// direction is open, and empty once it ended. A reader asks for the
+// next only once it has room for it, so a slow reader holds the far
+// end back, and nothing it has not asked for ever waits on the socket.
+const ReadBytesSchema = Schema.Uint8Array.check(
+  Schema.makeFilter((bytes) => bytes.byteLength <= CHANNEL_MAX_READ_BYTES),
+);
 
 const link = { remote: true, gated: false } as const;
 
@@ -97,7 +106,7 @@ export const linkContract = defineContract(
   invoke("hello", HelloSchema, WelcomeSchema, link),
   // Answers at once: a probe of a link that may have died unseen.
   invoke("ping", VoidSchema, VoidSchema, link),
-  read,
+  invoke("read", ReadSchema, ReadBytesSchema, link),
   // Bytes to the far end. Answers once the far end has taken them.
   invoke("write", WriteSchema, VoidSchema, link),
   // Ends this side's direction. The far end's may go on.
