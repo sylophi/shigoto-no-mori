@@ -12,6 +12,10 @@ import {
 } from "@host/lib/scripts/packageScriptStats";
 import { findWorktreeIdentity } from "@host/lib/git/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
+import type {
+  PackageScriptsDoc,
+  ScriptGroup,
+} from "@shigomori/contracts/schemas";
 import * as Ops from "@host/lib/engineOps";
 import { scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
@@ -23,14 +27,15 @@ class UndefinedScriptError extends Schema.TaggedError<UndefinedScriptError>()(
   { scriptName: Schema.String },
 ) {
   override get message(): string {
-    return `Script "${this.scriptName}" is not defined in package.json`;
+    return `No script named "${this.scriptName}" in this worktree`;
   }
 }
 
 export const packageScriptsHandlers = {
-  // The worktree's scripts in manifest order (an object
-  // keeps that order), the manager the lockfile selects, and each
-  // script's use stats. Null when there is no readable package.json.
+  // The worktree's scripts in file order (an object keeps that order),
+  // grouped by the file they come from, the manager the lockfile
+  // selects, and each script's use stats. Null when there is no
+  // package.json, justfile or Makefile, or none of them reads.
   list: ({ projectId, worktreeId }) =>
     Effect.gen(function* () {
       const doc = yield* Ops.packageScripts(projectId, worktreeId);
@@ -40,6 +45,7 @@ export const packageScriptsHandlers = {
           doc.scripts.map((script) => [script.name, script.command]),
         ),
         packageManager: doc.packageManager,
+        groups: groupByFile(doc.scripts),
         usage: doc.usage,
         launchRow: yield* readLaunchRow(projectId),
       };
@@ -112,3 +118,19 @@ export const packageScriptsHandlers = {
   HandlerContext,
   HostServices
 >;
+
+function groupByFile(
+  scripts: PackageScriptsDoc["scripts"],
+): ReadonlyArray<ScriptGroup> {
+  // Maps, not object keys, so a script named "__proto__" is a script.
+  const groups = new Map<string, Map<string, string>>();
+  for (const script of scripts) {
+    const labels = groups.get(script.file) ?? new Map<string, string>();
+    labels.set(script.name, script.label);
+    groups.set(script.file, labels);
+  }
+  return [...groups].map(([file, labels]) => ({
+    file,
+    labels: Object.fromEntries(labels),
+  }));
+}

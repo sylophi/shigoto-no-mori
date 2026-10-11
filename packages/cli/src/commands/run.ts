@@ -1,8 +1,10 @@
-// sm run [<script> [args...]]: the package.json scripts of the worktree
-// the cwd is in, listed, or one of them run by the manager its lockfile
-// picks, with the SHIGOMORI_* variables, from the worktree's root. The
-// app's scripts panel runs scripts the same way, by the ids it holds
-// (--project-id, --worktree-id), and reads the list's --json.
+// sm run [<script> [args...]]: the scripts of the worktree the cwd is
+// in (its package.json scripts, justfile recipes and Makefile targets),
+// listed, or one of them run, with the SHIGOMORI_* variables, from the
+// worktree's root: a package.json script by the manager its lockfile
+// picks, a recipe by just, a target by make. The app's scripts panel
+// runs scripts the same way, by the ids it holds (--project-id,
+// --worktree-id), and reads the list's --json.
 //
 // The script gets the terminal to itself (handOver.ts).
 import * as Scripts from "@shigomori/engine/Scripts";
@@ -64,11 +66,11 @@ export const runCommand = Command.make(
       const [script, ...extra] = input.args;
       const listing = { projectId: project.id, worktreePath: worktree.path };
       if (script === undefined) {
-        const listed = yield* scripts.list(listing);
+        const { files, ...listed } = yield* scripts.list(listing);
         if (json) return yield* emit({ ok: true, ...listed });
         const dimErr = styles(stderrColor).dim;
         if (listed.scripts.length === 0) {
-          return yield* note(dimErr("no scripts in package.json"));
+          return yield* note(dimErr(`no scripts in ${files.join(", ")}`));
         }
         const { cyan, dim } = styles(stdoutColor);
         for (const line of alignRows(
@@ -78,12 +80,14 @@ export const runCommand = Command.make(
         }
         return yield* note(
           dimErr(
-            `runs with ${listed.packageManager}: \`${binaryName} run <script>\``,
+            listed.packageManager === null
+              ? `\`${binaryName} run <script>\``
+              : `package.json scripts run with ${listed.packageManager}: \`${binaryName} run <script>\``,
           ),
         );
       }
       if (json) {
-        // A package.json that can't be read says so first.
+        // Script files that can't be read say so first.
         yield* scripts.readScripts(worktree.path);
         return yield* new UsageError({
           problem: `\`${binaryName} run <script>\` hands the terminal to the script. --json only applies to the list form.`,
@@ -94,12 +98,12 @@ export const runCommand = Command.make(
         project,
         worktree,
       });
-      yield* scripts.recordRun(project.id, script);
+      yield* scripts.recordRun(project.id, command.script);
       // From the worktree's root, not the cwd: a nested package.json must
       // not retarget the run.
       yield* handOver("exec", command.program, command.args, {
         cwd: worktree.path,
-        env: { ...process.env, ...scriptEnv(context, script) },
+        env: { ...process.env, ...scriptEnv(context, command.script) },
       });
     }),
-).pipe(Command.withDescription("List or run the worktree's package scripts"));
+).pipe(Command.withDescription("List or run the worktree's scripts"));

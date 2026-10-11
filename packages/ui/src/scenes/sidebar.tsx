@@ -54,6 +54,7 @@ import type { SidebarRow } from "../views/sidebar/sidebarRow.ts";
 import { SidebarToolbarView } from "../views/sidebar/SidebarToolbarView.tsx";
 import { ProjectSortMenuView } from "../views/sidebar/SidebarToolbarView.tsx";
 import type { WorktreeEntry } from "../views/sidebar/WorktreeEntryView.tsx";
+import { WorktreeMenuView } from "../views/sidebar/WorktreeMenuView.tsx";
 import { WorktreeRowView } from "../views/sidebar/WorktreeRowView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "../lib/deviceRoster.ts";
@@ -373,20 +374,27 @@ function SceneRow({
     case "worktree":
     case "remote-worktree":
       return (
-        <WorktreeRowView
-          worktree={row.worktree}
-          device={row.kind === "remote-worktree" ? row.device : undefined}
-          mirror={row.kind === "worktree" ? row.mirror : undefined}
-          pr={row.pr}
-          stack={row.stack}
-          stackRail={row.stackRail}
-          shelf={row.shelf}
-          entry={entryOf(
-            row.worktree.id,
-            selected,
-            row.kind === "remote-worktree",
-          )}
-        />
+        <WorktreeMenuView
+          row={
+            <WorktreeRowView
+              worktree={row.worktree}
+              device={row.kind === "remote-worktree" ? row.device : undefined}
+              mirror={row.kind === "worktree" ? row.mirror : undefined}
+              pr={row.pr}
+              stack={row.stack}
+              stackRail={row.stackRail}
+              shelf={row.shelf}
+              entry={entryOf(
+                row.worktree.id,
+                selected,
+                row.kind === "remote-worktree",
+              )}
+            />
+          }
+          onOpenChange={noop}
+        >
+          {null}
+        </WorktreeMenuView>
       );
     case "inbox-worktree":
       return (

@@ -9,6 +9,8 @@ interface ToggleRowProps {
   description?: React.ReactNode;
   disabled?: boolean;
   switchClassName?: string;
+  // Menu-sized type, for a row in a popover.
+  dense?: boolean;
 }
 
 export function ToggleRowView({
@@ -18,6 +20,7 @@ export function ToggleRowView({
   description,
   disabled = false,
   switchClassName,
+  dense = false,
 }: ToggleRowProps) {
   // The switch is a span with a role, which the label around it doesn't
   // name: it takes its name and description from the row's text.
@@ -51,12 +54,21 @@ export function ToggleRowView({
         <div className="flex min-w-0 flex-col">
           <span
             id={labelId}
-            className={cn("text-sm", disabled && "opacity-50")}
+            className={cn(
+              dense ? "text-xs" : "text-sm",
+              disabled && "opacity-50",
+            )}
           >
             {label}
           </span>
           {description && (
-            <span id={descriptionId} className="text-xs text-muted-foreground">
+            <span
+              id={descriptionId}
+              className={cn(
+                dense ? "text-2xs leading-snug" : "text-xs",
+                "text-muted-foreground",
+              )}
+            >
               {description}
             </span>
           )}

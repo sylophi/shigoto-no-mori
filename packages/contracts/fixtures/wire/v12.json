@@ -1399,12 +1399,33 @@
     },
     "success": {
       "scripts": {
-        "\u0000": "\u0000",
-        "tb": ""
+        "dev": "vite",
+        "just build": "cargo build --release",
+        "make release": "./scripts/release.sh"
       },
-      "packageManager": "npm",
+      "packageManager": "pnpm",
+      "groups": [
+        {
+          "file": "package.json",
+          "labels": {
+            "dev": "dev"
+          }
+        },
+        {
+          "file": "justfile",
+          "labels": {
+            "just build": "build"
+          }
+        },
+        {
+          "file": "Makefile",
+          "labels": {
+            "make release": "release"
+          }
+        }
+      ],
       "usage": {},
-      "launchRow": [""]
+      "launchRow": ["dev"]
     }
   },
   "packageScripts:run": {
@@ -2892,6 +2913,36 @@
         "exitCode": null,
         "runId": "]"
       }
+    }
+  },
+  "worktrees:describe": {
+    "payload": {
+      "projectId": "}",
+      "worktreeId": "\t",
+      "title": "-t edited",
+      "description": "- one\n- two"
+    },
+    "success": {
+      "id": "{T",
+      "projectId": "\n",
+      "name": "",
+      "branch": "r\\",
+      "path": "\udc00",
+      "ahead": 3,
+      "behind": 4,
+      "hasUpstream": false,
+      "hasRemote": false,
+      "divergedClean": true,
+      "behindPrimary": 4,
+      "unpushedCount": 1,
+      "mergedIntoPrimary": false,
+      "changedCount": 4,
+      "recentCommits": [],
+      "isPrimary": true,
+      "isExternal": true,
+      "detached": false,
+      "shelved": false,
+      "autoPull": true
     }
   },
   "worktrees:discardChanges": {

@@ -14,13 +14,17 @@ import {
   BranchTitleView,
 } from "../views/worktreeDetail/branch/BranchTitleView.tsx";
 import { BranchSwitcherView } from "../views/worktreeDetail/branch/BranchSwitcherView.tsx";
-import { DescriptionSectionView } from "../views/worktreeDetail/DescriptionSectionView.tsx";
+import {
+  DescriptionEditorView,
+  DescriptionSectionView,
+} from "../views/worktreeDetail/DescriptionSectionView.tsx";
 import { FooterActionButtonView } from "../views/worktreeDetail/FooterActionButtonView.tsx";
 import { LABEL_RANK } from "../views/worktreeDetail/FooterVerbView.tsx";
 import { TransferActionsView } from "../views/worktreeDetail/TransferActionsView.tsx";
 import { LaunchSectionView } from "../views/worktreeDetail/LaunchSectionView.tsx";
 import { LauncherRowView } from "../views/worktreeDetail/LauncherRowView.tsx";
 import { NoIdentityNoteView } from "../views/worktreeDetail/NoIdentityNoteView.tsx";
+import { OwnTitleView } from "../views/worktreeDetail/OwnTitleView.tsx";
 import { PullRequestTitleLinkView } from "../views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
 import { PullRequestStateLabelView } from "../views/worktreeDetail/pullRequests/PullRequestStateLabelView.tsx";
 import {
@@ -294,6 +298,47 @@ export function WorktreePagePartsScene() {
               onCancel: noop,
             }}
             actions={null}
+          />
+        </Part>
+        <Part label="Titled, editable">
+          <WorktreeHeaderView
+            title="Retry port-pool leases"
+            titleEdit={{
+              draft: null,
+              saving: false,
+              onEdit: noop,
+              onDraft: noop,
+              onCommit: noop,
+              onCancel: noop,
+            }}
+            branchTitle={branchTitle(QUAIL, true)}
+          />
+          <DescriptionSectionView
+            description="Retries a lease the pool refused once."
+            expanded={false}
+            onToggle={noop}
+            truncated={false}
+            onEdit={noop}
+            pencilBeside
+          />
+        </Part>
+        <Part label="Editing the title and description">
+          <OwnTitleView
+            title="Retry port-pool leases"
+            edit={{
+              draft: "Retry port-pool leases twice",
+              saving: false,
+              onDraft: noop,
+              onCommit: noop,
+              onCancel: noop,
+            }}
+          />
+          <DescriptionEditorView
+            draft={"Retries a lease the pool refused once.\n\n- twice now"}
+            saving={false}
+            onChange={noop}
+            onSave={noop}
+            onCancel={noop}
           />
         </Part>
         <Part label="Renaming the folder">

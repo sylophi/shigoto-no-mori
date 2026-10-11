@@ -59,6 +59,7 @@ export const GRANTS = {
       "worktrees:create",
       "worktrees:delete",
       "worktrees:deleteStack",
+      "worktrees:describe",
       "worktrees:discardChanges",
       "worktrees:discardHunks",
       "worktrees:dropStash",
