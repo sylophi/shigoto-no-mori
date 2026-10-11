@@ -1,6 +1,10 @@
 // sm projects <list|add|remove|relocate|reorder|icon|config>: the registered
 // projects, terrier's included, and each one's settings.
 import { basename } from "node:path";
+import {
+  keyDescriptions,
+  ShigomoriConfigSchema,
+} from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
@@ -93,21 +97,6 @@ const icon = Command.make(
     }),
 ).pipe(Command.withDescription("Print the project's icon"));
 
-// What each project setting is for, in the listing.
-const projectDescriptions: Readonly<Record<string, string>> = {
-  defaultBranch: "Branch new worktrees fork from (required)",
-  "scripts.setup": "Runs after creating a worktree",
-  "scripts.teardown": "Runs before removing a worktree",
-  worktreeLayout: "Where managed worktrees live",
-  customWorktreePath: "Absolute base dir for the custom layout",
-  useWorktreeInclude: "Honor the repo's .worktreeinclude file",
-  portBase: "port-pool base port",
-  lastMergeMethod: "Preferred PR merge method",
-  showPrimaryInInbox: "List the primary checkout in the inbox view",
-  carryOver: "Files carried into new worktrees (`carryover` verbs)",
-  launchers: "Per-project launchers (`launcher` verbs)",
-};
-
 // A project's settings, by the flags that name it.
 const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
   Effect.gen(function* () {
@@ -116,7 +105,7 @@ const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
       scope: { kind: "project", projectId: project.id, path: project.path },
       project: project.name,
       listCommand: "projects config list",
-      descriptions: projectDescriptions,
+      descriptions: keyDescriptions(ShigomoriConfigSchema),
     };
     return { settings, project };
   });
