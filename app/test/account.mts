@@ -76,7 +76,17 @@ import {
   DeviceInfoSchema,
   type DeviceInfo,
 } from "@shigomori/contracts/hubProtocol";
-import { entryAt, fakeSessionJwt, notYetSet } from "./lib/checkKit.mts";
+import {
+  entryAt,
+  fakeSessionJwt,
+  notYetSet,
+  testClock,
+} from "./lib/checkKit.mts";
+import {
+  deviceIdWithin,
+  HostUnreportedError,
+} from "../main/core/host/deviceId.ts";
+import * as Effect from "effect/Effect";
 
 // A resolved config that isConfigured accepts, for the flows that need
 // one. The hub URL is never dialled: fetch is always stubbed.
@@ -1314,4 +1324,44 @@ it("envFile: mergeServiceEnv layers file < baked < process.env", () => {
   assert.equal(merged.ONLY_FILE, "f");
   assert.equal(merged.ONLY_BAKED, "b");
   assert.equal(merged.ONLY_ENV, "e");
+});
+
+// The shell's account calls name the device its host reports, waiting
+// for a host that is starting or restarting, and failing as they did
+// before any host had reported once the restart budget runs out.
+it("account calls wait for the host's device id, but not past its restart budget", async () => {
+  const clock = testClock();
+  const run = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.runPromiseWith(clock.context)(effect);
+
+  let report!: (address: { deviceId: string }) => void;
+  const reported = new Promise<{ deviceId: string }>((resolve) => {
+    report = resolve;
+  });
+  const late = run(deviceIdWithin(() => reported, 60_000));
+  await clock.advance(59_000);
+  report({ deviceId: "the-host" });
+  assert.equal(await late, "the-host");
+
+  const never = run(
+    deviceIdWithin(() => new Promise<{ deviceId: string }>(() => {}), 60_000),
+  );
+  const settled = never.then(
+    () => "answered",
+    (error: unknown) => error,
+  );
+  await clock.advance(59_999);
+  let early: unknown;
+  void settled.then((outcome) => {
+    early = outcome;
+  });
+  await clock.settle();
+  assert.equal(early, undefined, "it gave up before the budget ran out");
+  await clock.advance(1);
+  const failure = await settled;
+  assert.ok(failure instanceof HostUnreportedError);
+  assert.equal(
+    failure.message,
+    "The device id was asked before launch read it.",
+  );
 });

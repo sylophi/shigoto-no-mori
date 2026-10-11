@@ -18,7 +18,7 @@ import { accountContract } from "@shigomori/contracts/modules/account";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import type { Handlers } from "@shigomori/contracts/types";
-import { hostAddress } from "../../hostProcess";
+import { hostDeviceId } from "../../hostProcess";
 import type { AccountFacts } from "@host/process/account";
 import {
   createAccountStore,
@@ -56,10 +56,6 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-
-// The device the host is, which the shell's account calls name, once a
-// host is up to say.
-const hostDeviceId = async () => (await hostAddress()).deviceId;
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerShellHandlers runs before

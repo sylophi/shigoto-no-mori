@@ -35,6 +35,7 @@ import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { stopUpdaterBridge } from "./electron/updaterBridge";
 import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
 import { createShellRegistrar, makePortServer } from "./ipc/shellLink";
+import { deviceIdWithin } from "./core/host/deviceId";
 
 type Address = {
   readonly port: number;
@@ -43,12 +44,20 @@ type Address = {
 };
 
 // A promise and its resolve, settled by whoever learns the value.
-function deferred<A>(): { promise: Promise<A>; resolve: (value: A) => void } {
+function deferred<A>(): {
+  promise: Promise<A>;
+  resolve: (value: A) => void;
+  settled: () => boolean;
+} {
   let resolve!: (value: A) => void;
+  let settled = false;
   const promise = new Promise<A>((settle) => {
-    resolve = settle;
+    resolve = (value) => {
+      settled = true;
+      settle(value);
+    };
   });
-  return { promise, resolve };
+  return { promise, resolve, settled: () => settled };
 }
 
 export type HostFailure = {
@@ -157,7 +166,8 @@ function fork(): void {
     child = null;
     if (quitting) return;
     log.warn(`[host] exited unasked (code ${code}), starting it again`);
-    address = deferred<Address>();
+    // One that died before it was up leaves its waiters to the next.
+    if (address.settled()) address = deferred<Address>();
     const now = Date.now();
     crashes.push(now);
     while (crashes[0] !== undefined && crashes[0] < now - CRASH_WINDOW_MS) {
@@ -198,6 +208,11 @@ export function host(): ReturnType<typeof session> {
 export function hostAddress(): Promise<Address> {
   return address.promise;
 }
+
+// The device the host is, which the shell's account calls name: waited
+// for across a restart, for as long as the restarts a minute allows.
+export const hostDeviceId = (): Promise<string> =>
+  Effect.runPromise(deviceIdWithin(hostAddress, CRASH_WINDOW_MS));
 
 // The updater moved. A host that is not up yet hears it as it starts.
 export function noteUpdaterState(state: UpdaterState): void {
