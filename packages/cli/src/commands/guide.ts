@@ -99,6 +99,12 @@ const handlers = (session: string) =>
       const path = yield* Path.Path;
       // The screenshots, gone when the server stops.
       const shots = yield* fs.makeTempDirectoryScoped({ prefix: "sm-guide-" });
+      // The agent is gone once its server stops, and so is its session.
+      yield* Effect.addFinalizer(() =>
+        control
+          .call("guideDrive:drive", { session, action: { _tag: "end" } })
+          .pipe(Effect.ignore),
+      );
       let taken = 0;
       const drive = (action: GuideAction) =>
         control.call("guideDrive:drive", { session, action }).pipe(

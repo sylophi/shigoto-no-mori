@@ -211,7 +211,14 @@ const make = Effect.gen(function* () {
 
   // A terminal tool's command line, run in the user's chosen terminal
   // (Terminal when that one isn't installed or has no script).
-  const inTerminal = (label: string, command: string, folder: string) =>
+  // `entries` are the launchers already read, which say whether the
+  // chosen terminal is installed. Without them it is looked up.
+  const inTerminal = (
+    label: string,
+    command: string,
+    folder: string,
+    entries?: ReadonlyArray<Launchers.Launchable>,
+  ) =>
     Effect.gen(function* () {
       const chosen = yield* config.get({ kind: "device" }, "terminal").pipe(
         Effect.map(({ value }) => (typeof value === "string" ? value : "")),
@@ -220,7 +227,11 @@ const make = Effect.gen(function* () {
       const installed =
         TERMINAL_SCRIPTS[chosen] === undefined
           ? undefined
-          : yield* launchers.installed(chosen);
+          : entries === undefined
+            ? yield* launchers.installed(chosen)
+            : entries.find(
+                (entry) => entry.kind === "detected" && entry.app.id === chosen,
+              );
       const id = installed === undefined ? DEFAULT_TERMINAL : chosen;
       const terminal = installed?.label ?? "Terminal";
       const { code, output } = yield* ran("osascript", [
@@ -237,7 +248,11 @@ const make = Effect.gen(function* () {
       return yield* new LaunchFailed({ label, said });
     });
 
-  const launch = (entry: Launchers.Launchable, located: Worktrees.Located) =>
+  const launch = (
+    entry: Launchers.Launchable,
+    located: Worktrees.Located,
+    entries: ReadonlyArray<Launchers.Launchable>,
+  ) =>
     Effect.gen(function* () {
       const where = located.worktree.path;
       switch (entry.kind) {
@@ -284,7 +299,12 @@ const make = Effect.gen(function* () {
         case "detected": {
           const { app } = entry;
           if (app.inTerminal !== undefined) {
-            return yield* inTerminal(entry.label, app.inTerminal, where);
+            return yield* inTerminal(
+              entry.label,
+              app.inTerminal,
+              where,
+              entries,
+            );
           }
           if (app.deepLink !== undefined) {
             return yield* run(entry.label, "open", [
@@ -336,7 +356,7 @@ const make = Effect.gen(function* () {
         labels: entries.map(({ label }) => label),
       });
     }
-    yield* launch(entry, located);
+    yield* launch(entry, located, entries);
     yield* usage.record("launcher", "", entry.id);
     return entry;
   });

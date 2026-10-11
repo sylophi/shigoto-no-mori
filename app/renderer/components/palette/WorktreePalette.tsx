@@ -98,26 +98,24 @@ export function WorktreePalette() {
   // Wherever focus sits, a text field and a terminal on macOS included
   // (a `Mod` chord). Opening waits for any other overlay to close, and
   // closing is the palette's own toggle.
+  // Opens over the page unless another overlay is up, keeping where
+  // focus was to hand back.
+  const openPalette = () => {
+    if (isOverlayOpen()) return false;
+    returnFocus.current = document.activeElement;
+    setOpen(true);
+  };
+
   // The Help menu's Ask, which is a question for the palette.
-  useEffect(
-    () =>
-      hasLocalHost
-        ? window.api.nav.onAskHow(() => {
-            if (!isOverlayOpen()) setOpen(true);
-          })
-        : undefined,
-    [setOpen],
+  useEffect(() =>
+    hasLocalHost
+      ? window.api.nav.onAskHow(() => void openPalette())
+      : undefined,
   );
 
-  useKeymapAction(
-    "palette",
-    () => {
-      if (!open && isOverlayOpen()) return false;
-      if (!open) returnFocus.current = document.activeElement;
-      setOpen(!open);
-    },
-    { overOverlays: true },
-  );
+  useKeymapAction("palette", () => (open ? setOpen(false) : openPalette()), {
+    overOverlays: true,
+  });
 
   if (!open) return null;
   return (
@@ -135,9 +133,9 @@ export function WorktreePalette() {
 }
 
 // A query that asks something: a question mark, or a question's first
-// word.
+// word and then a space, so a branch like do-release stays a branch.
 const QUESTION =
-  /\?\s*$|^(how|what|where|why|when|which|who|can|could|is|are|does|do)\b/i;
+  /\?\s*$|^(how|what|where|why|when|which|who|can|could|is|are|does|do)\s/i;
 
 const GROUP_HEADINGS: Record<PaletteRow["kind"], string> = {
   worktree: "Worktrees",
@@ -279,13 +277,12 @@ function PaletteDialog({
     }
     // Any query is a question the guide can take: first when it reads
     // as one, else last.
-    const [harness, ...otherHarnesses] = harnesses;
-    if (harness) {
+    if (harnesses !== null) {
       const ask: PaletteRow = {
         kind: "ask",
         key: "ask",
         question: listQuery,
-        harnesses: [harness, ...otherHarnesses],
+        harnesses,
       };
       if (QUESTION.test(listQuery)) rows.unshift(ask);
       else rows.push(ask);
@@ -362,7 +359,7 @@ function PaletteDialog({
       onClose();
       page.open();
     },
-    // Up until the agent's terminal opens; a failure toasts and leaves
+    // Up until the agent's terminal opens. A failure toasts and leaves
     // the palette up.
     ask: (harness, question) => {
       if (asking !== null) return;

@@ -1,14 +1,22 @@
 // The guide's side of the agents (Agents.guide): what the harness is
 // told, and the command line that opens it on a guide session with
 // `sm guide mcp` as its tools.
+import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import { shellQuote } from "./Lifecycle.ts";
+import { APP_REPO } from "./updateFeed.ts";
 
-export type GuideHarness = "claude" | "codex";
+// Each harness's tool in the launcher catalog, which says whether its
+// CLI is installed.
+export const GUIDE_LAUNCHERS: Record<GuideHarness, string> = {
+  claude: "claude-code",
+  codex: "codex-cli",
+};
 
 // The MCP server's name in the harness, which its tools are named under.
 const SERVER = "shigomori";
 
-export const SOURCE_REPO = "https://github.com/sylophi/shigoto-no-mori.git";
+// The app's source on GitHub.
+export const SOURCE_URL = `https://github.com/${APP_REPO}`;
 
 // Where the terminal `sm` looks for its data dir first.
 const DATA_DIR_ENV = "SHIGOMORI_DATA_DIR";
@@ -62,7 +70,7 @@ export const guideCommand = (input: {
 // Clones the release's source into `source` unless it is there, in the
 // terminal where its progress shows. The agent starts either way.
 export const cloneSourceCommand = (tag: string) =>
-  `[ -d source ] || { rm -rf source.partial && git -c advice.detachedHead=false clone --quiet --depth 1 --branch ${shellQuote(tag)} ${SOURCE_REPO} source.partial && mv source.partial source; }`;
+  `[ -d source ] || { rm -rf source.partial && git -c advice.detachedHead=false clone --quiet --depth 1 --branch ${shellQuote(tag)} ${SOURCE_URL}.git source.partial && mv source.partial source; }`;
 
 // The guide folder's AGENTS.md (Codex reads it, and Claude Code through
 // a CLAUDE.md naming it).

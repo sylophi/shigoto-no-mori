@@ -11,7 +11,7 @@ export function GuideBandView({
   onStop,
 }: {
   harnessLabel: string;
-  onStop?: () => void;
+  onStop: () => void;
 }) {
   return (
     // At the top of the window, so the title bar drags by it.
@@ -30,7 +30,7 @@ export function GuideBandView({
         size="xs"
         variant="ghost"
         style={dragRegion("no-drag")}
-        onClick={() => onStop?.()}
+        onClick={onStop}
       >
         Stop
       </Button>
@@ -61,7 +61,8 @@ export function GuideCalloutView({
 }) {
   const { ring } = place;
   return (
-    <div className="pointer-events-none absolute inset-0 z-50">
+    // Over the menus and dialogs (z-50), which the guide points into.
+    <div className="pointer-events-none absolute inset-0 z-[60]">
       <div
         data-slot="guide-ring"
         className="absolute rounded-lg ring-2 ring-sky-500 transition-all duration-150 motion-reduce:transition-none"

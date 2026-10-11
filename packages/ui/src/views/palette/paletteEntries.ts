@@ -1,5 +1,6 @@
 // What the palette lists, as the app's buildPaletteEntries.ts and
 // PaletteRows.tsx build it for the views.
+import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import type { LucideIcon } from "lucide-react";
 import type {
   Project,
@@ -82,8 +83,8 @@ export type PaletteRow =
       harnesses: [GuideHarnessOption, ...GuideHarnessOption[]];
     };
 
-// An agent the guide can open (contracts' modules/guide.ts).
+// An agent the guide can open.
 export interface GuideHarnessOption {
-  id: "claude" | "codex";
+  id: GuideHarness;
   label: string;
 }

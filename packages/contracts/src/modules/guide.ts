@@ -72,6 +72,9 @@ const GuideActionSchema = Schema.Union([
   Schema.TaggedStruct("press", GuideActionFields.press),
   Schema.TaggedStruct("point", GuideActionFields.point),
   Schema.TaggedStruct("clear", GuideActionFields.clear),
+  // Not a tool: what `sm guide mcp` sends as it stops, which ends the
+  // session.
+  Schema.TaggedStruct("end", {}),
 ]);
 export type GuideAction = typeof GuideActionSchema.Type;
 
@@ -95,8 +98,8 @@ export const GuideReplySchema = strict(
 export type GuideReply = typeof GuideReplySchema.Type;
 
 // What a window shows while a guide drives it: whose agent, and what it
-// points at. The target is marked in the page itself; `seq` moves with
-// each point, so the window finds it again.
+// points at. The target is marked in the page itself, and `seq` moves
+// with each point, so the window finds it again.
 const GuideStateSchema = strict(
   Schema.Struct({
     harness: GuideHarnessSchema,

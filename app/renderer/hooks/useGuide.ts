@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  GUIDE_HARNESS_LABELS,
   type GuideState,
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
@@ -29,16 +30,21 @@ export function useGuide(): GuideState | null {
 }
 
 // The agents a guide can open on this machine: those of the guide's
-// harnesses that are set up here.
-export function useGuideHarnesses(): GuideHarnessOption[] {
+// harnesses that are set up here, none as null. Read once a minute at
+// most: the palette mounts on every open.
+export function useGuideHarnesses():
+  | [GuideHarnessOption, ...GuideHarnessOption[]]
+  | null {
   const { data } = useQuery({
     queryKey: queryKeys.agents(),
     queryFn: () => window.api.agents.status(),
+    staleTime: 60_000,
     enabled: hasLocalHost,
   });
-  return (data ?? []).flatMap((harness) =>
+  const [first, ...rest] = (data ?? []).flatMap((harness) =>
     harness.detected && isGuideHarness(harness.id)
-      ? [{ id: harness.id, label: harness.label }]
+      ? [{ id: harness.id, label: GUIDE_HARNESS_LABELS[harness.id] }]
       : [],
   );
+  return first === undefined ? null : [first, ...rest];
 }

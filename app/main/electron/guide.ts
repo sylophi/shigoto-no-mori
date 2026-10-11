@@ -1,14 +1,18 @@
 // The guide's windows as Electron holds them (core/guide/Guide.ts): a
 // window's page driven through its own DevTools protocol client, which
-// opens no port, and its guide told to it alone. A window that closes
-// ends its session.
-import type { WebContents } from "electron";
+// opens no port, its guide told to it alone, the agent opened by the
+// host, and each window as it closes.
+import { BrowserWindow, type WebContents } from "electron";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as FiberSet from "effect/FiberSet";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
 import { guideContract } from "@shigomori/contracts/modules/guide";
 import { layerLatch } from "@host/lib/util/layerLatch";
 import * as Guide from "../core/guide/Guide";
+import { host } from "../hostProcess";
 import { broadcast } from "../ipc/register";
 import { liveWindow, navigateWindow, onWindowClosed } from "./windows";
 
@@ -18,18 +22,25 @@ const PROTOCOL = "1.3";
 // How long a page takes in a click or a key before the guide reads it.
 const SETTLE = "150 millis";
 
+// Attached again when something else detached it (opening DevTools
+// does).
+const attach = (webContents: WebContents) =>
+  Effect.try({
+    try: () => {
+      if (!webContents.debugger.isAttached()) {
+        webContents.debugger.attach(PROTOCOL);
+      }
+    },
+    catch: (cause) => new Guide.GuidePageFailed({ method: "attach", cause }),
+  });
+
 const attached = (webContents: WebContents) =>
-  Effect.acquireRelease(
-    Effect.try({
-      try: () => webContents.debugger.attach(PROTOCOL),
-      catch: () => new Guide.GuideSessionEnded(),
+  Effect.acquireRelease(attach(webContents), () =>
+    Effect.sync(() => {
+      if (!webContents.isDestroyed() && webContents.debugger.isAttached()) {
+        webContents.debugger.detach();
+      }
     }),
-    () =>
-      Effect.sync(() => {
-        if (!webContents.isDestroyed() && webContents.debugger.isAttached()) {
-          webContents.debugger.detach();
-        }
-      }),
   );
 
 const windowsLayer = Layer.succeed(
@@ -42,19 +53,32 @@ const windowsLayer = Layer.succeed(
         const { webContents } = live;
         yield* attached(webContents);
         const send = (method: string, params?: Record<string, unknown>) =>
-          Effect.tryPromise({
-            try: (): Promise<unknown> =>
-              webContents.debugger.sendCommand(method, params),
-            catch: (cause) => new Guide.GuidePageFailed({ method, cause }),
-          });
+          attach(webContents).pipe(
+            Effect.andThen(
+              Effect.tryPromise({
+                try: (): Promise<unknown> =>
+                  webContents.debugger.sendCommand(method, params),
+                catch: (cause) => new Guide.GuidePageFailed({ method, cause }),
+              }),
+            ),
+          );
         return {
           send,
           route: Effect.sync(() => liveWindow(windowId)?.route ?? ""),
           navigate: (route) =>
             Effect.sync(() => navigateWindow(windowId, route)),
+          // At the window's own size, which is all an agent reads, not
+          // the display's pixels.
           screenshot: Effect.tryPromise({
-            try: async () =>
-              (await webContents.capturePage()).toPNG().toString("base64"),
+            try: async () => {
+              const image = await webContents.capturePage();
+              const [width] =
+                BrowserWindow.fromWebContents(webContents)?.getContentSize() ??
+                [];
+              return (width === undefined ? image : image.resize({ width }))
+                .toPNG()
+                .toString("base64");
+            },
             catch: (cause) =>
               new Guide.GuidePageFailed({ method: "capturePage", cause }),
           }),
@@ -68,22 +92,34 @@ const windowsLayer = Layer.succeed(
           broadcast(guideContract, "changed", state, live.webContents);
         }
       }),
+    launch: (input) =>
+      Effect.tryPromise({
+        try: () => host().guideLaunch(input),
+        catch: callFailureOf,
+      }),
+    closed: Stream.callback<number>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() =>
+          onWindowClosed((windowId) => Queue.offerUnsafe(queue, windowId)),
+        ),
+        (forget) => Effect.sync(forget),
+      ),
+    ),
   }),
 );
 
-// The guide, for the shell's handlers and its host's calls.
-const guide = layerLatch<Guide.Guide["Service"]>("The guide");
+// The guide, for the shell's handlers and its host's calls, with the
+// context its layer was built in, so its spans reach the shell's trace.
+const guide = layerLatch<{
+  readonly service: Guide.Guide["Service"];
+  readonly context: Context.Context<never>;
+}>("The guide");
 
 export const layer = Layer.effectDiscard(
   guide.provide(
     Effect.gen(function* () {
       const service = yield* Guide.Guide;
-      const runFork = yield* FiberSet.makeRuntime<never>();
-      const forget = onWindowClosed((windowId) =>
-        runFork(service.end(windowId)),
-      );
-      yield* Effect.addFinalizer(() => Effect.sync(forget));
-      return service;
+      return { service, context: yield* Effect.context<never>() };
     }),
   ),
 ).pipe(Layer.provide(Guide.layer), Layer.provide(windowsLayer));
@@ -92,4 +128,7 @@ export const layer = Layer.effectDiscard(
 // the wire carries with its message and code.
 export const onGuide = <A, E>(
   use: (service: Guide.Guide["Service"]) => Effect.Effect<A, E>,
-): Promise<A> => Effect.runPromise(Effect.flatMap(guide.get, use));
+): Promise<A> =>
+  Effect.runPromise(guide.get).then(({ service, context }) =>
+    Effect.runPromiseWith(context)(use(service)),
+  );

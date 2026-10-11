@@ -56,7 +56,9 @@ export function axOutline(answer: unknown): string {
   );
   const lines: string[] = [];
 
-  const walk = (node: AxNode, depth: number, named: boolean) => {
+  // `heldBy` is the name of the nearest shown node above: text that only
+  // repeats it (a button's label) is left out.
+  const walk = (node: AxNode, depth: number, heldBy: string) => {
     if (lines.length > MAX_LINES) return;
     const role = text(node.role);
     const name = text(node.name);
@@ -69,7 +71,7 @@ export function axOutline(answer: unknown): string {
       role !== "" &&
       role !== "RootWebArea" &&
       !HOLDERS.has(role) &&
-      !(TEXT.has(role) && (named || name === ""));
+      !(TEXT.has(role) && (name === "" || heldBy.includes(name)));
     if (shows) {
       if (role === "InlineTextBox") return;
       if (role === "StaticText") {
@@ -96,11 +98,11 @@ export function axOutline(answer: unknown): string {
       lines.push(parts.join(" "));
     }
     for (const child of children) {
-      walk(child, shows ? depth + 1 : depth, shows ? name !== "" : named);
+      walk(child, shows ? depth + 1 : depth, shows ? name : heldBy);
     }
   };
 
-  if (root !== undefined) walk(root, 0, false);
+  if (root !== undefined) walk(root, 0, "");
   if (lines.length > MAX_LINES) {
     lines.length = MAX_LINES;
     lines.push("… (cut: scroll or open a part of the page, then look again)");

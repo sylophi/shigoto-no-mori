@@ -34,10 +34,20 @@ function placeOf(target: Element, root: HTMLElement): GuideCalloutPlace {
 }
 
 const samePlace = (a: GuideCalloutPlace | null, b: GuideCalloutPlace | null) =>
-  JSON.stringify(a) === JSON.stringify(b);
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.ring.x === b.ring.x &&
+    a.ring.y === b.ring.y &&
+    a.ring.width === b.ring.width &&
+    a.ring.height === b.ring.height &&
+    a.left === b.left &&
+    a.top === b.top &&
+    a.bottom === b.bottom);
 
 // The ring and sentence over what the guide points at, following it as
-// the page scrolls or moves under it, and gone while it is off the page.
+// the page scrolls, resizes or changes under it (measured at most once a
+// frame), and gone while it is off the page.
 export function GuideCallout() {
   const point = useGuide()?.point ?? null;
   const root = useWindowRoot();
@@ -49,14 +59,34 @@ export function GuideCallout() {
       return;
     }
     let frame = 0;
-    const follow = () => {
-      const target = root.querySelector(TARGET);
-      const next = target === null ? null : placeOf(target, root);
-      setPlace((current) => (samePlace(current, next) ? current : next));
-      frame = requestAnimationFrame(follow);
+    const resized = new ResizeObserver(() => measure());
+    const measure = () => {
+      if (frame !== 0) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const target = root.querySelector(TARGET);
+        if (target !== null) resized.observe(target);
+        const next = target === null ? null : placeOf(target, root);
+        setPlace((current) => (samePlace(current, next) ? current : next));
+      });
     };
-    follow();
-    return () => cancelAnimationFrame(frame);
+    const changed = new MutationObserver(measure);
+    changed.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-guide-target"],
+    });
+    resized.observe(root);
+    const doc = root.ownerDocument;
+    doc.addEventListener("scroll", measure, true);
+    measure();
+    return () => {
+      cancelAnimationFrame(frame);
+      changed.disconnect();
+      resized.disconnect();
+      doc.removeEventListener("scroll", measure, true);
+    };
   }, [seq, root]);
   if (point === null || place === null) return null;
   return <GuideCalloutView place={place} say={point.say} />;

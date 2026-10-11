@@ -1,26 +1,43 @@
 // Proof for the guide's sessions in the shell (main/core/guide/Guide.ts),
-// over windows that stand in for Electron's: a session's token is minted
-// fresh for the window that asked and drives that window alone; it is
-// refused once the window stops it, asks again or closes, and once the
-// shell quits; and the guide is refused a click on a control that
-// deletes, a key on one, and any text or key in a terminal, each before
-// anything reaches the page. Also the outline `look` answers
-// (axOutline.ts).
+// over windows that stand in for Electron's. A session's token is minted
+// fresh for the window that asked and drives that window alone. It is
+// refused once the window stops it, asks again or closes, the agent's
+// server ends it, or the shell quits. The guide is refused a click on a
+// control that deletes, a key on one, and any text or key in a terminal,
+// each before anything reaches the page. Also the outline `look`
+// answers (axOutline.ts).
 //
 // Run: pnpm test guide.
 import assert from "node:assert/strict";
-import type { GuideState } from "@shigomori/contracts/modules/guide";
+import { RemoteCallError } from "@shigomori/contracts/errors";
+import type {
+  GuideHarness,
+  GuideState,
+} from "@shigomori/contracts/modules/guide";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { it } from "vitest";
 import { axOutline } from "../main/core/guide/axOutline.ts";
 import * as Guide from "../main/core/guide/Guide.ts";
 
-type Facts = { destructive: boolean; terminal: boolean };
+// A node as the test poses it: its control's variant and name, and
+// whether it is in a terminal.
+type Facts = { variant?: string; name?: string; terminal?: boolean };
+
+// The same, as the page's inspection answers it.
+const asPage = (facts: Facts | undefined) => ({
+  controls:
+    facts === undefined
+      ? []
+      : [{ variant: facts.variant ?? "", name: facts.name ?? "" }],
+  terminal: facts?.terminal === true,
+});
 
 // A window's page: what each node and the focus are, and every command
 // the guide sent it.
@@ -32,7 +49,7 @@ function makeWindow(windowId: number) {
     attached: false,
     detached: false,
     nodes: new Map<number, Facts>(),
-    focused: { destructive: false, terminal: false } as Facts,
+    focused: {} as Facts,
     inputs: () =>
       sent.filter(({ method }) => method.startsWith("Input.")).length,
   };
@@ -48,10 +65,10 @@ function makeWindow(windowId: number) {
         }
         if (method === "Runtime.callFunctionOn") {
           const facts = window.nodes.get(Number(params?.["objectId"]));
-          return { result: { value: { ...facts, x: 10, y: 10 } } };
+          return { result: { value: { ...asPage(facts), x: 10, y: 10 } } };
         }
         if (method === "Runtime.evaluate") {
-          return { result: { value: window.focused } };
+          return { result: { value: asPage(window.focused) } };
         }
         if (method === "Accessibility.getFullAXTree") return { nodes: [] };
         return {};
@@ -64,13 +81,17 @@ function makeWindow(windowId: number) {
   return { window, page };
 }
 
-// The shell's guide over two windows, 1 and 2, with what each was told.
+// The shell's guide over two windows, 1 and 2, with what each was told,
+// the agents it launched, and windows to close.
 function makeShell() {
   const windows = new Map([
     [1, makeWindow(1)],
     [2, makeWindow(2)],
   ]);
   const told: { windowId: number; state: GuideState | null }[] = [];
+  const launched: string[] = [];
+  let launchFails = false;
+  const closing = new Set<(windowId: number) => void>();
   const layer = Guide.layer.pipe(
     Layer.provide(
       Layer.succeed(
@@ -94,6 +115,23 @@ function makeShell() {
           },
           tell: (windowId, state) =>
             Effect.sync(() => void told.push({ windowId, state })),
+          launch: ({ session }) =>
+            launchFails
+              ? Effect.fail(
+                  new RemoteCallError({ text: "Couldn't open Terminal" }),
+                )
+              : Effect.sync(() => void launched.push(session)),
+          closed: Stream.callback<number>((queue) =>
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                const listener = (windowId: number) =>
+                  Queue.offerUnsafe(queue, windowId);
+                closing.add(listener);
+                return listener;
+              }),
+              (listener) => Effect.sync(() => closing.delete(listener)),
+            ),
+          ),
         }),
       ),
     ),
@@ -106,6 +144,28 @@ function makeShell() {
     },
     told,
     layer,
+    // Asks in a window, answering the session the agent was launched on.
+    ask: (
+      guide: Guide.Guide["Service"],
+      windowId: number,
+      harness: GuideHarness,
+    ) =>
+      Effect.andThen(
+        guide.ask(windowId, harness, "How do I rename a worktree?"),
+        Effect.sync(() => {
+          const session = launched.at(-1);
+          if (session === undefined) throw new Error("nothing launched");
+          return session;
+        }),
+      ),
+    failLaunches: () => {
+      launchFails = true;
+    },
+    // Whether anything heard it.
+    close: (windowId: number) => {
+      for (const listener of closing) listener(windowId);
+      return closing.size > 0;
+    },
   };
 }
 
@@ -132,8 +192,8 @@ it("mints a fresh token for each ask and drives the window it was minted for alo
   const shell = makeShell();
   await run(shell.layer, (guide) =>
     Effect.gen(function* () {
-      const one = yield* guide.start(1, "claude");
-      const two = yield* guide.start(2, "codex");
+      const one = yield* shell.ask(guide, 1, "claude");
+      const two = yield* shell.ask(guide, 2, "codex");
       // 32 random bytes each, as base64url.
       assert.match(one, /^[\w-]{43}$/);
       assert.notEqual(one, two);
@@ -171,9 +231,9 @@ it("refuses a token once its window stops it, asks again or closes", async () =>
   const shell = makeShell();
   await run(shell.layer, (guide) =>
     Effect.gen(function* () {
-      const first = yield* guide.start(1, "claude");
+      const first = yield* shell.ask(guide, 1, "claude");
       yield* guide.drive(first, { _tag: "look" });
-      const second = yield* guide.start(1, "claude");
+      const second = yield* shell.ask(guide, 1, "claude");
       assert.ok(
         ended(yield* Effect.exit(guide.drive(first, { _tag: "look" }))),
       );
@@ -190,7 +250,7 @@ it("refuses a token once its window stops it, asks again or closes", async () =>
       );
 
       yield* guide.drive(second, { _tag: "look" });
-      // Stop, and a closed window, both arrive as the window's end.
+      // Stop is the window's end.
       yield* guide.end(1);
       assert.ok(
         ended(yield* Effect.exit(guide.drive(second, { _tag: "look" }))),
@@ -203,6 +263,29 @@ it("refuses a token once its window stops it, asks again or closes", async () =>
   );
 });
 
+it("ends a window's session as the window closes, and leaves none when the agent won't open", async () => {
+  const shell = makeShell();
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const token = yield* shell.ask(guide, 1, "claude");
+      yield* guide.drive(token, { _tag: "look" });
+      // The close reaches the guide's fiber in a moment, not a time.
+      while (!shell.close(1)) yield* Effect.yieldNow;
+      while ((yield* guide.read(1)) !== null) yield* Effect.yieldNow;
+      assert.ok(
+        ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
+      );
+      assert.ok(shell.window(1).detached);
+
+      shell.failLaunches();
+      const failed = yield* Effect.exit(shell.ask(guide, 2, "codex"));
+      assert.ok(failure(failed) instanceof RemoteCallError);
+      assert.equal(yield* guide.read(2), null);
+      assert.deepEqual(shell.told.at(-1), { windowId: 2, state: null });
+    }),
+  );
+});
+
 it("ends every session when the shell quits", async () => {
   const shell = makeShell();
   const scope = await Effect.runPromise(Scope.make());
@@ -211,29 +294,39 @@ it("ends every session when the shell quits", async () => {
       Effect.map((context) => Context.get(context, Guide.Guide)),
     ),
   );
-  const token = await Effect.runPromise(guide.start(1, "claude"));
+  const token = await Effect.runPromise(shell.ask(guide, 1, "claude"));
   await Effect.runPromise(guide.drive(token, { _tag: "look" }));
   await Effect.runPromise(Scope.close(scope, Exit.void));
   assert.ok(shell.window(1).detached);
 });
 
-it("refuses a click or a key on a control that deletes, before it reaches the page", async () => {
+it("refuses a click or a key on a control that deletes, by its variant or its name, before it reaches the page", async () => {
   const shell = makeShell();
   const page = shell.window(1);
-  page.nodes.set(7, { destructive: true, terminal: false });
-  page.nodes.set(8, { destructive: false, terminal: false });
+  page.nodes.set(7, { variant: "outline-destructive", name: "Confirm" });
+  page.nodes.set(8, { variant: "outline", name: "Mirror" });
+  page.nodes.set(12, { variant: "ghost", name: "Sign out" });
+  page.nodes.set(13, { name: "Discard" });
   await run(shell.layer, (guide) =>
     Effect.gen(function* () {
-      const token = yield* guide.start(1, "claude");
+      const token = yield* shell.ask(guide, 1, "claude");
       assert.equal(
         refusedFor(
           yield* Effect.exit(guide.drive(token, { _tag: "click", ref: 7 })),
         ),
         "destructive",
       );
+      for (const ref of [12, 13]) {
+        assert.equal(
+          refusedFor(
+            yield* Effect.exit(guide.drive(token, { _tag: "click", ref })),
+          ),
+          "destructive",
+        );
+      }
       assert.equal(page.inputs(), 0);
 
-      page.focused = { destructive: true, terminal: false };
+      page.focused = { variant: "destructive", name: "Delete worktree" };
       for (const key of ["Enter", "Space"] as const) {
         assert.equal(
           refusedFor(
@@ -257,11 +350,11 @@ it("refuses a click or a key on a control that deletes, before it reaches the pa
 it("refuses any text or key in a terminal, before it reaches the page", async () => {
   const shell = makeShell();
   const page = shell.window(1);
-  page.nodes.set(9, { destructive: false, terminal: true });
-  page.nodes.set(10, { destructive: false, terminal: false });
+  page.nodes.set(9, { terminal: true });
+  page.nodes.set(10, { name: "Name" });
   await run(shell.layer, (guide) =>
     Effect.gen(function* () {
-      const token = yield* guide.start(1, "codex");
+      const token = yield* shell.ask(guide, 1, "codex");
       assert.equal(
         refusedFor(
           yield* Effect.exit(
@@ -270,7 +363,7 @@ it("refuses any text or key in a terminal, before it reaches the page", async ()
         ),
         "terminal",
       );
-      page.focused = { destructive: false, terminal: true };
+      page.focused = { terminal: true };
       for (const key of ["Enter", "Escape", "ArrowUp"] as const) {
         assert.equal(
           refusedFor(
@@ -300,10 +393,10 @@ it("refuses any text or key in a terminal, before it reaches the page", async ()
 it("refuses every action after Stop, and a ref no longer on the page", async () => {
   const shell = makeShell();
   const page = shell.window(1);
-  page.nodes.set(11, { destructive: false, terminal: false });
+  page.nodes.set(11, { name: "Name" });
   await run(shell.layer, (guide) =>
     Effect.gen(function* () {
-      const token = yield* guide.start(1, "claude");
+      const token = yield* shell.ask(guide, 1, "claude");
       yield* guide.drive(token, { _tag: "point", ref: 11, say: "This one." });
       assert.deepEqual(yield* guide.read(1), {
         harness: "claude",
@@ -331,6 +424,65 @@ it("refuses every action after Stop, and a ref no longer on the page", async () 
       }
       assert.equal(page.sent.length, before);
     }),
+  );
+});
+
+it("ends the session as the agent's server stops", async () => {
+  const shell = makeShell();
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const token = yield* shell.ask(guide, 1, "codex");
+      yield* guide.drive(token, { _tag: "look" });
+      yield* guide.drive(token, { _tag: "end" });
+      assert.ok(
+        ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
+      );
+      assert.ok(shell.window(1).detached);
+      assert.equal(yield* guide.read(1), null);
+      assert.deepEqual(shell.told.at(-1), { windowId: 1, state: null });
+    }),
+  );
+});
+
+it("keeps a dialog's text, and leaves out a control's label it repeats", () => {
+  const outline = axOutline({
+    nodes: [
+      { nodeId: "1", role: { value: "RootWebArea" }, childIds: ["2"] },
+      {
+        nodeId: "2",
+        role: { value: "dialog" },
+        name: { value: "Delete branch" },
+        backendDOMNodeId: 9,
+        childIds: ["3", "5", "6"],
+      },
+      { nodeId: "3", role: { value: "generic" }, childIds: ["4"] },
+      {
+        nodeId: "4",
+        role: { value: "StaticText" },
+        name: { value: "Its commits stay on GitHub." },
+      },
+      {
+        nodeId: "5",
+        role: { value: "StaticText" },
+        name: { value: "Delete branch" },
+      },
+      {
+        nodeId: "6",
+        role: { value: "button" },
+        name: { value: "Cancel" },
+        backendDOMNodeId: 12,
+        childIds: ["7"],
+      },
+      { nodeId: "7", role: { value: "StaticText" }, name: { value: "Cancel" } },
+    ],
+  });
+  assert.equal(
+    outline,
+    [
+      '- dialog "Delete branch" [ref=9]',
+      '  - text "Its commits stay on GitHub."',
+      '  - button "Cancel" [ref=12]',
+    ].join("\n"),
   );
 });
 
