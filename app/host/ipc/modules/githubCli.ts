@@ -17,11 +17,25 @@ import {
   listPullRequestCandidates,
   resolvePullRequestCheckout,
 } from "@host/lib/githubCli/pullRequestCheckout";
+import {
+  comparePullRequest,
+  createPullRequest,
+  getPullRequestDraft,
+  getPullRequestOptions,
+  stageAttachment,
+  stageAttachmentFromUrl,
+  discardAttachment,
+} from "@host/lib/githubCli/newPullRequest";
+import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
 import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "@host/lib/githubCli/readiness";
 import { getRepoMergeConfig } from "@host/lib/githubCli/repoConfig";
 import { getRepoDescription } from "@host/lib/githubCli/repoDescription";
-import { findProjectOrThrow } from "@host/lib/projects";
+import {
+  findProjectAndWorktreeOrThrow,
+  findProjectOrThrow,
+  findWorktreePathOrThrow,
+} from "@host/lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   readiness: () => getGithubCliReadiness(),
@@ -87,6 +101,48 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   setPullRequestDraft: async ({ projectId, number, draft }) => {
     const project = await findProjectOrThrow(projectId);
     await setPullRequestDraft({ cwd: project.path, number, draft });
+  },
+
+  pullRequestDraft: async ({ projectId, worktreeId }) => {
+    const project = await findProjectOrThrow(projectId);
+    const worktree = await findWorktreeIdentityOrThrow(project.id, worktreeId, {
+      primaryRef: true,
+    });
+    return getPullRequestDraft({
+      cwd: worktree.path,
+      projectPath: project.path,
+      branch: worktree.branch,
+      primaryRef: worktree.primaryRef,
+    });
+  },
+
+  pullRequestCompare: async ({ projectId, worktreeId, base }) =>
+    comparePullRequest(
+      await findWorktreePathOrThrow({ projectId, worktreeId }),
+      base,
+    ),
+
+  pullRequestOptions: async ({ projectId }) => {
+    const project = await findProjectOrThrow(projectId);
+    return getPullRequestOptions(project.path);
+  },
+
+  stageAttachment: (chunk) => stageAttachment(chunk),
+
+  stageAttachmentFromUrl: (source) => stageAttachmentFromUrl(source),
+
+  discardAttachment: ({ id }) => discardAttachment(id),
+
+  createPullRequest: async ({ projectId, worktreeId, ...pr }) => {
+    const { project, worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    return createPullRequest({
+      cwd: worktree.path,
+      projectPath: project.path,
+      ...pr,
+    });
   },
 
   disablePullRequestAutoMerge: async ({ projectId, number }) => {

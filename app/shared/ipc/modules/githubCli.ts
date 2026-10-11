@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
+  CreatePullRequestPayloadSchema,
+  CreatePullRequestResultSchema,
+  DiscardAttachmentPayloadSchema,
   DisablePullRequestAutoMergePayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
@@ -10,6 +13,14 @@ import {
   MergePullRequestResultSchema,
   ProjectScopedPayloadSchema,
   PullRequestCandidateListSchema,
+  PullRequestComparePayloadSchema,
+  PullRequestCompareSchema,
+  PullRequestDraftSchema,
+  PullRequestOptionsSchema,
+  StageAttachmentFromUrlPayloadSchema,
+  StageAttachmentPayloadSchema,
+  StagedAttachmentSchema,
+  WorktreeScopedPayloadSchema,
   PullRequestCheckoutRefSchema,
   PullRequestDetailSchema,
   PublishRepoPayloadSchema,
@@ -101,6 +112,56 @@ export const githubCliContract = defineContract("host", {
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
     z.void(),
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // The create pull request dialog's starting point (PullRequestDraftSchema).
+  pullRequestDraft: invoke(
+    "githubCli:pullRequestDraft",
+    WorktreeScopedPayloadSchema,
+    PullRequestDraftSchema,
+    { remote: true, gated: false },
+  ),
+  // What a PR from the worktree's branch into a base would hold.
+  pullRequestCompare: invoke(
+    "githubCli:pullRequestCompare",
+    PullRequestComparePayloadSchema,
+    PullRequestCompareSchema,
+    { remote: true, gated: false },
+  ),
+  // The people and labels a new PR can name.
+  pullRequestOptions: invoke(
+    "githubCli:pullRequestOptions",
+    ProjectScopedPayloadSchema,
+    PullRequestOptionsSchema,
+    { remote: true, gated: false },
+  ),
+  // Writes a chunk of a file pasted into a new PR's description, kept
+  // on the host until the PR is created.
+  stageAttachment: invoke(
+    "githubCli:stageAttachment",
+    StageAttachmentPayloadSchema,
+    z.void(),
+    { remote: true, gated: true },
+  ),
+  // Fetches an image or video dropped or pasted in as a link.
+  stageAttachmentFromUrl: invoke(
+    "githubCli:stageAttachmentFromUrl",
+    StageAttachmentFromUrlPayloadSchema,
+    StagedAttachmentSchema,
+    { remote: true, gated: true },
+  ),
+  // Drops a staged file taken out of the description.
+  discardAttachment: invoke(
+    "githubCli:discardAttachment",
+    DiscardAttachmentPayloadSchema,
+    z.void(),
+    { remote: true, gated: true },
+  ),
+  // Pushes the worktree's branch and opens a PR from it.
+  createPullRequest: invoke(
+    "githubCli:createPullRequest",
+    CreatePullRequestPayloadSchema,
+    CreatePullRequestResultSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   // Turns an armed auto-merge off, so the PR waits for a person again.

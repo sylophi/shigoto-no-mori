@@ -606,6 +606,31 @@
   }
 }
 
+/* In a dialog, the trays are the dialog's own muted wash instead:
+   --input is set to stand off the canvas, and on a popover it reads
+   muddy (the search strip below makes the same trade). Set per tray
+   rather than by remapping --input, which a switch's track also wears
+   and needs to stand off the dialog. */
+.doubutsu
+  [data-slot="modal-shell"]
+  :is(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="segmented-control"]
+  ) {
+  background-color: color-mix(in oklab, var(--muted) 55%, transparent);
+}
+@media (hover: hover) {
+  .doubutsu
+    [data-slot="modal-shell"]
+    :is([data-slot="input"], [data-slot="textarea"]):hover:not(
+      :focus,
+      :disabled
+    ) {
+    background-color: var(--muted);
+  }
+}
+
 /* --- Search strips and popup footers, without rules ---
    v1 rules a search strip off from the list under it, and a popup's
    footer off from its body. Here the strip becomes the field tray
