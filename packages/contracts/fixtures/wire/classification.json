@@ -1,0 +1,1738 @@
+{
+  "account:acceptsCommands": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:changed": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "account:commandAccessChanged": {
+    "kind": "push",
+    "scope": "client",
+    "remote": true,
+    "gated": false
+  },
+  "account:enroll": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:listDevices": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:revokeDevice": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:setAcceptsCommands": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:setDeviceIcon": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:setDeviceName": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:signOut": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "account:status": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "agents:setHooks": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "agents:status": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "branches:create": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "branches:delete": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "branches:rename": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "cli:doctor": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:doctorFix": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:install": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:shellInstall": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:shellStatus": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:shellUninstall": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:status": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "cli:uninstall": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "clientConfig:read": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "clientConfig:write": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "control:bring": {
+    "kind": "view",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "control:devices": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "control:mirrors": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "control:mirrorStop": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "control:peerWorktrees": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "control:send": {
+    "kind": "view",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "dialog:pickFolder": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "forward:open": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "reachServers"
+  },
+  "fs:isGitRepo": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "fs:listDirectory": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "fs:scanForGitRepos": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "git:externalChange": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "git:fetchActive": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "git:projectChanged": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "git:refreshProject": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "git:refsRefreshed": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "git:sweep": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:disablePullRequestAutoMerge": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "githubCli:mergePullRequest": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "githubCli:owners": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:projectPullRequests": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:projectPullRequestsRefreshed": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:publish": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "githubCli:pullRequestCandidates": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:pullRequestDiff": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:readiness": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:repoDescription": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:repoMergeConfig": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:repos": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:resolvePullRequestCheckout": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "githubCli:setPullRequestDraft": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "githubCli:worktreePullRequest": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "globalConfig:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "globalConfig:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "globalConfig:writeDeviceSettings": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "hub:invokePeer": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "hub:peerPush": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "hub:status": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "hub:statusChanged": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "hub:watchPeer": {
+    "kind": "view",
+    "scope": "client"
+  },
+  "hygiene:diskUsage": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "hygiene:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "launchers:detect": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "launchers:forProject": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "launchers:launch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "tracksProjectUsage": true
+  },
+  "link:end": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "link:hello": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "link:ping": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "link:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "link:reset": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "link:write": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "menu:setChords": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "menu:setLaunchToolsEnabled": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "migration:changed": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "migration:continue": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "migration:read": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "mirror:applyGitState": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "invitable": "copy"
+  },
+  "mirror:changed": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "mirror:gitChanged": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "mirror:gitState": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles",
+    "invitable": "copy"
+  },
+  "mirror:history": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "mirror:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "mirror:openStream": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles",
+    "invitable": "copy"
+  },
+  "mirror:pause": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "mirror:release": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "invitable": "copy"
+  },
+  "mirror:resume": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "mirror:setIgnores": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "mirror:startFrom": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "mirror:startTo": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "mirror:stop": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "mirror:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "nav:addProject": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "nav:deepLink": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "nav:launchById": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "nav:openSettings": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "nav:takeDeepLink": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "packageScripts:getOrder": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "packageScripts:getSort": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "packageScripts:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "packageScripts:run": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands",
+    "tracksProjectUsage": true
+  },
+  "packageScripts:setLaunchRow": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "packageScripts:setOrder": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "packageScripts:setSort": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "portForward:changed": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "portForward:list": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "portForward:start": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "portForward:stop": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "portPool:isActive": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "portPool:isInstalled": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "ports:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "ports:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:add": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "projects:carryOverListing": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:carryOverStats": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:clone": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "projects:cloneUrl": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:create": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "projects:defaultBranch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:icon": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:listBranches": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:pickWorktreeName": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:relocate": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "projects:remove": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "projects:reorder": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "projects:usageBumped": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "projects:worktreeIncludeStatus": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "releases:list": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "runtime:info": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "runtime:moveDataDir": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "runtime:nuke": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "runtime:nukeProgress": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:attach": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "scripts:cancel": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "scripts:changed": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:event": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:orphanReport": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:resize": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "scripts:run": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands",
+    "tracksProjectUsage": true
+  },
+  "scripts:stoppedForRemovedWorktree": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "scripts:write": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "session:account": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:accountDevices": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:busy": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:quit": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:updaterState": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:wake": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:windowFocused": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "sharedSettings:changed": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "sharedSettings:merge": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "sharedSettings:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "sharedSettings:set": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "sharedSettings:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "sharing:changed": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "sharing:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": false
+  },
+  "sharing:set": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "sharing:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": false,
+    "gated": false
+  },
+  "shell:openExternal": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shell:showItemInFolder": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:failed": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:migration": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:ready": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:relaunch": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:stopUpdaterBridge": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:updaterCheck": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:updaterInstall": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:updaterUpdate": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shigomori:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "shigomori:write": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands",
+    "tracksProjectUsage": true
+  },
+  "sync:cancelMove": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "sync:hasCommits": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles",
+    "invitable": "project"
+  },
+  "sync:ignoredPaths": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "sync:openSource": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles",
+    "invitable": "copy"
+  },
+  "sync:pullProgress": {
+    "kind": "push",
+    "scope": "host",
+    "gated": false
+  },
+  "sync:pullWorktree": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "sync:receiveBundle": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "invitable": "project"
+  },
+  "sync:receiveWorktree": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "invitable": "landing"
+  },
+  "sync:sendWorktree": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "sync:teardownSource": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": true
+  },
+  "sync:worktreeFolder": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "terminals:attach": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "terminals:close": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "terminals:list": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "terminals:open": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "terminals:resize": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "terminals:write": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "runCommands"
+  },
+  "terrier:readiness": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "terrier:repos": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "gated": false
+  },
+  "updater:check": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "updater:get": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "updater:install": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "updater:state": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "updater:update": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp"
+  },
+  "villagers:cancel": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "villagers:download": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "villagers:face": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "villagers:profiles": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "villagers:remove": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "villagers:status": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "window:blurred": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "window:focused": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "window:hostAddress": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:networkChanged": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:notify": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:nuke": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:open": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:previewTheme": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:relaunch": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "window:showing": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "worktreeData:describe": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "invitable": "copy"
+  },
+  "worktreeData:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false,
+    "invitable": "copy"
+  },
+  "worktreeData:write": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeApp",
+    "tracksProjectUsage": true
+  },
+  "worktrees:abortOperation": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:applyStash": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:branchDiff": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:branchHistory": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:carryOverComplete": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:changeStatus": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:checkoutBranch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:cherryPick": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:commit": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:commitDiff": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:commitMessage": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:continueOperation": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:convertExternal": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:create": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:delete": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "invitable": "copy",
+    "tracksProjectUsage": true
+  },
+  "worktrees:deleteStack": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:discardChanges": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:discardHunks": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:dropStash": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "worktrees:fileDiff": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:fileHunks": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:idleAgents": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:lifecyclePhase": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:list": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false,
+    "invitable": "project"
+  },
+  "worktrees:listCommits": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:mergeBranch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:mergePreview": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:mergePrimary": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:mergeUpstream": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:operation": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:overwrite": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:publish": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:pull": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:pullAndPush": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:push": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:pushForce": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:readFile": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
+  "worktrees:relocate": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:removal": {
+    "kind": "push",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:rename": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:renameBranch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:resetSoft": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:resolveConflict": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:restoreDiscard": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "worktrees:restoreStash": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "worktrees:resumeAgent": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false,
+    "tracksProjectUsage": true
+  },
+  "worktrees:revertCommit": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:rewordCommit": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:setAutoPull": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:setShelved": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:squashCommit": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:stashChanges": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:stashDiff": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:stashes": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:switchToPrimaryAndDeleteBranch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:syncWithPrimary": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:unbindAgent": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:watch": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchChangeStatus": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  }
+}
