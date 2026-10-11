@@ -8,7 +8,9 @@
 // carries a token minted as the host starts. The host publishes the
 // port and the token in <dataDir>/loopback.json, owner-only, which is
 // what names an app instance (flavor and dev profile) to the terminal,
-// and hands them to whoever asks (address).
+// and hands them to whoever asks (address). A second token, handed to
+// the shell alone over the port they share and written nowhere, opens
+// the shell's session calls too (modules/session.ts).
 //
 // A token in the clear is enough here, where a peer's link needs a
 // sealed socket: loopback traffic never leaves the machine, so only
@@ -43,10 +45,12 @@ class LoopbackBindError extends Schema.TaggedError<LoopbackBindError>()(
 export class Loopback extends Context.Service<
   Loopback,
   {
-    // Where the loopback listens, and the token its handshake proves.
+    // Where the loopback listens, the token its handshake proves, and
+    // the shell's.
     readonly address: Effect.Effect<{
       readonly port: number;
       readonly token: string;
+      readonly shellToken: string;
     }>;
     // Takes loopback.json away, before the data-folder move carries the
     // data dir off: a terminal then reads the app as not running rather
@@ -72,13 +76,14 @@ const make = (options: {
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const token = mintHexId();
+    const shellToken = mintHexId();
     const link = yield* makeLink({
       registrar: options.registrar,
       group: LoopbackGroup,
       local: true,
       services: options.services,
       auth: {
-        opens: { token },
+        opens: { token, shellToken },
         // Its callers command this machine as its owner.
         isCommandGranted: () => true,
       },
@@ -122,7 +127,7 @@ const make = (options: {
     yield* publish;
     yield* Effect.addFinalizer(() => unpublish);
     return Loopback.of({
-      address: Effect.succeed({ port, token }),
+      address: Effect.succeed({ port, token, shellToken }),
       unpublish,
       publish,
     });

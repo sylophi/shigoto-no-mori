@@ -14,6 +14,7 @@ import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { finishPendingNuke } from "./core/nuke/finish";
+import { asksForRemoteDebugging } from "./electron/debugSwitches";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
@@ -59,6 +60,12 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
 
+if (
+  app.isPackaged &&
+  asksForRemoteDebugging((name) => app.commandLine.hasSwitch(name))
+) {
+  process.exit(1);
+}
 enableDevCdpPort();
 
 // The dev profile this instance runs as (electron/devProfile.ts), or
@@ -326,7 +333,7 @@ function showHostFailure(failure: HostFailure): void {
       `${failure.message}\n\nQuit and relaunch the app. If it keeps happening, restart your machine or reinstall.`,
     );
   }
-  app.exit(1);
+  process.exit(1);
 }
 
 // Every quit path lands here: the graph's shutdown runs its finalizers

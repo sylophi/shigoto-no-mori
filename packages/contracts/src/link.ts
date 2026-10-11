@@ -178,7 +178,9 @@ export const LinkGroup = handshakeOf(remoteCalls).merge(
 // app's own credential admits (the terminal `sm`, the app's windows and
 // its shell). It serves the link's own calls, every call of every
 // host-scope module, remote or not, with its pushes and views, the
-// control contract's ops, the guide's drive and the shell's session.
+// control contract's ops, the guide's drive and the shell's session,
+// which only a hello with the shell's own token opens
+// (host/socket/loopback.ts).
 const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules
