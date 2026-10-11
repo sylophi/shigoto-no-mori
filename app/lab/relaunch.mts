@@ -126,10 +126,8 @@ const answer = await evaluate(
 ).catch((error) => `no answer: ${error}`);
 const killed = killedLines().slice(killedBefore);
 // A window whose renderer was killed ignores a quit.
-execFileSync("pkill", [
-  "-f",
-  executable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-]);
+const last = pidOfApp();
+if (last !== null) process.kill(last, "SIGKILL");
 
 console.log(
   `relaunched as ${second} (was ${first}), window ${windowBack === null ? "never answered" : `back in ${windowBack} ms`}`,
