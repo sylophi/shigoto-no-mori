@@ -8,7 +8,7 @@
 // so every consumer derives from here. Constant-only module aside from
 // the flavor switch: forge config, main and check scripts all import
 // it.
-import type { CliFlavor } from "./cliDist.mts";
+import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
 
 export const RENDERER_SCHEME_HOST = "app";
 
@@ -18,13 +18,12 @@ export const RENDERER_SCHEME_HOST = "app";
 // scheme handler serves the renderer only on that host.
 export const DEEP_LINK_HOST = "open";
 
-// Dev and prod register separate schemes with the OS, mirroring the
-// dev userData split: a shared spelling would let an installed copy
-// swallow a dev build's OAuth callbacks (or vice versa).
-export function rendererSchemeName(flavor: CliFlavor): string {
-  return flavor === "prod" ? "shigomori" : "shigomori-dev";
+// Each flavor registers its own scheme with the OS: a shared spelling
+// would let an installed copy swallow another build's OAuth callbacks.
+export function rendererSchemeName(flavor: Flavor): string {
+  return flavorNames(flavor).scheme;
 }
 
-export function rendererSchemeOrigin(flavor: CliFlavor): string {
+export function rendererSchemeOrigin(flavor: Flavor): string {
   return `${rendererSchemeName(flavor)}://${RENDERER_SCHEME_HOST}`;
 }

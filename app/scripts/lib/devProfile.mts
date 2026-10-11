@@ -25,12 +25,11 @@ import {
   assertDevProfileName,
   CLERK_TOKEN_STORE,
   DEV_PROFILE_ENV,
-  DEV_USER_DATA_SUFFIX,
   devProfileUserData,
   CLONED_LOGIN_MARKER,
 } from "../../shared/packaging/appName.mts";
 import { cliDataDirName } from "../../shared/packaging/cliDist.mts";
-import { productName } from "./devBundle.mts";
+import { flavorNames } from "@shigomori/engine/flavor";
 
 const PROFILES_DIR = join(homedir(), `${cliDataDirName("dev")}-profiles`);
 
@@ -55,8 +54,7 @@ export function devProfilePaths(name: string): DevProfile {
 }
 
 // Electron's userData for the plain dev instance: the platform's
-// appData joined with the product name (Electron's own default) plus
-// the dev suffix main/index.ts appends.
+// appData joined with the dev flavor's folder (main/flavor.ts).
 function devUserDataDir(): string {
   const home = homedir();
   const appData =
@@ -65,7 +63,7 @@ function devUserDataDir(): string {
       : platform() === "win32"
         ? (process.env.APPDATA ?? join(home, "AppData", "Roaming"))
         : (process.env.XDG_CONFIG_HOME ?? join(home, ".config"));
-  return join(appData, `${productName}${DEV_USER_DATA_SUFFIX}`);
+  return join(appData, flavorNames("dev").userDataDir);
 }
 
 // The two env vars that make a launched app run as the profile.

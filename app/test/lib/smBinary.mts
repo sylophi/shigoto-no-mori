@@ -82,7 +82,7 @@ export function builtSm(): string {
   });
   renameSync(macfs, join(dir, "macfs"));
   const partial = `${binary}.${process.pid}`;
-  execFileSync("node", ["build.mts", partial, "--prod"], {
+  execFileSync("node", ["build.mts", partial, "--flavor=prod"], {
     cwd: join(repoRoot, "packages", "cli"),
     env,
     stdio: ["ignore", "ignore", "inherit"],
