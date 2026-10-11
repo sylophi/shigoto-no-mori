@@ -189,8 +189,20 @@ const pointedAt = (page: Page) =>
   page.evaluate(() => {
     const target = document.querySelector("[data-guide-target]");
     if (target === null) return null;
+    // Its accessible name: its label, the text of what labels it (by id
+    // or a <label for>), or its own text.
+    const labelledBy = target
+      .getAttribute("aria-labelledby")
+      ?.split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    const labels = (target as HTMLInputElement).labels;
     const name =
-      target.getAttribute("aria-label") ?? (target as HTMLElement).innerText;
+      target.getAttribute("aria-label") ??
+      labelledBy ??
+      (labels !== null && labels !== undefined && labels.length > 0
+        ? [...labels].map((label) => label.textContent ?? "").join(" ")
+        : (target as HTMLElement).innerText);
     return name.trim().slice(0, 120);
   });
 
