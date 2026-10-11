@@ -6,19 +6,26 @@
 // missing. From then on either side writes, ends its direction, or
 // resets the whole channel.
 //
-// On the wire a channel is the link's own calls (modules/link.ts): the
-// host's bytes are one `read` stream, which the dialer pulls, so a slow
-// reader holds the host back. The dialer's bytes are `write` calls,
-// each answered once the host's sink took them, so a slow sink holds
-// the dialer back. The host's half is host/socket/channels.ts.
+// On the wire a channel is the link's own calls (modules/link.ts), each
+// direction numbered calls with a few in flight: the host's bytes come
+// as the answers to `read` calls, the next asked only once this side's
+// endpoint took a piece, so a slow reader holds the host back. The
+// dialer's bytes are `write` calls, each answered once the host's sink
+// took them, so a slow sink holds the dialer back. A read is never
+// answered with more than this side asked for, so what waits on the
+// socket for a busy reader is bounded and never stalls the link's other
+// calls, as a stream's pieces would (the RPC client queues those in its
+// socket's read loop). The host's half is host/socket/channels.ts.
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Queue from "effect/Queue";
 import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
 import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
-import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
+import {
+  CHANNEL_CALLS_IN_FLIGHT,
+  CHANNEL_MAX_WRITE_BYTES,
+} from "@shigomori/contracts/modules/link";
 
 // The dialing side's channels on one link.
 export type ChannelMux = {
@@ -31,16 +38,16 @@ export type ChannelMux = {
 // Bytes a side queues before its writer is told to pause.
 export const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
 
-// Writes one channel keeps in flight.
-const WRITES_IN_FLIGHT = 8;
-
 // The link calls a dialer's channels ride.
 export type ChannelCalls = {
   readonly call: (
     tag: "link:write" | "link:end" | "link:reset",
     payload: unknown,
   ) => Effect.Effect<void, unknown>;
-  readonly read: (channelId: string) => Stream.Stream<Uint8Array, unknown>;
+  readonly read: (
+    channelId: string,
+    seq: number,
+  ) => Effect.Effect<Uint8Array, unknown>;
   // Runs a fiber for as long as the link lives.
   readonly fork: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>;
 };
@@ -98,15 +105,34 @@ export function createChannelMux(calls: ChannelCalls): ChannelMux & {
       let queued = 0;
       let paused = false;
 
-      // The far end's bytes, one piece at a time, the next pulled once
-      // the endpoint took this one.
-      const reader = calls.read(channelId).pipe(
-        Stream.runForEach((data) =>
-          Effect.callback<void>((resume) => {
+      // The far end's bytes, read ahead by a few calls and handed to the
+      // endpoint in turn, the next asked once it took one. An empty
+      // answer is the far end's end. Reads still in flight then are
+      // interrupted with the reader.
+      const reader = Effect.gen(function* () {
+        const asked: Fiber.Fiber<Uint8Array, unknown>[] = [];
+        let seq = 0;
+        const ask = Effect.suspend(() =>
+          Effect.map(
+            Effect.forkChild(calls.read(channelId, seq++)),
+            (fiber) => {
+              asked.push(fiber);
+            },
+          ),
+        );
+        for (let n = 0; n < CHANNEL_CALLS_IN_FLIGHT; n++) yield* ask;
+        for (;;) {
+          const data = yield* Fiber.join(
+            asked.shift() as Fiber.Fiber<Uint8Array, unknown>,
+          );
+          if (data.byteLength === 0) return;
+          yield* Effect.callback<void>((resume) => {
             if (channel.gone) return resume(Effect.void);
             endpoint.onData(data, () => resume(Effect.void));
-          }),
-        ),
+          });
+          yield* ask;
+        }
+      }).pipe(
         Effect.matchCause({
           onSuccess: () => {
             if (channel.gone) return;
@@ -123,7 +149,7 @@ export function createChannelMux(calls: ChannelCalls): ChannelMux & {
       // This side's bytes, numbered, with a few writes in flight at once
       // so a long link is not one round trip per piece. The end goes
       // once every write was answered.
-      const inFlight = Semaphore.makeUnsafe(WRITES_IN_FLIGHT);
+      const inFlight = Semaphore.makeUnsafe(CHANNEL_CALLS_IN_FLIGHT);
       let seq = 0;
       const send = (data: Uint8Array) =>
         calls.call("link:write", { channelId, seq: seq++, data }).pipe(
@@ -145,7 +171,7 @@ export function createChannelMux(calls: ChannelCalls): ChannelMux & {
         while (true) {
           const piece = yield* Queue.take(queue);
           if (piece === "end") {
-            yield* inFlight.take(WRITES_IN_FLIGHT);
+            yield* inFlight.take(CHANNEL_CALLS_IN_FLIGHT);
             if (channel.gone) return;
             yield* calls.call("link:end", { channelId });
             channel.sentEnd = true;

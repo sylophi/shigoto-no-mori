@@ -89,7 +89,7 @@ import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData"
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { registerHostContract } from "@shared/ipc/registerContract";
-import { hostContext, runHost } from "./lib/adapters.mts";
+import { hostContext, runHost } from "./lib/hostRuntime.mts";
 import type { HostServices } from "@host/process/services";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shared/ipc/registerContract";

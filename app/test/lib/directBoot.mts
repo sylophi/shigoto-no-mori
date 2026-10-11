@@ -43,7 +43,7 @@ import {
   registerHostContract,
 } from "@shared/ipc/registerContract";
 import type { HostServices } from "@host/process/services";
-import { hostContext } from "./adapters.mts";
+import { hostContext } from "./hostRuntime.mts";
 import type {
   ClientTransport,
   HandlerContext,

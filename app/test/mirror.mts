@@ -125,7 +125,7 @@ import { createMirrorGateway } from "../host/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
-import { runHost } from "./lib/adapters.mts";
+import { runHost } from "./lib/hostRuntime.mts";
 import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
 import { delay, processAlive } from "./lib/checkKit.mts";
 

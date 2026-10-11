@@ -1,0 +1,158 @@
+// The host's services, up the way the app's graph (host/process/layer.ts)
+// brings them up, so host code a proof or a bench reaches answers
+// instead of waiting for a graph that never comes (EFFECT.md, runtime
+// boundaries). Every proof's file starts and disposes it (adapters.mts);
+// a bench under plain node disposes it itself.
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Migration from "@shigomori/engine/Migration";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as FileSync from "../../host/fileSync/FileSync.ts";
+import * as Engine from "../../host/lib/engine.ts";
+import * as BackgroundFetch from "../../host/lib/git/backgroundFetch.ts";
+import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
+import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
+import * as Terminals from "../../host/lib/terminals/Terminals.ts";
+import * as Terrier from "../../host/lib/terrier.ts";
+import * as HostPushes from "../../host/lib/hostPushes.ts";
+import * as Sharing from "../../host/lib/sharing.ts";
+import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
+import * as Views from "../../host/lib/views.ts";
+import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
+import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
+import * as Ports from "../../host/lib/ports.ts";
+import { sandboxEngine } from "./sandboxEngine.mts";
+import * as Villagers from "../../host/lib/villagers.ts";
+import { terminalStart } from "../../host/ipc/scriptRun.ts";
+
+// The engine's data dir for this file's proofs, a fresh one each file.
+// A proof that drives the host's engine calls points the host's own
+// data dir (initDataDirAt) at it too.
+export const engineDataDir = join(
+  realpathSync(mkdtempSync(join(tmpdir(), "sm-proof-data-"))),
+  "data",
+);
+
+// The darwin helper as macfs/ is now, built once per state of its
+// sources into the temp dir, as smBinary.mts builds sm.
+function builtMacfs(): string {
+  const dir = join(import.meta.dirname, "..", "..", "..", "macfs");
+  const hash = createHash("sha256");
+  for (const rel of readdirSync(dir)
+    .filter(
+      (file) =>
+        file === "go.mod" ||
+        file === "go.sum" ||
+        (file.endsWith(".go") && !file.endsWith("_test.go")),
+    )
+    .toSorted()) {
+    hash.update(`${rel}\0`);
+    hash.update(readFileSync(join(dir, rel)));
+  }
+  const binary = join(
+    tmpdir(),
+    `macfs-proof-${hash.digest("hex").slice(0, 16)}`,
+    "macfs",
+  );
+  if (existsSync(binary)) return binary;
+  mkdirSync(join(binary, ".."), { recursive: true });
+  const partial = `${binary}.${process.pid}`;
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+  execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
+    cwd: dir,
+    env,
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+  renameSync(partial, binary);
+  return binary;
+}
+
+// The engine reads its data dir from the environment when the graph
+// is built (host/lib/engine.ts). Set here, so a proof never writes to
+// the dev app's, or to one the shell exported.
+process.env.SHIGOMORI_DATA_DIR = engineDataDir;
+const engine = Engine.layer({
+  flavor: "dev",
+  macfs: builtMacfs(),
+  sm: "smd",
+}).pipe(Layer.provideMerge(Migration.layer));
+
+// No file-sync engine: a proof that runs one brings its own
+// (mirror.mts). The services the host's handlers answer on
+// (host/process/services.ts) are here too, for a proof that runs a
+// handler or serves one (runHost, hostContext).
+const runtime = ManagedRuntime.make(
+  Terminals.layer({ start: terminalStart }).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Ports.layer,
+        Terrier.layer,
+        Villagers.deviceLayer,
+        Views.layer,
+        Sharing.layer({ announce: () => {} }),
+        // No fetches behind a proof's back.
+        Layer.succeed(
+          BackgroundFetch.BackgroundFetch,
+          BackgroundFetch.BackgroundFetch.of({
+            refreshProject: () => Effect.void,
+            sweepForPeer: Effect.succeed({ leaseMs: 0 }),
+            setWindowFocused: () => {},
+          }),
+        ),
+        // Nothing a previous run left behind to sweep.
+        Layer.succeed(
+          OrphanSweep.OrphanSweep,
+          OrphanSweep.OrphanSweep.of({
+            takeReport: Effect.succeed({ stopped: 0 }),
+          }),
+        ),
+      ),
+    ),
+    Layer.provideMerge(
+      Layer.mergeAll(HostPushes.layer, EngineStoreChanges.layer),
+    ),
+    // The copy of the shared settings, read from the store.
+    Layer.provideMerge(SharedSettingsStore.layer),
+    Layer.provideMerge(ScriptRuns.layer),
+    Layer.provideMerge(FileSync.layer(() => null)),
+    Layer.provideMerge(GithubCli.layer),
+    Layer.provideMerge(engine),
+    Layer.provideMerge(NodeServices.layer),
+  ),
+);
+
+export type Services = ManagedRuntime.ManagedRuntime.Services<typeof runtime>;
+
+// With the sandbox's engine in place of this file's, once a proof has
+// brought one up (sandboxEngine.mts).
+export const hostContext = async () => {
+  const context = await runtime.context();
+  const sandbox = sandboxEngine();
+  return sandbox === undefined ? context : Context.merge(context, sandbox);
+};
+export const runHost = async <A, E>(effect: Effect.Effect<A, E, Services>) =>
+  Effect.runPromiseWith(await hostContext())(effect);
+
+export const startHost = () => runtime.context();
+export const disposeHost = async () => {
+  await runtime.dispose();
+  rmSync(join(engineDataDir, ".."), { recursive: true, force: true });
+};

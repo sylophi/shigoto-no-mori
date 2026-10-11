@@ -46,7 +46,7 @@ import {
   hostContext,
   runHost,
   type Services as HostServices,
-} from "./lib/adapters.mts";
+} from "./lib/hostRuntime.mts";
 import {
   makeTracker,
   sandboxGit,

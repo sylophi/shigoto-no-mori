@@ -23,7 +23,7 @@ import {
   startScript,
 } from "@host/lib/scripts";
 import { initDataDirAt } from "@host/lib/util/paths";
-import { runHost } from "./lib/adapters.mts";
+import { runHost } from "./lib/hostRuntime.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import {
   makeTracker,

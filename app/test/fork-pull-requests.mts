@@ -26,7 +26,7 @@ import {
 import * as PullRequests from "@host/lib/githubCli/pullRequests";
 import { it } from "vitest";
 import { hostEngine } from "./lib/smBinary.mts";
-import { runHost } from "./lib/adapters.mts";
+import { runHost } from "./lib/hostRuntime.mts";
 import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 

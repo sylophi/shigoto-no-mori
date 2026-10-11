@@ -167,6 +167,10 @@ const SWITCHES = new Set([
   channelOf(callOf(accountContract, "commandAccessChanged")),
 ]);
 
+// A channel's numbered calls, which hold no place under the in-flight
+// cap: the channel bounds them.
+const CHANNEL_CALLS = new Set(["link:read", "link:write"]);
+
 export type WsServerStartOpts = {
   port: number;
   // The host binds "::" (dual stack), because it advertises IPv6
@@ -672,12 +676,12 @@ export const make = (options: {
           ) => hello(payload, client.id),
           "link:ping": () => Effect.void,
           "link:read": (
-            { channelId }: { channelId: string },
+            { channelId, seq }: { channelId: string; seq: number },
             { client }: Options,
           ) =>
-            Stream.unwrap(
-              Effect.tap(connectionOf(client.id), underSwitch).pipe(
-                Effect.map((connection) => connection.channels.read(channelId)),
+            Effect.tap(connectionOf(client.id), underSwitch).pipe(
+              Effect.flatMap((connection) =>
+                connection.channels.read(channelId, seq),
               ),
             ),
           "link:write": (
@@ -788,9 +792,12 @@ export const make = (options: {
               return Effect.fail(new LinkUnauthenticatedError());
             }
             const deviceId = connection.deviceId;
-            // A stream (a push, a view, a channel's bytes) lives as
-            // long as its reader wants it, so it holds no place.
-            const streaming = !isInvoke(rpc as ContractCall);
+            // A stream (a push, a view) lives as long as its reader
+            // wants it, and a channel's bytes are bounded per channel
+            // (CHANNEL_CALLS_IN_FLIGHT), so neither holds a place.
+            const call = rpc as ContractCall;
+            const streaming =
+              !isInvoke(call) || CHANNEL_CALLS.has(channelOf(call));
             if (!streaming && connection.inFlight >= MAX_IN_FLIGHT_PER_PEER) {
               return Effect.fail(
                 new RemoteCallError({ text: "too many in-flight requests" }),

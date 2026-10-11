@@ -73,7 +73,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import * as Effect from "effect/Effect";
-import { runHost, type Services } from "./lib/adapters.mts";
+import { runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import * as Ops from "@host/lib/engineOps";
 import {

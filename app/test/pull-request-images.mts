@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import * as PullRequests from "@host/lib/githubCli/pullRequests";
-import { runHost } from "./lib/adapters.mts";
+import { runHost } from "./lib/hostRuntime.mts";
 import { it } from "vitest";
 import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";

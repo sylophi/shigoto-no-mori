@@ -26,7 +26,6 @@ import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
-import * as Stream from "effect/Stream";
 import type * as Scope from "effect/Scope";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { type ChannelMux, createChannelMux } from "./channels";
@@ -321,8 +320,8 @@ export const dialDevice = (
 
     const channels = createChannelMux({
       call: (tag, payload) => Effect.asVoid(call(tag, payload)),
-      read: (channelId) =>
-        client("link:read", { channelId }) as Stream.Stream<
+      read: (channelId, seq) =>
+        call("link:read", { channelId, seq }) as Effect.Effect<
           Uint8Array,
           unknown
         >,
