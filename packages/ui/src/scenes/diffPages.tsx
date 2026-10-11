@@ -38,7 +38,7 @@ import { SidebarTakeoverView } from "../views/sidebar/SidebarTakeoverView.tsx";
 import { SyncActionButtonView } from "../views/worktreeDetail/SyncActionButtonView.tsx";
 import { peerReadOnlyNote } from "../lib/commandAccessCopy.ts";
 import { changeEntries, fileKey, patchEntries } from "../lib/patchFiles.ts";
-import { changeKey } from "@shigomori/contracts/schemas/index";
+import { changeKey } from "@shigomori/contracts/schemas";
 import { createFakeChanges } from "../fixtures/changesFixtures.ts";
 import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { FAKE_DIFF } from "../fixtures/pullRequestFixtures.ts";

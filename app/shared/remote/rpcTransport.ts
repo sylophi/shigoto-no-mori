@@ -7,7 +7,7 @@
 import {
   channelOf,
   type ContractCall,
-  isBroadcast,
+  isPush,
   isInvoke,
 } from "@shigomori/contracts/contract";
 import { type ContractSchema, decode } from "@shigomori/contracts/codec";
@@ -91,7 +91,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
   const { client, group } = options;
   const fanOut = pushFanOut();
   for (const call of group.requests.values()) {
-    if (!isBroadcast(call)) continue;
+    if (!isPush(call)) continue;
     const channel = channelOf(call);
     yield* Stream.runForEach(
       client(channel, undefined) as Stream.Stream<unknown, unknown>,
@@ -121,7 +121,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
     },
     view: (channel, input) => {
       const rpc = group.requests.get(channel);
-      if (rpc === undefined || isInvoke(rpc) || isBroadcast(rpc)) {
+      if (rpc === undefined || isInvoke(rpc) || isPush(rpc)) {
         return Stream.die(
           new Error(`No view registered for channel "${channel}"`),
         );

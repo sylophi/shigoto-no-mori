@@ -1,4 +1,4 @@
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import {
   MoveDataDirPayloadSchema,
   NukeProgressSchema,
@@ -36,7 +36,7 @@ export const runtimeContract = defineContract(
     gated: true,
     grant: "changeApp",
   }),
-  broadcast("nukeProgress", NukeProgressSchema, {
+  push("nukeProgress", NukeProgressSchema, {
     remote: true,
   }),
 );

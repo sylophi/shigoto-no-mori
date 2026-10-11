@@ -5,7 +5,7 @@ import {
   type LauncherCommand,
   type TerminalId,
   type Theme,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import {
   type DarkTheme,
   type LightTheme,

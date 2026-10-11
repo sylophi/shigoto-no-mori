@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke, Remote } from "../contract.ts";
+import { push, defineContract, invoke, Remote } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
@@ -140,7 +140,7 @@ export const guideContract = defineContract(
   // Ends this window's guide: its session's token is refused from then.
   invoke("stop", VoidSchema, VoidSchema),
   // This window's guide moved (to this window alone).
-  broadcast("changed", Schema.NullOr(GuideStateSchema)),
+  push("changed", Schema.NullOr(GuideStateSchema)),
 );
 
 // The terminal `sm guide mcp`'s calls, served on the loopback only

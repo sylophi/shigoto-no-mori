@@ -8,7 +8,7 @@ import {
   Gated,
   Grant,
   inputOf,
-  isBroadcast,
+  isPush,
   isInvoke,
   keyOf,
   outputOf,
@@ -27,8 +27,8 @@ import type {
   ServerTransport,
 } from "./transport";
 import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
+  PushKeys,
+  PushProducerPayload,
   Handlers,
 } from "@shigomori/contracts/types";
 
@@ -117,7 +117,7 @@ function wrapEffectCall<Services>(
 // gated, and a remote gated one which consent line covers it. Thrown at
 // registration, so such a call never serves.
 export function classificationGap(call: ContractCall): string | null {
-  if (isBroadcast(call)) return null;
+  if (isPush(call)) return null;
   const host = annotation(call, Scope) === "host";
   const remote = annotation(call, Remote);
   if (host && remote === undefined) {
@@ -252,17 +252,17 @@ export function registerHostContract<M extends ContractModule, Services>(
 // parsing at the registrar boundary for invoke calls.
 export function resolveBroadcast<
   M extends ContractModule,
-  K extends BroadcastKeys<M>,
+  K extends PushKeys<M>,
 >(
   module: M,
   key: K,
-  payload: BroadcastProducerPayload<M, K>,
+  payload: PushProducerPayload<M, K>,
 ): { channel: string; parsed: unknown; remote: boolean } {
   const call = callOf(module, key);
   // The key type narrows to broadcast calls, but a cast at a call site
   // can defeat it. Without this guard a wrong key surfaces as a crash
   // on a missing payload schema instead of a named error.
-  if (!isBroadcast(call)) {
+  if (!isPush(call)) {
     throw new Error(`contract key "${key}" is not a broadcast`);
   }
   return {
@@ -276,13 +276,10 @@ export function resolveBroadcast<
 // to the server transport for delivery to every connected peer, on
 // whatever wire the side serves. Window-targeted pushes are the shell's
 // (main/ipc/register.ts), since a single window is an Electron concept.
-export function broadcastAll<
-  M extends ContractModule,
-  K extends BroadcastKeys<M>,
->(
+export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
   module: M,
   key: K,
-  payload: BroadcastProducerPayload<M, K>,
+  payload: PushProducerPayload<M, K>,
   server: Pick<ServerTransport, "broadcastAll">,
 ): void {
   const { channel, parsed, remote } = resolveBroadcast(module, key, payload);

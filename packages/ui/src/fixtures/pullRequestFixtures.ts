@@ -14,7 +14,7 @@ import {
   type PullRequestReviews,
   type RepoMergeConfig,
   summarizeChecks,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { armsAutoMerge } from "../lib/pullRequest.ts";
 
 const FAKE_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);

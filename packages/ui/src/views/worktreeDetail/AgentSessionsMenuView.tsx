@@ -20,7 +20,7 @@ import {
 } from "../../lib/agentSessions.ts";
 import { needLine, needView, stateLabel } from "../../lib/agentNeeds.ts";
 import { cn } from "../../lib/utils.ts";
-import type { AgentSession } from "@shigomori/contracts/schemas/index";
+import type { AgentSession } from "@shigomori/contracts/schemas";
 import { FooterVerbView, LABEL_RANK } from "./FooterVerbView.tsx";
 
 // The agent sessions bound to the worktree (`sm agents`), as a footer

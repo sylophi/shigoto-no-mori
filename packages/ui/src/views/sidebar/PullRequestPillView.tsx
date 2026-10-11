@@ -1,6 +1,6 @@
 import { describePullRequest } from "../../lib/pullRequest.ts";
 import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
-import type { PullRequest } from "@shigomori/contracts/schemas/index";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { StatusPillView } from "./StatusPillView.tsx";
 
 interface PullRequestPillProps {

@@ -3,7 +3,7 @@ import {
   type ContractModule,
   callsOf,
   channelOf,
-  isBroadcast,
+  isPush,
   isInvoke,
   keyOf,
   outputOf,
@@ -24,7 +24,7 @@ export function buildClient<M extends ContractModule>(
   const out: Record<string, unknown> = {};
   for (const call of callsOf(module)) {
     const key = keyOf(call);
-    if (isBroadcast(call)) {
+    if (isPush(call)) {
       out[`on${key.charAt(0).toUpperCase()}${key.slice(1)}`] = subscriber(
         call,
         transport,

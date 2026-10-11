@@ -8,7 +8,7 @@ import { GitBranch } from "lucide-react";
 import { describePullRequest } from "../../../lib/pullRequest.ts";
 import { cn } from "../../../lib/utils.ts";
 import type { PullRequestStack } from "@shigomori/contracts/pullRequestStack";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { PullRequestTitleLinkView } from "./PullRequestTitleLinkView.tsx";
 import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";

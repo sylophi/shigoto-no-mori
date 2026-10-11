@@ -1,5 +1,5 @@
 import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
-import type { CarryOverEntry } from "@shigomori/contracts/schemas/index";
+import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 

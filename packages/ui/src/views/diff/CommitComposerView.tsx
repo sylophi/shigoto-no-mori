@@ -15,7 +15,7 @@ import { Textarea } from "../../primitives/textarea.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "../../lib/pluralize.ts";
 import { cn } from "../../lib/utils.ts";
-import type { ChangedFile } from "@shigomori/contracts/schemas/index";
+import type { ChangedFile } from "@shigomori/contracts/schemas";
 
 // The commit message being written for a worktree, persisted so leaving
 // the changes page (to check one more file in the editor, say) doesn't

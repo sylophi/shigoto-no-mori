@@ -1,6 +1,6 @@
 import { FileDiff } from "lucide-react";
 import { worktreeSyncView } from "../../lib/syncState.ts";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { StatusPillView } from "./StatusPillView.tsx";
 import { pluralize } from "../../lib/pluralize.ts";
 

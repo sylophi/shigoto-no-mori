@@ -3,7 +3,7 @@ import { Button } from "../../../primitives/button.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
 import { cn } from "../../../lib/utils.ts";
-import type { StashEntry } from "@shigomori/contracts/schemas/index";
+import type { StashEntry } from "@shigomori/contracts/schemas";
 
 // The Git page's Stashes tab: the way to stash the uncommitted changes
 // (with a name, if they deserve one), then the stashes made on the

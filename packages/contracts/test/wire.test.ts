@@ -17,7 +17,7 @@ import {
   type ContractCall,
   type ContractModule,
   inputOf,
-  isBroadcast,
+  isPush,
   isInvoke,
   outputOf,
   payloadOf,
@@ -54,7 +54,7 @@ for (const module of modules) {
       const channel = channelOf(call);
       assert.ok(!calls.has(channel), `${channel} is defined twice`);
       rpcs.push(call);
-      const parts: [Part, ContractSchema][] = isBroadcast(call)
+      const parts: [Part, ContractSchema][] = isPush(call)
         ? [["payload", payloadOf(call)]]
         : [
             ["payload", inputOf(call)],

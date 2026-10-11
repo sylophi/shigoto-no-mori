@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   AddProjectPayloadSchema,
   BranchListSchema,
@@ -68,7 +68,7 @@ export const projectsContract = defineContract(
   }),
   // Emitted after an action bumps a project's usage so the renderer can
   // refresh its usage-sorted sidebar list.
-  broadcast("usageBumped", ProjectScopedPayloadSchema, {
+  push("usageBumped", ProjectScopedPayloadSchema, {
     remote: true,
   }),
   invoke("defaultBranch", ProjectScopedPayloadSchema, Schema.String, {

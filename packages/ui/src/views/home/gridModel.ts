@@ -7,7 +7,7 @@ import type { GroupWork } from "./ProjectGridView.tsx";
 import {
   worktreeLastActivityAt,
   type Project,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import {
   buildPaletteEntries,
   projectLead,
