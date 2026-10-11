@@ -84,7 +84,10 @@ export function startHost(options: {
           source: facts.packaged
             ? { tag: `v${facts.appVersion}` }
             : { checkout: dirname(facts.appPath) },
-        }).pipe(Effect.mapError(callFailureOf)),
+        }).pipe(
+          Effect.mapError(callFailureOf),
+          Effect.catchDefect((defect) => Effect.fail(callFailureOf(defect))),
+        ),
       ),
     quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
   };

@@ -90,6 +90,7 @@ const crashes: number[] = [];
 // The current host's address, once it is up. Replaced as a host forks,
 // so a window redialing meanwhile waits for the next one.
 let address = deferred<Address>();
+let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 
 const session = () => buildClient(sessionContract, link);
@@ -109,6 +110,7 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
     // The device the host is rides along, which the shell's account
     // calls name.
+    reportedDeviceId = reported.deviceId;
     address.resolve(reported);
     if (started) {
       link.reconnect();
@@ -209,10 +211,13 @@ export function hostAddress(): Promise<Address> {
   return address.promise;
 }
 
-// The device the host is, which the shell's account calls name: waited
-// for across a restart, for as long as the restarts a minute allows.
+// The device the host is, which the shell's account calls name: the
+// last one reported, or one waited for as long as the restarts a
+// minute allows.
 export const hostDeviceId = (): Promise<string> =>
-  Effect.runPromise(deviceIdWithin(hostAddress, CRASH_WINDOW_MS));
+  Effect.runPromise(
+    deviceIdWithin(reportedDeviceId, hostAddress, CRASH_WINDOW_MS),
+  );
 
 // The updater moved. A host that is not up yet hears it as it starts.
 export function noteUpdaterState(state: UpdaterState): void {

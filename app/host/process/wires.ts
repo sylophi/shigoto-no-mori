@@ -184,10 +184,11 @@ export const loopbackLayer = () =>
 
 // This device's id, for the root's synchronous callbacks, which run
 // once the graph is up.
+let deviceId: string | undefined;
 const deviceIdNow = () =>
-  Graph.readNow(DeviceId.current, () => {
+  (deviceId ??= Graph.readNow(DeviceId.current, () => {
     throw new Error("The device id was asked before launch read it.");
-  });
+  }));
 
 // The host's own consumers of peer pushes (the mirror's git follower
 // reacts to a peer's git:projectChanged and mirror:gitChanged), beside

@@ -55,8 +55,8 @@ const loaded = layerLatch<void>("The shared settings");
 export const layer = Layer.effectDiscard(
   loaded.provide(
     Effect.gen(function* () {
-      held = yield* Ops.readSharedSettings;
       deviceId = yield* DeviceId.current;
+      held = yield* Ops.readSharedSettings;
       yield* Effect.forkScoped(writer);
     }),
   ),

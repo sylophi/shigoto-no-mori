@@ -1338,13 +1338,17 @@ it("account calls wait for the host's device id, but not past its restart budget
   const reported = new Promise<{ deviceId: string }>((resolve) => {
     report = resolve;
   });
-  const late = run(deviceIdWithin(() => reported, 60_000));
+  const late = run(deviceIdWithin(undefined, () => reported, 60_000));
   await clock.advance(59_000);
   report({ deviceId: "the-host" });
   assert.equal(await late, "the-host");
 
   const never = run(
-    deviceIdWithin(() => new Promise<{ deviceId: string }>(() => {}), 60_000),
+    deviceIdWithin(
+      undefined,
+      () => new Promise<{ deviceId: string }>(() => {}),
+      60_000,
+    ),
   );
   const settled = never.then(
     () => "answered",
@@ -1359,6 +1363,17 @@ it("account calls wait for the host's device id, but not past its restart budget
   assert.equal(early, undefined, "it gave up before the budget ran out");
   await clock.advance(1);
   const failure = await settled;
+  // Once a host has reported, a restart leaves the id it named.
+  assert.equal(
+    await run(
+      deviceIdWithin(
+        "the-host",
+        () => new Promise<{ deviceId: string }>(() => {}),
+        60_000,
+      ),
+    ),
+    "the-host",
+  );
   assert.ok(failure instanceof HostUnreportedError);
   assert.equal(
     failure.message,
