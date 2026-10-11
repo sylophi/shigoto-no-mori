@@ -20,7 +20,8 @@ import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
+import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
+import { isOverlayOpen } from "@/lib/dom";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
@@ -50,7 +51,8 @@ import {
   PickedChipView,
 } from "@shigomori/ui/views/palette/WorktreePaletteView.tsx";
 
-// ⌘K: every worktree on every machine, one fuzzy list, and beside it
+// The palette (⌘K, the keymap's): every worktree on every machine, one
+// fuzzy list, and beside it
 // what the highlighted one offers. ↩ jumps to it, ⌘↩ opens its
 // changes, ⌘1..⌘9 open it in a launch tool, and ⇥ (or → at the end of
 // the query) hands the keys to the rest: its pages, tools, git move and
@@ -91,24 +93,18 @@ export function WorktreePalette() {
     if (previous instanceof HTMLElement) previous.focus();
   }, [open]);
 
-  // On window, so it works wherever focus sits. ⌘K fires from text
-  // fields too. Ctrl+K doesn't: in a text field it is kill-line
-  // (macOS's text system, and the running program's in the console's
-  // terminal), so there it only closes the palette. Opening waits for any other overlay to close, and closing
-  // is the palette's own toggle.
-  useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "k" || e.repeat || e.isComposing) return;
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      if (!open && !e.metaKey && isEditableTarget(e.target)) return;
-      if (!open && isOverlayOpen()) return;
-      e.preventDefault();
+  // Wherever focus sits, a text field and a terminal on macOS included
+  // (a `Mod` chord). Opening waits for any other overlay to close, and
+  // closing is the palette's own toggle.
+  useKeymapAction(
+    "palette",
+    () => {
+      if (!open && isOverlayOpen()) return false;
       if (!open) returnFocus.current = document.activeElement;
       setOpen(!open);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, setOpen]);
+    },
+    { overOverlays: true },
+  );
 
   if (!open) return null;
   return (
@@ -142,6 +138,7 @@ function PaletteDialog({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const changesKeys = useBinding("paletteChanges");
   // The row whose verbs have the keys, and the list's query it was
   // picked from, which the input goes back to. Null on the list.
   const [picked, setPicked] = useState<{
@@ -390,7 +387,7 @@ function PaletteDialog({
     }
     if (!current) return;
     const atEnd = e.currentTarget.selectionStart === query.length;
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (changesKeys.matches(e)) {
       // Changes, a worktree's alone: on any other row ⌘↩ would reach
       // cmdk as a plain ↩ and run the row.
       e.preventDefault();
@@ -500,6 +497,7 @@ function PaletteDialog({
           )
         }
         current={current?.kind}
+        changesKeys={changesKeys.label}
       />
     </ModalShell>
   );

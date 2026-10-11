@@ -31,6 +31,7 @@ import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
 import type { Project, Worktree } from "@shigomori/contracts/schemas/index";
 import { forests, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
+import { defaultBinding } from "../lib/keymap.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
@@ -179,7 +180,7 @@ function verbs() {
             key: "diff",
             label: "Open changes",
             icon: iconOf(FileDiff),
-            listKeys: "⌘↩",
+            listKeys: defaultBinding("paletteChanges").label,
             run: noop,
           },
           ...(entry?.pr
@@ -259,6 +260,7 @@ function palette(picked: boolean) {
             emptyList="No worktrees match."
             verbs={verbs()}
             current={FIRST?.kind}
+            changesKeys={defaultBinding("paletteChanges").label}
           />
         </SceneDialog>
       }

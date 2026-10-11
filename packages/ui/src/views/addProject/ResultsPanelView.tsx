@@ -23,6 +23,8 @@ interface ResultsPanelProps {
   onAdd: () => Promise<void>;
   bulkAdding: boolean;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+  // The keys that add the repos picked (the keymap's).
+  confirmKeys: string;
   terrierOptIn: ReactNode;
 }
 
@@ -104,7 +106,7 @@ export function ResultsPanelView(props: ResultsPanelProps) {
                 ? "Adding…"
                 : `Add ${pluralize(props.selected.size, "project")}`
             }
-            keys="⌘↩"
+            keys={props.confirmKeys}
             onClick={() => void props.onAdd()}
             disabled={props.selected.size === 0 || props.bulkAdding}
           />

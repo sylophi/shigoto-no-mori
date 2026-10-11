@@ -44,8 +44,8 @@ export function CleanTreeMessageView({
   shortcut,
 }: {
   owed: string | null;
-  // What ⌘↵ runs here, when it runs anything.
-  shortcut: string | null;
+  // What the commit keys run here, when they run anything, and the keys.
+  shortcut: { keys: string; does: string } | null;
 }) {
   return (
     <span className="flex flex-col items-center gap-2">
@@ -54,8 +54,8 @@ export function CleanTreeMessageView({
       {owed && <span className="text-xs">{owed}</span>}
       {shortcut && (
         <span className="flex items-center gap-1.5 text-xs">
-          <Kbd>⌘↵</Kbd>
-          {shortcut}
+          <Kbd>{shortcut.keys}</Kbd>
+          {shortcut.does}
         </span>
       )}
     </span>

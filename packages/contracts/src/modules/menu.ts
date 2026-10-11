@@ -1,6 +1,7 @@
 import { defineContract, invoke } from "../contract.ts";
 import {
   SetLaunchToolsEnabledPayloadSchema,
+  SetMenuChordsPayloadSchema,
   VoidSchema,
 } from "../schemas/index.ts";
 
@@ -12,4 +13,5 @@ export const menuContract = defineContract(
     SetLaunchToolsEnabledPayloadSchema,
     VoidSchema,
   ),
+  invoke("setChords", SetMenuChordsPayloadSchema, VoidSchema),
 );

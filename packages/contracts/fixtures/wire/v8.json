@@ -700,6 +700,14 @@
       "data": "5fo="
     }
   },
+  "menu:setChords": {
+    "payload": {
+      "chords": {
+        "settings": "Cmd+,",
+        "launchTool1": "Cmd+1"
+      }
+    }
+  },
   "menu:setLaunchToolsEnabled": {
     "payload": {
       "enabled": false

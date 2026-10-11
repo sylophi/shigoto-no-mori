@@ -1,3 +1,4 @@
+import { Kbd } from "../../primitives/kbd.tsx";
 import { Fragment, type ReactNode } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { BranchLabel } from "../../primitives/branch-label.tsx";
@@ -150,7 +151,9 @@ export function PageRowView({
       }
       title={<HighlightView text={page.label} query={query} />}
       detail={page.parent}
-    />
+    >
+      {page.keys && <Kbd className="shrink-0">{page.keys}</Kbd>}
+    </PaletteRowLayoutView>
   );
 }
 

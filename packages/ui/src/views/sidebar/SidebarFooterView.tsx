@@ -68,13 +68,15 @@ const VIEW_OPTIONS = [
 
 // The inbox / projects flip. Both shells' footers carry it. The phone
 // layout has the two views as tabs instead. aria-keyshortcuts gives
-// assistive tech the Tab shortcut.
+// assistive tech the keys that flip it (the keymap's, Tab).
 export function SidebarViewToggleView({
   view,
   onChange,
+  keys,
 }: {
   view: SidebarView;
   onChange: (view: SidebarView) => void;
+  keys: string;
 }) {
   return (
     <SegmentedControl<SidebarView>
@@ -82,7 +84,7 @@ export function SidebarViewToggleView({
       onChange={onChange}
       options={VIEW_OPTIONS}
       aria-label="Sidebar layout"
-      aria-keyshortcuts="Tab"
+      aria-keyshortcuts={keys}
       optionClassName="px-1.5 py-1"
     />
   );
