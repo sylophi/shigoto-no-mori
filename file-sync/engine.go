@@ -16,9 +16,9 @@ package main
 // only the app's host process spawns them, so they live here where the
 // server's concerns stay the server's. Two roles, one binary:
 //
-//   - `file-sync serve` is the PEER side of one mirror stream. It
-//     serves a Mutagen endpoint over its own stdin/stdout until the
-//     other end hangs up. The host spawns one per incoming stream and
+//   - `file-sync serve --root <dir>` is the PEER side of one mirror
+//     stream. It serves a Mutagen endpoint at the worktree the host
+//     names over its own stdin/stdout until the other end hangs up. The host spawns one per incoming stream and
 //     shuttles the bytes over the device wire, so this process never
 //     knows a network exists.
 //
@@ -82,6 +82,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/selection"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
+	"github.com/mutagen-io/mutagen/pkg/synchronization/compression"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/core"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/core/ignore"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/remote"
@@ -122,12 +123,73 @@ const mirrorGatewayTimeout = 30 * time.Second
 // ---------------------------------------------------------------------
 // Peer side
 
-// Serves one Mutagen endpoint over the stream until the client ends it.
-// The stream must unblock reads and writes when closed (Mutagen's
+// The buffering on each side of the stream, Mutagen's own for it.
+const mirrorStreamBufferSize = 64 * 1024
+
+// Serves one Mutagen endpoint at root, the worktree the host opened the
+// stream for, until the client ends it. The client's first message
+// names a root of its own, which Mutagen would serve as it stands, so it
+// is replaced before Mutagen reads it: the client is a peer, and the
+// host decided what it may reach. Mutagen serves behind an in-process
+// pipe, uncompressed, with the stream's compression undone and redone
+// here. The stream must unblock reads and writes when closed (Mutagen's
 // contract). Pipes and sockets do.
-func serveMirrorEndpoint(stream io.ReadWriteCloser, logOut io.Writer) error {
-	logger := logging.NewLogger(logging.LevelWarn, logOut)
-	return remote.ServeEndpoint(logger, stream)
+func serveMirrorEndpoint(stream io.ReadWriteCloser, root string, logOut io.Writer) error {
+	defer stream.Close()
+	algorithm, err := compression.ServerHandshake(stream)
+	if err != nil {
+		return fmt.Errorf("compression handshake failed: %w", err)
+	}
+	decompressor := algorithm.Decompress(bufio.NewReaderSize(stream, mirrorStreamBufferSize))
+	defer decompressor.Close()
+	inbound := bufio.NewReaderSize(decompressor, mirrorStreamBufferSize)
+	request := &remote.InitializeSynchronizationRequest{}
+	if err := encoding.NewProtobufDecoder(inbound).Decode(request); err != nil {
+		return fmt.Errorf("unable to receive initialize request: %w", err)
+	}
+	request.Root = root
+
+	inner, served := net.Pipe()
+	defer inner.Close()
+	finished := make(chan error, 1)
+	go func() {
+		finished <- remote.ServeEndpoint(logging.NewLogger(logging.LevelWarn, logOut), served)
+	}()
+	if err := compression.ClientHandshake(inner, compression.Algorithm_AlgorithmNone); err != nil {
+		return fmt.Errorf("compression handshake failed: %w", err)
+	}
+	if err := encoding.NewProtobufEncoder(inner).Encode(request); err != nil {
+		return fmt.Errorf("unable to forward initialize request: %w", err)
+	}
+	go func() {
+		io.Copy(inner, inbound)
+		inner.Close()
+	}()
+	// Every answer goes out whole as Mutagen writes it, since the client
+	// waits on it.
+	compressor := algorithm.Compress(stream)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		buffer := make([]byte, mirrorStreamBufferSize)
+		for {
+			n, err := inner.Read(buffer)
+			if n > 0 {
+				if _, err := compressor.Write(buffer[:n]); err != nil {
+					return
+				}
+				if err := compressor.Flush(); err != nil {
+					return
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	err = <-finished
+	<-drained
+	return err
 }
 
 // stdin/stdout as the single stream serve needs.
