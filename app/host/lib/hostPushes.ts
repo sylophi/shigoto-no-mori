@@ -1,6 +1,9 @@
 // Every push the host makes (a contract's streaming Rpc with no
 // payload, what the wires call a broadcast), as one stream: the
 // host's view streams re-read off it, and the device link serves it.
+import type { ContractModule } from "@shigomori/contracts/contract";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
+import { resolveBroadcast } from "@shared/ipc/registerContract";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -55,3 +58,21 @@ export const layer = Layer.effect(
 // (the host's root, whose broadcasts must not wait for the graph).
 export const layerOn = (pubsub: PubSub.PubSub<Push>) =>
   Layer.succeed(HostPushes, over(pubsub));
+
+// A push from an effect, checked against its schema as the root's are
+// (process/wires.ts broadcastAll).
+export const push = <M extends ContractModule, K extends PushKeys<M>>(
+  module: M,
+  key: K,
+  payload: PushProducerPayload<M, K>,
+) =>
+  Effect.flatMap(HostPushes, (pushes) =>
+    Effect.suspend(() => {
+      const { channel, parsed, remote } = resolveBroadcast(
+        module,
+        key,
+        payload,
+      );
+      return pushes.publish({ channel, payload: parsed, remote });
+    }),
+  );

@@ -46,7 +46,7 @@ const nuke = (
 ) =>
   runHost(
     nukeEverything({
-      onProgress,
+      onProgress: (progress) => Effect.sync(() => onProgress(progress)),
       killAllScripts: Effect.void,
       closeTerminals: Effect.void,
       uninstall: Effect.sync(() => {
@@ -170,7 +170,7 @@ it("removes every worktree the app made, and a second run finishes an interrupte
 it("reports what it couldn't uninstall, with why", async () => {
   const report = await runHost(
     nukeEverything({
-      onProgress: () => {},
+      onProgress: () => Effect.void,
       killAllScripts: Effect.void,
       closeTerminals: Effect.void,
       uninstall: Effect.map(

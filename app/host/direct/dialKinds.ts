@@ -11,11 +11,12 @@ import {
 } from "@shigomori/contracts/modules/direct";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
-import { hostFacts } from "@host/process/facts";
 
-export function devDialKinds(): DirectCandidateKind[] | undefined {
+export function devDialKinds(
+  packaged: boolean,
+): DirectCandidateKind[] | undefined {
   const raw = envSetting("SHIGOMORI_DIAL_KINDS");
-  if (hostFacts().packaged || raw === undefined) return undefined;
+  if (packaged || raw === undefined) return undefined;
   const wanted = new Set(raw.split(",").map((kind) => kind.trim()));
   const kinds = ALL_DIRECT_CANDIDATE_KINDS.filter((kind) => wanted.has(kind));
   if (kinds.length === 0) return undefined;
@@ -28,9 +29,9 @@ export function devDialKinds(): DirectCandidateKind[] | undefined {
 // and the tunnel's ingress, so a proxy there (the reliability lab's)
 // carries every connection a peer makes to this device and can drop
 // them. Unset, not a port, or a packaged build: the listener's own.
-export function devFrontPort(listenerPort: number): number {
+export function devFrontPort(listenerPort: number, packaged: boolean): number {
   const raw = envSetting("SHIGOMORI_DIRECT_FRONT_PORT");
-  if (hostFacts().packaged || raw === undefined) return listenerPort;
+  if (packaged || raw === undefined) return listenerPort;
   const port = Number(raw);
   return Number.isInteger(port) && port > 0 && port < 65_536
     ? port

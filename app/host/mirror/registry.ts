@@ -1,10 +1,10 @@
-// The mirror daemon's slot and the vocabulary around it: the labels the
-// start orchestration writes on a session, the raw shapes the daemon
-// reports, and the impl the root wires in following the setPortForwardEngine
-// precedent. Separate from the mirror handler module so the worktree
-// tombstone protocol (host/lib/scripts/index.ts withDeleteInflight)
-// can stop a worktree's mirrors without importing that module (which
-// reaches sync, which reaches worktrees).
+// The vocabulary around the mirror daemon (MirrorEngine.ts): the labels
+// the start orchestration writes on a session, the raw shapes the daemon
+// reports, and the sweeps over its sessions. Separate from the mirror
+// handler module so the worktree tombstone protocol
+// (host/lib/scripts/index.ts withDeleteInflight) can stop a worktree's
+// mirrors without importing that module (which reaches sync, which
+// reaches worktrees).
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -13,10 +13,6 @@ import { access } from "node:fs/promises";
 import {
   MIRROR_LABEL_MODE,
   MIRROR_LABEL_REPLACES,
-  type MirrorDaemonStatus,
-  type MirrorEvent,
-  type MirrorEventKind,
-  type MirrorGitStatus,
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
   type MirrorSessionRaw,
@@ -24,8 +20,8 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
-import { implSlot } from "@host/lib/util/implSlot";
-import { peerMirrorFor } from "@host/ipc/peerSync";
+import { peerMirrorFor } from "@host/ipc/PeerReach";
+import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
 import {
   dropMirrorInvitesWithPeers,
   forgetMirrorInvitesOf,
@@ -100,78 +96,6 @@ export function carriedLabels(
 // (contracts' modules/mirror.ts), re-exported for the host's own callers.
 export type { MirrorSessionRaw };
 
-// The create request the daemon takes (file-sync/engine.go
-// mirrorRequest, the create fields).
-export type MirrorCreateInput = {
-  localRoot: string;
-  deviceId: string;
-  projectId: string;
-  worktreeId: string;
-  remoteRoot: string;
-  name: string;
-  // This device's own worktree id, carried to the peer in the stream
-  // preface so its sidebar can fold the pair. A field of its own, not
-  // a label the engine would have to know the key of.
-  localWorktreeId: string;
-  labels: Record<string, string>;
-  ignores: readonly string[];
-  // A pull (file-sync/engine.go mirrorRequest.pull): files flow one
-  // way, remote to local, and nothing here reaches the peer. The
-  // transplant's one-shot transfer. Absent, a two-way mirror.
-  pull?: boolean;
-  // A push (mirrorRequest.push), the pull turned around: local to
-  // remote, and nothing the peer holds lands here. A sent worktree's
-  // one-shot transfer.
-  push?: boolean;
-  // A replica (mirrorRequest.replica): local to remote, the remote
-  // made an exact copy. A mirror start's first pass.
-  replica?: boolean;
-};
-
-// The daemon as the mirror surfaces use it, wired by the root from the
-// daemon service, the git follower and the threads.
-export type MirrorImpl = {
-  status: Effect.Effect<MirrorDaemonStatus>;
-  sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
-  create: (input: MirrorCreateInput) => Effect.Effect<string, MirrorError>;
-  // Ends a session and opens a fresh one in its place, whatever hangs
-  // off the old id (the git follower's agreement) carried across.
-  recreate: (
-    session: string,
-    input: MirrorCreateInput,
-  ) => Effect.Effect<string, MirrorError>;
-  terminate: (session: string) => Effect.Effect<void, MirrorError>;
-  pause: (session: string) => Effect.Effect<void, MirrorError>;
-  resume: (session: string) => Effect.Effect<void, MirrorError>;
-  // The git follower's verdict for a session (host/mirror/gitFollow.ts).
-  gitStatus: (session: string) => MirrorGitStatus | undefined;
-  // The verdict looked at again now, for a decision that must not
-  // read a cached one (the stop's safety check).
-  refreshGit: (session: string) => Effect.Effect<MirrorGitStatus | undefined>;
-  // The mirror's thread of events, by local worktree (host/mirror/
-  // history.ts), and the way a control op adds to it.
-  history: (localWorktreeId: string) => readonly MirrorEvent[];
-  noteEvent: (
-    localWorktreeId: string,
-    kind: MirrorEventKind,
-    detail: string,
-  ) => void;
-  // Drops a worktree's thread, once the worktree itself is gone.
-  forgetHistory: (localWorktreeId: string) => void;
-  // Moves a worktree's thread to the id it has after a move.
-  moveHistory: (from: string, to: string) => void;
-};
-
-// What a mirror operation refused, in words for the user.
-export class MirrorError extends Schema.TaggedError<MirrorError>()(
-  "MirrorError",
-  { reason: Schema.String },
-) {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
 // The local worktree a session runs on, "" on a session that predates
 // the label.
 export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
@@ -185,33 +109,32 @@ export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
   return isMirrorIgnoreMode(mode) ? mode : "everything";
 }
 
-// The daemon (engine), or null before it is wired (engineOrNull), for
-// a caller that has a sensible answer without one.
-const {
-  set: setMirrorImpl,
-  get: engine,
-  orNull: engineOrNull,
-} = implSlot<MirrorImpl>("mirror handler invoked before the daemon was wired");
-export { setMirrorImpl, engine, engineOrNull };
-
 // The engine when it can take a session, or the reason it cannot:
 // the mirror start and the transplant's file transfer both begin here.
-export const requireRunningEngine = Effect.suspend(() => {
-  const daemon = engine();
-  return Effect.flatMap(daemon.status, (status) => {
+export const requireRunningEngine = Effect.flatMap(MirrorEngine, (daemon) =>
+  Effect.flatMap(daemon.status, (status) => {
     const blocker = mirrorEngineBlocker(status);
     return blocker === undefined
       ? Effect.succeed(daemon)
       : Effect.fail(new MirrorError({ reason: blocker }));
-  });
-});
+  }),
+);
+
+// The daemon, or null where none is provided, for a caller that has a
+// sensible answer without one.
+export const engineOrNull = Effect.map(
+  Effect.serviceOption(MirrorEngine),
+  Option.getOrNull,
+);
 
 // The daemon's sessions that ARE mirrors: a transplant's one-shot
 // transfer (host/mirror/oneShot.ts) rides the same daemon under a
 // label, and nothing that lists, follows or narrates mirrors should
 // see it. The transfer finds its own session on the raw list. Nor a
 // session in a mode this build does not know.
-export const mirrorSessions = (daemon: Pick<MirrorImpl, "sessions">) =>
+export const mirrorSessions = (
+  daemon: Pick<MirrorEngine["Service"], "sessions">,
+) =>
   Effect.map(daemon.sessions, (sessions) =>
     sessions.filter((raw) => {
       const mode = modeOf(raw.labels);
@@ -248,7 +171,7 @@ export function isOrphanedTransfer(raw: MirrorSessionRaw): boolean {
   return token !== null && !liveTransfers.has(token);
 }
 
-export const findSession = (daemon: MirrorImpl, session: string) =>
+export const findSession = (daemon: MirrorEngine["Service"], session: string) =>
   Effect.map(daemon.sessions, (sessions) =>
     sessions.find((raw) => raw.session === session),
   );
@@ -279,9 +202,9 @@ const pendingStops = new Set<string>();
 export const stopMirrorsForWorktree = (localWorktreeId: string) =>
   Effect.gen(function* () {
     forgetMirrorInvitesOf(localWorktreeId);
-    const daemon = engineOrNull();
-    // Unwired (a check, a surface that never mounts the daemon) there is
-    // nothing mirroring anything.
+    // Absent (a check that never mounts the daemon) there is nothing
+    // mirroring anything.
+    const daemon = yield* engineOrNull;
     if (daemon === null) return;
     if ((yield* daemon.status) !== "running") {
       pendingStops.add(localWorktreeId);
@@ -291,7 +214,10 @@ export const stopMirrorsForWorktree = (localWorktreeId: string) =>
     daemon.forgetHistory(localWorktreeId);
   });
 
-const endSessionsOnWorktree = (daemon: MirrorImpl, localWorktreeId: string) =>
+const endSessionsOnWorktree = (
+  daemon: MirrorEngine["Service"],
+  localWorktreeId: string,
+) =>
   Effect.flatMap(daemon.sessions, (sessions) =>
     Effect.forEach(
       sessions.filter(
@@ -336,7 +262,7 @@ const releaseCopy = (raw: MirrorSessionRaw) =>
 // whose original is gone (the copy is then the only one left). The
 // original's thread says why.
 export const endMirrorKeepingCopy = (
-  daemon: MirrorImpl,
+  daemon: MirrorEngine["Service"],
   raw: MirrorSessionRaw,
   detail: string,
 ) =>
@@ -379,7 +305,7 @@ const endingSessions = new Set<string>();
 // so the next snapshot looks again.
 const rootLooks = new Set<string>();
 
-// Sessions a re-open is replacing right now (MirrorImpl.recreate): the
+// Sessions a re-open is replacing right now (MirrorEngine's recreate): the
 // re-open ends the old one itself once the new one is up, so the
 // leftover sweep below must not race it to the terminate.
 const recreating = new Set<string>();
@@ -423,7 +349,7 @@ export const rootExists = (path: string) =>
   );
 
 export const settleMirrorBookkeeping = Effect.gen(function* () {
-  const daemon = engineOrNull();
+  const daemon = yield* engineOrNull;
   if (daemon === null || (yield* daemon.status) !== "running") return;
   const ids = [...pendingStops];
   pendingStops.clear();
@@ -507,7 +433,7 @@ const endOnce = <E, R>(session: string, end: Effect.Effect<unknown, E, R>) =>
 
 // A move (worktrees:relocate) put the original somewhere else. The id
 // is path derived, so to the engine it is a new worktree: each session
-// on the old one re-opens on the new path (MirrorImpl.recreate, the
+// on the old one re-opens on the new path (MirrorEngine's recreate, the
 // git follower's agreement carried across by the replaces label), and
 // the thread moves with it. The engine halted the old session the
 // moment its root went, so nothing crossed meanwhile. A re-open the
@@ -519,7 +445,7 @@ export const moveMirrorsOfWorktree = (
   moved: { id: string; path: string },
 ) =>
   Effect.gen(function* () {
-    const daemon = engineOrNull();
+    const daemon = yield* engineOrNull;
     if (daemon === null) return;
     if ((yield* daemon.status) !== "running") {
       // Nothing to re-open against: the stop waits for the daemon like a
@@ -620,7 +546,7 @@ export const endMirrorsWithPeers = (
 ) =>
   Effect.gen(function* () {
     dropMirrorInvitesWithPeers(stillOnAccount);
-    const daemon = engineOrNull();
+    const daemon = yield* engineOrNull;
     if (daemon === null) return;
     const candidates = opts.transfers
       ? yield* daemon.sessions
@@ -663,7 +589,7 @@ export const endMirrorsIntoGoneCopy = (
   worktreeId: string,
 ) =>
   Effect.gen(function* () {
-    const daemon = engineOrNull();
+    const daemon = yield* engineOrNull;
     if (daemon === null || (yield* daemon.status) !== "running") return;
     yield* endSessions(
       daemon,
@@ -681,7 +607,7 @@ export const endMirrorsIntoGoneCopy = (
 // Each session ended, then noted "stopped" on its original's thread. A
 // session that refuses to end is logged, not thrown.
 const endSessions = (
-  daemon: MirrorImpl,
+  daemon: MirrorEngine["Service"],
   doomed: readonly MirrorSessionRaw[],
   what: string,
   detail: string,
