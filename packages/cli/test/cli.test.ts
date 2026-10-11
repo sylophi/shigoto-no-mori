@@ -26,6 +26,8 @@ import {
   beforeEach,
   describe,
   it,
+  onTestFinished,
+  vi,
 } from "vitest";
 import { macfs, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
 import {
@@ -479,6 +481,10 @@ describe("transfer", () => {
   });
 });
 
+// A key to type, or what the case does instead: its own checks, which
+// may fail it with the menu still up.
+type Key = string | (() => string);
+
 describe("at a terminal", () => {
   // What the menu's help line says in either mode. The menu draws it
   // once its keys reach it, so a key typed after it lands in the menu.
@@ -490,17 +496,32 @@ describe("at a terminal", () => {
   // stdout and stderr together, escapes and all.
   const inTerminal = async (
     args: ReadonlyArray<string>,
-    keys: ReadonlyArray<readonly [shown: string, key: string]>,
+    keys: ReadonlyArray<readonly [shown: string, key: Key]>,
     env: NodeJS.ProcessEnv = {},
   ) => {
     // script takes no socket for its input, which node's pipes are, so
     // cat hands it a pipe.
     const command = 'cat | script -q /dev/null "$@"';
+    // In a process group of its own, so ending it ends cat and script
+    // with sh, and script's end hangs the binary up.
     const child = spawn("sh", ["-c", command, "sh", built, ...args], {
       cwd: box.home,
       env: { ...box.env("cli"), TERM: "xterm-256color", ...env },
       stdio: ["pipe", "pipe", "ignore"],
+      detached: true,
     });
+    const stop = () => {
+      // No pid is a spawn that failed, and -0 would be this process's
+      // own group.
+      if (child.pid === undefined) return;
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        // The group has ended already.
+      }
+    };
+    // A case that times out never reaches the finally below.
+    onTestFinished(stop);
     let shown = "";
     let closed = false;
     // Each check runs again on every chunk the screen gets and once the
@@ -534,12 +555,13 @@ describe("at a terminal", () => {
         check();
       });
     const type = async (
-      steps: ReadonlyArray<readonly [string, string]>,
+      steps: ReadonlyArray<readonly [string, Key]>,
     ): Promise<void> => {
       const [step, ...rest] = steps;
       if (step === undefined) return;
       await showing(HELP, await showing(step[0], shown.length));
-      child.stdin.write(step[1]);
+      const [, key] = step;
+      child.stdin.write(typeof key === "string" ? key : key());
       return type(rest);
     };
     try {
@@ -548,7 +570,7 @@ describe("at a terminal", () => {
       await ended;
       return shown;
     } finally {
-      child.kill();
+      stop();
     }
   };
   const DOWN = "\u001b[B";
@@ -601,6 +623,28 @@ describe("at a terminal", () => {
     assert.equal(got.stdout, "false\n");
     // Without a terminal there is no editor to wait on.
     assert.equal((await runAt(box.home, "--json", "config", "edit")).code, 2);
+  });
+
+  it("leaves no process behind when a case fails with the menu up", async () => {
+    projects();
+    await assert.rejects(
+      inTerminal(
+        ["path"],
+        [
+          [
+            "Select a project:",
+            () => {
+              throw new Error("the case failed");
+            },
+          ],
+        ],
+      ),
+      /the case failed/,
+    );
+    // pgrep exits 1 once nothing runs the binary.
+    await vi.waitFor(() =>
+      assert.throws(() => execFileSync("pgrep", ["-f", built])),
+    );
   });
 
   it("filters by name, and esc cancels", async () => {
