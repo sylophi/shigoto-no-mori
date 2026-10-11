@@ -127,3 +127,11 @@ it("lists a Makefile's named targets in file order, each with its first recipe",
     make("proto", "protoc schema"),
   ]);
 });
+
+it("leaves out a target named like one of make's options", () => {
+  const raw = "--file=other:\n\techo no\n-j:\n\techo no\nbuild:\n\techo yes\n";
+  assert.deepEqual(
+    parseMakefile(raw).map(({ label }) => label),
+    ["build"],
+  );
+});

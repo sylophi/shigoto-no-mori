@@ -3,6 +3,7 @@ import type * as React from "react";
 import { createContext, use, type ReactNode } from "react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 
+import { destructiveMark } from "../lib/usersAlone.ts";
 import { cn } from "../lib/utils.ts";
 import {
   FLOATING_POSITIONER_CLASS,
@@ -173,6 +174,7 @@ function DropdownMenuItem({
         role="menuitem"
         data-slot="dropdown-menu-item"
         data-variant={variant}
+        {...destructiveMark(variant)}
         className={cn(MENU_ITEM_CLASS, className as string)}
       >
         {props.children as ReactNode}
@@ -183,6 +185,7 @@ function DropdownMenuItem({
     <MenuPrimitive.Item
       data-slot="dropdown-menu-item"
       data-variant={variant}
+      {...destructiveMark(variant)}
       className={cn(MENU_ITEM_CLASS, className)}
       {...props}
     />
@@ -208,6 +211,7 @@ function DropdownMenuSubTrigger({
         role="menuitem"
         data-slot="dropdown-menu-sub-trigger"
         data-variant={variant}
+        {...destructiveMark(variant)}
         className={cn(MENU_SUB_TRIGGER_CLASS, className as string)}
       >
         {children as ReactNode}
@@ -219,6 +223,7 @@ function DropdownMenuSubTrigger({
     <MenuPrimitive.SubmenuTrigger
       data-slot="dropdown-menu-sub-trigger"
       data-variant={variant}
+      {...destructiveMark(variant)}
       className={cn(MENU_SUB_TRIGGER_CLASS, className)}
       {...props}
     >
