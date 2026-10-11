@@ -593,7 +593,7 @@ const appRelaunch: Scenario = {
 
 const laptopSleep: Scenario = {
   name: "laptop-sleep",
-  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and the tabs wake.",
+  does: "The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, the desktop apps stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake.",
   boundMs: 30_000,
   async run(lab, random) {
     const ms = between(random, 30_000, 120_000);
@@ -607,6 +607,9 @@ const laptopSleep: Scenario = {
     await sleep(ms);
     lab.network.restore({ cut: true });
     for (const [app, pids] of frozen) app.thaw(pids);
+    // A machine waking says so (the power monitor's resume, the network
+    // back), which has each app's host probe its links and dial now.
+    await Promise.all(lab.windows.map((tab) => tab.setOffline(false)));
     await Promise.all(
       lab.tabs.map(async (tab) => {
         await tab.setFrozen(false);
