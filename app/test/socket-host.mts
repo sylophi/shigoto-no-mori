@@ -121,6 +121,9 @@ import { testDeviceKey } from "./lib/hubStub.mts";
 // What the test handlers saw.
 type Seen = {
   refreshes: number;
+  // What a call that leaves something going (a script's console) keeps
+  // to reach its caller with.
+  notifiers: HandlerContext["notifier"][];
   hanging: { signal: AbortSignal; resolve: (value: unknown) => void }[];
   channels: Map<
     string,
@@ -151,6 +154,7 @@ function serve(listener: DirectListener, seen: Seen): void {
     if (projectId === "notify") {
       ctx.notifier(gitContract, "projectChanged")({ projectId: "mine" });
     }
+    if (projectId === "keep") seen.notifiers.push(ctx.notifier);
   });
   binding.handle("worktrees:list", (ctx) => hang(seen, ctx));
   // A view: what the projects list reads as, twice.
@@ -207,7 +211,12 @@ async function listen(
   track: Track,
   opts: DirectListenerOpts = {},
 ): Promise<{ listener: DirectListener; seen: Seen }> {
-  const seen: Seen = { refreshes: 0, hanging: [], channels: new Map() };
+  const seen: Seen = {
+    refreshes: 0,
+    notifiers: [],
+    hanging: [],
+    channels: new Map(),
+  };
   const listener = await startDirectListener(track, {
     ...opts,
     registerHandlers: (binding) => {
@@ -727,6 +736,43 @@ it("commands turned off under a linked peer: its gated views under way end with 
   listener.setAccepts(false);
   assert.ok(failureOf(await gated) instanceof CommandRefusedError);
   assert.equal(read.pollUnsafe(), undefined, "the read ended");
+});
+
+it("what a granted call left going reaches its peer only while commands and sharing are on", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dialListener(track, listener);
+  const heard: unknown[] = [];
+  connection.transport.subscribe("git:projectChanged", (p) => heard.push(p));
+  await invoke(connection, "git:refreshProject", { projectId: "keep" });
+  const [notifier] = seen.notifiers;
+  assert.ok(notifier !== undefined);
+  const say = (projectId: string) =>
+    notifier(gitContract, "projectChanged")({ projectId });
+  await waitFor(() => {
+    say("before");
+    return has(heard, "before");
+  }, "the peer to hear its call's pushes");
+  // Each switch off, then on again: the push between is never heard,
+  // and the one after it, on the same ordered stream, shows it would
+  // have been by then.
+  listener.setAccepts(false);
+  say("commands-off");
+  listener.setAccepts(true);
+  await waitFor(() => {
+    say("commands-on");
+    return has(heard, "commands-on");
+  }, "the peer to hear again");
+  listener.setSharing(false);
+  say("not-sharing");
+  listener.setSharing(true);
+  await waitFor(() => {
+    say("sharing");
+    return has(heard, "sharing");
+  }, "the peer to hear again");
+  assert.equal(has(heard, "commands-off"), false);
+  assert.equal(has(heard, "not-sharing"), false);
 });
 
 it("invited calls: with commands off a call the host asked for runs while the rest stay refused, and the byte channel it attached survives the switch-off drop that resets every other", async () => {

@@ -5,7 +5,7 @@
 import type {
   VillagerProfile,
   VillagerProfiles,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { type VillagerRarity, villagerRarity } from "./rarity.ts";
 
 // A villager's visits: how many, and the first and last (epoch ms).

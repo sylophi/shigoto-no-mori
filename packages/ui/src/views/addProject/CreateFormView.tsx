@@ -1,6 +1,6 @@
 import type { ReactNode, RefObject } from "react";
 import { ChevronDown, FolderPlus } from "lucide-react";
-import type { GhUnavailableReason } from "@shigomori/contracts/schemas/index";
+import type { GhUnavailableReason } from "@shigomori/contracts/schemas";
 import { Checkbox } from "../../primitives/checkbox.tsx";
 import {
   DropdownMenu,

@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
 // Whether this device shares with the account's other devices at all,
@@ -18,5 +18,5 @@ export const sharingContract = defineContract(
   // The switch as it now stands. A peer hears it whether or not this
   // device shares, beside the connectInfo answer's sharesData: it is
   // how the peer's status follows the switch (HubStatus.peerSharesData).
-  broadcast("changed", Schema.Boolean, { remote: true }),
+  push("changed", Schema.Boolean, { remote: true }),
 );

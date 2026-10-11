@@ -13,7 +13,7 @@ import {
   type Project,
   type PullRequest,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import {
   deviceBadgeOf,
   groupShelfOf,

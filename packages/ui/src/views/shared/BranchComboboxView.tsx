@@ -3,7 +3,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import { ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { cn } from "../../lib/utils.ts";
 import { rankByScore } from "../../lib/fuzzyMatch.ts";
-import type { BranchList } from "@shigomori/contracts/schemas/index";
+import type { BranchList } from "@shigomori/contracts/schemas";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useThemeRoot } from "../../root.tsx";
 

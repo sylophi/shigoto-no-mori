@@ -7,7 +7,7 @@ import type {
   Project,
   PullRequest,
   Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 
 // The shelves the inbox view folds shut by default, and the tree's

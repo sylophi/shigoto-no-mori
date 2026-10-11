@@ -7,7 +7,7 @@ import type {
   DoctorReport,
   ShellIntegrationStatus,
 } from "@shigomori/contracts/modules/cli";
-import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/index";
+import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
 
 export const FAKE_DETECTED = [
   { kind: "detected", id: "app:vscode", label: "VS Code", available: true },

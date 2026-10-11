@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import {
   DisablePullRequestAutoMergePayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
@@ -125,7 +125,7 @@ export const githubCliContract = defineContract(
       grant: "changeCode",
     },
   ),
-  broadcast("projectPullRequestsRefreshed", ProjectScopedPayloadSchema, {
+  push("projectPullRequestsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),
 );

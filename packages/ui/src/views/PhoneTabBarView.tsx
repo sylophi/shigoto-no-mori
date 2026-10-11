@@ -16,7 +16,7 @@ import {
   TreeDeciduous,
   type LucideIcon,
 } from "lucide-react";
-import type { SidebarView } from "@shigomori/contracts/schemas/index";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import { cn } from "../lib/utils.ts";
 
 // The forest tabs share one route, told apart by its view param.

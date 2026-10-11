@@ -5,7 +5,7 @@ import {
   MAX_CUSTOM_PORTS,
   type CustomPort,
   type WorktreePort,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { Button } from "../../../primitives/button.tsx";
 import { Skeleton } from "../../../primitives/skeleton.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";

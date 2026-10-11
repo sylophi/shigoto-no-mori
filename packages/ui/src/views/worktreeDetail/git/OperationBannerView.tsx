@@ -2,7 +2,7 @@ import { ChevronRight, TriangleAlert } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import { pluralize } from "../../../lib/pluralize.ts";
 import { cn } from "../../../lib/utils.ts";
-import type { GitOperationState } from "@shigomori/contracts/schemas/index";
+import type { GitOperationState } from "@shigomori/contracts/schemas";
 
 const STOPPED: Record<string, string> = {
   merge: "Merge",

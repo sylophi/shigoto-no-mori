@@ -23,7 +23,7 @@ import { cn } from "../../../lib/utils.ts";
 import type {
   PackageScriptSortMode,
   ScriptGroup,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import {
   ArrangeScriptRowView,
   ScriptDragPreviewView,

@@ -12,7 +12,7 @@ import type {
   ChangedFile,
   StashEntry,
   Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // How many changed files the Changes row names before it just counts.
 const NAMED_FILES = 3;

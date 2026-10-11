@@ -2,7 +2,7 @@ import { assertNever } from "../../../lib/utils.ts";
 import type {
   PackageScriptSortMode,
   PackageScriptUsage,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 export interface SortableEntry {
   name: string;

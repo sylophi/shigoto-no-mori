@@ -12,7 +12,7 @@ import {
   sortChecksWorstFirst,
 } from "../../../lib/pullRequest.ts";
 import { cn } from "../../../lib/utils.ts";
-import type { PullRequestDetail } from "@shigomori/contracts/schemas/index";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { CheckEntryView } from "./CheckEntryView.tsx";
 import { ChecksSummaryIconView } from "./ChecksSummaryIconView.tsx";
 

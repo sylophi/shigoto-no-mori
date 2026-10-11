@@ -1,6 +1,6 @@
 import { describePullRequest } from "../../../lib/pullRequest.ts";
 import { cn } from "../../../lib/utils.ts";
-import type { PullRequest } from "@shigomori/contracts/schemas/index";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { STATE_LABEL } from "./pullRequestShared.ts";
 import { TONE_MARK, TONE_FILL } from "../../../primitives/status-dot.tsx";
 

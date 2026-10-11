@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { Input } from "../../primitives/input.tsx";
-import type { LauncherCommand } from "@shigomori/contracts/schemas/index";
+import type { LauncherCommand } from "@shigomori/contracts/schemas";
 import { IconButton } from "../../primitives/icon-button.tsx";
 
 interface CustomLauncherInputProps {

@@ -3,7 +3,7 @@ import type {
   PullRequestCandidate,
   PullRequestCandidateList,
   Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useNow } from "../../hooks/useNow.ts";

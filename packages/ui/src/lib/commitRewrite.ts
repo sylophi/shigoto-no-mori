@@ -3,7 +3,7 @@ import {
   canRewriteCommits,
   type CommitSummary,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // What may be done to one commit of the history list, as the app's
 // lib/commitRewrite.ts works it out.

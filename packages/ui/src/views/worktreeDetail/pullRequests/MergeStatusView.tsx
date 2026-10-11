@@ -2,7 +2,7 @@ import { Chip } from "../../../primitives/chip-button.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { describeChecks, type MergeVerdict } from "../../../lib/pullRequest.ts";
 import { cn } from "../../../lib/utils.ts";
-import type { PullRequestDetail } from "@shigomori/contracts/schemas/index";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { ChecksPopoverView } from "./ChecksPopoverView.tsx";
 import { ChecksSummaryIconView } from "./ChecksSummaryIconView.tsx";
 import { MergeStateIconView } from "./MergeStateIconView.tsx";

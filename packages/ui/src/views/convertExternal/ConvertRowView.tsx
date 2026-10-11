@@ -5,7 +5,7 @@ import { type RowStatus } from "../../primitives/row-status.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { tildify } from "@shigomori/contracts/projectPaths";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { ToneTag } from "../../primitives/row-tag.tsx";
 
 interface ConvertRowProps {

@@ -1,4 +1,4 @@
-import type { Project } from "@shigomori/contracts/schemas/index";
+import type { Project } from "@shigomori/contracts/schemas";
 import type { ReactNode } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";

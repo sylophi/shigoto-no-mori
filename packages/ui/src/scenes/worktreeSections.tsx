@@ -72,7 +72,7 @@ import type {
   StashEntry,
   Worktree,
   WorktreePort,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 const noop = () => {};
 const resolved = async () => {};
