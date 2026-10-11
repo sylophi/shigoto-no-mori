@@ -7,60 +7,20 @@
 // server and its link refuses every peer's ask as serving no listener
 // (a verdict the asking dialer parks on). It only ASKS, for the direct
 // dialer, which is why this exposes just askConnectInfo plus the
-// lifecycle (refresh, stop, status).
+// lifecycle (refresh, status).
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific arrives through browser
 // globals or the injected HubConnectOpts (deviceId, accountId, the
 // credential-backed ticket mint).
-import type { KeyPair } from "@shared/crypto/noise";
 import { HubLinkDownError } from "@shared/hub/link";
-import {
-  createHubConnectionCore,
-  type HubSocketAdapter,
-} from "@shared/hub/connection";
-import type { HeartbeatOptions } from "@shared/hub/heartbeat";
-import type {
-  HubConnectOpts,
-  HubConnectionStatus,
-} from "@shared/hub/connectionTypes";
-
-export type HubConnectionOpts = {
-  // Fired on every supervisor or presence transition, so the owner can
-  // fan a status snapshot out to its views.
-  onChange?: () => void;
-  // Test seams for the liveness heartbeat (shared/hub/connection.ts).
-  heartbeat?: HeartbeatOptions;
-};
-
-export type HubConnectionBinding = {
-  // Asks a peer for its connect info (HubLink.askConnectInfo). Rejects
-  // with HubLinkDownError while the socket is down.
-  askConnectInfo(
-    deviceId: string,
-    input: unknown,
-    timeoutMs: number,
-  ): Promise<unknown>;
-  // Reconciles the connection with the wanted state. The resolver runs
-  // INSIDE the serialized lifecycle, and null means stop (signed out or
-  // unconfigured).
-  refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
-  stop(): Promise<void>;
-  status(): HubConnectionStatus;
-  // The wake-time liveness probe (shared/hub/connection.ts).
-  probe(): void;
-  // This device's key pair and a peer's roster key, for the device
-  // link's handshakes (shared/hub/connection.ts).
-  localKey(): KeyPair | null;
-  peerKey(deviceId: string): Uint8Array | undefined;
-  rosterKnown(): boolean;
-};
+import * as Shared from "@shared/hub/connection";
 
 // The browser-global half of the shared socket adapter. A browser
 // WebSocket has no terminate, no payload bound and no compression knob,
 // so the adapter exposes only the advisory close and the shared core
 // falls back to it wherever the node adapter would hard-terminate.
-function openBrowserSocket(url: string): HubSocketAdapter {
+function openBrowserSocket(url: string): Shared.HubSocketAdapter {
   const socket = new WebSocket(url);
   socket.addEventListener("error", () => {
     // The browser fires error with no useful detail and always follows
@@ -97,12 +57,6 @@ function openBrowserSocket(url: string): HubSocketAdapter {
   };
 }
 
-export function createHubConnection(
-  opts: HubConnectionOpts,
-): HubConnectionBinding {
-  return createHubConnectionCore({
-    openSocket: openBrowserSocket,
-    onChange: opts.onChange,
-    heartbeat: opts.heartbeat,
-  });
-}
+// The connection, for the length of the scope it is made in.
+export const make = (opts: Omit<Shared.HubConnectionDeps, "openSocket">) =>
+  Shared.make({ ...opts, openSocket: openBrowserSocket });

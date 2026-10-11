@@ -15,11 +15,13 @@
 // (marks, the worktree's data, a pending dirty capture) is re-keyed
 // (the engine's rekey, `sm worktrees rekey`), and git's own worktree links are
 // re-pointed by `git worktree repair`.
-import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, rename, rm, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
 import { run } from "./git/core";
@@ -29,7 +31,6 @@ import {
   getBusyOperations,
   markDeleteInflight,
 } from "./scripts";
-import { tempPathFor, unlinkIfExists } from "./util/atomicJson";
 import {
   canonicalDataDirName,
   dataDir,
@@ -174,7 +175,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     moved.map((m) => m.oldId),
   );
   for (const id of marked) markDeleteInflight(id);
-  const pointerTmp = tempPathFor(pointerFile);
+  const fs = yield* FileSystem.FileSystem;
+  // The pointer is written beside itself under a name of its own, then
+  // renamed in.
+  const pointerTmp = `${pointerFile}.tmp.${(yield* Random.nextInt).toString(36)}`;
+  // Gone already is gone.
+  const removeIfThere = (file: string) =>
+    fs.remove(file, { force: true }).pipe(Effect.mapError(callFailureOf));
   let pointerStaged = false;
   let rekeyed = false;
   let renamed = false;
@@ -188,10 +195,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // above can't orphan the temp file. The default location needs no
     // pointer, so none is staged for it.
     if (!toDefault) {
-      yield* fsStep(async () => {
-        await mkdir(dirname(pointerFile), { recursive: true });
-        await writeFile(pointerTmp, `${newDir}\n`, "utf8");
-      });
+      yield* fs
+        .makeDirectory(dirname(pointerFile), { recursive: true })
+        .pipe(
+          Effect.andThen(fs.writeFileString(pointerTmp, `${newDir}\n`)),
+          Effect.mapError(callFailureOf),
+        );
       pointerStaged = true;
     }
 
@@ -227,26 +236,22 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     });
     renamed = true;
 
-    yield* fsStep(async () => {
-      // Point both readers (app boot, CLI) at the new location. Atomic
-      // rename so no reader can ever see a half-written path. Committed
-      // before the old copy is deleted: if that cleanup fails midway,
-      // the pointer already names the complete new copy. Leftovers beat
-      // a boot against a half-deleted data dir. Moving to the default
-      // removes the pointer instead, and the pre-2.0 pointer goes either
-      // way: exactly one file may ever redirect a boot.
-      if (toDefault) {
-        await unlinkIfExists(pointerFile);
-      } else {
-        await rename(pointerTmp, pointerFile);
-      }
-      if (legacyPointerFile !== null) await unlinkIfExists(legacyPointerFile);
-      if (copied) {
-        await rm(oldDir, { recursive: true, force: true }).catch(
-          () => undefined,
-        );
-      }
-    });
+    // Point both readers (app boot, CLI) at the new location. Atomic
+    // rename so no reader can ever see a half-written path. Committed
+    // before the old copy is deleted: if that cleanup fails midway, the
+    // pointer already names the complete new copy. Leftovers beat a boot
+    // against a half-deleted data dir. Moving to the default removes the
+    // pointer instead, and the pre-2.0 pointer goes either way: exactly
+    // one file may ever redirect a boot.
+    yield* toDefault
+      ? removeIfThere(pointerFile)
+      : fs.rename(pointerTmp, pointerFile).pipe(Effect.mapError(callFailureOf));
+    if (legacyPointerFile !== null) yield* removeIfThere(legacyPointerFile);
+    if (copied) {
+      yield* fsStep(() =>
+        rm(oldDir, { recursive: true, force: true }).catch(() => undefined),
+      );
+    }
 
     // Re-link git's worktree metadata (each worktree's .git file and
     // the repo's .git/worktrees/<name>/gitdir both record absolute
@@ -268,11 +273,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
-        if (pointerStaged) {
-          yield* Effect.promise(() =>
-            unlinkIfExists(pointerTmp).catch(() => undefined),
-          );
-        }
+        if (pointerStaged) yield* Effect.ignore(removeIfThere(pointerTmp));
         if (rekeyed && !renamed) {
           yield* Effect.ignore(rekeyWorktrees(repairTargets, true));
         }

@@ -489,7 +489,7 @@ it("teardown: stopping the connection fails pending asks as link-down, and later
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
   await rawB.nextHub();
-  await a.connection.stop();
+  await a.stop();
   await assert.rejects(
     () => pending,
     (error) => error instanceof HubLinkDownError,
@@ -608,15 +608,15 @@ it("blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its
   assert.match(superseded.message, /another instance/);
 });
 
-it("liveness: a device heartbeats the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket", async () => {
+it("liveness: a device pings the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket", async () => {
   const stub = await startStubHub(trackTest);
-  const heartbeat = { intervalMs: 30, timeoutMs: 120 };
-  const a = await bootDevice(stub, "A", { heartbeat }, trackTest);
-  await waitFor(() => stub.pingsFrom("A") >= 2, "A to heartbeat");
+  const ping = { intervalMs: 30, timeoutMs: 120 };
+  const a = await bootDevice(stub, "A", { ping }, trackTest);
+  await waitFor(() => stub.pingsFrom("A") >= 2, "A to ping");
   assert.equal(
     a.connection.status().socket.phase,
     "connected",
-    "an answered heartbeat keeps the socket connected",
+    "an answered ping keeps the socket connected",
   );
   assert.equal(a.mints(), 1);
   // The hub goes silent: its socket is still open at the TCP level,
@@ -633,7 +633,7 @@ it("liveness: a device heartbeats the device hub, and a hub that stops answering
   stub.setAnswerPings(true);
   await waitFor(
     () => a.connection.status().socket.phase === "connected",
-    "A to reconnect after the heartbeat death",
+    "A to reconnect after the ping death",
     3_000,
   );
 
@@ -643,7 +643,7 @@ it("liveness: a device heartbeats the device hub, and a hub that stops answering
   // hub/README.md states, and the cost of getting it wrong is a
   // redial per timeout, not a dead device.
   stub.setAnswerPings(false);
-  const b = await bootDevice(stub, "B", { heartbeat }, trackTest);
+  const b = await bootDevice(stub, "B", { ping }, trackTest);
   await waitFor(
     () => b.mints() >= 2,
     "B to redial a hub that never answered",

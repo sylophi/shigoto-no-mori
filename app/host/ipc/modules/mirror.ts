@@ -45,8 +45,7 @@ export const mirrorHandlers = {
     reopenMirror(session, ignoreMode, ignores),
   // The runner ended its mirror into a copy here and kept the copy:
   // the invitation goes, the worktree stays.
-  release: ({ worktreeId }) =>
-    Effect.sync(() => forgetMirrorInvitesOf(worktreeId)),
+  release: ({ worktreeId }) => forgetMirrorInvitesOf(worktreeId),
   history: ({ localWorktreeId }) =>
     Effect.map(MirrorEngine, (engine) => ({
       events: engine.history(localWorktreeId),

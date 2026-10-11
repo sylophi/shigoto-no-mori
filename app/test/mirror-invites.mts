@@ -2,7 +2,8 @@
 // what an ask admits past the command-access and sharing switches, and
 // when. Drives
 // the store's own surface against the gate predicate the direct
-// listener consults, with the persistence seam a recording double.
+// listener consults, over a recording stand-in for the engine's
+// MirrorInvites.
 // Asserts:
 //   - the invited surface is exactly the calls a mirror into this
 //     device makes, as the contracts tag them (invitable), pinned here
@@ -26,6 +27,9 @@
 //
 // Run: pnpm test mirror-invites.
 import assert from "node:assert/strict";
+import type { MirrorInvite } from "@shigomori/contracts/modules/mirror";
+import * as MirrorInvites from "@shigomori/engine/MirrorInvites";
+import * as Effect from "effect/Effect";
 import {
   dropMirrorInvitesWithPeers,
   forgetMirrorInvitesOf,
@@ -34,10 +38,9 @@ import {
   inviteMirror,
   landInvitedMirror,
   listMirrorInvites,
-  type MirrorInvite,
+  loadMirrorInvites,
   mirrorInviteAdmits,
   reconcileMirrorInvites,
-  setMirrorInviteStore,
 } from "@host/mirror/invites";
 import { it } from "vitest";
 
@@ -84,23 +87,29 @@ const PROJECT_CALLS = [
   "worktrees:list",
 ];
 
-// A store whose disk says no, either way.
-function brokenDisk(): never {
-  throw new Error("disk says no");
-}
-
-// A store that records what is saved and answers with a seed.
-function recordingStore(seed: MirrorInvite[] = []) {
+// The store as the engine serves it: recording what is saved and
+// answering with a seed, or saying no either way. `run` runs an effect
+// of the invitations on it.
+function standInStore(seed: readonly MirrorInvite[] = [], broken = false) {
   const saved: MirrorInvite[][] = [];
-  return {
-    saved,
-    store: {
-      load: () => seed,
-      save: (invites: MirrorInvite[]) => {
-        saved.push(structuredClone(invites));
-      },
-    },
-  };
+  const store = MirrorInvites.MirrorInvites.of({
+    load: broken ? Effect.die("disk says no") : Effect.succeed(seed),
+    save: (invites) =>
+      broken
+        ? Effect.die("disk says no")
+        : Effect.sync(() => {
+            saved.push(structuredClone([...invites]));
+          }),
+  });
+  const run = <A,>(
+    effect: Effect.Effect<A, never, MirrorInvites.MirrorInvites>,
+  ) =>
+    Effect.runSync(
+      Effect.provideService(effect, MirrorInvites.MirrorInvites, store),
+    );
+  // Loaded, as the mirror layer does at boot.
+  run(loadMirrorInvites);
+  return { saved, run };
 }
 
 it("the invited surface is the contracts' invitable calls", () => {
@@ -124,7 +133,7 @@ it("the invited surface is the contracts' invitable calls", () => {
 });
 
 it("nothing is admitted unasked", () => {
-  setMirrorInviteStore(recordingStore().store);
+  standInStore();
   assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false);
   for (const channel of [...COPY_CALLS, ...PROJECT_CALLS]) {
     assert.equal(admits(channel, COPY), false, channel);
@@ -132,7 +141,7 @@ it("nothing is admitted unasked", () => {
 });
 
 it("pending: the peer's landing of the named original into the named repo and place, and nothing else", () => {
-  setMirrorInviteStore(recordingStore().store);
+  const { run } = standInStore();
   const invite = inviteMirror(ASK);
   assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), true);
   assert.equal(
@@ -159,7 +168,7 @@ it("pending: the peer's landing of the named original into the named repo and pl
     assert.equal(admits(channel, COPY), false, `${channel} before landing`);
   }
   assert.deepEqual(listMirrorInvites(), [ASK]);
-  invite.withdraw();
+  run(invite.withdraw);
   assert.deepEqual(listMirrorInvites(), [], "withdrawn with the ask");
   assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false);
   // An ask that names a clone place is held to it.
@@ -177,20 +186,19 @@ it("pending: the peer's landing of the named original into the named repo and pl
     admits(LANDING, { ...LANDING_OF(ORIGINAL), cloneInto: CLONE_INTO }),
     true,
   );
-  placed.withdraw();
+  run(placed.withdraw);
 });
 
 it("landed: the copy-scoped calls on that copy, the project-scoped ones in its project, and no landing any more", () => {
-  const { store, saved } = recordingStore();
-  setMirrorInviteStore(store);
+  const { run, saved } = standInStore();
   inviteMirror(ASK);
   // A landing nobody asked for (a plain send, under the switch)
   // lands nothing, nor does one on a wire that stamps no caller.
-  landInvitedMirror(OTHER_PEER, ORIGINAL, OTHER_COPY);
-  landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY);
-  landInvitedMirror(undefined, ORIGINAL, OTHER_COPY);
+  run(landInvitedMirror(OTHER_PEER, ORIGINAL, OTHER_COPY));
+  run(landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY));
+  run(landInvitedMirror(undefined, ORIGINAL, OTHER_COPY));
   assert.equal(saved.length, 0, "nothing landed, nothing saved");
-  landInvitedMirror(PEER, ORIGINAL, COPY);
+  run(landInvitedMirror(PEER, ORIGINAL, COPY));
   for (const channel of COPY_CALLS) {
     assert.equal(admits(channel, COPY), true, channel);
     assert.equal(admits(channel, OTHER_COPY), false, `${channel} elsewhere`);
@@ -238,82 +246,84 @@ it("landed: the copy-scoped calls on that copy, the project-scoped ones in its p
   );
 });
 
-it("ended: with the copy, by a failed ask, with a peer that left, and when the boot finds the copy missing", async () => {
-  const { store, saved } = recordingStore();
-  setMirrorInviteStore(store);
+it("ended: with the copy, by a failed ask, with a peer that left, and when the boot finds the copy missing", () => {
+  const { run, saved } = standInStore();
   // With the copy.
   inviteMirror(ASK);
-  landInvitedMirror(PEER, ORIGINAL, COPY);
-  forgetMirrorInvitesOf(OTHER_COPY.worktreeId);
+  run(landInvitedMirror(PEER, ORIGINAL, COPY));
+  run(forgetMirrorInvitesOf(OTHER_COPY.worktreeId));
   assert.equal(admits(STREAM, COPY), true, "another copy's removal");
-  forgetMirrorInvitesOf(COPY.worktreeId);
+  run(forgetMirrorInvitesOf(COPY.worktreeId));
   assert.equal(admits(STREAM, COPY), false);
   assert.deepEqual(saved.at(-1), [], "the removal is saved");
   // By a failed ask, after the landing: the peer's rollback
   // removed the copy under the invitation, then the ask failed.
   const failed = inviteMirror(ASK);
-  landInvitedMirror(PEER, ORIGINAL, COPY);
-  failed.withdraw();
+  run(landInvitedMirror(PEER, ORIGINAL, COPY));
+  run(failed.withdraw);
   assert.equal(admits(STREAM, COPY), false);
   assert.deepEqual(listMirrorInvites(), []);
-  failed.withdraw();
+  run(failed.withdraw);
   assert.deepEqual(listMirrorInvites(), [], "a second withdraw is a no-op");
   // With a peer that left the account.
   inviteMirror(ASK);
-  landInvitedMirror(PEER, ORIGINAL, COPY);
+  run(landInvitedMirror(PEER, ORIGINAL, COPY));
   inviteMirror({
     ...ASK,
     peerDeviceId: OTHER_PEER,
     sourceWorktreeId: OTHER_ORIGINAL,
   });
-  landInvitedMirror(OTHER_PEER, OTHER_ORIGINAL, OTHER_COPY);
-  dropMirrorInvitesWithPeers((deviceId) => deviceId === PEER);
+  run(landInvitedMirror(OTHER_PEER, OTHER_ORIGINAL, OTHER_COPY));
+  run(dropMirrorInvitesWithPeers((deviceId) => deviceId === PEER));
   assert.equal(admits(STREAM, OTHER_COPY, OTHER_PEER), false);
   assert.equal(admits(STREAM, COPY), true, "the peer still on stays");
   // When the boot finds the copy missing: the landed one whose
   // worktree is gone goes, the other stays, a pending ask is not
   // asked about.
   inviteMirror({ ...ASK, sourceWorktreeId: OTHER_ORIGINAL });
-  landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY);
+  run(landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY));
   const asked: string[] = [];
-  await reconcileMirrorInvites(async ({ worktreeId }) => {
-    asked.push(worktreeId);
-    return worktreeId === COPY.worktreeId;
-  });
+  run(
+    reconcileMirrorInvites(({ worktreeId }) =>
+      Effect.sync(() => {
+        asked.push(worktreeId);
+        return worktreeId === COPY.worktreeId;
+      }),
+    ),
+  );
   assert.deepEqual(
     asked.toSorted(),
     [COPY.worktreeId, OTHER_COPY.worktreeId].toSorted(),
   );
   assert.equal(admits(STREAM, COPY), true);
   assert.equal(admits(STREAM, OTHER_COPY), false, "the missing copy's went");
-  dropMirrorInvitesWithPeers(() => false);
+  run(dropMirrorInvitesWithPeers(() => false));
   assert.deepEqual(listMirrorInvites(), []);
 });
 
 it("the store: only landed invitations reach it, a load admits what it saved, and a broken store never throws", () => {
-  const { store, saved } = recordingStore();
-  setMirrorInviteStore(store);
+  const { run, saved } = standInStore();
   inviteMirror(ASK);
   inviteMirror({
     ...ASK,
     peerDeviceId: OTHER_PEER,
     sourceWorktreeId: OTHER_ORIGINAL,
   });
-  landInvitedMirror(PEER, ORIGINAL, COPY);
+  run(landInvitedMirror(PEER, ORIGINAL, COPY));
   assert.equal(saved.length, 1);
   assert.deepEqual(
     saved[0]?.map((invite) => invite.peerDeviceId),
     [PEER],
     "the pending ask is not saved",
   );
-  // A fresh process loads the file: the landed one is back, a
+  // A fresh process loads the store: the landed one is back, a
   // pending one that somehow got there is not.
   const stale: MirrorInvite = {
     ...ASK,
     peerDeviceId: OTHER_PEER,
     sourceWorktreeId: OTHER_ORIGINAL,
   };
-  setMirrorInviteStore(recordingStore([...(saved[0] ?? []), stale]).store);
+  standInStore([...(saved[0] ?? []), stale]);
   assert.equal(admits(STREAM, COPY), true);
   assert.equal(
     admits("sync:receiveBundle", { projectId: COPY.projectId }),
@@ -326,11 +336,11 @@ it("the store: only landed invitations reach it, a load admits what it saved, an
   );
   // A store that cannot be read starts empty, and one that cannot
   // be written loses nothing in memory. Neither throws.
-  setMirrorInviteStore({ load: brokenDisk, save: brokenDisk });
+  const broken = standInStore([], true);
   assert.deepEqual(listMirrorInvites(), []);
   inviteMirror(ASK);
-  landInvitedMirror(PEER, ORIGINAL, COPY);
+  broken.run(landInvitedMirror(PEER, ORIGINAL, COPY));
   assert.equal(admits(STREAM, COPY), true, "landed despite the failed save");
-  setMirrorInviteStore(null);
-  assert.equal(admits(STREAM, COPY), false, "unwired, nothing");
+  standInStore();
+  assert.equal(admits(STREAM, COPY), false, "an empty store, nothing");
 });

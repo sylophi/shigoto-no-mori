@@ -21,15 +21,16 @@
 // copy is gone: the stop's delete, a local delete, or the peer leaving
 // the account (host/mirror/registry.ts, where the mirrors' own
 // lifecycle hooks carry the invitations along), or a copy found
-// missing at boot (reconcileMirrorInvites). Landed invitations persist
-// beside the follower's store, so a relaunch still serves the mirrors
-// it asked for. Pending ones do not: an ask dies with the process that
-// made it.
+// missing at boot (loadMirrorInvites). Landed invitations persist in
+// the store (the engine's MirrorInvites), so a relaunch still serves
+// the mirrors it asked for. Pending ones do not: an ask dies with the
+// process that made it. The gates read them synchronously, so they are
+// held here too, read from the store as the mirror layer comes up and
+// written back as they change.
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Types from "effect/Types";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import {
   annotation,
@@ -39,90 +40,44 @@ import {
   type InvitableScope,
 } from "@shigomori/contracts/contract";
 import {
+  type MirrorInvite,
+  type MirrorInviteAsk,
   type MirrorWorktreePayload,
-  MirrorWorktreePayloadSchema,
 } from "@shigomori/contracts/modules/mirror";
+import * as MirrorInvites from "@shigomori/engine/MirrorInvites";
 import { SyncCloneIntoSchema } from "@shigomori/contracts/modules/sync";
 import {
   ProjectScopedPayloadSchema,
   WorktreeIdSchema,
   WorktreeScopedPayloadSchema,
 } from "@shigomori/contracts/schemas";
-import { strict } from "@shigomori/contracts/schemas/strict";
-import { log } from "@shared/log";
 
-// What the ask named, which the landing must match.
-const MirrorInviteAskSchema = strict(
-  Schema.Struct({
-    peerDeviceId: DeviceIdSchema,
-    // The peer's original, the id its landing names.
-    sourceWorktreeId: WorktreeIdSchema,
-    // The repo it belongs to, and where the copy lands when this device
-    // has no checkout of it.
-    identity: Schema.NonEmptyString,
-    cloneInto: Schema.optional(SyncCloneIntoSchema),
-  }),
-);
-export type MirrorInviteAsk = typeof MirrorInviteAskSchema.Type;
-
-export const MirrorInviteSchema = strict(
-  Schema.Struct({
-    ...MirrorInviteAskSchema.struct.fields,
-    // The copy here, once the landing answered. Absent while pending.
-    copy: Schema.optional(MirrorWorktreePayloadSchema),
-  }),
-);
-export type MirrorInvite = typeof MirrorInviteSchema.Type;
 type Landed = MirrorInvite & { copy: MirrorWorktreePayload };
 
-// Where the landed invitations live, wired by the root beside the
-// follower's store. A store that fails to read starts empty (the
-// mirrors it named can be asked for again) and one that fails to
-// write is logged: neither may fail the landing or the boot. Unwired
-// (a check, a surface without the daemon), nothing persists and
-// nothing is admitted past the switch.
-export type MirrorInviteStore = {
-  load: () => readonly MirrorInvite[];
-  save: (invites: MirrorInvite[]) => void;
-};
-
-let store: MirrorInviteStore | null = null;
 let invites: Types.Mutable<MirrorInvite>[] = [];
-
-export function setMirrorInviteStore(next: MirrorInviteStore | null): void {
-  store = next;
-  invites = [];
-  if (next === null) return;
-  try {
-    invites = next.load().filter(isLanded);
-  } catch (error) {
-    log.warn(
-      `[mirror] the invitations could not be read, starting with none: ${errorMessageOf(error)}`,
-    );
-  }
-}
 
 function isLanded(invite: MirrorInvite): invite is Landed {
   return invite.copy !== undefined;
 }
 
-function persist(): void {
-  try {
-    store?.save(invites.filter(isLanded));
-  } catch (error) {
-    log.warn(
-      `[mirror] the invitations could not be saved: ${errorMessageOf(error)}`,
-    );
-  }
-}
+// The landed ones, to the store as they stand when it runs. One that
+// fails to write is logged: it may not fail the landing it follows.
+const persist = Effect.flatMap(MirrorInvites.MirrorInvites, (store) =>
+  Effect.suspend(() => store.save(invites.filter(isLanded))),
+).pipe(
+  Effect.catchCause((cause) =>
+    Effect.logWarning("[mirror] the invitations could not be saved", cause),
+  ),
+);
 
 // Keeps the invitations `keep` answers true for, saving when any went.
-function keepInvites(keep: (invite: MirrorInvite) => boolean): void {
-  const kept = invites.filter(keep);
-  if (kept.length === invites.length) return;
-  invites = kept;
-  persist();
-}
+const keepInvites = (keep: (invite: MirrorInvite) => boolean) =>
+  Effect.suspend(() => {
+    const kept = invites.filter(keep);
+    if (kept.length === invites.length) return Effect.void;
+    invites = kept;
+    return persist;
+  });
 
 export function listMirrorInvites(): MirrorInvite[] {
   return structuredClone(invites);
@@ -131,10 +86,12 @@ export function listMirrorInvites(): MirrorInvite[] {
 // The ask: the peer may land this one worktree of its here. `withdraw`
 // undoes it, pending or landed: the ask failed, and whatever the
 // peer's rollback removed under it is gone.
-export function inviteMirror(ask: MirrorInviteAsk): { withdraw: () => void } {
+export function inviteMirror(ask: MirrorInviteAsk): {
+  withdraw: Effect.Effect<void, never, MirrorInvites.MirrorInvites>;
+} {
   const invite: Types.Mutable<MirrorInvite> = { ...ask };
   invites.push(invite);
-  return { withdraw: () => keepInvites((other) => other !== invite) };
+  return { withdraw: keepInvites((other) => other !== invite) };
 }
 
 // The landing answered: the pending invitation for this original
@@ -142,55 +99,75 @@ export function inviteMirror(ask: MirrorInviteAsk): { withdraw: () => void } {
 // receiveWorktree), before the peer's next call names the copy. A
 // landing nobody here asked for (a plain send under the switch)
 // matches nothing and leaves nothing behind.
-export function landInvitedMirror(
+export const landInvitedMirror = (
   peerDeviceId: string | undefined,
   sourceWorktreeId: string,
   copy: MirrorWorktreePayload,
-): void {
-  const pending = invites.find(
-    (invite) =>
-      !isLanded(invite) &&
-      invite.peerDeviceId === peerDeviceId &&
-      invite.sourceWorktreeId === sourceWorktreeId,
-  );
-  if (pending === undefined) return;
-  pending.copy = { ...copy };
-  persist();
-}
+) =>
+  Effect.suspend(() => {
+    const pending = invites.find(
+      (invite) =>
+        !isLanded(invite) &&
+        invite.peerDeviceId === peerDeviceId &&
+        invite.sourceWorktreeId === sourceWorktreeId,
+    );
+    if (pending === undefined) return Effect.void;
+    pending.copy = { ...copy };
+    return persist;
+  });
 
 // The copy is gone (the stop's delete, or any other), and with it the
 // invitation.
-export function forgetMirrorInvitesOf(worktreeId: string): void {
+export const forgetMirrorInvitesOf = (worktreeId: string) =>
   keepInvites((invite) => invite.copy?.worktreeId !== worktreeId);
-}
 
 // The peers this device no longer shares an account with lose their
 // invitations, like their mirrors.
-export function dropMirrorInvitesWithPeers(
+export const dropMirrorInvitesWithPeers = (
   stillOnAccount: (deviceId: string) => boolean,
-): void {
-  keepInvites((invite) => stillOnAccount(invite.peerDeviceId));
-}
+) => keepInvites((invite) => stillOnAccount(invite.peerDeviceId));
+
+// The landed invitations as the store has them, read as the mirror
+// layer comes up, in place of whatever is held. A store that fails to
+// read starts empty: the mirrors it named can be asked for again.
+export const loadMirrorInvites = Effect.flatMap(
+  MirrorInvites.MirrorInvites,
+  (store) => store.load,
+).pipe(
+  Effect.catchCause((cause) =>
+    Effect.logWarning(
+      "[mirror] the invitations could not be read, starting with none",
+      cause,
+    ).pipe(Effect.as([])),
+  ),
+  Effect.map((loaded) => {
+    invites = structuredClone(loaded.filter(isLanded));
+  }),
+);
 
 // A copy removed while the app was not running (a folder deleted by
 // hand, a repo re-cloned) never passed the delete that forgets its
 // invitation, and a worktree id is a path hash a later worktree can
 // take. So the landed invitations are checked against the worktrees
-// this device lists, once the store is loaded. `exists` answers false
-// only for a copy known to be gone: a lookup that failed for another
-// reason must answer true, or a bad moment at boot would drop every
-// mirror this device asked for.
-export async function reconcileMirrorInvites(
-  exists: (copy: MirrorWorktreePayload) => Promise<boolean>,
-): Promise<void> {
-  const missing = new Set<MirrorInvite>();
-  await Promise.all(
-    invites.filter(isLanded).map(async (invite) => {
-      if (!(await exists(invite.copy))) missing.add(invite);
-    }),
-  );
-  keepInvites((invite) => !missing.has(invite));
-}
+// this device lists, once they are loaded. `exists` answers false only
+// for a copy known to be gone: a lookup that failed for another reason
+// must answer true, or a bad moment at boot would drop every mirror
+// this device asked for.
+export const reconcileMirrorInvites = <R>(
+  exists: (copy: MirrorWorktreePayload) => Effect.Effect<boolean, never, R>,
+) =>
+  Effect.gen(function* () {
+    const missing = new Set<MirrorInvite>();
+    yield* Effect.forEach(
+      invites.filter(isLanded),
+      (invite) =>
+        Effect.map(exists(invite.copy), (there) => {
+          if (!there) missing.add(invite);
+        }),
+      { concurrency: "unbounded", discard: true },
+    );
+    yield* keepInvites((invite) => !missing.has(invite));
+  });
 
 // What an invitation admits, by the scope the call's contract entry
 // declares (its Invitable annotation). The input is the raw frame's, read
