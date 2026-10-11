@@ -18,6 +18,7 @@ import { worktreeSyncView } from "@/lib/syncState";
 import type { Worktree } from "@shared/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { assertNever, cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 import { SYNC_PILL_SHAPE, SyncActionButton } from "./SyncActionButton";
 
 interface WorktreeSyncPillProps {
@@ -58,6 +59,14 @@ export function WorktreeSyncPill({
     );
   }
 
+  // Every move in this pill waits for the others, so a click here can't
+  // start one git command beside another.
+  const busy =
+    pushForce.isPending ||
+    overwrite.isPending ||
+    mergeUpstream.isPending ||
+    Object.values(mutations).some((m) => m.isPending);
+
   switch (state.kind) {
     case "detached":
     case "synced":
@@ -68,25 +77,53 @@ export function WorktreeSyncPill({
     case "pullAndPush": {
       if (!move) return null;
       const mutation = mutations[move.key];
-      return (
+      const button = (
         <SyncActionButton
           tone={move.tone}
           icon={move.arrowsInLabel ? undefined : move.Icon}
           label={compact ? move.compactLabel : move.label}
           tip={move.disabledReason ?? move.tip}
-          disabled={move.disabledReason !== undefined}
+          disabled={move.disabledReason !== undefined || busy}
           pending={mutation.isPending}
           onClick={() => mutation.mutate(input)}
+        />
+      );
+      // A split that merges cleanly can still pick a side instead.
+      if (state.kind !== "pullAndPush") return button;
+      return (
+        <PickSide
+          // A new split remounts it, so a confirm armed on the old one
+          // can't fire on this one.
+          key={`${state.kind}:${state.ahead}/${state.behind}`}
+          worktree={worktree}
+          lead={button}
+          busy={busy}
+          pushForce={pushForce}
+          overwrite={overwrite}
+          ahead={state.ahead}
+          behind={state.behind}
+          compact={compact}
         />
       );
     }
     case "diverged":
       return (
         <PickSide
+          // A new split remounts it, so a confirm armed on the old one
+          // can't fire on this one.
+          key={`${state.kind}:${state.ahead}/${state.behind}`}
           worktree={worktree}
+          lead={
+            <MergeUpstream
+              input={input}
+              mergeUpstream={mergeUpstream}
+              behind={state.behind}
+              busy={busy}
+            />
+          }
+          busy={busy}
           pushForce={pushForce}
           overwrite={overwrite}
-          mergeUpstream={mergeUpstream}
           ahead={state.ahead}
           behind={state.behind}
           compact={compact}
@@ -97,38 +134,22 @@ export function WorktreeSyncPill({
   }
 }
 
-// Histories have diverged, and merging them conflicts. The merge `git
-// pull` would make, stopped on its conflicts for the Changes tab to
-// settle, or one side wins: "overwrite the remote" (force-push) or
-// "overwrite local" (reset hard), both behind a two-step confirm.
-function PickSide({
-  worktree,
-  pushForce,
-  overwrite,
+// The merge `git pull` would make, stopped on its conflicts for the
+// Changes tab to settle. Its own component so only a diverged pill
+// follows the router.
+function MergeUpstream({
+  input,
   mergeUpstream,
-  ahead,
   behind,
-  compact,
+  busy,
 }: {
-  worktree: Worktree;
-  pushForce: ReturnType<typeof usePushForceWorktree>;
-  overwrite: ReturnType<typeof useOverwriteWorktree>;
+  input: { projectId: string; worktreeId: string };
   mergeUpstream: ReturnType<typeof useMergeUpstreamWorktree>;
-  ahead: number;
   behind: number;
-  compact: boolean;
+  busy: boolean;
 }) {
   const nav = useWorktreeNav();
-  const input = { projectId: worktree.projectId, worktreeId: worktree.id };
-  // Both actions throw away one side's commits, which is more
-  // destructive than "Delete worktree" (that one keeps the branch). Same
-  // two-step confirm, and arming one disarms the other so a stray second
-  // click can't land on the button the user didn't mean.
-  const confirmPushForce = useConfirmTwice(CONFIRM_QUICK_MS);
-  const confirmOverwrite = useConfirmTwice(CONFIRM_QUICK_MS);
-  const busy =
-    pushForce.isPending || overwrite.isPending || mergeUpstream.isPending;
-  const merge = (
+  return (
     <SyncActionButton
       tone="sky"
       icon={GitMerge}
@@ -145,12 +166,44 @@ function PickSide({
       }
     />
   );
-  // Narrow, the overwrites wait in a menu behind the merge, each still
+}
+
+// History has split from the remote. The lead move takes both sides
+// (pull and push where they merge cleanly, otherwise MergeUpstream),
+// or one side wins: "overwrite the remote" (force-push) or
+// "overwrite local" (reset hard), both behind a two-step confirm.
+function PickSide({
+  worktree,
+  lead,
+  busy,
+  pushForce,
+  overwrite,
+  ahead,
+  behind,
+  compact,
+}: {
+  worktree: Worktree;
+  lead: ReactNode;
+  busy: boolean;
+  pushForce: ReturnType<typeof usePushForceWorktree>;
+  overwrite: ReturnType<typeof useOverwriteWorktree>;
+  ahead: number;
+  behind: number;
+  compact: boolean;
+}) {
+  const input = { projectId: worktree.projectId, worktreeId: worktree.id };
+  // Both actions throw away one side's commits, which is more
+  // destructive than "Delete worktree" (that one keeps the branch). Same
+  // two-step confirm, and arming one disarms the other so a stray second
+  // click can't land on the button the user didn't mean.
+  const confirmPushForce = useConfirmTwice(CONFIRM_QUICK_MS);
+  const confirmOverwrite = useConfirmTwice(CONFIRM_QUICK_MS);
+  // Narrow, the overwrites wait in a menu behind the lead move, each still
   // confirmed with a second click.
   if (compact) {
     return (
       <span className="inline-flex shrink-0 items-center gap-0.5 self-center text-xs">
-        {merge}
+        {lead}
         {/* Closing the menu disarms both, so a reopen never finds one
             a click away from firing. */}
         <DropdownMenu
@@ -203,11 +256,11 @@ function PickSide({
   }
   return (
     <span className="inline-flex shrink-0 items-center gap-1 self-center text-xs">
-      {merge}
+      {lead}
       {/* On the label, not the row: each button has its own tip, and
           two tooltips would stack. */}
       <SimpleTooltip
-        tip={`Diverged: ${ahead} local, ${behind} remote. History has split. Pick which side wins.`}
+        tip={`History has split: ${ahead} local, ${behind} remote. Pick which side wins.`}
       >
         <span className="px-1.5 text-rose-500">Overwrite:</span>
       </SimpleTooltip>
