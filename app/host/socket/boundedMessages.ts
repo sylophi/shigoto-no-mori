@@ -17,7 +17,7 @@ export const MAX_MESSAGE_BYTES = 1024 * 1024;
 // At least the bytes `value` takes in the binary layout: a string's
 // UTF-16 code units at three UTF-8 bytes each, bytes as they are, and
 // every key, number and marker counted generously.
-export function encodedSizeBound(value: unknown): number {
+function encodedSizeBound(value: unknown): number {
   if (typeof value === "string") return 3 * value.length + 9;
   if (value instanceof Uint8Array) return value.byteLength + 9;
   if (Array.isArray(value)) {
