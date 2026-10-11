@@ -13,7 +13,7 @@ import type {
   PullRequestCheckBucket,
   PullRequestDetail,
   PullRequestReviewerState,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 export const STATE_LABEL: Record<PullRequestDetail["state"], string> = {
   OPEN: "Open",

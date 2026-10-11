@@ -1,4 +1,4 @@
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   MergeSharedSettingsPayloadSchema,
   SetSharedSettingPayloadSchema,
@@ -45,7 +45,7 @@ export const sharedSettingsContract = defineContract(
   // This copy moved, carrying it whole. Fired only when a set or a
   // merge actually changed something, which is what ends the exchange:
   // a peer that merges this and learns nothing announces nothing back.
-  broadcast("changed", SharedSettingsDocSchema, {
+  push("changed", SharedSettingsDocSchema, {
     remote: true,
   }),
 );

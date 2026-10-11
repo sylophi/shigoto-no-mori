@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils.ts";
 import { TONE_MARK } from "../../primitives/status-dot.tsx";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 import type { GroupShelf } from "./sidebarRow.ts";
-import type { PullRequest, Worktree } from "@shigomori/contracts/schemas/index";
+import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import type {
   StackPosition,
   StackRail,

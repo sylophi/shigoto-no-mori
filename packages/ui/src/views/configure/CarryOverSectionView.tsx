@@ -8,7 +8,7 @@ import { normalizeRelPath } from "@shigomori/contracts/git/gitPaths";
 import type {
   CarryOverEntry,
   CarryOverStat,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { CarryOverRowView } from "./CarryOverRowView.tsx";
 
 export function CarryOverSectionView({

@@ -5,7 +5,7 @@ import {
   trunkOf,
 } from "@shigomori/contracts/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
-import { isAgentWorking } from "@shigomori/contracts/schemas/index";
+import { isAgentWorking } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";
 import {
   groupPrefixOf,
@@ -21,7 +21,7 @@ import type {
   PullRequest,
   Worktree,
   WorktreeSortMode,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 import {
   GROUP_SHELVES,

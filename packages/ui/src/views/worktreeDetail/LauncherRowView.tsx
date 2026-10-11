@@ -5,7 +5,7 @@ import { LauncherIconView } from "../shared/LauncherIconView.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { Skeleton } from "../../primitives/skeleton.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import type { LauncherEntry } from "@shigomori/contracts/schemas/index";
+import type { LauncherEntry } from "@shigomori/contracts/schemas";
 
 export function LauncherRowView({
   entries,

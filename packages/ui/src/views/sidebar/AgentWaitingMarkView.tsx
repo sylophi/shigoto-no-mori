@@ -4,7 +4,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { needLine } from "../../lib/agentNeeds.ts";
 import { AGENT_STATE_VIEW, waitingSession } from "../../lib/agentSessions.ts";
 import { cn } from "../../lib/utils.ts";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 // A worktree's row while one of its agent sessions waits on you (a
 // permission prompt or a question): the agent's icon and "Needs you" in

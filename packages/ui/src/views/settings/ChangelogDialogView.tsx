@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ExternalLink, ScrollText, Sparkles } from "lucide-react";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import type { Release } from "@shigomori/contracts/schemas/index";
+import type { Release } from "@shigomori/contracts/schemas";
 import {
   changelogFor,
   isBetween,

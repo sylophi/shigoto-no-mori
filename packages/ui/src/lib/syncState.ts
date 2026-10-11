@@ -21,7 +21,7 @@ import {
   syncWaitsForCleanTree,
   type RemoteSyncState,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // The sidebar's compact mark: icon and an optional count, in the tone.
 interface SyncBadge {

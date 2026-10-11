@@ -5,7 +5,7 @@
 import type {
   VillagerProfile,
   VillagerProfiles,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // A spread of visits for the Visitors album: slug, times, and the days
 // ago of the first and last.

@@ -4,7 +4,7 @@
 // (test/scenes.test.tsx) and into the marketing site at build time, so
 // nothing here may reach window, the router or a query.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import type { Project, Worktree } from "@shigomori/contracts/schemas/index";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import type { DeviceBarTab } from "../views/shared/DeviceTabBarView.tsx";
 import {
   deviceStatusView,

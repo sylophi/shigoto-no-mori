@@ -1,8 +1,5 @@
 import { assertNever } from "./utils.ts";
-import type {
-  Project,
-  ProjectSortMode,
-} from "@shigomori/contracts/schemas/index";
+import type { Project, ProjectSortMode } from "@shigomori/contracts/schemas";
 
 // Orders the sidebar project list for display. `manual` preserves the stored
 // (drag-arranged) order; the usage sorts read the `lastUsed` / `recentCount`

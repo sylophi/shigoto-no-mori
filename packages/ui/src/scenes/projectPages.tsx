@@ -65,7 +65,7 @@ import {
   LocationSkeletonView,
 } from "../views/worktreeLocation/WorktreeLocationView.tsx";
 import { LAYOUT_OPTIONS } from "../views/worktreeLocation/layoutOptions.ts";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   forests,
   LOCAL_DEVICE_ID,

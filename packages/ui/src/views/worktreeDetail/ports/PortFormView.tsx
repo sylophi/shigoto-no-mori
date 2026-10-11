@@ -12,7 +12,7 @@ import {
   parsePortNumber,
   type CustomPort,
   type WorktreePort,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { Button } from "../../../primitives/button.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { TONE_TEXT } from "../../../primitives/status-dot.tsx";

@@ -6,7 +6,7 @@
 import { defaultBinding } from "../lib/keymap.ts";
 import { buildGrid } from "../views/home/gridModel.ts";
 import type { ReactNode } from "react";
-import type { SidebarView } from "@shigomori/contracts/schemas/index";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import { AddProjectButtonView } from "../views/sidebar/AddProjectButtonView.tsx";
 import {
   buildSidebarRows,

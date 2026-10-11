@@ -11,7 +11,7 @@ import {
   Radio,
   Settings as SettingsIcon,
 } from "lucide-react";
-import type { SidebarView } from "@shigomori/contracts/schemas/index";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import {
   SegmentedControl,
   type SegmentedOption,

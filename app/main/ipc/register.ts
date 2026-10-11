@@ -10,8 +10,8 @@ import { layerLatch } from "@host/lib/util/layerLatch";
 import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { isHostSide } from "@shigomori/contracts/link";
 import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
+  PushKeys,
+  PushProducerPayload,
   Handlers,
 } from "@shigomori/contracts/types";
 import {
@@ -79,10 +79,10 @@ export function registerContract<M extends ContractModule>(
 
 // A push to one window alone (its menu's events, its focus), on its
 // shell port.
-export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
+export function broadcast<M extends ContractModule, K extends PushKeys<M>>(
   module: M,
   key: K,
-  payload: BroadcastProducerPayload<M, K>,
+  payload: PushProducerPayload<M, K>,
   webContents: WebContents,
 ): void {
   const { channel, parsed } = resolveBroadcast(module, key, payload);
@@ -95,9 +95,10 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 // A push to every window, on every window's shell port. One annotated
 // `remote` (account:commandAccessChanged) reaches the peers from the
 // host, which hears the switch in the account's facts.
-export function broadcastAll<
-  M extends ContractModule,
-  K extends BroadcastKeys<M>,
->(module: M, key: K, payload: BroadcastProducerPayload<M, K>): void {
+export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
+  module: M,
+  key: K,
+  payload: PushProducerPayload<M, K>,
+): void {
   broadcastAllCore(module, key, payload, shellRegistrar);
 }
