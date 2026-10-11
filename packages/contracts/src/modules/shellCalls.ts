@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "../contract.ts";
 import { MigrationSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
+import { GuideDrivePayloadSchema, GuideReplySchema } from "./guide.ts";
 import { HostAddressSchema } from "./window.ts";
 
 // What the host asks of the shell that started it (the updater and the
@@ -43,4 +44,7 @@ export const shellCallsContract = defineContract(
   // Stop the bridge `sm update` asks the updater through, before a wipe
   // of the data folder it lives in.
   invoke("stopUpdaterBridge", VoidSchema, VoidSchema),
+  // An action of `sm guide mcp`'s, which the shell runs in the window
+  // its session is bound to.
+  invoke("guide", GuideDrivePayloadSchema, GuideReplySchema),
 );

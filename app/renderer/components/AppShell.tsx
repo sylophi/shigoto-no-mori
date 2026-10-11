@@ -11,6 +11,8 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
+import { GuideBand } from "@/components/guide/GuideBand";
+import { GuideCallout } from "@/components/guide/GuideCallout";
 import { WorktreePalette } from "@/components/palette/WorktreePalette";
 import { PhoneTabBar } from "@/components/PhoneTabBar";
 import {
@@ -133,6 +135,7 @@ export function AppShell() {
         )
       }
       tabBar={<PhoneTabBar />}
+      band={hasLocalHost && <GuideBand />}
       overlays={
         // The app-wide overlays. They live here, under the router, so
         // their navigation is plain useNavigate. The ⌘K worktree palette
@@ -142,6 +145,7 @@ export function AppShell() {
           {phone && <ForestKeepalive />}
           <WorktreePalette />
           <AddProjectModal />
+          {hasLocalHost && <GuideCallout />}
         </>
       }
     >

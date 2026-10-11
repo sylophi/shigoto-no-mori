@@ -154,10 +154,9 @@ export class Open extends Context.Service<
       located: Worktrees.Located,
       tool: string,
     ) => Effect.Effect<Launchers.Launchable, UnknownLauncher | LaunchFailed>;
-    // Runs a command line in the user's chosen terminal, in the
-    // worktree.
+    // Runs a command line in the user's chosen terminal, in a folder.
     readonly inTerminal: (
-      located: Worktrees.Located,
+      folder: string,
       command: string,
     ) => Effect.Effect<void, LaunchFailed>;
     // Opens (or brings forward) the installed app.
@@ -212,29 +211,33 @@ const make = Effect.gen(function* () {
 
   // A terminal tool's command line, run in the user's chosen terminal
   // (Terminal when that one isn't installed or has no script).
+  // `entries` are the launchers already read, which say whether the
+  // chosen terminal is installed. Without them it is looked up.
   const inTerminal = (
     label: string,
     command: string,
-    worktreePath: string,
-    entries: ReadonlyArray<Launchers.Launchable>,
+    folder: string,
+    entries?: ReadonlyArray<Launchers.Launchable>,
   ) =>
     Effect.gen(function* () {
       const chosen = yield* config.get({ kind: "device" }, "terminal").pipe(
         Effect.map(({ value }) => (typeof value === "string" ? value : "")),
         Effect.orElseSucceed(() => ""),
       );
-      const installed = entries.find(
-        (entry) =>
-          entry.kind === "detected" &&
-          entry.app.id === chosen &&
-          TERMINAL_SCRIPTS[chosen] !== undefined,
-      );
+      const installed =
+        TERMINAL_SCRIPTS[chosen] === undefined
+          ? undefined
+          : entries === undefined
+            ? yield* launchers.installed(chosen)
+            : entries.find(
+                (entry) => entry.kind === "detected" && entry.app.id === chosen,
+              );
       const id = installed === undefined ? DEFAULT_TERMINAL : chosen;
       const terminal = installed?.label ?? "Terminal";
       const { code, output } = yield* ran("osascript", [
         "-e",
         TERMINAL_SCRIPTS[id] ?? "",
-        `cd ${shellQuote(worktreePath)}\n${command}`,
+        `cd ${shellQuote(folder)}\n${command}`,
       ]);
       if (code === 0) return;
       const said = output.includes("(-1743)")
@@ -359,11 +362,10 @@ const make = Effect.gen(function* () {
   });
 
   const inTerminalAt = Effect.fn("Open.inTerminal")(function* (
-    located: Worktrees.Located,
+    folder: string,
     command: string,
   ) {
-    const entries = yield* launchers.launchable(located.project);
-    yield* inTerminal("the terminal", command, located.worktree.path, entries);
+    yield* inTerminal("the terminal", command, folder);
   });
 
   // A cold launch gets this environment, which the app rebuilds at

@@ -640,3 +640,9 @@
     display: none;
   }
 }
+
+/* What the guide points at shows, even a control that waits for its
+   row's hover (main/core/guide/Guide.ts marks it). */
+[data-guide-target] {
+  opacity: 1 !important;
+}

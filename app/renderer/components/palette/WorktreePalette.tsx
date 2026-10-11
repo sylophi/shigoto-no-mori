@@ -15,6 +15,7 @@ import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
+import { useGuideHarnesses } from "@/hooks/useGuide";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
@@ -23,6 +24,7 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
 import { isOverlayOpen } from "@/lib/dom";
 import { hasLocalHost } from "@/lib/localHost";
+import { notifyError } from "@/lib/toast";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import {
@@ -96,15 +98,24 @@ export function WorktreePalette() {
   // Wherever focus sits, a text field and a terminal on macOS included
   // (a `Mod` chord). Opening waits for any other overlay to close, and
   // closing is the palette's own toggle.
-  useKeymapAction(
-    "palette",
-    () => {
-      if (!open && isOverlayOpen()) return false;
-      if (!open) returnFocus.current = document.activeElement;
-      setOpen(!open);
-    },
-    { overOverlays: true },
+  // Opens over the page unless another overlay is up, keeping where
+  // focus was to hand back.
+  const openPalette = () => {
+    if (isOverlayOpen()) return false;
+    returnFocus.current = document.activeElement;
+    setOpen(true);
+  };
+
+  // The Help menu's Ask, which is a question for the palette.
+  useEffect(() =>
+    hasLocalHost
+      ? window.api.nav.onAskHow(() => void openPalette())
+      : undefined,
   );
+
+  useKeymapAction("palette", () => (open ? setOpen(false) : openPalette()), {
+    overOverlays: true,
+  });
 
   if (!open) return null;
   return (
@@ -121,11 +132,17 @@ export function WorktreePalette() {
   );
 }
 
+// A query that asks something: a question mark, or a question's first
+// word and then a space, so a branch like do-release stays a branch.
+const QUESTION =
+  /\?\s*$|^(how|what|where|why|when|which|who|can|could|is|are|does|do)\s/i;
+
 const GROUP_HEADINGS: Record<PaletteRow["kind"], string> = {
   worktree: "Worktrees",
   project: "Projects",
   page: "Pages",
   create: "Create",
+  ask: "Ask",
 };
 
 function PaletteDialog({
@@ -152,6 +169,9 @@ function PaletteDialog({
   const { quickCreate, openCreateForm } = useQuickCreateWorktree();
   // The create under way, if any: one at a time, and its row says so.
   const [creating, setCreating] = useState<{ branch?: string } | null>(null);
+  // The question being handed to an agent, if any.
+  const [asking, setAsking] = useState<string | null>(null);
+  const harnesses = useGuideHarnesses();
   const now = useNow();
 
   // The sidebar's own views, already streaming, so opening doesn't
@@ -255,6 +275,18 @@ function PaletteDialog({
         targets: [target, ...others],
       });
     }
+    // Any query is a question the guide can take: first when it reads
+    // as one, else last.
+    if (harnesses !== null) {
+      const ask: PaletteRow = {
+        kind: "ask",
+        key: "ask",
+        question: listQuery,
+        harnesses,
+      };
+      if (QUESTION.test(listQuery)) rows.unshift(ask);
+      else rows.push(ask);
+    }
     return rows;
   };
 
@@ -327,6 +359,19 @@ function PaletteDialog({
       onClose();
       page.open();
     },
+    // Up until the agent's terminal opens. A failure toasts and leaves
+    // the palette up.
+    ask: (harness, question) => {
+      if (asking !== null) return;
+      setAsking(question);
+      void window.api.guide.ask({ harness, question }).then(
+        () => onClose(),
+        (error: unknown) => {
+          setAsking(null);
+          notifyError("Couldn't open the guide", error);
+        },
+      );
+    },
   };
 
   // What ↩ does on the list: the first of the row's verbs.
@@ -344,6 +389,8 @@ function PaletteDialog({
         return actions.openPage(row.page);
       case "create":
         return actions.create(row.targets[0].id, row.branch);
+      case "ask":
+        return actions.ask(row.harnesses[0].id, row.question);
     }
   };
 
@@ -429,6 +476,7 @@ function PaletteDialog({
           query={listQuery}
           now={now}
           creating={row.kind === "create" && creating?.branch === row.branch}
+          asking={row.kind === "ask" && asking === row.question}
         />
       </PaletteItemView>
     ));

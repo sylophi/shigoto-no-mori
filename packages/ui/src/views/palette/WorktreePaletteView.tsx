@@ -19,6 +19,15 @@ import { FooterRow } from "../../primitives/footer-row.tsx";
 // The ⌘K palette's content, inside its dialog (WorktreePalette.tsx
 // runs it): the search row, the list beside the highlighted row's
 // verbs, and the keys that move between them.
+// What ↩ does on the list, by the highlighted row.
+const ENTER_LABELS: Record<PaletteRow["kind"], string> = {
+  worktree: "Open",
+  project: "Open",
+  page: "Open",
+  create: "Create",
+  ask: "Ask",
+};
+
 export function PaletteDialogView({
   picked,
   highlighted,
@@ -129,7 +138,7 @@ export function PaletteDialogView({
         />
         <KbdHint
           keys={["↩"]}
-          label={picked ? "Run" : current === "create" ? "Create" : "Open"}
+          label={picked ? "Run" : ENTER_LABELS[current ?? "worktree"]}
         />
         {picked ? (
           <KbdHint keys={["⌫"]} label="Back" />
@@ -228,5 +237,7 @@ function PickedLabel({ row, icon }: { row: PaletteRow; icon: ReactNode }) {
       return <span className="truncate">{row.page.label}</span>;
     case "create":
       return <span className="truncate font-mono">{row.branch}</span>;
+    case "ask":
+      return <span className="truncate">{row.question}</span>;
   }
 }
