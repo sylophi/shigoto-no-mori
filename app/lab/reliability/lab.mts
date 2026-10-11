@@ -47,6 +47,7 @@ import {
   killGroup,
   repoDir,
   waitFor,
+  within,
   type TraceLine,
 } from "./util.mts";
 
@@ -657,22 +658,39 @@ export class Lab {
     const apps = [this.remote, this.desk, this.hostApp].filter(
       (each): each is DevApp => each !== null,
     );
+    // Each step on its own, so one that fails or hangs (a sign-out on
+    // an app already signed out) leaves the rest to run.
+    const step = async (what: string, run: () => unknown) => {
+      try {
+        await within(30_000, what, Promise.resolve().then(run));
+      } catch (error) {
+        this.note(`cleanup: ${what} failed: ${String(error)}`, "warning");
+      }
+    };
     // Nothing may stay frozen, or it could not be revoked or quit.
-    for (const app of apps) app.thaw(app.appPids());
-    this.network.restore({ cut: true });
+    for (const app of apps) {
+      await step(`thawing ${app.profile}`, () => app.thaw(app.appPids()));
+    }
+    await step("the network", () => this.network.restore({ cut: true }));
     if (!this.options.keep) {
       // The web client's device, and each app's. The browser keeps its
       // Clerk session, so the next run enrolls it again.
       const [tab] = this.tabs;
-      await tab?.page
-        .evaluate(() => window.api.account.signOut())
-        .catch(() => {});
-      for (const app of apps) await app.revoke();
+      if (tab !== undefined) {
+        await step("signing the browser out", () =>
+          tab.page.evaluate(() => window.api.account.signOut()),
+        );
+      }
+      for (const app of apps) {
+        await step(`signing ${app.profile} out`, () => app.revoke());
+      }
     }
-    await this.context?.close().catch(() => {});
+    await step("the browser", () => this.context?.close());
     // B and C before A, whose launcher serves their renderer.
-    for (const app of apps) await app.stop().catch(() => {});
-    await this.network.stop().catch(() => {});
+    for (const app of apps) {
+      await step(`stopping ${app.profile}`, () => app.stop());
+    }
+    await step("the switches", () => this.network.stop());
     if (this.webServer?.pid !== undefined) {
       killGroup(this.webServer.pid, "SIGTERM");
     }

@@ -284,8 +284,12 @@ async function heal(): Promise<void> {
   );
 }
 
+let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    lab.note(`${signal}: cleaning up`);
     writeReport();
     void lab.close().finally(() => process.exit(130));
   });
