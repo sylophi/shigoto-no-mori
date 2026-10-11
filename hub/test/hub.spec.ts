@@ -423,6 +423,8 @@ describe("what a socket may send", () => {
     expect((await socket.closed).code).toBe(1009);
   });
 
+  // A thousand messages through workerd take seconds on a loaded
+  // machine, past vitest's default 5 s.
   it("cuts a socket that sends faster than its budget", async () => {
     const { socket } = await enrollAndConnect("acct-input-rate", "dev-rate");
     await socket.untilPresence(["dev-rate"]);
@@ -430,7 +432,7 @@ describe("what a socket may send", () => {
     // matters. Far more than the burst, in less time than it refills.
     for (let i = 0; i < 1000; i++) socket.ws.send("{}");
     expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
-  });
+  }, 30_000);
 
   it("lets a dial storm's worth of asks through", async () => {
     const { socket } = await enrollAndConnect("acct-input-storm", "dev-storm");

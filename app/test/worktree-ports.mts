@@ -1,6 +1,6 @@
 // Durable proof for the worktree port list's three pure-ish parts,
 // under plain Node with no Electron and no git:
-//   - the port-pool state reader (host/lib/ports.ts) honours
+//   - the port-pool state reader (host/lib/Ports.ts) honours
 //     XDG_DATA_HOME, keeps the project's declared port order, tolerates
 //     a trailing slash on the recorded directory, skips malformed
 //     allocations and unknown fields, and reads a missing or corrupt
@@ -17,7 +17,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
-import * as Ports from "@host/lib/ports";
+import * as Ports from "@host/lib/Ports";
 import { runHost } from "./lib/hostRuntime.mts";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";

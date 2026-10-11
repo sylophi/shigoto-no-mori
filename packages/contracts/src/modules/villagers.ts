@@ -8,7 +8,7 @@ import {
 } from "../schemas/index.ts";
 
 // The villager data, downloaded to and served from this device's data
-// dir (host/lib/villagers.ts) for Village life, a setting of the
+// dir (host/lib/VillagerData.ts) for Village life, a setting of the
 // desktop window (Settings, Appearance). Local only: no peer reads or
 // manages another device's copy, and a web client, which has no device
 // of its own, offers no Village life.

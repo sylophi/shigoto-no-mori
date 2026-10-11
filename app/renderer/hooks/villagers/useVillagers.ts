@@ -4,7 +4,7 @@ import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { queryKeys } from "@/lib/queryKeys";
 
 // The villager extras' data, read from this device's copy
-// (host/lib/villagers.ts) and only while useVillageLife() says the
+// (host/lib/VillagerData.ts) and only while useVillageLife() says the
 // extras show, whichever device a worktree lives on. Neither changes
 // once downloaded, so both are read once.
 

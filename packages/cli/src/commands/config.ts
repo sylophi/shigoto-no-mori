@@ -4,6 +4,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  DeviceSettingsPatchSchema,
+  keyDescriptions,
+} from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -267,28 +271,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
 const device: Settings = {
   scope: { kind: "device" },
   listCommand: "config list",
-  descriptions: {
-    launchScripts: "Show package scripts in the Launch section",
-    deleteBranchOnRemove: "Delete the branch when removing its worktree",
-    autoPopulateInstall: "Seed new projects' setup script with `<pm> install`",
-    autoPullNew:
-      "Start new worktrees (and added projects' primaries) with auto-pull on",
-    autoPullPrimaryOnly:
-      "autoPullNew applies to added projects' primaries only",
-    autoShelveDays: "Shelve worktrees untouched for this many days",
-    doubutsuNames:
-      "Name new worktrees after Animal Crossing characters (on for new installs)",
-    codexWorktreeNames:
-      "Name Codex-style <name>/<repo> worktrees by their parent folder",
-    managedOnProjectDrive:
-      "Keep managed worktrees on the project's drive when it is an external one",
-    portPool: "Provision/release port-pool ports with worktrees",
-    terrier: "List terrier-registered repos as projects",
-    githubCli: "GitHub CLI integration",
-    launchers: "Global custom launchers (`config launcher`)",
-    hiddenLaunchers: "Hidden launcher ids (via edit or the app)",
-    terminal: "Terminal that terminal tools (Claude Code, Neovim, …) open in",
-  },
+  descriptions: keyDescriptions(DeviceSettingsPatchSchema.struct),
 };
 
 export const configCommand = Command.make("config").pipe(

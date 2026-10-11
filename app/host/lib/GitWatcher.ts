@@ -32,10 +32,9 @@ import * as FiberMap from "effect/FiberMap";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import { readFileSync, statSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
 
@@ -70,29 +69,31 @@ export function isRelevantGitPath(file: string): boolean {
 // ordinary checkout, or the common dir behind a `.git` FILE (the
 // project path is itself a linked worktree, or a submodule). Null
 // when the path has no git directory (missing, or not a repo).
-export function gitDirOf(projectPath: string): string | null {
-  const dotGit = join(projectPath, ".git");
-  let text: string;
-  try {
-    const stat = statSync(dotGit);
-    if (stat.isDirectory()) return dotGit;
-    if (!stat.isFile()) return null;
-    text = readFileSync(dotGit, "utf8");
-  } catch {
-    return null;
-  }
-  const pointed = /^gitdir:\s*(.+)$/m.exec(text)?.[1]?.trim();
-  if (pointed === undefined) return null;
-  const gitDir = isAbsolute(pointed) ? pointed : resolve(projectPath, pointed);
-  // A linked worktree's git dir names its repository's common dir,
-  // which is where the refs live.
-  try {
-    const common = readFileSync(join(gitDir, "commondir"), "utf8").trim();
-    return isAbsolute(common) ? common : resolve(gitDir, common);
-  } catch {
-    return gitDir;
-  }
-}
+export const refsDirOf = (projectPath: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dotGit = path.join(projectPath, ".git");
+    const stat = yield* fs.stat(dotGit).pipe(Effect.option);
+    if (Option.isNone(stat)) return null;
+    if (stat.value.type === "Directory") return dotGit;
+    if (stat.value.type !== "File") return null;
+    const text = yield* fs.readFileString(dotGit).pipe(Effect.option);
+    if (Option.isNone(text)) return null;
+    const pointed = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
+    if (pointed === undefined) return null;
+    const gitDir = path.isAbsolute(pointed)
+      ? pointed
+      : path.resolve(projectPath, pointed);
+    // A linked worktree's git dir names its repository's common dir,
+    // which is where the refs live.
+    const common = yield* fs
+      .readFileString(path.join(gitDir, "commondir"))
+      .pipe(Effect.option);
+    if (Option.isNone(common)) return gitDir;
+    const dir = common.value.trim();
+    return path.isAbsolute(dir) ? dir : path.resolve(gitDir, dir);
+  });
 
 export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
@@ -112,11 +113,12 @@ export class GitWatcher extends Context.Service<
     // added, removed or relocated.
     readonly reconcile: Effect.Effect<void>;
   }
->()("sm/main/GitWatcher") {}
+>()("sm/host/GitWatcher") {}
 
 const make = (deps: GitWatcherDeps) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     // Each watched project's git directory and the fiber watching it.
     const watches = yield* FiberMap.make<string>();
     // What each running watch watches. Written only under `serial`, so
@@ -152,7 +154,9 @@ const make = (deps: GitWatcherDeps) =>
       if (Option.isNone(projects)) return;
       const wanted = new Map<string, string>();
       for (const project of projects.value) {
-        const gitDir = gitDirOf(project.path);
+        const gitDir = yield* refsDirOf(project.path).pipe(
+          Effect.provide(platform),
+        );
         if (gitDir !== null) wanted.set(project.id, gitDir);
       }
       for (const [projectId, { gitDir }] of gitDirs) {

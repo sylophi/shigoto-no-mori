@@ -7,8 +7,11 @@ What crosses a wire or sits on disk, described once for every side: the app's ma
 - `src/hubApi.ts`: the hub Worker's HTTP API, its refusals and its two bearer tiers, which the Worker serves and the app calls through the derived client.
 - `src/hubProtocol.ts`: the bodies that API carries, the socket envelopes between a device and the hub, and the connectInfo ask and answer the devices relay through it.
 - `src/errors.ts`: the errors a contract names and the renderer recognizes.
+- The host serves a host-scoped module through its handler map, `app/host/ipc/modules/<module>.ts`, which `app/host/process/handlers.ts` registers; the shell serves a client-scoped one (`app/main/ipc/modules/`). A call's annotations say who may make it, and the registrar fails closed on one that is missing: a host invoke says `remote` (true only if a peer may call it), a remote one says `gated` (true for anything that changes what the user owns, and for the reads `src/contract.ts` lists), and a remote gated one names the consent line that covers it (`grant`, from `src/grants.ts`). `invitable` and `tracksProjectUsage` are opt-in (`src/contract.ts` says when). After changing any of them, run `classification` and read its diff (below).
+- `src/link.ts`: the device link's `RpcGroup`, every module's remote calls plus the link's own (`src/modules/link.ts`), and the middleware tags that guard it. `src/allModules.ts` lists the modules it is built from, and `src/channelRefusals.ts` the markers a byte channel's open is refused with.
+- `src/sharedSettings.ts`, `src/leaveOutRule.ts`, `src/pullRequestStack.ts`, `src/releaseVersions.ts`, `src/accountServiceConfig.ts`: the rules two sides must apply the same way (the shared settings' merge, a mirror's leave-out rule, stacked pull requests, release precedence and the changelog, the account's build configuration), as pure functions over the schemas. A module's schema and its contract keep the same name under `src/schemas/` and `src/modules/`.
 - `src/predicates/`, `src/deviceIcon.ts`, `src/platform.ts`, `src/mirrorIgnores.ts`: the values and checks the schemas are built from, which the app uses too.
-- `src/git/` (branch names, repo-relative paths, worktree layout paths), `src/projectPaths.ts` and `src/scriptEnv.ts`: pure helpers the host and the views both read, kept here because every side can compile the contracts and nothing else.
+- `src/git/` (branch names, matching git's ignored paths, worktree layout paths), `src/projectPaths.ts` and `src/scriptEnv.ts`: pure helpers the host and the views both read, kept here because every side can compile the contracts and nothing else.
 
 Consumers import a module by its path under `src/`, without the extension: `@shigomori/contracts/modules/sync`, `@shigomori/contracts/predicates/webUrl`. The schemas also come as one barrel, `@shigomori/contracts/schemas`. Inside the package, imports are relative with the `.ts` extension.
 
@@ -22,9 +25,14 @@ The package has no runtime dependency besides `effect` and imports nothing from 
 
 The hub's envelopes and HTTP bodies (`src/hubProtocol.ts`) follow the same rule: a change an older build cannot read bumps the version, since the hub's floor is the version (`HUB_PROTOCOL_FLOOR`) and turns away every build below it.
 
-The samples prove one direction: this build reads what the version's samples hold. That an older build of the same version reads everything this one sends (a new optional field in a strict result, a new literal) is the reviewer's call, and a bump when it cannot.
+The samples prove one direction: this build reads what the version's samples hold. The other, that an older build of the same version reads everything this one sends, is the rule a reviewer holds:
 
-`pnpm -F @shigomori/contracts wire-fixtures` adds a sample derived from the schema for each part that has none, asks for one by hand where a schema's checks leave nothing to derive, and drops the samples of calls and parts that are gone. It never rewrites a sample that is there.
+- No bump: a new call (an older build answers a call it lacks with a defect for that call alone, and the link stays up), and a new optional field in a plain struct or a `loose` one, which an older build drops or keeps as it came.
+- A bump: anything an older build decodes and would refuse or misread. A new field in a `strict` schema (strict refuses a key it does not model), a field or call removed or renamed, a type narrowed, a new literal or union member, a new error in `CallFailureSchema` (an older build cannot decode it), or a change to the encoding.
+
+To bump, raise `PROTOCOL_VERSION`, `git mv` the samples file to the new version's name, run `wire-fixtures`, and record the bump in `V3.md` while the branch lives. The hub deploys with the bump, since its floor is the version.
+
+`pnpm -F @shigomori/contracts wire-fixtures` adds a sample derived from the schema for each part that has none, asks for one by hand where a schema's checks leave nothing to derive, and drops the samples of calls and parts that are gone. It never rewrites a sample that is there, and it formats the file as the repo does (oxfmt), so the diff is the samples it added or dropped. `test/wire.test.ts` also refuses a channel named twice in the file, which `JSON.parse` would hide.
 
 ## Classification
 

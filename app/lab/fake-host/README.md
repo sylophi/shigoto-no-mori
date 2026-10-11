@@ -32,8 +32,11 @@ Some ways to use it:
   person would, `expect` each stage, and film the session for a
   reviewer. The sync verbs move the fake world, so the outcome shows.
 - **Mid-session changes.** `window.fakeHost` flips a peer's presence,
-  drops the socket, or makes a worktree appear behind the app's back,
-  to see how a screen already open reacts.
+  poses the hub socket's status, or makes a worktree appear behind the
+  app's back, to see how a screen already open reacts. The socket is a
+  pose: the web shell here runs on a fixture `window.api` and never
+  dials (`web/hub/` does not run), so a redial or its trace is the
+  real web client's (`../reliability/README.md`).
 
 The marketing site runs the same bridge in-process for its live frames
 (`frames.tsx`): each frame is a desktop window of the app mounted into
@@ -49,7 +52,13 @@ renders here proves nothing about the host behind it. Electron itself
 those, use device windows (`../devices.md`).
 
 Open one with weblab's `new`, the worktree's port as the address.
-`grep FAKE_HOST_ .env.ports` prints both ports. Below, 4752 and 4753
+`grep FAKE_HOST_ .env.ports` prints both ports. A fresh checkout has no
+`.env.ports` until the first `pnpm fake-host` (or any dev server) runs
+`scripts/ensure-ports.mts`, which asks port-pool for this checkout's
+ports; `port-pool release <checkout>` gives them back when a throwaway
+checkout goes. The first load after an install can answer 504
+("Outdated Optimize Dep") while Vite bundles its dependencies: give the
+first `goto` a longer timeout, or load again. Below, 4752 and 4753
 stand for them:
 
 ```json
@@ -153,6 +162,9 @@ Poses ride the URL:
   `single-passed`, `single-failing`, `passed`, `passed-some-skipped`,
   `all-skipped`, `auto-merge`, `pending`, `failing`, `failing-blocked`,
   `failing-and-pending`, `many`. Absent, it keeps two passing checks.
+- `?stack=merged`: the stack of three PRs across Studio Mac and
+  Thinkpad (`fix-stale-locks`, `exp/terrier-sync`, `port-pool-retry`)
+  all landed, so the closed-PR box offers the stack cleanup.
 - `?reviews=<variant>`: the reviews on the same PR, keys of
   `FAKE_REVIEW_POSES`: `approved`, `approved-no-rule`,
   `changes-requested`, `required`, `required-unrequested`,

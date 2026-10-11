@@ -98,6 +98,7 @@ import {
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/remote/link";
 import * as HostPushes from "@host/lib/hostPushes";
+import { secretsMatch } from "@host/lib/util/secretCompare";
 import * as Sharing from "@host/lib/sharing";
 import type { HostServices } from "@host/process/services";
 import { type HostChannels, makeHostChannels } from "./channels";
@@ -162,10 +163,14 @@ type LinkSharing = Pick<Sharing.Sharing["Service"], "current" | "changes"> & {
   readonly seesPush: (peerDeviceId: string, payload: unknown) => boolean;
 };
 
+const COMMAND_ACCESS_CHANGED = channelOf(
+  callOf(accountContract, "commandAccessChanged"),
+);
+
 // The host's word on its switches, which a peer hears either way.
 const SWITCHES = new Set([
   channelOf(callOf(sharingContract, "changed")),
-  channelOf(callOf(accountContract, "commandAccessChanged")),
+  COMMAND_ACCESS_CHANGED,
 ]);
 
 // A channel's numbered calls, which hold no place under the in-flight
@@ -620,14 +625,16 @@ export const make = (options: {
             }
             const admitted =
               "token" in opens
-                ? payload.token === opens.token
+                ? secretsMatch(payload.token ?? "", opens.token)
                 : opened !== null &&
                   payload.deviceId === opened.deviceId &&
                   sameKey(rosterKey, opened.publicKey) &&
                   opens.spend(opened.ticket, connection.arrivalKind) ===
                     opened.deviceId;
             if (!admitted) {
-              recordAuthFailure(connection.ip);
+              // Not on the loopback, where every caller shares one
+              // address and a wrong token is no guess at a right one.
+              if (!local) recordAuthFailure(connection.ip);
               log.warn(`[link] refused a hello from ${connection.ip}`);
               yield* killSoon(connection, "auth failed");
               return yield* new LinkRefusedError();
@@ -836,6 +843,8 @@ export const make = (options: {
           CommandGate,
           (effect, { rpc, payload }) =>
             Effect.gen(function* () {
+              // The loopback's callers command this machine as its owner.
+              if (local) return yield* effect;
               const peer = yield* LinkPeer;
               // Only an explicit gated:false is a read. A missing
               // annotation is gated like a command.
@@ -863,7 +872,13 @@ export const make = (options: {
               if (!auth.isCommandGranted()) {
                 return yield* new CommandRefusedError();
               }
-              return yield* effect;
+              // A call or a view under way ends as the switch turns off.
+              const off = hostPushes.stream(COMMAND_ACCESS_CHANGED).pipe(
+                Stream.filter(() => !auth.isCommandGranted()),
+                Stream.runHead,
+                Effect.andThen(Effect.fail(new CommandRefusedError())),
+              );
+              return yield* Effect.raceFirst(effect, off);
             }),
         );
 

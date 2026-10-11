@@ -70,7 +70,7 @@ export class ShellLink extends Context.Service<
       push: Push,
     ) => Effect.Effect<void>;
   }
->()("sm/shell/ShellLink") {}
+>()("sm/main/ShellLink") {}
 
 type Connection = {
   readonly socket: Socket.WebSocketLike;
