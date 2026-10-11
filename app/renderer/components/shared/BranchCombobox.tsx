@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
+import { localBranchOf } from "@shared/git/branches";
 import type { BranchList } from "@shared/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
@@ -27,6 +28,9 @@ interface BranchComboboxProps {
   // question. Manage Branches asks the same thing the new-worktree form
   // does and could pass it. That just hasn't been wired up yet.
   pinnedBranch?: string;
+  // Only the branches a remote has, by their name there ("main" for
+  // origin/main), and nothing typed: what a pull request can merge into.
+  remoteNames?: boolean;
 }
 
 export interface BranchEntry {
@@ -37,7 +41,15 @@ export interface BranchEntry {
 function toBranchEntries(
   branches: BranchList | undefined,
   exclude: ReadonlySet<string>,
+  remoteNames: boolean,
 ): BranchEntry[] {
+  if (remoteNames) {
+    const remote = new Set(branches?.remote);
+    const names = new Set([...remote].map((ref) => localBranchOf(ref, remote)));
+    return [...names]
+      .filter((name) => !exclude.has(name))
+      .map((name) => ({ name, kind: "local" }));
+  }
   const out: BranchEntry[] = [];
   for (const name of branches?.local ?? []) {
     if (!exclude.has(name)) out.push({ name, kind: "local" });
@@ -69,6 +81,7 @@ export function BranchCombobox({
   className,
   excludeBranches,
   pinnedBranch,
+  remoteNames = false,
 }: BranchComboboxProps) {
   const { data: branches, isFetching } = useBranches(projectId);
   const queryClient = useQueryClient();
@@ -76,14 +89,16 @@ export function BranchCombobox({
   const [query, setQuery] = useState("");
 
   const all = pinFirst(
-    toBranchEntries(branches, new Set(excludeBranches ?? [])),
+    toBranchEntries(branches, new Set(excludeBranches ?? []), remoteNames),
     pinnedBranch,
   );
   const sorted = rankByScore(query, all, (b) => b.name);
 
   const trimmedQuery = query.trim();
   const showCustom =
-    trimmedQuery.length > 0 && !all.some((b) => b.name === trimmedQuery);
+    !remoteNames &&
+    trimmedQuery.length > 0 &&
+    !all.some((b) => b.name === trimmedQuery);
 
   return (
     <Combobox.Root
@@ -142,7 +157,7 @@ export function BranchCombobox({
         >
           <Combobox.Popup
             data-slot="combobox-popup"
-            className="flex max-h-72 w-(--anchor-width) flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+            className="flex max-h-72 w-(--anchor-width) min-w-56 flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
           >
             <div
               data-slot="search-row"

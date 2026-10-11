@@ -221,6 +221,14 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       mergePullRequest: githubCliClient.mergePullRequest,
       pullRequestDiff: githubCliClient.pullRequestDiff,
       setPullRequestDraft: githubCliClient.setPullRequestDraft,
+      pullRequestDraft: githubCliClient.pullRequestDraft,
+      pullRequestCompare: githubCliClient.pullRequestCompare,
+      pullRequestOptions: (projectId: string) =>
+        githubCliClient.pullRequestOptions({ projectId }),
+      stageAttachment: githubCliClient.stageAttachment,
+      stageAttachmentFromUrl: githubCliClient.stageAttachmentFromUrl,
+      discardAttachment: githubCliClient.discardAttachment,
+      createPullRequest: githubCliClient.createPullRequest,
       disablePullRequestAutoMerge: githubCliClient.disablePullRequestAutoMerge,
       onProjectPullRequestsRefreshed:
         githubCliClient.projectPullRequestsRefreshed,

@@ -5,11 +5,16 @@
 // diff for the diff pages. Pure data plus readers of location.search,
 // served by bridge.ts.
 import {
+  type CommitSummary,
+  type CreatePullRequestResult,
   type MergeMethod,
   type MergePullRequestResult,
   type PullRequestCheck,
   type PullRequestCheckBucket,
+  type PullRequestCompare,
+  type PullRequestDraft,
   type PullRequestMergeState,
+  type PullRequestOptions,
   type PullRequestReviews,
   type RepoMergeConfig,
   summarizeChecks,
@@ -63,6 +68,84 @@ const FAKE_PRS = {
 const FAKE_PR_BRANCH = "v2-exp/remote-ui-flows";
 const FAKE_PR_SLIM = FAKE_PRS[FAKE_PR_BRANCH];
 
+// The PRs the create pull request dialog made this session, by head
+// branch, and their descriptions by number.
+const createdPullRequests: Record<string, typeof FAKE_PR_SLIM> = {};
+const createdBodies: Record<number, string> = {};
+
+export function fakeCreatePullRequest(opts: {
+  branch: string;
+  base: string;
+  title: string;
+  body: string;
+  draft: boolean;
+}): CreatePullRequestResult {
+  const number = 153 + Object.keys(createdPullRequests).length;
+  const pr = {
+    ...fakePullRequest(number, opts.title, opts.base),
+    isDraft: opts.draft,
+  };
+  createdPullRequests[opts.branch] = pr;
+  createdBodies[number] = opts.body;
+  return { url: pr.url, warning: null };
+}
+
+// Where the create pull request dialog starts: quiet-quail's branch
+// sits on gentle-gecko's in the stack, so that's its base, and the fill
+// is a newest commit's subject. shigoto-no-mori has a short template.
+export function fakePullRequestDraft(
+  projectId: string,
+  worktree: { branch: string; recentCommits: CommitSummary[] },
+): PullRequestDraft {
+  return {
+    suggestedBase:
+      worktree.branch === "port-pool-retry" ? "exp/terrier-sync" : null,
+    fill: { title: worktree.recentCommits[0]?.subject ?? "", body: "" },
+    template: FAKE_SM_PROJECT_IDS.has(projectId)
+      ? "## What changed\n\n\n## How it was checked\n\n- [ ] `pnpm test`\n"
+      : null,
+  };
+}
+
+// The row's own commits against any base, with totals that add up.
+export function fakePullRequestCompare(
+  commits: CommitSummary[],
+): PullRequestCompare {
+  return {
+    commits: commits.length,
+    files: commits.length * 3,
+    additions: commits.reduce((sum, c) => sum + c.additions, 0),
+    deletions: commits.reduce((sum, c) => sum + c.deletions, 0),
+  };
+}
+
+export const FAKE_PULL_REQUEST_OPTIONS: PullRequestOptions = {
+  viewer: "sylophi",
+  people: [
+    { login: "sylophi", name: "Sylophi" },
+    { login: "rin", name: "Rin Takeda" },
+    { login: "mossgrove", name: null },
+    { login: "kestrel-dev", name: "Kestrel" },
+    { login: "hollyfern", name: "Holly Fern" },
+  ],
+  labels: [
+    { name: "bug", color: "d73a4a", description: "Something isn't working" },
+    { name: "design", color: "c5def5", description: null },
+    {
+      name: "documentation",
+      color: "0075ca",
+      description: "Improvements or additions to documentation",
+    },
+    {
+      name: "enhancement",
+      color: "a2eeef",
+      description: "New feature or request",
+    },
+    { name: "good first issue", color: "7057ff", description: null },
+    { name: "needs-review", color: "fbca04", description: null },
+  ],
+};
+
 // ?stack=merged poses the whole stack as landed, so the closed-PR box
 // offers the stack cleanup (the merged layers' worktrees together).
 const FAKE_STACK_BRANCHES = new Set([
@@ -97,7 +180,10 @@ function fakePrStatePose() {
 
 function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
   const merged = new URLSearchParams(location.search).get("stack") === "merged";
-  const prs = merged ? FAKE_PRS_MERGED : FAKE_PRS;
+  const prs = {
+    ...(merged ? FAKE_PRS_MERGED : FAKE_PRS),
+    ...createdPullRequests,
+  };
   const pose = fakePrStatePose();
   if (!pose) return prs;
   // The slim map carries no merge state.
@@ -118,7 +204,8 @@ export function fakePullRequestDetail(branch: string) {
   return {
     ...FAKE_PR_DETAIL,
     ...slim,
-    body: FAKE_STACK_BODIES[slim.number] ?? "",
+    body: FAKE_STACK_BODIES[slim.number] ?? createdBodies[slim.number] ?? "",
+    ...(slim.isDraft && { mergeState: "DRAFT" as const }),
     ...fakeChecks([]),
   };
 }
