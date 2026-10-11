@@ -3,6 +3,7 @@ import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { applyThemeSource } from "../../electron/clientConfig";
 import { showNotification } from "../../electron/notifications";
+import { nukeShell } from "../../electron/nuke";
 import { relaunchApp } from "../../electron/relaunch";
 import { noteShowing, openWindow } from "../../electron/windows";
 import { host, hostAddress } from "../../hostProcess";
@@ -39,4 +40,6 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   networkChanged: () => {
     void host().wake();
   },
+
+  nuke: () => nukeShell(),
 };

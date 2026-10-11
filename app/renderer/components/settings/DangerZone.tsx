@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { NukeProgress } from "@shigomori/contracts/schemas";
+import type { NukeProgress, NukeReport } from "@shigomori/contracts/schemas";
 import { setOpenProject } from "@/components/sidebar/openProject";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -17,6 +17,7 @@ export function DangerZone() {
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
   const [nuking, setNuking] = useState(false);
   const [progress, setProgress] = useState<NukeProgress | null>(null);
+  const [left, setLeft] = useState<NukeReport["left"] | null>(null);
 
   useEffect(() => window.api.runtime.onNukeProgress(setProgress), []);
 
@@ -28,27 +29,24 @@ export function DangerZone() {
       setNuking(true);
       setProgress(null);
       try {
-        await window.api.runtime.nuke();
-        // One rule decides what a nuke covers: this host's data dir
-        // goes, and so does this machine's shigomori install (the CLI
-        // and its shell hooks), while preferences survive because they
-        // are preferences, not data. Appearance therefore stays put:
-        // it lives as client config in the app's own userData, and the
-        // localStorage boot hints stay valid.
-        // Every cached query now describes deleted state. A blanket
-        // invalidateQueries() would refetch them all against the wiped
-        // data dir and raise a burst of "Unknown project/worktree" toasts,
-        // with retries landing even after the navigation below. Cancel
-        // in-flight fetches and drop the cache BEFORE navigating, so
-        // "/" never draws pre-nuke data.
+        // The host's half, then the shell's (sign-out, the marker that
+        // deletes the files at the next start). Either may leave
+        // something it says why for.
+        const host = await window.api.runtime.nuke();
+        const shell = await window.api.window.nuke();
+        // Every cached query now describes what is going. A blanket
+        // invalidateQueries() would refetch them all and raise a burst
+        // of "Unknown project/worktree" toasts. Cancel in-flight fetches
+        // and drop the cache, so nothing draws the old state.
         await queryClient.cancelQueries();
         queryClient.clear();
-        // The sidebar's open project is kept outside the cache, and a
-        // repo added back would open inside it. Back to the list.
         setOpenProject(null);
-        // The store went with the data dir: the app starts again on a
-        // fresh one.
-        void window.api.window.relaunch();
+        const all = [...host.left, ...shell.left];
+        if (all.length === 0) {
+          void window.api.window.relaunch();
+          return;
+        }
+        setLeft(all);
       } catch (err) {
         notifyError("Couldn't nuke shigomori data", err);
       }
@@ -63,8 +61,10 @@ export function DangerZone() {
       root={root}
       nuking={nuking}
       progress={progress}
+      left={left}
       armed={armed}
       onNuke={handleNuke}
+      onRelaunch={() => void window.api.window.relaunch()}
     />
   );
 }

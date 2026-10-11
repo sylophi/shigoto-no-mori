@@ -155,6 +155,8 @@ export class Terminals extends Context.Service<
     ) => Effect.Effect<void, UnknownTerminalError>;
     // Closes the terminals whose worktree, or its project, is gone.
     readonly closeMissing: Effect.Effect<void>;
+    // Closes every terminal, none saved for the next start (a nuke).
+    readonly closeEvery: Effect.Effect<void>;
     // How many terminals run something in the foreground: what a quit
     // asks about.
     readonly busy: Effect.Effect<number>;
@@ -603,6 +605,7 @@ const make = <R>(options: {
           missing.includes(session.terminal.terminalId),
         );
       }),
+      closeEvery: closeAll(() => true),
     });
   });
 

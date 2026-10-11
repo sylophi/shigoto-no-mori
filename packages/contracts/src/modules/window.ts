@@ -5,6 +5,7 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
 import {
   NotifyPayloadSchema,
+  NukeReportSchema,
   PortNumberSchema,
   PreviewThemePayloadSchema,
   VoidSchema,
@@ -56,4 +57,9 @@ export const windowContract = defineContract(
   // The window's Chromium saw the network go or come back: the shell
   // wakes its host, as on a resume from sleep.
   invoke("networkChanged", VoidSchema, VoidSchema),
+  // The shell's half of a nuke, after the host's: this device revoked
+  // on the hub and signed out, launch at login off, and the files
+  // (the data dir, userData, the logs) marked to go at the next start,
+  // before anything opens them.
+  invoke("nuke", VoidSchema, NukeReportSchema),
 );

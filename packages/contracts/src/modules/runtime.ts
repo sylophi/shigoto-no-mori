@@ -2,6 +2,7 @@ import { broadcast, defineContract, invoke } from "../contract.ts";
 import {
   MoveDataDirPayloadSchema,
   NukeProgressSchema,
+  NukeReportSchema,
   RuntimeInfoSchema,
   VoidSchema,
 } from "../schemas/index.ts";
@@ -27,7 +28,9 @@ export const runtimeContract = defineContract(
     gated: true,
     grant: "browseFiles",
   }),
-  invoke("nuke", VoidSchema, VoidSchema, { remote: false }),
+  // The host's half of a nuke: everything that needs the store or a
+  // running host. The files go at the next start (window:nuke).
+  invoke("nuke", VoidSchema, NukeReportSchema, { remote: false }),
   invoke("moveDataDir", MoveDataDirPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
