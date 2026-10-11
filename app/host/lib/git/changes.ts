@@ -14,7 +14,7 @@ import { isUntracked } from "@shared/schemas";
 import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
 import { refuseMidOperation } from "./operation";
-import { verifyRev } from "./refs";
+import { headAt, resolveCommit, verifyRev } from "./refs";
 
 // Discard snapshots kept per repository. Pruned by count rather than
 // age, so a repo you touch monthly keeps as useful a tail as one you
@@ -324,15 +324,7 @@ export function resetSoft(
 ): Promise<string> {
   return onIndex(worktreePath, async () => {
     await refuseMidOperation(worktreePath);
-    const [head, expected] = await Promise.all([
-      verifyRev(worktreePath, "HEAD"),
-      expectHead ? verifyRev(worktreePath, expectHead) : undefined,
-    ]);
-    if (expected !== undefined && head !== expected) {
-      throw new Error(
-        "The branch has moved on since this was loaded. Reload and try again.",
-      );
-    }
+    const head = await headAt(worktreePath, expectHead);
     const backwards = await isAncestor(worktreePath, target, head);
     const forwards =
       !backwards && expectHead !== undefined
@@ -372,6 +364,98 @@ export function resetSoft(
     }
     await run(worktreePath, ["reset", "--soft", "--end-of-options", target]);
     return head;
+  });
+}
+
+// `git reset --hard`: the branch, the index and the working tree all
+// move to `ref`, wherever it is. What it throws away can come back:
+// the commits through the previous HEAD it returns, and the files it
+// overwrites through a discard snapshot taken first, for
+// restoreDiscard. Those are the uncommitted changes to tracked files,
+// and the untracked files where `ref` tracks the same path. Every
+// other untracked file stays as it is. `expectHead` pins HEAD to where
+// the page that asked last saw it.
+//
+// The only paths the reset can overwrite untracked are those `ref`
+// tracks and HEAD doesn't, so one divergence-sized listing finds them.
+// `--no-renames` matters because rename detection would report a
+// rename as R, not A, and its destination path would slip through. Git
+// itself then says which of those are on disk (`ls-files -o` with them
+// as pathspecs): a plain exists-check would false-positive on
+// case-insensitive APFS, where a case-only rename "exists" locally as
+// the tracked file under its old casing, a state `reset --hard`
+// handles fine. An ignored file among them (a carried-over `.env`
+// colliding with a committed one) never was in git, and a snapshot
+// can't hold it either, so that refuses.
+//
+// The undo resets back to the previous HEAD, pinned to where this one
+// left it, and puts the snapshot back (`restore`). Anything changed
+// since would be overwritten by it, so that refuses too.
+export function resetHard(
+  worktreePath: string,
+  ref: string,
+  expectHead: string | undefined,
+  restore: string | undefined,
+): Promise<{ previousHead: string; head: string; snapshot: string | null }> {
+  return onIndex(worktreePath, async () => {
+    const [, previousHead, target, changed] = await Promise.all([
+      refuseMidOperation(worktreePath),
+      headAt(worktreePath, expectHead),
+      resolveCommit(worktreePath, ref),
+      listChangedFiles(worktreePath),
+    ]);
+    const added = splitZ(
+      await run(worktreePath, [
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--diff-filter=A",
+        "-z",
+        "HEAD",
+        target,
+      ]),
+    );
+    const others = (extra: string[]) =>
+      runChunked(
+        worktreePath,
+        ["ls-files", "-z", "--others", "--exclude-standard", ...extra],
+        added,
+      ).then((out) => out.flatMap(splitZ));
+    const [overwritten, ignored] = await Promise.all([
+      others([]),
+      others(["--ignored"]),
+    ]);
+    if (ignored.length > 0) {
+      const shown = ignored.slice(0, 3).join(", ");
+      const rest = ignored.length > 3 ? ` (+${ignored.length - 3} more)` : "";
+      throw new Error(
+        `This would replace ignored local file(s) that ${ref} tracks: ${shown}${rest}. Move them aside first.`,
+      );
+    }
+    const paths = [
+      ...changed
+        .filter((f) => !isUntracked(f))
+        .flatMap((f) => (f.prevPath ? [f.path, f.prevPath] : [f.path])),
+      ...overwritten,
+    ];
+    if (restore && paths.length > 0) {
+      throw new Error(
+        "Files changed since the hard reset. Commit, stash, or discard them first.",
+      );
+    }
+    const snapshot =
+      paths.length > 0 ? await snapshotPaths(worktreePath, paths) : null;
+    try {
+      await run(worktreePath, ["reset", "--hard", "--end-of-options", target]);
+    } catch (err) {
+      if (!snapshot) throw err;
+      throw new Error(
+        `${(err as Error).message}\nThe uncommitted changes were snapshotted first, as ${snapshot}.`,
+        { cause: err },
+      );
+    }
+    if (restore) await restoreSnapshot(worktreePath, restore);
+    return { previousHead, head: target, snapshot };
   });
 }
 
@@ -515,41 +599,46 @@ export function restoreDiscard(
   worktreePath: string,
   snapshot: string,
 ): Promise<void> {
-  return onIndex(worktreePath, async () => {
-    // `--root` makes a parentless snapshot (an unborn-branch discard)
-    // diff against the empty tree instead of printing nothing.
-    // `--no-commit-id` keeps the hash out of the output.
-    const stdout = await run(worktreePath, [
-      "diff-tree",
-      "-r",
-      "-z",
-      "--root",
-      "--no-commit-id",
-      "--no-renames",
-      "--name-status",
-      "--end-of-options",
-      snapshot,
-      "--",
-    ]);
-    const fields = splitZ(stdout);
-    const restore: string[] = [];
-    const remove: string[] = [];
-    for (let i = 0; i + 1 < fields.length; i += 2) {
-      const status = fields[i];
-      const path = fields[i + 1];
-      if (!status || !path) continue;
-      if (status.startsWith("D")) remove.push(path);
-      else restore.push(path);
-    }
-    if (restore.length > 0) {
-      await runChunked(
-        worktreePath,
-        ["restore", "--worktree", `--source=${snapshot}`],
-        restore,
-      );
-    }
-    await Promise.all(
-      remove.map((path) => rm(join(worktreePath, path), { force: true })),
+  return onIndex(worktreePath, () => restoreSnapshot(worktreePath, snapshot));
+}
+
+async function restoreSnapshot(
+  worktreePath: string,
+  snapshot: string,
+): Promise<void> {
+  // `--root` makes a parentless snapshot (an unborn-branch discard)
+  // diff against the empty tree instead of printing nothing.
+  // `--no-commit-id` keeps the hash out of the output.
+  const stdout = await run(worktreePath, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--root",
+    "--no-commit-id",
+    "--no-renames",
+    "--name-status",
+    "--end-of-options",
+    snapshot,
+    "--",
+  ]);
+  const fields = splitZ(stdout);
+  const restore: string[] = [];
+  const remove: string[] = [];
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const status = fields[i];
+    const path = fields[i + 1];
+    if (!status || !path) continue;
+    if (status.startsWith("D")) remove.push(path);
+    else restore.push(path);
+  }
+  if (restore.length > 0) {
+    await runChunked(
+      worktreePath,
+      ["restore", "--worktree", `--source=${snapshot}`],
+      restore,
     );
-  });
+  }
+  await Promise.all(
+    remove.map((path) => rm(join(worktreePath, path), { force: true })),
+  );
 }

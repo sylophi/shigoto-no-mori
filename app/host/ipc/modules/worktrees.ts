@@ -7,6 +7,7 @@ import {
   discardChanges,
   listChangesForPage,
   readCommitMessage,
+  resetHard,
   resetSoft,
   restoreDiscard,
 } from "@host/lib/git/changes";
@@ -398,6 +399,13 @@ export const worktreesHandlers: Handlers<
     return { previousHead, worktree };
   },
 
+  resetHard: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+      resetHard(wt.path, input.ref, input.expectHead, input.restore),
+    );
+    return { ...result, worktree };
+  },
+
   commitDiff: async (input) =>
     getCommitDiff(await findWorktreePathOrThrow(input), input.hash),
 
@@ -516,7 +524,11 @@ export const worktreesHandlers: Handlers<
       resolveConflict(wt.path, input.path, input.side),
     ),
   mergePreview: async (input) =>
-    readMergePreview(await findWorktreePathOrThrow(input), input.ref),
+    readMergePreview(
+      await findWorktreePathOrThrow(input),
+      input.ref,
+      input.countsOnly,
+    ),
   mergeBranch: async (input) => {
     const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
       mergeBranch(wt.path, input.ref, input.method, input.message),

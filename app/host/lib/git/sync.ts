@@ -3,7 +3,8 @@
 // turns into a thrown Error, whose message the IPC layer relays
 // verbatim into the renderer's toast).
 import { syncConflictsError } from "@shared/errors";
-import { chunked, run, runLenient, splitZ } from "./core";
+import { resetHard } from "./changes";
+import { run, runLenient } from "./core";
 import { mergeKeepingConflicts } from "./merge";
 import { conflictedPaths } from "./operation";
 import { ownCommitCounts, upstreamName } from "./refs";
@@ -63,25 +64,7 @@ export async function hasUncommittedOrUntracked(
 // leaves nothing to recover from, so the guard has to live here.
 // Untracked files count as dirty too: `reset --hard` silently
 // overwrites any untracked file whose path exists in the upstream tree
-// (see hasUncommittedOrUntracked).
-//
-// Ignored files never appear in `status`, but `reset --hard` overwrites
-// them all the same when the upstream tree tracks a file at their path
-// (e.g. a carried-over `.env` colliding with a committed one), and
-// their content was never in git, so nothing can recover it. After a
-// clean status the only paths that can collide are upstream-tracked
-// ones with no local tracked counterpart, and (tree clean, so tracked
-// == HEAD) those are exactly the upstream side's added files versus
-// HEAD: one divergence-sized listing instead of two whole-tree ones.
-// `--no-renames` matters because rename detection would report an
-// upstream rename as R, not A, and its destination path would slip
-// through.
-// git itself then says which candidates are ignored files on disk
-// (`ls-files -o -i` with the candidates as pathspecs): a plain
-// exists-check would false-positive on case-insensitive APFS, where an
-// upstream case-only rename "exists" locally as the tracked file under
-// its old casing. That is a state `reset --hard` handles fine, and this
-// guard must not turn into a dead end.
+// (see hasUncommittedOrUntracked). Ignored ones are resetHard's to refuse.
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
@@ -91,43 +74,12 @@ export async function overwriteFromUpstream(
       "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
     );
   }
-  const addedUpstream = splitZ(
-    await run(worktreePath, [
-      "diff",
-      "--name-only",
-      "--no-renames",
-      "--diff-filter=A",
-      "-z",
-      "HEAD",
-      "@{u}",
-    ]),
-  );
-  // Chunked: a badly-behind branch can carry enough added files to
-  // brush the OS arg-length limit.
-  const collisions = (
-    await Promise.all(
-      chunked(addedUpstream).map((chunk) =>
-        run(worktreePath, [
-          "ls-files",
-          "-z",
-          "--others",
-          "--ignored",
-          "--exclude-standard",
-          "--",
-          ...chunk,
-        ]),
-      ),
-    )
-  ).flatMap(splitZ);
-  if (collisions.length > 0) {
-    const shown = collisions.slice(0, 3).join(", ");
-    const rest =
-      collisions.length > 3 ? ` (+${collisions.length - 3} more)` : "";
-    throw new Error(
-      `Overwriting would replace ignored local file(s) the upstream branch tracks: ${shown}${rest}. Move them aside first.`,
-    );
-  }
-  await run(worktreePath, ["reset", "--hard", "@{u}"]);
+  // By its full name: a branch or tag called "origin/feature" would
+  // shadow the short one.
+  const upstream = (
+    await run(worktreePath, ["rev-parse", "--symbolic-full-name", "@{u}"])
+  ).trim();
+  await resetHard(worktreePath, upstream, undefined, undefined);
 }
 
 // Publish: push the current branch to the first configured remote with
