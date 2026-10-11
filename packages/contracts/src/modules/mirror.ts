@@ -1,10 +1,12 @@
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { broughtPaths } from "../mirrorIgnores.ts";
+import { DeviceIdSchema } from "../hubProtocol.ts";
 import {
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
   MirrorIgnoresSchema,
+  SyncCloneIntoSchema,
   SyncLandingRefSchema,
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
@@ -626,6 +628,31 @@ export const MirrorEventSchema = strict(
 );
 export type MirrorEvent = typeof MirrorEventSchema.Type;
 export const MIRROR_HISTORY_LIMIT = 100;
+
+// A mirror this device asked a peer for, which the device link's gates
+// admit the peer's calls under (app/host/mirror/invites.ts): what the
+// ask named, which the landing must match, and the copy once landed.
+const MirrorInviteAskSchema = strict(
+  Schema.Struct({
+    peerDeviceId: DeviceIdSchema,
+    // The peer's original, the id its landing names.
+    sourceWorktreeId: WorktreeIdSchema,
+    // The repo it belongs to, and where the copy lands when this device
+    // has no checkout of it.
+    identity: Schema.NonEmptyString,
+    cloneInto: Schema.optional(SyncCloneIntoSchema),
+  }),
+);
+export type MirrorInviteAsk = typeof MirrorInviteAskSchema.Type;
+
+export const MirrorInviteSchema = strict(
+  Schema.Struct({
+    ...MirrorInviteAskSchema.struct.fields,
+    // The copy here, once the landing answered. Absent while pending.
+    copy: Schema.optional(MirrorWorktreePayloadSchema),
+  }),
+);
+export type MirrorInvite = typeof MirrorInviteSchema.Type;
 const MirrorHistoryPayloadSchema = strict(
   Schema.Struct({
     localWorktreeId: WorktreeIdSchema,

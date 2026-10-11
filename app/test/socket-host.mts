@@ -95,12 +95,14 @@ import {
 import { generateKeyPair } from "@shared/crypto/noise";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import {
+  dropMirrorInvitesWithPeers,
   inviteMirror,
   landInvitedMirror,
+  loadMirrorInvites,
   mirrorInviteAdmits,
   mirrorInviteSees,
-  setMirrorInviteStore,
 } from "@host/mirror/invites";
+import { runHost } from "./lib/hostRuntime.mts";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import type { ChannelHandle } from "@shigomori/contracts/link";
 import { delay, type Track, waitFor } from "./lib/checkKit.mts";
@@ -838,14 +840,14 @@ it("invited calls: with commands off a call the host asked for runs while the re
 it("sharing gate: with sharing off a peer's reads and commands are refused and never run, and its pushes withheld, while the mirror this device asked for is still served and still hears its copy, and turning it back on needs no reconnect", async () => {
   const track = trackTest;
   const copy = { projectId: "copy-project", worktreeId: "abcdef012345" };
-  setMirrorInviteStore({ load: () => [], save: () => {} });
-  track(() => setMirrorInviteStore(null));
+  await runHost(loadMirrorInvites);
+  track(() => runHost(dropMirrorInvitesWithPeers(() => false)));
   inviteMirror({
     peerDeviceId: DIALER,
     sourceWorktreeId: "0123456789ab",
     identity: "repo-identity",
   });
-  landInvitedMirror(DIALER, "0123456789ab", copy);
+  await runHost(landInvitedMirror(DIALER, "0123456789ab", copy));
   const { listener, seen } = await listen(track, {
     isInvited: mirrorInviteAdmits,
     seesPush: mirrorInviteSees,

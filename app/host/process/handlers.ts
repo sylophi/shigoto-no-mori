@@ -19,13 +19,14 @@ import { launchersContract } from "@shigomori/contracts/modules/launchers";
 import type { HubHandlers } from "@shared/hub/bridgeHandlers";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import {
-  MirrorEventSchema,
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
@@ -86,9 +87,8 @@ import {
 } from "@host/mirror/registry";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
 import {
-  MirrorInviteSchema,
+  loadMirrorInvites,
   reconcileMirrorInvites,
-  setMirrorInviteStore,
 } from "@host/mirror/invites";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { onRunningScriptsChanged } from "@host/lib/scripts";
@@ -134,13 +134,10 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
+import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
 import { createMirrorGateway } from "@host/mirror/gateway";
-import { createMirrorHistory } from "@host/mirror/history";
+import { createMirrorHistory, type MirrorHistory } from "@host/mirror/history";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
-import {
-  atomicWriteJsonSync,
-  readJsonOrNullSync,
-} from "@host/lib/util/atomicJson";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@host/lib/util/paths";
 import {
@@ -260,34 +257,9 @@ export const scriptsChangedLayer = Layer.effectDiscard(
   ),
 );
 const fileSyncDir = () => join(dataDir(), "file-sync");
-// The mirrors' event threads (host/mirror/history.ts), one file
-// beside the engine's data, fed by every daemon snapshot and follower
-// verdict below and by the handlers' control ops.
-const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
-const MirrorHistoryStoreSchema = Schema.Struct({
-  events: Schema.Record(Schema.String, Schema.Array(MirrorEventSchema)).pipe(
-    Schema.withDecodingDefault(Effect.succeed({})),
-  ),
-});
-// The mirrors this device invited (host/mirror/invites.ts), beside them.
-const mirrorInvitesPath = () => join(fileSyncDir(), "mirror-invites.json");
 const decodeMirrorWorktreePayload = Schema.decodeUnknownOption(
   MirrorWorktreePayloadSchema,
 );
-const MirrorInviteStoreSchema = Schema.Struct({
-  invites: Schema.Array(MirrorInviteSchema).pipe(
-    Schema.withDecodingDefault(Effect.succeed([])),
-  ),
-});
-const mirrorHistory = createMirrorHistory({
-  store: {
-    load: () =>
-      readJsonOrNullSync(mirrorHistoryPath(), MirrorHistoryStoreSchema)
-        ?.events ?? {},
-    save: (events) => atomicWriteJsonSync(mirrorHistoryPath(), { events }),
-  },
-  onChange: () => broadcastMirrorChanged(),
-});
 // The daemon's sessions as they stand, for the root's synchronous
 // callbacks: none before the graph is up.
 export const mirrorSessionsNow = () =>
@@ -302,6 +274,7 @@ export const mirrorSessionsNow = () =>
 const mirror = layerLatch<{
   readonly daemon: MirrorDaemon.MirrorDaemon["Service"];
   readonly follower: GitFollower;
+  readonly history: MirrorHistory;
 }>("The mirror engine");
 const onDaemon = <A>(
   f: (
@@ -391,11 +364,13 @@ const mirrorImpl: MirrorEngine["Service"] = {
       Effect.flatMap(({ follower }) => follower.reconcileNow(session)),
       Effect.orElseSucceed(() => undefined),
     ),
-  history: (localWorktreeId) => mirrorHistory.eventsFor(localWorktreeId),
+  history: (localWorktreeId) =>
+    mirror.now()?.history.eventsFor(localWorktreeId) ?? [],
   noteEvent: (localWorktreeId, kind, detail) =>
-    mirrorHistory.note(localWorktreeId, kind, detail),
-  forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
-  moveHistory: (from, to) => mirrorHistory.move(from, to),
+    mirror.now()?.history.note(localWorktreeId, kind, detail),
+  forgetHistory: (localWorktreeId) =>
+    mirror.now()?.history.forget(localWorktreeId),
+  moveHistory: (from, to) => mirror.now()?.history.move(from, to),
 };
 
 // A transfer session no pull here is waiting on (registry.ts
@@ -430,9 +405,11 @@ const reapOrphanedTransfers = Effect.flatMap(daemonSessions, (sessions) =>
 const observeMirrorHistory = Effect.map(
   mirrorSessions(mirrorImpl),
   (sessions) =>
-    mirrorHistory.observe(sessions, (session) =>
-      mirror.now()?.follower.statusOf(session),
-    ),
+    mirror
+      .now()
+      ?.history.observe(sessions, (session) =>
+        mirror.now()?.follower.statusOf(session),
+      ),
 );
 // The gateway's facts the daemon is handed, once it has them.
 function listening<T>(value: T | null): T {
@@ -502,7 +479,10 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 }
 
 // The daemon's sessions with the git half of each (host/mirror/
-// gitFollow.ts), for the length of the graph: the follower reads the
+// gitFollow.ts) and their threads (host/mirror/history.ts), for the
+// length of the graph, and the mirrors this device asked peers for
+// (host/mirror/invites.ts), which its switch does not gate, read from
+// the store before the device link serves a peer. The follower reads the
 // daemon's sessions, reaches the peer through the same cached direct
 // sessions, and reports through the same changed signal. Its inputs
 // are wired below: the local git watcher (layer.ts, via
@@ -512,6 +492,32 @@ export const mirrorLayer = Layer.effectDiscard(
   mirror.provide(
     Effect.gen(function* () {
       const daemon = yield* MirrorDaemon.MirrorDaemon;
+      yield* loadMirrorInvites;
+      // A copy removed while the app was closed took no invitation with
+      // it, so the boot checks the landed ones against the worktrees
+      // listed. Only a worktree known to be gone loses its invitation:
+      // a read that failed for any other reason keeps it.
+      yield* reconcileMirrorInvites(({ projectId, worktreeId }) =>
+        findProjectAndWorktree(projectId, worktreeId).pipe(
+          Effect.as(true),
+          Effect.catch((error) => Effect.succeed(!isEntityGoneError(error))),
+        ),
+      ).pipe(Effect.forkScoped);
+      // Every thread as the store had it, written back a turn after it
+      // changes, one write at a time.
+      const threads = yield* MirrorHistoryStore.MirrorHistory;
+      const saved = yield* threads.load;
+      const writes = yield* Semaphore.make(1);
+      const write = yield* FiberSet.makeRuntime<never>();
+      const history = createMirrorHistory({
+        store: {
+          load: () => ({ ...saved }),
+          save: (events) => {
+            write(writes.withPermit(threads.save(events)));
+          },
+        },
+        onChange: () => broadcastMirrorChanged(),
+      });
       const follower = yield* makeGitFollower({
         sessions: mirrorSessions(mirrorImpl),
         followDescription: true,
@@ -533,7 +539,7 @@ export const mirrorLayer = Layer.effectDiscard(
         // showing it refetch without waiting on the git watcher.
         onLocalApplied: (projectId) => announceProjectChanged(projectId),
       });
-      return { daemon, follower };
+      return { daemon, follower, history };
     }),
   ),
 );
@@ -752,25 +758,6 @@ export function registerHostHandlers(): void {
         ),
       ),
   });
-  // The mirrors this device asked peers for (host/mirror/invites.ts),
-  // which its switch does not gate: one file beside the follower's.
-  setMirrorInviteStore({
-    load: () =>
-      readJsonOrNullSync(mirrorInvitesPath(), MirrorInviteStoreSchema)
-        ?.invites ?? [],
-    save: (invites) => atomicWriteJsonSync(mirrorInvitesPath(), { invites }),
-  });
-  // A copy removed while the app was closed took no invitation with
-  // it, so the boot checks the landed ones against the worktrees
-  // listed.
-  void reconcileMirrorInvites(({ projectId, worktreeId }) =>
-    Graph.run(findProjectAndWorktree(projectId, worktreeId)).then(
-      () => true,
-      // Only a worktree known to be gone loses its invitation. A read
-      // that failed for any other reason keeps it.
-      (error: unknown) => !isEntityGoneError(error),
-    ),
-  );
   // The listeners belong to this machine, so the surface never mounts
   // on a remote wire.
   registerContract(portForwardContract, portForwardHandlers);

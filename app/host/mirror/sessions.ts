@@ -324,7 +324,7 @@ export const startMirrorFrom = (
                 worktreeId,
                 ...rule,
               })
-              .pipe(Effect.onError(() => Effect.sync(() => invite.withdraw())));
+              .pipe(Effect.onError(() => invite.withdraw));
             return decodeMirrorStartToResult(started);
           }),
         ),

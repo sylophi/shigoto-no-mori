@@ -375,7 +375,7 @@ export const landForSender: EffectHandlers<
     // A landing this device asked for (a mirror invited from here,
     // host/mirror/invites.ts): the invitation moves onto the copy
     // before the peer's next call names it.
-    landInvitedMirror(ctx.callerDeviceId, landing.sourceWorktreeId, {
+    yield* landInvitedMirror(ctx.callerDeviceId, landing.sourceWorktreeId, {
       projectId: landed.worktree.projectId,
       worktreeId: landed.worktree.id,
     });

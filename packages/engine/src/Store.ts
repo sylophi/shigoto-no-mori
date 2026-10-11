@@ -17,6 +17,8 @@ import {
 import { agentSessions } from "./migrations/agentSessions.ts";
 import { changes } from "./migrations/changes.ts";
 import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
+import { mirrorHistory } from "./migrations/mirrorHistory.ts";
+import { mirrorInvites } from "./migrations/mirrorInvites.ts";
 import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
@@ -130,6 +132,8 @@ export const layer = (
               mirrorAgreements,
               platform,
             ),
+            "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
+            "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
           }),
         }).pipe(Effect.provideService(SqlClient.SqlClient, client));
         yield* importing("done");
