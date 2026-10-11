@@ -35,6 +35,14 @@ import {
   removeOurs,
   snakeCase,
 } from "./agentHooks.ts";
+import type { GuideHarness } from "@shigomori/contracts/modules/guide";
+import {
+  cloneSourceCommand,
+  GUIDE_LAUNCHERS,
+  guideCommand,
+  guideInstructions,
+  SOURCE_URL,
+} from "./agentGuide.ts";
 import {
   type AgentSession,
   applyAgentEvent,
@@ -42,6 +50,7 @@ import {
 } from "./agentSessions.ts";
 import { envVar } from "./environment.ts";
 import { shellQuote } from "./Lifecycle.ts";
+import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
@@ -127,6 +136,41 @@ export class CantResume extends Schema.TaggedError<CantResume>()("CantResume", {
   }
 }
 
+// The guide's folder could not be laid out.
+export class GuideFolderFailed extends Schema.TaggedError<GuideFolderFailed>()(
+  "GuideFolderFailed",
+  { path: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Couldn't set up the guide's folder at ${this.path}.`;
+  }
+}
+
+// The harness a guide asked for isn't installed here.
+export class GuideHarnessMissing extends Schema.TaggedError<GuideHarnessMissing>()(
+  "GuideHarnessMissing",
+  { label: Schema.String, command: Schema.String },
+) {
+  override get message(): string {
+    return `${this.label} isn't installed here: there's no \`${this.command}\` on the PATH.`;
+  }
+}
+
+// Where the agent a guide opens reads the app's source: a release's tag,
+// cloned from GitHub, or a dev build's own checkout.
+export type GuideSource =
+  | { readonly tag: string }
+  | { readonly checkout: string };
+
+// A guide to open: the harness, the question, the session it drives the
+// window on, and the source it reads.
+export type GuideLaunch = {
+  readonly harness: GuideHarness;
+  readonly question: string;
+  readonly session: string;
+  readonly source: GuideSource;
+};
+
 export class Agents extends Context.Service<
   Agents,
   {
@@ -165,6 +209,15 @@ export class Agents extends Context.Service<
       located: Worktrees.Located,
       ref: SessionRef,
     ) => Effect.Effect<void, CantResume | Open.LaunchFailed>;
+    // Opens the harness in the user's terminal on a guide session (the
+    // app's guide): in the guide folder, which holds the guide's
+    // instructions and `source`, with `sm guide mcp` as its tools.
+    readonly guide: (
+      input: GuideLaunch,
+    ) => Effect.Effect<
+      void,
+      GuideHarnessMissing | GuideFolderFailed | Open.LaunchFailed
+    >;
     // One lifecycle event as the hooks send it (JSON), from a hook run
     // in `cwd`. Never fails: a missed state change is no hook's
     // business. Judged against a plain read first, so the common event
@@ -207,10 +260,11 @@ const make = (binary: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { home, binaryName } = yield* Paths.Paths;
+    const { home, binaryName, dataDir } = yield* Paths.Paths;
     const registry = yield* Registry.Registry;
     const worktrees = yield* Worktrees.Worktrees;
     const open = yield* Open.Open;
+    const launchers = yield* Launchers.Launchers;
     // By its real path, as Go's sm named itself, so the app (its bundled
     // copy) and a terminal (through the linked command) write the same
     // entry and agree on whether it is current. One not built yet (a dev
@@ -517,8 +571,71 @@ const make = (binary: string) =>
         return yield* new CantResume({ harness: ref.harness });
       }
       yield* open.inTerminal(
-        located,
+        located.worktree.path,
         `${harness.resume} ${shellQuote(ref.session)}`,
+      );
+    });
+
+    // One folder for every guide, so a harness asks to trust it once.
+    // Its `source` is the running version's: the checkout a dev build
+    // runs from, or a release's tag, cloned again once the app updates
+    // (`source-tag` names the tag it holds).
+    const guide = Effect.fn("Agents.guide")(function* (input: GuideLaunch) {
+      if (
+        (yield* launchers.installed(GUIDE_LAUNCHERS[input.harness])) ===
+        undefined
+      ) {
+        const harness = harnessById(input.harness);
+        return yield* new GuideHarnessMissing({
+          label: harness?.label ?? input.harness,
+          command: input.harness,
+        });
+      }
+      const folder = path.join(dataDir, "guide");
+      const source = path.join(folder, "source");
+      // What the folder's `source` is to hold, where the agent reads it
+      // when it doesn't, and what the terminal runs first.
+      const { wanted, sourceUrl, link, before } =
+        "tag" in input.source
+          ? {
+              wanted: input.source.tag,
+              sourceUrl: `${SOURCE_URL}/tree/${input.source.tag}`,
+              link: undefined,
+              before: `${cloneSourceCommand(input.source.tag)}; `,
+            }
+          : {
+              wanted: input.source.checkout,
+              sourceUrl: input.source.checkout,
+              link: input.source.checkout,
+              before: "",
+            };
+      yield* Effect.gen(function* () {
+        yield* fs.makeDirectory(folder, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(folder, "AGENTS.md"),
+          guideInstructions(sourceUrl),
+        );
+        yield* fs.writeFileString(
+          path.join(folder, "CLAUDE.md"),
+          "@AGENTS.md\n",
+        );
+        const tagFile = path.join(folder, "source-tag");
+        const held = yield* fs
+          .readFileString(tagFile)
+          .pipe(Effect.orElseSucceed(() => ""));
+        if (held.trim() !== wanted) {
+          yield* fs.remove(source, { recursive: true, force: true });
+          if (link !== undefined) yield* fs.symlink(link, source);
+          yield* fs.writeFileString(tagFile, `${wanted}\n`);
+        }
+      }).pipe(
+        Effect.mapError(
+          (cause) => new GuideFolderFailed({ path: folder, cause }),
+        ),
+      );
+      yield* open.inTerminal(
+        folder,
+        `${before}${guideCommand({ ...input, sm, dataDir })}`,
       );
     });
 
@@ -582,6 +699,7 @@ const make = (binary: string) =>
       unbind,
       idle,
       resume,
+      guide,
       event: (harness, raw, cwd) =>
         onEvent(harness, raw, cwd).pipe(
           Effect.catchCause((cause) => Effect.logDebug("agents event", cause)),

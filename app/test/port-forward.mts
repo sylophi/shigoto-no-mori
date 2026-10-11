@@ -51,7 +51,10 @@ import { randomBytes } from "node:crypto";
 import type { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
-import { CommandRefusedError } from "@shigomori/contracts/errors";
+import {
+  CommandRefusedError,
+  isChannelRefusedError,
+} from "@shigomori/contracts/errors";
 import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
@@ -379,7 +382,7 @@ it('a dead port refuses with "connect-failed", a reused id with "channel-taken"'
   const taken = await openChannel(toListener, forward, echo.port);
   await assert.rejects(
     () => forward.open({ port: echo.port, channelId: taken.channelId }),
-    /channel-taken/,
+    (error) => isChannelRefusedError(error) && error.reason === "channel-taken",
   );
   taken.reset();
 });
@@ -394,7 +397,8 @@ it('the 33rd channel on one connection refuses with "too-many-conns"', async () 
   }
   await assert.rejects(
     () => openChannel(toListener, forward, echo.port),
-    /too-many-conns/,
+    (error) =>
+      isChannelRefusedError(error) && error.reason === "too-many-conns",
   );
   for (const channel of capped) channel.reset();
 });

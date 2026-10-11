@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "check": "astro check",
+    "typecheck": "astro check",
     "build": "astro check && astro build",
     "preview": "astro preview",
     "og": "node scripts/og.mts"

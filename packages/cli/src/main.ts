@@ -18,7 +18,15 @@ import { projectsCommand } from "./commands/projects.ts";
 import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
-import { adopt, create, move, rekey, rm, setup } from "./commands/changes.ts";
+import {
+  adopt,
+  create,
+  move,
+  rekey,
+  rename,
+  rm,
+  setup,
+} from "./commands/changes.ts";
 import { done, land, merge, pr } from "./commands/landing.ts";
 import { dirty } from "./commands/dirty.ts";
 import { bundle } from "./commands/bundle.ts";
@@ -32,7 +40,7 @@ import {
   send,
   unmirror,
 } from "./commands/transfer.ts";
-import { cdCommand, shellCommand } from "./commands/shell.ts";
+import { cdCommand, shellCommand, switchCommand } from "./commands/shell.ts";
 import {
   destination,
   link,
@@ -43,6 +51,7 @@ import {
 import { describe } from "./commands/describe.ts";
 import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
+import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
 import { doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
@@ -98,6 +107,7 @@ const sm = Command.make("sm").pipe(
       ),
     ),
     cdCommand.pipe(Command.provide(services)),
+    switchCommand.pipe(Command.provide(services)),
     runCommand.pipe(Command.provide(services)),
     worktreesCommand.pipe(Command.provide(services)),
     list.pipe(Command.provide(services)),
@@ -113,6 +123,7 @@ const sm = Command.make("sm").pipe(
     create.pipe(Command.provide(services)),
     rm.pipe(Command.provide(services)),
     move.pipe(Command.provide(services)),
+    rename.pipe(Command.provide(services)),
     adopt.pipe(Command.provide(services)),
     setup.pipe(Command.provide(services)),
     rekey.pipe(Command.provide(services)),
@@ -132,6 +143,7 @@ const sm = Command.make("sm").pipe(
     devices.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
+    guideCommand.pipe(Command.provide(services)),
   ]),
 );
 

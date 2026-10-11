@@ -83,6 +83,8 @@ export class Launchers extends Context.Service<
       readonly id: string;
       readonly path: string;
     }) => Effect.Effect<ReadonlyArray<Launchable>>;
+    // The catalog's app `id`, when it is installed here.
+    readonly installed: (id: string) => Effect.Effect<CatalogApp | undefined>;
   }
 >()("sm/engine/Launchers") {}
 
@@ -386,7 +388,12 @@ const make = Effect.gen(function* () {
     ] satisfies ReadonlyArray<Launchable>;
   });
 
-  return Launchers.of({ catalog: listCatalog, row, launchable });
+  const installed = Effect.fn("Launchers.installed")(function* (id: string) {
+    const app = apps.find((entry) => entry.id === id);
+    return app !== undefined && (yield* available(app)) ? app : undefined;
+  });
+
+  return Launchers.of({ catalog: listCatalog, row, launchable, installed });
 });
 
 export const layer = Layer.effect(Launchers, make);

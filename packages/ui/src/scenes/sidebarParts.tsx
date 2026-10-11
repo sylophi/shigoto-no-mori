@@ -29,6 +29,11 @@ import {
   WorktreesLoadingView,
 } from "../views/sidebar/SidebarRowsView.tsx";
 import { StatusIndicatorView } from "../views/sidebar/StatusIndicatorView.tsx";
+import {
+  WorktreeMenuLeadView,
+  WorktreeMenuManageView,
+  WorktreeMenuTransfersView,
+} from "../views/sidebar/WorktreeMenuView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { DropdownMenuItem, StaticMenu } from "../primitives/dropdown-menu.tsx";
 import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
@@ -86,6 +91,25 @@ export function SidebarPartsScene() {
             </DropdownMenuItem>
           </StaticMenu>
           <WorktreeSortMenuView sort="recent" onPick={noop} />
+        </Part>
+        <Part label="Worktree menu">
+          <StaticMenu className="min-w-48">
+            <WorktreeMenuLeadView
+              onGoToProject={noop}
+              pullRequest={{ number: 142, url: "" }}
+              path={worktree.path}
+              branch={worktree.branch}
+            />
+            <WorktreeMenuTransfersView
+              mirror={{ disabled: false, onClick: noop }}
+              onTransplant={noop}
+            />
+            <WorktreeMenuManageView
+              autoPull={{ checked: true, disabled: false, onChange: noop }}
+              shelve={{ shelved: false, disabled: false, onToggle: noop }}
+              remove={{ armed: false, disabled: false, onClick: noop }}
+            />
+          </StaticMenu>
         </Part>
         <Part label="Marks">
           <span className="flex items-center gap-2 text-3xs">

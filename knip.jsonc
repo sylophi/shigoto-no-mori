@@ -21,6 +21,8 @@
         "test/lib/terminalsHost.mts",
         // Run through package.json scripts or by hand (their headers say how).
         "scripts/*.{mts,cts}",
+        // A lab check run by hand against a packaged build.
+        "lab/relaunch.mts",
       ],
       "ignoreDependencies": [
         // Loaded from an inline script in index.html, in dev only.

@@ -959,6 +959,62 @@ describe("run", () => {
     assert.doesNotMatch(ran.stdout, /SHIGOMORI_CD_FILE/);
   });
 
+  it("lists and runs a justfile's recipes and a Makefile's targets beside package.json's scripts", async () => {
+    const { repo } = scripted();
+    writeFileSync(join(repo, "justfile"), "check:\n    echo check\n");
+    writeFileSync(join(repo, "Makefile"), "build:\n\tgo build\n");
+    box.fakeBin(
+      "just",
+      'for arg in "$@"; do echo "[$arg]"; done\necho "$SHIGOMORI_SCRIPT_NAME"',
+    );
+    const listed = (await runAt(repo, "--json", "run")).doc as {
+      packageManager: string | null;
+      scripts: ReadonlyArray<Record<string, string>>;
+    };
+    assert.equal(listed.packageManager, "npm");
+    assert.deepEqual(listed.scripts.slice(-2), [
+      {
+        name: "just check",
+        command: "echo check",
+        file: "justfile",
+        label: "check",
+      },
+      {
+        name: "make build",
+        command: "go build",
+        file: "Makefile",
+        label: "build",
+      },
+    ]);
+    assert.deepEqual(listed.scripts[0], {
+      name: "ok",
+      command: "ok",
+      file: "package.json",
+      label: "ok",
+    });
+    // Named whole, the way the app does, or as two words at a terminal.
+    const [whole, split] = await Promise.all([
+      start(repo, ["run", "just check", "a"]).ended,
+      start(repo, ["run", "just", "check", "b"]).ended,
+    ]);
+    assert.equal(whole.stdout, "[check]\n[a]\njust check\n");
+    assert.equal(split.stdout, "[check]\n[b]\njust check\n");
+  });
+
+  it("is no-scripts without a package.json, justfile or Makefile", async () => {
+    const repo = box.repo("bare");
+    box.write("registry.json", {
+      projects: [{ id: "B", name: "bare", path: repo }],
+    });
+    const listed = await runAt(repo, "--json", "run");
+    assert.equal(listed.code, 1);
+    assert.deepEqual(listed.doc, {
+      ok: false,
+      error: `No package.json, justfile or Makefile in ${repo}.`,
+      code: "no-scripts",
+    });
+  });
+
   // A signal sent to sm reaches the script, and sm ends as the script
   // did.
   it.each([

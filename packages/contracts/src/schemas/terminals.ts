@@ -28,7 +28,7 @@ const TerminalSchema = Schema.Struct({
   // The folder it started in.
   cwd: Schema.String,
   // Epoch ms.
-  openedAt: Schema.Number,
+  openedAt: Schema.Finite,
 });
 export type Terminal = typeof TerminalSchema.Type;
 

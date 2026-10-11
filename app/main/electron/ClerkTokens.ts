@@ -77,7 +77,7 @@ export class ClerkTokens extends Context.Service<
       key: string,
     ) => Effect.Effect<void, KeyValueStore.KeyValueStoreError>;
   }
->()("sm/desktop/ClerkTokens") {}
+>()("sm/main/ClerkTokens") {}
 
 const refused = (method: string, cause?: unknown) =>
   new KeyValueStore.KeyValueStoreError({

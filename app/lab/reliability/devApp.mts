@@ -19,6 +19,8 @@ export type DevAppOptions = {
   // Whether it is up only with its own tunnel (a host a browser
   // reaches), or with the hub socket alone.
   readonly needsTunnel: boolean;
+  // Runs with no account (the guide's lab): up once its window is.
+  readonly signedOut?: true;
   readonly logs: WriteStream;
 };
 
@@ -104,6 +106,7 @@ export class DevApp {
       async () => this.windows()[0],
       60_000,
     );
+    if (this.options.signedOut) return;
     const needsTunnel = this.options.needsTunnel;
     await waitFor(
       `${this.profile} to be signed in and on the hub${needsTunnel ? ", with its tunnel up" : ""}`,

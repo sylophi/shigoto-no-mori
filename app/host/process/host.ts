@@ -140,6 +140,7 @@ async function main(): Promise<void> {
       },
       stopUpdaterBridge: () => shell.stopUpdaterBridge(),
       migration: (progress) => shell.migration(progress),
+      guide: (payload) => shell.guide(payload),
     },
     quit,
   });

@@ -16,9 +16,9 @@ package main
 // only the app's host process spawns them, so they live here where the
 // server's concerns stay the server's. Two roles, one binary:
 //
-//   - `file-sync serve` is the PEER side of one mirror stream. It
-//     serves a Mutagen endpoint over its own stdin/stdout until the
-//     other end hangs up. The host spawns one per incoming stream and
+//   - `file-sync serve --root <dir>` is the PEER side of one mirror
+//     stream. It serves a Mutagen endpoint at the worktree the host
+//     names over its own stdin/stdout until the other end hangs up. The host spawns one per incoming stream and
 //     shuttles the bytes over the device wire, so this process never
 //     knows a network exists.
 //
@@ -121,14 +121,6 @@ const mirrorGatewayTimeout = 30 * time.Second
 
 // ---------------------------------------------------------------------
 // Peer side
-
-// Serves one Mutagen endpoint over the stream until the client ends it.
-// The stream must unblock reads and writes when closed (Mutagen's
-// contract). Pipes and sockets do.
-func serveMirrorEndpoint(stream io.ReadWriteCloser, logOut io.Writer) error {
-	logger := logging.NewLogger(logging.LevelWarn, logOut)
-	return remote.ServeEndpoint(logger, stream)
-}
 
 // stdin/stdout as the single stream serve needs.
 type stdioStream struct {

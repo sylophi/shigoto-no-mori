@@ -3,7 +3,7 @@
 // pick to its list's default, and a pick keeps while the switch is
 // off so it comes back with it.
 //
-// covers: app/index.html app/web/public/boot-theme.js
+// covers: app/web/public/boot-theme.js
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -94,21 +94,22 @@ it("the hidden hotkey cycles a swatch's variants", () => {
   assert.equal(nextVariant(LIGHT_THEMES, "sky"), null);
 });
 
-it("both boot scripts paint the catalog's defaults and read its mirrors", () => {
-  // The pre-paint scripts can't import the catalog (one is inline
-  // in index.html, the other must stay a classic script for the
-  // web deploy's CSP), so they repeat the two default ids and the
-  // three storage keys. This holds the copies to the source.
-  for (const file of ["index.html", "web/public/boot-theme.js"]) {
-    const src = readFileSync(join(import.meta.dirname, "..", file), "utf8");
-    for (const needle of [
-      `"${DEFAULT_LIGHT_THEME}"`,
-      `"${DEFAULT_DARK_THEME}"`,
-      '"shigomori.doubutsu"',
-      '"shigomori.lightTheme"',
-      '"shigomori.darkTheme"',
-    ]) {
-      assert.ok(src.includes(needle), `${file} lost ${needle}`);
-    }
+it("the boot script paints the catalog's defaults and reads its mirrors", () => {
+  // The pre-paint script can't import the catalog (it must stay a
+  // classic script for the windows' and the web deploy's CSP), so it
+  // repeats the two default ids and the three storage keys. This
+  // holds the copies to the source.
+  const src = readFileSync(
+    join(import.meta.dirname, "..", "web/public/boot-theme.js"),
+    "utf8",
+  );
+  for (const needle of [
+    `"${DEFAULT_LIGHT_THEME}"`,
+    `"${DEFAULT_DARK_THEME}"`,
+    '"shigomori.doubutsu"',
+    '"shigomori.lightTheme"',
+    '"shigomori.darkTheme"',
+  ]) {
+    assert.ok(src.includes(needle), `boot-theme.js lost ${needle}`);
   }
 });

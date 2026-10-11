@@ -185,7 +185,7 @@ function buildQueryKeys(deviceId: string) {
     // while a detail page shows it, so a dev server starting or
     // stopping on the host shows up without a refetch trigger.
     terrierReadiness: () => host("terrierReadiness"),
-    // The villager data (host/lib/villagers.ts): this device's own,
+    // The villager data (host/lib/VillagerData.ts): this device's own,
     // read by its own window only, so only the local registry's are
     // ever filled.
     villagerData: () => host("villagers", "status"),
@@ -255,6 +255,9 @@ function buildQueryKeys(deviceId: string) {
 
     // Client-scoped: the v3 migration as the shell serves it.
     migration: () => ["migration"] as const,
+
+    // Client-scoped: this window's guide as its shell serves it.
+    guide: () => ["guide"] as const,
 
     // Client-scoped: the code highlighter holding a language, loaded in
     // this window whichever device the code came from.

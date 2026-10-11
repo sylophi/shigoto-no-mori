@@ -368,6 +368,28 @@
     "gated": true,
     "grant": "changeApp"
   },
+  "guide:ask": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "guide:changed": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "guide:read": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "guide:stop": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "guideDrive:drive": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
   "hub:invokePeer": {
     "kind": "invoke",
     "scope": "client"
@@ -581,6 +603,11 @@
     "gated": false
   },
   "nav:addProject": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "nav:askHow": {
     "kind": "push",
     "scope": "client",
     "gated": false
@@ -916,6 +943,11 @@
     "scope": "host",
     "remote": false
   },
+  "session:guideLaunch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
   "session:quit": {
     "kind": "invoke",
     "scope": "host",
@@ -1000,6 +1032,10 @@
     "scope": "client"
   },
   "shellCalls:failed": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:guide": {
     "kind": "invoke",
     "scope": "client"
   },
@@ -1413,6 +1449,14 @@
     "tracksProjectUsage": true
   },
   "worktrees:deleteStack": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:describe": {
     "kind": "invoke",
     "scope": "host",
     "remote": true,

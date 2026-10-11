@@ -5,7 +5,7 @@ import type { villagerDataView } from "./villagerDataView.ts";
 
 // The villager data, beside the Village life row: download it, follow
 // the download, remove it. This device's copy, in its data dir
-// (host/lib/villagers.ts). Village life stays locked until the
+// (host/lib/VillagerData.ts). Village life stays locked until the
 // download is complete.
 //
 // Removing takes a second click, like the app's other removals of

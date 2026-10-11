@@ -11,7 +11,7 @@
 // villageLife is a client setting (ClientConfig): the purely visual
 // villager extras on every worktree named after a character, whichever
 // device it lives on, with the villager data this device holds
-// (host/lib/villagers.ts). Off when unset.
+// (host/lib/VillagerData.ts). Off when unset.
 import type {
   ClientConfig,
   GlobalConfig,

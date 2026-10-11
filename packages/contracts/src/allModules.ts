@@ -7,6 +7,7 @@ import { dialogContract } from "./modules/dialog.ts";
 import { forwardContract } from "./modules/forward.ts";
 import { fsContract } from "./modules/fs.ts";
 import { gitContract } from "./modules/git.ts";
+import { guideContract } from "./modules/guide.ts";
 import { githubCliContract } from "./modules/githubCli.ts";
 import { globalConfigContract } from "./modules/globalConfig.ts";
 import { hygieneContract } from "./modules/hygiene.ts";
@@ -51,6 +52,7 @@ export const allContractModules = [
   forwardContract,
   fsContract,
   gitContract,
+  guideContract,
   githubCliContract,
   globalConfigContract,
   hygieneContract,

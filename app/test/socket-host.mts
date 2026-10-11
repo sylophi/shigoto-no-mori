@@ -73,6 +73,7 @@ import {
 } from "@shigomori/contracts/contract";
 import { GRANTS } from "@shigomori/contracts/grants";
 import { controlContract } from "@shigomori/contracts/modules/control";
+import { guideDriveContract } from "@shigomori/contracts/modules/guide";
 import { safeDecode } from "@shigomori/contracts/codec";
 import { classificationGap } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -694,6 +695,40 @@ it("command gate: with commands off a command is refused with the typed error an
   assert.equal(seen.refreshes, 1);
 });
 
+it("commands turned off under a linked peer: its gated views under way end with the typed error while its reads carry on", async () => {
+  const track = trackTest;
+  let opened = 0;
+  const { listener } = await listen(track, {
+    registerHandlers: (binding) =>
+      binding.view("terminals:list", () =>
+        Stream.concat(
+          Stream.fromEffect(
+            Effect.sync(() => {
+              opened += 1;
+            }),
+          ).pipe(Stream.drain),
+          Stream.never,
+        ),
+      ),
+  });
+  listener.setAccepts(true);
+  const raw = await rawLink(track, listener);
+  assert.ok(Exit.isSuccess(await raw.hello()));
+  const gated = Effect.runPromiseExit(
+    Stream.runDrain(raw.watch("terminals:list")),
+  );
+  const read = Effect.runFork(
+    Stream.runDrain(
+      raw.watch("ports:watch", { projectId: "p", worktreeId: "w" }),
+    ),
+  );
+  track(() => Effect.runPromise(Fiber.interrupt(read)));
+  await waitFor(() => opened === 1, "the gated view to run");
+  listener.setAccepts(false);
+  assert.ok(failureOf(await gated) instanceof CommandRefusedError);
+  assert.equal(read.pollUnsafe(), undefined, "the read ended");
+});
+
 it("invited calls: with commands off a call the host asked for runs while the rest stay refused, and the byte channel it attached survives the switch-off drop that resets every other", async () => {
   const track = trackTest;
   const invitedPort = 1;
@@ -1181,7 +1216,11 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   );
   // Every group the app serves, the CLI's control contract included.
   const granted = new Map<string, string[]>();
-  for (const module of [...allContractModules, controlContract]) {
+  for (const module of [
+    ...allContractModules,
+    controlContract,
+    guideDriveContract,
+  ]) {
     for (const call of callsOf(module)) {
       // The registrar's fail-closed rule: a host invoke says whether it
       // is remote, a remote one whether it is gated, and a remote gated

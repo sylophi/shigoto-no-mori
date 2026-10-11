@@ -54,7 +54,7 @@ import {
   isPrerelease,
   parseSemver,
   type Semver,
-} from "./semver.ts";
+} from "@shigomori/contracts/semver";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
@@ -62,6 +62,7 @@ import {
   UpdateInProgress,
 } from "./stagingLock.ts";
 import {
+  APP_REPO,
   type AppStatus,
   appStatusOf,
   FeedAnswer,
@@ -257,10 +258,15 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
       "no-team-identifier",
       "installed-unsigned",
       "other-team",
+      "other-app",
+      "not-newer",
     ]),
     bundle: Schema.String,
     team: Schema.optional(Schema.String),
     installedTeam: Schema.optional(Schema.String),
+    identifier: Schema.optional(Schema.String),
+    installedIdentifier: Schema.optional(Schema.String),
+    version: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -277,6 +283,10 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
         return "The installed app has no Team ID to verify the update against. Refusing to install.";
       case "other-team":
         return `The downloaded update is signed by a different team (${this.team}, installed app: ${this.installedTeam}). Refusing to install.`;
+      case "other-app":
+        return `The downloaded update is a different app (${this.identifier}, installed app: ${this.installedIdentifier}). Refusing to install.`;
+      case "not-newer":
+        return `The downloaded update is version ${this.version}, which is not newer than this build. Refusing to install.`;
     }
   }
 }
@@ -512,9 +522,6 @@ export class Updater extends Context.Service<
 
 // --- the pipeline -------------------------------------------------------------
 
-// The repo behind the feeds (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
-const FEED_REPO = "sylophi/shigoto-no-mori";
-
 const FEED_TIMEOUT = Duration.seconds(30);
 // A generous budget for the zip (about 200MB on a slow connection). There
 // is no byte progress, so this is what unsticks a blackholed connection.
@@ -600,12 +607,12 @@ const ZERO_VERSION = parseSemver("0.0.0") as Semver;
 const updateServerUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.feedUrl ?? "")
-    : `https://update.electronjs.org/${FEED_REPO}/darwin-${input.running.arch}/${input.running.version}`;
+    : `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`;
 
 const releaseListUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.releasesUrl ?? "")
-    : `https://api.github.com/repos/${FEED_REPO}/releases?per_page=100`;
+    : `https://api.github.com/repos/${APP_REPO}/releases?per_page=100`;
 
 const feedFailed =
   (source: FeedFailed["source"]) =>
@@ -638,10 +645,15 @@ const bodyText = (
   );
 };
 
-// The installed app, and its Team ID, read once for a stage.
+// What a bundle's signature names: its Team ID ("" for an ad hoc
+// signature) and its identifier, which tells one flavor's app from
+// another's under the same team.
+type Signer = { readonly team: string; readonly identifier: string };
+
+// The installed app, and its signer, read once for a stage.
 type Anchor = {
   readonly bundle: string;
-  readonly team: Effect.Effect<string, SignatureRejected>;
+  readonly signer: Effect.Effect<Signer, SignatureRejected>;
 };
 
 // What the release list copy holds, its times in epoch ms (0 for none).
@@ -1021,8 +1033,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
 
   // --- signatures ---
 
-  // The bundle's Team ID, "" for an ad hoc signature.
-  const teamOf = Effect.fn("Updater.teamOf")(function* (bundle: string) {
+  const signerOf = Effect.fn("Updater.signerOf")(function* (bundle: string) {
     const shown = yield* run("codesign", ["-dvv", "--", bundle]);
     if (!shown.ok) {
       return yield* new SignatureRejected({
@@ -1039,29 +1050,42 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       });
     }
     const team = (match[1] ?? "").trim();
-    return team === "not set" ? "" : team;
+    const identifier = /(?:^|\n)Identifier=([^\n]+)/.exec(shown.output);
+    return {
+      team: team === "not set" ? "" : team,
+      identifier: (identifier?.[1] ?? "").trim(),
+    };
   });
 
-  // The installed bundle for a run, its Team ID read at most once.
+  // The installed bundle for a run, its signer read at most once.
   const anchorOf = (bundle: string) =>
     Effect.map(
-      Effect.cached(teamOf(bundle)),
-      (team): Anchor => ({ bundle, team }),
+      Effect.cached(signerOf(bundle)),
+      (signer): Anchor => ({ bundle, signer }),
     );
 
-  // A valid deep, strict signature and the installed app's Team ID. An
-  // unsigned installed app refuses too: with no anchor there is nothing
-  // to trust, and release builds are always signed. The checks run at
-  // once, and fail in the order Go's sm made them.
+  // A valid deep, strict signature from a certificate Apple issued, the
+  // installed app's Team ID, and the installed app's identifier, so a
+  // release of another flavor is no update for this one. An unsigned
+  // installed app refuses too: with no anchor there is nothing to
+  // trust, and release builds are always signed. The checks run at
+  // once, and fail in the order Go's sm made them, the identifier last.
   const verify = Effect.fn("Updater.verify")(function* (
     installed: Anchor,
     candidate: string,
   ) {
-    const [checked, installedTeam, team] = yield* Effect.all(
+    const [checked, installedSigner, signer] = yield* Effect.all(
       [
-        run("codesign", ["--verify", "--deep", "--strict", "--", candidate]),
-        Effect.result(installed.team),
-        Effect.result(teamOf(candidate)),
+        run("codesign", [
+          "--verify",
+          "--deep",
+          "--strict",
+          "-R=anchor apple generic",
+          "--",
+          candidate,
+        ]),
+        Effect.result(installed.signer),
+        Effect.result(signerOf(candidate)),
       ],
       { concurrency: "unbounded" },
     );
@@ -1072,20 +1096,32 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         cause: new Error(checked.output.trim()),
       });
     }
-    if (Result.isFailure(installedTeam)) return yield* installedTeam.failure;
-    if (Result.isFailure(team)) return yield* team.failure;
-    if (installedTeam.success === "") {
+    if (Result.isFailure(installedSigner)) {
+      return yield* installedSigner.failure;
+    }
+    if (Result.isFailure(signer)) return yield* signer.failure;
+    const ours = installedSigner.success;
+    const theirs = signer.success;
+    if (ours.team === "") {
       return yield* new SignatureRejected({
         reason: "installed-unsigned",
         bundle: installed.bundle,
       });
     }
-    if (team.success !== installedTeam.success) {
+    if (theirs.team !== ours.team) {
       return yield* new SignatureRejected({
         reason: "other-team",
         bundle: candidate,
-        team: team.success,
-        installedTeam: installedTeam.success,
+        team: theirs.team,
+        installedTeam: ours.team,
+      });
+    }
+    if (theirs.identifier !== ours.identifier) {
+      return yield* new SignatureRejected({
+        reason: "other-app",
+        bundle: candidate,
+        identifier: theirs.identifier,
+        installedIdentifier: ours.identifier,
       });
     }
   });
@@ -1251,6 +1287,32 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         ),
       );
 
+  // A bundle whose own version is newer than this build's, so a feed
+  // that names an older release of ours as the newest gets nothing.
+  const newerBundle = (bundle: string, running: Running) =>
+    Effect.gen(function* () {
+      const read = yield* run(
+        "plutil",
+        [
+          "-extract",
+          "CFBundleShortVersionString",
+          "raw",
+          "-o",
+          "-",
+          path.join(bundle, "Contents", "Info.plist"),
+        ],
+        "stdout",
+      );
+      const version = read.output.trim();
+      if (!read.ok || !newerThan(running, version)) {
+        return yield* new SignatureRejected({
+          reason: "not-newer",
+          bundle,
+          version,
+        });
+      }
+    });
+
   // Checks the feed and, when a release is newer than this build, leaves
   // a verified bundle in updates/staged. None when already up to date.
   // Everything runs under the lock, so a concurrent stager never sees
@@ -1311,6 +1373,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
 
     yield* report(input, { phase: "verifying", version: release.version });
     yield* verify(installed, candidate).pipe(
+      Effect.andThen(newerBundle(candidate, running)),
       Effect.tapError(() => removeAll(extractDir)),
     );
     yield* clearStaged;
@@ -1384,7 +1447,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     }
     // The installed app's Team ID read afresh, as the app may have changed
     // since staging.
-    yield* verify({ bundle: target, team: teamOf(target) }, incoming).pipe(
+    yield* verify({ bundle: target, signer: signerOf(target) }, incoming).pipe(
       Effect.tapError(() => removeAll(incoming)),
     );
     const aside = path.join(dir, `${base}.old-${pid}`);

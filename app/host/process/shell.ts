@@ -4,6 +4,10 @@
 // (main/hostProcess.ts).
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
+import type {
+  GuideDrivePayload,
+  GuideReply,
+} from "@shigomori/contracts/modules/guide";
 import { implSlot } from "@host/lib/util/implSlot";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
@@ -25,6 +29,8 @@ export type ShellCalls = {
   readonly stopUpdaterBridge: () => Promise<void>;
   // The v3 migration as it goes, which the shell serves its windows.
   readonly migration: (progress: MigrationProgress) => Promise<void>;
+  // An action of `sm guide mcp`'s, run in the window its session guides.
+  readonly guide: (payload: GuideDrivePayload) => Promise<GuideReply>;
 };
 
 const { set: setShellCalls, get: shellCalls } = implSlot<ShellCalls>(

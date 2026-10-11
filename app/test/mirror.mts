@@ -181,9 +181,9 @@ const fileSync = Layer.effect(
     const real = yield* FileSync.FileSync;
     return FileSync.FileSync.of({
       ...real,
-      serve: (env, until) =>
+      serve: (root, env, until) =>
         real
-          .serve(env, until)
+          .serve(root, env, until)
           .pipe(
             Effect.tap((child) =>
               Effect.sync(() => serveChildren.add(child.pid)),

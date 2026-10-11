@@ -177,12 +177,12 @@ export function gitSection(worktree: Worktree, stashes = STASHES) {
   );
 }
 
-function scriptRow(name: string, state = IDLE) {
+function scriptRow(name: string, state = IDLE, command = `pnpm ${name}`) {
   return (
     <ScriptRowView
       key={name}
       label={name}
-      command={`pnpm ${name}`}
+      command={command}
       state={state}
       busy={state.status === "running"}
       canRun
@@ -202,22 +202,38 @@ export function scriptsSection() {
       packageScripts={
         <PackageScriptsView
           sortMode="frequent"
-          sorted={["dev", "test", "theme:check", "build"].map((name) => ({
-            name,
-            command: `pnpm ${name}`,
-          }))}
+          sorted={[
+            ...["dev", "test", "theme:check", "build"].map((name) => ({
+              name,
+              command: `pnpm ${name}`,
+            })),
+            { name: "just release", command: "goreleaser release --clean" },
+          ]}
+          groups={[
+            {
+              file: "package.json",
+              labels: {
+                dev: "dev",
+                test: "test",
+                "theme:check": "theme:check",
+                build: "build",
+              },
+            },
+            { file: "justfile", labels: { "just release": "release" } },
+          ]}
           launchRow={["dev"]}
           canCommand
           onSort={noop}
           onArrange={noop}
           onReorder={noop}
           onPin={noop}
-          renderRow={(entry) =>
+          renderRow={(entry, label) =>
             scriptRow(
-              entry.name,
+              label,
               entry.name === "dev"
                 ? { ...IDLE, status: "running", startedAt: NOW - 4 * MINUTE }
                 : IDLE,
+              entry.command,
             )
           }
         />
@@ -536,10 +552,15 @@ export function WorktreeSectionsPartsScene({
         </Part>
         <Part label="Arranging scripts">
           <ScriptListView>
-            <ArrangeScriptRowView name="dev" pinned onPin={noop} />
-            <ArrangeScriptRowView name="test" pinned={false} onPin={noop} />
+            <ArrangeScriptRowView name="dev" label="dev" pinned onPin={noop} />
+            <ArrangeScriptRowView
+              name="test"
+              label="test"
+              pinned={false}
+              onPin={noop}
+            />
           </ScriptListView>
-          <ScriptDragPreviewView name="dev" pinned />
+          <ScriptDragPreviewView label="dev" pinned />
         </Part>
         <Part label="A peer's ports">
           <ModalBox className="max-w-2xl">

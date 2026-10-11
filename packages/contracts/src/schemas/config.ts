@@ -92,31 +92,55 @@ export type WorktreeLayout = typeof WorktreeLayoutSchema.Type;
 export const ShigomoriConfigSchema = Schema.Struct({
   scripts: Schema.optional(
     Schema.Struct({
-      setup: Schema.optional(Schema.String),
-      teardown: Schema.optional(Schema.String),
+      setup: Schema.optional(Schema.String).annotateKey({
+        description: "Runs after creating a worktree",
+      }),
+      teardown: Schema.optional(Schema.String).annotateKey({
+        description: "Runs before removing a worktree",
+      }),
     }),
   ),
-  launchers: Schema.optional(Schema.Array(LauncherCommandSchema)),
-  portBase: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
-  defaultBranch: Schema.NonEmptyString,
-  carryOver: Schema.optional(Schema.Array(CarryOverEntrySchema)),
+  launchers: Schema.optional(Schema.Array(LauncherCommandSchema)).annotateKey({
+    description: "Per-project launchers (`launcher` verbs)",
+  }),
+  portBase: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThan(0)),
+  ).annotateKey({
+    description: "port-pool base port",
+  }),
+  defaultBranch: Schema.NonEmptyString.annotateKey({
+    description: "Branch new worktrees fork from (required)",
+  }),
+  carryOver: Schema.optional(Schema.Array(CarryOverEntrySchema)).annotateKey({
+    description: "Files carried into new worktrees (`carryover` verbs)",
+  }),
   // When false, the repo's .worktreeinclude file is ignored at worktree
   // creation. Absent = enabled (the integration is opt-out).
-  useWorktreeInclude: Schema.optional(Schema.Boolean),
-  worktreeLayout: Schema.optional(WorktreeLayoutSchema),
+  useWorktreeInclude: Schema.optional(Schema.Boolean).annotateKey({
+    description: "Honor the repo's .worktreeinclude file",
+  }),
+  worktreeLayout: Schema.optional(WorktreeLayoutSchema).annotateKey({
+    description: "Where managed worktrees live",
+  }),
   // Absolute path; only meaningful when worktreeLayout === "custom".
-  customWorktreePath: Schema.optional(Schema.String),
+  customWorktreePath: Schema.optional(Schema.String).annotateKey({
+    description: "Absolute base dir for the custom layout",
+  }),
   // Last merge method picked for this project's PRs. Drives the split-
   // button's primary action so each repo remembers its house style.
   // Falls back to whatever the repo allows when the saved value is
   // disabled at GitHub.
-  lastMergeMethod: Schema.optional(MergeMethodSchema),
+  lastMergeMethod: Schema.optional(MergeMethodSchema).annotateKey({
+    description: "Preferred PR merge method",
+  }),
   // When true, the inbox view lists this project's primary checkout
   // alongside its worktrees (always live, never shelved or merged).
   // Per project because the primary means different things in
   // different repos: in some it's a place you work, in most it's just
   // the root. Off by default. Absent = hidden.
-  showPrimaryInInbox: Schema.optional(Schema.Boolean),
+  showPrimaryInInbox: Schema.optional(Schema.Boolean).annotateKey({
+    description: "List the primary checkout in the inbox view",
+  }),
 });
 export type ShigomoriConfig = typeof ShigomoriConfigSchema.Type;
 
@@ -150,6 +174,18 @@ export function modeledKeyFields(
   schema: Schema.Top,
 ): Array<{ path: string[]; ast: SchemaAST.AST }> {
   return walkKeyFields(structFieldsOf(schema.ast) ?? [], []);
+}
+
+// What each modeled key is for, by its dotted name: the description its
+// field carries (`annotateKey`), which the terminal's settings listing
+// shows beside it.
+export function keyDescriptions(schema: Schema.Top): Record<string, string> {
+  return Object.fromEntries(
+    modeledKeyFields(schema).map(({ path, ast }) => [
+      path.join("."),
+      String(ast.context?.annotations?.["description"] ?? ""),
+    ]),
+  );
 }
 
 // The paths alone, which the host's project write walks.
@@ -286,7 +322,7 @@ const GlobalConfigSchema = Schema.Struct({
   // harmless to keep.
   hiddenLaunchers: Schema.optional(Schema.Array(Schema.String)),
   // When true, the Launch section carries a second row of the worktree's
-  // top package.json scripts, as many as fit on one line, ordered by the
+  // top scripts, as many as fit on one line, ordered by the
   // project's script sort. On by default; absent = on, explicit `false` is
   // the opt-out.
   launchScripts: Schema.optional(Schema.Boolean),
@@ -401,21 +437,61 @@ export const StoredGlobalConfigSchema = loose(GlobalConfigSchema);
 // below, or the strict reject makes it un-writable.
 export const DeviceSettingsPatchSchema = strict(
   Schema.Struct({
-    launchers: GlobalConfigSchema.fields.launchers,
-    hiddenLaunchers: GlobalConfigSchema.fields.hiddenLaunchers,
-    launchScripts: GlobalConfigSchema.fields.launchScripts,
-    terminal: GlobalConfigSchema.fields.terminal,
-    deleteBranchOnRemove: GlobalConfigSchema.fields.deleteBranchOnRemove,
-    autoPopulateInstall: GlobalConfigSchema.fields.autoPopulateInstall,
-    autoPullNew: GlobalConfigSchema.fields.autoPullNew,
-    autoPullPrimaryOnly: GlobalConfigSchema.fields.autoPullPrimaryOnly,
-    autoShelveDays: GlobalConfigSchema.fields.autoShelveDays,
-    doubutsuNames: GlobalConfigSchema.fields.doubutsuNames,
-    codexWorktreeNames: GlobalConfigSchema.fields.codexWorktreeNames,
-    managedOnProjectDrive: GlobalConfigSchema.fields.managedOnProjectDrive,
-    portPool: GlobalConfigSchema.fields.portPool,
-    terrier: GlobalConfigSchema.fields.terrier,
-    githubCli: GlobalConfigSchema.fields.githubCli,
+    launchers: GlobalConfigSchema.fields.launchers.annotateKey({
+      description: "Global custom launchers (`config launcher`)",
+    }),
+    hiddenLaunchers: GlobalConfigSchema.fields.hiddenLaunchers.annotateKey({
+      description: "Hidden launcher ids (via edit or the app)",
+    }),
+    launchScripts: GlobalConfigSchema.fields.launchScripts.annotateKey({
+      description: "Show package scripts in the Launch section",
+    }),
+    terminal: GlobalConfigSchema.fields.terminal.annotateKey({
+      description:
+        "Terminal that terminal tools (Claude Code, Neovim, …) open in",
+    }),
+    deleteBranchOnRemove:
+      GlobalConfigSchema.fields.deleteBranchOnRemove.annotateKey({
+        description: "Delete the branch when removing its worktree",
+      }),
+    autoPopulateInstall:
+      GlobalConfigSchema.fields.autoPopulateInstall.annotateKey({
+        description: "Seed new projects' setup script with `<pm> install`",
+      }),
+    autoPullNew: GlobalConfigSchema.fields.autoPullNew.annotateKey({
+      description:
+        "Start new worktrees (and added projects' primaries) with auto-pull on",
+    }),
+    autoPullPrimaryOnly:
+      GlobalConfigSchema.fields.autoPullPrimaryOnly.annotateKey({
+        description: "autoPullNew applies to added projects' primaries only",
+      }),
+    autoShelveDays: GlobalConfigSchema.fields.autoShelveDays.annotateKey({
+      description: "Shelve worktrees untouched for this many days",
+    }),
+    doubutsuNames: GlobalConfigSchema.fields.doubutsuNames.annotateKey({
+      description:
+        "Name new worktrees after Animal Crossing characters (on for new installs)",
+    }),
+    codexWorktreeNames:
+      GlobalConfigSchema.fields.codexWorktreeNames.annotateKey({
+        description:
+          "Name Codex-style <name>/<repo> worktrees by their parent folder",
+      }),
+    managedOnProjectDrive:
+      GlobalConfigSchema.fields.managedOnProjectDrive.annotateKey({
+        description:
+          "Keep managed worktrees on the project's drive when it is an external one",
+      }),
+    portPool: GlobalConfigSchema.fields.portPool.annotateKey({
+      description: "Provision/release port-pool ports with worktrees",
+    }),
+    terrier: GlobalConfigSchema.fields.terrier.annotateKey({
+      description: "List terrier-registered repos as projects",
+    }),
+    githubCli: GlobalConfigSchema.fields.githubCli.annotateKey({
+      description: "GitHub CLI integration",
+    }),
   }),
 );
 export type DeviceSettingsPatch = typeof DeviceSettingsPatchSchema.Type;
@@ -478,7 +554,7 @@ export const ClientConfigSchema = Schema.Struct({
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir
-  // (host/lib/villagers.ts), so only the desktop offers it: a web
+  // (host/lib/VillagerData.ts), so only the desktop offers it: a web
   // client has no device of its own. Off by default (absent = off),
   // explicit `true` is the opt-in. Nothing on a device reads it.
   villageLife: Schema.optional(Schema.Boolean),

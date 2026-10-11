@@ -1,4 +1,4 @@
-// The Launch section's row of package.json scripts (ScriptLaunchRow
+// The Launch section's row of the worktree's scripts (ScriptLaunchRow
 // binds it): the scripts pinned to it, wrapping, or the top scripts
 // trimmed to the ones that fit on one line, measured off a hidden copy.
 import type { ReactNode, Ref } from "react";

@@ -10,7 +10,6 @@
 // binary is on PATH, and the config file parses as JSON with a
 // schemaVersion field. Richer validation is left to port-pool itself.
 import type { WorktreePort } from "@shigomori/contracts/schemas";
-import { homedir } from "node:os";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -21,6 +20,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Paths from "@shigomori/engine/Paths";
 import { envSetting } from "@shared/config";
 import {
   mergeWorktreePorts,
@@ -174,10 +174,10 @@ const make = Effect.gen(function* () {
   const pathOf = (worktree: Worktree) =>
     Cache.get(paths, worktreeKey(worktree.projectId, worktree.worktreeId));
 
+  const { home } = yield* read(Effect.service(Paths.Paths));
   const statePath = () =>
     path.join(
-      envSetting("XDG_DATA_HOME")?.trim() ||
-        path.join(homedir(), ".local", "share"),
+      envSetting("XDG_DATA_HOME")?.trim() || path.join(home, ".local", "share"),
       "port-pool",
       "state.json",
     );

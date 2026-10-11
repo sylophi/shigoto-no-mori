@@ -12,7 +12,14 @@
 // past the v3 migration, a window opened meanwhile shows its page in
 // place of the app. The app quits with its last window (main/index.ts).
 import { join } from "node:path";
-import { app, BrowserWindow, dialog, type Rectangle, screen } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  type Rectangle,
+  screen,
+  type WebContents,
+} from "electron";
 import * as Schema from "effect/Schema";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { navContract } from "@shigomori/contracts/modules/nav";
@@ -85,6 +92,9 @@ type Held = {
 
 // Least recently focused first.
 const held: Held[] = [];
+
+// Who hears a window close (onWindowClosed).
+const closedListeners = new Set<(windowId: number) => void>();
 
 // The last window as it closed, which a quit that closing it started
 // remembers, and a cancelled one reopens.
@@ -268,6 +278,7 @@ function create(
     if (at !== -1) held.splice(at, 1);
     if (held.length === 0) lastClosed = recordOf(entry);
     forgetWindowMenu(entry.id);
+    for (const listener of closedListeners) listener(entry.id);
   });
 
   // Recover the page from a renderer crash: a new window where it was,
@@ -449,6 +460,40 @@ export function takeDeepLink(windowId: number | undefined): string | null {
   const route = entry.deepLink;
   entry.deepLink = null;
   return route;
+}
+
+// A window by its id, while it has a page: its contents and the route
+// it shows.
+export function liveWindow(
+  windowId: number,
+): { readonly webContents: WebContents; readonly route: string } | undefined {
+  const entry = find(windowId);
+  if (
+    entry === undefined ||
+    entry.dead ||
+    entry.window.isDestroyed() ||
+    entry.window.webContents.isCrashed()
+  ) {
+    return undefined;
+  }
+  return { webContents: entry.window.webContents, route: entry.route };
+}
+
+// Opens a page in one window, the way a deep link does, without raising
+// it.
+export function navigateWindow(windowId: number, route: string): void {
+  const entry = find(windowId);
+  if (entry === undefined || entry.window.isDestroyed()) return;
+  entry.deepLink = route;
+  broadcast(navContract, "deepLink", undefined, entry.window.webContents);
+}
+
+// Hears each window close, by its id, until the returned call.
+export function onWindowClosed(
+  listener: (windowId: number) => void,
+): () => void {
+  closedListeners.add(listener);
+  return () => closedListeners.delete(listener);
 }
 
 export function noteShowing(windowId: number | undefined, route: string): void {

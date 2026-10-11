@@ -563,11 +563,12 @@ export const addProject = Effect.fnUntraced(function* (path: string) {
   return yield* Schema.decodeEffect(ProjectSchema)(project);
 });
 
-// The command that runs a worktree's package.json script, and the
-// SHIGOMORI_* values startScript can't derive, for the app's registry
-// to spawn (it keeps owning streaming, cancel, and quit-time reaping).
-// The engine picks the manager the lockfile selects and counts the run
-// in the use log.
+// The command that runs a worktree's script (package.json, justfile,
+// Makefile), and the SHIGOMORI_* values startScript can't derive, for
+// the app's registry to spawn (it keeps owning streaming, cancel, and
+// quit-time reaping).
+// The engine picks the tool that runs it (the manager the lockfile
+// selects, just or make) and counts the run in the use log.
 export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
   projectId: string;
   worktreeId: string;
@@ -755,6 +756,19 @@ const rowAfter = Effect.fnUntraced(function* (
   return decodeWorktree(row);
 });
 
+// The worktree's own title, description or both (`sm describe`),
+// refused while an open pull request holds them.
+export const describe = (
+  project: Project,
+  worktreeId: string,
+  change: { readonly title?: string; readonly description?: string },
+) =>
+  rowAfter(project, worktreeId, (located) =>
+    Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
+      Effect.asVoid(worktrees.describe(located, change)),
+    ),
+  );
+
 // Every agent session bound to the worktree goes idle.
 export const idleAgents = (project: Project, worktreeId: string) =>
   rowAfter(project, worktreeId, (located) =>
@@ -793,6 +807,15 @@ export const resumeAgent = Effect.fnUntraced(function* (
     { projectId: project.id, worktreeId },
   );
 });
+
+// Opens the user's agent on a guide session the shell minted for one of
+// its windows. Like a resume, it writes no state.
+export const launchGuide = (input: Agents.GuideLaunch) =>
+  asCall(
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.guide(input),
+    ),
+  );
 
 const decodeHarnesses = Schema.decodeUnknownSync(AgentHarnessStatusListSchema);
 
@@ -1127,8 +1150,9 @@ export const launcherCatalog = Effect.fnUntraced(function* () {
 
 const decodePackageScripts = Schema.decodeUnknownSync(PackageScriptsDocSchema);
 
-// The worktree's package.json scripts, or null when it has no readable
-// package.json. A worktree or project that is gone still fails.
+// The worktree's scripts, or null when it has no package.json, justfile
+// or Makefile, or none of them reads. A worktree or project that is gone
+// still fails.
 export const packageScripts = Effect.fnUntraced(function* (
   projectId: string,
   worktreeId: string,
@@ -1144,8 +1168,8 @@ export const packageScripts = Effect.fnUntraced(function* (
         })
         .pipe(
           Effect.catchTags({
-            NoPackageJson: () => Effect.succeed(null),
-            UnreadablePackageJson: () => Effect.succeed(null),
+            NoScripts: () => Effect.succeed(null),
+            UnreadableScripts: () => Effect.succeed(null),
           }),
         );
     }),

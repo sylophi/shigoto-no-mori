@@ -3,12 +3,16 @@
 `README.md` has the layout, and each folder documents itself.
 
 - pnpm for JavaScript, one workspace installed from the root
-  (`pnpm -C app …` or the root scripts for the app), Go for `file-sync/`
+  (`pnpm install`, then `pnpm run postinstall`, since install scripts
+  are off; `pnpm -C app …` or the root scripts for the app), Go for `file-sync/`
   and `macfs/`, Bun to compile the terminal `sm` (`packages/cli`).
 - On commit, lefthook runs lint, format, typecheck and the proofs the
   change touches, and CI runs every check on each pull request:
   `pnpm check`, each piece a `check:*` script in the root
-  `package.json`. `pnpm test <name>` runs one proof (`app/test/`).
+  `package.json`. `pnpm test <name>` runs one proof (`app/test/`), and
+  `pnpm -C packages/<package> exec vitest run <file>` one package
+  test file. `pnpm typecheck` also prints the Effect language
+  service's suggestions (`suggestion TS377…`), which don't fail it.
 - To check a change by running it (a screen in some state, a
   screenshot, the real app on several devices), start at
   `app/lab/README.md`. Pages and windows are driven with weblab.

@@ -53,11 +53,11 @@ export function WorktreeOptionsView({
       <PopoverContent
         side="top"
         align="end"
-        className="w-80"
         finalFocus={() => !handedOff.current}
       >
         <div className="flex flex-col gap-3 p-2">
           <ToggleRowView
+            dense
             label={<OptionLabel icon={<RefreshCw />} name="Auto-pull" />}
             description={
               autoPull.can
@@ -70,6 +70,7 @@ export function WorktreeOptionsView({
           />
           {shelve && (
             <ToggleRowView
+              dense
               label={<OptionLabel icon={<Archive />} name="Shelved" />}
               description="Folded away under Shelved in the sidebar, out of the main list."
               checked={shelve.checked}
@@ -118,10 +119,12 @@ export function OptionActionView({
       onClick={onClick}
       className="-m-1 flex flex-col items-start rounded-md p-1 text-left hover:bg-muted dark:hover:bg-muted/50"
     >
-      <span className="text-sm">
+      <span className="text-xs">
         <OptionLabel icon={icon} name={label} />
       </span>
-      <span className="text-xs text-muted-foreground">{description}</span>
+      <span className="text-2xs leading-snug text-muted-foreground">
+        {description}
+      </span>
     </PopoverClose>
   );
 }

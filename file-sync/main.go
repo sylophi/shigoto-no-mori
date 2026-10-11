@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -40,7 +41,7 @@ func watchParent(interval time.Duration) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Usage: file-sync serve | file-sync daemon --gateway <host:port> --data-dir <dir>")
+	fmt.Fprintln(os.Stderr, "Usage: file-sync serve --root <dir> | file-sync daemon --gateway <host:port> --data-dir <dir>")
 }
 
 func run(args []string) int {
@@ -54,9 +55,19 @@ func run(args []string) int {
 	}
 	switch args[0] {
 	case "serve":
+		flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+		flags.SetOutput(os.Stderr)
+		root := flags.String("root", "", "absolute directory the stream may reach")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if !filepath.IsAbs(*root) {
+			usage()
+			return 2
+		}
 		// stdout IS the protocol stream here, so nothing else may print
 		// to it. Diagnostics go to stderr.
-		err := serveMirrorEndpoint(stdioStream{in: os.Stdin, out: os.Stdout}, os.Stderr)
+		err := serveMirrorEndpoint(stdioStream{in: os.Stdin, out: os.Stdout}, *root, os.Stderr)
 		// The client hanging up is how every stream ends (the session was
 		// terminated, the peer went away, the app quit), and Mutagen
 		// reports it as a read hitting EOF. That is a clean exit, not an

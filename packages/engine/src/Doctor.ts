@@ -18,6 +18,7 @@
 // (`standalone`): the checks that read only files and programs still
 // run, and the file the store refused is named as Go named it.
 import { RegistryFileSchema } from "@shigomori/contracts/schemas/dataDir";
+import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -41,14 +42,12 @@ import type { ConfigDoc } from "./configDoc.ts";
 import {
   atoi,
   belowGitFloor,
-  compareVersions,
   fields,
   formatSize,
   launcherProgram,
   parseGitVersion,
   parsePortPoolDirs,
   parseProcessTable,
-  parseSemver,
   plural,
   pluralize,
   scriptFileTokens,
@@ -1029,7 +1028,7 @@ const make = Effect.gen(function* () {
       if (
         stagedVersion !== undefined &&
         current !== undefined &&
-        compareVersions(stagedVersion, current) <= 0
+        compareSemver(stagedVersion, current) <= 0
       ) {
         found.push(stagedDir);
       }

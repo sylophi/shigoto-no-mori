@@ -73,11 +73,19 @@ export function SidebarToolbarView({
     // changes what the list shows sits left, the action sits right.
     <div className="flex items-center gap-1 px-2 pb-1">
       {onBack ? (
-        <BackButton label="Projects" onClick={onBack} className="ml-0" />
+        // Stretches up to the controls on the right, so the whole row
+        // reads as the way back.
+        <BackButton
+          label="Projects"
+          onClick={onBack}
+          className="ml-0 w-auto flex-1 justify-start"
+        />
       ) : (
-        projectSort
+        <>
+          {projectSort}
+          <div className="flex-1" />
+        </>
       )}
-      <div className="flex-1" />
       {worktreeSort}
       {addProject}
     </div>

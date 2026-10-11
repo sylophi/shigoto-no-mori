@@ -23,8 +23,8 @@ const catalog = (names: Names) => {
       ],
       [
         "run [<script>] [<args>...]",
-        "Run a package.json script here",
-        "Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them; with --json that list is {ok, packageManager, scripts: [{name, command}] in package.json order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where sort and order are the project's saved script sort and manual order.",
+        "Run a package.json, justfile or Makefile script here",
+        "Works inside any registered project's checkout or worktree. The scripts are package.json's, then the justfile's recipes as `just <recipe>` and the Makefile's targets as `make <target>`. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` (or `just <recipe>`, `make <target>`) at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them; with --json that list is {ok, packageManager, scripts: [{name, command, file, label}] in file order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where packageManager is null without a package.json, file and label are the file a script comes from and its name there (\"build\" for \"just build\"), and sort and order are the project's saved script sort and manual order.",
       ],
       [
         "launchers [-p <project>] [--catalog]",
@@ -433,19 +433,19 @@ const width = (text: string) => [...text].length;
 const fieldsOf = (usage: string) => usage.split(" ").filter((f) => f !== "");
 
 // The command each catalog entry documents, as its words: what the
-// terminal's test runs, so the help names no command it lacks.
+// terminal's test runs, so the help names no command it lacks. A
+// worktree verb is documented twice, since the prefix is optional.
 export const documentedCommands = (names: Names) =>
   Object.entries(catalog(names))
     .filter(([group]) => group !== "flags" && group !== "environment")
     .flatMap(([, items]) =>
-      items.map(([usage]) => {
+      items.flatMap(([usage]) => {
         const [first = "", second] = fieldsOf(usage);
-        const namespaced =
-          second !== undefined &&
-          ["worktrees", "projects", "config", "agents", "shell"].includes(
-            first,
-          );
-        return namespaced ? [first, second] : [first];
+        if (second === undefined) return [[first]];
+        if (first === "worktrees") return [[first, second], [second]];
+        return ["projects", "config", "agents", "shell"].includes(first)
+          ? [[first, second]]
+          : [[first]];
       }),
     );
 

@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { defineContract, invoke, Remote } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
+import { GuideLaunchSchema } from "./guide.ts";
 import { UpdaterStateSchema } from "../schemas/runtime.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
@@ -60,6 +61,9 @@ export const sessionContract = defineContract(
   invoke("busy", VoidSchema, BusyOperationsSchema),
   // The shell's updater moved.
   invoke("updaterState", UpdaterStateSchema, VoidSchema),
+  // Open the user's agent on a guide session the shell minted for one
+  // of its windows.
+  invoke("guideLaunch", GuideLaunchSchema, VoidSchema),
   // Stop: the host closes its graph and exits. A hurried quit (an
   // update install, a relaunch) signals scripts instead of waiting.
   invoke(

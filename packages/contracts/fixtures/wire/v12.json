@@ -564,6 +564,41 @@
       }
     }
   },
+  "guide:ask": {
+    "payload": {
+      "harness": "codex",
+      "question": "\ud800"
+    }
+  },
+  "guide:changed": {
+    "payload": {
+      "harness": "codex",
+      "point": null
+    }
+  },
+  "guide:read": {
+    "success": {
+      "harness": "codex",
+      "point": {
+        "say": " ",
+        "seq": -3
+      }
+    }
+  },
+  "guide:stop": {},
+  "guideDrive:drive": {
+    "payload": {
+      "session": "TA)gV[Dp0S}J78tB",
+      "action": {
+        "_tag": "navigate",
+        "route": "/"
+      }
+    },
+    "success": {
+      "route": "y",
+      "png": "bG"
+    }
+  },
   "hub:invokePeer": {
     "payload": {
       "deviceId": "26",
@@ -722,19 +757,6 @@
     }
   },
   "migration:continue": {},
-  "migration:read": {
-    "success": {
-      "planned": false,
-      "import": null,
-      "worktrees": {
-        "state": "done",
-        "moved": 1.986711582562313e-9,
-        "total": 9.4e-323,
-        "current": "\t",
-        "stuck": []
-      }
-    }
-  },
   "migration:read": {
     "success": {
       "planned": false,
@@ -1348,6 +1370,7 @@
     }
   },
   "nav:addProject": {},
+  "nav:askHow": {},
   "nav:deepLink": {},
   "nav:launchById": {
     "payload": "\udc00"
@@ -1376,12 +1399,33 @@
     },
     "success": {
       "scripts": {
-        "\u0000": "\u0000",
-        "tb": ""
+        "dev": "vite",
+        "just build": "cargo build --release",
+        "make release": "./scripts/release.sh"
       },
-      "packageManager": "npm",
+      "packageManager": "pnpm",
+      "groups": [
+        {
+          "file": "package.json",
+          "labels": {
+            "dev": "dev"
+          }
+        },
+        {
+          "file": "justfile",
+          "labels": {
+            "just build": "build"
+          }
+        },
+        {
+          "file": "Makefile",
+          "labels": {
+            "make release": "release"
+          }
+        }
+      ],
       "usage": {},
-      "launchRow": [""]
+      "launchRow": ["dev"]
     }
   },
   "packageScripts:run": {
@@ -1676,7 +1720,12 @@
   },
   "runtime:nuke": {
     "success": {
-      "left": [{ "what": "H", "why": "0" }]
+      "left": [
+        {
+          "what": "H",
+          "why": "0"
+        }
+      ]
     }
   },
   "runtime:nukeProgress": {
@@ -1768,6 +1817,13 @@
     "success": {
       "runningScripts": 3,
       "inflightDeletes": 1
+    }
+  },
+  "session:guideLaunch": {
+    "payload": {
+      "session": "n80D$PJ9Ebstno7q",
+      "harness": "claude",
+      "question": "\u0000"
     }
   },
   "session:quit": {
@@ -1880,6 +1936,18 @@
     "payload": {
       "message": "0",
       "storeReport": "e"
+    }
+  },
+  "shellCalls:guide": {
+    "payload": {
+      "session": "P%wpdwD=WUHC`rU%",
+      "action": {
+        "_tag": "screenshot"
+      }
+    },
+    "success": {
+      "route": "^h",
+      "tree": "|"
     }
   },
   "shellCalls:migration": {
@@ -2311,7 +2379,12 @@
   },
   "window:nuke": {
     "success": {
-      "left": [{ "what": "0", "why": "" }]
+      "left": [
+        {
+          "what": "0",
+          "why": ""
+        }
+      ]
     }
   },
   "window:open": {
@@ -2609,6 +2682,14 @@
     }
   },
   "worktrees:commit": {
+    "payload": {
+      "projectId": "0",
+      "worktreeId": "😀",
+      "summary": "?崥8$Y",
+      "paths": [],
+      "hunks": [],
+      "amend": false
+    },
     "success": {
       "hash": "e9a1",
       "worktree": {
@@ -2650,14 +2731,6 @@
         "shelved": true,
         "autoPull": false
       }
-    },
-    "payload": {
-      "projectId": "0",
-      "worktreeId": "😀",
-      "summary": "?崥8$Y",
-      "paths": [],
-      "hunks": [],
-      "amend": false
     }
   },
   "worktrees:commitDiff": {
@@ -2840,6 +2913,36 @@
         "exitCode": null,
         "runId": "]"
       }
+    }
+  },
+  "worktrees:describe": {
+    "payload": {
+      "projectId": "}",
+      "worktreeId": "\t",
+      "title": "-t edited",
+      "description": "- one\n- two"
+    },
+    "success": {
+      "id": "{T",
+      "projectId": "\n",
+      "name": "",
+      "branch": "r\\",
+      "path": "\udc00",
+      "ahead": 3,
+      "behind": 4,
+      "hasUpstream": false,
+      "hasRemote": false,
+      "divergedClean": true,
+      "behindPrimary": 4,
+      "unpushedCount": 1,
+      "mergedIntoPrimary": false,
+      "changedCount": 4,
+      "recentCommits": [],
+      "isPrimary": true,
+      "isExternal": true,
+      "detached": false,
+      "shelved": false,
+      "autoPull": true
     }
   },
   "worktrees:discardChanges": {

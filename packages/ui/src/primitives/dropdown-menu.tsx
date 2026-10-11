@@ -23,7 +23,9 @@ const MENU_ITEM_CLASS =
 const MENU_SUB_TRIGGER_CLASS =
   "flex cursor-default items-center gap-1.5 rounded-md px-2 py-1 text-xs outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-6 data-popup-open:bg-accent data-popup-open:text-accent-foreground data-open:bg-accent data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:data-popup-open:bg-destructive/10 data-[variant=destructive]:data-popup-open:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 dark:data-[variant=destructive]:data-popup-open:bg-destructive/20";
 const MENU_RADIO_ITEM_CLASS =
-  "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+  "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-2 text-xs outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-6 data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5";
+const MENU_CHECKBOX_ITEM_CLASS =
+  "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-2 text-xs outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:cursor-not-allowed data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5";
 const MENU_SEPARATOR_CLASS = "-mx-1 my-1 h-px bg-border";
 
 // A menu drawn open in place, for a scene (src/scenes): Base UI's parts
@@ -284,6 +286,49 @@ function DropdownMenuRadioItem({
   );
 }
 
+// An item that is on or off, its check at the end. Sized like the
+// plain item, since it sits in the same lists.
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: WithoutTitle<MenuPrimitive.CheckboxItem.Props>) {
+  const check = (
+    <span className="pointer-events-none absolute right-2 flex items-center justify-center">
+      {use(StaticMenuContext) ? (
+        props.checked && <CheckIcon />
+      ) : (
+        <MenuPrimitive.CheckboxItemIndicator>
+          <CheckIcon />
+        </MenuPrimitive.CheckboxItemIndicator>
+      )}
+    </span>
+  );
+  if (use(StaticMenuContext)) {
+    return (
+      <div
+        role="menuitemcheckbox"
+        aria-checked={props.checked === true}
+        data-slot="dropdown-menu-checkbox-item"
+        className={cn(MENU_CHECKBOX_ITEM_CLASS, className as string)}
+      >
+        {check}
+        {children as ReactNode}
+      </div>
+    );
+  }
+  return (
+    <MenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      className={cn(MENU_CHECKBOX_ITEM_CLASS, className)}
+      {...props}
+    >
+      {check}
+      {children}
+    </MenuPrimitive.CheckboxItem>
+  );
+}
+
 function DropdownMenuSeparator({
   className,
   ...props
@@ -313,6 +358,7 @@ export {
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,

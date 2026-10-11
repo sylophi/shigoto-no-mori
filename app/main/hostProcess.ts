@@ -30,6 +30,7 @@ import { HOST_FACTS_FLAG, type HostFacts } from "@host/process/facts";
 import { appPlace } from "./electron/appPlace";
 import { noteMigration } from "./ipc/modules/migration";
 import { relaunchAppUnattended } from "./electron/relaunch";
+import { onGuide } from "./electron/guide";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { stopUpdaterBridge } from "./electron/updaterBridge";
 import { setDeviceId } from "@host/lib/config/deviceId";
@@ -123,6 +124,8 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   updaterInstall: ({ unattended }) => updaterCalls.install(unattended),
   updaterUpdate: ({ unattended }) => updaterCalls.update(unattended),
   stopUpdaterBridge: () => stopUpdaterBridge(),
+  guide: ({ session: token, action }) =>
+    onGuide((guide) => guide.drive(token, action)),
 };
 registerContract(shellCallsContract, shellCalls, registrar, {
   validateOutputs: !app.isPackaged,
