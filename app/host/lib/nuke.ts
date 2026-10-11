@@ -30,7 +30,7 @@ import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { clearDeleteInflight, markDeleteInflight } from "./scripts";
 import { dataDir } from "./util/paths";
 
-export class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
+class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
   { reason: Schema.String },
 ) {
