@@ -26,7 +26,8 @@ export const PROBE_TIMEOUT_MS = 5_000;
 // timer throttling.
 export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 
-// Calls one peer may have running at once, its streams aside. Over it a
+// Calls one peer may have running at once, its streams and a channel's
+// numbered calls aside (CHANNEL_CALLS_IN_FLIGHT bounds those). Over it a
 // call is refused rather than spawning yet another git or CLI process.
 export const MAX_IN_FLIGHT_PER_PEER = 64;
 

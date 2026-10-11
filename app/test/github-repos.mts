@@ -9,7 +9,7 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { listGithubRepos } from "@host/lib/githubCli/actions";
 import { it } from "vitest";
-import { runHost } from "./lib/adapters.mts";
+import { runHost } from "./lib/hostRuntime.mts";
 import { tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 

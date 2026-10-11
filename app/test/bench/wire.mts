@@ -40,6 +40,7 @@ import {
 import { openDevice } from "@shared/remote/deviceLink";
 import { appRoot, delay, makeTracker } from "../lib/checkKit.mts";
 import { mintTicket, startDirectListener } from "../lib/directBoot.mts";
+import { disposeHost } from "../lib/hostRuntime.mts";
 import { testDeviceKey } from "../lib/hubStub.mts";
 import { startShapedLink, type ShapedLink } from "./lib/shapedLink.mts";
 
@@ -377,6 +378,7 @@ async function main() {
   connection.close();
   await link.close();
   await tracker.teardown();
+  await disposeHost();
 
   if (asJson) {
     console.log(
