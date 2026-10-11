@@ -14,8 +14,10 @@
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
 import { logFailure } from "@shared/log";
-import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
@@ -65,6 +67,11 @@ import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
 import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 import { createLocalRegistrar } from "./localRegistrar";
+
+// The session token an enroll was asked with, which the run reads.
+class EnrollToken extends Context.Service<EnrollToken, string>()(
+  "sm/web/EnrollToken",
+) {}
 
 export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
@@ -283,9 +290,44 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // hub rotates the credential per enroll, so racers can strand the
   // stored one) or two revokes. Same-tab only: the storage key is
   // still shared across tabs, but a cross-tab race is closed by the
-  // reconciler's re-read after the storage event.
-  const enrollOnce = singleFlight<AccountStatus>();
-  const signOutOnce = singleFlight<void>();
+  // reconciler's re-read after the storage event. A caller arriving
+  // while one runs rides it (an enroll's own token unused), and the
+  // first after it settles starts afresh: each is cached with no time
+  // to live.
+  const enrollOnce = Effect.runSync(
+    Effect.cachedWithTTL(
+      Effect.flatMap(EnrollToken, (token) =>
+        Effect.promise(async () => {
+          await enrollDevice(
+            {
+              config,
+              service,
+              store,
+              deviceId,
+              fallbackDeviceName: defaultDeviceName(),
+              platform: WEB_PLATFORM,
+              detectedIcon,
+            },
+            token,
+          );
+          accountChanged();
+          return readStatus();
+        }),
+      ),
+      Duration.zero,
+    ),
+  );
+  // The shared best-effort revoke-then-clear (the desktop handler adds
+  // a warn-once and its grant clear on top of the same core).
+  const signOutOnce = Effect.runSync(
+    Effect.cachedWithTTL(
+      Effect.promise(async () => {
+        await signOutDevice({ config, service, store, deviceId });
+        accountChanged();
+      }),
+      Duration.zero,
+    ),
+  );
 
   // Removing a device from the account, served over the
   // account:revokeDevice client channel (what the account page calls).
@@ -312,30 +354,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // "web" (a legal opaque label beside the desktop's os.platform()
     // values in EnrollRequestSchema's 1..64 bound).
     enroll: (token) =>
-      enrollOnce(async () => {
-        await enrollDevice(
-          {
-            config,
-            service,
-            store,
-            deviceId,
-            fallbackDeviceName: defaultDeviceName(),
-            platform: WEB_PLATFORM,
-            detectedIcon,
-          },
-          token,
-        );
-        accountChanged();
-        return readStatus();
-      }),
+      Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
 
-    // The shared best-effort revoke-then-clear (the desktop handler
-    // adds a warn-once and its grant clear on top of the same core).
-    signOut: () =>
-      signOutOnce(async () => {
-        await signOutDevice({ config, service, store, deviceId });
-        accountChanged();
-      }),
+    signOut: () => Effect.runPromise(signOutOnce),
 
     revokeDevice: (targetDeviceId) => revokeDeviceOnAccount(targetDeviceId),
 

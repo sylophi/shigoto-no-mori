@@ -10,7 +10,7 @@ import type { Project } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { offer, peerSource } from "@host/lib/sync/sourceLink";
-import { peerMirrorFor, peerSyncFor } from "@host/ipc/peerSync";
+import { peerMirrorFor, peerSyncFor } from "@host/ipc/PeerReach";
 import {
   CHANGED_LOCALLY,
   core,
