@@ -126,6 +126,17 @@ done
    deep-link back. The most recently launched worktree owns the
    `shigomori-dev://` scheme.
 
+Flags the profile options don't take go on to electron-forge, so
+`pnpm dev --profile <name> --inspect-electron` starts the main process
+under Node's inspector. `pnpm device` takes only its own flags.
+
+The native menu, the dock and the system dialogs are outside any page.
+weblab drives them through the main process: a session that attaches
+to the window with `mainProcess` set runs an `electron` step there, so
+walking `Menu.getApplicationMenu().items` to an item by its label and
+calling its `click` is a step like any other. Shoot the attached window (`shot`), not the
+screen, which an agent's session has no permission to capture.
+
 ## Environment variables
 
 | Variable                           | Effect                                                                        |
@@ -150,7 +161,8 @@ publishable key, neither a secret, and is not in the repo: a worktree
 `sm` makes carries it over from the primary checkout (the project's
 carry-over setting), and a checkout made any other way copies it from
 there. Without both values the account reads as unconfigured: the
-web client never dials its hub socket, and Sign in stays off.
+web client never dials its hub socket, Sign in stays off, and the
+first run's page and the migration's leave their sign-in step out.
 
 The app passes the two update stand-ins to its own update check and
 removes them from its environment, so scripts it runs don't inherit

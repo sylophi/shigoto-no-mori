@@ -28,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import { count, flag, list, struct, text } from "./goJson.ts";
 import * as Control from "./Control.ts";
 import type * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
@@ -155,18 +156,6 @@ const reading =
   <T>() =>
   <S extends Schema.Top>(schema: S & Reads<T, S>): S =>
     schema;
-
-const text = Schema.String.pipe(
-  Schema.withDecodingDefaultKey(Effect.succeed("")),
-);
-const flag = Schema.Boolean.pipe(
-  Schema.withDecodingDefaultKey(Effect.succeed(false)),
-);
-const count = Schema.Int.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0)));
-const list = <S extends Schema.Top>(item: S) =>
-  Schema.Array(item).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])));
-const struct = <S extends Schema.Top>(schema: S) =>
-  schema.pipe(Schema.withDecodingDefaultKey(Effect.succeed({})));
 
 type NamedDevice = ControlPeerWorktree["device"];
 const namedDevice = struct(
