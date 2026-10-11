@@ -19,6 +19,7 @@ import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
@@ -225,7 +226,7 @@ export const dialDevice = (
     const socket = yield* Socket.fromWebSocket(Effect.succeed(wire), {
       openTimeout: options.deadlineMs,
     });
-    const protocol = yield* RpcClient.makeProtocolSocket({
+    const socketProtocol = yield* RpcClient.makeProtocolSocket({
       pingInterval: PING_INTERVAL_MS,
       pingTimeout: PING_TIMEOUT_MS,
       // One socket, one ticket: a dropped link is the keeper's to redial.
@@ -242,6 +243,22 @@ export const dialDevice = (
         ),
       ),
     );
+    // A frame this end cannot decode (one past the decoder's size cap)
+    // leaves the RPC client's parser unable to find the next, so every
+    // later answer fails too while the socket stays up (effect 4.0.2's
+    // makeProtocolSocket). The link drops instead, and is dialed again.
+    const protocol = RpcClient.Protocol.of({
+      ...socketProtocol,
+      run: (clientId, write) =>
+        socketProtocol.run(clientId, (message) =>
+          Predicate.isTagged(message, "ClientProtocolError")
+            ? Effect.andThen(
+                write(message),
+                Deferred.succeed(dropped, undefined),
+              )
+            : write(message),
+        ),
+    });
     // The group is built from the contract's calls as they are listed,
     // so its client knows each call only as some call: one with a tag,
     // a payload and an Effect or a Stream back.
