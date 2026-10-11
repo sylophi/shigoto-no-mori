@@ -129,7 +129,15 @@ export function PaletteDialogView({
         />
         <KbdHint
           keys={["↩"]}
-          label={picked ? "Run" : current === "create" ? "Create" : "Open"}
+          label={
+            picked
+              ? "Run"
+              : current === "create"
+                ? "Create"
+                : current === "ask"
+                  ? "Ask"
+                  : "Open"
+          }
         />
         {picked ? (
           <KbdHint keys={["⌫"]} label="Back" />
@@ -228,5 +236,7 @@ function PickedLabel({ row, icon }: { row: PaletteRow; icon: ReactNode }) {
       return <span className="truncate">{row.page.label}</span>;
     case "create":
       return <span className="truncate font-mono">{row.branch}</span>;
+    case "ask":
+      return <span className="truncate">{row.question}</span>;
   }
 }

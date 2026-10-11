@@ -61,7 +61,8 @@ export interface PalettePage {
 }
 
 // Everything the list can hold: the worktrees, the projects and pages a
-// query names, and, for a query, the worktree it could make.
+// query names, and, for a query, the worktree it could make and the
+// question it could ask.
 export type PaletteRow =
   | { kind: "worktree"; key: string; entry: PaletteEntry }
   | { kind: "project"; key: string; item: PaletteProject }
@@ -72,4 +73,17 @@ export type PaletteRow =
       branch: string;
       // Where it can go, the one ↩ picks first.
       targets: [Project, ...Project[]];
+    }
+  | {
+      kind: "ask";
+      key: string;
+      question: string;
+      // The agents installed here, the one ↩ opens first.
+      harnesses: [GuideHarnessOption, ...GuideHarnessOption[]];
     };
+
+// An agent the guide can open (contracts' modules/guide.ts).
+export interface GuideHarnessOption {
+  id: "claude" | "codex";
+  label: string;
+}

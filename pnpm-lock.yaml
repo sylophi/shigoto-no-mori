@@ -629,6 +629,9 @@ importers:
       '@effect/sql-sqlite-bun':
         specifier: 'catalog:'
         version: 4.0.2(effect@4.0.2)
+      '@shigomori/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@shigomori/engine':
         specifier: workspace:*
         version: link:../engine

@@ -794,6 +794,17 @@ export const resumeAgent = Effect.fnUntraced(function* (
   );
 });
 
+// Opens the user's agent on a guide session the shell minted for one of
+// its windows. Like a resume, it writes no state.
+export const launchGuide = (
+  input: Parameters<Agents.Agents["Service"]["guide"]>[0],
+) =>
+  asCall(
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.guide(input),
+    ),
+  );
+
 const decodeHarnesses = Schema.decodeUnknownSync(AgentHarnessStatusListSchema);
 
 export const agentHarnesses = Effect.fnUntraced(function* () {

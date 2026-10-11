@@ -36,6 +36,13 @@ import {
   snakeCase,
 } from "./agentHooks.ts";
 import {
+  cloneSourceCommand,
+  type GuideHarness,
+  guideCommand,
+  guideInstructions,
+  SOURCE_REPO,
+} from "./agentGuide.ts";
+import {
   type AgentSession,
   applyAgentEvent,
   parseAgentEvent,
@@ -127,6 +134,22 @@ export class CantResume extends Schema.TaggedError<CantResume>()("CantResume", {
   }
 }
 
+// The guide's folder could not be laid out.
+export class GuideFolderFailed extends Schema.TaggedError<GuideFolderFailed>()(
+  "GuideFolderFailed",
+  { path: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Couldn't set up the guide's folder at ${this.path}.`;
+  }
+}
+
+// Where the agent a guide opens reads the app's source: a release's tag,
+// cloned from GitHub, or a dev build's own checkout.
+export type GuideSource =
+  | { readonly tag: string }
+  | { readonly checkout: string };
+
 export class Agents extends Context.Service<
   Agents,
   {
@@ -165,6 +188,15 @@ export class Agents extends Context.Service<
       located: Worktrees.Located,
       ref: SessionRef,
     ) => Effect.Effect<void, CantResume | Open.LaunchFailed>;
+    // Opens the harness in the user's terminal on a guide session (the
+    // app's guide): in the guide folder, which holds the guide's
+    // instructions and `source`, with `sm guide mcp` as its tools.
+    readonly guide: (input: {
+      readonly harness: GuideHarness;
+      readonly question: string;
+      readonly session: string;
+      readonly source: GuideSource;
+    }) => Effect.Effect<void, GuideFolderFailed | Open.LaunchFailed>;
     // One lifecycle event as the hooks send it (JSON), from a hook run
     // in `cwd`. Never fails: a missed state change is no hook's
     // business. Judged against a plain read first, so the common event
@@ -207,7 +239,7 @@ const make = (binary: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { home, binaryName } = yield* Paths.Paths;
+    const { home, binaryName, dataDir } = yield* Paths.Paths;
     const registry = yield* Registry.Registry;
     const worktrees = yield* Worktrees.Worktrees;
     const open = yield* Open.Open;
@@ -517,8 +549,61 @@ const make = (binary: string) =>
         return yield* new CantResume({ harness: ref.harness });
       }
       yield* open.inTerminal(
-        located,
+        located.worktree.path,
         `${harness.resume} ${shellQuote(ref.session)}`,
+      );
+    });
+
+    // One folder for every guide, so a harness asks to trust it once.
+    // Its `source` is the running version's: the checkout a dev build
+    // runs from, or a release's tag, cloned again once the app updates
+    // (`source-tag` names the tag it holds).
+    const guide = Effect.fn("Agents.guide")(function* (input: {
+      readonly harness: GuideHarness;
+      readonly question: string;
+      readonly session: string;
+      readonly source: GuideSource;
+    }) {
+      const folder = path.join(dataDir, "guide");
+      const source = path.join(folder, "source");
+      yield* Effect.gen(function* () {
+        yield* fs.makeDirectory(folder, { recursive: true });
+        const sourceUrl =
+          "tag" in input.source
+            ? `${SOURCE_REPO.replace(/\.git$/, "")}/tree/${input.source.tag}`
+            : input.source.checkout;
+        yield* fs.writeFileString(
+          path.join(folder, "AGENTS.md"),
+          guideInstructions(sourceUrl),
+        );
+        yield* fs.writeFileString(
+          path.join(folder, "CLAUDE.md"),
+          "@AGENTS.md\n",
+        );
+        const tagFile = path.join(folder, "source-tag");
+        const held = yield* fs
+          .readFileString(tagFile)
+          .pipe(Effect.orElseSucceed(() => ""));
+        const wanted =
+          "tag" in input.source ? input.source.tag : input.source.checkout;
+        if (held.trim() !== wanted) {
+          yield* fs.remove(source, { recursive: true, force: true });
+          if ("checkout" in input.source) {
+            yield* fs.symlink(input.source.checkout, source);
+          }
+          yield* fs.writeFileString(tagFile, `${wanted}\n`);
+        }
+      }).pipe(
+        Effect.mapError(
+          (cause) => new GuideFolderFailed({ path: folder, cause }),
+        ),
+      );
+      const launch = guideCommand({ ...input, sm, dataDir });
+      yield* open.inTerminal(
+        folder,
+        "tag" in input.source
+          ? `${cloneSourceCommand(input.source.tag)}; ${launch}`
+          : launch,
       );
     });
 
@@ -582,6 +667,7 @@ const make = (binary: string) =>
       unbind,
       idle,
       resume,
+      guide,
       event: (harness, raw, cwd) =>
         onEvent(harness, raw, cwd).pipe(
           Effect.catchCause((cause) => Effect.logDebug("agents event", cause)),

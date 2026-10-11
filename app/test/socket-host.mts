@@ -78,6 +78,7 @@ import {
 } from "@shigomori/contracts/contract";
 import { GRANTS } from "@shigomori/contracts/grants";
 import { controlContract } from "@shigomori/contracts/modules/control";
+import { guideDriveContract } from "@shigomori/contracts/modules/guide";
 import { safeDecode } from "@shigomori/contracts/codec";
 import { classificationGap } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -1160,7 +1161,11 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   );
   // Every group the app serves, the CLI's control contract included.
   const granted = new Map<string, string[]>();
-  for (const module of [...allContractModules, controlContract]) {
+  for (const module of [
+    ...allContractModules,
+    controlContract,
+    guideDriveContract,
+  ]) {
     for (const call of callsOf(module)) {
       // The registrar's fail-closed rule: a host invoke says whether it
       // is remote, a remote one whether it is gated, and a remote gated

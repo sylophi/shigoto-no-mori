@@ -104,7 +104,8 @@ Rules that keep both themes cheap to maintain:
 - **No outlines in doubutsu.** No border, hairline or ring draws an
   edge: fills set surfaces apart, and a floating one stands on a hard,
   blur-less drop (`--doubutsu-sticker-shadow`). Keyboard focus rings
-  are the one exception. So rows that v1 rules off say what they are
+  are the one exception, and the guide's ring around what it points
+  at, a pointer like focus (`data-slot="guide-ring"`). So rows that v1 rules off say what they are
   instead: a search strip carries `data-slot="search-row"` (it becomes
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
   muted band).

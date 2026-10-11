@@ -256,6 +256,9 @@ function buildQueryKeys(deviceId: string) {
     // Client-scoped: the v3 migration as the shell serves it.
     migration: () => ["migration"] as const,
 
+    // Client-scoped: this window's guide as its shell serves it.
+    guide: () => ["guide"] as const,
+
     // Client-scoped: the code highlighter holding a language, loaded in
     // this window whichever device the code came from.
     codeHighlighter: (lang: string) => ["codeHighlighter", lang] as const,
