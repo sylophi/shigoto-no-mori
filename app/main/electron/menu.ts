@@ -206,7 +206,7 @@ export function buildAppMenu(): void {
         },
         { type: "separator" },
         {
-          label: "Add project…",
+          label: "Add Project…",
           accelerator: chords.addProject,
           click: clickBroadcast(navContract, "addProject", undefined),
         },

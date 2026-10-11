@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { Switch } from "../../primitives/switch.tsx";
 import { cn } from "../../lib/utils.ts";
+import { usersAlone, type UsersAloneReason } from "../../lib/usersAlone.ts";
 
 interface ToggleRowProps {
   checked: boolean;
@@ -11,6 +12,9 @@ interface ToggleRowProps {
   switchClassName?: string;
   // Menu-sized type, for a row in a popover.
   dense?: boolean;
+  // Why the app's guide leaves the switch, and the label that flips it,
+  // to the user (lib/usersAlone.ts).
+  alone?: UsersAloneReason;
 }
 
 export function ToggleRowView({
@@ -21,6 +25,7 @@ export function ToggleRowView({
   disabled = false,
   switchClassName,
   dense = false,
+  alone,
 }: ToggleRowProps) {
   // The switch is a span with a role, which the label around it doesn't
   // name: it takes its name and description from the row's text.
@@ -30,7 +35,10 @@ export function ToggleRowView({
     // The hover fill bleeds past the row on a negative margin, which
     // would beat the gap a space-y parent gives the row. A flow-root box
     // contains it, so the fill overhangs without moving the neighbors.
-    <div className="flow-root">
+    <div
+      className="flow-root"
+      {...(alone === undefined ? {} : usersAlone(alone))}
+    >
       <label
         className={cn(
           "-m-1 flex items-start gap-3 rounded-md p-1",

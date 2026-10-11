@@ -28,7 +28,12 @@ import * as Guide from "../main/core/guide/Guide.ts";
 
 // A node as the test poses it: its control's variant and name, and
 // whether it is in a terminal.
-type Facts = { variant?: string; name?: string; terminal?: boolean };
+type Facts = {
+  variant?: string;
+  name?: string;
+  alone?: string;
+  terminal?: boolean;
+};
 
 // The same, as the page's inspection answers it.
 const asPage = (facts: Facts | undefined) => ({
@@ -36,6 +41,7 @@ const asPage = (facts: Facts | undefined) => ({
     facts === undefined
       ? []
       : [{ variant: facts.variant ?? "", name: facts.name ?? "" }],
+  alone: facts?.alone ?? null,
   terminal: facts?.terminal === true,
 });
 
@@ -343,6 +349,43 @@ it("refuses a click or a key on a control that deletes, by its variant or its na
       // A plain control takes the click: a move, a press and a release.
       yield* guide.drive(token, { _tag: "click", ref: 8 });
       assert.equal(page.inputs(), 5);
+    }),
+  );
+});
+
+it("refuses a click or a key on what the page declares the user's alone, whatever its name, before it reaches the page", async () => {
+  const shell = makeShell();
+  const page = shell.window(1);
+  // The access switch: a control with no name of its own.
+  page.nodes.set(14, { alone: "access", name: "" });
+  page.nodes.set(15, { alone: "destructive", name: "Confirm" });
+  page.nodes.set(16, { alone: "terminal" });
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const token = yield* shell.ask(guide, 1, "claude");
+      const click = (ref: number) =>
+        Effect.exit(guide.drive(token, { _tag: "click", ref }));
+      assert.equal(refusedFor(yield* click(14)), "access");
+      assert.equal(refusedFor(yield* click(15)), "destructive");
+      assert.equal(refusedFor(yield* click(16)), "terminal");
+      assert.equal(
+        refusedFor(
+          yield* Effect.exit(
+            guide.drive(token, { _tag: "fill", ref: 16, text: "ls" }),
+          ),
+        ),
+        "terminal",
+      );
+      page.focused = { alone: "access" };
+      assert.equal(
+        refusedFor(
+          yield* Effect.exit(
+            guide.drive(token, { _tag: "press", key: "Space" }),
+          ),
+        ),
+        "access",
+      );
+      assert.equal(page.inputs(), 0);
     }),
   );
 });

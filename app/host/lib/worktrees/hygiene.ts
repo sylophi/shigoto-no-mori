@@ -20,10 +20,19 @@ import {
   splitRemoteRefSync,
 } from "../git/remotes";
 import type { WorktreeIdentity } from "../git/worktrees";
+import * as Cache from "effect/Cache";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type * as Engine from "../engine";
 import * as Ops from "../engineOps";
-import { ttlEffectCache } from "../util/ttlCache";
+import { answersFor } from "../util/cacheTtl";
+
+// One page load's identity lookups, and a disk walk's answer (both
+// explained where they are cached, in makeHygiene).
+const IDENTITIES_TTL = Duration.seconds(10);
+const DISK_TTL = Duration.seconds(60);
 
 interface HeadCommit {
   // Epoch ms of the worktree's HEAD commit.
@@ -249,109 +258,130 @@ const hygieneFor = Effect.fnUntraced(function* (
   return fallback ?? base;
 });
 
-// Probes run through a shared window because this is asked for every
-// project at once: a machine with five projects would otherwise start
-// forty independent git chains, `merge-tree` included, in one burst.
-const gitProbes = Semaphore.makeUnsafe(6);
+// The Worktrees service's tidy-page reads (host/lib/Worktrees.ts).
+export const makeHygiene = Effect.gen(function* () {
+  const context = yield* Effect.context<
+    Engine.Services | ChildProcessSpawner.ChildProcessSpawner
+  >();
 
-export const collectProjectHygiene = Effect.fnUntraced(function* (
-  projectId: string,
-  projectPath: string,
-) {
-  // A repo with no resolvable default branch has nothing to compare
-  // against. Reported as no candidates rather than as a failed call, so
-  // the rows read "can't tell" instead of loading forever. The local
-  // branch name behind the primary ref ("main" for "origin/main") is so
-  // a linked worktree that has it checked out can be recognised and kept
-  // off the tick list.
-  const [identities, remotes] = yield* Effect.all(
-    [identityCache.get(projectId), listRemotes(projectPath)],
-    { concurrency: 2 },
+  // Probes run through a shared window because this is asked for every
+  // project at once: a machine with five projects would otherwise start
+  // forty independent git chains, `merge-tree` included, in one burst.
+  const gitProbes = yield* Semaphore.make(6);
+
+  // The worktree identities (with the project's primary ref), cached
+  // for long enough to serve one page load.
+  //
+  // The renderer asks for disk usage one worktree at a time, and each
+  // of those calls needs the same id-to-path lookup. Without this,
+  // opening the page re-runs the engine's identity list once per row on
+  // top of the once per project the facts already paid for. The
+  // renderer asks for every worktree's disk usage at once, so the whole
+  // burst arrives before the first lookup has resolved: the cache
+  // coalescing those misses is what makes it one identity list per
+  // project rather than one per row.
+  const identities = yield* Cache.makeWith(
+    (projectId: string) =>
+      Ops.listWorktreeIdentities({ projectId }, { primaryRef: true }),
+    { capacity: Infinity, timeToLive: answersFor(IDENTITIES_TTL) },
   );
-  // Resolved once per project by the engine and carried on every
-  // identity.
-  const primaryRef = identities[0]?.primaryRef ?? null;
-  const primaryBranch = identities[0]?.primaryBranch ?? null;
-  const candidates = yield* primaryRefCandidates(
-    projectPath,
-    primaryRef,
-    remotes,
+
+  // Three walks at a time. Each one is the engine's Hygiene walk on a
+  // darwin helper streaming a whole tree, so a wider window mostly
+  // makes the first size land later. Any narrower and a fleet of forty
+  // crawls.
+  const diskWalks = yield* Semaphore.make(3);
+
+  // Disk measurements are cached because a full walk of a big checkout
+  // costs real IO, and the tidy page refetches on mount and on window
+  // focus like every other query here. 60s is long enough to make
+  // navigating back instant, short enough that a freshly removed
+  // worktree doesn't linger in the total.
+  //
+  // Keyed by path plus whatever was carved out of it, not by id: the id
+  // is derived from the path anyway, and folding the carve-outs into the
+  // key keeps a walk from being reused after a nested worktree appeared
+  // or went away. Cache lookups sit inside the slot so a queued worktree
+  // whose walk landed in the meantime returns from cache instead of
+  // re-walking.
+  const disk = yield* Cache.makeWith(
+    (key: string) => {
+      // split always answers at least one part, so the default never
+      // applies.
+      const [root = key, ...excluded] = key.split("\u0000");
+      return Ops.diskUsage(root, excluded);
+    },
+    { capacity: Infinity, timeToLive: answersFor(DISK_TTL) },
   );
-  return yield* Effect.forEach(
-    identities,
-    (identity) =>
-      hygieneFor(identity, projectPath, candidates, primaryBranch).pipe(
-        gitProbes.withPermits(1),
-      ),
-    { concurrency: "unbounded" },
-  );
-});
 
-// The worktree identities (with the project's primary ref), cached for
-// long enough to serve one page load.
-//
-// The renderer asks for disk usage one worktree at a time, and each of
-// those calls needs the same id-to-path lookup. Without this, opening
-// the page re-runs the engine's identity list once per row on top of
-// the once per project the facts already paid for. The renderer asks
-// for every worktree's disk usage at once, so the whole burst arrives
-// before the first lookup has resolved: the cache coalescing those
-// misses is what makes it one identity list per project rather than
-// one per row.
-const identityCache = ttlEffectCache(10_000, (projectId: string) =>
-  Ops.listWorktreeIdentities({ projectId }, { primaryRef: true }),
-);
+  return {
+    hygiene: Effect.fn("Worktrees.hygiene")(function* (
+      projectId: string,
+      projectPath: string,
+    ) {
+      // A repo with no resolvable default branch has nothing to compare
+      // against. Reported as no candidates rather than as a failed call,
+      // so the rows read "can't tell" instead of loading forever. The
+      // local branch name behind the primary ref ("main" for
+      // "origin/main") is so a linked worktree that has it checked out
+      // can be recognised and kept off the tick list.
+      const [listed, remotes] = yield* Effect.all(
+        [
+          Cache.get(identities, projectId),
+          listRemotes(projectPath).pipe(Effect.provide(context)),
+        ],
+        { concurrency: 2 },
+      );
+      // Resolved once per project by the engine and carried on every
+      // identity.
+      const primaryRef = listed[0]?.primaryRef ?? null;
+      const primaryBranch = listed[0]?.primaryBranch ?? null;
+      const candidates = yield* primaryRefCandidates(
+        projectPath,
+        primaryRef,
+        remotes,
+      ).pipe(Effect.provide(context));
+      return yield* Effect.forEach(
+        listed,
+        (identity) =>
+          hygieneFor(identity, projectPath, candidates, primaryBranch).pipe(
+            gitProbes.withPermits(1),
+            Effect.provide(context),
+          ),
+        { concurrency: "unbounded" },
+      );
+    }),
 
-export const findWorktreeForDisk = Effect.fnUntraced(function* (
-  projectId: string,
-  worktreeId: string,
-) {
-  const identities = yield* identityCache.get(projectId);
-  const found = identities.find((identity) => identity.id === worktreeId);
-  if (!found) return yield* new UnknownWorktreeError({ worktreeId });
-  return found;
-});
+    worktreeForDisk: Effect.fn("Worktrees.worktreeForDisk")(function* (
+      projectId: string,
+      worktreeId: string,
+    ) {
+      const listed = yield* Cache.get(identities, projectId);
+      const found = listed.find((identity) => identity.id === worktreeId);
+      if (!found) return yield* new UnknownWorktreeError({ worktreeId });
+      return found;
+    }),
 
-// Three walks at a time. Each one is the engine's Hygiene walk on a
-// darwin helper streaming a whole tree, so a wider window mostly makes the
-// first size land later. Any narrower and a fleet of forty crawls.
-const diskWalks = Semaphore.makeUnsafe(3);
-
-// Disk measurements are cached because a full walk of a big checkout
-// costs real IO, and the tidy page refetches on mount and on window
-// focus like every other query here. 60s is long enough to make
-// navigating back instant, short enough that a freshly removed worktree
-// doesn't linger in the total.
-//
-// Keyed by path plus whatever was carved out of it, not by id: the id is
-// derived from the path anyway, and folding the carve-outs into the key
-// keeps a walk from being reused after a nested worktree appeared or
-// went away. Cache lookups sit inside the slot so a queued worktree
-// whose walk landed in the meantime returns from cache instead of
-// re-walking.
-const diskCache = ttlEffectCache(60_000, (key: string) => {
-  // split always answers at least one part, so the default never applies.
-  const [root = key, ...excluded] = key.split("\u0000");
-  return Ops.diskUsage(root, excluded);
-});
-
-export const measureWorktreeDisk = Effect.fnUntraced(function* (
-  projectId: string,
-  worktree: WorktreeIdentity,
-) {
-  const worktreePath = worktree.path;
-  // Under the in-project layout a project's worktrees live inside its
-  // primary checkout. Each one is measured as its own row, so the
-  // enclosing walk steps over them rather than counting them twice.
-  const identities = yield* identityCache.get(projectId);
-  const nested = identities
-    .map((identity) => identity.path)
-    .filter(
-      (path) => path !== worktreePath && isSameOrInside(path, worktreePath),
-    )
-    .toSorted();
-  const usage = yield* diskCache
-    .get([worktreePath, ...nested].join("\u0000"))
-    .pipe(diskWalks.withPermits(1));
-  return { worktreeId: worktree.id, ...usage };
+    diskUsage: Effect.fn("Worktrees.diskUsage")(function* (
+      projectId: string,
+      worktree: WorktreeIdentity,
+    ) {
+      const worktreePath = worktree.path;
+      // Under the in-project layout a project's worktrees live inside its
+      // primary checkout. Each one is measured as its own row, so the
+      // enclosing walk steps over them rather than counting them twice.
+      const listed = yield* Cache.get(identities, projectId);
+      const nested = listed
+        .map((identity) => identity.path)
+        .filter(
+          (path) => path !== worktreePath && isSameOrInside(path, worktreePath),
+        )
+        .toSorted();
+      const usage = yield* Cache.get(
+        disk,
+        [worktreePath, ...nested].join("\u0000"),
+      ).pipe(diskWalks.withPermits(1));
+      return { worktreeId: worktree.id, ...usage };
+    }),
+  };
 });

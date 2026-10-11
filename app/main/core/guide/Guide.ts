@@ -6,11 +6,13 @@
 // DevTools protocol, attached at a session's first action and detached
 // as it ends.
 //
-// Some controls are the user's alone: one that deletes, removes or signs
-// out (a `data-variant` ending in "destructive", or a name that says so),
-// which a click or a key on it is refused for, and the app's terminals,
-// which take no keys or text from a guide. The agent's server ends its
-// session as it stops.
+// Some controls are the user's alone, as the page declares them
+// (`data-users-alone`, packages/ui's lib/usersAlone.ts) on the control or
+// around it: one that deletes, removes or signs out, one that lets the
+// account's other devices into this machine, and the app's terminals. A
+// click or a key on one is refused, and a terminal takes no text either.
+// A name that says it deletes is refused too, should a control go
+// undeclared. The agent's server ends its session as it stops.
 import { randomBytes } from "node:crypto";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -30,6 +32,7 @@ import type {
   GuideReply,
   GuideState,
 } from "@shigomori/contracts/modules/guide";
+import { USERS_ALONE } from "@shigomori/ui/lib/usersAlone.ts";
 import { axOutline } from "./axOutline";
 
 // Each error carries a code, which the wire keeps beside the message.
@@ -49,16 +52,21 @@ export class GuideSessionEnded extends Schema.TaggedError<GuideSessionEnded>()(
 
 export class GuideRefused extends Schema.TaggedError<GuideRefused>()(
   "GuideRefused",
-  { reason: Schema.Literals(["destructive", "terminal"]) },
+  { reason: Schema.Literals(["destructive", "access", "terminal"]) },
 ) {
   get code(): string {
     return "guide-refused";
   }
 
   override get message(): string {
-    return this.reason === "destructive"
-      ? "That control is the user's to use: it deletes, removes or signs out. Point at it and let them decide."
-      : "The app's terminals are the user's. Use your own shell instead.";
+    switch (this.reason) {
+      case "destructive":
+        return "That control is the user's to use: it deletes, removes or signs out. Point at it and let them decide.";
+      case "access":
+        return "That control lets the user's other devices into this machine, which is theirs to decide. Point at it and let them.";
+      case "terminal":
+        return "The app's terminals are the user's. Use your own shell instead.";
+    }
   }
 }
 
@@ -177,13 +185,19 @@ const CONTROL_OF = `(node) => {
   return { variant, name: name.trim().slice(0, 200) };
 }`;
 
+// Why the page leaves a node to the user, null when it doesn't.
+const ALONE_OF = `(node) =>
+  node?.closest?.("[${USERS_ALONE}]")?.getAttribute("${USERS_ALONE}") ?? null`;
+
 // What the page says of a node: its control, the control under its
-// middle (a click lands on whatever is on top there), whether it is in a
-// terminal, and where its middle is, scrolled into view.
+// middle (a click lands on whatever is on top there), whether either is
+// the user's alone, whether it is in a terminal, and where its middle
+// is, scrolled into view.
 const INSPECT = `function () {
   const el = this.nodeType === 1 ? this : this.parentElement;
   if (el === null) return null;
   const controlOf = ${CONTROL_OF};
+  const aloneOf = ${ALONE_OF};
   el.scrollIntoView({ block: "nearest", inline: "nearest" });
   const r = el.getBoundingClientRect();
   const x = r.x + r.width / 2;
@@ -191,6 +205,7 @@ const INSPECT = `function () {
   const hit = el.ownerDocument.elementFromPoint(x, y);
   return {
     controls: [controlOf(el), controlOf(hit)].filter((c) => c !== null),
+    alone: aloneOf(el) ?? aloneOf(hit),
     terminal: el.closest(".xterm") !== null,
     x,
     y,
@@ -201,23 +216,35 @@ const INSPECT = `function () {
 const FOCUSED = `(() => {
   const el = document.activeElement;
   const controlOf = ${CONTROL_OF};
+  const aloneOf = ${ALONE_OF};
   const control = controlOf(el);
   return {
     controls: control === null ? [] : [control],
+    alone: aloneOf(el),
     terminal: el !== null && el.closest(".xterm") !== null,
   };
 })()`;
 
-// What a control that is the user's alone says of itself: a destructive
-// variant, or a name that deletes, removes or signs out.
-const USERS_ALONE =
+// A name that deletes, removes or signs out, for a control the page
+// left undeclared.
+const DESTRUCTIVE_NAME =
   /\b(delete|remove|discard|sign out|revoke|tear down|nuke|erase|wipe|drop|forget|unlink|uninstall)\b/i;
 
-const usersAlone = (facts: Facts) =>
-  facts.controls.some(
-    ({ variant, name }) =>
-      variant.endsWith("destructive") || USERS_ALONE.test(name),
-  );
+// Why a node is the user's alone, undefined when it isn't.
+const aloneFor = (facts: Facts): GuideRefused["reason"] | undefined => {
+  if (facts.terminal || facts.alone === "terminal") return "terminal";
+  if (facts.alone === "access") return "access";
+  if (
+    facts.alone !== null ||
+    facts.controls.some(
+      ({ variant, name }) =>
+        variant.endsWith("destructive") || DESTRUCTIVE_NAME.test(name),
+    )
+  ) {
+    return "destructive";
+  }
+  return undefined;
+};
 
 const TARGET = "data-guide-target";
 
@@ -245,6 +272,7 @@ type Facts = {
     readonly variant: string;
     readonly name: string;
   }>;
+  readonly alone: string | null;
   readonly terminal: boolean;
 };
 type Spot = Facts & { readonly x: number; readonly y: number };
@@ -445,9 +473,9 @@ const make = Effect.gen(function* () {
       click: ({ ref }) =>
         Effect.gen(function* () {
           const spot = yield* spotOf(page, ref);
-          if (usersAlone(spot)) {
-            return yield* new GuideRefused({ reason: "destructive" });
-          }
+          const alone = aloneFor(spot);
+          if (alone !== undefined)
+            return yield* new GuideRefused({ reason: alone });
           yield* mouse(page, "mouseMoved", spot);
           yield* mouse(page, "mousePressed", spot);
           yield* mouse(page, "mouseReleased", spot);
@@ -456,7 +484,7 @@ const make = Effect.gen(function* () {
       fill: ({ ref, text }) =>
         Effect.gen(function* () {
           const spot = yield* spotOf(page, ref);
-          if (spot.terminal) {
+          if (aloneFor(spot) === "terminal") {
             return yield* new GuideRefused({ reason: "terminal" });
           }
           yield* page.send("DOM.focus", { backendNodeId: ref });
@@ -469,11 +497,13 @@ const make = Effect.gen(function* () {
       press: ({ key }) =>
         Effect.gen(function* () {
           const facts = yield* focused(page);
-          if (facts.terminal) {
-            return yield* new GuideRefused({ reason: "terminal" });
-          }
-          if (usersAlone(facts) && (key === "Enter" || key === "Space")) {
-            return yield* new GuideRefused({ reason: "destructive" });
+          const alone = aloneFor(facts);
+          // Moving off a control is the guide's, never into a terminal.
+          if (
+            alone === "terminal" ||
+            (alone !== undefined && (key === "Enter" || key === "Space"))
+          ) {
+            return yield* new GuideRefused({ reason: alone });
           }
           yield* sendKey(page, key);
           return {};

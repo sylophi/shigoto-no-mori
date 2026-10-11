@@ -10,7 +10,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
@@ -22,20 +21,16 @@ import {
   MACFS_DIST_DIR,
 } from "@shared/packaging/macfsDist.mts";
 import { openPortLink } from "@shared/remote/portLink";
-import { getDeviceId } from "@host/lib/config/deviceId";
+import * as DeviceId from "@host/lib/config/DeviceId";
+import * as HostFacts from "@host/lib/HostFacts";
 import { storeFailureReport } from "@host/lib/storeFailure";
 import * as Observability from "@host/lib/util/observability";
 import { initDataDir } from "@host/lib/util/paths";
 import * as Graph from "./graph";
 import * as Loopback from "@host/socket/loopback";
-import {
-  flavorOf,
-  HOST_FACTS_FLAG,
-  type HostFacts,
-  HostFactsSchema,
-  hostBinaryPath,
-} from "./facts";
+import { hostBinaryPath, hostFacts } from "./facts";
 import * as HostLayer from "./layer";
+import * as ShellLayer from "./shell";
 import { startHost } from "./session";
 
 // The utility process's port to its parent, and the port the shell
@@ -55,14 +50,6 @@ type ParentPort = {
   ): void;
 };
 
-function factsFromArgv(): HostFacts {
-  const arg = process.argv.find((value) => value.startsWith(HOST_FACTS_FLAG));
-  if (arg === undefined) throw new Error("the host was started without facts");
-  return Schema.decodeUnknownSync(Schema.fromJsonString(HostFactsSchema))(
-    arg.slice(HOST_FACTS_FLAG.length),
-  );
-}
-
 // Every span that ends, a JSON line in host-trace.log beside the
 // shell's trace.log, rotated to host-trace.old.log past 1 MB at start.
 function traceFile(logsPath: string): (line: string) => void {
@@ -79,8 +66,8 @@ function traceFile(logsPath: string): (line: string) => void {
   return (line) => void stream.write(`${line}\n`);
 }
 
-const facts = factsFromArgv();
-const flavor = flavorOf(facts);
+const facts = hostFacts();
+const flavor = facts.flavor;
 // oxlint-disable-next-line shigomori/no-double-cast -- Electron adds parentPort to a utility process, and its types are Electron's
 const parentPort = (process as unknown as { parentPort: ParentPort })
   .parentPort;
@@ -129,21 +116,7 @@ async function main(): Promise<void> {
   // The shell has opened the data folder already, and says so when it
   // can't: this only names it for the host.
   await initDataDir(flavor);
-  startHost({
-    facts,
-    shell: {
-      relaunch: () => shell.relaunch(),
-      updater: {
-        check: () => shell.updaterCheck(),
-        install: (unattended) => shell.updaterInstall({ unattended }),
-        update: (unattended) => shell.updaterUpdate({ unattended }),
-      },
-      stopUpdaterBridge: () => shell.stopUpdaterBridge(),
-      migration: (progress) => shell.migration(progress),
-      guide: (payload) => shell.guide(payload),
-    },
-    quit,
-  });
+  startHost({ quit });
   const engine = {
     flavor,
     macfs: hostBinaryPath(MACFS_DIST_DIR, MACFS_BINARY_NAME),
@@ -153,6 +126,13 @@ async function main(): Promise<void> {
   const graph = ManagedRuntime.make(
     Graph.layer.pipe(
       Layer.provideMerge(HostLayer.layer({ hurried: () => hurried, engine })),
+      // What the shell handed over: its facts and its calls.
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.succeed(HostFacts.HostFacts, facts),
+          ShellLayer.layer(shell),
+        ),
+      ),
       Layer.provideMerge(
         Observability.layer({
           packaged: facts.packaged,
@@ -180,7 +160,7 @@ async function main(): Promise<void> {
   }
   await shell.ready({
     ...(await Graph.run(Effect.flatMap(Loopback.Loopback, (it) => it.address))),
-    deviceId: getDeviceId(),
+    deviceId: await Graph.run(DeviceId.current),
   });
 }
 

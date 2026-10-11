@@ -17,22 +17,21 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import {
+  type PeerReach,
   peerEffects,
   peerWorktreesFor,
-  thisDeviceId,
-} from "@host/ipc/peerSync";
+} from "@host/ipc/PeerReach";
+import * as DeviceId from "@host/lib/config/DeviceId";
+import * as AccountPeers from "./AccountPeers";
+import type { DirectPeer } from "./AccountPeers";
 import * as Ops from "@host/lib/engineOps";
 import { mirrorList } from "@host/mirror/sessions";
-import { implSlot } from "@host/lib/util/implSlot";
-import type { PeerEffects } from "@host/ipc/peerSync";
+import type { PeerEffects } from "@host/ipc/PeerReach";
 import type { Client } from "@shigomori/contracts/types";
 import {
   listed,
@@ -43,59 +42,6 @@ import {
   peersOf,
   type Running,
 } from "./plan";
-
-// The root injects the account at boot (host/process/handlers.ts):
-// the device registry rides the stored credential, and which peers
-// have a direct session up is the hub status snapshot's. The peers
-// themselves are reached through host/ipc/peerSync.ts.
-type ControlImpl = {
-  // The account's device registry. Empty when signed out.
-  listDevices: Effect.Effect<
-    DeviceInfo[],
-    ControlError | AccountUnreachableError
-  >;
-  // The devices a direct session is established to (the only ones a
-  // call can reach), each with whether it shares with this device and
-  // runs its commands: the hub status snapshot's peerSharesData and
-  // peerAcceptsCommands, the same reading the app's windows show.
-  directPeers: Effect.Effect<Readonly<Record<string, DirectPeer>>>;
-};
-
-export type DirectPeer = {
-  readonly sharesData: boolean;
-  readonly acceptsCommands: boolean;
-};
-
-// The account's hub out of reach while listing the devices: a network
-// down, the hub redeploying.
-export class AccountUnreachableError extends Schema.TaggedError<AccountUnreachableError>()(
-  "AccountUnreachableError",
-  { reason: Schema.String },
-) {
-  override get message(): string {
-    return `Couldn't reach your account to find your devices (${this.reason}). Check the network, then try again.`;
-  }
-}
-
-// Why the device list failed, in the words the terminal prints: a
-// credential the hub no longer honors (the device was removed from the
-// account while the app held it) is the signed-out case, and anything
-// else the hub out of reach, with its cause.
-export function listDevicesFailure(
-  error: unknown,
-): ControlError | AccountUnreachableError {
-  return isHubRefusal(error)
-    ? new ControlError(
-        "signed-out",
-        "This device's access to the account was removed. Sign in again from the app.",
-      )
-    : new AccountUnreachableError({ reason: errorMessageOf(error) });
-}
-
-const { set: setControlImpl, get: requireImpl } = implSlot<ControlImpl>(
-  "control op requested before setControlImpl ran",
-);
-export { setControlImpl };
 
 // An ask that only informs an answer gets a probe's patience, the
 // registry included: it is a hub round trip with no clock of its own.
@@ -108,8 +54,11 @@ const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
   );
 
 export const roster = Effect.gen(function* () {
-  const devices = yield* requireImpl().listDevices;
-  const hereId = thisDeviceId();
+  const devices = yield* Effect.flatMap(
+    AccountPeers.AccountPeers,
+    (account) => account.listDevices,
+  );
+  const hereId = yield* DeviceId.current;
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) {
     return yield* Effect.fail(
@@ -137,7 +86,7 @@ export const standingsOf = (
   identity: string | null,
   { grant }: { grant: boolean },
 ) =>
-  Effect.flatMap(requireImpl().directPeers, (direct) =>
+  Effect.flatMap(directPeers, (direct) =>
     Effect.forEach(
       devices,
       (device) => standingOf(device, identity, direct[device.deviceId], grant),
@@ -155,7 +104,7 @@ const standingOf = (
   // Undefined when no direct session is established.
   peer: DirectPeer | undefined,
   grant: boolean,
-): Effect.Effect<ControlDevice> => {
+): Effect.Effect<ControlDevice, never, PeerReach> => {
   const base = {
     deviceId: device.deviceId,
     name: nameOf(device),
@@ -243,13 +192,10 @@ export const candidates = Effect.fnUntraced(function* (
   };
 });
 
-export const registryOrEmpty = probe(requireListDevices(), () => []).pipe(
-  Effect.orElseSucceed((): DeviceInfo[] => []),
-);
-
-function requireListDevices() {
-  return Effect.suspend(() => requireImpl().listDevices);
-}
+export const registryOrEmpty = probe(
+  Effect.flatMap(AccountPeers.AccountPeers, (account) => account.listDevices),
+  () => [],
+).pipe(Effect.orElseSucceed((): DeviceInfo[] => []));
 
 // A session a peer runs against one of this device's worktrees, with
 // the peer and the client to drive it through.
@@ -265,8 +211,8 @@ export type PeerMirror = Running & {
 // than a refusal: the device's own sessions were already looked at.
 export const peerMirrors = (registry: DeviceInfo[]) =>
   Effect.gen(function* () {
-    const hereId = thisDeviceId();
-    const direct = yield* requireImpl().directPeers;
+    const hereId = yield* DeviceId.current;
+    const direct = yield* directPeers;
     const peers = peersOf(registry, hereId).filter(
       (device) => direct[device.deviceId]?.sharesData === true,
     );
@@ -294,9 +240,9 @@ export const peerMirrors = (registry: DeviceInfo[]) =>
     return found.flat();
   });
 
-export const peerMirrorOf = (
+export const peerMirrorOf = <R>(
   target: { projectId: string; worktreeId: string },
-  registry: Effect.Effect<DeviceInfo[]>,
+  registry: Effect.Effect<DeviceInfo[], never, R>,
 ) =>
   Effect.map(Effect.flatMap(registry, peerMirrors), (mirrors) =>
     mirrors.find(
@@ -408,4 +354,7 @@ export const worktreesOn = (standings: ControlDevice[]) =>
 
 // Which devices have a direct session up, each with whether it runs
 // this device's commands.
-export const directPeers = Effect.suspend(() => requireImpl().directPeers);
+export const directPeers = Effect.flatMap(
+  AccountPeers.AccountPeers,
+  (account) => account.directPeers,
+);

@@ -16,9 +16,9 @@ import {
   MIRROR_LABEL_IGNORE_MODE,
   MIRROR_LABEL_LOCAL_PROJECT,
   MIRROR_LABEL_LOCAL_WORKTREE,
-  type MirrorCreateInput,
   type MirrorSessionRaw,
 } from "./registry";
+import type { MirrorCreateInput } from "./MirrorEngine";
 
 const decodeMirrorSession = Schema.decodeUnknownSync(MirrorSessionSchema);
 

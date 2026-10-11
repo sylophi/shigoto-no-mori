@@ -8,15 +8,15 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "./Git.ts";
-import { parseJson } from "./json.ts";
+import * as GoJson from "./goJson.ts";
 import {
+  CheckNode,
   checkVerdict,
   MERGE_PROGRESS_QUERY,
   type MergeProgress,
@@ -329,64 +329,107 @@ export const commandMessageOf = (error: GitHubCliError): string => {
   }
 };
 
-const text = (value: unknown) => (typeof value === "string" ? value : "");
-const count = (value: unknown) => (typeof value === "number" ? value : 0);
-
 // One node is one verdict (checkVerdict).
-const rollupChecks = (nodes: unknown): PullRequestChecks => {
+const rollupChecks = (nodes: ReadonlyArray<CheckNode>): PullRequestChecks => {
   const checks = { total: 0, passing: 0, failing: 0, pending: 0 };
-  for (const node of Array.isArray(nodes) ? nodes : []) {
+  for (const node of nodes) {
     checks.total++;
     checks[checkVerdict(node)]++;
   }
   return checks;
 };
 
-type Row = { readonly [key: string]: unknown };
+// A `gh pr list` or `gh pr view` row, read as Go read it (goJson.ts).
+const Row = Schema.Struct({
+  number: GoJson.count,
+  title: GoJson.text,
+  state: GoJson.text,
+  isDraft: GoJson.flag,
+  url: GoJson.text,
+  baseRefName: GoJson.text,
+  headRefName: GoJson.text,
+  isCrossRepository: GoJson.flag,
+  mergeStateStatus: GoJson.text,
+  body: GoJson.text,
+  autoMergeRequest: Schema.optional(
+    Schema.NullOr(Schema.Struct({ mergeMethod: GoJson.text })),
+  ),
+  statusCheckRollup: GoJson.list(CheckNode),
+});
+type Row = typeof Row.Type;
+const decodeRow = Schema.decodeUnknownOption(Schema.fromJsonString(Row));
 
-// A `gh pr list` row as Go decoded it: a missing field reads as its zero
-// value, and the empty ones are left out of the document.
-const summaryOf = (row: Row): PullRequestSummary => {
-  const autoMerge = row["autoMergeRequest"];
-  return {
-    number: count(row["number"]),
-    title: text(row["title"]),
-    state: text(row["state"]),
-    isDraft: row["isDraft"] === true,
-    url: text(row["url"]),
-    baseRefName: text(row["baseRefName"]),
-    headRefName: text(row["headRefName"]),
-    ...(row["isCrossRepository"] === true
-      ? { isCrossRepository: true as const }
-      : {}),
-    ...(text(row["mergeStateStatus"]) === ""
-      ? {}
-      : { mergeStateStatus: text(row["mergeStateStatus"]) }),
-    ...(Predicate.isObject(autoMerge)
-      ? { autoMergeRequest: { mergeMethod: text(autoMerge["mergeMethod"]) } }
-      : {}),
-  };
-};
+// The row as the document has it: the empty fields left out.
+const summaryOf = (row: Row): PullRequestSummary => ({
+  number: row.number,
+  title: row.title,
+  state: row.state,
+  isDraft: row.isDraft,
+  url: row.url,
+  baseRefName: row.baseRefName,
+  headRefName: row.headRefName,
+  ...(row.isCrossRepository ? { isCrossRepository: true as const } : {}),
+  ...(row.mergeStateStatus === ""
+    ? {}
+    : { mergeStateStatus: row.mergeStateStatus }),
+  ...(row.autoMergeRequest
+    ? { autoMergeRequest: { mergeMethod: row.autoMergeRequest.mergeMethod } }
+    : {}),
+});
 
-// The repository object of a GraphQL answer, undefined when there is none.
-const repositoryOf = (stdout: string): Row | undefined => {
-  const parsed = Option.getOrUndefined(parseJson(stdout));
-  const data = Predicate.isObject(parsed) ? parsed["data"] : undefined;
-  const repository = Predicate.isObject(data) ? data["repository"] : undefined;
-  return Predicate.isObject(repository) ? repository : undefined;
-};
+// gh's array of rows, none when it is something else.
+const rowsOf = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Array(Row)),
+);
 
-// gh's JSON array of objects, none when it is something else.
-const rowsOf = (stdout: string): Option.Option<ReadonlyArray<Row>> => {
-  try {
-    const parsed: unknown = JSON.parse(stdout);
-    return Array.isArray(parsed) && parsed.every(Predicate.isObject)
-      ? Option.some(parsed)
-      : Option.none();
-  } catch {
-    return Option.none();
-  }
-};
+// The repository settings a GraphQL answer carries, none when it has
+// no repository.
+const RepositoryAnswer = Schema.fromJsonString(
+  Schema.Struct({
+    data: GoJson.struct(
+      Schema.Struct({
+        repository: Schema.NullOr(
+          Schema.Struct({
+            mergeCommitAllowed: GoJson.flag,
+            squashMergeAllowed: GoJson.flag,
+            rebaseMergeAllowed: GoJson.flag,
+            autoMergeAllowed: GoJson.flag,
+          }),
+        ).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+      }),
+    ),
+  }),
+);
+const repositoryOf = (stdout: string) =>
+  Option.flatMap(
+    Schema.decodeUnknownOption(RepositoryAnswer)(stdout),
+    ({ data }) => Option.fromNullishOr(data.repository),
+  );
+
+const MergeStateAnswer = Schema.fromJsonString(
+  Schema.Struct({ mergeStateStatus: GoJson.text }),
+);
+
+// The stacks API's answer: each stack's pull requests.
+const StacksAnswer = Schema.fromJsonString(
+  Schema.Array(
+    Schema.Struct({
+      pull_requests: GoJson.list(
+        Schema.Struct({ number: GoJson.count, state: GoJson.text }),
+      ),
+    }),
+  ),
+);
+
+// An async merge's answer: its status, and the ticket's details.
+const AsyncTicket = Schema.fromJsonString(
+  Schema.Struct({
+    status: GoJson.text,
+    details: GoJson.struct(
+      Schema.Struct({ message: GoJson.text, uuid: GoJson.text }),
+    ),
+  }),
+);
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -522,7 +565,7 @@ const make = Effect.gen(function* () {
       repo,
       branch,
       rows.success.map((row) =>
-        Object.assign(summaryOf(row), { rollup: row["statusCheckRollup"] }),
+        Object.assign(summaryOf(row), { rollup: row.statusCheckRollup }),
       ),
     );
     if (Option.isNone(own)) return { found: null };
@@ -551,16 +594,16 @@ const make = Effect.gen(function* () {
         ? { found: null }
         : { found: null, unavailable: reasonOf(failure) };
     }
-    const own = rows.success.find((row) => row["isCrossRepository"] !== true);
+    const own = rows.success.find((row) => !row.isCrossRepository);
     return {
       found:
         own === undefined
           ? null
           : {
-              number: count(own["number"]),
-              url: text(own["url"]),
-              title: text(own["title"]),
-              body: text(own["body"]),
+              number: own.number,
+              url: own.url,
+              title: own.title,
+              body: own.body,
               isCrossRepository: false,
             },
     };
@@ -619,10 +662,8 @@ const make = Effect.gen(function* () {
       }
       return yield* answered.failure;
     }
-    const parsed = parseJson(answered.success);
-    if (Option.isSome(parsed) && Predicate.isObject(parsed.value)) {
-      return Option.some(summaryOf(parsed.value));
-    }
+    const row = decodeRow(answered.success);
+    if (Option.isSome(row)) return Option.some(summaryOf(row.value));
     return yield* new GitHubOutputError({ command: "pr view" });
   });
 
@@ -677,16 +718,17 @@ const make = Effect.gen(function* () {
       `query=${REPO_MERGE_QUERY}`,
     ]).pipe(Effect.option);
     if (Option.isNone(stdout)) return everything;
-    const repository = repositoryOf(stdout.value);
-    if (repository === undefined) return everything;
-    const flags: Record<MergeMethod, unknown> = {
-      merge: repository["mergeCommitAllowed"],
-      squash: repository["squashMergeAllowed"],
-      rebase: repository["rebaseMergeAllowed"],
+    const found = repositoryOf(stdout.value);
+    if (Option.isNone(found)) return everything;
+    const repository = found.value;
+    const flags: Record<MergeMethod, boolean> = {
+      merge: repository.mergeCommitAllowed,
+      squash: repository.squashMergeAllowed,
+      rebase: repository.rebaseMergeAllowed,
     };
     return {
-      allowed: MERGE_METHODS.filter((method) => flags[method] === true),
-      autoMerge: repository["autoMergeAllowed"] === true,
+      allowed: MERGE_METHODS.filter((method) => flags[method]),
+      autoMerge: repository.autoMergeAllowed,
     };
   });
 
@@ -724,8 +766,10 @@ const make = Effect.gen(function* () {
       "--json",
       "mergeStateStatus",
     ]);
-    const parsed = Option.getOrUndefined(parseJson(stdout));
-    return text(Predicate.isObject(parsed) ? parsed["mergeStateStatus"] : "");
+    return Option.match(Schema.decodeUnknownOption(MergeStateAnswer)(stdout), {
+      onNone: () => "",
+      onSome: (answer) => answer.mergeStateStatus,
+    });
   });
 
   const stackFor = Effect.fn("GitHub.stackFor")(function* (
@@ -743,38 +787,27 @@ const make = Effect.gen(function* () {
         return Option.none<GitHubStack>();
       return yield* answered.failure;
     }
-    const stacks = Option.getOrUndefined(parseJson(answered.success));
-    if (!Array.isArray(stacks)) {
+    const stacks = Schema.decodeUnknownOption(StacksAnswer)(answered.success);
+    if (Option.isNone(stacks)) {
       return yield* new GitHubOutputError({ command: "api stacks" });
     }
-    for (const stack of stacks) {
-      const entries = Predicate.isObject(stack)
-        ? stack["pull_requests"]
-        : undefined;
-      if (!Array.isArray(entries)) continue;
-      const parsed = entries.map((entry) => ({
-        number: count(Predicate.isObject(entry) ? entry["number"] : undefined),
-        state: text(Predicate.isObject(entry) ? entry["state"] : undefined),
-      }));
-      if (parsed.some((entry) => entry.number === number)) {
-        return Option.some<GitHubStack>(parsed);
+    for (const { pull_requests: entries } of stacks.value) {
+      if (entries.some((entry) => entry.number === number)) {
+        return Option.some<GitHubStack>(entries);
       }
     }
     return Option.none<GitHubStack>();
   });
 
   const asyncTicket = (stdout: string) =>
-    Option.flatMap(parseJson(stdout), (parsed) => {
-      if (!Predicate.isObject(parsed)) return Option.none();
-      const details = Predicate.isObject(parsed["details"])
-        ? parsed["details"]
-        : {};
-      return Option.some({
-        status: text(parsed["status"]),
-        message: text(details["message"]),
-        uuid: text(details["uuid"]),
-      });
-    });
+    Option.map(
+      Schema.decodeUnknownOption(AsyncTicket)(stdout),
+      ({ status, details }) => ({
+        status,
+        message: details.message,
+        uuid: details.uuid,
+      }),
+    );
 
   const mergeStackAsync = Effect.fn("GitHub.mergeStackAsync")(function* (
     repo: string,

@@ -25,10 +25,10 @@ import {
   findSession,
   MIRROR_LABEL_LOCAL_WORKTREE,
   transferModeFor,
-  type MirrorImpl,
   type MirrorSessionRaw,
   requireRunningEngine,
 } from "./registry";
+import type { MirrorEngine } from "./MirrorEngine";
 import { log } from "@shared/log";
 
 export type TransferFilesResult = {
@@ -77,7 +77,7 @@ export const transferFilesOnce = (
     direction?: "pull" | "push" | "replica";
   },
   onProgress: (bytes: number, totalBytes: number) => void,
-): Effect.Effect<TransferFilesResult> =>
+): Effect.Effect<TransferFilesResult, never, MirrorEngine> =>
   Effect.acquireUseRelease(
     Effect.sync(beginTransfer),
     (token) =>
@@ -141,7 +141,7 @@ function settled(raw: MirrorSessionRaw): boolean {
 }
 
 const waitSettled = (
-  daemon: MirrorImpl,
+  daemon: MirrorEngine["Service"],
   session: string,
   onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
