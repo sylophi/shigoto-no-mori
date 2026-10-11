@@ -21,11 +21,7 @@ import type { Duplex } from "node:stream";
 import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 import type { HandlerContext } from "@shared/ipc/transport";
-import {
-  CHANNEL_OPEN_NO_CHANNELS,
-  CHANNEL_OPEN_TAKEN,
-  CHANNEL_OPEN_TOO_MANY,
-} from "@shigomori/contracts/channelRefusals";
+import { ChannelRefusedError } from "@shigomori/contracts/errors";
 
 export type DuplexChannelOpts = {
   // Fires exactly once when the channel is gone for any reason: both
@@ -108,12 +104,13 @@ export function requireChannels(
   channelId: string,
 ): NonNullable<HandlerContext["channels"]> {
   const channels = ctx.channels;
-  if (channels === undefined) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
+  if (channels === undefined)
+    throw new ChannelRefusedError({ reason: "no-byte-channels" });
   if (channels.has(channelId) || ctx.connection.aborted) {
-    throw new Error(CHANNEL_OPEN_TAKEN);
+    throw new ChannelRefusedError({ reason: "channel-taken" });
   }
   if (channels.size() >= MAX_CHANNELS_PER_LINK) {
-    throw new Error(CHANNEL_OPEN_TOO_MANY);
+    throw new ChannelRefusedError({ reason: "too-many-conns" });
   }
   return channels;
 }

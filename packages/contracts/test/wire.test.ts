@@ -144,6 +144,18 @@ it(`every call has wire samples for protocol v${PROTOCOL_VERSION}, and every sam
   );
 });
 
+// JSON.parse keeps the last of two samples under one channel, so a
+// duplicate would hide one of them from every check above.
+it("names each call once in its samples file", () => {
+  const channels = [
+    ...readFileSync(file, "utf8").matchAll(/^ {2}"([^"]+)":/gm),
+  ].map(([, channel]) => channel);
+  assert.deepEqual(
+    channels.filter((channel, i) => channels.indexOf(channel) !== i),
+    [],
+  );
+});
+
 // The device link writes every call in Effect's binary layout, which
 // refuses some schemas a JSON codec takes (a union of members it cannot
 // tell apart). Compiled here, every part and every outcome, so such a

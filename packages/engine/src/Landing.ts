@@ -1031,15 +1031,12 @@ const make = Effect.gen(function* () {
     project: RegisteredProject,
     verb: LandingRefused["verb"],
   ) =>
-    worktrees
-      .primaryTarget(project)
-      .pipe(
-        Effect.flatMap((target) =>
-          target.primaryRef === ""
-            ? Effect.fail(refuse(verb, "no-primary", [], [project.path]))
-            : Effect.succeed(target),
-        ),
-      );
+    worktrees.primaryTarget(project).pipe(
+      Effect.filterOrFail(
+        (target) => target.primaryRef !== "",
+        () => refuse(verb, "no-primary", [], [project.path]),
+      ),
+    );
 
   // A stack cleanup: the layers landed once the merge is through (merged
   // before, or in the set this merge lands), and the worktrees on them
