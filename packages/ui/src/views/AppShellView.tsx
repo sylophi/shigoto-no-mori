@@ -29,9 +29,11 @@ interface AppShellViewProps {
   backBar?: ReactNode;
   tabBar?: ReactNode;
   // Mounted between the sidebar and the page (the update toast) and
-  // after the page (the app-wide overlays).
+  // after the page (the app-wide overlays, laid over the whole window).
   toasts?: ReactNode;
   overlays?: ReactNode;
+  // Over the page, the guide's band while one drives the window.
+  band?: ReactNode;
   // The routed page.
   children: ReactNode;
   // Over the root's own classes, such as h-full in place of the
@@ -49,13 +51,14 @@ export function AppShellView({
   tabBar,
   toasts,
   overlays,
+  band,
   children,
   className,
 }: AppShellViewProps) {
   return (
     <div
       className={cn(
-        "flex h-full overflow-hidden text-foreground",
+        "relative flex h-full overflow-hidden text-foreground",
         // The desktop window is transparent so the sidebar's vibrancy
         // material shows through, and the main pane paints its own
         // background. A browser tab has no material, so the root paints.
@@ -88,6 +91,7 @@ export function AppShellView({
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
         {phone && backBar}
+        {band}
         <main
           data-doubutsu-zone="main"
           className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"

@@ -12,6 +12,8 @@ import { getBusyOperations } from "@host/lib/scripts";
 import * as Graph from "./graph";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
+import { launchGuide } from "@host/lib/engineOps";
+import { dirname } from "node:path";
 import { type HostFacts, setHostFacts } from "./facts";
 import {
   applyAccount,
@@ -72,6 +74,19 @@ export function startHost(options: {
         noteUpdaterState(state);
         broadcastAll(updaterContract, "state", state);
       }),
+    // A release's agent reads the source at its tag, a dev build's the
+    // checkout it runs from.
+    guideLaunch: (input) =>
+      onRoot(() =>
+        Graph.run(
+          launchGuide({
+            ...input,
+            source: options.facts.packaged
+              ? { tag: `v${options.facts.appVersion}` }
+              : { checkout: dirname(options.facts.appPath) },
+          }),
+        ),
+      ),
     quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
   };
   registerLoopbackContract(sessionContract, session);

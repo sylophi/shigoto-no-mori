@@ -49,6 +49,7 @@ import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import { controlContract } from "@shigomori/contracts/modules/control";
+import { guideDriveContract } from "@shigomori/contracts/modules/guide";
 import { terrierContract } from "@shigomori/contracts/modules/terrier";
 import { agentsContract } from "@shigomori/contracts/modules/agents";
 import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
@@ -115,6 +116,7 @@ import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
+import { guideDriveHandlers } from "@host/ipc/modules/guideDrive";
 import { listDevicesFailure, setControlImpl } from "@host/lib/control/peers";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { agentsHandlers } from "@host/ipc/modules/agents";
@@ -818,6 +820,7 @@ export function registerHostHandlers(): void {
     ),
   });
   registerLoopbackContract(controlContract, controlHandlers, controlTransfers);
+  registerLoopbackContract(guideDriveContract, guideDriveHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(worktreeDataContract, worktreeDataHandlers);
   registerContract(syncContract, syncHandlers);

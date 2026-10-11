@@ -62,6 +62,7 @@ import {
   UpdateInProgress,
 } from "./stagingLock.ts";
 import {
+  APP_REPO,
   type AppStatus,
   appStatusOf,
   FeedAnswer,
@@ -521,9 +522,6 @@ export class Updater extends Context.Service<
 
 // --- the pipeline -------------------------------------------------------------
 
-// The repo behind the feeds (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
-const FEED_REPO = "sylophi/shigoto-no-mori";
-
 const FEED_TIMEOUT = Duration.seconds(30);
 // A generous budget for the zip (about 200MB on a slow connection). There
 // is no byte progress, so this is what unsticks a blackholed connection.
@@ -609,12 +607,12 @@ const ZERO_VERSION = parseSemver("0.0.0") as Semver;
 const updateServerUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.feedUrl ?? "")
-    : `https://update.electronjs.org/${FEED_REPO}/darwin-${input.running.arch}/${input.running.version}`;
+    : `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`;
 
 const releaseListUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.releasesUrl ?? "")
-    : `https://api.github.com/repos/${FEED_REPO}/releases?per_page=100`;
+    : `https://api.github.com/repos/${APP_REPO}/releases?per_page=100`;
 
 const feedFailed =
   (source: FeedFailed["source"]) =>
