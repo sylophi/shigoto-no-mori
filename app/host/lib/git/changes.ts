@@ -96,7 +96,9 @@ export function onIndex<T>(
 // leaves the path slot empty and spends two more fields on the old and
 // new names. Binary files report "-" for both and map to undefined, so
 // a caller can tell "git says no counts" from "git never mentioned it".
-function parseNumstat(stdout: string): Map<string, ChangeCounts | undefined> {
+export function parseNumstat(
+  stdout: string,
+): Map<string, ChangeCounts | undefined> {
   const fields = splitZ(stdout);
   const counts = new Map<string, ChangeCounts | undefined>();
   for (let i = 0; i < fields.length; i++) {

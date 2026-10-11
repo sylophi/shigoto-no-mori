@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { ProjectScopedPayloadSchema } from "./payloads";
+import {
+  ProjectScopedPayloadSchema,
+  WorktreeScopedPayloadSchema,
+} from "./payloads";
 
 export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
 
@@ -360,6 +363,137 @@ export const SetPullRequestDraftPayloadSchema =
     number: z.number().int().positive(),
     draft: z.boolean(),
   });
+
+// What the create pull request dialog starts from, read once as it
+// opens. The base a stacked branch belongs on (the nearest branch below
+// it with an open PR of its own), null for the primary branch. The
+// title and body gh's --fill would give the branch's commits against
+// that base. And the repo's PR template, null without one.
+export const PullRequestDraftSchema = z.object({
+  suggestedBase: z.string().nullable(),
+  fill: z.object({ title: z.string(), body: z.string() }),
+  template: z.string().nullable(),
+});
+export type PullRequestDraft = z.infer<typeof PullRequestDraftSchema>;
+
+// What a PR into `base` would hold: how many commits the branch has
+// since it left the base, and what they change together. The base is a
+// branch name, compared at its remote-tracking ref when there is one.
+export const PullRequestComparePayloadSchema =
+  WorktreeScopedPayloadSchema.extend({
+    base: z.string().min(1),
+  });
+export const PullRequestCompareSchema = z.object({
+  commits: z.number().int().nonnegative(),
+  files: z.number().int().nonnegative(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+});
+export type PullRequestCompare = z.infer<typeof PullRequestCompareSchema>;
+
+// Who and what a new PR can name, from the repo: the signed-in user,
+// the people it can be assigned to (reviewers are picked from the same
+// list, less the viewer), and its labels.
+export const PullRequestOptionsSchema = z.object({
+  viewer: z.string(),
+  people: z.array(z.object({ login: z.string(), name: z.string().nullable() })),
+  labels: z.array(
+    z.object({
+      name: z.string(),
+      // Hex without the hash, as GitHub stores it.
+      color: z.string(),
+      description: z.string().nullable(),
+    }),
+  ),
+});
+export type PullRequestOptions = z.infer<typeof PullRequestOptionsSchema>;
+
+// A file the description refers to as `./<name>`, staged on the host a
+// chunk at a time as it is pasted in (stageAttachment), and uploaded
+// by gh's --attach when the PR is created. The id is the renderer's.
+export const AttachmentIdSchema = z.string().regex(/^[0-9a-f]{16}$/);
+export const AttachmentNameSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/);
+
+// What gh's --attach uploads, by the extension it reads the type from
+// (cli/cli internal/attachments/userasset.go), and how big: GitHub's
+// limit for an image, and gh's for a video (the plan decides the rest).
+export const ATTACHMENT_IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+export const ATTACHMENT_VIDEO_EXTENSIONS: Readonly<Record<string, string>> = {
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+};
+export const MAX_ATTACHMENT_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENT_VIDEO_BYTES = 100 * 1024 * 1024;
+
+// An image or video on the web, fetched by the host into the staging
+// folder like a pasted file, so the PR keeps its own copy on GitHub.
+// Its name is `<stem>.<extension of the type it came as>`, which the
+// host answers with.
+export const StageAttachmentFromUrlPayloadSchema = z.object({
+  id: AttachmentIdSchema,
+  stem: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/),
+  url: z.url({ protocol: /^https?$/ }),
+});
+export const StagedAttachmentSchema = z.object({
+  name: AttachmentNameSchema,
+  type: z.string(),
+});
+export type StagedAttachment = z.infer<typeof StagedAttachmentSchema>;
+
+// One chunk of an attachment, its bytes as base64. Chunks go in order,
+// each at the offset the ones before it end at, small enough that a
+// peer's request frame (1 MiB) holds one.
+export const ATTACHMENT_CHUNK_BYTES = 512 * 1024;
+export const StageAttachmentPayloadSchema = z.object({
+  id: AttachmentIdSchema,
+  name: AttachmentNameSchema,
+  offset: z.number().int().nonnegative(),
+  base64: z.string().max(Math.ceil(ATTACHMENT_CHUNK_BYTES / 3) * 4),
+});
+
+export const DiscardAttachmentPayloadSchema = z.object({
+  id: AttachmentIdSchema,
+});
+
+// A new PR from the worktree's branch into `base`, with GitHub's own
+// limits on the title and body (cli/cmd_describe.go). Each attachment
+// must be staged in full, and is referenced in the body as
+// `./<name>`.
+export const CreatePullRequestPayloadSchema =
+  WorktreeScopedPayloadSchema.extend({
+    base: z.string().min(1),
+    title: z.string().min(1).max(256),
+    body: z.string().max(65536),
+    draft: z.boolean(),
+    reviewers: z.array(z.string().min(1)),
+    assignees: z.array(z.string().min(1)),
+    labels: z.array(z.string().min(1)),
+    attachments: z.array(
+      z.object({ id: AttachmentIdSchema, name: AttachmentNameSchema }),
+    ),
+  });
+export type CreatePullRequestPayload = z.infer<
+  typeof CreatePullRequestPayloadSchema
+>;
+
+// The new PR's URL, and what went wrong after it was made (an
+// attachment that didn't upload), null when nothing did.
+export const CreatePullRequestResultSchema = z.object({
+  url: z.url(),
+  warning: z.string().nullable(),
+});
+export type CreatePullRequestResult = z.infer<
+  typeof CreatePullRequestResultSchema
+>;
 
 export const DisablePullRequestAutoMergePayloadSchema =
   ProjectScopedPayloadSchema.extend({

@@ -12,6 +12,7 @@ import { canSyncFromPrimary } from "@/lib/syncState";
 import { cn } from "@/lib/utils";
 import { getBrowseLeafSegment } from "@shared/projectPaths";
 import type { CommitSummary, Worktree } from "@shared/schemas";
+import { CreatePullRequestPill } from "../pullRequests/CreatePullRequest";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { OperationBanner } from "./OperationBanner";
@@ -24,9 +25,9 @@ const SHOWN_COMMITS = 3;
 // The worktree page's way into the Git page, where git is done: a row
 // per tab of it (Changes, Stashes, History), each saying what is there
 // and opening it, and in the heading the moves worth a click from here,
-// pushing and syncing from the primary branch. A merge or rebase
-// stopped on conflicts shows above, since nothing else moves until it
-// is settled. Everything here reads, and opens the Git page to act.
+// pushing, syncing from the primary branch and opening a pull request.
+// A merge or rebase stopped on conflicts shows above, since nothing else
+// moves until it is settled. The rows read, and open the Git page to act.
 export function GitSection({ worktree }: { worktree: Worktree }) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
@@ -57,6 +58,12 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
           <WorktreeSyncPill worktree={worktree} />
           {canSyncFromPrimary(worktree) && (
             <WorktreePrimarySyncPill worktree={worktree} />
+          )}
+          {history?.base && (
+            <CreatePullRequestPill
+              worktree={worktree}
+              ownCommits={history.commits.length}
+            />
           )}
         </div>
       </div>

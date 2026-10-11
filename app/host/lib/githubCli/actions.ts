@@ -13,7 +13,7 @@ import { evictGithubRepoInfo, remoteNameForUrl } from "./remote";
 // Every action here shares one policy: gate on readiness, then rethrow
 // gh failures with a trimmed message the renderer can show inline.
 // `fallback` covers the rare non-Error / empty-message throw.
-async function runGh(
+export async function runGh(
   args: string[],
   opts: {
     cwd?: string;
@@ -51,6 +51,14 @@ async function runGh(
   }
 }
 
+// What gh printed before it failed, read off the error runGh rethrows:
+// its message keeps only the last line of gh's stderr.
+export function ghStream(err: unknown, stream: "stdout" | "stderr"): string {
+  const cause = (err as { cause?: Record<string, unknown> }).cause;
+  const out = cause?.[stream];
+  return typeof out === "string" ? out : "";
+}
+
 // Streams `gh pr diff <num>` as plain unified diff text, ready to hand
 // to DiffView. Throws on gh failure so the renderer can show the error
 // inline (vs. silently rendering an empty diff).
@@ -80,9 +88,7 @@ export async function getPullRequestDiff(opts: {
 // keeps only the last line of gh's stderr in the message, so the whole
 // of it is read off the cause.
 function isDiffTooLarge(err: unknown): boolean {
-  const cause = (err as { cause?: { stderr?: unknown } }).cause;
-  const stderr = typeof cause?.stderr === "string" ? cause.stderr : "";
-  return /\btoo_large\b/.test(stderr);
+  return /\btoo_large\b/.test(ghStream(err, "stderr"));
 }
 
 const GhPrCommitsSchema = z.object({
@@ -203,8 +209,7 @@ export async function listGithubRepos(): Promise<string[]> {
     // with an error beside the rest of the list. gh exits non-zero on
     // it, with the response on stdout, and the repositories that did
     // come are still the ones to offer. Any other failure stands.
-    const cause = (err as { cause?: { stdout?: unknown } }).cause;
-    const partial = typeof cause?.stdout === "string" ? cause.stdout : "";
+    const partial = ghStream(err, "stdout");
     if (reposOf(partial) === null) throw err;
     return partial;
   });

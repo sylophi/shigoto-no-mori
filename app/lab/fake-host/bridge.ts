@@ -49,10 +49,14 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {
   FAKE_DIFF,
+  FAKE_PULL_REQUEST_OPTIONS,
   FAKE_REPO_MERGE_CONFIG,
+  fakeCreatePullRequest,
   fakeDisableAutoMerge,
   fakeMergePullRequest,
+  fakePullRequestCompare,
   fakePullRequestDetail,
+  fakePullRequestDraft,
   fakePullRequests,
 } from "./pullRequestFixtures";
 import { createFakeChanges } from "./changesFixtures";
@@ -710,7 +714,11 @@ function hostHandlersFor(
       fakePullRequests(projectId),
     "githubCli:worktreePullRequest": ({ branch }) =>
       fakePullRequestDetail(branch),
-    "githubCli:repoMergeConfig": () => FAKE_REPO_MERGE_CONFIG,
+    // None without a gh signed in, as the host reads none then.
+    "githubCli:repoMergeConfig": () =>
+      new URLSearchParams(location.search).has("gh")
+        ? null
+        : FAKE_REPO_MERGE_CONFIG,
     "githubCli:repoDescription": ({ projectId }) =>
       repoDescriptionFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
@@ -719,6 +727,46 @@ function hostHandlersFor(
     // merged after it, so the flow can be walked in the fake host.
     "githubCli:mergePullRequest": ({ method }) => fakeMergePullRequest(method),
     "githubCli:disablePullRequestAutoMerge": () => fakeDisableAutoMerge(),
+    "githubCli:pullRequestDraft": ({ projectId, worktreeId }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      return fakePullRequestDraft(projectId, worktree);
+    },
+    "githubCli:pullRequestCompare": ({ worktreeId }) =>
+      fakePullRequestCompare(findWorktree(worktreeId)?.recentCommits ?? []),
+    "githubCli:pullRequestOptions": () => FAKE_PULL_REQUEST_OPTIONS,
+    // Takes a beat per chunk, so a paste shows its upload.
+    "githubCli:stageAttachment": async () => {
+      await sleep(150);
+    },
+    // Takes the time a download would, and every link is a PNG.
+    "githubCli:stageAttachmentFromUrl": async ({ stem }) => {
+      await sleep(900);
+      return { name: `${stem}.png`, type: "image/png" };
+    },
+    "githubCli:discardAttachment": () => {},
+    // Pushes the branch the way a publish does, then opens the PR, which
+    // the PR lookups answer with from then on. Who it names and what it
+    // attaches go nowhere.
+    "githubCli:createPullRequest": async ({
+      worktreeId,
+      base,
+      title,
+      body,
+      draft,
+    }) => {
+      const worktree = await syncAfter(worktreeId, (w) => {
+        w.hasUpstream = true;
+        pushed(w);
+      });
+      return fakeCreatePullRequest({
+        branch: worktree.branch,
+        base,
+        title,
+        body,
+        draft,
+      });
+    },
     "sync:worktreeFolder": ({ relative }) => [...(FAKE_TREE[relative] ?? [])],
     "sync:ignoredPaths": () => ({
       paths: [...FAKE_IGNORED_PATHS],
