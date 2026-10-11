@@ -3,6 +3,7 @@ import type { Project, ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   combineFanOut,
+  forestRead,
   resolveForestScope,
   type HostForestScope,
 } from "@/hooks/remote/hostForestScope";
@@ -19,7 +20,7 @@ export function shigomoriConfigQueryOptions(
     queryKey: queryKeysFor(deviceId).shigomoriConfig(projectId),
     queryFn: () => {
       if (!projectId || !api) return null;
-      return api.shigomori.read({ projectId });
+      return forestRead(deviceId, () => api.shigomori.read({ projectId }));
     },
     enabled: projectId !== null && api !== undefined && deviceId !== "",
     meta: { errorTitle: "Couldn't load project config" },

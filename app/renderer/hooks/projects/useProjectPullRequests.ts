@@ -20,6 +20,7 @@ import {
 } from "@/lib/queryKeys";
 import {
   combineFanOut,
+  forestRead,
   resolveForestScope,
   type HostForestScope,
 } from "@/hooks/remote/hostForestScope";
@@ -113,7 +114,9 @@ export function projectPullRequestsQueryOptions(
         ? skipToken
         : async () =>
             ownBranchPullRequests(
-              await api.githubCli.projectPullRequests({ projectId }),
+              await forestRead(deviceId, () =>
+                api.githubCli.projectPullRequests({ projectId }),
+              ),
             ),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
