@@ -2,7 +2,8 @@
 // and its real dialer (shared/remote/deviceLink.ts)
 // talking through a link shaped like an internet path
 // (lib/shapedLink.mts), so a change to the wire shows up as time and
-// bytes instead of an argument. Not a proof: it asserts nothing and
+// bytes instead of an argument, and as how long a terminal's chunks
+// and a small call wait on the link beside a bundle. Not a proof: it asserts nothing and
 // never runs in a hook.
 //
 //   pnpm test bench/wire
@@ -24,6 +25,8 @@ import type { LookupFunction } from "node:net";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import { WebSocket } from "ws";
 import { mintHexId } from "@host/lib/hexId";
 import {
@@ -53,8 +56,6 @@ const downMbit = flag("down", 20);
 const upMbit = flag("up", 20);
 const asJson = process.argv.includes("--json");
 const viaTunnel = process.argv.includes("--tunnel");
-// The A/B switch: a dialer that does not offer permessage-deflate.
-const noDeflate = process.argv.includes("--no-deflate");
 
 // A quick tunnel onto the binding: no account, a throwaway
 // trycloudflare.com hostname that dies with the process. The binding
@@ -175,6 +176,38 @@ const sendPieces = (link: Link) =>
 
 const decodeBundleAnswer = Schema.decodeUnknownSync(BundleAnswerSchema);
 
+// A terminal under a flood, as the host streams one (terminals:attach):
+// a chunk every 16 ms whether or not the link is ready for it, each
+// carrying when it was made, so the client reads how long it waited.
+const TERMINAL_EVERY_MS = 16;
+const TERMINAL_FILLER = "y\n".repeat(1024);
+const terminalOutput = () =>
+  Stream.callback<{ kind: "output"; data: string; seq: number }>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        let seq = 0;
+        return setInterval(() => {
+          Queue.offerUnsafe(queue, {
+            kind: "output",
+            data: `${performance.now()}|${TERMINAL_FILLER}`,
+            seq: seq++,
+          });
+        }, TERMINAL_EVERY_MS);
+      }),
+      (timer) => Effect.sync(() => clearInterval(timer)),
+    ),
+  );
+
+// The median, the 95th percentile and the most of some times, in ms.
+function spread(times: number[]) {
+  const sorted = times.toSorted((a, b) => a - b);
+  const at = (q: number) =>
+    Math.round(
+      sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0,
+    );
+  return { count: times.length, p50: at(0.5), p95: at(0.95), max: at(1) };
+}
+
 // What each size of read answers, as the one string the read returns.
 const payloads = {
   small: "main",
@@ -201,6 +234,7 @@ async function main() {
         async (_ctx, raw) =>
           payloads[(raw as { projectId: keyof typeof payloads }).projectId],
       );
+      binding.view("terminals:attach", terminalOutput);
       binding.handle("forward:open", async (ctx, raw) => {
         const { channelId, port } = raw as { channelId: string; port: number };
         const link = attachLinkFarEnd(ctx, channelId);
@@ -276,13 +310,15 @@ async function main() {
       // The ticket is held to the path a connection arrives on, which
       // the host tells by the header the local cloudflared adds. The
       // shaped link stands in for the tunnel, so it carries it too.
-      openSocket: (url) =>
-        new WebSocket(url, {
-          perMessageDeflate: !noDeflate,
+      openSocket: (url) => {
+        const ws = new WebSocket(url, {
+          perMessageDeflate: false,
           ...(viaTunnel
             ? { lookup: publicLookup }
             : { headers: { "cf-connecting-ip": "203.0.113.7" } }),
-        }),
+        });
+        return ws;
+      },
     }).authenticate();
   };
   // A quick tunnel's hostname takes a few seconds to resolve
@@ -306,7 +342,6 @@ async function main() {
     "connect (open + handshake + hello + welcome)",
     connect,
   );
-  const deflate = noDeflate ? "off" : "on";
   const { transport } = connection;
 
   await measure("1 small invoke", () =>
@@ -353,7 +388,7 @@ async function main() {
     return { channelId, bundleLink };
   };
   const megabytes = (BUNDLE_BYTES / 1e6).toFixed(1);
-  await measure(`${megabytes} MB bundle down a link`, async () => {
+  const bundleDown = async () => {
     const { channelId, bundleLink } = openLink();
     await transport.invoke("forward:open", { ...BUNDLE_DOWN, channelId });
     const header = decodeBundleAnswer(await Effect.runPromise(bundleLink.read));
@@ -361,7 +396,8 @@ async function main() {
       bundleLink.readBytes(header.bundle.bytes, () => Effect.void),
     );
     bundleLink.end();
-  });
+  };
+  await measure(`${megabytes} MB bundle down a link`, bundleDown);
   await measure(`${megabytes} MB bundle up a link`, async () => {
     const { channelId, bundleLink } = openLink();
     const received = transport.invoke("forward:open", {
@@ -375,6 +411,52 @@ async function main() {
     await received;
   });
 
+  // The bundle down again, beside a terminal flood and a small call
+  // every 100 ms: how long each waited on the link, idle and then
+  // under the transfer.
+  let waits: number[] = [];
+  const stopTerminal = transport.watch?.(
+    "terminals:attach",
+    { terminalId: "bench" },
+    {
+      value: (event) => {
+        const { data } = event as { data: string };
+        waits.push(
+          performance.now() - Number(data.slice(0, data.indexOf("|"))),
+        );
+      },
+      end: () => {},
+    },
+  );
+  await delay(1_000);
+  const terminalIdle = spread(waits);
+  waits = [];
+  const calls: number[] = [];
+  let transferring = true;
+  const caller = (async () => {
+    // oxlint-disable-next-line no-unmodified-loop-condition -- the bundle's end clears it
+    while (transferring) {
+      const started = performance.now();
+      // oxlint-disable-next-line no-await-in-loop -- one call at a time
+      await transport.invoke(READ, { projectId: "small" });
+      calls.push(performance.now() - started);
+      // oxlint-disable-next-line no-await-in-loop -- paced
+      await delay(100);
+    }
+  })();
+  await measure(
+    `${megabytes} MB bundle down, a terminal and calls beside`,
+    bundleDown,
+  );
+  transferring = false;
+  await caller;
+  stopTerminal?.();
+  const waited = [
+    { name: "terminal chunk, idle", ...terminalIdle },
+    { name: "terminal chunk, under the bundle", ...spread(waits) },
+    { name: "small call, under the bundle", ...spread(calls) },
+  ];
+
   connection.close();
   await link.close();
   await tracker.teardown();
@@ -382,7 +464,14 @@ async function main() {
 
   if (asJson) {
     console.log(
-      JSON.stringify({ viaTunnel, rttMs, downMbit, upMbit, deflate, results }),
+      JSON.stringify({
+        viaTunnel,
+        rttMs,
+        downMbit,
+        upMbit,
+        results,
+        waited,
+      }),
     );
     return;
   }
@@ -390,7 +479,7 @@ async function main() {
     (viaTunnel
       ? "\nlink: Cloudflare quick tunnel"
       : `\nlink: ${rttMs} ms RTT, ${downMbit} Mbit/s down, ${upMbit} Mbit/s up`) +
-      `, deflate ${deflate}\n`,
+      `\n`,
   );
   for (const row of results) {
     const bytes =
@@ -399,6 +488,12 @@ async function main() {
         : `${(row.downBytes / 1024).toFixed(1)} KiB down`;
     console.log(
       `${row.name.padEnd(44)} ${String(row.ms).padStart(6)} ms   ${bytes}`,
+    );
+  }
+  console.log("\nwaited on the link (ms)              n   p50   p95   max");
+  for (const row of waited) {
+    console.log(
+      `${row.name.padEnd(34)} ${String(row.count).padStart(4)} ${[row.p50, row.p95, row.max].map((n) => String(n).padStart(5)).join(" ")}`,
     );
   }
 }

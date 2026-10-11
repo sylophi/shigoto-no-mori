@@ -39,6 +39,7 @@
 // covers: app/test/read-surface.golden.json app/host/process/wires.ts
 import assert from "node:assert/strict";
 import { mintHexId } from "@host/lib/hexId";
+import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
@@ -144,6 +145,11 @@ type Seen = {
   >;
 };
 
+// A flood's backlog: a client's 64 chunks of 256K characters each
+// (host/lib/terminals/Terminals.ts), 16 MiB in all.
+const FLOOD_CHUNKS = 64;
+const FLOOD_CHUNK_CHARS = 256 * 1024;
+
 // Stand-ins for real handlers, on real contract calls: a read
 // (git:sweep), a command (git:refreshProject, which also fails on cue
 // and notifies its caller), a call that waits to be released
@@ -168,6 +174,20 @@ function serve(listener: DirectListener, seen: Seen): void {
   binding.view("projects:watch", () => Stream.make([], []));
   // A view that never ends, as a live one doesn't.
   binding.view("ports:watch", () => Stream.never);
+  // A terminal's output as a client that fell behind a flood is handed
+  // it: its whole backlog at once, the most a chunk holds each. Or one
+  // event past what the dialer's decoder takes.
+  binding.view("terminals:attach", (input) =>
+    (input as { terminalId: string }).terminalId === "huge"
+      ? Stream.make({ kind: "output", data: "y".repeat(17 << 20), seq: 1 })
+      : Stream.fromIterable(
+          Array.from({ length: FLOOD_CHUNKS }, (_, n) => ({
+            kind: "output",
+            data: "y".repeat(FLOOD_CHUNK_CHARS),
+            seq: n + 1,
+          })),
+        ),
+  );
   binding.handle("forward:open", async (ctx, input) => {
     const { channelId } = input as { channelId: string };
     const record = {
@@ -226,6 +246,8 @@ type DialOpts = {
   onClose?: () => void;
   protocolVersion?: number;
   deviceKind?: "desktop" | "web";
+  // Hears the size of every frame the dialer receives, sealed.
+  onFrame?: (bytes: number) => void;
 };
 
 function dialing(listener: DirectListener, opts: DialOpts = {}) {
@@ -241,7 +263,14 @@ function dialing(listener: DirectListener, opts: DialOpts = {}) {
     localDeviceId: deviceId,
     expectedDeviceId: HOST,
     onClose: opts.onClose ?? (() => {}),
-    openSocket: (url) => new WebSocket(url, { headers: opts.headers }),
+    openSocket: (url) => {
+      const ws = new WebSocket(url, { headers: opts.headers });
+      const { onFrame } = opts;
+      if (onFrame !== undefined) {
+        ws.on("message", (data: Buffer) => onFrame(data.byteLength));
+      }
+      return ws;
+    },
     deadlineMs: 3000,
     ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
     ...(opts.protocolVersion === undefined
@@ -989,6 +1018,53 @@ it("byte channels: the reads idle channels hold take no place under the in-fligh
   await delay(200);
   assert.equal(resets, 0, "no channel was refused its reads");
   assert.ok(ids.every((id) => connection.channels.has(id)));
+});
+
+it("streams: a client behind a flood is handed it in messages within the cap, and the link's calls still answer", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const frames: number[] = [];
+  const connection = await dial(track, listener, {
+    onFrame: (bytes) => frames.push(bytes),
+  });
+  let events = 0;
+  await new Promise<void>((resolve, reject) => {
+    connection.transport.watch?.(
+      "terminals:attach",
+      { terminalId: "flood" },
+      {
+        value: () => {
+          events += 1;
+        },
+        end: (failure) =>
+          failure === undefined ? resolve() : reject(failure as Error),
+      },
+    );
+  });
+  assert.equal(events, FLOOD_CHUNKS);
+  // A message's frame: the message, its envelope and the seal's tag.
+  assert.ok(
+    Math.max(...frames) <= MAX_MESSAGE_BYTES + 1024,
+    `a frame of ${Math.max(...frames)} bytes`,
+  );
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+});
+
+it("streams: a frame past the decoder's cap drops the link rather than failing every call after it, and a dial again answers", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  let closes = 0;
+  const connection = await dial(track, listener, { onClose: () => closes++ });
+  connection.transport.watch?.(
+    "terminals:attach",
+    { terminalId: "huge" },
+    { value: () => {}, end: () => {} },
+  );
+  await waitFor(() => closes === 1, "the link to drop");
+  const again = await dial(track, listener);
+  assert.deepEqual(await invoke(again, "git:sweep"), { leaseMs: 5 });
 });
 
 it("interruption: a call its caller cancels is interrupted on the host, its handler's signal aborted", async () => {
