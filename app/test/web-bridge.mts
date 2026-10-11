@@ -9,7 +9,9 @@
 // JSON, the per-browser deviceId is stable and matches DeviceIdSchema,
 // enroll exchanges the Clerk session token for a credential with
 // platform "web" and persists the enc:false envelope, sign-out
-// revokes this device then clears the envelope, read-classified OS-bound
+// revokes this device then clears the envelope, a concurrent enroll or
+// sign-out rides the one under way (a failed one not kept),
+// read-classified OS-bound
 // channels answer structural stub defaults while every mutation-shaped
 // or unclassified channel REJECTS (fail-closed, including enum/union
 // outputs the walker refuses to fabricate), the remote reads and writes
@@ -463,6 +465,97 @@ it("sign-out: revokes THIS device on the device hub, clears the envelope, and st
     () => storedJson(second, "sm.web.account").parked === undefined,
     "the parking to clear",
   );
+});
+
+it("enroll and sign-out: a caller arriving while one runs rides it, a failed run is not kept, and the first after one settles starts afresh", async () => {
+  const localStorage = memoryStorage();
+  // Each enroll's bearer, and each revoke, held until released.
+  const enrolls: (string | null)[] = [];
+  let revokes = 0;
+  let release: (() => void) | undefined;
+  let refuse = false;
+  const held = () =>
+    new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url === `${HUB_URL}/devices/enroll`) {
+      enrolls.push(new Headers(init.headers).get("authorization"));
+      await held();
+      if (refuse) return jsonResponse(403, { error: "refused" });
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      return jsonResponse(200, {
+        credential: `cred-${enrolls.length}`,
+        device: {
+          deviceId: body.deviceId,
+          name: body.name,
+          platform: body.platform,
+          icon: body.icon,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    if (init.method === "DELETE") {
+      revokes += 1;
+      await held();
+      return new Response(null, { status: 204 });
+    }
+    if (url === `${HUB_URL}/tickets`) {
+      return jsonResponse(500, { error: "no device hub in this check" });
+    }
+    throw new Error(`unexpected fetch in single-flight check: ${url}`);
+  };
+  const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
+  trackTest(() => bridge.stop());
+  const { account } = bridge.api;
+
+  // Two at once are one enroll, under the first caller's token.
+  const first = account.enroll(fakeSessionJwt("acct_1"));
+  const second = account.enroll(fakeSessionJwt("acct_2"));
+  await waitFor(
+    () => enrolls.length === 1,
+    "the first enroll to reach the hub",
+  );
+  release?.();
+  const [firstStatus, secondStatus] = await Promise.all([first, second]);
+  assert.deepEqual(enrolls, [`Bearer ${fakeSessionJwt("acct_1")}`]);
+  assert.equal(firstStatus.accountId, "acct_1");
+  assert.deepEqual(secondStatus, firstStatus);
+
+  // A refused run fails everyone riding it, and is not kept.
+  refuse = true;
+  const refused = [
+    account.enroll(fakeSessionJwt("acct_1")),
+    account.enroll(fakeSessionJwt("acct_1")),
+  ];
+  await waitFor(
+    () => enrolls.length === 2,
+    "the refused enroll to reach the hub",
+  );
+  release?.();
+  const settled = await Promise.allSettled(refused);
+  assert.deepEqual(
+    settled.map((result) => result.status),
+    ["rejected", "rejected"],
+  );
+  assert.equal(enrolls.length, 2, "the refused run was shared");
+  refuse = false;
+  const afresh = account.enroll(fakeSessionJwt("acct_1"));
+  await waitFor(() => enrolls.length === 3, "a fresh enroll after the refusal");
+  release?.();
+  assert.equal((await afresh).signedIn, true);
+
+  // Two sign-outs at once are one revoke.
+  const signOuts = [account.signOut(), account.signOut()];
+  await waitFor(() => revokes === 1, "the sign-out's revoke to reach the hub");
+  release?.();
+  await Promise.all(signOuts);
+  assert.equal(revokes, 1);
+  assert.equal((await account.status()).signedIn, false);
 });
 
 it("unconfigured: status reports configured false, enroll rejects, and the hub refresh leaves the socket stopped", async () => {

@@ -18,7 +18,7 @@ import { accountContract } from "@shigomori/contracts/modules/account";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import type { Handlers } from "@shigomori/contracts/types";
-import { getDeviceId } from "@host/lib/config/deviceId";
+import { hostDeviceId } from "../../hostProcess";
 import type { AccountFacts } from "@host/process/account";
 import {
   createAccountStore,
@@ -41,7 +41,6 @@ import {
   type DeviceFields,
 } from "@shared/account/enroll";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { singleFlight } from "@shared/util/singleFlight";
 import {
   createAccountService,
   type AccountService,
@@ -54,6 +53,9 @@ import {
 } from "@shigomori/contracts/accountServiceConfig";
 import { log } from "@shared/log";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerShellHandlers runs before
@@ -67,15 +69,11 @@ let cachedStore: AccountStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
 let revokeWarned = false;
-// Re-entrancy guards for account:enroll and account:signOut. A
-// concurrent enroll (a re-fired renderer effect, two windows) must not
-// enroll twice and rotate the credential mid-write, and concurrent
-// sign-outs (the UI button plus ClerkAccountSync reacting to the same
-// session end) must not race two revokes, where the second would 401
-// against the credential the first already deleted. The second caller
-// rides the in-flight promise.
-const enrollOnce = singleFlight<AccountStatus>();
-const signOutOnce = singleFlight<void>();
+
+// The session token an enroll was asked with, which the run reads.
+class EnrollToken extends Context.Service<EnrollToken, string>()(
+  "sm/main/EnrollToken",
+) {}
 
 // The safeStorage-backed cipher. `available` is the OS keychain's
 // verdict: when true the credential is encrypted at rest, when false the
@@ -323,7 +321,7 @@ export async function retryParkedSignOut(): Promise<void> {
     config,
     service: createAccountService({ baseUrl: config.hubUrl }),
     store: store(),
-    deviceId: getDeviceId(),
+    deviceId: await hostDeviceId(),
   });
 }
 
@@ -339,7 +337,7 @@ export async function signOutForNuke(): Promise<string | null> {
     config,
     service: createAccountService({ baseUrl: config.hubUrl }),
     store: store(),
-    deviceId: getDeviceId(),
+    deviceId: await hostDeviceId(),
     onRevokeFailure: (error) => {
       failure = errorMessageOf(error);
     },
@@ -376,7 +374,7 @@ export function makeAccountHandlers(
       {
         service: signedIn.service,
         store: store(),
-        deviceId: getDeviceId(),
+        deviceId: await hostDeviceId(),
         detectedIcon: await detectedDeviceIcon(),
       },
       signedIn.record,
@@ -386,6 +384,78 @@ export function makeAccountHandlers(
     accountChanged();
     return readStatus();
   };
+  const enroll = async (token: string): Promise<AccountStatus> => {
+    const config = serviceConfig();
+    await enrollDevice(
+      {
+        config,
+        service: createAccountService({ baseUrl: config.hubUrl }),
+        store: store(),
+        // The hub device identity is tied to the data dir's store: the
+        // host reads the UUID minted with it, so a fresh store
+        // re-enrolls this app as a brand new hub device.
+        deviceId: await hostDeviceId(),
+        fallbackDeviceName: (await defaultDeviceName()).name,
+        // The device hub stores it as an opaque label.
+        platform: platform(),
+        detectedIcon: await detectedDeviceIcon(),
+      },
+      token,
+    );
+    accountChanged();
+    return readStatus();
+  };
+  const signOut = async (): Promise<void> => {
+    // The command-access switch is off from the first moment of the
+    // sign-out, ahead of the revoke's round trip: a peer's gated call
+    // landing during the revoke must not find it on. Written through,
+    // so nothing that re-reads the record meanwhile turns it back on.
+    // The sign-out's clear drops the record with it, so signing back
+    // into the same account starts with the switch off.
+    const record = store().read();
+    if (record?.acceptsCommands === true) {
+      writeAcceptsCommands(record, false);
+    }
+    acceptsCache = false;
+    const config = serviceConfig();
+    await signOutDevice({
+      config,
+      service: createAccountService({ baseUrl: config.hubUrl }),
+      store: store(),
+      deviceId: await hostDeviceId(),
+      // The failure is swallowed (local sign-out must always land) and
+      // logged at most once per session.
+      onRevokeFailure: (error) => {
+        if (revokeWarned) return;
+        revokeWarned = true;
+        log.warn(
+          "[account] best-effort device revoke on sign-out failed, " +
+            "clearing the local credential anyway.",
+          error,
+        );
+      },
+    });
+    await accountChanged();
+  };
+  // Re-entrancy guards. A concurrent enroll (a re-fired renderer
+  // effect, two windows) must not enroll twice and rotate the
+  // credential mid-write, and concurrent sign-outs (the UI button plus
+  // ClerkAccountSync reacting to the same session end) must not race
+  // two revokes, where the second would 401 against the credential the
+  // first already deleted. A caller arriving while one runs rides it
+  // (an enroll's own token unused), and the first after it settles
+  // starts afresh: each is cached with no time to live.
+  const enrollOnce = Effect.runSync(
+    Effect.cachedWithTTL(
+      Effect.flatMap(EnrollToken, (token) =>
+        Effect.promise(() => enroll(token)),
+      ),
+      Duration.zero,
+    ),
+  );
+  const signOutOnce = Effect.runSync(
+    Effect.cachedWithTTL(Effect.promise(signOut), Duration.zero),
+  );
   return {
     status: async () => {
       const defaultName = await defaultDeviceName();
@@ -396,68 +466,12 @@ export function makeAccountHandlers(
       );
     },
 
-    enroll: async (token) => {
-      // A second concurrent caller rides the first enrollment instead
-      // of racing it and rotating the credential twice. This is the
-      // authoritative dedupe for the whole app: renderer effects may
-      // re-fire, but the credential is a one-per-machine fact.
-      return enrollOnce(async () => {
-        const config = serviceConfig();
-        await enrollDevice(
-          {
-            config,
-            service: createAccountService({ baseUrl: config.hubUrl }),
-            store: store(),
-            // The hub device identity is tied to the data dir's store:
-            // getDeviceId reads the UUID minted with it, so a fresh store
-            // re-enrolls this app as a brand new hub device.
-            deviceId: getDeviceId(),
-            fallbackDeviceName: (await defaultDeviceName()).name,
-            // The device hub stores it as an opaque label.
-            platform: platform(),
-            detectedIcon: await detectedDeviceIcon(),
-          },
-          token,
-        );
-        accountChanged();
-        return readStatus();
-      });
-    },
+    // This is the authoritative dedupe for the whole app: renderer
+    // effects may re-fire, but the credential is a one-per-machine fact.
+    enroll: (token) =>
+      Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
 
-    signOut: () =>
-      signOutOnce(async () => {
-        // The command-access switch is off from the first moment of
-        // the sign-out, ahead of the revoke's round trip: a peer's
-        // gated call landing during the revoke must not find it on.
-        // Written through, so nothing that re-reads the record
-        // meanwhile turns it back on. The sign-out's clear drops the
-        // record with it, so signing back into the same account starts
-        // with the switch off.
-        const record = store().read();
-        if (record?.acceptsCommands === true) {
-          writeAcceptsCommands(record, false);
-        }
-        acceptsCache = false;
-        const config = serviceConfig();
-        await signOutDevice({
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
-          store: store(),
-          deviceId: getDeviceId(),
-          // The failure is swallowed (local sign-out must always land)
-          // and logged at most once per session.
-          onRevokeFailure: (error) => {
-            if (revokeWarned) return;
-            revokeWarned = true;
-            log.warn(
-              "[account] best-effort device revoke on sign-out failed, " +
-                "clearing the local credential anyway.",
-              error,
-            );
-          },
-        });
-        await accountChanged();
-      }),
+    signOut: () => Effect.runPromise(signOutOnce),
 
     revokeDevice: async (deviceId) => {
       const signedIn = signedInService();
@@ -471,7 +485,7 @@ export function makeAccountHandlers(
       // call here leaves the device enrolled, and no local state stands
       // in for that, so the renderer must be able to say so.
       await service.revoke(record.credential, deviceId);
-      if (deviceId === getDeviceId()) {
+      if (deviceId === (await hostDeviceId())) {
         // Self-revoke invalidated our own credential, so drop it now
         // rather than waiting for the device hub to refuse the next
         // call. The desktop UI routes this device through Sign out
@@ -496,7 +510,7 @@ export function makeAccountHandlers(
         {
           service: signedIn.service,
           store: store(),
-          deviceId: getDeviceId(),
+          deviceId: await hostDeviceId(),
           detectedIcon: await detectedDeviceIcon(),
         },
         signedIn.record,

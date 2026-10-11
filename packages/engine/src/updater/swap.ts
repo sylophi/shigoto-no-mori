@@ -9,7 +9,9 @@ import { UpdateInProgress } from "../stagingLock.ts";
 import {
   APP_QUIT_TIMEOUT,
   NothingStaged,
+  SignatureRejected,
   SwapFailed,
+  isNewer,
   polling,
 } from "./documents.ts";
 import type { FilesArea } from "./files.ts";
@@ -33,7 +35,7 @@ export const makeSwap = ({
     const stagedDir = path.join(updatesDir, "staged");
     const { removeAll, run } = files;
     const { signerOf, verify } = signatures;
-    const { lock, readManifest, clearStaged } = staging;
+    const { lock, readManifest, clearStaged, bundleVersion } = staging;
     // --- the swap ---
 
     // Replaces `target` with `staged`, in an order that leaves every crash
@@ -73,10 +75,26 @@ export const makeSwap = ({
       }
       // The installed app's Team ID read afresh, as the app may have changed
       // since staging.
+      // And never older than the app it replaces, which another install
+      // may have moved past the staged release meanwhile.
       yield* verify(
         { bundle: target, signer: signerOf(target) },
         incoming,
-      ).pipe(Effect.tapError(() => removeAll(incoming)));
+      ).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            const version = yield* bundleVersion(incoming);
+            if (!isNewer(version, yield* bundleVersion(target))) {
+              return yield* new SignatureRejected({
+                reason: "not-newer",
+                bundle: incoming,
+                version,
+              });
+            }
+          }),
+        ),
+        Effect.tapError(() => removeAll(incoming)),
+      );
       const aside = path.join(dir, `${base}.old-${pid}`);
       yield* removeAll(aside);
       // Not interruptible: an interruption between the two renames would

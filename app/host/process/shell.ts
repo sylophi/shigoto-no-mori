@@ -1,55 +1,35 @@
-// What the host asks of the shell that started it: the few things only
-// Electron's process can do (the updater and the app's own lifetime
-// stay there). Wired by the shell as the host starts
-// (main/hostProcess.ts).
-import type { UpdaterState } from "@shigomori/contracts/schemas";
-import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
-import type {
-  GuideDrivePayload,
-  GuideReply,
-} from "@shigomori/contracts/modules/guide";
-import { implSlot } from "@host/lib/util/implSlot";
+// The Shell service (lib/Shell.ts) over the shell's calls, which ride
+// the port the shell handed over as the host started (host.ts).
 import { callFailureOf } from "@shigomori/contracts/errors";
+import type { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
+import type { Client } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Shell from "@host/lib/Shell";
 
-export type ShellCalls = {
-  // Restarts the app with nobody at it to answer a prompt: after a
-  // data-folder move a peer asked for.
-  readonly relaunch: () => Promise<void>;
-  // The updater, which a peer's Settings page reads and drives here.
-  // `unattended` marks a call another device made: a busy host refuses
-  // it instead of prompting a screen nobody watches.
-  readonly updater: {
-    readonly check: () => Promise<void>;
-    readonly install: (unattended: boolean) => Promise<void>;
-    readonly update: (unattended: boolean) => Promise<void>;
-  };
-  // The bridge the terminal's `sm update` asks the updater through,
-  // stopped before a wipe of the data folder it lives in.
-  readonly stopUpdaterBridge: () => Promise<void>;
-  // The v3 migration as it goes, which the shell serves its windows.
-  readonly migration: (progress: MigrationProgress) => Promise<void>;
-  // An action of `sm guide mcp`'s, run in the window its session guides.
-  readonly guide: (payload: GuideDrivePayload) => Promise<GuideReply>;
-};
-
-const { set: setShellCalls, get: shellCalls } = implSlot<ShellCalls>(
-  "the host called its shell before the shell wired itself in",
-);
-export { setShellCalls, shellCalls };
-
-// A call on the shell, for an effect: its failure as it crosses a wire.
-export const onShell = <A>(call: () => Promise<A>) =>
+const onShell = <A>(call: () => Promise<A>) =>
   Effect.tryPromise({ try: call, catch: callFailureOf });
 
-// The updater's state as the shell last reported it (session.ts), so a
-// peer's read is answered here without a round trip.
-let updaterState: UpdaterState = { kind: "idle" };
-
-export function lastUpdaterState(): UpdaterState {
-  return updaterState;
-}
-
-export function noteUpdaterState(state: UpdaterState): void {
-  updaterState = state;
-}
+export const layer = (calls: Client<typeof shellCallsContract>) =>
+  Layer.effect(
+    Shell.Shell,
+    Effect.map(Ref.make<UpdaterState>({ kind: "idle" }), (state) =>
+      Shell.Shell.of({
+        relaunch: Effect.sync(() => void calls.relaunch()),
+        updater: {
+          check: onShell(() => calls.updaterCheck()),
+          install: (unattended) =>
+            onShell(() => calls.updaterInstall({ unattended })),
+          update: (unattended) =>
+            onShell(() => calls.updaterUpdate({ unattended })),
+          state: Ref.get(state),
+          noteState: (next) => Ref.set(state, next),
+        },
+        stopUpdaterBridge: Effect.sync(() => void calls.stopUpdaterBridge()),
+        migration: (progress) => onShell(() => calls.migration(progress)),
+        guide: (payload) => onShell(() => calls.guide(payload)),
+      }),
+    ),
+  );

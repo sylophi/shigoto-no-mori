@@ -202,7 +202,9 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
       "installed-unsigned",
       "other-team",
       "other-app",
+      "no-identifier",
       "not-newer",
+      "other-version",
     ]),
     bundle: Schema.String,
     team: Schema.optional(Schema.String),
@@ -228,8 +230,12 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
         return `The downloaded update is signed by a different team (${this.team}, installed app: ${this.installedTeam}). Refusing to install.`;
       case "other-app":
         return `The downloaded update is a different app (${this.identifier}, installed app: ${this.installedIdentifier}). Refusing to install.`;
+      case "no-identifier":
+        return `codesign reported no Identifier for ${this.bundle}.`;
       case "not-newer":
-        return `The downloaded update is version ${this.version}, which is not newer than this build. Refusing to install.`;
+        return `The update is version ${this.version}, which is not newer than the app it would replace. Refusing to install.`;
+      case "other-version":
+        return `The downloaded update is version ${this.version}, not the release it was offered as. Refusing to install.`;
     }
   }
 }
@@ -460,6 +466,13 @@ export const upToDate = (running: Running): UpToDate => ({
   status: "up-to-date",
   version: running.version,
 });
+
+// Whether `version` is a version newer than `than`.
+export const isNewer = (version: string, than: string) => {
+  const a = parseSemver(version);
+  const b = parseSemver(than);
+  return a !== undefined && b !== undefined && compareSemver(a, b) > 0;
+};
 
 export const newerThan = (running: Running, version: string) => {
   const current = parseSemver(running.version);

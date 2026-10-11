@@ -40,50 +40,48 @@ export const makeSignatures = ({ files }: { readonly files: FilesArea }) =>
         (signer): Anchor => ({ bundle, signer }),
       );
 
-    // A valid deep, strict signature from a certificate Apple issued, the
-    // installed app's Team ID, and the installed app's identifier, so a
-    // release of another flavor is no update for this one. An unsigned
-    // installed app refuses too: with no anchor there is nothing to
-    // trust, and release builds are always signed. The checks run at
-    // once, and fail in the order Go's sm made them, the identifier last.
+    // A valid deep, strict signature that satisfies one requirement made
+    // from the installed app: a certificate Apple issued, to the installed
+    // app's team, for the installed app's identifier. So a release of
+    // another flavor, another team's or one signed outside Apple's chain
+    // is no update for this one. An installed app with no team or no
+    // identifier refuses: with no anchor there is nothing to trust, and
+    // release builds always have both. The candidate's own team and
+    // identifier are read too, to say which one differed.
     const verify = Effect.fn("Updater.verify")(function* (
       installed: Anchor,
       candidate: string,
     ) {
-      const [checked, installedSigner, signer] = yield* Effect.all(
-        [
-          run("codesign", [
-            "--verify",
-            "--deep",
-            "--strict",
-            "-R=anchor apple generic",
-            "--",
-            candidate,
-          ]),
-          Effect.result(installed.signer),
-          Effect.result(signerOf(candidate)),
-        ],
-        { concurrency: "unbounded" },
-      );
-      if (!checked.ok) {
-        return yield* new SignatureRejected({
-          reason: "invalid",
-          bundle: candidate,
-          cause: new Error(checked.output.trim()),
-        });
-      }
-      if (Result.isFailure(installedSigner)) {
-        return yield* installedSigner.failure;
-      }
-      if (Result.isFailure(signer)) return yield* signer.failure;
-      const ours = installedSigner.success;
-      const theirs = signer.success;
-      if (ours.team === "") {
+      const ours = yield* installed.signer;
+      if (ours.team === "" || !/^[A-Z0-9]+$/.test(ours.team)) {
         return yield* new SignatureRejected({
           reason: "installed-unsigned",
           bundle: installed.bundle,
         });
       }
+      if (!/^[A-Za-z0-9.-]+$/.test(ours.identifier)) {
+        return yield* new SignatureRejected({
+          reason: "no-identifier",
+          bundle: installed.bundle,
+        });
+      }
+      const requirement = `anchor apple generic and certificate leaf[subject.OU] = "${ours.team}" and identifier "${ours.identifier}"`;
+      const [checked, signer] = yield* Effect.all(
+        [
+          run("codesign", [
+            "--verify",
+            "--deep",
+            "--strict",
+            `-R=${requirement}`,
+            "--",
+            candidate,
+          ]),
+          Effect.result(signerOf(candidate)),
+        ],
+        { concurrency: "unbounded" },
+      );
+      if (Result.isFailure(signer)) return yield* signer.failure;
+      const theirs = signer.success;
       if (theirs.team !== ours.team) {
         return yield* new SignatureRejected({
           reason: "other-team",
@@ -98,6 +96,13 @@ export const makeSignatures = ({ files }: { readonly files: FilesArea }) =>
           bundle: candidate,
           identifier: theirs.identifier,
           installedIdentifier: ours.identifier,
+        });
+      }
+      if (!checked.ok) {
+        return yield* new SignatureRejected({
+          reason: "invalid",
+          bundle: candidate,
+          cause: new Error(checked.output.trim()),
         });
       }
     });

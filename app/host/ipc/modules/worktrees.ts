@@ -1,5 +1,6 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Effect from "effect/Effect";
+import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -672,6 +673,7 @@ export const worktreesHandlers = {
   HandlerContext,
   | Terminals
   | GithubCli
+  | PeerReach
   | ChildProcessSpawner.ChildProcessSpawner
   | Engine.Services
 >;

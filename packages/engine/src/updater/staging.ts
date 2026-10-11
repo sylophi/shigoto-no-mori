@@ -26,6 +26,7 @@ import {
   type UpdateInput,
   discard,
   feedRequest,
+  isNewer,
   newerThan,
   report,
   within,
@@ -220,11 +221,10 @@ export const makeStaging = ({
           ),
         );
 
-    // A bundle whose own version is newer than this build's, so a feed
-    // that names an older release of ours as the newest gets nothing.
-    const newerBundle = (bundle: string, running: Running) =>
-      Effect.gen(function* () {
-        const read = yield* run(
+    // A bundle's own version (its Info.plist's), "" when it has none.
+    const bundleVersion = (bundle: string) =>
+      Effect.map(
+        run(
           "plutil",
           [
             "-extract",
@@ -235,9 +235,24 @@ export const makeStaging = ({
             path.join(bundle, "Contents", "Info.plist"),
           ],
           "stdout",
-        );
-        const version = read.output.trim();
-        if (!read.ok || !newerThan(running, version)) {
+        ),
+        (read) => (read.ok ? read.output.trim() : ""),
+      );
+
+    // The downloaded bundle is the release the feed offered and newer than
+    // this build, so a feed that serves an older release of ours under a
+    // newer name gets nothing.
+    const offeredBundle = (bundle: string, release: string, running: Running) =>
+      Effect.gen(function* () {
+        const version = yield* bundleVersion(bundle);
+        if (version !== release) {
+          return yield* new SignatureRejected({
+            reason: "other-version",
+            bundle,
+            version,
+          });
+        }
+        if (!isNewer(version, running.version)) {
           return yield* new SignatureRejected({
             reason: "not-newer",
             bundle,
@@ -309,7 +324,7 @@ export const makeStaging = ({
 
       yield* report(input, { phase: "verifying", version: release.version });
       yield* verify(installed, candidate).pipe(
-        Effect.andThen(newerBundle(candidate, running)),
+        Effect.andThen(offeredBundle(candidate, release.version, running)),
         Effect.tapError(() => removeAll(extractDir)),
       );
       yield* clearStaged;
@@ -344,7 +359,7 @@ export const makeStaging = ({
       return Option.some(manifest);
     }, Effect.scoped);
 
-    return { lock, readManifest, clearStaged, stageUpdate };
+    return { lock, readManifest, clearStaged, bundleVersion, stageUpdate };
   });
 
 export type StagingArea = Effect.Success<ReturnType<typeof makeStaging>>;

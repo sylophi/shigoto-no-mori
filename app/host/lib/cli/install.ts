@@ -25,31 +25,25 @@ import {
   cliUserBinDir,
 } from "@shared/packaging/cliDist.mts";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
-import { cliBinaryPath } from "./binary";
+import { cliBinaryOf } from "./binary";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { uninstallShellIntegration } from "./shell";
-import { hostFacts } from "@host/process/facts";
+import * as HostFacts from "@host/lib/HostFacts";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
 
-function cliFlavor(): Flavor {
-  return hostFacts().flavor;
-}
-
-function cliName(): string {
-  return cliBinaryName(cliFlavor());
-}
+type Facts = HostFacts.HostFacts["Service"];
 
 // Both command names the install manages: the short one (sm) and the
 // spelled-out alias (shigomori). Both links point at the same binary.
-function linkNames(): string[] {
-  return [cliName(), cliAliasName(cliFlavor())];
+function linkNames(flavor: Flavor): string[] {
+  return [cliBinaryName(flavor), cliAliasName(flavor)];
 }
 
-function linkPath(): string {
-  return join(cliUserBinDir(), cliName());
+function linkPath(flavor: Flavor): string {
+  return join(cliUserBinDir(), cliBinaryName(flavor));
 }
 
 // What a link path points at, in decreasing closeness to "the binary
@@ -73,20 +67,23 @@ type LinkOwnership =
   | "our-family"
   | "foreign";
 
-async function linkOwnership(link: string): Promise<LinkOwnership> {
+async function linkOwnership(
+  facts: Facts,
+  link: string,
+): Promise<LinkOwnership> {
   const stat = await lstat(link).catch(() => null);
   if (stat === null) return "missing";
   if (!stat.isSymbolicLink()) return "foreign";
   const target = await readlink(link).catch(() => null);
   if (target === null) return "foreign";
-  const binary = cliBinaryPath();
+  const binary = cliBinaryOf(facts);
   if (binary !== null && target === binary) {
     return "this-binary";
   }
-  const name = cliName();
+  const name = cliBinaryName(facts.flavor);
   const bundleTarget = target.endsWith(`/Contents/Resources/${name}`);
   const distTarget = target.endsWith(`/${CLI_DIST_DIR}/${name}`);
-  if (hostFacts().packaged ? bundleTarget : distTarget) return "this-flavor";
+  if (facts.packaged ? bundleTarget : distTarget) return "this-flavor";
   if (bundleTarget || distTarget) return "our-family";
   return "foreign";
 }
@@ -100,18 +97,17 @@ function isOnPath(dir: string): boolean {
 // Gatekeeper app translocation (quarantined app run from ~/Downloads)
 // mounts the bundle at a randomized read-only path that dies with the
 // process. A link to it would dangle immediately.
-function isTranslocated(): boolean {
-  const { packaged, resourcesPath } = hostFacts();
+function isTranslocated({ packaged, resourcesPath }: Facts): boolean {
   return packaged && resourcesPath.includes("/AppTranslocation/");
 }
 
-async function linkStatus(): Promise<CliStatus> {
+async function linkStatus(facts: Facts): Promise<CliStatus> {
   const binDir = cliUserBinDir();
   const base = {
-    name: cliName(),
-    aliasName: cliAliasName(cliFlavor()),
+    name: cliBinaryName(facts.flavor),
+    aliasName: cliAliasName(facts.flavor),
     binDir,
-    linkPath: linkPath(),
+    linkPath: linkPath(facts.flavor),
     foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };
@@ -120,9 +116,12 @@ async function linkStatus(): Promise<CliStatus> {
   // the offending link so the foreign/stale copy names the right path.
   const severity = { installed: 0, missing: 1, stale: 2, foreign: 3 } as const;
   const links = await Promise.all(
-    linkNames().map(async (name) => {
+    linkNames(facts.flavor).map(async (name) => {
       const link = join(binDir, name);
-      return { link, state: stateOfOwnership(await linkOwnership(link)) };
+      return {
+        link,
+        state: stateOfOwnership(await linkOwnership(facts, link)),
+      };
     }),
   );
   let state: keyof typeof severity = "installed";
@@ -159,11 +158,15 @@ function stateOfOwnership(
 // Point both links at the binary. Without force, a foreign occupant
 // stays untouched; any shigomori-made link (or an empty slot) gets
 // (re)pointed at the running binary.
-async function pointLinksAt(binary: string, force: boolean): Promise<void> {
+async function pointLinksAt(
+  facts: Facts,
+  binary: string,
+  force: boolean,
+): Promise<void> {
   await Promise.all(
-    linkNames().map(async (name) => {
+    linkNames(facts.flavor).map(async (name) => {
       const link = join(cliUserBinDir(), name);
-      if (!force && (await linkOwnership(link)) === "foreign") return;
+      if (!force && (await linkOwnership(facts, link)) === "foreign") return;
       replaceWithSymlinkSync(binary, link);
     }),
   );
@@ -175,8 +178,8 @@ async function pointLinksAt(binary: string, force: boolean): Promise<void> {
 // translocated mount. force is the Settings "Replace and install"
 // consent: it takes over a foreign occupant too, so a command that
 // doesn't point at the app can be fixed without a trip to the shell.
-async function installLinks(force: boolean): Promise<CliStatus> {
-  const status = await linkStatus();
+async function installLinks(facts: Facts, force: boolean): Promise<CliStatus> {
+  const status = await linkStatus(facts);
   if (status.state === "foreign" && !force) {
     throw new Error(
       `${status.linkPath} already exists and wasn't created by ` +
@@ -184,37 +187,41 @@ async function installLinks(force: boolean): Promise<CliStatus> {
         "manage the link.",
     );
   }
-  if (isTranslocated()) {
+  if (isTranslocated(facts)) {
     throw new Error(
       "macOS is running this app from a temporary location (App " +
         "Translocation). Move it to Applications and relaunch, then " +
         "install.",
     );
   }
-  const binary = cliBinaryPath();
+  const binary = cliBinaryOf(facts);
   if (binary === null) throw new Error("No CLI binary is available to link.");
-  await pointLinksAt(binary, force);
-  return linkStatus();
+  await pointLinksAt(facts, binary, force);
+  return linkStatus(facts);
 }
 
 // The links' state, and their install, for the handlers. A refusal
 // crosses the wire in its own words.
-export const cliLinkStatus = Effect.tryPromise({
-  try: linkStatus,
-  catch: callFailureOf,
-});
+export const cliLinkStatus = Effect.flatMap(HostFacts.HostFacts, (facts) =>
+  Effect.tryPromise({ try: () => linkStatus(facts), catch: callFailureOf }),
+);
 export const installCliLinks = (force: boolean) =>
-  Effect.tryPromise({ try: () => installLinks(force), catch: callFailureOf });
+  Effect.flatMap(HostFacts.HostFacts, (facts) =>
+    Effect.tryPromise({
+      try: () => installLinks(facts, force),
+      catch: callFailureOf,
+    }),
+  );
 
 // Remove this flavor's links when they are recognizably shigomori-made.
 // Anything else at the path stays. Accepts our-family on purpose: nuke
 // should also take the checkout link the prod app otherwise refuses to
 // manage.
-async function uninstallCliLinks(): Promise<void> {
+async function uninstallCliLinks(facts: Facts): Promise<void> {
   await Promise.all(
-    linkNames().map(async (name) => {
+    linkNames(facts.flavor).map(async (name) => {
       const link = join(cliUserBinDir(), name);
-      const ownership = await linkOwnership(link);
+      const ownership = await linkOwnership(facts, link);
       if (ownership === "missing" || ownership === "foreign") return;
       await rm(link, { force: true }).catch(() => undefined);
     }),
@@ -229,14 +236,15 @@ async function uninstallCliLinks(): Promise<void> {
 // line no-ops once the command is gone), yet the user should hear it
 // stayed.
 export const uninstallCliEverything = Effect.gen(function* () {
+  const facts = yield* HostFacts.HostFacts;
   // No binary means the hook-removal spawn can't run. The guarded hook
   // line is inert without the command anyway, so skipping is not a
   // failure worth reporting.
   const hooks =
-    cliBinaryPath() === null
+    cliBinaryOf(facts) === null
       ? Exit.void
       : yield* Effect.exit(uninstallShellIntegration);
-  yield* Effect.promise(uninstallCliLinks);
+  yield* Effect.promise(() => uninstallCliLinks(facts));
   return yield* hooks;
 });
 
@@ -244,14 +252,14 @@ export const uninstallCliEverything = Effect.gen(function* () {
 // installed points at a copy of the app that is no longer the one
 // running (updated bundle path, another checkout's dev build), repoint
 // it. Consent was given at install time; failures only log.
-export async function repairCliLinks(): Promise<void> {
-  if (isTranslocated()) return;
-  const status = await linkStatus();
+export async function repairCliLinks(facts: Facts): Promise<void> {
+  if (isTranslocated(facts)) return;
+  const status = await linkStatus(facts);
   if (status.state !== "stale") return;
-  const binary = cliBinaryPath();
+  const binary = cliBinaryOf(facts);
   if (binary === null) return;
   try {
-    await pointLinksAt(binary, false);
+    await pointLinksAt(facts, binary, false);
   } catch (err) {
     log.warn("[cli] link repair failed", err);
   }
