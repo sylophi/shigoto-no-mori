@@ -20,12 +20,7 @@ import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import {
-  type HostFailure,
-  host,
-  startHostProcess,
-  stopHostProcess,
-} from "./hostProcess";
+import { type HostFailure, host } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "@host/lib/util/shellEnv";
@@ -182,9 +177,9 @@ registerShellHandlers();
 installShellPorts();
 
 // The shell's layer graph, built in the ready handler and closed by the
-// quit below, after the host's process has gone.
+// quit below, the host's process first.
 const runtime = ManagedRuntime.make(
-  ShellLayer.layer.pipe(
+  ShellLayer.layer({ failed: showHostFailure, hurried: isHurriedQuit }).pipe(
     // The renderer asks for its Clerk session as soon as it loads.
     Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
     Layer.provideMerge(UpdaterEngine.layer(flavor)),
@@ -296,7 +291,6 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
-  startHostProcess({ failed: showHostFailure });
   graph = runtime.context();
   buildAppMenu();
   // Host liveness. Install the crash guards before
@@ -398,10 +392,8 @@ function quit(): void {
   const hurried = isHurriedQuit();
   rememberWindows();
   if (hurried) rememberVisibilityForRestart();
-  // The host first, whose quit sequence (host/process/layer.ts) may
-  // still ask the shell for its updater bridge.
-  void stopHostProcess(hurried)
-    .then(() => runtime.dispose())
+  void runtime
+    .dispose()
     .catch((error: unknown) => {
       log.error("[quit] a finalizer failed:", error);
     })
