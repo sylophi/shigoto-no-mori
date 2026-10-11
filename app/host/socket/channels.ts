@@ -7,11 +7,12 @@
 // attached this one, so a call naming an id not attached yet waits for
 // it, briefly.
 //
-// Both directions are numbered calls the caller keeps a few of in
-// flight: a read answers the next of this side's queued bytes, a write
-// hands the caller's to the endpoint, each in its number's turn. A
-// call further ahead than the caller may have in flight is refused, so
-// a channel holds a bounded number of them.
+// Both directions are numbered calls the caller keeps in flight, as
+// many as fill the link (shared/remote/channels.ts sizes them): a read
+// answers the next of this side's queued bytes, a write hands the
+// caller's to the endpoint, each in its number's turn. A call further
+// ahead than CHANNEL_CALLS_IN_FLIGHT is refused, so a channel holds a
+// bounded number of them, and at most that many writes' bytes.
 import {
   RemoteCallError,
   type CallFailureSchema,

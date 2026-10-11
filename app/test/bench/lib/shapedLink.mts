@@ -35,7 +35,9 @@ export async function startShapedLink({
   const counters = { up: 0, down: 0 };
 
   // One direction of one connection. `free` is when the link finishes
-  // serializing everything queued so far.
+  // serializing everything queued so far. Chunks leave in the order they
+  // came, from one queue: a timer each could fire out of order by a
+  // fraction of a millisecond, and a byte stream must not.
   function pipe(
     from: Socket,
     to: Socket,
@@ -43,19 +45,38 @@ export async function startShapedLink({
     count: (bytes: number) => void,
   ): void {
     let free = 0;
+    const queue: { chunk: Buffer | null; arrive: number }[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const deliver = (): void => {
+      timer = null;
+      const now = performance.now();
+      while (queue.length > 0 && (queue[0]?.arrive ?? 0) <= now) {
+        const { chunk } = queue.shift() as { chunk: Buffer | null };
+        if (to.destroyed) continue;
+        if (chunk === null) to.end();
+        else to.write(chunk);
+      }
+      schedule();
+    };
+    const schedule = (): void => {
+      const head = queue[0];
+      if (timer !== null || head === undefined) return;
+      timer = setTimeout(deliver, Math.max(0, head.arrive - performance.now()));
+    };
     from.on("data", (chunk: Buffer) => {
       count(chunk.length);
       const now = performance.now();
       const start = Math.max(now, free);
       free = start + (chunk.length / bytesPerSec) * 1000;
-      const arrive = free + oneWayDelayMs;
-      setTimeout(() => {
-        if (!to.destroyed) to.write(chunk);
-      }, arrive - now);
+      queue.push({ chunk, arrive: free + oneWayDelayMs });
+      schedule();
     });
     from.on("end", () => {
-      const wait = Math.max(performance.now(), free) + oneWayDelayMs;
-      setTimeout(() => to.end(), wait - performance.now());
+      queue.push({
+        chunk: null,
+        arrive: Math.max(performance.now(), free) + oneWayDelayMs,
+      });
+      schedule();
     });
     from.on("error", () => to.destroy());
   }

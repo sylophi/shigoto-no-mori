@@ -56,6 +56,7 @@ import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { boundedMessages } from "./boundedMessages";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -203,8 +204,9 @@ const MAX_CONNECTIONS = 64;
 // Sockets before their hello, a tighter cap so a flood that never says
 // hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
-// The largest inbound frame: a channel write is at most 256 KiB of
-// bytes and a few more of frame around them.
+// The largest inbound frame: a call well past any a peer makes (a
+// channel write is at most 32 KiB of bytes), and what bounds the
+// messages of a stream the other way too (boundedMessages.ts).
 const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 // Lets a refusal's answer flush before the socket is cut.
 const REJECT_TERMINATE_DELAY_MS = 250;
@@ -748,7 +750,7 @@ export const make = (options: {
                   ),
                 ),
               ),
-            );
+            ).pipe(boundedMessages);
 
         // A view, failing as an invoke does: the contract error it is,
         // or RemoteCallError with its message and code.
@@ -757,7 +759,7 @@ export const make = (options: {
             Effect.map(services, (context) =>
               view(payload).pipe(Stream.provideContext(context)),
             ),
-          ).pipe(Stream.mapError(callFailureOf));
+          ).pipe(Stream.mapError(callFailureOf), boundedMessages);
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
         for (const call of group.requests.values()) {
