@@ -17,6 +17,9 @@ level up.
   and lefthook run.
 - `host/README.md`: what the host serves, and a new call end to end.
 - `main/README.md`: the shell, Electron's main process.
+- `renderer/README.md`: the UI both shells run, containers over the
+  views.
+- `web/README.md`: the web client, a device with no host.
 - `shared/README.md`: the code the host, the shell and the clients
   share.
 
