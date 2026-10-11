@@ -19,6 +19,6 @@ export function usePackageScripts(
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    meta: { errorTitle: "Couldn't read package.json scripts" },
+    meta: { errorTitle: "Couldn't read scripts" },
   });
 }

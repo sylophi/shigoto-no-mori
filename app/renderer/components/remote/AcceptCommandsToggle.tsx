@@ -42,7 +42,7 @@ const GRANTS: readonly { icon: LucideIcon; title: string; detail: string }[] = [
     icon: SquareTerminal,
     title: "Run commands as you",
     detail:
-      "Edit and run setup, teardown and package.json scripts, and type into their terminals.",
+      "Edit and run setup, teardown and project scripts, and type into their terminals.",
   },
   {
     icon: GitBranch,
