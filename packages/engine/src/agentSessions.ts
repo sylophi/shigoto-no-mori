@@ -2,6 +2,10 @@
 // one event moves it to, and the text the app shows of it. Agents.ts
 // stores the sessions and reads the events.
 import { createHash } from "node:crypto";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 
 // A session's states: working through a turn, waiting on the user
 // mid-turn (a permission prompt), or idle (the turn ended).
@@ -48,31 +52,51 @@ export type AgentEvent = {
   readonly lastMessage: string;
 };
 
-const text = (value: unknown) => (typeof value === "string" ? value : "");
+// A field the hook's harness may send in any shape, or not at all: its
+// text, else "", so a harness that spells one differently still names
+// its session.
+const field = Schema.Unknown.pipe(
+  Schema.decodeTo(
+    Schema.String,
+    SchemaTransformation.transform<string, unknown>({
+      decode: (value) => (typeof value === "string" ? value : ""),
+      encode: (value) => value,
+    }),
+  ),
+  Schema.withDecodingDefaultKey(Effect.succeed("")),
+);
+
+const HookEvent = Schema.fromJsonString(
+  Schema.Struct({
+    hook_event_name: field,
+    session_id: field,
+    cwd: field,
+    notification_type: field,
+    agent_id: field,
+    tool_name: field,
+    tool_input: Schema.optional(Schema.Unknown),
+    prompt: field,
+    session_title: field,
+    last_assistant_message: field,
+  }),
+);
 
 // An event as the hooks send it, or undefined when it names no session.
 export function parseAgentEvent(raw: string): AgentEvent | undefined {
-  let doc: unknown;
-  try {
-    doc = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return undefined;
-  }
-  const fields = doc as Record<string, unknown>;
+  const decoded = Schema.decodeUnknownOption(HookEvent)(raw);
+  if (Option.isNone(decoded)) return undefined;
+  const fields = decoded.value;
   const event = {
-    name: text(fields.hook_event_name),
-    session: text(fields.session_id),
-    cwd: text(fields.cwd),
-    notificationType: text(fields.notification_type),
-    agentId: text(fields.agent_id),
-    toolName: text(fields.tool_name),
+    name: fields.hook_event_name,
+    session: fields.session_id,
+    cwd: fields.cwd,
+    notificationType: fields.notification_type,
+    agentId: fields.agent_id,
+    toolName: fields.tool_name,
     toolInput: fields.tool_input ?? null,
-    prompt: text(fields.prompt),
-    sessionTitle: text(fields.session_title),
-    lastMessage: text(fields.last_assistant_message),
+    prompt: fields.prompt,
+    sessionTitle: fields.session_title,
+    lastMessage: fields.last_assistant_message,
   };
   return event.session === "" ? undefined : event;
 }
@@ -132,6 +156,10 @@ function waitAsk(entry: string) {
 // a title or a prompt's call, a few for a closing message.
 export const AGENT_LINE_MAX = 120;
 export const AGENT_MESSAGE_MAX = 400;
+
+// A value of a tool's input, whose shape is the tool's own: its text,
+// else "".
+const text = (value: unknown) => (typeof value === "string" ? value : "");
 
 // What a permission prompt asks, in a line: the question, or the one
 // input that says what the call does (a command, a file, a URL), a path

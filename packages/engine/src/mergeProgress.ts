@@ -1,6 +1,10 @@
 // Where an open pull request stands on its way to merging, as the wait
 // for an armed auto-merge or a merge queue reads it (Landing.ts), and
 // what a check's state comes to.
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { flag, list, struct, text } from "./goJson.ts";
 
 const PASSING = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
 const FAILING = new Set([
@@ -14,21 +18,23 @@ const FAILING = new Set([
 
 export type CheckVerdict = "passing" | "failing" | "pending";
 
-const text = (value: unknown) => (typeof value === "string" ? value : "");
+// gh's check rollup mixes CheckRun nodes (name, status and conclusion)
+// and StatusContext nodes (context and state).
+export const CheckNode = Schema.Struct({
+  name: text,
+  context: text,
+  state: text,
+  status: text,
+  conclusion: text,
+  isRequired: flag,
+});
+export type CheckNode = typeof CheckNode.Type;
 
-const isObject = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-// gh's check rollup mixes CheckRun nodes (status and conclusion) and
-// StatusContext nodes (state). One node is one verdict.
-export function checkVerdict(node: unknown): CheckVerdict {
-  const fields = isObject(node) ? node : {};
-  let verdict = text(fields["state"]);
+// One node is one verdict.
+export function checkVerdict(node: CheckNode): CheckVerdict {
+  let verdict = node.state;
   if (verdict === "") {
-    verdict =
-      text(fields["status"]) === "COMPLETED"
-        ? text(fields["conclusion"])
-        : "PENDING";
+    verdict = node.status === "COMPLETED" ? node.conclusion : "PENDING";
   }
   return PASSING.has(verdict)
     ? "passing"
@@ -65,45 +71,71 @@ export const MERGE_PROGRESS_QUERY =
   "... on CheckRun { name status conclusion isRequired(pullRequestNumber: $number) } " +
   "... on StatusContext { context state isRequired(pullRequestNumber: $number) } } } } } } } } } }";
 
+const MergeProgressAnswer = Schema.fromJsonString(
+  Schema.Struct({
+    data: struct(
+      Schema.Struct({
+        repository: struct(
+          Schema.Struct({
+            pullRequest: Schema.NullOr(
+              Schema.Struct({
+                state: text,
+                mergeStateStatus: text,
+                reviewDecision: text,
+                isInMergeQueue: flag,
+                autoMergeRequest: Schema.optional(
+                  Schema.NullOr(Schema.Struct({ mergeMethod: text })),
+                ),
+                commits: struct(
+                  Schema.Struct({
+                    nodes: list(
+                      Schema.Struct({
+                        commit: struct(
+                          Schema.Struct({
+                            statusCheckRollup: struct(
+                              Schema.Struct({
+                                contexts: struct(
+                                  Schema.Struct({ nodes: list(CheckNode) }),
+                                ),
+                              }),
+                            ),
+                          }),
+                        ),
+                      }),
+                    ),
+                  }),
+                ),
+              }),
+            ).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+          }),
+        ),
+      }),
+    ),
+  }),
+);
+
 // The query's answer, or undefined when it isn't one.
 export function parseMergeProgress(stdout: string): MergeProgress | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return undefined;
-  }
-  const data = isObject(parsed) ? parsed["data"] : undefined;
-  const repository = isObject(data) ? data["repository"] : undefined;
-  const pr = isObject(repository) ? repository["pullRequest"] : undefined;
-  if (!isObject(pr)) return undefined;
-  const armed = pr["autoMergeRequest"];
-  const commits = isObject(pr["commits"]) ? pr["commits"]["nodes"] : [];
-  const checks: Array<MergeProgress["checks"][number]> = [];
-  for (const commit of Array.isArray(commits) ? commits : []) {
-    const rollup =
-      isObject(commit) && isObject(commit["commit"])
-        ? commit["commit"]["statusCheckRollup"]
-        : undefined;
-    const contexts =
-      isObject(rollup) && isObject(rollup["contexts"])
-        ? rollup["contexts"]["nodes"]
-        : [];
-    for (const node of Array.isArray(contexts) ? contexts : []) {
-      const fields = isObject(node) ? node : {};
-      checks.push({
-        name: text(fields["name"]) || text(fields["context"]),
-        verdict: checkVerdict(node),
-        required: fields["isRequired"] === true,
-      });
-    }
-  }
+  const answer = Schema.decodeUnknownOption(MergeProgressAnswer)(stdout);
+  const pr = Option.isSome(answer)
+    ? answer.value.data.repository.pullRequest
+    : null;
+  if (pr === null) return undefined;
+  const checks = pr.commits.nodes.flatMap(({ commit }) =>
+    commit.statusCheckRollup.contexts.nodes.map((node) => ({
+      name: node.name || node.context,
+      verdict: checkVerdict(node),
+      required: node.isRequired,
+    })),
+  );
   return {
-    state: text(pr["state"]),
-    mergeStateStatus: text(pr["mergeStateStatus"]),
-    reviewDecision: text(pr["reviewDecision"]),
-    isInMergeQueue: pr["isInMergeQueue"] === true,
-    ...(isObject(armed) ? { autoMergeMethod: text(armed["mergeMethod"]) } : {}),
+    state: pr.state,
+    mergeStateStatus: pr.mergeStateStatus,
+    reviewDecision: pr.reviewDecision,
+    isInMergeQueue: pr.isInMergeQueue,
+    ...(pr.autoMergeRequest
+      ? { autoMergeMethod: pr.autoMergeRequest.mergeMethod }
+      : {}),
     checks,
   };
 }

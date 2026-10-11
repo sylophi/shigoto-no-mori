@@ -161,7 +161,8 @@ publishable key, neither a secret, and is not in the repo: a worktree
 `sm` makes carries it over from the primary checkout (the project's
 carry-over setting), and a checkout made any other way copies it from
 there. Without both values the account reads as unconfigured: the
-web client never dials its hub socket, and Sign in stays off.
+web client never dials its hub socket, Sign in stays off, and the
+first run's page and the migration's leave their sign-in step out.
 
 The app passes the two update stand-ins to its own update check and
 removes them from its environment, so scripts it runs don't inherit

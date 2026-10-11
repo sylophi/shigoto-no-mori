@@ -11,8 +11,10 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
-import { setDeviceId } from "@host/lib/config/deviceId";
-import * as Ops from "@host/lib/engineOps";
+import * as DeviceId from "@host/lib/config/DeviceId";
+import { DataDirHolders } from "@host/lib/DataDirHolders";
+import * as Shell from "@host/lib/Shell";
+import * as Loopback from "@host/socket/loopback";
 import { refresh } from "@host/lib/projects";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import {
@@ -35,6 +37,7 @@ import * as Terminals from "@host/lib/terminals/Terminals";
 import { terminalStart } from "@host/ipc/scriptRun";
 import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/VillagerData";
+import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
@@ -42,13 +45,16 @@ import * as OrphanSweep from "@host/lib/scripts/persistence";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
+  mirrorChangesLayer,
   mirrorDaemonLayer,
   mirrorLayer,
   mirrorSessionsNow,
+  portForwardsLayer,
+  rootServices,
+  scriptsChangedLayer,
   startMirrorGateway,
   stopMirrorGateway,
 } from "./handlers";
-import { stopAllPortForwards } from "@host/ipc/modules/portForward";
 import {
   broadcastAll,
   deviceLinkLayer,
@@ -61,6 +67,7 @@ import {
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
 import * as Migration from "@shigomori/engine/Migration";
+import { hostFacts } from "./facts";
 import * as Graph from "./graph";
 import * as MigrationShell from "./migration";
 
@@ -208,20 +215,35 @@ const mirrorGateway = lifetime(
 // starts after the reap at the end has looked.
 const scriptGate = onQuit("the script gate", Effect.sync(markShuttingDown));
 
-// Port forwards start on demand. Stopping them before the remote planes
-// gives their best-effort closes a socket to ride out on.
-const portForwards = onQuit(
-  "the port forwards",
-  Effect.sync(stopAllPortForwards),
+// What lets go of the data folder before a move takes it away: the
+// store, the updater's bridge and the loopback's address file.
+const dataDirHolders = Layer.effect(
+  DataDirHolders,
+  Effect.gen(function* () {
+    const store = yield* EngineStoreChanges.StoreChanges;
+    const shell = yield* Shell.Shell;
+    const loopback = yield* Loopback.Loopback;
+    return DataDirHolders.of({
+      release: store.release.pipe(
+        Effect.andThen(shell.stopUpdaterBridge),
+        Effect.andThen(loopback.unpublish),
+      ),
+    });
+  }),
 );
 
-// What the host answers from caches of other tools: gh, terrier and
-// port-pool.
-const toolAnswers = Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer);
+// What the host answers from caches: other tools' (gh, terrier and
+// port-pool), and its reads across a project's checkouts.
+const cachedAnswers = Layer.mergeAll(
+  GithubCli.layer,
+  Terrier.layer,
+  Ports.layer,
+  Worktrees.layer,
+);
 
 // The bottom of the graph, closed last.
 const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
-  toolAnswers.pipe(
+  cachedAnswers.pipe(
     // A villager download under way stops here, and resumes next launch.
     Layer.provideMerge(Villagers.deviceLayer),
     // Every push the host makes and every store write, which the wires
@@ -229,15 +251,12 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     Layer.provideMerge(Views.layer),
     Layer.provideMerge(pushesLayer),
     Layer.provideMerge(EngineStoreChanges.layer),
+    // What the root provides from its own wiring: the peers' reach,
+    // the mirror engine and the account.
+    Layer.provideMerge(rootServices),
     // This device's id, which the wires above name themselves by, read
     // from the store once.
-    Layer.provideMerge(
-      Layer.effectDiscard(
-        Effect.flatMap(Ops.deviceId, (id) =>
-          Effect.sync(() => setDeviceId(id)),
-        ),
-      ),
-    ),
+    Layer.provideMerge(DeviceId.layer),
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Engine.layer(engine)),
@@ -265,6 +284,8 @@ const scriptsAndFoundation = (options: {
     // Every terminal, each saved for the next start as it closes with
     // the quit.
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
+    // The scripts' changed push, which outlives the quit's kills.
+    Layer.provideMerge(scriptsChangedLayer),
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.layer),
@@ -277,8 +298,11 @@ export const layer = (options: {
   readonly hurried: () => boolean;
   readonly engine: Parameters<typeof Engine.layer>[0];
 }) =>
-  scriptGate.pipe(
-    Layer.provideMerge(portForwards),
+  dataDirHolders.pipe(
+    Layer.provideMerge(scriptGate),
+    // Port forwards start on demand. Stopping them before the remote
+    // planes gives their best-effort closes a socket to ride out on.
+    Layer.provideMerge(portForwardsLayer),
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
@@ -286,6 +310,9 @@ export const layer = (options: {
     Layer.provideMerge(mirrorFollower),
     Layer.provideMerge(mirrorDaemon),
     Layer.provideMerge(mirrorGateway),
+    // The mirror's changed push, which the engine above and the
+    // served streams feed.
+    Layer.provideMerge(mirrorChangesLayer),
     Layer.provideMerge(remotePlanes),
     // The cloudflared child, fronting the device link's listener.
     Layer.provideMerge(tunnelLayer()),
@@ -306,7 +333,7 @@ export const layer = (options: {
     // repairs an installed link whose target moved (an app update,
     // another checkout).
     Layer.provideMerge(
-      starts("the CLI link repair", () => void repairCliLinks()),
+      starts("the CLI link repair", () => void repairCliLinks(hostFacts())),
     ),
     Layer.provideMerge(firstProjectList),
     // The handlers read this device's copy of the shared settings

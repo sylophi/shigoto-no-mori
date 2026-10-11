@@ -186,7 +186,10 @@ export function parseMakefile(raw: string): ReadonlyArray<RunnerScript> {
 
     const command = stepsOr(body, prereqs);
     for (const target of line.slice(0, colon).trim().split(/\s+/)) {
-      if (target === "" || /[.%/$()&]/.test(target)) continue;
+      // A name that starts with '-' would reach make as an option.
+      if (target === "" || target.startsWith("-") || /[.%/$()&]/.test(target)) {
+        continue;
+      }
       const at = index.get(target);
       if (at !== undefined) {
         if (body.length > 0 && !hasRecipe.has(target)) {

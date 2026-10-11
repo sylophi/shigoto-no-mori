@@ -89,14 +89,13 @@ import { forwardHandlers } from "@host/ipc/modules/forward";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
   type MirrorCreateInput,
+  type MirrorEngine,
   MirrorError,
-  setMirrorImpl,
-} from "@host/mirror/registry";
+} from "@host/mirror/MirrorEngine";
 import { listMirrorServing } from "@host/mirror/serving";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
-import { setPeerReach } from "@host/ipc/peerSync";
 import {
   beginTransfer,
   carriedLabels,
@@ -105,7 +104,6 @@ import {
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   MIRROR_LABEL_LOCAL_WORKTREE,
-  type MirrorImpl,
   mirrorSessions,
   type MirrorSessionRaw,
   holdRootChecks,
@@ -126,6 +124,11 @@ import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
+import {
+  standInDeviceId,
+  standInMirror,
+  standInPeers,
+} from "./lib/hostStandIns.mts";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
   bootDirectWire,
@@ -348,11 +351,11 @@ beforeAll(async () => {
   mirrorOverWire = buildClient(mirrorContract, toListener.transport);
   // Every peer reach of the dialer's host code (the follower's sync and mirror
   // calls, its source links) rides the same session.
-  setPeerReach({
+  standInPeers({
     transportFor: () => toListener.transport,
     channelsFor: () => toListener.channels,
-    thisDeviceId: () => DIALER,
   });
+  standInDeviceId(DIALER);
 
   // The dialer's half: the real gateway over the real peer client, the real
   // daemon on the freshly built binary.
@@ -1062,7 +1065,7 @@ it("one-shot transfer: the admitted file crosses, the rule holds, nothing flows 
   // on the listener, one beside it crosses, and no session survives the call.
   // Only the daemon slot's create/sessions/terminate/status are in
   // play. The rest of the impl is inert here.
-  setMirrorImpl(inertImpl());
+  standInMirror(inertImpl());
   mkdirSync(join(listenerWorktree, "skip"), { recursive: true });
   writeFileSync(join(listenerWorktree, "skip", "me.txt"), "stays\n");
   writeFileSync(join(listenerWorktree, "once.txt"), "once\n");
@@ -1184,8 +1187,8 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         }),
       ],
     ]);
-    const noted: Parameters<MirrorImpl["noteEvent"]>[] = [];
-    setMirrorImpl({
+    const noted: Parameters<MirrorEngine["Service"]["noteEvent"]>[] = [];
+    standInMirror({
       ...inertImpl(),
       sessions: Effect.sync(() => [...live.values()]),
       terminate: (id) =>
@@ -1242,8 +1245,8 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
         into("s-into-c", "C", "wt-copy", "wt-original-3"),
       ].map((raw): [string, MirrorSessionRaw] => [raw.session, raw]),
     );
-    const noted: Parameters<MirrorImpl["noteEvent"]>[] = [];
-    setMirrorImpl({
+    const noted: Parameters<MirrorEngine["Service"]["noteEvent"]>[] = [];
+    standInMirror({
       ...inertImpl(),
       status: Effect.succeed("running"),
       sessions: Effect.sync(() => [...live.values()]),
@@ -1298,13 +1301,13 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       });
     const live = new Map<string, MirrorSessionRaw>();
     const put = (raw: MirrorSessionRaw) => live.set(raw.session, raw);
-    const noted: Parameters<MirrorImpl["noteEvent"]>[] = [];
+    const noted: Parameters<MirrorEngine["Service"]["noteEvent"]>[] = [];
     const deleted: string[] = [];
     const released: string[] = [];
-    let status: Effect.Success<MirrorImpl["status"]> = "running";
+    let status: Effect.Success<MirrorEngine["Service"]["status"]> = "running";
     let verdict: MirrorGitStatus = { status: "synced", detail: "" };
     let failTerminate = false;
-    setMirrorImpl({
+    standInMirror({
       ...inertImpl(),
       status: Effect.sync(() => status),
       sessions: Effect.sync(() =>
@@ -1324,7 +1327,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     // The peer's list never answers, which the copy-gone probe reads
     // as no answer (the copy may well be there), so no refusal is
     // waved through as a copy already gone.
-    setPeerReach({
+    standInPeers({
       // The peer's own serving side, as far as this check asks it: the
       // copy's delete and its release. Everything else refuses.
       transportFor: () => ({
@@ -1344,8 +1347,8 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
         subscribe: () => () => {},
       }),
       channelsFor: () => () => Promise.reject(new Error("not in this check")),
-      thisDeviceId: () => DIALER,
     });
+    standInDeviceId(DIALER);
 
     // Git in step but a file held still as a conflict: the copy may
     // hold the only version of it, so the unforced stop refuses,

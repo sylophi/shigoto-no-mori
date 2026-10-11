@@ -4,6 +4,7 @@ import {
   type EnrollmentStep,
   useEnrollment,
 } from "@/hooks/account/useEnrollment";
+import { hasAccountService } from "@/lib/accountService";
 
 const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   done: { state: "done", asks: false },
@@ -12,15 +13,27 @@ const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   "sign-in": { state: "waiting", asks: true },
 };
 
+type SignInStepHook = (due: boolean) => {
+  // None when the build has no account service: sign-in stays off.
+  readonly signIn: SignInStep | null;
+  readonly needsDeviceKey: boolean;
+  readonly run: () => void;
+};
+
 // The sign-in step both pages share (the migration's and the first
 // run's), on this device's enrollment (useEnrollment): while `due`, a
 // live session enrolls once by itself, and a lapsed one, or a failed
-// enrollment, waits on the button, which tries again.
-export function useSignInStep(due: boolean): {
-  readonly signIn: SignInStep;
-  readonly needsDeviceKey: boolean;
-  readonly run: () => void;
-} {
+// enrollment, waits on the button, which tries again. A build with no
+// account service has no ClerkProvider to enroll under (ClerkGate), so
+// it has no sign-in step and calls no Clerk hook; which of the two runs
+// is fixed for the window's life.
+export const useSignInStep: SignInStepHook = hasAccountService
+  ? useEnrollmentStep
+  : () => NO_SIGN_IN;
+
+const NO_SIGN_IN = { signIn: null, needsDeviceKey: false, run: () => {} };
+
+function useEnrollmentStep(due: boolean): ReturnType<SignInStepHook> {
   const { step, error, needsDeviceKey, run } = useEnrollment();
   const enrolled = useRef(false);
   useEffect(() => {

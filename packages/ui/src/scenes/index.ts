@@ -65,6 +65,7 @@ import {
   OnboardingCliScene,
   OnboardingDoneScene,
   OnboardingProjectScene,
+  OnboardingNoAccountScene,
   OnboardingSignInScene,
 } from "./steps.tsx";
 import { LivePageScene, LiveQuietScene } from "./live.tsx";
@@ -101,6 +102,7 @@ export const scenes = {
   migrationSignIn: { Scene: MigrationSignInScene, ...DESKTOP },
   migrationDone: { Scene: MigrationDoneScene, ...DESKTOP },
   onboardingSignIn: { Scene: OnboardingSignInScene, ...DESKTOP },
+  onboardingNoAccount: { Scene: OnboardingNoAccountScene, ...DESKTOP },
   onboardingCli: { Scene: OnboardingCliScene, ...DESKTOP },
   onboardingProject: { Scene: OnboardingProjectScene, ...DESKTOP },
   onboardingDone: { Scene: OnboardingDoneScene, ...DESKTOP },

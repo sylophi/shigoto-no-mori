@@ -489,6 +489,7 @@ describe("at a terminal", () => {
   // What the menu's help line says in either mode. The menu draws it
   // once its keys reach it, so a key typed after it lands in the menu.
   const HELP = "enter select";
+  const STEP_DEADLINE = 10_000;
 
   // The built binary in a terminal of its own (BSD script's pty), each
   // key typed once the screen shows the text paired with it, and after
@@ -541,14 +542,24 @@ describe("at a terminal", () => {
         resolve(undefined);
       }),
     );
-    // Where `text` shows from `from` on, once it does.
+    // Where `text` shows from `from` on, once it does. A step shows in
+    // well under a second; one that hasn't in STEP_DEADLINE fails naming
+    // what it waited for and the screen, where the case's own timeout
+    // would say neither.
     const showing = (text: string, from: number) =>
       new Promise<number>((resolve, reject) => {
+        const deadline = setTimeout(() => {
+          checks.delete(check);
+          reject(
+            new Error(`Waited ${STEP_DEADLINE} ms for ${text}:\n${shown}`),
+          );
+        }, STEP_DEADLINE);
         const check = () => {
           const at = shown.indexOf(text, from);
           if (at !== -1) resolve(at);
           else if (closed) reject(new Error(`Never showed ${text}:\n${shown}`));
           else return;
+          clearTimeout(deadline);
           checks.delete(check);
         };
         checks.add(check);

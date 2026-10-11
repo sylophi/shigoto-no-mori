@@ -1,4 +1,5 @@
 import type React from "react";
+import { destructiveMark } from "../lib/usersAlone.ts";
 import { cn } from "../lib/utils.ts";
 import type { WithoutTitle } from "./tooltip.tsx";
 
@@ -40,6 +41,7 @@ export function IconButton({
     <button
       type="button"
       data-icon-button
+      {...destructiveMark(tone)}
       className={cn(
         "rounded-md text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-accent aria-pressed:text-accent-foreground",
         SIZE_CLASS[size],

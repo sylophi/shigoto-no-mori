@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shared/ipc/registerContract";
-import type { NukeProgress } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
@@ -11,8 +10,11 @@ import * as Ops from "@host/lib/engineOps";
 import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { moveDataDir } from "@host/lib/dataDirMove";
-import { killAllScripts } from "@host/lib/scripts";
-import { implSlot } from "@host/lib/util/implSlot";
+import { getBusyOperations, killAllScripts } from "@host/lib/scripts";
+import { busyRemoteRefusal } from "@shared/busy";
+import { DataDirHolders } from "@host/lib/DataDirHolders";
+import * as HostPushes from "@host/lib/hostPushes";
+import * as Shell from "@host/lib/Shell";
 import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
@@ -20,25 +22,6 @@ import {
   dataDirSource,
   defaultDataDir,
 } from "@host/lib/util/paths";
-
-// The host's root injects the app-lifecycle teardown hooks at boot
-// (process/impls.ts): the store's release, the updater bridge's stop,
-// the loopback's unpublish and the nuke-progress fan-out. Keeping them
-// behind a setter keeps this handler module free of the root's wiring.
-type RuntimeImpl = {
-  releaseStore: Effect.Effect<void>;
-  stopUpdaterBridge: () => void;
-  // Unpublishes loopback.json, so the moved data dir never carries the
-  // address of this pre-move process to a terminal that resolved the
-  // new one.
-  unpublishLoopback: Effect.Effect<void>;
-  broadcastNukeProgress: (progress: NukeProgress) => void;
-  relaunchAppUnattended: () => void;
-  // Why a move asked for by another device must not start right now
-  // (it reaps every running script, and nobody here was asked), or
-  // null when the host is idle.
-  unattendedMoveRefusal: () => string | null;
-};
 
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   "MoveRefusedError",
@@ -48,11 +31,6 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
     return this.reason;
   }
 }
-
-const { set: setRuntimeImpl, get: runtimeImpl } = implSlot<RuntimeImpl>(
-  "runtime handler invoked before setRuntimeImpl registered one",
-);
-export { setRuntimeImpl };
 
 let moveInFlight = false;
 
@@ -72,6 +50,8 @@ export const runtimeHandlers = {
   moveDataDir: ({ parentDir }, ctx) =>
     Effect.gen(function* () {
       const unattended = isRemoteCaller(ctx);
+      const shell = yield* Shell.Shell;
+      const holders = yield* DataDirHolders;
       // One move at a time, now that the local window is no longer the
       // only caller: two would share the staged pointer file and undo
       // each other's re-key.
@@ -81,7 +61,8 @@ export const runtimeHandlers = {
         });
       }
       if (unattended) {
-        const refusal = runtimeImpl().unattendedMoveRefusal();
+        // It reaps every running script, and nobody here was asked.
+        const refusal = busyRemoteRefusal(getBusyOperations(), "move");
         if (refusal !== null) {
           return yield* new MoveRefusedError({ reason: refusal });
         }
@@ -92,25 +73,19 @@ export const runtimeHandlers = {
         killAllScripts: killAllScripts(),
         beforeMove: Effect.suspend(() => {
           watchersStopped = true;
-          const impl = runtimeImpl();
-          return impl.releaseStore.pipe(
-            Effect.andThen(Effect.sync(impl.stopUpdaterBridge)),
-            Effect.andThen(impl.unpublishLoopback),
-          );
+          return holders.release;
         }),
       }).pipe(
         Effect.onError(() =>
-          Effect.sync(() => {
+          Effect.suspend(() => {
             // A move that failed after the watchers stopped leaves this
             // app running without them. At this machine the user sees
             // the error and can restart. For a peer's move nobody here
             // does, so the restart that brings them back happens anyway
             // (the data dir and pointer are where they were).
-            if (unattended && watchersStopped) {
-              runtimeImpl().relaunchAppUnattended();
-            } else {
-              moveInFlight = false;
-            }
+            if (unattended && watchersStopped) return shell.relaunch;
+            moveInFlight = false;
+            return Effect.void;
           }),
         ),
       );
@@ -122,13 +97,14 @@ export const runtimeHandlers = {
       // this reply lands. A peer has no window module on this machine
       // to acknowledge with, so the host relaunches itself, after the
       // reply has left (the shell owns that timing).
-      if (unattended) runtimeImpl().relaunchAppUnattended();
+      if (unattended) yield* shell.relaunch;
     }),
 
   nuke: () =>
     Effect.flatMap(Terminals.Terminals, (terminals) =>
       nukeEverything({
-        onProgress: (progress) => runtimeImpl().broadcastNukeProgress(progress),
+        onProgress: (progress) =>
+          HostPushes.push(runtimeContract, "nukeProgress", progress),
         killAllScripts: killAllScripts(),
         closeTerminals: terminals.closeEvery,
         uninstall: Effect.map(

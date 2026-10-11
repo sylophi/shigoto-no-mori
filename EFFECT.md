@@ -92,17 +92,17 @@ export const layer = Layer.effect(Registry, make);
 - **Moving a service** updates every consumer. No re-export shims.
 - **A service too big to hold at once spans a few modules**, one per
   area of what it does, in a folder named for it beside its module
-  (`Worktrees.ts`, then `worktrees/listing.ts`, `worktrees/changes.ts`).
+  (`Worktrees.ts`, then `worktrees/listing.ts`, `worktrees/creating.ts`).
   Each area is a sub-maker: an `Effect.gen` that takes the services it
   needs from the environment, and as a parameter what an earlier area
   built for it, and returns that area's methods. The service's `make`
   runs the sub-makers in dependency order and composes `Service.of`
   from what they return. The tag, `make` and `layer` stay in the
-  service module. The errors, schemas and documents the areas share go
-  in the folder too (`worktrees/errors.ts`), so no area imports the
-  service module back, and a consumer imports them from there. A
-  sub-maker has no tag and no layer, and nothing outside the service
-  imports it.
+  service module. The errors, documents and helpers the areas share go
+  in the folder too (`worktrees/documents.ts`), so no area imports the
+  service module back; the service module re-exports what consumers
+  use, so it stays the one place they import. A sub-maker has no tag
+  and no layer, and nothing outside the service imports it.
 
   ```ts
   // worktrees/listing.ts
@@ -116,8 +116,8 @@ export const layer = Layer.effect(Registry, make);
   // Worktrees.ts
   const make = Effect.gen(function* () {
     const listing = yield* makeListing;
-    const changes = yield* makeChanges(listing);
-    return Worktrees.of({ ...listing, ...changes });
+    const creating = yield* makeCreating({ listing });
+    return Worktrees.of({ ...listing, ...creating });
   });
   ```
 

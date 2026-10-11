@@ -1,10 +1,10 @@
 // The mirror engine's stand-ins the mirror proofs share: a session as
 // the daemon reports one (file-sync/engine.go's state line), and the
-// mirror impl (host/mirror/registry.ts) with nothing behind it, for a
+// mirror engine (host/mirror/MirrorEngine.ts) with nothing behind it, for a
 // check to fill in with what it is about.
 import type { MirrorSessionRaw } from "@shigomori/contracts/modules/mirror";
 import * as Effect from "effect/Effect";
-import type { MirrorImpl } from "../../host/mirror/registry.ts";
+import type { MirrorEngine } from "../../host/mirror/MirrorEngine.ts";
 
 type MirrorEndpoint = MirrorSessionRaw["local"];
 
@@ -54,8 +54,8 @@ const notHere = () => Effect.die(new Error("not in this check"));
 // whose calls a check does not make die. `impl` replaces what the check
 // is about.
 export const inertMirrorImpl = (
-  impl: Partial<MirrorImpl> = {},
-): MirrorImpl => ({
+  impl: Partial<MirrorEngine["Service"]> = {},
+): MirrorEngine["Service"] => ({
   status: Effect.succeed("running"),
   sessions: Effect.succeed([]),
   create: notHere,

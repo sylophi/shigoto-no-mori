@@ -105,6 +105,7 @@ export function AcceptCommandsToggleView({
         // out and the read runs again).
         disabled={(enabled === undefined && !isError) || pending}
         switchClassName="data-[checked]:bg-amber-500"
+        alone="access"
         label={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             Allow control from other devices
