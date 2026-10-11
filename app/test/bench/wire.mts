@@ -2,7 +2,8 @@
 // and its real dialer (shared/remote/deviceLink.ts)
 // talking through a link shaped like an internet path
 // (lib/shapedLink.mts), so a change to the wire shows up as time and
-// bytes instead of an argument. Not a proof: it asserts nothing and
+// bytes instead of an argument, and as how long a terminal's chunks
+// and a small call wait on the link beside a bundle. Not a proof: it asserts nothing and
 // never runs in a hook.
 //
 //   pnpm test bench/wire
