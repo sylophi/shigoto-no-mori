@@ -8,6 +8,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import { usersAlone } from "../../lib/usersAlone.ts";
 import { readTerminalTheme, sameTheme } from "./terminalTheme.ts";
 
 // What the feed writes into once the screen is up.
@@ -198,6 +199,7 @@ export function TerminalView({
     <div
       data-slot="terminal"
       data-keyboard-surface="raw"
+      {...usersAlone("terminal")}
       className="isolate h-full w-full overflow-hidden bg-background px-3 py-2 font-terminal text-xs"
     >
       <div
