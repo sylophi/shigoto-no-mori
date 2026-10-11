@@ -8,6 +8,7 @@ import type * as Ports from "@host/lib/Ports";
 import type * as OrphanSweep from "@host/lib/scripts/persistence";
 import type * as ScriptRuns from "@host/lib/scripts/pty";
 import type * as Sharing from "@host/lib/sharing";
+import type * as Moves from "@host/lib/sync/Moves";
 import type * as Terminals from "@host/lib/terminals/Terminals";
 import type * as Terrier from "@host/lib/terrier";
 import type * as BackgroundFetch from "@host/lib/git/backgroundFetch";
@@ -24,6 +25,7 @@ export type HostServices =
   | OrphanSweep.OrphanSweep
   | ScriptRuns.ScriptRuns
   | Sharing.Sharing
+  | Moves.Moves
   | Terminals.Terminals
   | Terrier.Terrier
   | Villagers.VillagerData

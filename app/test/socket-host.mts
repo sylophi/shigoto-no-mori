@@ -196,7 +196,10 @@ function serve(listener: DirectListener, seen: Seen): void {
   });
 }
 
-function hang(seen: Seen, ctx: HandlerContext): Promise<unknown> {
+function hang(
+  seen: Seen,
+  ctx: HandlerContext & { readonly signal: AbortSignal },
+): Promise<unknown> {
   return new Promise((resolve) => {
     seen.hanging.push({ signal: ctx.signal, resolve });
   });

@@ -39,6 +39,7 @@ import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/persistence";
+import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
@@ -314,5 +315,7 @@ export const layer = (options: {
     Layer.provideMerge(
       logged("the shared settings", SharedSettingsStore.layer),
     ),
+    // The moves in flight, each one the quit comes before rolled back.
+    Layer.provideMerge(Moves.layer),
     Layer.provideMerge(scriptsAndFoundation(options)),
   );

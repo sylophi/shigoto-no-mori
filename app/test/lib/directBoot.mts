@@ -70,23 +70,31 @@ const DIAL_DEADLINE_MS = 3000;
 
 // The listener as a proof drives it: the registrar it serves, its calls
 // Promise handlers (a ServerTransport, for registerContract and
-// broadcastAll), and the listener's own state.
-type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
-  Pick<ServerTransport, "handle"> & {
-    // A call as the host serves it, an effect (registerHostContract).
-    serve: DeviceLink.LinkRegistrar["handle"];
-    // A push from the host, as the host's broadcastAll publishes it.
-    broadcastAll(
-      channel: string,
-      payload: unknown,
-      opts?: { remote?: boolean },
-    ): void;
-    status(): { listening: boolean; port: number | null };
-    closePeersNotIn(online: readonly string[]): Promise<void>;
-    // Brings the listener to `opts` (null stops it), as the host's refresh
-    // does.
-    reconcile(opts: WsServerStartOpts | null): Promise<void>;
-  };
+// broadcastAll) each handed a signal that aborts when the call is
+// interrupted, and the listener's own state.
+type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> & {
+  handle(
+    channel: string,
+    fn: (
+      ctx: HandlerContext & { readonly signal: AbortSignal },
+      raw: unknown,
+    ) => Promise<unknown>,
+    opts?: Parameters<ServerTransport["handle"]>[2],
+  ): void;
+  // A call as the host serves it, an effect (registerHostContract).
+  serve: DeviceLink.LinkRegistrar["handle"];
+  // A push from the host, as the host's broadcastAll publishes it.
+  broadcastAll(
+    channel: string,
+    payload: unknown,
+    opts?: { remote?: boolean },
+  ): void;
+  status(): { listening: boolean; port: number | null };
+  closePeersNotIn(online: readonly string[]): Promise<void>;
+  // Brings the listener to `opts` (null stops it), as the host's refresh
+  // does.
+  reconcile(opts: WsServerStartOpts | null): Promise<void>;
+};
 
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;

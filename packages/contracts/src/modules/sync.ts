@@ -488,7 +488,7 @@ export type SyncMoveRef = typeof SyncTeardownSourcePayloadSchema.Type;
 // create lands. Served to peers on the command grant: the device that
 // asked for a move it does not run (a mirror from the copy's side,
 // which the original's device runs) cancels it there. A host only ever
-// finds the moves of the device asking (host/lib/sync/moves.ts keys on
+// finds the moves of the device asking (host/lib/sync/Moves.ts keys on
 // the caller), so nothing else's move can be cancelled, and the
 // landing a send asks of a peer needs no cancel of its own: the sender
 // tears the link down, which the landing runs under. `cancelled` is

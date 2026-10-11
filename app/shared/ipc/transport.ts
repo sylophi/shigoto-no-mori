@@ -68,19 +68,14 @@ export type InvokeOptions = {
 
 // Context handed to every invoke handler. Deliberately Electron free:
 // minting a notifier bound to the calling connection lets a handler
-// stream broadcasts back to whoever invoked it, and the signal tells a
-// long-running handler that the caller is gone. Delivery semantics
-// (drop once the peer is gone) live in the server transport binding.
+// stream broadcasts back to whoever invoked it. A caller that is gone
+// interrupts its call. Delivery semantics (drop once the peer is gone)
+// live in the server transport binding.
 export type HandlerContext = {
   notifier<M extends ContractModule, K extends BroadcastKeys<M>>(
     module: M,
     key: K,
   ): (payload: BroadcastProducerPayload<M, K>) => void;
-  // Aborts when the call is cancelled: the caller interrupting it, or
-  // its link dropping (a window's page going, reload included).
-  // Consumers that attach listeners should remove them when the call
-  // completes.
-  signal: AbortSignal;
   // Aborts when the caller's link is gone. One per connection, so a
   // stream a caller joins can tell a connection that already hears it
   // from a new one.
@@ -150,19 +145,13 @@ export type ServerTransport = {
   ): void;
 };
 
-// What a server built in a layer graph hands each call: the context
-// without the signal, since such a call is an effect, cancelled by
-// interruption. The registrar gives a Promise handler a signal of its
-// own that aborts with it (registerContract.ts, registerHostContract).
-export type CallContext = Omit<HandlerContext, "signal">;
-
 // The server side of a layer graph's wires: each call mounted as an
 // effect on the graph's `Services`.
 export type EffectServerTransport<Services> = {
   handle(
     channel: string,
     fn: (
-      ctx: CallContext,
+      ctx: HandlerContext,
       raw: unknown,
     ) => Effect.Effect<unknown, CallFailure, Services>,
     opts?: TransportCallOpts,

@@ -55,7 +55,7 @@ import {
   peerWorktreesFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
-import { runMove } from "@host/lib/sync/moves";
+import * as Moves from "@host/lib/sync/Moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { inviteMirror, listMirrorInvites } from "./invites";
 import { transferFilesOnce } from "./oneShot";
@@ -189,7 +189,10 @@ export const startMirrorTo = (
       return yield* new MirrorStartRefusedError({ reason: refusal });
     }
     const { ignoreMode, ignores, ...sendInput } = input;
-    return yield* runMove(ctx, input.worktreeId, () =>
+    const moves = yield* Moves.Moves;
+    return yield* moves.run(
+      ctx,
+      input.worktreeId,
       Effect.gen(function* () {
         const { source, result: sent } = yield* sendWorktree(sendInput, ctx, {
           mirror: true,
@@ -297,31 +300,35 @@ export const startMirrorFrom = (
         },
       );
     }),
-    // A move like the others (runMove), so the dialog's and the
+    // A move like the others (Moves.ts), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a
     // caller going away both reach it, and interrupt the peer's send
     // over the device link. The invitation is made inside, once the
     // move holds its key: a second ask for the same worktree is refused
     // without touching the first's.
     () =>
-      runMove(ctx, worktreeId, () =>
-        Effect.gen(function* () {
-          const invite = inviteMirror({
-            peerDeviceId: sourceDeviceId,
-            sourceWorktreeId: worktreeId,
-            identity,
-            cloneInto: rule.cloneInto,
-          });
-          const started = yield* peerMirrorFor(sourceDeviceId)
-            .startTo({
-              targetDeviceId: thisDeviceId(),
-              projectId,
-              worktreeId,
-              ...rule,
-            })
-            .pipe(Effect.onError(() => Effect.sync(() => invite.withdraw())));
-          return decodeMirrorStartToResult(started);
-        }),
+      Effect.flatMap(Moves.Moves, (moves) =>
+        moves.run(
+          ctx,
+          worktreeId,
+          Effect.gen(function* () {
+            const invite = inviteMirror({
+              peerDeviceId: sourceDeviceId,
+              sourceWorktreeId: worktreeId,
+              identity,
+              cloneInto: rule.cloneInto,
+            });
+            const started = yield* peerMirrorFor(sourceDeviceId)
+              .startTo({
+                targetDeviceId: thisDeviceId(),
+                projectId,
+                worktreeId,
+                ...rule,
+              })
+              .pipe(Effect.onError(() => Effect.sync(() => invite.withdraw())));
+            return decodeMirrorStartToResult(started);
+          }),
+        ),
       ),
     (stopRelay) => Effect.sync(stopRelay),
   );

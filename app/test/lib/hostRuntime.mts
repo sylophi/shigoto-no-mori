@@ -32,6 +32,7 @@ import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as Terrier from "../../host/lib/terrier.ts";
 import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
+import * as Moves from "../../host/lib/sync/Moves.ts";
 import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
 import * as Views from "../../host/lib/views.ts";
 import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
@@ -108,6 +109,7 @@ const runtime = ManagedRuntime.make(
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
+        Moves.layer,
         // No fetches behind a proof's back.
         Layer.succeed(
           BackgroundFetch.BackgroundFetch,

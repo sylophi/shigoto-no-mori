@@ -74,7 +74,10 @@ import * as Semaphore from "effect/Semaphore";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
-import type { CallContext, EffectServerTransport } from "@shared/ipc/transport";
+import type {
+  EffectServerTransport,
+  HandlerContext,
+} from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {
   CommandGate,
@@ -311,7 +314,7 @@ function closeThenTerminate(
 type Push = { readonly channel: string; readonly payload: unknown };
 
 type Served = (
-  ctx: CallContext,
+  ctx: HandlerContext,
   input: unknown,
 ) => Effect.Effect<unknown, CallFailure, HostServices>;
 type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
