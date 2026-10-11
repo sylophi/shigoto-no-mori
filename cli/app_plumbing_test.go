@@ -647,12 +647,12 @@ func TestRunDropsTransitionalFlagsAndListWritesNothing(t *testing.T) {
 			t.Errorf("%s = exit %d, want 2 (removed)", flag, code)
 		}
 	}
-	// No package.json: the coded failure, and no use-log write.
+	// No script file: the coded failure, and no use-log write.
 	seedState(t, `{"keep":true}`)
 	before := readFileT(t, statePath())
 	captureJSON(t, func() {
-		if _, err := cmdRun(ctx, []string{"--project-id", proj.ID, "--worktree-id", primaryID}); errorKindOf(err) != "no-package-json" {
-			t.Errorf("no package.json: %v (kind %q)", err, errorKindOf(err))
+		if _, err := cmdRun(ctx, []string{"--project-id", proj.ID, "--worktree-id", primaryID}); errorKindOf(err) != "no-scripts" {
+			t.Errorf("no script file: %v (kind %q)", err, errorKindOf(err))
 		}
 	})
 	if after := readFileT(t, statePath()); after != before {

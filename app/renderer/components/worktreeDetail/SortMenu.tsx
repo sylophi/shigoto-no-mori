@@ -17,7 +17,7 @@ const SORT_OPTIONS: ReadonlyArray<{
   { value: "frequent", label: "Most used" },
   { value: "recent", label: "Most recently used" },
   { value: "alphabetical", label: "Alphabetical" },
-  { value: "manifest", label: "package.json" },
+  { value: "manifest", label: "File order" },
   { value: "manual", label: "Manual order" },
 ];
 

@@ -583,11 +583,11 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
   return ProjectSchema.parse(doc);
 }
 
-// The command that runs a package.json script through the CLI
-// engine. Unlike the functions above this doesn't spawn anything:
+// The command that runs a script (package.json, justfile, Makefile)
+// through the CLI engine. Unlike the functions above this doesn't spawn anything:
 // package-script runs go through startScript so the app's registry
 // keeps owning streaming, cancel, and quit-time reaping. The CLI
-// contributes everything else: the manager the lockfile selects, the
+// contributes everything else: the tool that runs it, the
 // SHIGOMORI_* env, and the use-log bump (an external state.json write
 // the caller covers with a self-write note, see packageScripts.run).
 // `--` guards a script name that looks like a flag.
@@ -1162,8 +1162,8 @@ export async function launcherCatalogViaCli(): Promise<DetectedLauncher[]> {
   return z.object({ apps: z.array(DetectedLauncherSchema) }).parse(doc).apps;
 }
 
-// The worktree's package.json scripts (`sm run` with no script), or
-// null when it has no readable package.json. A worktree or project
+// The worktree's scripts (`sm run` with no script), or null when it
+// has no readable package.json, justfile or Makefile. A worktree or project
 // that is gone still fails.
 export async function packageScriptsViaCli(
   projectId: string,
