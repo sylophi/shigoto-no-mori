@@ -3,8 +3,11 @@
 // while it runs, a cancel by key interrupts it (its finalizers run) and
 // fails its call with the cancel, the caller's call interrupted
 // interrupts it too, and a key is the caller's: another device's move
-// of the same worktree is its own. The real moves' unwinding is
-// sync-transfer.mts's.
+// of the same worktree is its own. Over the device link, a peer's move
+// cancelled by key reaches the caller as the same quiet outcome as
+// ever: the cancelled marker the dialogs read as their cancelled step
+// (isMoveCancelledError), never an interruption or a failure. The real
+// moves' unwinding is sync-transfer.mts's.
 //
 // Run: pnpm test moves.
 import assert from "node:assert/strict";
@@ -14,8 +17,18 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import { it } from "vitest";
-import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import {
+  isMoveCancelledError,
+  MOVE_CANCELLED,
+  syncContract,
+} from "@shigomori/contracts/modules/sync";
+import { buildClient } from "@shared/ipc/buildClient";
+import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { syncHandlers } from "@host/ipc/modules/sync";
 import * as Moves from "../host/lib/sync/Moves.ts";
+import { bootDirectWire } from "./lib/directBoot.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 
 const run = <A, E>(effect: Effect.Effect<A, E, Moves.Moves>) =>
   Effect.runPromise(Effect.scoped(Effect.provide(effect, Moves.layer)));
@@ -88,5 +101,59 @@ it("a move's own failure is its call's, and the key is freed", async () => {
       assert.equal(failure(exit), "no peer");
       assert.equal(yield* moves.run(here, "wt", Effect.succeed(3)), 3);
     }),
+  );
+});
+
+it("over the device link: a peer's move cancelled by key fails its call with the cancelled marker the dialogs read as cancelled, and a second cancel finds nothing", async () => {
+  const started = Deferred.makeUnsafe<void>();
+  const { listener, toListener } = await bootDirectWire(trackTest, {
+    contracts: [
+      // The original's device runs a mirror start for the copy's: here
+      // a move that runs until it is cut short.
+      [
+        mirrorContract,
+        {
+          ...mirrorHandlers,
+          startTo: (input, ctx) =>
+            Effect.flatMap(Moves.Moves, (moves) =>
+              moves.run(
+                ctx,
+                input.worktreeId,
+                Effect.andThen(
+                  Deferred.succeed(started, undefined),
+                  Effect.never,
+                ),
+              ),
+            ),
+        },
+      ],
+      [syncContract, syncHandlers],
+    ],
+  });
+  listener.setAccepts(true);
+  const mirror = buildClient(mirrorContract, toListener.transport);
+  const sync = buildClient(syncContract, toListener.transport);
+  const start = mirror
+    .startTo({
+      targetDeviceId: "copy-device",
+      projectId: "p",
+      worktreeId: "0123456789ab",
+      ignoreMode: "gitignored",
+      ignores: [],
+    })
+    .then(
+      () => assert.fail("a cancelled move answered"),
+      (error: unknown) => error,
+    );
+  await Effect.runPromise(Deferred.await(started));
+  assert.deepEqual(
+    await sync.cancelMove({ sourceWorktreeId: "0123456789ab" }),
+    { cancelled: true },
+  );
+  const error = await start;
+  assert.ok(isMoveCancelledError(error), String(error));
+  assert.deepEqual(
+    await sync.cancelMove({ sourceWorktreeId: "0123456789ab" }),
+    { cancelled: false },
   );
 });
