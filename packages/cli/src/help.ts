@@ -433,19 +433,19 @@ const width = (text: string) => [...text].length;
 const fieldsOf = (usage: string) => usage.split(" ").filter((f) => f !== "");
 
 // The command each catalog entry documents, as its words: what the
-// terminal's test runs, so the help names no command it lacks.
+// terminal's test runs, so the help names no command it lacks. A
+// worktree verb is documented twice, since the prefix is optional.
 export const documentedCommands = (names: Names) =>
   Object.entries(catalog(names))
     .filter(([group]) => group !== "flags" && group !== "environment")
     .flatMap(([, items]) =>
-      items.map(([usage]) => {
+      items.flatMap(([usage]) => {
         const [first = "", second] = fieldsOf(usage);
-        const namespaced =
-          second !== undefined &&
-          ["worktrees", "projects", "config", "agents", "shell"].includes(
-            first,
-          );
-        return namespaced ? [first, second] : [first];
+        if (second === undefined) return [[first]];
+        if (first === "worktrees") return [[first, second], [second]];
+        return ["projects", "config", "agents", "shell"].includes(first)
+          ? [[first, second]]
+          : [[first]];
       }),
     );
 

@@ -1,0 +1,60 @@
+// The window's Content-Security-Policy, sent with everything the
+// renderer scheme serves (main/electron/clerk.ts). The page holds the
+// loopback's token, which runs scripts and terminals on this machine,
+// so what may run in it is the bundle and Clerk's script alone: no
+// inline script, no eval, and nothing to connect to but the loopback
+// and Clerk. The web client's policy (vercel.json) is the model. A dev
+// build serves through vite, whose client and React's refresh preamble
+// are inline and whose updates arrive over a socket of its own, and
+// runs react-grab, which fetches its font and asks for its version.
+
+// The Clerk instance's Frontend API host, which serves its script and
+// answers its calls: what a publishable key encodes, base64 after its
+// pk_test_ or pk_live_ prefix and ending in "$". None for an
+// unconfigured build or a key that isn't one.
+export function clerkFrontendHost(publishableKey: string): string | null {
+  const match = /^pk_(?:test|live)_([A-Za-z0-9+/=_-]+)$/.exec(publishableKey);
+  if (match === null) return null;
+  const decoded = Buffer.from(match[1] ?? "", "base64").toString("utf8");
+  const host = decoded.endsWith("$") ? decoded.slice(0, -1) : "";
+  return /^[a-z0-9.-]+$/i.test(host) ? host : null;
+}
+
+export function rendererContentPolicy(options: {
+  readonly clerkHost: string | null;
+  readonly dev: boolean;
+}): string {
+  const clerk =
+    options.clerkHost === null ? [] : [`https://${options.clerkHost}`];
+  // Clerk's bot check, on a sign-up it asks one of.
+  const challenges = "https://challenges.cloudflare.com";
+  const dev = (...sources: string[]) => (options.dev ? sources : []);
+  const directives: Record<string, readonly string[]> = {
+    "default-src": ["'self'"],
+    "script-src": ["'self'", ...clerk, challenges, ...dev("'unsafe-inline'")],
+    "style-src": [
+      "'self'",
+      "'unsafe-inline'",
+      ...dev("https://fonts.googleapis.com"),
+    ],
+    // A description's images come from wherever its author put them.
+    "img-src": ["'self'", "data:", "blob:", "https:"],
+    "font-src": ["'self'", "data:", ...dev("https://fonts.gstatic.com")],
+    "connect-src": [
+      "'self'",
+      "ws://127.0.0.1:*",
+      ...clerk,
+      challenges,
+      ...dev("ws://localhost:*", "https://www.react-grab.com"),
+    ],
+    "worker-src": ["'self'", "blob:"],
+    "frame-src": [challenges],
+    "object-src": ["'none'"],
+    "base-uri": ["'self'"],
+    "form-action": ["'none'"],
+    "frame-ancestors": ["'none'"],
+  };
+  return Object.entries(directives)
+    .map(([name, sources]) => `${name} ${sources.join(" ")}`)
+    .join("; ");
+}

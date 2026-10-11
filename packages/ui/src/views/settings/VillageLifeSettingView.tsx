@@ -12,7 +12,7 @@ const AC_NOTICE = acNotice.notice;
 
 // The Village life row with the villager data it needs beside it, in
 // Appearance. The data lives in this device's data dir
-// (host/lib/villagers.ts), so only the desktop mounts this: a web
+// (host/lib/VillagerData.ts), so only the desktop mounts this: a web
 // client, which has no device of its own, has no Village life. What
 // the setting gates reads useVillageLife, never this field.
 export function VillageLifeSettingView({

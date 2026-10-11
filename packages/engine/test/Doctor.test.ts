@@ -35,10 +35,9 @@ import {
   parseGitVersion,
   parsePortPoolDirs,
   parseProcessTable,
-  parseSemver,
-  compareVersions,
   scriptFileTokens,
 } from "../src/doctorParse.ts";
+import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
 import { engineLayer } from "../src/layer.ts";
 import * as Migration from "../src/Migration.ts";
 import * as Registry from "../src/Registry.ts";
@@ -164,9 +163,7 @@ const expand = (path: string) => path;
 // Which of two versions ranks higher, none when either doesn't parse.
 const order = (a: string, b: string) => {
   const [x, y] = [parseSemver(a), parseSemver(b)];
-  return x === undefined || y === undefined
-    ? undefined
-    : Math.sign(compareVersions(x, y));
+  return x === undefined || y === undefined ? undefined : compareSemver(x, y);
 };
 
 describe("the data dir", () => {

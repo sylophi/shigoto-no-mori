@@ -11,6 +11,7 @@
   "dependencies": {
     "@effect/platform-bun": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
+    "@shigomori/contracts": "workspace:*",
     "@shigomori/engine": "workspace:*",
     "effect": "catalog:",
     "ink": "^7.1.1",

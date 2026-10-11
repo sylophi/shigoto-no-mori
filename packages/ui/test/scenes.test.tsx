@@ -71,12 +71,15 @@ it("has no window", () => {
   expect((globalThis as { window?: unknown }).window).toBeUndefined();
 });
 
-it("renders every scene, and every view in one", () => {
-  for (const [name, { Scene }] of Object.entries(scenes)) {
-    const html = renderToStaticMarkup(createElement(Scene));
-    assert.ok(html.length > 0, `${name} rendered nothing`);
-    assert.ok(!html.includes("NaN"), `${name} rendered a NaN`);
-  }
+// One case per scene, so each stays well inside the default timeout.
+it.each(Object.entries(scenes))("renders %s", (name, { Scene }) => {
+  const html = renderToStaticMarkup(createElement(Scene));
+  assert.ok(html.length > 0, `${name} rendered nothing`);
+  assert.ok(!html.includes("NaN"), `${name} rendered a NaN`);
+});
+
+// After the scenes above, which record the views they draw.
+it("draws every view in a scene", () => {
   const undrawn: string[] = [];
   for (const [file, module] of Object.entries(views)) {
     const path = file.replace("../src/views/", "");

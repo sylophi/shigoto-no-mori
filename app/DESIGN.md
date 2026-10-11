@@ -281,7 +281,7 @@ and their face beside the branch title on their worktree's page and
 beside the worktree's name in the inbox. It is a setting of each
 desktop window (client config, Appearance in Settings), with the
 villager data downloaded into that device's data dir
-(`host/lib/villagers.ts`), so it covers every device's worktrees
+(`host/lib/VillagerData.ts`), so it covers every device's worktrees
 that window shows. A web client offers none: it has no device of its
 own to hold the data. Every doubutsu character has a
 rarity, like a card's (`shared/villagers/rarity.ts`):

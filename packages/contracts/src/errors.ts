@@ -164,11 +164,31 @@ export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
 
 export const isNotSharingError = Schema.is(NotSharingError);
 
+// A byte channel's open refused by the host (app/host/socket/): the
+// link carries no byte channels, the id is already open, or the
+// connection holds as many as it may (MAX_CHANNELS_PER_LINK,
+// app/shared/remote/link.ts). The message is the reason's marker.
+export class ChannelRefusedError extends Schema.TaggedError<ChannelRefusedError>()(
+  "ChannelRefusedError",
+  {
+    reason: Schema.Literals([
+      "no-byte-channels",
+      "channel-taken",
+      "too-many-conns",
+    ]),
+  },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+export const isChannelRefusedError = Schema.is(ChannelRefusedError);
+
 // The far side failed the call with something no class above names.
-// Its message is the far side's own words (a refusal marker some
-// callers match, see channelRefusals.ts), and its code the errno or
-// marker it carried, so errorMessageOf and errorCodeOf read it like the
-// error it was.
+// Its message is the far side's own words, and its code the errno it
+// carried, so errorMessageOf and errorCodeOf read it like the error it
+// was.
 export class RemoteCallError extends Schema.TaggedError<RemoteCallError>()(
   "RemoteCallError",
   { text: Schema.String, code: Schema.optional(Schema.String) },
@@ -232,6 +252,7 @@ export const ContractErrorSchema = Schema.Union([
   ProtocolVersionMismatchError,
   LinkRefusedError,
   LinkUnauthenticatedError,
+  ChannelRefusedError,
 ]);
 
 export const isContractError = Schema.is(ContractErrorSchema);

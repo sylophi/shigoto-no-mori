@@ -1,5 +1,5 @@
 // Durable proof for the per-project git-directory watcher
-// (host/lib/gitWatcher.ts) against a REAL git repository with a
+// (host/lib/GitWatcher.ts) against a REAL git repository with a
 // linked worktree: a commit made in the worktree, a checkout there and
 // a branch deleted from the main checkout each surface as exactly one
 // project-scoped change, while the churn the allowlist exists to
@@ -7,7 +7,7 @@
 // files, a file edit in the working tree) surfaces as none. The
 // watcher's loop-safety rests on that allowlist (the app's own
 // `git status` must never feed a refetch that feeds a `git status`),
-// so this is where it is pinned. Also covered: gitDirOf resolving a
+// so this is where it is pinned. Also covered: refsDirOf resolving a
 // linked worktree's `.git` file to the repository's common dir, and
 // the reconcile dropping a project that left the registry.
 //
@@ -20,11 +20,11 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  gitDirOf,
   isRelevantGitPath,
+  refsDirOf,
   GitWatcher,
   layer as gitWatcherLayer,
-} from "../host/lib/gitWatcher.ts";
+} from "../host/lib/GitWatcher.ts";
 import {
   delay,
   sandboxGit,
@@ -110,6 +110,9 @@ it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operatio
   }
 });
 
+const refsDir = (path: string) =>
+  Effect.runPromise(refsDirOf(path).pipe(Effect.provide(NodeServices.layer)));
+
 it("real repository: a commit, a checkout and a branch delete each land as one project change, while status, objects and working-tree edits land as none, and a project leaving the registry stops its watch", async () => {
   // realpath: macOS puts tmpdir behind a symlink and git records the real
   // path in a worktree's .git file, so the paths compared below must
@@ -124,12 +127,12 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   git(repo, "worktree", "add", "-q", "-b", "feat", worktree);
 
   assert.equal(
-    gitDirOf(worktree),
+    await refsDir(worktree),
     join(repo, ".git"),
     "a linked worktree's .git file must resolve to the common dir",
   );
-  assert.equal(gitDirOf(repo), join(repo, ".git"));
-  assert.equal(gitDirOf(join(root, "nowhere")), null);
+  assert.equal(await refsDir(repo), join(repo, ".git"));
+  assert.equal(await refsDir(join(root, "nowhere")), null);
 
   const changes: string[] = [];
   let projects = [{ id: "p1", name: "repo", path: repo }];

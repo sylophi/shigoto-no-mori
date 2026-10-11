@@ -113,7 +113,7 @@ const baseName = (path: string) => {
 // terrier answered with a failure.
 class TerrierCommandFailed extends Schema.TaggedError<TerrierCommandFailed>()(
   "TerrierCommandFailed",
-  { args: Schema.Array(Schema.String), code: Schema.Number },
+  { args: Schema.Array(Schema.String), code: Schema.Int },
 ) {}
 
 // Code-unit order, as Go compares strings.

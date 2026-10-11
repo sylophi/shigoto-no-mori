@@ -29,7 +29,7 @@ import {
   tempDir,
   withGit,
   write,
-} from "./sandbox.ts";
+} from "./lib/gitRepos.ts";
 
 // A repository, a bare remote it pushed main to, and a clone of that.
 function withRemote() {

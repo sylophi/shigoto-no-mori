@@ -9,7 +9,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { afterAll } from "vitest";
-import * as Git from "../src/Git.ts";
+import * as Git from "../../src/Git.ts";
 
 // The service runs git under this process's environment. A pre-commit
 // hook's GIT_* variables would point it at the commit in progress, and

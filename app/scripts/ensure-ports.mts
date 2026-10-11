@@ -11,13 +11,17 @@
 // move the ports, so a dev server this checkout already has running
 // keeps the old one until it restarts.
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 
-// The worktree as `..` from app/, where pnpm runs the scripts, rather
-// than a path resolved from this file: port-pool keys allocations by
-// the exact path string, and a resolved one could differ through a
-// symlink from the one shigomori provisioned under.
+// The worktree, `..` from app/ where pnpm runs the scripts, by its real
+// path: port-pool keys allocations by the exact path string, so a
+// checkout reached through a symlink (macOS's /tmp is /private/tmp)
+// would otherwise hold one lease per spelling. The engine provisions a
+// managed worktree under its stored path, which is real too.
+const worktree = realpathSync("..");
+
 function portPool(command: string, pipeStderr = false) {
-  const result = spawnSync("port-pool", [command, ".."], {
+  const result = spawnSync("port-pool", [command, worktree], {
     stdio: ["ignore", "inherit", pipeStderr ? "pipe" : "inherit"],
     encoding: "utf8",
   });
