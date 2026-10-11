@@ -17,7 +17,7 @@ import { remoteNameForUrl } from "./remote";
 
 // A GitHub action that didn't go through, in words the renderer shows
 // inline: gh not ready, gone or slow, or its own last line of stderr.
-class GhActionError extends Schema.TaggedError<GhActionError>()(
+export class GhActionError extends Schema.TaggedError<GhActionError>()(
   "GhActionError",
   { reason: Schema.String, cause: Schema.optional(Schema.Defect()) },
 ) {
@@ -29,7 +29,7 @@ class GhActionError extends Schema.TaggedError<GhActionError>()(
 // Every action here shares one policy: gate on readiness, then fail
 // with a trimmed message the renderer can show inline. `fallback`
 // covers a gh that failed without a word.
-const runGh = Effect.fnUntraced(function* (
+export const runGh = Effect.fnUntraced(function* (
   args: string[],
   opts: {
     cwd?: string;
@@ -67,6 +67,16 @@ const runGh = Effect.fnUntraced(function* (
   return stdout;
 });
 
+// What gh printed before it failed: the error's reason keeps only the
+// last line of gh's stderr.
+export function ghStream(
+  err: GhActionError,
+  stream: "stdout" | "stderr",
+): string {
+  if (!isCommandError(err.cause)) return "";
+  return stream === "stdout" ? stdoutOf(err.cause) : stderrOf(err.cause);
+}
+
 // Streams `gh pr diff <num>` as plain unified diff text, ready to hand
 // to DiffView. Throws on gh failure so the renderer can show the error
 // inline (vs. silently rendering an empty diff).
@@ -94,7 +104,7 @@ export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
 // keeps only the last line of gh's stderr in the message, so the whole
 // of it is read off the cause.
 function isDiffTooLarge(err: GhActionError): boolean {
-  return isCommandError(err.cause) && /\btoo_large\b/.test(stderrOf(err.cause));
+  return /\btoo_large\b/.test(ghStream(err, "stderr"));
 }
 
 const decodeGhPrCommits = Schema.decodeUnknownEffect(
@@ -226,7 +236,7 @@ export const listGithubRepos = Effect.fn("GithubActions.repos")(function* () {
         // non-zero on it, with the response on stdout, and the
         // repositories that did come are still the ones to offer. Any
         // other failure stands.
-        const partial = isCommandError(err.cause) ? stdoutOf(err.cause) : "";
+        const partial = ghStream(err, "stdout");
         return reposOf(partial) === null
           ? Effect.fail(err)
           : Effect.succeed(partial);

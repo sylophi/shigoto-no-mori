@@ -1,22 +1,34 @@
 // What the host's handlers and views may reach: the services of the
 // layer graph (layer.ts) below the wires that serve them, and the
 // platform the graph runs on.
+import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as FileSync from "@host/fileSync/FileSync";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import type * as Ports from "@host/lib/Ports";
-import type * as OrphanSweep from "@host/lib/scripts/persistence";
+import type * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import type * as ScriptRuns from "@host/lib/scripts/pty";
 import type * as Sharing from "@host/lib/sharing";
+import type * as Moves from "@host/lib/sync/Moves";
 import type * as Terminals from "@host/lib/terminals/Terminals";
 import type * as Terrier from "@host/lib/terrier";
 import type * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import type * as Engine from "@host/lib/engine";
 import type * as Views from "@host/lib/views";
 import type * as Villagers from "@host/lib/VillagerData";
+import type * as Worktrees from "@host/lib/Worktrees";
+import type * as AccountPeers from "@host/lib/control/AccountPeers";
+import type * as DeviceId from "@host/lib/config/DeviceId";
+import type * as DataDirHolders from "@host/lib/DataDirHolders";
+import type * as HostFacts from "@host/lib/HostFacts";
+import type * as Shell from "@host/lib/Shell";
+import type * as PeerReach from "@host/ipc/PeerReach";
+import type * as MirrorEngine from "@host/mirror/MirrorEngine";
+import type * as PortForwards from "@host/portForward/PortForwards";
 
 export type HostServices =
   | ChildProcessSpawner.ChildProcessSpawner
+  | FileSystem.FileSystem
   | FileSync.FileSync
   | GithubCli.GithubCli
   | Views.Services
@@ -24,8 +36,18 @@ export type HostServices =
   | OrphanSweep.OrphanSweep
   | ScriptRuns.ScriptRuns
   | Sharing.Sharing
+  | Moves.Moves
   | Terminals.Terminals
   | Terrier.Terrier
   | Villagers.VillagerData
+  | Worktrees.Worktrees
   | Engine.Services
-  | BackgroundFetch.BackgroundFetch;
+  | BackgroundFetch.BackgroundFetch
+  | HostFacts.HostFacts
+  | Shell.Shell
+  | DeviceId.DeviceId
+  | PeerReach.PeerReach
+  | AccountPeers.AccountPeers
+  | MirrorEngine.MirrorEngine
+  | PortForwards.PortForwards
+  | DataDirHolders.DataDirHolders;

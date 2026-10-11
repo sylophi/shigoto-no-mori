@@ -250,6 +250,14 @@
     "remote": true,
     "gated": false
   },
+  "githubCli:createPullRequest": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
   "githubCli:disablePullRequestAutoMerge": {
     "kind": "invoke",
     "scope": "host",
@@ -257,6 +265,13 @@
     "gated": true,
     "grant": "changeCode",
     "tracksProjectUsage": true
+  },
+  "githubCli:discardAttachment": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
   },
   "githubCli:mergePullRequest": {
     "kind": "invoke",
@@ -298,7 +313,25 @@
     "remote": true,
     "gated": false
   },
+  "githubCli:pullRequestCompare": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "githubCli:pullRequestDiff": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:pullRequestDraft": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "githubCli:pullRequestOptions": {
     "kind": "invoke",
     "scope": "host",
     "remote": true,
@@ -342,6 +375,20 @@
     "gated": true,
     "grant": "changeCode",
     "tracksProjectUsage": true
+  },
+  "githubCli:stageAttachment": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
+  "githubCli:stageAttachmentFromUrl": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
   },
   "githubCli:worktreePullRequest": {
     "kind": "invoke",
@@ -1640,6 +1687,14 @@
     "tracksProjectUsage": true
   },
   "worktrees:renameBranch": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode",
+    "tracksProjectUsage": true
+  },
+  "worktrees:resetHard": {
     "kind": "invoke",
     "scope": "host",
     "remote": true,

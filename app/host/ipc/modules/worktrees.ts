@@ -1,5 +1,6 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Effect from "effect/Effect";
+import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,7 @@ import {
   discardChanges,
   listChangesForPage,
   readCommitMessage,
+  resetHard,
   resetSoft,
   restoreDiscard,
 } from "@host/lib/git/changes";
@@ -537,6 +539,11 @@ export const worktreesHandlers = {
       })),
     ),
 
+  resetHard: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
+      resetHard(wt.path, input.ref, input.expectHead, input.restore),
+    ).pipe(Effect.map(({ result, worktree }) => ({ ...result, worktree }))),
+
   commitDiff: (input) =>
     atPath(input, (path) => getCommitDiff(path, input.hash)),
 
@@ -652,7 +659,9 @@ export const worktreesHandlers = {
       resolveConflict(wt.path, input.path, input.side),
     ),
   mergePreview: (input) =>
-    atPath(input, (path) => readMergePreview(path, input.ref)),
+    atPath(input, (path) =>
+      readMergePreview(path, input.ref, input.countsOnly),
+    ),
   mergeBranch: (input) =>
     mutateAndDescribeWith(input, (wt) =>
       mergeBranch(wt.path, input.ref, input.method, input.message),
@@ -672,6 +681,7 @@ export const worktreesHandlers = {
   HandlerContext,
   | Terminals
   | GithubCli
+  | PeerReach
   | ChildProcessSpawner.ChildProcessSpawner
   | Engine.Services
 >;

@@ -65,12 +65,16 @@ import {
   OnboardingCliScene,
   OnboardingDoneScene,
   OnboardingProjectScene,
+  OnboardingNoAccountScene,
   OnboardingSignInScene,
 } from "./steps.tsx";
 import { LivePageScene, LiveQuietScene } from "./live.tsx";
 import { PalettePickedScene, PaletteScene } from "./palette.tsx";
 import { GuidePartsScene } from "./guide.tsx";
-import { PullRequestPartsScene } from "./pullRequests.tsx";
+import {
+  CreatePullRequestScene,
+  PullRequestPartsScene,
+} from "./pullRequests.tsx";
 import { SidebarPartsScene } from "./sidebarParts.tsx";
 import { TerminalPartsScene } from "./terminal.tsx";
 import {
@@ -101,6 +105,7 @@ export const scenes = {
   migrationSignIn: { Scene: MigrationSignInScene, ...DESKTOP },
   migrationDone: { Scene: MigrationDoneScene, ...DESKTOP },
   onboardingSignIn: { Scene: OnboardingSignInScene, ...DESKTOP },
+  onboardingNoAccount: { Scene: OnboardingNoAccountScene, ...DESKTOP },
   onboardingCli: { Scene: OnboardingCliScene, ...DESKTOP },
   onboardingProject: { Scene: OnboardingProjectScene, ...DESKTOP },
   onboardingDone: { Scene: OnboardingDoneScene, ...DESKTOP },
@@ -110,8 +115,9 @@ export const scenes = {
   sidebarParts: { Scene: SidebarPartsScene, size: [920, 560] },
   worktreePage: { Scene: WorktreePageScene, ...DESKTOP },
   worktreePageParts: { Scene: WorktreePagePartsScene, size: [1100, 900] },
-  worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1000] },
+  worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1200] },
   pullRequestParts: { Scene: PullRequestPartsScene, size: [1100, 1300] },
+  createPullRequest: { Scene: CreatePullRequestScene, size: [960, 900] },
   transplantReview: { Scene: TransplantReviewScene, size: [960, 780] },
   mirrorReview: { Scene: MirrorReviewScene, size: [960, 640] },
   flowSteps: { Scene: FlowStepsScene, size: [1800, 1300] },

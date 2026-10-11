@@ -6,6 +6,7 @@ import {
   Ellipsis,
   FolderGit2,
   GitBranchPlus,
+  ListRestart,
   PencilLine,
   RotateCcw,
   TextCursorInput,
@@ -44,6 +45,7 @@ export function CommitDetailsView({
   onPick,
   canCommand,
   onNewWorktree,
+  onHardReset,
   dialog,
 }: {
   hash: string;
@@ -68,7 +70,8 @@ export function CommitDetailsView({
   onPick: (worktreeId: string) => void;
   canCommand: boolean;
   onNewWorktree: () => void;
-  // The reword dialog, while it is open.
+  onHardReset: () => void;
+  // The reword or hard reset dialog, while it is open.
   dialog: ReactNode;
 }) {
   return (
@@ -169,6 +172,14 @@ export function CommitDetailsView({
               <DropdownMenuItem disabled={busy} onClick={onNewWorktree}>
                 <FolderGit2 />
                 New worktree from here
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={busy}
+                onClick={onHardReset}
+              >
+                <ListRestart />
+                Hard reset to here…
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -98,6 +98,15 @@ it("the preview counts each side's commits and names the conflicts", async () =>
     conflicts: ["a.txt"],
     incomingSubject: "Main",
   });
+  // Counts only, for a hard reset: no trial merge, no subject.
+  assert.deepEqual(await readMergePreview(repo, "main", true), {
+    incoming: 1,
+    own: 1,
+    pushed: 0,
+    ownMerges: 0,
+    conflicts: null,
+    incomingSubject: null,
+  });
   const clear = seed({ diverge: true });
   assert.deepEqual((await readMergePreview(clear, "main")).conflicts, []);
   await assert.rejects(

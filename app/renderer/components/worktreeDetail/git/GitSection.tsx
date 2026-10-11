@@ -1,11 +1,13 @@
 // The worktree page's way into the Git page (GitSectionView): its
-// changes, stashes and newest commits, and the moves worth a click.
+// changes, stashes and newest commits, and the moves worth a click:
+// pushing, syncing from the primary branch and opening a pull request.
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { canSyncFromPrimary } from "@shigomori/ui/lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
+import { CreatePullRequestPill } from "../pullRequests/CreatePullRequest";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { GitSectionView } from "@shigomori/ui/views/worktreeDetail/git/GitSectionView.tsx";
@@ -47,6 +49,12 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
           <WorktreeSyncPill worktree={worktree} />
           {canSyncFromPrimary(worktree) && (
             <WorktreePrimarySyncPill worktree={worktree} />
+          )}
+          {history?.base && (
+            <CreatePullRequestPill
+              worktree={worktree}
+              ownCommits={history.commits.length}
+            />
           )}
         </>
       }

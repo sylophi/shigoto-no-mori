@@ -21,11 +21,12 @@ import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
+import { HardResetDialog } from "./HardResetDialog";
 
 // Everything a commit's menu or buttons can do, as one object per
 // surface (the Git timeline, a commit's page) rather than a
-// subscription per row. `dialog` is the reword dialog, rendered by the
-// surface. `onRewritten` hears a reword or squash land, after which the
+// subscription per row. `dialog` is the reword or hard reset dialog,
+// rendered by the surface. `onRewritten` hears a reword or squash land, after which the
 // commits from there up have new hashes. On a peer that takes no
 // commands from here, nothing is offered (`canCommand` for the moves
 // with no flag of their own), and only copying is left.
@@ -43,10 +44,12 @@ export function useCommitActions(
   const { data: siblings } = useWorktrees(projectId);
   const { data: operation } = useWorktreeOperation(worktree);
   const { canCommand } = useCommandAccess();
-  const [rewording, setRewording] = useState<{
-    hash: string;
-    head: string;
-  } | null>(null);
+  const [open, setOpen] = useState<
+    | { kind: "reword"; hash: string; head: string }
+    | { kind: "hardReset"; hash: string }
+    | null
+  >(null);
+  const close = () => setOpen(null);
 
   return {
     canCommand,
@@ -85,16 +88,25 @@ export function useCommitActions(
         { onSuccess: (rewritten) => onRewritten?.(rewritten) },
       ),
     reword: (commit: CommitSummary, head: string) =>
-      setRewording({ hash: commit.hash, head }),
-    dialog: rewording && (
-      <RewordDialog
-        worktree={worktree}
-        hash={rewording.hash}
-        head={rewording.head}
-        onClose={() => setRewording(null)}
-        onRewritten={onRewritten}
-      />
-    ),
+      setOpen({ kind: "reword", hash: commit.hash, head }),
+    hardResetTo: (commit: CommitSummary) =>
+      setOpen({ kind: "hardReset", hash: commit.hash }),
+    dialog:
+      open?.kind === "reword" ? (
+        <RewordDialog
+          worktree={worktree}
+          hash={open.hash}
+          head={open.head}
+          onClose={close}
+          onRewritten={onRewritten}
+        />
+      ) : open?.kind === "hardReset" ? (
+        <HardResetDialog
+          worktree={worktree}
+          initialRef={open.hash}
+          onClose={close}
+        />
+      ) : null,
   };
 }
 

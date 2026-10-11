@@ -26,7 +26,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as FileSync from "@host/fileSync/FileSync";
-import type { MirrorCreateInput } from "@host/mirror/registry";
+import type { MirrorCreateInput } from "@host/mirror/MirrorEngine";
 import {
   mirrorEngineBlocker,
   type MirrorDaemonStatus,

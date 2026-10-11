@@ -2,7 +2,7 @@
 // build's dist directory under the app path in dev. The sm CLI, the
 // file-sync engine and cloudflared all follow this one rule. The shell
 // and the host each know their app's place (main/electron/appPlace.ts,
-// host/process/facts.ts) and pass it in.
+// host/lib/HostFacts.ts) and pass it in.
 import { existsSync } from "node:fs";
 import path from "node:path";
 

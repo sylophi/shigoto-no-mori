@@ -3,6 +3,8 @@
 The data model and the store, git, worktrees, landing, the cross-device verbs, doctor and the updater, as Effect services with no Electron import. The terminal `sm` (`packages/cli`) and the app's host both run it, on one store.
 
 - `src/`: one module per service, named for it (`Store.ts`), shaped as `EFFECT.md` section 2 says, and its pure helpers beside it in lowercase modules. Consumers import a module by its name: `@shigomori/engine/Store`.
+- `src/worktrees/`, `src/doctor/`, `src/git/`, `src/updater/`, `src/landing/`: the five largest services, each split by area into sub-makers that its module's `make` composes (`EFFECT.md`, section 2). An area's file says what it covers; `documents.ts` holds the errors, documents and helpers the areas share, which the service module re-exports, so a consumer still imports `@shigomori/engine/Worktrees`.
+- `src/goJson.ts`: JSON from another program (gh, the app's control answers) read as Go read it, a field absent or null at its zero value.
 - `src/layer.ts`: the engine's layer graph (`engineLayer`), built once per process by the terminal, the host and the test sandbox.
 - `src/migrations/`: the store's schema history, which `Store` runs on open.
 - `src/data/`: the data the engine ships with: the launcher catalog and the worktree name pools.
@@ -16,6 +18,6 @@ Worktrees live under `wt/`: `<dataDir>/wt/<project>`, `<project>/.shigomori/wt`,
 
 The v3 migration reports as it goes (`src/Migration.ts`): what this start owes a 2.x data dir (the import, the move into `wt/`) and each step's state, the move's count and the worktree on the move, and the ones that stayed with git's reason. The store reports its import as it opens and `WtFolder` each move, so a process that builds `Migration` first can show the migration while the store is still opening; the counts are read from the store, so a start after a crash resumes the count. The app's window shows it on a page of its own, and the terminal says one line per step.
 
-The store is one SQLite database in the data dir (`store.db`, WAL), opened by the engine only and by one connection per process. Its first open imports the JSON files a 2.x data dir keeps and leaves them in place. The import reads what the last v2 release wrote; an older data dir upgrades through v2 first.
+The store is one SQLite database in the data dir (`store.db`, WAL), opened by the engine only and by one connection per process. Its first open imports the JSON files a 2.x data dir keeps and leaves them in place, the mirrors' among them (`file-sync/git-follow.json`, `mirror-history.json` and `mirror-invites.json`, each taken by the migration that makes its table). The import reads what the last v2 release wrote; an older data dir upgrades through v2 first.
 
 The engine runs in the host under Node and in the terminal binary under Bun, so it imports Node's APIs, `effect`, `@effect/*` and `@shigomori/contracts`, and nothing else: no Electron, nothing from the app, no Bun global. `test/boundary.test.ts` holds that for its sources.

@@ -1,6 +1,7 @@
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import {
   disablePullRequestAutoMerge,
@@ -22,7 +23,21 @@ import {
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
-import { findProject } from "@host/lib/projects";
+import {
+  findProject,
+  findProjectAndWorktree,
+  findWorktreePath,
+} from "@host/lib/projects";
+import {
+  comparePullRequest,
+  createPullRequest,
+  discardAttachment,
+  getPullRequestDraft,
+  getPullRequestOptions,
+  stageAttachment,
+  stageAttachmentFromUrl,
+} from "@host/lib/githubCli/newPullRequest";
+import { findWorktreeIdentity } from "@host/lib/git/worktrees";
 
 const projectPath = (projectId: string) =>
   Effect.map(findProject(projectId), (project) => project.path);
@@ -93,6 +108,45 @@ export const githubCliHandlers = {
       setPullRequestDraft({ cwd, number, draft }),
     ),
 
+  pullRequestDraft: ({ projectId, worktreeId }) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const worktree = yield* findWorktreeIdentity(project.id, worktreeId, {
+        primaryRef: true,
+      });
+      return yield* getPullRequestDraft({
+        cwd: worktree.path,
+        projectPath: project.path,
+        branch: worktree.branch,
+        primaryRef: worktree.primaryRef,
+      });
+    }),
+
+  pullRequestCompare: ({ projectId, worktreeId, base }) =>
+    Effect.flatMap(findWorktreePath({ projectId, worktreeId }), (cwd) =>
+      comparePullRequest(cwd, base),
+    ),
+
+  pullRequestOptions: ({ projectId }) =>
+    Effect.flatMap(projectPath(projectId), getPullRequestOptions),
+
+  stageAttachment: (chunk) => stageAttachment(chunk),
+
+  stageAttachmentFromUrl: (source) => stageAttachmentFromUrl(source),
+
+  discardAttachment: ({ id }) => discardAttachment(id),
+
+  createPullRequest: ({ projectId, worktreeId, ...pr }) =>
+    Effect.flatMap(
+      findProjectAndWorktree(projectId, worktreeId),
+      ({ project, worktree }) =>
+        createPullRequest({
+          cwd: worktree.path,
+          projectPath: project.path,
+          ...pr,
+        }),
+    ),
+
   disablePullRequestAutoMerge: ({ projectId, number }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
       disablePullRequestAutoMerge({ cwd, number }),
@@ -100,5 +154,8 @@ export const githubCliHandlers = {
 } satisfies EffectHandlers<
   typeof githubCliContract,
   unknown,
-  GithubCli | ChildProcessSpawner.ChildProcessSpawner | Engine.Services
+  | GithubCli
+  | ChildProcessSpawner.ChildProcessSpawner
+  | FileSystem.FileSystem
+  | Engine.Services
 >;

@@ -1,9 +1,11 @@
-// A worktree's pull request over the fixtures: the merge box in the
-// states its PR goes through, the section a PR gets on a page not named
-// by it, with the stack it sits in, and the boxes that clean up after a
-// PR closed or merged.
+// A worktree's pull request over the fixtures: the dialog that creates
+// one, the merge box in the states its PR goes through, the section a PR
+// gets on a page not named by it, with the stack it sits in, and the
+// boxes that clean up after a PR closed or merged.
 import type { ReactNode } from "react";
+import { ModalBox } from "../primitives/modal-shell.tsx";
 import { StaticPopover } from "../primitives/popover.tsx";
+import { CreatePullRequestDialogView } from "../views/newPullRequest/CreatePullRequestDialogView.tsx";
 import { CheckEntryView } from "../views/worktreeDetail/pullRequests/CheckEntryView.tsx";
 import { ClosedPullRequestBoxView } from "../views/worktreeDetail/pullRequests/ClosedPullRequestBoxView.tsx";
 import {
@@ -30,7 +32,9 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
 import {
+  FAKE_PULL_REQUEST_OPTIONS,
   FAKE_REPO_MERGE_CONFIG,
+  fakePullRequestCompare,
   posedPullRequestDetail,
   unposedPullRequests,
 } from "../fixtures/pullRequestFixtures.ts";
@@ -237,6 +241,72 @@ export function PullRequestPartsScene() {
           </StaticPopover>
         </Part>
       </div>
+    </div>
+  );
+}
+
+// The create pull request dialog on a stacked branch, its base the
+// branch below it, written with a screenshot attached and a recording
+// still uploading, a reviewer and a label picked.
+export function CreatePullRequestScene() {
+  return (
+    <div className="flex h-full items-center justify-center bg-background p-6 text-foreground">
+      <ModalBox className="max-w-3xl">
+        <CreatePullRequestDialogView
+          branch={GECKO.branch}
+          basePicker={null}
+          form={{
+            base: "fix-stale-locks",
+            title: "Reload the project list when terrier's registry changes",
+            body: [
+              "Watches terrier's registry and reloads the project list on a change.",
+              "",
+              "![registry](./registry.png)",
+              "",
+              "![Uploading reload…](./0123456789abcdef)",
+            ].join("\n"),
+            reviewers: ["rin"],
+            assignees: [],
+            labels: ["enhancement"],
+            attachments: [
+              {
+                id: "fedcba9876543210",
+                name: "registry.png",
+                previewUrl: null,
+                status: "staged",
+              },
+              {
+                id: "0123456789abcdef",
+                name: "0123456789abcdef",
+                label: "reload",
+                previewUrl: null,
+                status: "staging",
+              },
+            ],
+          }}
+          compare={fakePullRequestCompare(GECKO.recentCommits)}
+          seedError={undefined}
+          compareError={undefined}
+          createError={undefined}
+          options={FAKE_PULL_REQUEST_OPTIONS}
+          optionsPending={false}
+          unpushed={1}
+          blocked="Waiting for the attachments to upload"
+          ready={false}
+          busy={false}
+          descriptionDisabled={false}
+          onTitle={noop}
+          onBody={noop}
+          onReviewers={noop}
+          onAssignees={noop}
+          onLabels={noop}
+          onAttach={noop}
+          onRemoveAttachment={noop}
+          onCreate={noop}
+          onCancel={noop}
+          onClose={noop}
+        />
+      </ModalBox>
     </div>
   );
 }

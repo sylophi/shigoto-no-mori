@@ -21,7 +21,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
-} from "@host/lib/util/atomicJson";
+} from "../core/files/exitFiles";
 import { readClientConfigSync } from "./clientConfig";
 import {
   accountServiceConfigured,
@@ -175,7 +175,7 @@ function relaunchMarkerPath(): string {
 
 // Read the recent-relaunch timestamps, ask the rate limiter whether one
 // more is allowed, and if so persist the appended list before returning
-// true. Read and write go through the shared atomic-json helpers so the
+// true. Read and write go through the exit-path file helpers so the
 // write is temp-plus-rename atomic: this runs right before app.exit, so a
 // raw write could be truncated by the exit mid-flush. A marker that
 // cannot be READ is treated as no recent relaunches (fine: a marker that

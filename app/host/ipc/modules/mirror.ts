@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
 import type { HostServices } from "@host/process/services";
 import { forgetMirrorInvitesOf } from "@host/mirror/invites";
-import { engine } from "@host/mirror/registry";
+import { MirrorEngine } from "@host/mirror/MirrorEngine";
 import {
   applyServedGitState,
   servedGitState,
@@ -25,15 +25,14 @@ import {
   stopMirror,
 } from "@host/mirror/sessions";
 
-export const mirrorViews: ViewHandlers<typeof mirrorContract, Views.Services> =
-  {
-    watch: () =>
-      Views.view(
-        "mirror:watch",
-        () => mirrorList(),
-        Views.pushed(mirrorContract, "changed"),
-      ),
-  };
+export const mirrorViews: ViewHandlers<typeof mirrorContract, HostServices> = {
+  watch: () =>
+    Views.view(
+      "mirror:watch",
+      () => mirrorList(),
+      Views.pushed(mirrorContract, "changed"),
+    ),
+};
 
 export const mirrorHandlers = {
   list: () => mirrorList(),
@@ -46,10 +45,11 @@ export const mirrorHandlers = {
     reopenMirror(session, ignoreMode, ignores),
   // The runner ended its mirror into a copy here and kept the copy:
   // the invitation goes, the worktree stays.
-  release: ({ worktreeId }) =>
-    Effect.sync(() => forgetMirrorInvitesOf(worktreeId)),
+  release: ({ worktreeId }) => forgetMirrorInvitesOf(worktreeId),
   history: ({ localWorktreeId }) =>
-    Effect.sync(() => ({ events: engine().history(localWorktreeId) })),
+    Effect.map(MirrorEngine, (engine) => ({
+      events: engine.history(localWorktreeId),
+    })),
   openStream: (input, ctx: HandlerContext) => serveStream(input, ctx),
   gitState: (input) => servedGitState(input),
   applyGitState: (input) => applyServedGitState(input),

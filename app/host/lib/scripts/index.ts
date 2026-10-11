@@ -31,7 +31,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { type PersistedScript, persistRunningScripts } from "./persistence";
+import { OrphanSweep } from "./OrphanSweep";
 import { signalPidTree } from "./process";
 import {
   type PtyHandle,
@@ -361,24 +361,6 @@ let runningScriptsChanged: () => void = () => {};
 
 export function onRunningScriptsChanged(listener: () => void): void {
   runningScriptsChanged = listener;
-}
-
-// Mirror the live map to disk on every spawn and every settle, so a
-// crash that skips the kill chains leaves the next boot something to
-// sweep (see ./persistence.ts).
-function persistSnapshot(): void {
-  const scripts: PersistedScript[] = Array.from(
-    runningScripts.values(),
-    (record) => ({
-      runId: record.runId,
-      pid: record.pid,
-      projectId: record.projectId,
-      worktreeId: record.worktreeId,
-      startedAt: record.startedAt,
-      command: record.command,
-    }),
-  );
-  persistRunningScripts(scripts);
 }
 
 // Ref-counted: overlapping deleters can mark the same worktree (a
@@ -791,7 +773,6 @@ export const startScript = Effect.fn("Scripts.start")(function* (
     flushOutput,
   };
   runningScripts.set(runId, record);
-  persistSnapshot();
   runningScriptsChanged();
 
   pty.onData((data) => {
@@ -819,9 +800,24 @@ export const startScript = Effect.fn("Scripts.start")(function* (
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
-    persistSnapshot();
     runningScriptsChanged();
   });
+
+  // Recorded until its exit, so a crash that skips the kill chains
+  // leaves the next boot something to sweep (./OrphanSweep.ts). After
+  // the listeners, since a quick command may finish while the store
+  // writes, and the PTY replays nothing.
+  yield* (yield* OrphanSweep).record(
+    {
+      runId,
+      pid: record.pid,
+      projectId: record.projectId,
+      worktreeId: record.worktreeId,
+      startedAt: record.startedAt,
+      command: record.command,
+    },
+    pty.exit,
+  );
 
   return runId;
 });

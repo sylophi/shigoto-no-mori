@@ -24,11 +24,6 @@ import {
   refresh,
   relocateProject,
 } from "@host/lib/projects";
-import {
-  listCarryOverCandidates,
-  listCarryOverCheckouts,
-  statCarryOverPaths,
-} from "@host/lib/worktrees/carryOver";
 import { readWorktreeIncludeStatus } from "@host/lib/worktrees/worktreeInclude";
 import {
   clearProjectDeleteInflight,
@@ -37,6 +32,7 @@ import {
 } from "@host/lib/scripts";
 import type { HostServices } from "@host/process/services";
 import * as Terrier from "@host/lib/terrier";
+import * as Worktrees from "@host/lib/Worktrees";
 import { expandHome } from "@host/lib/util/paths";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
@@ -126,8 +122,10 @@ const register = Effect.fn("projects.register")(function* (
 // Every checkout of the project, the primary first, for what is carried
 // over into a new worktree.
 const checkoutsOf = (projectId: string) =>
-  Effect.flatMap(findProject(projectId), (project) =>
-    listCarryOverCheckouts(project.id, project.path),
+  Effect.flatMap(
+    Effect.all([findProject(projectId), Worktrees.Worktrees]),
+    ([project, worktrees]) =>
+      worktrees.carryOverCheckouts(project.id, project.path),
   );
 
 export const projectsViews: ViewHandlers<
@@ -264,13 +262,16 @@ export const projectsHandlers = {
     ),
 
   carryOverListing: ({ projectId, relative, ruleIgnored }) =>
-    Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
-      listCarryOverCandidates(checkouts, relative, { ruleIgnored }),
+    Effect.flatMap(
+      Effect.all([checkoutsOf(projectId), Worktrees.Worktrees]),
+      ([checkouts, worktrees]) =>
+        worktrees.carryOverCandidates(checkouts, relative, { ruleIgnored }),
     ),
 
   carryOverStats: ({ projectId, paths }) =>
-    Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
-      statCarryOverPaths(checkouts, paths),
+    Effect.flatMap(
+      Effect.all([checkoutsOf(projectId), Worktrees.Worktrees]),
+      ([checkouts, worktrees]) => worktrees.carryOverStats(checkouts, paths),
     ),
 
   // The engine resolves icons through its shared cache (Icons.ts).

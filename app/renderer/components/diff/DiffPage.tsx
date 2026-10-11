@@ -129,7 +129,7 @@ export function DiffPage({
   // file list: the Git page's tabs, its Changes tab around this list and
   // its History tab in place of it. Handed the list.
   renderSidebar?: (index: ReactNode) => ReactNode;
-  // At the end of the sidebar's back row: the Git page's Merge.
+  // At the end of the sidebar's back row: the Git page's branch menu.
   sidebarActions?: ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;

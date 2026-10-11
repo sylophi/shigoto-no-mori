@@ -1,11 +1,12 @@
 // The merge dialog's content (MergeDialog puts it in a ModalShell).
 import type { ReactNode } from "react";
-import { Check, TriangleAlert } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "../../../primitives/button.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { Input } from "../../../primitives/input.tsx";
 import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
+import { Warning } from "../../../primitives/warning.tsx";
 import { pluralize } from "../../../lib/pluralize.ts";
 import type {
   IntegrateMethod,
@@ -206,15 +207,6 @@ function Outcome({
         </Warning>
       )}
     </div>
-  );
-}
-
-function Warning({ children }: { children: ReactNode }) {
-  return (
-    <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-      <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-      <span className="min-w-0 wrap-anywhere">{children}</span>
-    </p>
   );
 }
 

@@ -35,6 +35,7 @@
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -60,7 +61,7 @@ import {
 import { strict } from "@shigomori/contracts/schemas/strict";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
-import { peerChannelsFor, peerSyncFor } from "@host/ipc/peerSync";
+import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { refTip, treeOf } from "@host/lib/git/refs";
 import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
@@ -107,14 +108,14 @@ export type Link = {
   end(): void;
   // Tears the channel down now, failing whatever waits on it.
   reset(): void;
-  // Aborted once the OTHER end reset the link (a sender that gave up,
+  // Done once the OTHER end reset the link (a sender that gave up,
   // its cancel or its caller gone), or it was gone before this end
   // attached. A landing run over a link a peer opened runs under it,
   // so the sender's cancel reaches it without a word of its own. A
   // clean end leaves it alone, and so does this end's own reset: a
   // landing that fails and tears the link down is reporting its own
   // failure, not a cancel.
-  closed: AbortSignal;
+  closed: Deferred.Deferred<void>;
 };
 
 export function attachLink(
@@ -133,7 +134,7 @@ export function attachLink(
     arrived = null;
     waiting?.();
   };
-  const closed = new AbortController();
+  const closed = Deferred.makeUnsafe<void>();
   const fail = (error: LinkError): void => {
     failure ??= error;
     wake();
@@ -154,7 +155,7 @@ export function attachLink(
       wake();
     },
     onReset() {
-      closed.abort();
+      Deferred.doneUnsafe(closed, Exit.void);
       fail(gone());
     },
     onWritable() {
@@ -163,7 +164,7 @@ export function attachLink(
     },
   });
   if (!handle.open) {
-    closed.abort();
+    Deferred.doneUnsafe(closed, Exit.void);
     fail(gone());
   }
   // Once something arrives, the other end ends, or the link fails.
@@ -279,7 +280,7 @@ export function attachLink(
       handle.reset();
       fail(gone());
     },
-    closed: closed.signal,
+    closed,
   };
 }
 
@@ -770,6 +771,7 @@ export const peerSource = (
   worktree: { projectId: string; worktreeId: string },
 ) =>
   Effect.gen(function* () {
+    const reach = yield* PeerReach;
     let attached: Link | undefined;
     // This device's end of the link is attached BEFORE the call that
     // opens the peer's end is sent, so the peer's first bytes always
@@ -783,7 +785,7 @@ export const peerSource = (
         .openSource({ ...worktree, channelId })
         .pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
       return link;
-    });
+    }).pipe(Effect.provideService(PeerReach, reach));
     const linkOf = yield* Effect.cached(open);
     // A cancel must not wait on a peer that never answered the open,
     // so the link goes as soon as it is attached.

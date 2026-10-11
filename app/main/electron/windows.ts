@@ -28,7 +28,7 @@ import { log } from "@shared/log";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
-} from "@host/lib/util/atomicJson";
+} from "../core/files/exitFiles";
 import {
   APP_VERSION_FLAG,
   CLERK_PK_FLAG,

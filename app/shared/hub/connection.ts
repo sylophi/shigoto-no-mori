@@ -1,19 +1,20 @@
 // The shared hub connection lifecycle: one outbound socket from this
 // device to its account's Durable Object, driving the hub link. The
-// node desktop connection (host/hub/connection.ts) and the browser
+// node desktop connection (host/hub/HubConnection.ts) and the browser
 // connection (web/hub/connection.ts) were a near-verbatim fork of
 // this machine and had already begun to drift, so the dial settle
-// logic, the supervisor wiring and the refresh/stop/status lifecycle
-// live here exactly once, behind a small socket adapter each platform
-// implements over its own WebSocket.
+// logic, the supervisor wiring, the socket's liveness and the
+// refresh/status lifecycle live here exactly once, behind a small
+// socket adapter each platform implements over its own WebSocket. The
+// connection lives as long as the scope it is made in, whose close
+// takes the socket down.
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific lives in the injected
 // adapter, and everything account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
-import { createHeartbeat, type HeartbeatOptions } from "@shared/hub/heartbeat";
+import { HELLO_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { newConnectionId, RemoteConnectError } from "@shared/remote/deviceLink";
 import {
   createHubLink,
@@ -38,15 +39,21 @@ import {
   HUB_PING,
   HUB_PONG,
 } from "@shigomori/contracts/hubProtocol";
+import * as Clock from "effect/Clock";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FiberSet from "effect/FiberSet";
+import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import {
   type CloseClassifier,
-  type ConnectFn,
-  createSupervisor,
   type SupervisedConnection,
   type Supervisor,
   type SupervisorStatus,
+  supervise,
 } from "@shared/remote/supervisor";
-import { createLimiter } from "@shared/util/limit";
 import { log } from "@shared/log";
 import { deviceKeyPair } from "@shared/crypto/deviceKey";
 import type { KeyPair } from "@shared/crypto/noise";
@@ -60,6 +67,26 @@ const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 // After an owner close, how long a stalled device hub has before its
 // socket is cut, so it cannot hold the close for ws's ~30s window.
 const TERMINATE_GRACE_MS = 1_500;
+
+// A websocket over a NAT, a tunnel edge or a laptop that just slept can
+// die without either end seeing a close, so the socket sends the hub's
+// ping (HUB_PING, which the Durable Object answers without waking) on
+// this interval and gives the socket up when a ping stays unanswered
+// for the timeout. ANY inbound frame answers it (a relay or presence
+// proves the hub alive as well as a pong does), and the timeout runs
+// from the OLDEST unanswered ping, never from the last frame, so a
+// background tab whose timers the browser throttles is not misjudged
+// dead by its own slow cadence. A probe (a wake from sleep, a tab
+// coming back) pings now and judges within PROBE_TIMEOUT_MS instead.
+const PING_INTERVAL_MS = 15_000;
+const PING_TIMEOUT_MS = 40_000;
+
+// Test seams for the pings' timing. Real callers take the defaults.
+type PingOptions = {
+  intervalMs?: number;
+  timeoutMs?: number;
+  probeTimeoutMs?: number;
+};
 
 // One dialed hub socket as the platform adapter exposes it to the
 // core. The adapter owns the platform WebSocket and its event wiring,
@@ -85,7 +112,7 @@ export type HubSocketAdapter = {
   onClose(handler: (code: number) => void): void;
 };
 
-type HubConnectionCoreDeps = {
+export type HubConnectionDeps = {
   openSocket(url: string): HubSocketAdapter;
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its views.
@@ -95,12 +122,11 @@ type HubConnectionCoreDeps = {
   // listener (the web), whose link then answers every ask with the
   // no-listener refusal.
   serveConnectInfo?: ServeConnectInfo;
-  // Test seams for the liveness heartbeat (shared/hub/heartbeat.ts).
-  heartbeat?: HeartbeatOptions;
+  ping?: PingOptions;
 };
 
 // The lifecycle surface both platform bindings re-expose unchanged.
-type HubConnectionCore = {
+export type HubConnection = {
   // Ask one peer for its connect info (HubLink.askConnectInfo).
   // Rejects with HubLinkDownError while the socket is down.
   askConnectInfo(
@@ -108,8 +134,11 @@ type HubConnectionCore = {
     input: unknown,
     timeoutMs: number,
   ): Promise<unknown>;
-  refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
-  stop(): Promise<void>;
+  // Reconciles the connection with the wanted state, one refresh at a
+  // time so a fast account double-toggle cannot interleave one
+  // refresh's stop with another's start. `resolve` runs inside, and
+  // null means stop (signed out or unconfigured).
+  refresh(resolve: Effect.Effect<HubConnectOpts | null>): Effect.Effect<void>;
   status(): HubConnectionStatus;
   // What the device link's handshakes are made of: this device's key
   // pair, and the key the hub's roster names for a peer. Null and
@@ -175,161 +204,136 @@ function sameOpts(a: HubConnectOpts, b: HubConnectOpts): boolean {
 }
 
 // Prefer the adapter's hard terminate for a socket nothing should keep
-// draining (an aborted or timed-out dial), falling back to the advisory
-// close where the platform has nothing harder.
+// draining (an aborted or timed-out dial, a dead one), falling back to
+// the advisory close where the platform has nothing harder.
 function killSocket(socket: HubSocketAdapter): void {
   if (socket.terminate !== undefined) socket.terminate();
   else socket.close();
 }
 
-export function createHubConnectionCore(
-  deps: HubConnectionCoreDeps,
-): HubConnectionCore {
-  let link: HubLink | null = null;
-  // Kept across the links a redial replaces (link.ts, SeenAsks).
-  const seenAsks: SeenAsks = new Map();
-  // The established connection as the supervisor reports it (null the
-  // moment it is lost or torn down), so probe() reaches exactly the
-  // live socket.
-  let live: SupervisedConnection | null = null;
-  let current: { supervisor: Supervisor; opts: HubConnectOpts } | null = null;
-  let socketStatus: SupervisorStatus = { phase: "idle" };
-  // The in-flight dial's cancel handle, so stop() can abort a dial that
-  // has not yet established (the mint fetch or a half-open socket), not
-  // only an established socket.
-  let pendingDialAbort: AbortController | null = null;
-  // Serializes refresh/stop so a fast account double-toggle cannot
-  // interleave one refresh's stop with another's start.
-  const lifecycle = createLimiter(1);
-  // This socket's name on the hub, kept across redials. A web device
-  // holds one per tab, and the hub relays to each.
-  const connectionId = newConnectionId();
+export const make = (
+  deps: HubConnectionDeps,
+): Effect.Effect<HubConnection, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const scope = yield* Effect.scope;
+    const lifecycle = yield* Semaphore.make(1);
+    const intervalMs = deps.ping?.intervalMs ?? PING_INTERVAL_MS;
+    const timeoutMs = deps.ping?.timeoutMs ?? PING_TIMEOUT_MS;
+    const probeTimeoutMs = deps.ping?.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
+    let link: HubLink | null = null;
+    // Kept across the links a redial replaces (link.ts, SeenAsks).
+    const seenAsks: SeenAsks = new Map();
+    // The established connection as the supervisor reports it (null the
+    // moment it is lost or torn down), so probe() reaches exactly the
+    // live socket.
+    let live: SupervisedConnection | null = null;
+    // The supervisor for the current inputs, in a scope of its own the
+    // next refresh closes.
+    let current: {
+      scope: Scope.Closeable;
+      supervisor: Supervisor;
+      opts: HubConnectOpts;
+    } | null = null;
+    let socketStatus: SupervisorStatus = { phase: "idle" };
+    // This socket's name on the hub, kept across redials. A web device
+    // holds one per tab, and the hub relays to each.
+    const connectionId = newConnectionId();
 
-  function notifyChange(): void {
-    deps.onChange?.();
-  }
+    function notifyChange(): void {
+      deps.onChange?.();
+    }
 
-  // One connect attempt: mint a fresh ticket, dial the DO, and treat
-  // the FIRST PRESENCE envelope as the accept signal (the DO sends it
-  // right after accepting, and a rejected ticket never gets one, only
-  // a close). The resolved connection satisfies the supervisor's
-  // shape, with empty remote identity because the DO speaks no sm
-  // welcome. It has no byte channels and no sm transport of its own:
-  // the device hub carries JSON frames only (byte channels exist only
-  // on direct sockets), and the one peer question rides askConnectInfo.
-  function dial(
-    opts: HubConnectOpts,
-    onClose: (code: number | null) => void,
-  ): Promise<SupervisedConnection> {
-    return new Promise((resolve, reject) => {
-      const dialAbort = new AbortController();
-      pendingDialAbort = dialAbort;
-      // One settle per dial: whichever of accept, timeout, close, mint
-      // failure or stop lands first owns the outcome, and no later event
-      // can flip established or fire a second onClose.
-      let settled = false;
-      let established = false;
-      let ownerClosed = false;
-      let ws: HubSocketAdapter | null = null;
-
-      function clearPending(): void {
-        if (pendingDialAbort === dialAbort) pendingDialAbort = null;
-      }
-
-      // stop() aborts this. Kill a half-open socket so an orphan dial
-      // cannot complete after stop and get superseded into terminal
-      // blocked.
-      dialAbort.signal.addEventListener("abort", () => {
-        if (settled) return;
-        settled = true;
-        clearPending();
-        if (ws !== null) killSocket(ws);
-        reject(new RemoteConnectError("hub dial cancelled", null, false));
-      });
-
-      // The mint has its own deadline so a black-holed route cannot
-      // strand the supervisor in "connecting" forever. It shares
-      // dialAbort so stop() cancels the fetch too.
-      const mintTimer = setTimeout(() => dialAbort.abort(), ACCEPT_TIMEOUT_MS);
-      void opts
-        .mintTicket(connectionId, dialAbort.signal)
-        .then((ticket) => {
-          clearTimeout(mintTimer);
-          if (settled) return;
-          startDial(ticket);
-        })
-        .catch((error: unknown) => {
-          clearTimeout(mintTimer);
-          if (settled) return;
-          settled = true;
-          clearPending();
-          // A failed mint (offline, hub down, signed out mid-flight,
-          // timeout) is a retryable connect failure. A refusal is not:
-          // the device hub rejecting this credential is deterministic
-          // until the account changes, so it blocks the supervisor
-          // (terminal until refresh restarts it on the next sign-in or
-          // sign-out) instead of minting on the ladder forever. The
-          // message rides along so the UI can name it. A mint refused
-          // because the credential was REVOKED (the device was removed
-          // from the account while this socket was down, so it never
-          // saw the revoked close) carries the revoked close code, so
-          // the classifier blocks it as "revoked" and the app signs
-          // out exactly as it would have on the close.
-          reject(
+    // One connect attempt: mint a fresh ticket, dial the DO, and treat
+    // the FIRST PRESENCE envelope as the accept signal (the DO sends it
+    // right after accepting, and a rejected ticket never gets one, only
+    // a close). The connection satisfies the supervisor's shape, with
+    // empty remote identity because the DO speaks no sm welcome. It has
+    // no byte channels and no sm transport of its own: the device hub
+    // carries JSON frames only (byte channels exist only on direct
+    // sockets), and the one peer question rides askConnectInfo. The
+    // socket lives as long as the attempt's scope, and an interrupt
+    // (the supervisor stopping) cancels a mint or a half-open socket.
+    const dial = (
+      opts: HubConnectOpts,
+      onClose: (code: number | null) => void,
+    ): Effect.Effect<SupervisedConnection, RemoteConnectError, Scope.Scope> =>
+      Effect.gen(function* () {
+        // The mint has its own deadline so a black-holed route cannot
+        // strand the supervisor in "connecting" forever.
+        const ticket = yield* Effect.tryPromise({
+          try: (signal) => opts.mintTicket(connectionId, signal),
+          // A failed mint (offline, hub down, signed out mid-flight) is
+          // a retryable connect failure. A refusal is not: the device
+          // hub rejecting this credential is deterministic until the
+          // account changes, so it blocks the supervisor (terminal
+          // until refresh restarts it on the next sign-in or sign-out)
+          // instead of minting on the ladder forever. The message rides
+          // along so the UI can name it. A mint refused because the
+          // credential was REVOKED (the device was removed from the
+          // account while this socket was down, so it never saw the
+          // revoked close) carries the revoked close code, so the
+          // classifier blocks it as "revoked" and the app signs out
+          // exactly as it would have on the close.
+          catch: (error) =>
             new RemoteConnectError(
               `ticket mint failed: ${errorMessageOf(error)}`,
               isHubDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
               isHubRefusal(error),
               error instanceof Error ? error : undefined,
             ),
-          );
-        });
+        }).pipe(
+          Effect.timeoutOrElse({
+            duration: ACCEPT_TIMEOUT_MS,
+            orElse: () =>
+              Effect.fail(
+                new RemoteConnectError("hub dial cancelled", null, false),
+              ),
+          }),
+        );
 
-      function startDial(ticket: string): void {
-        const socket = deps.openSocket(connectUrlFor(opts.hubUrl, ticket));
-        ws = socket;
-        // Set true once stop() or a rejection lands, so no further
-        // inbound frame runs a handler even while the socket drains.
+        // Set once the socket's end is decided (the owner's close, its
+        // own close, a death), so no further inbound frame runs a
+        // handler even while the socket drains.
         let dead = false;
+        let established = false;
+        // The close is this side's: the platform close that follows it
+        // stays silent, so the supervisor never reconnects against it.
+        let ownerClosed = false;
+        const accepted = yield* Deferred.make<void, RemoteConnectError>();
         // The link half of a teardown, shared by every path that ends
-        // this socket (owner close, platform close, heartbeat death).
+        // this socket (owner close, platform close, a death).
         const tearDownLink = (): void => {
           if (link === nextLink) link = null;
           nextLink.teardown();
         };
-
-        // Liveness (shared/hub/heartbeat.ts), armed at the accept.
-        // Enforced from the first ping on purpose (no "seen a pong yet"
-        // latch): a socket that dies right after the accept must still
-        // be found, and the cost of that is only that a Worker
-        // predating the pair (which drops pings as malformed envelopes)
-        // is redialed once a minute until it is redeployed, so the
-        // Worker deploys first (hub/README.md). A death tears the link
-        // down and reports to the supervisor like a drop.
-        const heartbeat = createHeartbeat({
-          ...deps.heartbeat,
-          sendPing: () => socket.send(HUB_PING),
-          onDead: () => {
-            if (dead) return;
-            dead = true;
-            tearDownLink();
-            // Report the drop here, once, and read as owner-closed
-            // BEFORE the kill, so the platform close it triggers stays
-            // silent however promptly it lands.
-            if (established) onClose(null);
-            ownerClosed = true;
-            killSocket(socket);
-            notifyChange();
-          },
-        });
-
-        const acceptTimer = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          clearPending();
-          killSocket(socket);
-          reject(new RemoteConnectError("hub accept timeout", null, false));
-        }, ACCEPT_TIMEOUT_MS);
+        const socket = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            deps.openSocket(connectUrlFor(opts.hubUrl, ticket)),
+          ),
+          (opened) =>
+            Effect.sync(() => {
+              const wasDead = dead;
+              ownerClosed = true;
+              dead = true;
+              // Torn down at once, so pending asks reject rather than
+              // wait on the close event.
+              tearDownLink();
+              if (wasDead) return;
+              if (!established) {
+                // A dial cut short: no orphan socket can complete after
+                // the stop and be superseded into a terminal block.
+                killSocket(opened);
+                return;
+              }
+              opened.close();
+              // close() is advisory: node ws can hold it for ~30s
+              // against a stalled device hub. Where the adapter can
+              // terminate, arm a short grace so it cannot.
+              if (opened.terminate !== undefined) {
+                setTimeout(() => opened.terminate?.(), TERMINATE_GRACE_MS);
+              }
+            }),
+        );
 
         const nextLink = createHubLink({
           localDeviceId: opts.deviceId,
@@ -344,46 +348,23 @@ export function createHubConnectionCore(
             // would close every direct session on a hub blip). The
             // drop itself notifies, once, after the supervisor knows.
             if (dead) return;
-            if (!settled) {
-              settled = true;
+            if (!established) {
               established = true;
-              clearTimeout(acceptTimer);
-              clearPending();
               link = nextLink;
-              heartbeat.start();
-              resolve({
-                close: () => {
-                  ownerClosed = true;
-                  dead = true;
-                  heartbeat.stop();
-                  // Tear the link down SYNCHRONOUSLY so pending asks
-                  // reject at once rather than waiting on the close event.
-                  tearDownLink();
-                  socket.close();
-                  // close() is advisory: node ws can hold it for ~30s
-                  // against a stalled device hub. Where the adapter can
-                  // terminate, arm a short grace so it cannot.
-                  if (socket.terminate !== undefined) {
-                    setTimeout(() => socket.terminate?.(), TERMINATE_GRACE_MS);
-                  }
-                },
-                probe: heartbeat.probe,
-                remoteDeviceId: "",
-                remoteAppVersion: "",
-              });
+              Deferred.doneUnsafe(accepted, Exit.void);
             }
             notifyChange();
           },
         });
 
+        // The oldest ping still unanswered.
+        let pingSentAt: number | null = null;
+
         socket.onMessage((text) => {
-          // Once dead (owner close or a rejection), no further inbound
-          // frame runs a handler even though the socket may still
-          // deliver buffered frames while closing.
           if (dead) return;
           // Any inbound message proves the hub alive. A pong is not an
           // envelope, so it stops here.
-          heartbeat.noteInbound();
+          pingSentAt = null;
           if (text === HUB_PONG) return;
           // Wrap so a throw cannot escape into the platform's event
           // delivery and become an uncaught exception.
@@ -397,133 +378,200 @@ export function createHubConnectionCore(
         });
         socket.onClose((code) => {
           dead = true;
-          clearTimeout(acceptTimer);
-          clearPending();
-          heartbeat.stop();
           tearDownLink();
-          if (!settled) {
-            settled = true;
-            reject(
-              new RemoteConnectError(
-                `hub closed before accept (code ${code})`,
-                code,
-                hubCloseClassifier(code) !== null,
+          if (!established) {
+            Deferred.doneUnsafe(
+              accepted,
+              Exit.fail(
+                new RemoteConnectError(
+                  `hub closed before accept (code ${code})`,
+                  code,
+                  hubCloseClassifier(code) !== null,
+                ),
               ),
             );
-            notifyChange();
-            return;
+          } else if (!ownerClosed) {
+            // An established socket dropped. The owner's close and a
+            // death stay silent, so the supervisor never reconnects
+            // against its own stop and hears a death once.
+            onClose(code);
           }
-          // An established socket dropped. The owner-close path stays
-          // silent so the supervisor never reconnects against its own
-          // stop (a heartbeat death reads as owner-closed once it has
-          // reported itself).
-          if (established && !ownerClosed) onClose(code);
           notifyChange();
         });
-      }
+
+        yield* Deferred.await(accepted).pipe(
+          Effect.timeoutOrElse({
+            duration: ACCEPT_TIMEOUT_MS,
+            orElse: () =>
+              Effect.fail(
+                new RemoteConnectError("hub accept timeout", null, false),
+              ),
+          }),
+        );
+
+        // A socket that stopped answering: torn down and reported to the
+        // supervisor like a drop, once, BEFORE the kill, so the
+        // platform close it triggers stays silent however promptly it
+        // lands. Closed without waiting on the platform's close
+        // handshake, which against a dead peer can take a browser a
+        // minute.
+        const declareDead = Effect.sync(() => {
+          if (dead) return;
+          dead = true;
+          tearDownLink();
+          onClose(null);
+          ownerClosed = true;
+          killSocket(socket);
+          notifyChange();
+        });
+        // A ping the wire refused is left to the close that follows.
+        const sendPing = Effect.try(() => socket.send(HUB_PING)).pipe(
+          Effect.andThen(Clock.currentTimeMillis),
+          Effect.map((now) => {
+            if (pingSentAt === null) pingSentAt = now;
+          }),
+          Effect.ignore,
+        );
+        // One beat: a ping when none is outstanding, else the verdict on
+        // the oldest one. Answers whether the socket is still alive.
+        const beat = Effect.gen(function* () {
+          if (pingSentAt === null) {
+            yield* sendPing;
+            return true;
+          }
+          return (yield* Clock.currentTimeMillis) - pingSentAt < timeoutMs;
+        });
+        // Enforced from the first ping on purpose (no "seen a pong yet"
+        // latch): a socket that dies right after the accept must still
+        // be found, and the cost of that is only that a Worker
+        // predating the pair (which drops pings as malformed envelopes)
+        // is redialed once a minute until it is redeployed, so the
+        // Worker deploys first (hub/README.md).
+        yield* Effect.sleep(intervalMs).pipe(
+          Effect.andThen(
+            beat.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(intervalMs),
+                while: (alive) => alive,
+              }),
+            ),
+          ),
+          Effect.andThen(declareDead),
+          Effect.forkScoped,
+        );
+        const run = yield* FiberSet.makeRuntime<never>();
+        let probing = false;
+        const probe = Effect.gen(function* () {
+          yield* sendPing;
+          const sentAt = yield* Clock.currentTimeMillis;
+          yield* Effect.sleep(probeTimeoutMs);
+          // Any frame since the probe went out is the answer.
+          if (pingSentAt !== null && pingSentAt <= sentAt) yield* declareDead;
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              probing = false;
+            }),
+          ),
+        );
+        return {
+          probe: () => {
+            if (dead || probing) return;
+            probing = true;
+            run(probe);
+          },
+          remoteDeviceId: "",
+          remoteAppVersion: "",
+        };
+      });
+
+    // Ends the supervisor, which ends any dial in flight and closes the
+    // live socket.
+    const stopNow = Effect.suspend(() => {
+      if (current === null) return Effect.void;
+      const stopping = current.scope;
+      current = null;
+      return Scope.close(stopping, Exit.void);
     });
-  }
 
-  function stopNow(): void {
-    if (current === null) return;
-    const { supervisor } = current;
-    current = null;
-    // Cancel any in-flight dial (mint fetch or half-open socket) so an
-    // orphan connect cannot complete after stop and be superseded into
-    // terminal blocked.
-    if (pendingDialAbort !== null) {
-      pendingDialAbort.abort();
-      pendingDialAbort = null;
-    }
-    // stop() closes the live socket via the connection's close, whose
-    // close event tears the link down (the owner close also tears it
-    // down synchronously).
-    supervisor.stop();
-  }
+    const startNow = (opts: HubConnectOpts) =>
+      Effect.gen(function* () {
+        const child = yield* Scope.fork(scope);
+        const supervisor = yield* supervise({
+          connect: (onClose) => dial(opts, onClose),
+          classifyClose: hubCloseClassifier,
+          onStatus: (next) => {
+            socketStatus = next;
+            notifyChange();
+          },
+          onConnection: (connection) => {
+            live = connection;
+          },
+        }).pipe(Scope.provide(child));
+        current = { scope: child, supervisor, opts };
+      });
 
-  function startNow(opts: HubConnectOpts): void {
-    const connect: ConnectFn = (onClose) => dial(opts, onClose);
-    const supervisor = createSupervisor({
-      connect,
-      classifyClose: hubCloseClassifier,
-      onStatus: (next) => {
-        socketStatus = next;
-        notifyChange();
+    return {
+      localKey() {
+        return current === null ? null : deviceKeyPair(current.opts.deviceKey);
       },
-      onConnection: (connection) => {
-        live = connection;
+
+      peerKey(deviceId) {
+        return link?.publicKeyOf(deviceId);
       },
-    });
-    current = { supervisor, opts };
-    supervisor.start();
-  }
 
-  return {
-    localKey() {
-      return current === null ? null : deviceKeyPair(current.opts.deviceKey);
-    },
+      rosterKnown() {
+        return link !== null;
+      },
 
-    peerKey(deviceId) {
-      return link?.publicKeyOf(deviceId);
-    },
-
-    rosterKnown() {
-      return link !== null;
-    },
-
-    askConnectInfo(deviceId, input, timeoutMs) {
-      if (link === null) {
-        return Promise.reject(new HubLinkDownError());
-      }
-      return link.askConnectInfo(deviceId, input, timeoutMs);
-    },
-
-    refresh: (resolve) =>
-      lifecycle(async () => {
-        const opts = await resolve();
-        if (opts === null) {
-          stopNow();
-          return;
+      askConnectInfo(deviceId, input, askMs) {
+        if (link === null) {
+          return Promise.reject(new HubLinkDownError());
         }
-        // A blocked supervisor restarts on refresh: refresh only runs
-        // when inputs may have changed (boot, sign-in, sign-out,
-        // rename), and blocked is terminal precisely until then.
-        if (
-          current !== null &&
-          sameOpts(current.opts, opts) &&
-          socketStatus.phase !== "blocked"
-        ) {
-          return;
-        }
-        stopNow();
-        startNow(opts);
-      }),
+        return link.askConnectInfo(deviceId, input, askMs);
+      },
 
-    stop: () =>
-      lifecycle(async () => {
-        stopNow();
-      }),
+      refresh: (resolve) =>
+        lifecycle.withPermit(
+          Effect.gen(function* () {
+            const opts = yield* resolve;
+            if (opts === null) return yield* stopNow;
+            // A blocked supervisor restarts on refresh: refresh only
+            // runs when inputs may have changed (boot, sign-in,
+            // sign-out, rename), and blocked is terminal precisely until
+            // then.
+            if (
+              current !== null &&
+              sameOpts(current.opts, opts) &&
+              socketStatus.phase !== "blocked"
+            ) {
+              return;
+            }
+            yield* stopNow;
+            yield* startNow(opts);
+          }),
+        ),
 
-    probe: () => {
-      // A live socket gets its verdict within the probe's window, and a
-      // supervisor waiting out its backoff dials now.
-      if (live !== null) live.probe();
-      else current?.supervisor.dialNow();
-    },
+      probe: () => {
+        // A live socket gets its verdict within the probe's window, and a
+        // supervisor waiting out its backoff dials now.
+        if (live !== null) live.probe();
+        else current?.supervisor.dialNow();
+      },
 
-    status: () => {
-      const localDeviceId = current?.opts.deviceId;
-      // The link owns the authoritative roster, so this reads it rather
-      // than keeping a second copy that a stale generation's close
-      // could wipe. Presence includes the receiver per
-      // protocol.ts, so the local device is filtered out.
-      const online = (link?.onlineDeviceIds() ?? []).filter(
-        (id) => id !== localDeviceId,
-      );
-      return {
-        socket: socketStatus,
-        onlineDeviceIds: online,
-      };
-    },
-  };
-}
+      status: () => {
+        const localDeviceId = current?.opts.deviceId;
+        // The link owns the authoritative roster, so this reads it rather
+        // than keeping a second copy that a stale generation's close
+        // could wipe. Presence includes the receiver per
+        // protocol.ts, so the local device is filtered out.
+        const online = (link?.onlineDeviceIds() ?? []).filter(
+          (id) => id !== localDeviceId,
+        );
+        return {
+          socket: socketStatus,
+          onlineDeviceIds: online,
+        };
+      },
+    } satisfies HubConnection;
+  });

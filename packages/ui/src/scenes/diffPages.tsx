@@ -283,6 +283,7 @@ export function CommitPageScene() {
             onPick={noop}
             canCommand
             onNewWorktree={noop}
+            onHardReset={noop}
             dialog={null}
           />
         ),
@@ -351,6 +352,7 @@ export function DiffPartsScene() {
             onPick={noop}
             canCommand={false}
             onNewWorktree={noop}
+            onHardReset={noop}
             dialog={null}
           />
         </Part>

@@ -7,7 +7,7 @@ import { NO_REWRITE } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { CommitDetails } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
-import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
+import { GitPageActions } from "@/components/worktreeDetail/git/GitPageActions";
 import { DiffPage } from "./DiffPage";
 import { CommitBylineView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 
@@ -58,7 +58,7 @@ export function CommitDiff() {
           />
         )
       }
-      sidebarActions={<MergeButton worktree={worktree} />}
+      sidebarActions={<GitPageActions worktree={worktree} />}
       renderSidebar={() => (
         <GitPageSidebar
           worktree={worktree}

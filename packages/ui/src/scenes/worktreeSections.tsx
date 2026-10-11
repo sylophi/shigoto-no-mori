@@ -30,6 +30,7 @@ import {
   SplitHeaderView,
   UpToDateView,
 } from "../views/worktreeDetail/git/HistoryListView.tsx";
+import { HardResetDialogView } from "../views/worktreeDetail/git/HardResetDialogView.tsx";
 import { MergeDialogView } from "../views/worktreeDetail/git/MergeDialogView.tsx";
 import { OperationBannerView } from "../views/worktreeDetail/git/OperationBannerView.tsx";
 import {
@@ -142,6 +143,7 @@ const ACTIONS: CommitActions = {
   revert: noop,
   cherryPickInto: noop,
   newWorktreeFrom: () => undefined,
+  hardResetTo: () => undefined,
   squash: noop,
   reword: noop,
   dialog: null,
@@ -525,6 +527,31 @@ export function WorktreeSectionsPartsScene({
               blocked="Commit or stash your changes first."
               pending={false}
               ready={false}
+              onSubmit={noop}
+              onCancel={noop}
+            />
+          </ModalBox>
+        </Part>
+        <Part label="Hard reset">
+          <ModalBox className="max-w-md">
+            <HardResetDialogView
+              branch={worktree.branch}
+              target="origin/main"
+              to={null}
+              dirty
+              preview={{
+                incoming: 4,
+                own: 2,
+                pushed: 1,
+                ownMerges: 0,
+                conflicts: null,
+                incomingSubject: null,
+              }}
+              previewError={null}
+              resetError={undefined}
+              blocked={null}
+              pending={false}
+              ready
               onSubmit={noop}
               onCancel={noop}
             />

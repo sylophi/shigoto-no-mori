@@ -37,6 +37,8 @@ import {
   RelocateWorktreePayloadSchema,
   RenameWorktreePayloadSchema,
   RenameBranchPayloadSchema,
+  ResetHardPayloadSchema,
+  ResetHardResultSchema,
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
   ReadWorktreeFilePayloadSchema,
@@ -251,6 +253,12 @@ export const worktreesContract = defineContract(
     gated: false,
   }),
   invoke("resetSoft", ResetSoftPayloadSchema, ResetSoftResultSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  invoke("resetHard", ResetHardPayloadSchema, ResetHardResultSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,

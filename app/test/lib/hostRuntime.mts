@@ -32,14 +32,17 @@ import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as Terrier from "../../host/lib/terrier.ts";
 import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
-import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
+import * as Moves from "../../host/lib/sync/Moves.ts";
+import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
 import * as Views from "../../host/lib/views.ts";
 import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/Ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
 import * as Villagers from "../../host/lib/VillagerData.ts";
+import * as Worktrees from "../../host/lib/Worktrees.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
+import * as HostStandIns from "./hostStandIns.mts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -105,9 +108,11 @@ const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         Ports.layer,
         Terrier.layer,
+        Worktrees.layer,
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
+        Moves.layer,
         // No fetches behind a proof's back.
         Layer.succeed(
           BackgroundFetch.BackgroundFetch,
@@ -117,13 +122,9 @@ const runtime = ManagedRuntime.make(
             setWindowFocused: () => {},
           }),
         ),
-        // Nothing a previous run left behind to sweep.
-        Layer.succeed(
-          OrphanSweep.OrphanSweep,
-          OrphanSweep.OrphanSweep.of({
-            takeReport: Effect.succeed({ stopped: 0 }),
-          }),
-        ),
+        // Over the file's fresh store, with nothing a previous run left
+        // behind to sweep.
+        OrphanSweep.layer,
       ),
     ),
     Layer.provideMerge(
@@ -131,6 +132,8 @@ const runtime = ManagedRuntime.make(
     ),
     // The copy of the shared settings, read from the store.
     Layer.provideMerge(SharedSettingsStore.layer),
+    // What the app's root provides from its own wiring.
+    Layer.provideMerge(HostStandIns.layer),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),

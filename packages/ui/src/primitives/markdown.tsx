@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { isWebUrl } from "@shigomori/contracts/predicates/webUrl";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -87,11 +88,25 @@ function htmlOf(source: string): string {
 export function Markdown({
   source,
   className,
+  images,
 }: {
   source: string;
   className?: string;
+  // Images the source refers to by a local name (`./shot.png`), and
+  // where each is shown from, set on the rendered <img> rather than
+  // written into the source, which would cache the bytes with it.
+  images?: Readonly<Record<string, string>>;
 }) {
   const { openUrl } = useOutside();
+  const html = purify.isSupported ? htmlOf(source) : "";
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!images) return;
+    for (const img of ref.current?.querySelectorAll("img") ?? []) {
+      const resolved = images[img.getAttribute("src") ?? ""];
+      if (resolved !== undefined) img.src = resolved;
+    }
+  }, [html, images]);
   if (!purify.isSupported) {
     return (
       <div
@@ -102,10 +117,10 @@ export function Markdown({
       </div>
     );
   }
-  const html = htmlOf(source);
   return (
     // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- delegates the clicks of the links inside, which are the focusable controls (Enter on one fires this same click)
     <div
+      ref={ref}
       data-slot="markdown"
       className={cn(PROSE, className)}
       onClick={(event) => {

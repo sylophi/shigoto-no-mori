@@ -66,14 +66,16 @@ import * as Layer from "effect/Layer";
 import * as Tracer from "effect/Tracer";
 import {
   type PeerChannels,
+  type PeerReach,
   peerSyncFor,
-  setPeerReach,
-} from "@host/ipc/peerSync";
+} from "@host/ipc/PeerReach";
+import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import * as Effect from "effect/Effect";
-import { runHost, type Services } from "./lib/hostRuntime.mts";
+import * as Fiber from "effect/Fiber";
+import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import * as Ops from "@host/lib/engineOps";
 import {
@@ -147,7 +149,7 @@ const withPeerSource = <T, E>(
 const offerSource = <T, E>(
   project: Parameters<typeof offer>[1],
   worktreeId: string,
-  openOnPeer: (channelId: string) => Effect.Effect<T, E>,
+  openOnPeer: (channelId: string) => Effect.Effect<T, E, PeerReach>,
 ) => runHost(offer(LISTENER, project, worktreeId, openOnPeer));
 const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
 
@@ -374,11 +376,11 @@ beforeAll(async () => {
   // The peer as the orchestrations reach it: the sync surface plus
   // the session's byte channels, observed.
   observed = observedChannels(toListener.channels);
-  setPeerReach({
+  standInPeers({
     transportFor: () => toListener.transport,
     channelsFor: () => observed.channels,
-    thisDeviceId: () => DIALER,
   });
+  standInDeviceId(DIALER);
   worktreeRef = { projectId: sourceProjectId, worktreeId };
   targetProject = await findProjectOrThrow(targetProjectId);
 });
@@ -714,7 +716,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
   // tests drove. Everything in between -- the tip, the
   // capture, the bundle, `sm create`, the capture re-key, `sm dirty
   // apply` -- is production code against real git.
-  setPeerReach({
+  standInPeers({
     transportFor: (deviceId) => {
       assert.equal(
         deviceId,
@@ -752,7 +754,6 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
       assert.equal(deviceId, LISTENER, "the move dialed an unexpected device");
       return observed.channels;
     },
-    thisDeviceId: () => DIALER,
   });
   pullCtx = handlerCtx();
   const repoIdentity = await repoIdentityOf(sourceRepo);
@@ -1479,14 +1480,14 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
   assert.equal(existsSync(join(clonesDir, "again")), false);
 });
 
-// ---- The cancel (sync:cancelMove, host/lib/sync/moves.ts): a move
+// ---- The cancel (sync:cancelMove, host/lib/sync/Moves.ts): a move
 // cut short mid-create, with the target's setup script hung, ends
 // within moments with the script dead, the worktree it made
 // removed, the branch (kept by `sm rm` under the setting) and
 // incoming ref gone and the source untouched. Once over, there is nothing left to cancel. The same
 // for a send, where the landing runs on the peer and meets the
 // cancel as the link torn down under it, and for a caller that
-// goes away (the context's signal), which cancels like a click.
+// goes away (its call interrupted), which cancels like a click.
 describe("cancelMove", () => {
   let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
@@ -1659,18 +1660,18 @@ describe("cancelMove", () => {
     );
   });
 
-  it("cancelMove (caller gone): a context that aborts mid-create cancels the move like a click, and leaves nothing behind", async () => {
-    // (c) The caller gone: a pull whose context aborts (the window
-    // reloaded, the socket died) is cancelled the same way.
+  it("cancelMove (caller gone): a call interrupted mid-create cancels the move like a click, and leaves nothing behind", async () => {
+    // (c) The caller gone: a pull whose call is interrupted (the window
+    // reloaded, the socket died) is cancelled the same way, unwound by
+    // the time the interrupt returns.
     const wtCancel3Path = await addWorktree(
       sourceRepo,
       "wt-cancel3",
       "cancel3",
     );
     const wtCancel3Id = worktreeIdFromPath(wtCancel3Path);
-    const gone = new AbortController();
-    const abandonedPull = Promise.resolve(
-      pullWorktree(
+    const abandonedPull = Effect.runForkWith(await hostContext())(
+      syncHandlers.pullWorktree(
         {
           sourceDeviceId: LISTENER,
           sourceProjectId,
@@ -1678,13 +1679,11 @@ describe("cancelMove", () => {
           sourceIdentity: identity,
           branch: "cancel3",
         },
-        { ...pullCtx, signal: gone.signal },
+        pullCtx,
       ),
     );
-    abandonedPull.catch(() => {});
     const abandonedSetupPid = await setupStarted();
-    gone.abort();
-    await assert.rejects(abandonedPull, /The move was cancelled/);
+    await Effect.runPromise(Fiber.interrupt(abandonedPull));
     await waitFor(
       () => !processAlive(abandonedSetupPid),
       "the setup script to die",
