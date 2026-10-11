@@ -13,6 +13,7 @@ import {
 import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";
 import type { HandlerContext } from "@shared/ipc/transport";
+import type { PackageScriptsDoc, PackageScriptsResult } from "@shared/schemas";
 import { cliRunScriptSpawn, packageScriptsViaCli } from "../cliDelegate";
 import { scriptEventNotifier } from "../scriptRun";
 
@@ -21,8 +22,8 @@ export const packageScriptsHandlers: Handlers<
   HandlerContext
 > = {
   // `sm run` with no script: the scripts in file order (an object
-  // keeps that order), the manager the lockfile selects, the files
-  // they come from, and each script's use stats. Null when there is no
+  // keeps that order), grouped by the file they come from, the manager
+  // the lockfile selects, and each script's use stats. Null when there is no
   // package.json, justfile or Makefile, or one doesn't read.
   list: async ({ projectId, worktreeId }) => {
     const doc = await packageScriptsViaCli(projectId, worktreeId);
@@ -32,7 +33,7 @@ export const packageScriptsHandlers: Handlers<
         doc.scripts.map((script) => [script.name, script.command]),
       ),
       packageManager: doc.packageManager,
-      files: doc.files,
+      groups: groupByFile(doc.scripts),
       usage: doc.usage,
       launchRow: readLaunchRow(projectId),
     };
@@ -96,3 +97,15 @@ export const packageScriptsHandlers: Handlers<
     return { runId };
   },
 };
+
+function groupByFile(
+  scripts: PackageScriptsDoc["scripts"],
+): NonNullable<PackageScriptsResult["groups"]> {
+  const groups = new Map<string, Record<string, string>>();
+  for (const script of scripts) {
+    const labels = groups.get(script.file) ?? {};
+    labels[script.name] = script.label;
+    groups.set(script.file, labels);
+  }
+  return [...groups].map(([file, labels]) => ({ file, labels }));
+}

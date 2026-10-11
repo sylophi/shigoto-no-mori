@@ -752,10 +752,10 @@ async function main() {
         { projectId, worktreeId },
         ctx,
       );
-      assert.deepEqual(withRunners?.files, [
-        "package.json",
-        "justfile",
-        "Makefile",
+      assert.deepEqual(withRunners?.groups, [
+        { file: "package.json", labels: { zeta: "zeta", alpha: "alpha" } },
+        { file: "justfile", labels: { "just check": "check" } },
+        { file: "Makefile", labels: { "make build": "build" } },
       ]);
       assert.deepEqual(Object.entries(withRunners?.scripts ?? {}), [
         ["zeta", "echo z"],

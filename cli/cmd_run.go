@@ -27,14 +27,15 @@ import (
 )
 
 // One script. A slice, not a map: the list form prints scripts in
-// manifest order, like `pnpm run` with no arguments. runner and target
-// are set for a justfile recipe or Makefile target: the tool that runs
-// it and the name it goes by there.
+// manifest order, like `pnpm run` with no arguments. Label is the name
+// it goes by in its file (a recipe's "build" for "just build"), and
+// runner is the tool that runs a justfile recipe or Makefile target.
 type packageScript struct {
 	Name    string `json:"name"`
 	Command string `json:"command"`
+	File    string `json:"file"`
+	Label   string `json:"label"`
 	runner  string
-	target  string
 }
 
 func cmdRun(ctx cliContext, args []string) (int, error) {
@@ -80,7 +81,7 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 
 	tool, argv := manager, runArgv(manager, script.Name, extra)
 	if script.runner != "" {
-		tool, argv = script.runner, append([]string{script.runner, script.target}, extra...)
+		tool, argv = script.runner, append([]string{script.runner, script.Label}, extra...)
 	}
 	toolPath, lookErr := exec.LookPath(tool)
 	if lookErr != nil {
@@ -153,10 +154,9 @@ func runTarget(ctx cliContext, parsed parsedArgs) (located, error) {
 		binaryName, projectHint(ctx))
 }
 
-// --json: {ok, packageManager, files, scripts: [{name, command}] in
-// manifest order, usage: {<name>: {lastUsed, recentCount}}, sort,
-// order}. packageManager is null without a package.json, and files
-// names the script files found (package.json, justfile, Makefile). The
+// --json: {ok, packageManager, scripts: [{name, command, file, label}]
+// in file order, usage: {<name>: {lastUsed, recentCount}}, sort,
+// order}. packageManager is null without a package.json. The
 // app's PackageScriptsResultSchema is this with scripts folded into a
 // name -> command record (an array here, because a record can't hold
 // manifest order across every JSON reader). sort is the project's
@@ -183,7 +183,7 @@ func listPackageScripts(proj project, manager string, files []string, scripts []
 			managerField = manager
 		}
 		emit(map[string]any{
-			"ok": true, "packageManager": managerField, "files": files, "scripts": scripts,
+			"ok": true, "packageManager": managerField, "scripts": scripts,
 			"usage": usage, "sort": cmp.Or(sortMode, "frequent"), "order": order,
 		})
 		return 0, nil
@@ -237,7 +237,10 @@ func readWorktreeScripts(dir string) ([]packageScript, []string, error) {
 		if err != nil {
 			return nil, nil, errf("%s: %v", source.file, err)
 		}
-		scripts = append(scripts, source.parse(string(raw))...)
+		for _, script := range source.parse(string(raw)) {
+			script.File = source.file
+			scripts = append(scripts, script)
+		}
 		files = append(files, source.file)
 	}
 	if len(files) == 0 {
@@ -293,7 +296,7 @@ func parsePackageScripts(raw []byte) ([]packageScript, error) {
 		}
 		var command string
 		if json.Unmarshal(value, &command) == nil {
-			scripts = append(scripts, packageScript{Name: key, Command: command})
+			scripts = append(scripts, packageScript{Name: key, Command: command, File: "package.json", Label: key})
 		}
 	}
 	return scripts, nil

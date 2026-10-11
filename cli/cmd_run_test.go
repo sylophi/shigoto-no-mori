@@ -22,9 +22,9 @@ func TestParsePackageScriptsKeepsManifestOrder(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	want := []packageScript{
-		{Name: "zeta", Command: "run z"},
-		{Name: "alpha", Command: "run a"},
-		{Name: "mid", Command: "run m"},
+		{Name: "zeta", Command: "run z", File: "package.json", Label: "zeta"},
+		{Name: "alpha", Command: "run a", File: "package.json", Label: "alpha"},
+		{Name: "mid", Command: "run m", File: "package.json", Label: "mid"},
 	}
 	if !reflect.DeepEqual(scripts, want) {
 		t.Fatalf("got %v, want %v", scripts, want)
@@ -37,7 +37,10 @@ func TestParsePackageScriptsDropsNonStrings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	want := []packageScript{{Name: "ok", Command: "x"}, {Name: "ok2", Command: "y"}}
+	want := []packageScript{
+		{Name: "ok", Command: "x", File: "package.json", Label: "ok"},
+		{Name: "ok2", Command: "y", File: "package.json", Label: "ok2"},
+	}
 	if !reflect.DeepEqual(scripts, want) {
 		t.Fatalf("got %v, want %v", scripts, want)
 	}
@@ -102,9 +105,9 @@ build:
     echo duplicate
 `
 	want := []packageScript{
-		{Name: "just build", Command: "echo building {{target}}; go build ./...", runner: "just", target: "build"},
-		{Name: "just test", Command: "build", runner: "just", target: "test"},
-		{Name: "just quiet", Command: "echo quiet", runner: "just", target: "quiet"},
+		{Name: "just build", Command: "echo building {{target}}; go build ./...", Label: "build", runner: "just"},
+		{Name: "just test", Command: "build", Label: "test", runner: "just"},
+		{Name: "just quiet", Command: "echo quiet", Label: "quiet", runner: "just"},
 	}
 	if got := parseJustfile(raw); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -137,11 +140,11 @@ func TestParseMakefile(t *testing.T) {
 		"deps:\n" +
 		"\tgo mod download\n"
 	want := []packageScript{
-		{Name: "make build", Command: "echo building; go build ./...", runner: "make", target: "build"},
-		{Name: "make test", Command: "go test ./...", runner: "make", target: "test"},
-		{Name: "make lint", Command: "golangci-lint run", runner: "make", target: "lint"},
-		{Name: "make fmt", Command: "golangci-lint run", runner: "make", target: "fmt"},
-		{Name: "make deps", Command: "go mod download", runner: "make", target: "deps"},
+		{Name: "make build", Command: "echo building; go build ./...", Label: "build", runner: "make"},
+		{Name: "make test", Command: "go test ./...", Label: "test", runner: "make"},
+		{Name: "make lint", Command: "golangci-lint run", Label: "lint", runner: "make"},
+		{Name: "make fmt", Command: "golangci-lint run", Label: "fmt", runner: "make"},
+		{Name: "make deps", Command: "go mod download", Label: "deps", runner: "make"},
 	}
 	if got := parseMakefile(raw); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -151,8 +154,8 @@ func TestParseMakefile(t *testing.T) {
 func TestFindScript(t *testing.T) {
 	scripts := []packageScript{
 		{Name: "build", Command: "vite build"},
-		{Name: "just build", runner: "just", target: "build"},
-		{Name: "make test", runner: "make", target: "test"},
+		{Name: "just build", Label: "build", runner: "just"},
+		{Name: "make test", Label: "test", runner: "make"},
 	}
 	cases := []struct {
 		positionals []string

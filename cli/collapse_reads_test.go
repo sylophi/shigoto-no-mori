@@ -81,10 +81,9 @@ func TestRunListJSON(t *testing.T) {
 	want := map[string]any{
 		"ok":             true,
 		"packageManager": "pnpm",
-		"files":          []any{"package.json"},
 		"scripts": []any{
-			map[string]any{"name": "dev", "command": "vite"},
-			map[string]any{"name": "build", "command": "vite build"},
+			map[string]any{"name": "dev", "command": "vite", "file": "package.json", "label": "dev"},
+			map[string]any{"name": "build", "command": "vite build", "file": "package.json", "label": "build"},
 		},
 		"usage": map[string]any{
 			"dev":   map[string]any{"lastUsed": float64(now), "recentCount": float64(2)},

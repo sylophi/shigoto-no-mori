@@ -98,8 +98,8 @@ func parseJustfile(raw string) []packageScript {
 		scripts = append(scripts, packageScript{
 			Name:    "just " + name,
 			Command: stepsOr(body, line[colon+1:]),
+			Label:   name,
 			runner:  "just",
-			target:  name,
 		})
 	}
 	return scripts
@@ -189,8 +189,8 @@ func parseMakefile(raw string) []packageScript {
 			scripts = append(scripts, packageScript{
 				Name:    "make " + target,
 				Command: command,
+				Label:   target,
 				runner:  "make",
-				target:  target,
 			})
 		}
 	}

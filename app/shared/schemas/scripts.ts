@@ -36,10 +36,18 @@ export type PackageScriptUsage = z.infer<typeof PackageScriptUsageSchema>;
 export const PackageScriptsResultSchema = z.object({
   scripts: z.record(z.string(), z.string()),
   packageManager: PackageManagerSchema,
-  // The files the scripts come from: package.json, the justfile, the
-  // Makefile. Absent from a host on an older build, which reads
+  // The scripts by the file they come from, in file order, each name
+  // mapped to the one it goes by in that file ("build" for "just
+  // build"). Absent from a host on an older build, which reads
   // package.json alone.
-  files: z.array(z.string()).optional(),
+  groups: z
+    .array(
+      z.object({
+        file: z.string(),
+        labels: z.record(z.string(), z.string()),
+      }),
+    )
+    .optional(),
   usage: z.record(z.string(), PackageScriptUsageSchema),
   // The scripts picked for the launch row under the "manual" sort,
   // project-wide (see readLaunchRow). Rides the listing rather than a
@@ -58,13 +66,19 @@ export const PackageScriptSortModeSchema = z.enum([
 export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
 // `sm run --json` with no script: the worktree's scripts in file
-// order, the manager its lockfile selects, the files they come from,
-// each script's use stats, and the project's saved sort and manual
-// order.
+// order with the file each comes from and its name there, the manager
+// its lockfile selects, each script's use stats, and the project's
+// saved sort and manual order.
 export const PackageScriptsDocSchema = z.object({
   packageManager: PackageManagerSchema,
-  files: z.array(z.string()),
-  scripts: z.array(z.object({ name: z.string(), command: z.string() })),
+  scripts: z.array(
+    z.object({
+      name: z.string(),
+      command: z.string(),
+      file: z.string(),
+      label: z.string(),
+    }),
+  ),
   usage: z.record(z.string(), PackageScriptUsageSchema),
   sort: PackageScriptSortModeSchema,
   order: z.array(z.string()),

@@ -13,6 +13,8 @@ const PIN = "flex shrink-0 items-center px-2.5";
 
 interface ArrangeScriptRowProps {
   name: string;
+  // What the cell reads: the name within its file's group.
+  label: string;
   // Undefined when the host predates pinning, which hides the toggle.
   pinned: boolean | undefined;
   onPin: (onRow: boolean) => void;
@@ -26,6 +28,7 @@ interface ArrangeScriptRowProps {
 // cell itself can't).
 export function ArrangeScriptRow({
   name,
+  label,
   pinned,
   onPin,
 }: ArrangeScriptRowProps) {
@@ -59,7 +62,7 @@ export function ArrangeScriptRow({
         {...attributes}
         {...listeners}
       >
-        <ScriptCellContent name={name} />
+        <ScriptCellContent label={label} />
       </div>
       {pinned !== undefined && (
         <button
@@ -80,10 +83,10 @@ export function ArrangeScriptRow({
 }
 
 export function ScriptDragPreview({
-  name,
+  label,
   pinned,
 }: {
-  name: string;
+  label: string;
   pinned: boolean | undefined;
 }) {
   return (
@@ -94,7 +97,7 @@ export function ScriptDragPreview({
       )}
     >
       <div className={HANDLE}>
-        <ScriptCellContent name={name} />
+        <ScriptCellContent label={label} />
       </div>
       {pinned !== undefined && (
         <span className={PIN}>
@@ -117,15 +120,15 @@ function PinIcon({ pinned }: { pinned: boolean }) {
   );
 }
 
-function ScriptCellContent({ name }: { name: string }) {
+function ScriptCellContent({ label }: { label: string }) {
   return (
     <>
       <GripVertical
         aria-hidden
         className="size-3 shrink-0 text-muted-foreground"
       />
-      <SimpleTooltip whenTruncated tip={name}>
-        <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
+      <SimpleTooltip whenTruncated tip={label}>
+        <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
       </SimpleTooltip>
     </>
   );
