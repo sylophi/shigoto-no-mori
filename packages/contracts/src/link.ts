@@ -19,7 +19,7 @@ import {
   callsOf,
   channelOf,
   type ContractModule,
-  isBroadcast,
+  isPush,
   Remote,
   nameOf,
   scopeOf,
@@ -34,7 +34,7 @@ import { controlContract } from "./modules/control.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract } from "./modules/link.ts";
-import type { BroadcastKeys, BroadcastProducerPayload } from "./types.ts";
+import type { PushKeys, PushProducerPayload } from "./types.ts";
 
 // One end of a byte channel, as the side that attached it sees it.
 export type ChannelEndpoint = {
@@ -97,10 +97,10 @@ export class LinkPeer extends Context.Service<
     readonly channels: LinkChannels;
     // A push for this peer alone (a move's progress), on the stream
     // the peer reads that push from.
-    readonly notify: <M extends ContractModule, K extends BroadcastKeys<M>>(
+    readonly notify: <M extends ContractModule, K extends PushKeys<M>>(
       module: M,
       key: K,
-      payload: BroadcastProducerPayload<M, K>,
+      payload: PushProducerPayload<M, K>,
     ) => void;
   }
 >()("sm/remote/LinkPeer") {}
@@ -162,7 +162,7 @@ const remoteCalls = [linkContract, ...allContractModules].flatMap((module) =>
   callsOf(module).filter(
     (call) =>
       annotation(call, Remote) === true ||
-      (isBroadcast(call) && scopeOf(module) === "host"),
+      (isPush(call) && scopeOf(module) === "host"),
   ),
 );
 

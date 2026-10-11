@@ -8,10 +8,7 @@ import {
   channelOf,
   type ContractModule,
 } from "@shigomori/contracts/contract";
-import type {
-  BroadcastKeys,
-  BroadcastProducerPayload,
-} from "@shigomori/contracts/types";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import type { Table } from "@shigomori/engine/StoreChanges";
 import * as Context from "effect/Context";
@@ -141,16 +138,16 @@ export const wrote =
     signal.kind === "store" && tables.some((table) => signal.tables.has(table));
 
 // A signal from a module's push whose payload `matches`.
-export const pushed = <M extends ContractModule, K extends BroadcastKeys<M>>(
+export const pushed = <M extends ContractModule, K extends PushKeys<M>>(
   module: M,
   key: K,
-  matches: (payload: BroadcastProducerPayload<M, K>) => boolean = () => true,
+  matches: (payload: PushProducerPayload<M, K>) => boolean = () => true,
 ) => {
   const channel = channelOf(callOf(module, key));
   return (signal: Signal): boolean =>
     signal.kind === "push" &&
     signal.push.channel === channel &&
-    matches(signal.push.payload as BroadcastProducerPayload<M, K>);
+    matches(signal.push.payload as PushProducerPayload<M, K>);
 };
 
 export const either =

@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { DeviceIdSchema } from "../hubProtocol.ts";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import {
   PortNumberSchema,
@@ -86,5 +86,5 @@ export const portForwardContract = defineContract(
   // Fired by the engine whenever the forward or conn set changes, so
   // the list query refreshes without polling. Payload-free on purpose:
   // the list read is cheap and one signal shape cannot drift.
-  broadcast("changed", VoidSchema),
+  push("changed", VoidSchema),
 );

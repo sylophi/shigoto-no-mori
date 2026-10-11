@@ -1,9 +1,6 @@
 import { Archive, FolderTree, Hammer, House } from "lucide-react";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import {
-  isAgentWorking,
-  type Worktree,
-} from "@shigomori/contracts/schemas/index";
+import { isAgentWorking, type Worktree } from "@shigomori/contracts/schemas";
 
 const KINDS = {
   primary: { Icon: House, label: "Primary checkout" },

@@ -29,7 +29,7 @@ import {
 } from "../views/palette/WorktreePaletteView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
-import type { Project, Worktree } from "@shigomori/contracts/schemas/index";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { forests, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { defaultBinding } from "../lib/keymap.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";

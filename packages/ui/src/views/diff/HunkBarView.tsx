@@ -1,7 +1,7 @@
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs";
 import { Undo2 } from "lucide-react";
 import { Checkbox } from "../../primitives/checkbox.tsx";
-import type { LineChange } from "@shigomori/contracts/schemas/index";
+import type { LineChange } from "@shigomori/contracts/schemas";
 import type { Ticked } from "./changesPicks.ts";
 
 // What the changes page hands the pane for the picked file when it

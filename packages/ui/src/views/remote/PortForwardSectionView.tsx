@@ -30,7 +30,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { parsePortNumber } from "@shigomori/contracts/schemas/index";
+import { parsePortNumber } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { Chip, ChipButton } from "../../primitives/chip-button.tsx";
 import { ExternalLink } from "../../primitives/external-link.tsx";

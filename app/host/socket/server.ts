@@ -37,7 +37,7 @@ import {
   channelOf,
   type ContractCall,
   Gated,
-  isBroadcast,
+  isPush,
   isInvoke,
   Remote,
 } from "@shigomori/contracts/contract";
@@ -772,7 +772,7 @@ export const make = (options: {
         for (const call of group.requests.values()) {
           const tag = channelOf(call);
           if (tag in handlers) continue;
-          if (isBroadcast(call)) {
+          if (isPush(call)) {
             handlers[tag] = push(
               tag,
               local || annotation(call, Remote) === true,
@@ -890,7 +890,7 @@ export const make = (options: {
               const tag = channelOf(rpc);
               if (
                 tag.startsWith("link:") ||
-                isBroadcast(rpc as ContractCall) ||
+                isPush(rpc as ContractCall) ||
                 (peer.deviceId !== undefined &&
                   auth.isInvited?.(peer.deviceId, tag, payload) === true)
               ) {

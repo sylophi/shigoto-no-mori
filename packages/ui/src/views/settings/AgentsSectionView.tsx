@@ -2,7 +2,7 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { StatusDot } from "../../primitives/status-dot.tsx";
-import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/index";
+import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
 import { tildify } from "@shigomori/contracts/projectPaths";
 
 // The hooks each agent harness runs to report its sessions (`sm agents

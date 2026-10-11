@@ -33,10 +33,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { pluralize } from "../../lib/pluralize.ts";
 import { cn } from "../../lib/utils.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
-import {
-  changeKey,
-  type ChangedFile,
-} from "@shigomori/contracts/schemas/index";
+import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";
 import {
   changedFilePaths,
   type DiffChangesControls,

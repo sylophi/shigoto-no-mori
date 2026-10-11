@@ -12,7 +12,7 @@ import { useNow } from "../../hooks/useNow.ts";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { cn } from "../../lib/utils.ts";
-import type { WorktreeDiskUsage } from "@shigomori/contracts/schemas/index";
+import type { WorktreeDiskUsage } from "@shigomori/contracts/schemas";
 import type { TidyEntry } from "./tidyModel.ts";
 import type { ReactNode } from "react";
 import { TidyEntryTitleView } from "./TidyEntryTitleView.tsx";

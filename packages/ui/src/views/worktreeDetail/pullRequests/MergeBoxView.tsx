@@ -18,7 +18,7 @@ import { cn } from "../../../lib/utils.ts";
 import type {
   MergeMethod,
   PullRequestDetail,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { ChecksPopoverView } from "./ChecksPopoverView.tsx";
 import { MergeStatusView } from "./MergeStatusView.tsx";
 import { ReviewsPopoverView } from "./ReviewsPopoverView.tsx";

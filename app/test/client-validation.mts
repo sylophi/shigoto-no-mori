@@ -6,11 +6,7 @@
 // covers: app/shared/ipc/transport.ts
 import assert from "node:assert/strict";
 import * as Schema from "effect/Schema";
-import {
-  broadcast,
-  defineContract,
-  invoke,
-} from "@shigomori/contracts/contract";
+import { push, defineContract, invoke } from "@shigomori/contracts/contract";
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { it } from "vitest";
@@ -22,7 +18,7 @@ const probeContract = defineContract(
     remote: true,
     gated: false,
   }),
-  broadcast("ticked", Schema.Struct({ at: Schema.Int }), { remote: true }),
+  push("ticked", Schema.Struct({ at: Schema.Int }), { remote: true }),
 );
 
 // A transport answering every invoke with `answer` and pushing each of
@@ -36,7 +32,7 @@ function wire(
     local,
     invoke: () => Promise.resolve(answer),
     subscribe: (_channel, handler) => {
-      for (const push of pushes) handler(push);
+      for (const payload of pushes) handler(payload);
       return () => {};
     },
   };

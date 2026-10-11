@@ -1,4 +1,4 @@
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { UpdaterStateSchema, VoidSchema } from "../schemas/index.ts";
 
 // The app updater, as a HOST module: the update is a fact about the
@@ -32,5 +32,5 @@ export const updaterContract = defineContract(
     gated: true,
     grant: "changeApp",
   }),
-  broadcast("state", UpdaterStateSchema, { remote: true }),
+  push("state", UpdaterStateSchema, { remote: true }),
 );

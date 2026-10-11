@@ -1,8 +1,5 @@
 import { Flame } from "lucide-react";
-import type {
-  NukeProgress,
-  NukeReport,
-} from "@shigomori/contracts/schemas/index";
+import type { NukeProgress, NukeReport } from "@shigomori/contracts/schemas";
 import { BlockingOverlay } from "../../primitives/blocking-overlay.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";

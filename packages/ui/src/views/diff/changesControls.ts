@@ -1,4 +1,4 @@
-import type { ChangedFile } from "@shigomori/contracts/schemas/index";
+import type { ChangedFile } from "@shigomori/contracts/schemas";
 import type { ChangesPicks } from "./changesPicks.ts";
 import type { HunkControls } from "./HunkBarView.tsx";
 

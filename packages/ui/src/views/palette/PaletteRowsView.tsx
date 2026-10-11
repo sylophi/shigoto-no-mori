@@ -15,7 +15,7 @@ import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { pluralize } from "../../lib/pluralize.ts";
 import { cn } from "../../lib/utils.ts";
 import { worktreeTitle } from "../../lib/worktreeTitle.ts";
-import { worktreeLastActivityAt } from "@shigomori/contracts/schemas/index";
+import { worktreeLastActivityAt } from "@shigomori/contracts/schemas";
 import type {
   PaletteEntry,
   PalettePage,

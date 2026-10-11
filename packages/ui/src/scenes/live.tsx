@@ -26,7 +26,7 @@ import {
 } from "../views/live/LivePageView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { peerReadOnlyNote } from "../lib/commandAccessCopy.ts";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   fakeRunningScripts,
   LOCAL_DEVICE_ID,

@@ -4,7 +4,7 @@
 import { defaultBinding } from "../lib/keymap.ts";
 import type { ReactNode } from "react";
 import { DEVICE_ICONS } from "@shigomori/contracts/deviceIcon";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
 import { CustomLauncherInputView } from "../views/shared/CustomLauncherInputView.tsx";
 import { DeviceChipView } from "../views/shared/DeviceChipView.tsx";

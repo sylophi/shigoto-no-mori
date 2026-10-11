@@ -2,7 +2,7 @@ import {
   isFromThisRepository,
   type PullRequest,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 type TitledWorktree = Pick<Worktree, "title" | "branch" | "primaryBranch">;
 type TitlePullRequest = Pick<

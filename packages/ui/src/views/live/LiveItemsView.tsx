@@ -10,7 +10,7 @@ import {
   SquareTerminal,
   X,
 } from "lucide-react";
-import type { AgentSession } from "@shigomori/contracts/schemas/index";
+import type { AgentSession } from "@shigomori/contracts/schemas";
 import { DeviceGlyphView } from "../shared/DeviceGlyphView.tsx";
 import { Button } from "../../primitives/button.tsx";
 import { RelativeDate } from "../../primitives/relative-date.tsx";

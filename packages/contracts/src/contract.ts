@@ -1,9 +1,8 @@
 // A contract module is an RpcGroup: one Rpc per call, tagged with its
 // channel (`<module>:<key>`), and the call's classification as
 // annotations on it, which the registrar and the transports read. An
-// invoke is a plain Rpc. A push (what the transport still calls a
-// broadcast) is a streaming Rpc with no payload, whose chunks are its
-// payloads. A view is a streaming Rpc with a payload (VoidSchema when it
+// invoke is a plain Rpc. A push is a streaming Rpc with no payload,
+// whose chunks are its payloads. A view is a streaming Rpc with a payload (VoidSchema when it
 // takes nothing): what a query answers, then again each time it
 // changes. Only the RPC transport serves views.
 import * as Context from "effect/Context";
@@ -140,7 +139,7 @@ export const invoke = <
     typeof CallFailureSchema
   >;
 
-export const broadcast = <const Key extends string, P extends ContractSchema>(
+export const push = <const Key extends string, P extends ContractSchema>(
   key: Key,
   payload: P,
   options: { readonly remote?: boolean } = {},
@@ -314,7 +313,7 @@ export function channelOf(call: ContractCall): string {
 
 // Read off the AST's tag, not by identity: the renderer's bundle can
 // hold two copies of effect, and each has its own Schema.Void.
-export function isBroadcast(call: ContractCall): boolean {
+export function isPush(call: ContractCall): boolean {
   return (
     RpcSchema.isStreamSchema(call.successSchema) &&
     SchemaAST.isVoid(call.payloadSchema.ast)

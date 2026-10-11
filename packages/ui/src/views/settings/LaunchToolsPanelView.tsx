@@ -4,7 +4,7 @@ import {
   launcherIdFor,
   TERMINAL_IDS,
   type DetectedLauncher,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { LauncherIconView } from "../shared/LauncherIconView.tsx";
 import {

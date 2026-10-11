@@ -6,7 +6,7 @@ import { Input } from "../../primitives/input.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { IconButton } from "../../primitives/icon-button.tsx";
 
 // One local branch: its name, renamed in place, the worktree it is
