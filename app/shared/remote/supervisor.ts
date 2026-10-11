@@ -3,7 +3,7 @@
 // owner of retry for a connection: nothing else
 // drives the connect function for it, so there is exactly one fiber
 // and one restart schedule per connection, never a fan of overlapping
-// reconnect loops.
+// reconnect loops. It runs for the length of the scope it is made in.
 //
 // State machine, copying t3's discipline:
 //   idle -> connecting -> connected -> backoff -> connecting -> ...
@@ -17,17 +17,17 @@
 //
 // Deterministic on purpose: the ladder is fixed with no random jitter
 // (the renderer runtime forbids Math.random anyway), and time is the
-// Clock of the context the loop runs in, so a test on a TestClock
-// asserts the ladder and the reset without sleeping real seconds.
+// Clock of the context the supervisor is made in, so a test on a
+// TestClock asserts the ladder and the reset without sleeping real
+// seconds.
 import * as Clock from "effect/Clock";
-import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import type * as Scope from "effect/Scope";
 import { HubUpdateRequiredError } from "@shigomori/contracts/hubApi";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
@@ -49,21 +49,23 @@ export const STABLE_CONNECTION_MS = 30_000;
 // loopback.
 export type SupervisorStatus = HubStatus["socket"];
 
-// The part of an established connection the supervisor and its owner
-// touch: the owner close, the probe, and the remote identity the
-// connected status names.
+// The part of an established connection the supervisor's owner
+// touches: the probe, and the remote identity the connected status
+// names.
 export type SupervisedConnection = Pick<
   DeviceConnection,
-  "close" | "probe" | "remoteDeviceId" | "remoteAppVersion"
+  "probe" | "remoteDeviceId" | "remoteAppVersion"
 >;
 
 // The connect function: one attempt, handed the supervisor's close
-// handler, resolving with the established connection. The owner (the
-// hub connection) supplies it, and a test can drive a stub instead of
-// a real socket.
-export type ConnectFn = (
+// handler, answering with the established connection, which lives as
+// long as the scope it was opened in: the supervisor closes that scope
+// once the connection dropped or the supervisor's own scope closes.
+// The owner (the hub connection) supplies it, and a test can drive a
+// stub instead of a real socket.
+type ConnectFn = (
   onClose: (code: number | null) => void,
-) => Promise<SupervisedConnection>;
+) => Effect.Effect<SupervisedConnection, unknown, Scope.Scope>;
 
 // The block-vs-retry verdict for a close code, injected because each
 // wire has its own terminal codes. A non-null verdict blocks with its
@@ -94,8 +96,6 @@ export type CloseClassifier = (
 
 type SupervisorOptions = {
   connect: ConnectFn;
-  // What the loop runs in: the app's, or a test's with a TestClock.
-  context?: Context.Context<never>;
   classifyClose: CloseClassifier;
   // Status observer for a device registry / a live UI.
   onStatus?: (status: SupervisorStatus) => void;
@@ -106,8 +106,6 @@ type SupervisorOptions = {
 };
 
 export type Supervisor = {
-  start(): void;
-  stop(): void;
   // The network is back, or the machine awake: a backoff wait ends now
   // and the next attempt starts, instead of after the rest of its rung.
   // Does nothing outside a backoff.
@@ -189,62 +187,35 @@ export function backoffDelayMs(
   return ladder[index] ?? ladder[0];
 }
 
-export function createSupervisor(options: SupervisorOptions): Supervisor {
-  const classifyClose = options.classifyClose;
-  const run = Effect.runForkWith(options.context ?? Context.empty());
+// The supervisor, dialing from the moment it is made until its scope
+// closes, which ends the connection it holds and reports "stopped".
+export const supervise = (
+  options: SupervisorOptions,
+): Effect.Effect<Supervisor, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const { classifyClose } = options;
+    const setStatus = (next: SupervisorStatus) =>
+      Effect.sync(() => options.onStatus?.(next));
 
-  let status: SupervisorStatus = { phase: "idle" };
-  let loop: Fiber.Fiber<never> | null = null;
+    // Terminal until the owner's next refresh, which drops and recreates
+    // the supervisor: that is what unblocks.
+    const block = (reason: BlockReason, message: string) =>
+      setStatus({ phase: "blocked", reason, message }).pipe(
+        Effect.andThen(Effect.never),
+      );
 
-  const setStatus = (next: SupervisorStatus) =>
-    Effect.sync(() => {
-      status = next;
-      options.onStatus?.(next);
-    });
-
-  // Terminal until the owner's next refresh, which drops and recreates
-  // the supervisor: that is what unblocks.
-  const block = (reason: BlockReason, message: string) =>
-    setStatus({ phase: "blocked", reason, message }).pipe(
-      Effect.andThen(Effect.never),
-    );
-
-  // One connection's life: the connect, then the socket until it
-  // closes. Answers how long it stayed up, which the restart schedule
-  // reads (a failed attempt never counts as a stable connection), or
-  // blocks for good.
-  // Interruptible only while it waits (the connect, the open socket,
-  // a block): a stop between the connect landing and the socket's wait
-  // still closes the socket.
-  const attempt = Effect.uninterruptibleMask((restore) =>
-    Effect.gen(function* () {
+    // One connection's life: the connect, then the socket until it
+    // closes, in a scope of its own that ends the socket. Answers how
+    // long it stayed up, which the restart schedule reads (a failed
+    // attempt never counts as a stable connection), or blocks for good.
+    const attempt = Effect.gen(function* () {
       yield* setStatus({ phase: "connecting" });
       const closed = yield* Deferred.make<number | null>();
-      const connected = yield* restore(
-        Effect.callback<Result.Result<SupervisedConnection, unknown>>(
-          (resume) => {
-            let orphaned = false;
-            // Fires only for a socket that dropped on its own: the
-            // transport suppresses this for an owner-initiated close.
-            Promise.resolve()
-              .then(() =>
-                options.connect((code) =>
-                  Deferred.doneUnsafe(closed, Exit.succeed(code)),
-                ),
-              )
-              .then(
-                (connection) => {
-                  // Torn down while the handshake was in flight: the
-                  // orphan is closed so it does not leak a live socket.
-                  if (orphaned) connection.close();
-                  else resume(Effect.succeed(Result.succeed(connection)));
-                },
-                (error: unknown) => resume(Effect.succeed(Result.fail(error))),
-              );
-            return Effect.sync(() => {
-              orphaned = true;
-            });
-          },
+      // Fires only for a socket that dropped on its own: the connection
+      // stays silent for the close its scope makes.
+      const connected = yield* Effect.result(
+        options.connect((code) =>
+          Deferred.doneUnsafe(closed, Exit.succeed(code)),
         ),
       );
       if (Result.isFailure(connected)) {
@@ -265,61 +236,44 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
                   message: error.refusal.message,
                 }
               : { reason: "refused" as const, message: error.message });
-          return yield* restore(block(verdict.reason, verdict.message));
+          return yield* block(verdict.reason, verdict.message);
         }
         return 0;
       }
       const connection = connected.success;
-      return yield* Effect.gen(function* () {
-        const connectedAt = yield* Clock.currentTimeMillis;
-        yield* setStatus({
-          phase: "connected",
-          remoteDeviceId: connection.remoteDeviceId,
-          remoteAppVersion: connection.remoteAppVersion,
-        });
-        options.onConnection?.(connection);
-        const code = yield* restore(Deferred.await(closed));
-        options.onConnection?.(null);
-        const verdict = classifyClose(code);
-        if (verdict !== null) {
-          return yield* restore(block(verdict.reason, verdict.message));
-        }
-        return (yield* Clock.currentTimeMillis) - connectedAt;
-      }).pipe(Effect.onInterrupt(() => Effect.sync(() => connection.close())));
-    }),
-  );
+      const connectedAt = yield* Clock.currentTimeMillis;
+      yield* setStatus({
+        phase: "connected",
+        remoteDeviceId: connection.remoteDeviceId,
+        remoteAppVersion: connection.remoteAppVersion,
+      });
+      options.onConnection?.(connection);
+      const code = yield* Deferred.await(closed).pipe(
+        Effect.ensuring(Effect.sync(() => options.onConnection?.(null))),
+      );
+      const verdict = classifyClose(code);
+      if (verdict !== null)
+        return yield* block(verdict.reason, verdict.message);
+      return (yield* Clock.currentTimeMillis) - connectedAt;
+    }).pipe(Effect.scoped);
 
-  const wake = makeWake();
-  const supervise = attempt.pipe(
-    Effect.repeat(
-      restartSchedule(BACKOFF_LADDER_MS).pipe(
-        Schedule.tap(({ output, duration }) =>
-          setStatus({
-            phase: "backoff",
-            attempt: output,
-            delayMs: Duration.toMillis(duration),
-          }),
+    const wake = makeWake();
+    // Registered first, so it runs once the loop has stopped.
+    yield* Effect.addFinalizer(() => setStatus({ phase: "stopped" }));
+    yield* attempt.pipe(
+      Effect.repeat(
+        restartSchedule(BACKOFF_LADDER_MS).pipe(
+          Schedule.tap(({ output, duration }) =>
+            setStatus({
+              phase: "backoff",
+              attempt: output,
+              delayMs: Duration.toMillis(duration),
+            }),
+          ),
+          wakeable(wake),
         ),
-        wakeable(wake),
       ),
-    ),
-    Effect.andThen(Effect.never),
-  );
-
-  return {
-    start(): void {
-      if (loop !== null) return;
-      loop = run(supervise);
-    },
-    stop(): void {
-      if (loop === null && status.phase === "stopped") return;
-      const stopping = loop;
-      loop = null;
-      if (stopping !== null) run(Fiber.interrupt(stopping));
-      options.onConnection?.(null);
-      status = { phase: "stopped" };
-      options.onStatus?.(status);
-    },
-    dialNow: wake.now,
-  };
-}
+      Effect.forkScoped,
+    );
+    return { dialNow: wake.now };
+  });

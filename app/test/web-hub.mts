@@ -24,7 +24,7 @@ import {
   NO_LISTENER_CODE,
   type ServeConnectInfo,
 } from "@shared/hub/link";
-import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
+import { make as createWebConnection } from "../web/hub/connection.ts";
 import { it } from "vitest";
 import { type Track, waitFor } from "./lib/checkKit.mts";
 import {
@@ -122,7 +122,7 @@ it("presence: the web client's status learns a peer is online and drops it when 
     false,
     "the web client listed itself as an online peer",
   );
-  await b.connection.stop();
+  await b.stop();
   await waitFor(
     () => !a.connection.status().onlineDeviceIds.includes("B"),
     "web A to see B leave",

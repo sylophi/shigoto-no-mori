@@ -1,8 +1,8 @@
-// The node hub connection: the shared lifecycle
-// core in shared/hub/connection.ts bound to the node `ws` client,
-// owned by the host process, asking peers for their connect info and
-// answering theirs. Deliberately NOT a ServerTransport: the wire
-// answers one question, handed in at creation as a function, so
+// The node hub connection: the shared lifecycle core in
+// shared/hub/connection.ts bound to the node `ws` client, owned by the
+// host process (host/process/wires.ts), asking peers for their connect
+// info and answering theirs. Deliberately NOT a ServerTransport: the
+// wire answers one question, handed in at creation as a function, so
 // re-adding the hub to a wire loop that expects a ServerTransport is a
 // type error rather than a discouraged one-liner.
 //
@@ -11,60 +11,18 @@
 // credential-backed ticket mint) arrives through HubConnectOpts, which
 // the host composes.
 import { WebSocket } from "ws";
-import { HubLinkDownError, type ServeConnectInfo } from "@shared/hub/link";
-import {
-  createHubConnectionCore,
-  type HubSocketAdapter,
-} from "@shared/hub/connection";
-import type { HeartbeatOptions } from "@shared/hub/heartbeat";
+import { HubLinkDownError } from "@shared/hub/link";
+import * as Shared from "@shared/hub/connection";
 import { MAX_HUB_MESSAGE_BYTES } from "@shigomori/contracts/hubProtocol";
-import type {
-  HubConnectOpts,
-  HubConnectionStatus,
-} from "@shared/hub/connectionTypes";
-import type { KeyPair } from "@shared/crypto/noise";
 import { toText } from "./rawData";
 
-export type HubConnectionOpts = {
-  // Answers peers' connectInfo asks (host/process/wires.ts wires the
-  // direct listener's). Absent on a dial-only device (the check
-  // fixtures'), whose link refuses every ask as serving no listener.
-  serveConnectInfo?: ServeConnectInfo;
-  // Fired on every supervisor or presence transition, so the owner can
-  // fan a status snapshot out to its windows.
-  onChange?: () => void;
-  // Test seams for the liveness heartbeat (shared/hub/connection.ts).
-  heartbeat?: HeartbeatOptions;
-};
-
-export type HubConnectionBinding = {
-  // Asks a peer for its connect info (HubLink.askConnectInfo). Rejects
-  // with HubLinkDownError while the socket is down.
-  askConnectInfo(
-    deviceId: string,
-    input: unknown,
-    timeoutMs: number,
-  ): Promise<unknown>;
-  // Reconciles the connection with the wanted state. The resolver runs
-  // INSIDE the serialized lifecycle, and null means stop (signed out or
-  // unconfigured).
-  refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
-  stop(): Promise<void>;
-  status(): HubConnectionStatus;
-  // The wake-time liveness probe (shared/hub/connection.ts).
-  probe(): void;
-  // This device's key pair and a peer's roster key, for the device
-  // link's handshakes (shared/hub/connection.ts).
-  localKey(): KeyPair | null;
-  peerKey(deviceId: string): Uint8Array | undefined;
-  rosterKnown(): boolean;
-};
+export type HubConnectionOpts = Omit<Shared.HubConnectionDeps, "openSocket">;
 
 // The node ws half of the shared socket adapter. Everything ws-specific
 // lives here: the inbound payload bound, the disabled compression, the
 // RawData decode, and the hard terminate the shared core prefers for
 // orphan sockets and arms after an owner close.
-function openWsSocket(url: string): HubSocketAdapter {
+function openWsSocket(url: string): Shared.HubSocketAdapter {
   // Bound inbound buffering at the DO's own forwarding limit (nothing
   // it sends is larger: relays are measured against it and a full
   // presence roster fits under it), and disable perMessageDeflate so a
@@ -116,13 +74,9 @@ function openWsSocket(url: string): HubSocketAdapter {
   };
 }
 
-export function createHubConnection(
-  opts: HubConnectionOpts,
-): HubConnectionBinding {
-  return createHubConnectionCore({
-    openSocket: openWsSocket,
-    onChange: opts.onChange,
-    heartbeat: opts.heartbeat,
-    serveConnectInfo: opts.serveConnectInfo,
-  });
-}
+// The connection, for the length of the scope it is made in.
+// `serveConnectInfo` answers peers' connectInfo asks (wires.ts wires the
+// direct listener's). Absent on a dial-only device (the check
+// fixtures'), whose link refuses every ask as serving no listener.
+export const make = (opts: HubConnectionOpts) =>
+  Shared.make({ ...opts, openSocket: openWsSocket });

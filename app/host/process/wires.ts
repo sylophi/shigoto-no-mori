@@ -36,7 +36,8 @@ import type {
   EffectServerTransport,
   HandlerContext,
 } from "@shared/ipc/transport";
-import { createDirectPlane } from "@shared/hub/directPlane";
+import * as DirectPlane from "@shared/hub/directPlane";
+import type { HubConnection } from "@shared/hub/connection";
 import { logFailure } from "@shared/log";
 import {
   CLOUDFLARED_BINARY_NAME,
@@ -46,7 +47,8 @@ import * as TunnelService from "@host/direct/cloudflared";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
-import { createHubConnection } from "@host/hub/connection";
+import * as HubConnectionNode from "@host/hub/connection";
+import { LayerDownError, layerLatch } from "@host/lib/util/layerLatch";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
@@ -91,17 +93,22 @@ export const deviceLinkLayer = () =>
         check: (ticket, arrivedAs) => {
           const deviceId = directTickets.check(ticket, arrivedAs);
           if (deviceId === null) return null;
-          if (!hubServer.rosterKnown()) return ROSTER_UNAVAILABLE;
-          const publicKey = hubServer.peerKey(deviceId);
+          const hub = remote.now()?.hub;
+          if (hub === undefined || !hub.rosterKnown()) {
+            return ROSTER_UNAVAILABLE;
+          }
+          const publicKey = hub.peerKey(deviceId);
           return publicKey === undefined ? null : { deviceId, publicKey };
         },
         spend: (ticket, arrivedAs) => directTickets.consume(ticket, arrivedAs),
         keepDevices: (deviceIds) => directTickets.keepDevices(deviceIds),
-        keyOf: (deviceId) =>
-          hubServer.rosterKnown()
-            ? hubServer.peerKey(deviceId)
-            : ROSTER_UNAVAILABLE,
-        localKey: () => hubServer.localKey(),
+        keyOf: (deviceId) => {
+          const hub = remote.now()?.hub;
+          return hub?.rosterKnown() === true
+            ? hub.peerKey(deviceId)
+            : ROSTER_UNAVAILABLE;
+        },
+        localKey: () => remote.now()?.hub.localKey() ?? null,
       },
       isCommandGranted: acceptsPeerCommands,
       // The switches' one exception: the mirrors this device asked for.
@@ -161,7 +168,7 @@ export const tunnelLayer = () =>
     pidFilePath: () => join(hostFacts().userDataPath, "cloudflared.pid"),
     // Tunnel state rides the hub status snapshot, so the account
     // page updates live.
-    onChange: () => directPlane().notifyStatusChanged(),
+    onChange: () => remote.now()?.plane.notifyStatusChanged(),
   });
 
 // The device link again, on loopback, for the processes on this
@@ -203,46 +210,15 @@ export function onPeerPush(listener: PeerPushListener): () => void {
   };
 }
 
-// The direct plane (shared/hub/directPlane.ts): the dialer, the
-// window-facing hub handlers, the status snapshot and the presence
-// reconcile, assembled identically for the web bridge. Built on first
-// use, since its dialable kinds read a fact.
-let plane: ReturnType<typeof createDirectPlane> | undefined;
-const directPlane = () =>
-  (plane ??= createDirectPlane({
-    connection: () => hubServer,
-    localDeviceId: deviceIdNow,
-    localAppVersion: () => hostFacts().appVersion,
-    broadcastStatus: (status) =>
-      broadcastAll(hubContract, "statusChanged", status),
-    broadcastPeerPush: (push) => {
-      broadcastAll(hubContract, "peerPush", push);
-      for (const listener of peerPushListeners) listener(push);
-    },
-    // The candidate sockets ride the `ws` package so a failed dial names
-    // its errno (see OpenClientSocket in shared/remote/deviceLink.ts).
-    // Neither ws nor Node's global sends an Origin header, so the
-    // peer's upgrade gate reads the two identically. No
-    // permessage-deflate: the link's frames are ciphertext, which does
-    // not compress.
-    openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
-    dialableKinds: devDialKinds(hostFacts().packaged),
-    host: {
-      // A device the roster dropped loses its links and the tickets it
-      // was handed but has not spent (DeviceLink.closePeersNotIn).
-      closeHostPeersNotIn: (online) =>
-        void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online))),
-      tunnelState: () =>
-        Graph.readNow(
-          onTunnel((tunnel) => tunnel.status),
-          () => ({ state: "off" as const, hostname: null }),
-        ).state,
-    },
-  }));
-
 // The window-facing hub module, which also lends its invokeOnPeer to
 // the host's peer reach (handlers.ts).
-export const hubHandlers = () => directPlane().handlers;
+export const hubHandlers = () => {
+  const up = remote.now();
+  if (up === undefined) {
+    throw new LayerDownError({ name: "The device hub", reason: "is not up" });
+  }
+  return up.plane.handlers;
+};
 
 // The answer to a peer's connectInfo ask (host/direct/connectInfo.ts),
 // the one question the device hub carries, with the switches the
@@ -271,15 +247,64 @@ const serveConnectInfo = makeConnectInfo({
     ),
 });
 
-// The hub connection: connecting itself is gated in
-// refreshHubConnection below (signed out or unconfigured means no
-// socket). Its status transitions go to the direct plane, which fans a
-// snapshot out and reconciles direct-session presence on each. Peer
-// pushes arrive over direct sessions only, never over the device hub.
-const hubServer = createHubConnection({
-  serveConnectInfo,
-  onChange: () => directPlane().handleConnectionChange(),
-});
+// The hub socket and the direct plane (shared/hub/directPlane.ts) it
+// brokers, for the length of the graph: the dialer, the window-facing
+// hub handlers, the status snapshot and the presence reconcile,
+// assembled identically for the web bridge. Connecting itself is gated
+// in refreshHubConnection below (signed out or unconfigured means no
+// socket). The hub's status transitions go to the direct plane, which
+// fans a snapshot out and reconciles direct-session presence on each.
+// Peer pushes arrive over direct sessions only, never over the device
+// hub. Closing it closes the socket, so the Durable Object sees a clean
+// departure instead of waiting out a dead connection, and then the
+// outbound links, or each remote host would keep a dead socket in its
+// per-device slot and land the next start on the supersede path
+// instead of a clean reconnect.
+const remote = layerLatch<{
+  readonly hub: HubConnection;
+  readonly plane: DirectPlane.DirectPlane;
+}>("The device hub");
+export const remotePlanesLayer = Layer.effectDiscard(
+  remote.provide(
+    Effect.gen(function* () {
+      const plane: DirectPlane.DirectPlane = yield* DirectPlane.make({
+        connection: () => hub,
+        localDeviceId: deviceIdNow,
+        localAppVersion: () => hostFacts().appVersion,
+        broadcastStatus: (status) =>
+          broadcastAll(hubContract, "statusChanged", status),
+        broadcastPeerPush: (push) => {
+          broadcastAll(hubContract, "peerPush", push);
+          for (const listener of peerPushListeners) listener(push);
+        },
+        // The candidate sockets ride the `ws` package so a failed dial
+        // names its errno (see OpenClientSocket in
+        // shared/remote/deviceLink.ts). Neither ws nor Node's global
+        // sends an Origin header, so the peer's upgrade gate reads the
+        // two identically. No permessage-deflate: the link's frames are
+        // ciphertext, which does not compress.
+        openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
+        dialableKinds: devDialKinds(hostFacts().packaged),
+        host: {
+          // A device the roster dropped loses its links and the tickets
+          // it was handed but has not spent (DeviceLink.closePeersNotIn).
+          closeHostPeersNotIn: (online) =>
+            void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online))),
+          tunnelState: () =>
+            Graph.readNow(
+              onTunnel((tunnel) => tunnel.status),
+              () => ({ state: "off" as const, hostname: null }),
+            ).state,
+        },
+      });
+      const hub: HubConnection = yield* HubConnectionNode.make({
+        serveConnectInfo,
+        onChange: () => plane.handleConnectionChange(),
+      });
+      return { hub, plane };
+    }),
+  ),
+);
 
 // The loopback serves every host call. The device link serves a call
 // only when it opted into remote exposure, so a host call that is not
@@ -393,22 +418,32 @@ export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
 // is a log line: a connect problem must never fail the account change
 // that triggered it.
 export async function refreshHubConnection(): Promise<void> {
-  await logFailure("[hub] connection refresh failed", () =>
-    hubServer.refresh(async () => {
-      const inputs = hubConnectInputs();
-      if (inputs === null) return null;
-      return {
-        hubUrl: inputs.hubUrl,
-        // A different account rotates the credential, so accountId is
-        // in the opts to force a reconnect onto the new account's object
-        // instead of leaving the old socket live.
-        accountId: inputs.accountId,
-        deviceKey: inputs.deviceKey,
-        mintTicket: inputs.mintTicket,
-        deviceId: await Graph.run(DeviceId.current),
-      };
-    }),
-  );
+  await Graph.run(
+    Effect.flatMap(
+      Effect.all([remote.get, DeviceId.current]),
+      ([{ hub }, thisDevice]) =>
+        hub.refresh(
+          Effect.sync(() => {
+            const inputs = hubConnectInputs();
+            if (inputs === null) return null;
+            return {
+              hubUrl: inputs.hubUrl,
+              // A different account rotates the credential, so accountId is
+              // in the opts to force a reconnect onto the new account's
+              // object instead of leaving the old socket live.
+              accountId: inputs.accountId,
+              deviceKey: inputs.deviceKey,
+              mintTicket: inputs.mintTicket,
+              deviceId: thisDevice,
+            };
+          }),
+        ),
+    ).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("[hub] connection refresh failed", cause),
+      ),
+    ),
+  ).catch(() => undefined);
   // The listener follows the same enrollment condition, so it
   // reconciles on exactly the hub's cadence. Folded here so call sites
   // cannot forget one half.
@@ -422,26 +457,13 @@ export function clearDirectTickets(): void {
   directTickets.clear();
 }
 
-// Closes the hub socket at quit, so the Durable Object sees a clean
-// departure instead of waiting out a dead connection.
-export function stopHubConnection(): Promise<void> {
-  return hubServer.stop();
-}
-
 // The wake-time liveness probe for the hub socket and every direct
 // session: a socket that died while the machine slept gets its verdict
 // within the probe window and redials at once.
 export function probeRemoteConnections(): void {
-  hubServer.probe();
-  directPlane().probe();
-}
-
-// Quit's teardown beside stopHubConnection: closes the outbound links,
-// or each remote host would keep a dead socket in its per-device slot
-// and land the next start on the supersede path instead of a clean
-// reconnect. The listener closes with its layer.
-export function stopDirectHost(): void {
-  directPlane().stop();
+  const up = remote.now();
+  up?.hub.probe();
+  up?.plane.probe();
 }
 
 // Reconciles the listener with the account and the device's config: run

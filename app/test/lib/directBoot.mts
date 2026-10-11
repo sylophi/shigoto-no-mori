@@ -10,7 +10,10 @@ import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import * as DeviceLink from "@host/socket/server";
 import type { WsServerStartOpts } from "@host/socket/server";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -27,9 +30,9 @@ import {
 } from "@host/direct/tickets";
 import type { HubHandlers } from "@shared/hub/bridgeHandlers";
 import {
-  createDirectPlane,
   type DirectPlane,
   type DirectPlaneDeps,
+  make as makeDirectPlane,
 } from "@shared/hub/directPlane";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
@@ -70,23 +73,31 @@ const DIAL_DEADLINE_MS = 3000;
 
 // The listener as a proof drives it: the registrar it serves, its calls
 // Promise handlers (a ServerTransport, for registerContract and
-// broadcastAll), and the listener's own state.
-type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
-  Pick<ServerTransport, "handle"> & {
-    // A call as the host serves it, an effect (registerHostContract).
-    serve: DeviceLink.LinkRegistrar["handle"];
-    // A push from the host, as the host's broadcastAll publishes it.
-    broadcastAll(
-      channel: string,
-      payload: unknown,
-      opts?: { remote?: boolean },
-    ): void;
-    status(): { listening: boolean; port: number | null };
-    closePeersNotIn(online: readonly string[]): Promise<void>;
-    // Brings the listener to `opts` (null stops it), as the host's refresh
-    // does.
-    reconcile(opts: WsServerStartOpts | null): Promise<void>;
-  };
+// broadcastAll) each handed a signal that aborts when the call is
+// interrupted, and the listener's own state.
+type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> & {
+  handle(
+    channel: string,
+    fn: (
+      ctx: HandlerContext & { readonly signal: AbortSignal },
+      raw: unknown,
+    ) => Promise<unknown>,
+    opts?: Parameters<ServerTransport["handle"]>[2],
+  ): void;
+  // A call as the host serves it, an effect (registerHostContract).
+  serve: DeviceLink.LinkRegistrar["handle"];
+  // A push from the host, as the host's broadcastAll publishes it.
+  broadcastAll(
+    channel: string,
+    payload: unknown,
+    opts?: { remote?: boolean },
+  ): void;
+  status(): { listening: boolean; port: number | null };
+  closePeersNotIn(online: readonly string[]): Promise<void>;
+  // Brings the listener to `opts` (null stops it), as the host's refresh
+  // does.
+  reconcile(opts: WsServerStartOpts | null): Promise<void>;
+};
 
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;
@@ -348,7 +359,9 @@ export type BridgeOpts = {
   onPeerPush?: DirectPlaneDeps["broadcastPeerPush"];
   dialableKinds?: DirectPlaneDeps["dialableKinds"];
   deadlineMs?: number;
-  keeper?: DirectPlaneDeps["keeper"];
+  // What the plane is made in: a check's TestClock, so its keeper's
+  // retries are advanced by hand instead of slept out.
+  context?: Context.Context<never>;
   // The plane's presence path wired to the dialer's hub connection as
   // production wires it (late-bound, plus one catch-up call for the
   // roster that connected before the plane existed), so the keeper
@@ -361,6 +374,8 @@ export type Bridged = {
   dialer: BootedDevice;
   plane: DirectPlane;
   bridge: HubHandlers;
+  // Closes the plane's scope: its keeper latched, its sessions closed.
+  stop(): Promise<void>;
 };
 
 // The dialer bridged to `listener` through a stub device hub of its
@@ -404,13 +419,13 @@ export async function bridgeTo(
     ),
     bootDevice(stub, DIALER, { onChange: () => onPlaneChange?.() }, track),
   ]);
-  const { plane, bridge } = makeDirectBridge(dialer, opts);
-  track(() => plane.stop());
+  const { plane, bridge, stop } = makeDirectBridge(dialer, opts);
+  track(stop);
   if (opts.supervised === true) {
     onPlaneChange = () => plane.handleConnectionChange();
     plane.handleConnectionChange();
   }
-  return { stub, dialer, plane, bridge };
+  return { stub, dialer, plane, bridge, stop };
 }
 
 export type ServedContracts<C extends readonly ContractModule[]> = {
@@ -485,19 +500,21 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
 
 export type DirectBridgeOpts = Pick<
   BridgeOpts,
-  "onStatusChange" | "onPeerPush" | "dialableKinds" | "deadlineMs" | "keeper"
+  "onStatusChange" | "onPeerPush" | "dialableKinds" | "deadlineMs" | "context"
 >;
 
 // The dialer's composition under test: the REAL direct plane (dialer
 // over the connection's connectInfo ask, bridge cache over the dialer)
 // exactly as the host and the web bridge assemble it, over any hub
 // connection, for a check whose peer is no listener (a wedged or raw
-// one). The fan-out sinks are observation seams the scenarios read.
+// one). The fan-out sinks are observation seams the scenarios read. The
+// plane lives until `stop`.
 export function makeDirectBridge(
   dialer: Pick<BootedDevice, "connection">,
   opts: DirectBridgeOpts = {},
-): { plane: DirectPlane; bridge: HubHandlers } {
-  const plane = createDirectPlane({
+): { plane: DirectPlane; bridge: HubHandlers; stop: () => Promise<void> } {
+  const scope = Scope.makeUnsafe();
+  const make = makeDirectPlane({
     connection: () => dialer.connection,
     localDeviceId: () => DIALER,
     localAppVersion: () => "1.0.0",
@@ -509,11 +526,13 @@ export function makeDirectBridge(
     // of Node's global.
     openSocket: (url) => new WsClient(url),
     deadlineMs: opts.deadlineMs ?? DIAL_DEADLINE_MS,
-    // The keeper's clock/ladder seam, so retry scenarios advance a
-    // TestClock instead of sleeping the real ladder out.
-    keeper: opts.keeper,
-  });
-  return { plane, bridge: plane.handlers };
+  }).pipe(Scope.provide(scope));
+  const plane = Effect.runSyncWith(opts.context ?? Context.empty())(make);
+  return {
+    plane,
+    bridge: plane.handlers,
+    stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+  };
 }
 
 export type PeerTransport = {

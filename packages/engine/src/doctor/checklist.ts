@@ -168,7 +168,7 @@ export const makeChecklist = ({
             );
       }).pipe(Effect.provideContext(platform));
 
-    return { checkEnvironment, checkProcesses, checkAll };
+    return { checkEnvironment, checkOrphanTunnel, checkAll };
   });
 
 export type ChecklistArea = Effect.Success<ReturnType<typeof makeChecklist>>;

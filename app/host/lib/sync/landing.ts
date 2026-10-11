@@ -3,8 +3,10 @@
 // against a link to the source (move.ts), a send asks the peer to run
 // it (sync:receiveWorktree, landForSender below) against a link the
 // sender answers on. The source's side is sourceLink.ts.
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
@@ -36,7 +38,7 @@ import {
   findProjectByIdentityOrFail,
 } from "@host/lib/projects";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
-import { cancellable } from "@host/lib/sync/moves";
+import { MoveCancelledError } from "@host/lib/sync/Moves";
 import {
   attachLinkFarEnd,
   incomingRefFor,
@@ -48,7 +50,6 @@ import { notifierFor } from "@host/ipc/modules/worktrees";
 import type { EffectHandlers } from "@shared/ipc/registerContract";
 import type { HostServices } from "@host/process/services";
 import { landInvitedMirror } from "@host/mirror/invites";
-import { onAbort } from "@host/lib/util/abort";
 
 // The branch the landing asked for is gone from the source.
 class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
@@ -177,10 +178,10 @@ export type Landing = {
 // rather than failing: the worktree and branch are real and useful,
 // and the dirty state is still safe on the source device.
 //
-// An interrupt (the move's cancel) fails whichever step is waiting
-// (the link's question, the engine's create, through `signal`), and
-// the worktree the create made is removed by its finalizer, registered
-// in `move` so a cancel at any later step of the move removes it too.
+// An interrupt (the move's cancel) stops whichever step is waiting
+// (the link's question, the engine's create), and the worktree the
+// create made is removed by its finalizer, registered in `move` so a
+// cancel at any later step of the move removes it too.
 // The destination is then as it was, bar a clone that got registered
 // (which stays, a checkout at the place the user named) and a capture
 // ref a retry overwrites.
@@ -189,7 +190,6 @@ export const landWorktree = (
   landing: Landing,
   ctx: HandlerContext,
   progress: (frame: ProgressFrame) => void,
-  signal: AbortSignal,
   move: Scope.Scope,
 ) =>
   Effect.gen(function* () {
@@ -321,7 +321,6 @@ export const landWorktree = (
         },
         ctx,
         progress,
-        signal,
         move,
       );
       const captureTree =
@@ -353,42 +352,49 @@ export const landWorktree = (
 // the same wall the pull stands behind, so a send structurally
 // cannot land in a repo that is not the sender's. Its cancel is the
 // link: a sender that gives up (its own cancel, or its caller gone)
-// tears the link down, and the landing runs under that as well as
-// under this connection, so the create here dies with its setup
-// script and the copy goes.
+// tears the link down, and the landing is interrupted by that as well
+// as by this call's, so the create here dies with its setup script and
+// the copy goes. Cut short by the link, it fails with the cancel,
+// whatever the step it was on said.
 export const landForSender: EffectHandlers<
   typeof syncContract,
   HandlerContext,
   HostServices
 >["receiveWorktree"] = ({ channelId, landBranch, ...landing }, ctx) => {
   const link = attachLinkFarEnd(ctx, channelId);
-  const signal = AbortSignal.any([ctx.signal, link.closed]);
-  return cancellable(
-    signal,
-    Effect.gen(function* () {
-      const move = yield* Effect.scope;
-      const source = yield* linkSource(link);
-      const { receipt, ...landed } = yield* landWorktree(
-        source,
-        { ...landing, landBranch: landBranch ?? landing.branch },
-        ctx,
-        (frame) => source.report(frame),
-        signal,
-        move,
-      );
-      // A landing this device asked for (a mirror invited from here,
-      // host/mirror/invites.ts): the invitation moves onto the copy
-      // before the peer's next call names it.
-      landInvitedMirror(ctx.callerDeviceId, landing.sourceWorktreeId, {
-        projectId: landed.worktree.projectId,
-        worktreeId: landed.worktree.id,
-      });
-      return { ...landed, receipt };
-    }).pipe(
-      Effect.scoped,
-      Effect.withSpan("Sync.receive", {
-        attributes: moveAttributes("send", ctx.callerDeviceId),
-      }),
+  return Effect.gen(function* () {
+    const move = yield* Effect.scope;
+    const source = yield* linkSource(link);
+    const { receipt, ...landed } = yield* landWorktree(
+      source,
+      { ...landing, landBranch: landBranch ?? landing.branch },
+      ctx,
+      (frame) => source.report(frame),
+      move,
+    );
+    // A landing this device asked for (a mirror invited from here,
+    // host/mirror/invites.ts): the invitation moves onto the copy
+    // before the peer's next call names it.
+    yield* landInvitedMirror(ctx.callerDeviceId, landing.sourceWorktreeId, {
+      projectId: landed.worktree.projectId,
+      worktreeId: landed.worktree.id,
+    });
+    return { ...landed, receipt };
+  }).pipe(
+    Effect.scoped,
+    Effect.withSpan("Sync.receive", {
+      attributes: moveAttributes("send", ctx.callerDeviceId),
+    }),
+    Effect.raceFirst(
+      Effect.andThen(
+        Deferred.await(link.closed),
+        Effect.fail(new MoveCancelledError()),
+      ),
+    ),
+    Effect.catch((error) =>
+      Effect.flatMap(Deferred.isDone(link.closed), (cancelled) =>
+        Effect.fail(cancelled ? new MoveCancelledError() : error),
+      ),
     ),
   );
 };
@@ -409,7 +415,6 @@ const landIncoming = (
   },
   ctx: HandlerContext,
   progress: (frame: Pick<SyncPullProgress, "step" | "createPhase">) => void,
-  signal: AbortSignal,
   move: Scope.Scope,
 ) =>
   Effect.gen(function* () {
@@ -423,11 +428,15 @@ const landIncoming = (
     // caller cannot subscribe by an id that does not exist yet.
     progress({ step: "create" });
     const notify = notifierFor(ctx);
-    // Acquired whole even under a cancel: the move's signal interrupts the
-    // create (its setup script with it), and a create cut short still
-    // answers with its worktree (engineOps.ts, runStreamingCreate), which the release then removes. Released
-    // with the move, and only when it was interrupted.
-    const { worktree } = yield* Effect.acquireRelease(
+    // The create runs whole even under a cancel: an interrupt tells it
+    // through `cancelled`, its setup script dies with it, and a create
+    // cut short still answers with its worktree (engineOps.ts,
+    // runStreamingCreate), which the release then removes. So it runs
+    // on a fiber of the move's, waited on interruptibly, and the release
+    // waits for its answer. Released with the move, and only when it was
+    // interrupted.
+    const cancelled = yield* Deferred.make<void>();
+    const create = yield* Effect.acquireRelease(
       Ops.createWorktree(
         project,
         {
@@ -445,11 +454,21 @@ const landIncoming = (
             }
           },
         },
-        { resolveOn: "exit", cancelled: abortedBy(signal) },
-      ).pipe(Effect.withSpan("Landing.create")),
-      ({ worktree: landed }, exit) =>
-        Exit.hasInterrupts(exit) ? rollBackLanded(landed) : Effect.void,
+        { resolveOn: "exit", cancelled: Deferred.await(cancelled) },
+      ).pipe(Effect.withSpan("Landing.create"), Effect.forkIn(move)),
+      (fiber, exit) =>
+        Exit.hasInterrupts(exit)
+          ? Deferred.succeed(cancelled, undefined).pipe(
+              Effect.andThen(Fiber.await(fiber)),
+              Effect.flatMap((created) =>
+                Exit.isSuccess(created)
+                  ? rollBackLanded(created.value.worktree)
+                  : Effect.void,
+              ),
+            )
+          : Effect.void,
     ).pipe(Scope.provide(move));
+    const { worktree } = yield* Fiber.join(create);
 
     // Capture refs are keyed by worktree id, and ids are derived
     // from paths (sha256(path)[:12]), so the source's id names the
@@ -517,10 +536,3 @@ const rollBackLanded = (
       ),
     ),
   );
-
-// A move's cancel, as the effect the create waits on.
-const abortedBy = (signal: AbortSignal): Effect.Effect<void> =>
-  Effect.callback<void>((resume) => {
-    const off = onAbort(signal, () => resume(Effect.void));
-    return Effect.sync(off);
-  });

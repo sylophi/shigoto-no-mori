@@ -16,7 +16,7 @@ import {
   startScript,
   writeToScript,
 } from "@host/lib/scripts";
-import { OrphanSweep } from "@host/lib/scripts/persistence";
+import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import { shellQuote } from "@host/lib/util/shellQuote";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
@@ -98,7 +98,8 @@ export const scriptsHandlers = {
   resize: ({ runId, cols, rows }) =>
     Effect.sync(() => resizeScript(runId, cols, rows)),
 
-  orphanReport: () => Effect.flatMap(OrphanSweep, (it) => it.takeReport),
+  orphanReport: () =>
+    Effect.flatMap(OrphanSweep.OrphanSweep, (sweep) => sweep.takeReport),
 
   list: () => Effect.sync(() => ({ runs: listRunningScripts() })),
 

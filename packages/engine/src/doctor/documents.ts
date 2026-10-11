@@ -15,6 +15,7 @@ import { decodedLaunchers } from "../Launchers.ts";
 import * as Layout from "../Layout.ts";
 import { StoreImportError } from "../migrations/importJson.ts";
 import * as Registry from "../Registry.ts";
+import * as RunningScripts from "../RunningScripts.ts";
 import {
   StagingLockUnavailable,
   stagingHolder,
@@ -128,6 +129,7 @@ export type StoreServices =
   | Config.Config
   | Layout.Layout
   | Registry.Registry
+  | RunningScripts.RunningScripts
   | Terrier.Terrier
   | Worktrees.Worktrees
   | WorktreeData.WorktreeData
@@ -221,23 +223,6 @@ export const INCOMING_REF_STALE_MS = 60 * 60 * 1000;
 export const SCRIPT_START_TOLERANCE_MS = 5_000;
 
 export const INCOMING_PREFIX = "refs/shigomori/incoming/";
-
-// running-scripts.json: the dev servers and scripts the app started,
-// with the app instance that owns them.
-export const RunningScripts = Schema.fromJsonString(
-  Schema.Struct({
-    ownerPid: Schema.optional(Schema.Finite),
-    scripts: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          pid: Schema.optional(Schema.Finite),
-          startedAt: Schema.optional(Schema.Finite),
-          command: Schema.optional(Schema.String),
-        }),
-      ),
-    ),
-  }),
-);
 
 // A JSON file the store imports, read as an object.
 export const JsonObjectText = Schema.fromJsonString(

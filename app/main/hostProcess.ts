@@ -3,7 +3,10 @@
 // over a port (packages/contracts/src/modules/shellCalls.ts), and talks
 // to over the loopback like any device, through the session
 // (modules/session.ts). A host that exits unasked is forked again, and
-// told again what the shell knows; the windows' links redial it.
+// told again what the shell knows; the windows' links redial it. The
+// hold is a layer of the shell's graph (shellLayer.ts): it forks the
+// host as it comes up, and its closing asks the host to quit and closes
+// the port server.
 import { flavor } from "./flavor";
 import { join } from "node:path";
 import {
@@ -13,7 +16,7 @@ import {
   utilityProcess,
 } from "electron";
 import * as Effect from "effect/Effect";
-import * as Scope from "effect/Scope";
+import * as Layer from "effect/Layer";
 import { WebSocket as WsWebSocket } from "ws";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { sessionContract } from "@shigomori/contracts/modules/session";
@@ -89,6 +92,8 @@ const QUIT_DEADLINE_MS = 15_000;
 let child: UtilityProcess | null = null;
 let quitting = false;
 let windowFocused = false;
+type PortServer = Effect.Success<ReturnType<typeof makePortServer>>;
+let server: PortServer | null = null;
 let started = false;
 const crashes: number[] = [];
 // The current host's address, once it is up. Replaced as a host forks,
@@ -97,8 +102,23 @@ let address = deferred<Reported>();
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 
-const session = () => buildClient(sessionContract, link);
-let link: ReturnType<typeof connectHost>;
+// The shell's link to the current host, made on first use: a window
+// may ask before the hold is up, and waits for the host's address.
+let dialed: ReturnType<typeof connectHost> | undefined;
+const link = () =>
+  (dialed ??= connectHost({
+    // The shell dials with its own token, which opens its session.
+    address: () =>
+      address.promise.then(({ shellToken, ...rest }) => ({
+        ...rest,
+        token: shellToken,
+      })),
+    appVersion: app.getVersion(),
+    // The `ws` package, like the host's own peer dials. It sends no
+    // Origin, which the loopback admits.
+    openSocket: (url) => new WsWebSocket(url),
+  }));
+const session = () => buildClient(sessionContract, link());
 
 // A word to the host that nothing waits on. A host that went away
 // meanwhile hears it again as its successor starts.
@@ -117,7 +137,7 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     reportedDeviceId = reported.deviceId;
     address.resolve(reported);
     if (started) {
-      link.reconnect();
+      link().reconnect();
     } else {
       started = true;
       // A sign-out whose revoke never reached the hub, delivered once a
@@ -141,14 +161,6 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   guide: ({ session: token, action }) =>
     onGuide((guide) => guide.drive(token, action)),
 };
-registerContract(shellCallsContract, shellCalls, registrar, {
-  validateOutputs: !app.isPackaged,
-});
-const server = Effect.runPromise(
-  makePortServer(registrar, ShellCallsGroup).pipe(
-    Scope.provide(Scope.makeUnsafe()),
-  ),
-);
 
 function fork(): void {
   const { port1, port2 } = new MessageChannelMain();
@@ -166,7 +178,7 @@ function fork(): void {
       }
     });
   }
-  void server.then((served) => Effect.runPromise(served.attach(port1, null)));
+  if (server !== null) void Effect.runPromise(server.attach(port1, null));
   forked.postMessage(null, [port2]);
   forked.once("exit", (code) => {
     child = null;
@@ -188,27 +200,6 @@ function fork(): void {
     }
     fork();
   });
-}
-
-// Forks the host, and dials it as it comes up. `failed` hears a host
-// that could not start.
-export function startHostProcess(options: {
-  readonly failed: (failure: HostFailure) => void;
-}): void {
-  onFailed = options.failed;
-  link = connectHost({
-    // The shell dials with its own token, which opens its session.
-    address: () =>
-      address.promise.then(({ shellToken, ...rest }) => ({
-        ...rest,
-        token: shellToken,
-      })),
-    appVersion: app.getVersion(),
-    // The `ws` package, like the host's own peer dials. It sends no
-    // Origin, which the loopback admits.
-    openSocket: (url) => new WsWebSocket(url),
-  });
-  fork();
 }
 
 // The session with the current host, waiting for one to be up.
@@ -247,19 +238,45 @@ export function noteWindowFocused(focused: boolean): void {
 
 // Quit: the host closes its graph (its quit sequence) and exits. One
 // that does not within the deadline is killed.
-export async function stopHostProcess(hurried: boolean): Promise<void> {
-  quitting = true;
-  const running = child;
-  if (running === null) return;
-  const exited = new Promise<void>((resolve) =>
-    running.once("exit", () => resolve()),
+const stop = (hurried: boolean) =>
+  Effect.suspend(() => {
+    quitting = true;
+    const running = child;
+    if (running === null) return Effect.void;
+    const exited = new Promise<void>((resolve) =>
+      running.once("exit", () => resolve()),
+    );
+    void session()
+      .quit({ hurried })
+      .catch((error: unknown) => {
+        log.warn("[quit] the host did not take the quit:", error);
+      });
+    return Effect.promise(() => exited).pipe(
+      Effect.timeoutOrElse({
+        duration: QUIT_DEADLINE_MS,
+        orElse: () => Effect.sync(() => void running.kill()),
+      }),
+    );
+  });
+
+// The hold, for the length of the shell's graph: the port the host
+// calls the shell back on, and the host itself. `failed` hears a host
+// that could not start; `hurried` is asked at the quit (an update
+// install or a relaunch signals the host's scripts instead of waiting
+// them out).
+export const layer = (options: {
+  readonly failed: (failure: HostFailure) => void;
+  readonly hurried: () => boolean;
+}) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      onFailed = options.failed;
+      registerContract(shellCallsContract, shellCalls, registrar, {
+        validateOutputs: !app.isPackaged,
+      });
+      server = yield* makePortServer(registrar, ShellCallsGroup);
+      yield* Effect.acquireRelease(Effect.sync(fork), () =>
+        stop(options.hurried()),
+      );
+    }),
   );
-  void session()
-    .quit({ hurried })
-    .catch((error: unknown) => {
-      log.warn("[quit] the host did not take the quit:", error);
-    });
-  const timer = setTimeout(() => running.kill(), QUIT_DEADLINE_MS);
-  await exited;
-  clearTimeout(timer);
-}

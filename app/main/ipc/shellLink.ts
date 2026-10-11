@@ -137,18 +137,17 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
           : Effect.succeed(connection);
       });
 
-    // A call: the registered handler, its signal aborted when the call
-    // is interrupted, its failure crossing as the contract error it is,
-    // or as RemoteCallError with its message and code.
+    // A call: the registered handler, its failure crossing as the
+    // contract error it is, or as RemoteCallError with its message and
+    // code.
     const serve =
       (fn: Served) =>
       (payload: unknown, { client }: Options) =>
         Effect.flatMap(connectionOf(client.id), (connection) =>
           Effect.tryPromise({
-            try: (signal) =>
+            try: () =>
               fn(
                 {
-                  signal,
                   connection: connection.closed.signal,
                   ...(connection.windowId === null
                     ? {}

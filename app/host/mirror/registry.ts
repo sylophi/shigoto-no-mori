@@ -201,7 +201,7 @@ const pendingStops = new Set<string>();
 
 export const stopMirrorsForWorktree = (localWorktreeId: string) =>
   Effect.gen(function* () {
-    forgetMirrorInvitesOf(localWorktreeId);
+    yield* forgetMirrorInvitesOf(localWorktreeId);
     // Absent (a check that never mounts the daemon) there is nothing
     // mirroring anything.
     const daemon = yield* engineOrNull;
@@ -545,7 +545,7 @@ export const endMirrorsWithPeers = (
   opts: { transfers?: boolean } = {},
 ) =>
   Effect.gen(function* () {
-    dropMirrorInvitesWithPeers(stillOnAccount);
+    yield* dropMirrorInvitesWithPeers(stillOnAccount);
     const daemon = yield* engineOrNull;
     if (daemon === null) return;
     const candidates = opts.transfers
