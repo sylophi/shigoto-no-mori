@@ -125,7 +125,8 @@ export function WorktreeDetailInner({
   const { data: runtime } = useRuntimeInfo();
   const resident = useResident(worktree);
   const mirrorCopies = useMirrorCopies(worktree);
-  const { title, description, pullRequest } = useWorktreeTitle(worktree);
+  const { title, description, pullRequest, editable } =
+    useWorktreeTitle(worktree);
   const {
     deleteMutation,
     needsForce,
@@ -324,9 +325,11 @@ export function WorktreeDetailInner({
           <div className="space-y-5 empty:hidden">
             {description !== null && (
               <DescriptionSection
-                // Folded again for another worktree or a new text.
-                key={`${worktree.id}:${description}`}
+                // An edit stays with its worktree.
+                key={worktree.id}
+                worktree={worktree}
                 description={description}
+                editable={editable}
               />
             )}
             {pullRequest && <PullRequestLead worktree={worktree} />}
