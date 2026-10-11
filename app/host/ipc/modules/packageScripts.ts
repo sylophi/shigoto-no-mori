@@ -101,11 +101,15 @@ export const packageScriptsHandlers: Handlers<
 function groupByFile(
   scripts: PackageScriptsDoc["scripts"],
 ): NonNullable<PackageScriptsResult["groups"]> {
-  const groups = new Map<string, Record<string, string>>();
+  // Maps, not object keys, so a script named "__proto__" is a script.
+  const groups = new Map<string, Map<string, string>>();
   for (const script of scripts) {
-    const labels = groups.get(script.file) ?? {};
-    labels[script.name] = script.label;
+    const labels = groups.get(script.file) ?? new Map<string, string>();
+    labels.set(script.name, script.label);
     groups.set(script.file, labels);
   }
-  return [...groups].map(([file, labels]) => ({ file, labels }));
+  return [...groups].map(([file, labels]) => ({
+    file,
+    labels: Object.fromEntries(labels),
+  }));
 }

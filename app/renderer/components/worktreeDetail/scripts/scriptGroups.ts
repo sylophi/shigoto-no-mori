@@ -21,5 +21,8 @@ export function scriptGroups(pkg: PackageScriptsResult): ScriptGroup[] {
 // The name a script goes by in its file's group ("build" for "just
 // build").
 export function labelOf(group: ScriptGroup, name: string): string {
-  return group.labels[name] ?? name;
+  const label = Object.hasOwn(group.labels, name)
+    ? group.labels[name]
+    : undefined;
+  return label ?? name;
 }

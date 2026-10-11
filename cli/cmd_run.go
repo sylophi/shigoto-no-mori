@@ -208,9 +208,11 @@ func listPackageScripts(proj project, manager string, files []string, scripts []
 
 // Every script the worktree root offers, package.json's first, then the
 // justfile's recipes and the Makefile's targets, and the files they
-// came from. No script file at all is the coded no-scripts failure,
-// which the app's panel reads as "no scripts section", not as a
-// failure.
+// came from. A file that doesn't read or parse (a package.json caught
+// mid-edit) is left out rather than hiding the others, and fails the
+// read only when no other file is there. No script file at all is the
+// coded no-scripts failure, which the app's panel reads as "no scripts
+// section", not as a failure.
 func readWorktreeScripts(dir string) ([]packageScript, []string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -224,6 +226,7 @@ func readWorktreeScripts(dir string) ([]packageScript, []string, error) {
 	}
 	var scripts []packageScript
 	files := []string{}
+	var failure error
 	for _, source := range []struct {
 		find  func([]string) string
 		parse func([]byte) ([]packageScript, error)
@@ -238,18 +241,22 @@ func readWorktreeScripts(dir string) ([]packageScript, []string, error) {
 		}
 		path := filepath.Join(dir, file)
 		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, nil, errf("%s: %v", path, err)
+		var parsed []packageScript
+		if err == nil {
+			parsed, err = source.parse(raw)
 		}
-		parsed, err := source.parse(raw)
 		if err != nil {
-			return nil, nil, errf("%s: %v", path, err)
+			failure = cmp.Or(failure, errf("%s: %v", path, err))
+			continue
 		}
 		for _, script := range parsed {
 			script.File = file
 			scripts = append(scripts, script)
 		}
 		files = append(files, file)
+	}
+	if len(files) == 0 && failure != nil {
+		return nil, nil, failure
 	}
 	if len(files) == 0 {
 		return nil, nil, codedErrf("no-scripts", "No package.json, justfile or Makefile in %s.", dir)

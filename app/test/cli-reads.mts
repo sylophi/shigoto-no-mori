@@ -748,23 +748,26 @@ async function main() {
 
       writeFileSync(join(repo, "justfile"), "check:\n    echo check\n");
       writeFileSync(join(repo, "Makefile"), "build:\n\tgo build\n");
-      const withRunners = await packageScriptsHandlers.list(
-        { projectId, worktreeId },
-        ctx,
-      );
-      assert.deepEqual(withRunners?.groups, [
-        { file: "package.json", labels: { zeta: "zeta", alpha: "alpha" } },
-        { file: "justfile", labels: { "just check": "check" } },
-        { file: "Makefile", labels: { "make build": "build" } },
-      ]);
-      assert.deepEqual(Object.entries(withRunners?.scripts ?? {}), [
-        ["zeta", "echo z"],
-        ["alpha", "echo a"],
-        ["just check", "echo check"],
-        ["make build", "go build"],
-      ]);
-      rmSync(join(repo, "justfile"));
-      rmSync(join(repo, "Makefile"));
+      try {
+        const withRunners = await packageScriptsHandlers.list(
+          { projectId, worktreeId },
+          ctx,
+        );
+        assert.deepEqual(withRunners?.groups, [
+          { file: "package.json", labels: { zeta: "zeta", alpha: "alpha" } },
+          { file: "justfile", labels: { "just check": "check" } },
+          { file: "Makefile", labels: { "make build": "build" } },
+        ]);
+        assert.deepEqual(Object.entries(withRunners?.scripts ?? {}), [
+          ["zeta", "echo z"],
+          ["alpha", "echo a"],
+          ["just check", "echo check"],
+          ["make build", "go build"],
+        ]);
+      } finally {
+        rmSync(join(repo, "justfile"));
+        rmSync(join(repo, "Makefile"));
+      }
       await assert.rejects(
         async () =>
           packageScriptsHandlers.list(

@@ -59,16 +59,16 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   // order won't follow.
   const arranging = canCommand && arrangeRequested && sortMode === "manual";
   // Arranging clears the search, so it always sees every group whole.
-  const shown = scriptGroups(pkg)
-    .map((group) => ({
-      group,
-      entries: rankByScore(
-        query,
-        sorted.filter((e) => e.name in group.labels),
-        (e) => labelOf(group, e.name),
-      ),
-    }))
-    .filter(({ entries }) => entries.length > 0);
+  // A search matches the name a script goes by in its file and the one
+  // the launch row and ⌘K call it ("just build").
+  const groups = scriptGroups(pkg).map((group) => ({
+    group,
+    entries: rankByScore(
+      query,
+      sorted.filter((e) => Object.hasOwn(group.labels, e.name)),
+      (e) => [labelOf(group, e.name), e.name],
+    ),
+  }));
 
   // Arranging starts from the order on screen, whatever sort produced
   // it, so the first drag moves one script instead of reshuffling the
@@ -140,21 +140,22 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
         </div>
       )}
 
-      {shown.length === 0 ? (
+      {/* A group the search empties stays mounted (FileScripts renders
+          nothing), so a fold outlives the search. */}
+      {groups.every(({ entries }) => entries.length === 0) && (
         <p className="p-1 text-xs text-muted-foreground/70">No matches.</p>
-      ) : (
-        shown.map(({ group, entries }) => (
-          <FileScripts
-            key={group.file}
-            worktree={worktree}
-            launchRow={pkg.launchRow}
-            group={group}
-            entries={entries}
-            arranging={arranging}
-            onArrange={arrangeGroup}
-          />
-        ))
       )}
+      {groups.map(({ group, entries }) => (
+        <FileScripts
+          key={group.file}
+          worktree={worktree}
+          launchRow={pkg.launchRow}
+          group={group}
+          entries={entries}
+          arranging={arranging}
+          onArrange={arrangeGroup}
+        />
+      ))}
     </div>
   );
 }
@@ -200,6 +201,8 @@ function FileScripts({
     if (from < 0 || to < 0) return;
     onArrange(arrayMove(names, from, to));
   };
+
+  if (entries.length === 0) return null;
 
   return (
     <div className="space-y-2">

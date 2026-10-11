@@ -4,6 +4,8 @@ package main
 // parsing (order, non-string filtering) and manager argv construction.
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -103,11 +105,21 @@ test: build
 	-echo quiet
 build:
     echo duplicate
+
+[group('private-tools')]
+deploy:
+    echo deploy
+[no-cd, private]
+hidden:
+    echo hidden
+serve addr="localhost:8080": deploy
 `
 	want := []packageScript{
 		{Name: "just build", Command: "echo building {{target}}; go build ./...", Label: "build", runner: "just"},
 		{Name: "just test", Command: "build", Label: "test", runner: "just"},
 		{Name: "just quiet", Command: "echo quiet", Label: "quiet", runner: "just"},
+		{Name: "just deploy", Command: "echo deploy", Label: "deploy", runner: "just"},
+		{Name: "just serve", Command: "deploy", Label: "serve", runner: "just"},
 	}
 	if got := parseJustfile(raw); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -137,6 +149,12 @@ func TestParseMakefile(t *testing.T) {
 		"define TEMPLATE\n" +
 		"inside: rule\n" +
 		"endef\n" +
+		"export define EXPORTED\n" +
+		"inside2: rule\n" +
+		"endef\n" +
+		"$(error GOPATH is not set: run go env)\n" +
+		"gen proto &: schema\n" +
+		"\tprotoc schema\n" +
 		"deps:\n" +
 		"\tgo mod download\n"
 	want := []packageScript{
@@ -145,6 +163,8 @@ func TestParseMakefile(t *testing.T) {
 		{Name: "make lint", Command: "golangci-lint run", Label: "lint", runner: "make"},
 		{Name: "make fmt", Command: "golangci-lint run", Label: "fmt", runner: "make"},
 		{Name: "make deps", Command: "go mod download", Label: "deps", runner: "make"},
+		{Name: "make gen", Command: "protoc schema", Label: "gen", runner: "make"},
+		{Name: "make proto", Command: "protoc schema", Label: "proto", runner: "make"},
 	}
 	if got := parseMakefile(raw); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -175,5 +195,21 @@ func TestFindScript(t *testing.T) {
 	}
 	if _, _, ok := findScript(scripts, []string{"make", "nope"}); ok {
 		t.Error("an unknown target should not be found")
+	}
+}
+
+func TestReadWorktreeScriptsSkipsABrokenFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFileT(t, filepath.Join(dir, "package.json"), `{"scripts": {`)
+	writeFileT(t, filepath.Join(dir, "justfile"), "build:\n    go build\n")
+	scripts, files, err := readWorktreeScripts(dir)
+	if err != nil || !reflect.DeepEqual(files, []string{"justfile"}) || len(scripts) != 1 {
+		t.Fatalf("got %v %v %v, want the justfile's recipe alone", scripts, files, err)
+	}
+	if err := os.Remove(filepath.Join(dir, "justfile")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readWorktreeScripts(dir); err == nil || errorKindOf(err) == "no-scripts" {
+		t.Fatalf("a broken package.json alone: %v, want its parse error", err)
 	}
 }

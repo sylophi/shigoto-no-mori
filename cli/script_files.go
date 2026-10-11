@@ -59,11 +59,11 @@ func parseJustfile(raw string) []packageScript {
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimRight(lines[i], "\r")
 		if strings.HasPrefix(line, "[") {
-			private = private || strings.Contains(line, "private")
+			private = private || hasPrivateAttribute(line)
 			continue
 		}
 		match := justRecipeHeader.FindStringSubmatch(line)
-		colon := strings.IndexByte(line, ':')
+		colon := unquotedColon(line)
 		if match == nil || colon < 0 || strings.HasPrefix(line[colon:], ":=") {
 			if strings.TrimSpace(line) != "" && !strings.HasPrefix(line, "#") {
 				private = false
@@ -99,11 +99,43 @@ func parseJustfile(raw string) []packageScript {
 	return scripts
 }
 
+// Whether an attribute line ("[private]", "[no-cd, private]") holds the
+// private attribute.
+func hasPrivateAttribute(line string) bool {
+	inner := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(line), "["), "]")
+	for _, attribute := range strings.Split(inner, ",") {
+		if strings.TrimSpace(attribute) == "private" {
+			return true
+		}
+	}
+	return false
+}
+
+// The first ':' outside a quoted string, so a parameter default like
+// addr="localhost:8080" isn't taken for the recipe's colon. -1 when
+// there is none.
+func unquotedColon(line string) int {
+	var quote rune
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == ':':
+			return i
+		}
+	}
+	return -1
+}
+
 // A Makefile's named targets in file order. Pattern rules, special
 // targets (.PHONY), and file targets (anything with a '.', '/' or a
 // variable in it) are left out, which leaves the ones meant to be run
-// by name. Variable assignments, target-specific ones included, and
-// define blocks aren't rules. A target declared more than once keeps
+// by name. Variable assignments, target-specific ones included, define
+// blocks, and function calls like $(error ...) aren't rules. A target declared more than once keeps
 // its first place and the first recipe it is given.
 func parseMakefile(raw string) []packageScript {
 	var scripts []packageScript
@@ -129,11 +161,12 @@ func parseMakefile(raw string) []packageScript {
 			inDefine = trimmed != "endef"
 			continue
 		}
-		if strings.HasPrefix(trimmed, "define ") || trimmed == "define" {
+		directive := strings.TrimPrefix(strings.TrimPrefix(trimmed, "export "), "override ")
+		if strings.HasPrefix(directive, "define ") || directive == "define" {
 			inDefine = true
 			continue
 		}
-		if line == "" || line[0] == '\t' || line[0] == ' ' || line[0] == '#' {
+		if line == "" || strings.ContainsRune("\t #$", rune(line[0])) {
 			continue
 		}
 		colon := strings.IndexByte(line, ':')
@@ -168,7 +201,7 @@ func parseMakefile(raw string) []packageScript {
 
 		command := stepsOr(body, prereqs)
 		for _, target := range strings.Fields(line[:colon]) {
-			if strings.ContainsAny(target, ".%/$()") {
+			if strings.ContainsAny(target, ".%/$()&") {
 				continue
 			}
 			if at, seen := index[target]; seen {
