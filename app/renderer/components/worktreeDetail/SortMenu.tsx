@@ -52,8 +52,7 @@ export function SortMenu({
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        {/* Sized like the radio items above, which are text-sm. */}
-        <DropdownMenuItem onClick={onArrange} className="pl-1.5 text-sm">
+        <DropdownMenuItem onClick={onArrange}>
           Set manual order
         </DropdownMenuItem>
       </DropdownMenuContent>
