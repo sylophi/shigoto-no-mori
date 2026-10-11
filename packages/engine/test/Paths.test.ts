@@ -7,6 +7,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { afterEach, beforeEach, it } from "vitest";
+import type { Flavor } from "../src/flavor.ts";
 import * as Paths from "../src/Paths.ts";
 
 let home: string;
@@ -15,10 +16,14 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-const resolve = (env: Record<string, string> = {}, withHome = true) =>
+const resolve = (
+  env: Record<string, string> = {},
+  withHome = true,
+  flavor: Flavor = "prod",
+) =>
   Effect.service(Paths.Paths).pipe(
     Effect.provide(
-      Paths.layer("prod").pipe(
+      Paths.layer(flavor).pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
           ConfigProvider.layer(
@@ -98,4 +103,16 @@ it("reads a pre-2.0 path that is a file as holding nothing", async () => {
 
 it("reads an unset HOME as the working directory, as the Go sm does", async () => {
   assert.equal((await resolve({}, false)).dataDir, ".sm");
+});
+
+it("gives the test flavor its own folder, with nothing pre-2.0 to adopt", async () => {
+  mkdirSync(join(home, ".sm"));
+  writeFileSync(join(home, ".sm", "store.db"), "");
+  mkdirSync(join(home, "shigomori"));
+  writeFileSync(join(home, "shigomori", "state.json"), "{}");
+  pointTo(join(home, "prod-moved"));
+  const paths = await resolve({}, true, "test");
+  assert.equal(paths.dataDir, join(home, ".smt"));
+  assert.equal(paths.dataDirSource, "default");
+  assert.equal(paths.binaryName, "smt");
 });

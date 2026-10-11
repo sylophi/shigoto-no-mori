@@ -81,17 +81,25 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
     return name.endsWith(".zip") && name.includes(marker);
   })?.browser_download_url ?? "";
 
-// The release a prerelease build moves to, or undefined when none is
-// ahead: the highest of the full releases and of the prereleases in the
-// build's own channel that have a zip for this arch. A full 2.0.0 beats
-// every 2.0.0-beta.N, which ends the beta. A release flagged prerelease
-// under a full release's tag stays hidden, as the update server hides
-// it, and one without its zip yet (the workflow uploads assets minutes
-// after the tag) is skipped, as the update server skips it.
+// A `-test.N` prerelease, which only a test build moves to.
+const isTestRelease = (version: Semver) =>
+  isPrerelease(version) && version.pre[0] === "test";
+
+// The release a build moves to, or undefined when none is ahead. A prod
+// build (`releases`) takes the highest of the full releases and of the
+// prereleases in its own channel, so a full 2.0.0 beats every
+// 2.0.0-beta.N, which ends the beta, and never a test prerelease. A
+// test build (`test`) takes the highest test prerelease alone: a full
+// release is another flavor's bundle. Either way a release flagged
+// prerelease under a full release's tag stays hidden, as the update
+// server hides it, and one without its zip for this arch yet (the
+// workflow uploads assets minutes after the tag) is skipped, as the
+// update server skips it.
 export const pickRelease = (
   current: Semver,
   releases: ReadonlyArray<GitHubRelease>,
   arch: string,
+  line: "releases" | "test" = "releases",
 ): ReleaseInfo | undefined => {
   const channel = releaseChannel(current);
   const marker = `-darwin-${arch}-`;
@@ -103,7 +111,11 @@ export const pickRelease = (
       continue;
     }
     if (best !== null && compareSemver(version, best.version) <= 0) continue;
-    if (isPrerelease(version)) {
+    if (line === "test") {
+      if (!isTestRelease(version)) continue;
+    } else if (isTestRelease(version)) {
+      continue;
+    } else if (isPrerelease(version)) {
       if (releaseChannel(version) !== channel) continue;
     } else if (release?.prerelease === true) {
       continue;

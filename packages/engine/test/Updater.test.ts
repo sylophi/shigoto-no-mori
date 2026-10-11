@@ -637,6 +637,43 @@ describe("the release list", () => {
     );
   });
 
+  // A full release is the prod app, another flavor's bundle, and the
+  // update server only knows full releases.
+  it("is all a test build follows, its test prereleases alone", async () => {
+    const box = newBox("3.0.0-test.1");
+    const listing = [
+      listed("v3.0.0"),
+      listed("v3.0.0-rc.1"),
+      listed("v3.0.0-test.2"),
+      listed("v3.0.0-test.1"),
+    ];
+    const { client, seen } = network((url) =>
+      url.toString() === LIST ? json(listing) : undefined,
+    );
+    const setup = { box, http: client, flavor: "test" as const };
+    assert.deepEqual(
+      await using(setup, (u) =>
+        u.check({ running: running(box, "3.0.0-test.1") }),
+      ),
+      {
+        ok: true,
+        status: "update-available",
+        version: "3.0.0-test.2",
+        installed: "3.0.0-test.1",
+      },
+    );
+    // With GitHub down, the update server's full release isn't asked.
+    const fresh = newBox("3.0.0-test.1");
+    const down = network(listDown(serverFor("3.0.0")));
+    await failure({ box: fresh, http: down.client, flavor: "test" }, (u) =>
+      u.check({ running: running(fresh, "3.0.0-test.1") }),
+    );
+    assert.deepEqual(
+      [...seen, ...down.seen].map(({ url }) => url),
+      [LIST, LIST],
+    );
+  });
+
   it("is the error reported when the update server fails too", async () => {
     const box = newBox();
     const { client } = network((url) =>

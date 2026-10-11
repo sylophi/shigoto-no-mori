@@ -4,6 +4,7 @@
 // to over the loopback like any device, through the session
 // (modules/session.ts). A host that exits unasked is forked again, and
 // told again what the shell knows; the windows' links redial it.
+import { flavor } from "./flavor";
 import { join } from "node:path";
 import {
   app,
@@ -61,7 +62,8 @@ function hostFacts(): HostFacts {
     appVersion: app.getVersion(),
     userDataPath: app.getPath("userData"),
     logsPath: app.getPath("logs"),
-    rendererOrigin: rendererSchemeOrigin(app.isPackaged ? "prod" : "dev"),
+    rendererOrigin: rendererSchemeOrigin(flavor),
+    flavor,
   };
 }
 

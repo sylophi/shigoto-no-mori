@@ -79,7 +79,7 @@ const columns = Math.min(
 );
 const help = helpPages({
   names: flavorNames(flavor),
-  dev: flavor !== "prod",
+  unshipped: flavor === "prod" ? null : flavor,
   color: !plain && process.stdout.isTTY === true,
   columns,
 });

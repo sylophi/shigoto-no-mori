@@ -3,11 +3,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { platform } from "node:os";
 import path from "node:path";
-import {
-  DEV_NAME_SUFFIX,
-  DEV_USER_DATA_SUFFIX,
-  devProfileUserData,
-} from "@shared/packaging/appName.mts";
+import { devProfileUserData } from "@shared/packaging/appName.mts";
+import { flavor, names } from "./flavor";
 import {
   createDesktopClerkBridge,
   serveRendererOverScheme,
@@ -75,28 +72,23 @@ function devProfile(): string | null {
   }
 }
 
-// Electron scopes the single-instance lock to the userData directory,
-// and dev and packaged builds resolve the same one out of productName.
-// A dev run owns a different data dir (~/.smd), so give it
-// its own userData or an installed copy would lock it out.
-if (!app.isPackaged) {
+// Each flavor has its own userData and name (main/flavor.ts), so its
+// own single-instance lock, Clerk tokens, hub credential, log folder
+// and "<name> Safe Storage" keychain item: a test build runs beside the
+// installed prod one and a dev run beside both, none locking out or
+// signing out another.
+{
   const profile = devProfile();
-  const devUserData = `${app.getPath("userData")}${DEV_USER_DATA_SUFFIX}`;
+  const userData = path.join(app.getPath("appData"), names.userDataDir);
   // A dev profile (shared/packaging/appName.mts) is a further dev
   // instance on this machine with its own userData, so its own lock,
   // credential, grants and tokens: a separate device for testing remote
   // flows against a real peer (scripts/dev-peer.mts).
   app.setPath(
     "userData",
-    profile === null ? devUserData : devProfileUserData(devUserData, profile),
+    profile === null ? userData : devProfileUserData(userData, profile),
   );
-  // The rename gives dev its own menu bar label and, on Linux and
-  // Windows where safeStorage really talks to libsecret/DPAPI, its
-  // own "<name> Safe Storage" item so dev tokens never share prod's
-  // encryption key. (On macOS dev never reaches the keychain, see
-  // below.) After the userData suffix above, so the dev data path
-  // stays derived from the shared productName.
-  app.setName(`${app.name}${DEV_NAME_SUFFIX}${devProfileSuffix()}`);
+  app.setName(`${names.appName}${devProfileSuffix()}`);
 }
 
 // After the rename above, which names the log folder.
@@ -173,9 +165,6 @@ createDesktopClerkBridge();
 installMenuImpl();
 registerShellHandlers();
 installShellPorts();
-
-// The build flavor, which names the data dir and the terminal `sm`.
-const flavor = app.isPackaged ? ("prod" as const) : ("dev" as const);
 
 // The shell's layer graph, built in the ready handler and closed by the
 // quit below, after the host's process has gone.

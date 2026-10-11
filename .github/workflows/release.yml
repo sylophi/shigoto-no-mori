@@ -76,6 +76,42 @@ jobs:
         working-directory: .
         run: pnpm install --frozen-lockfile
 
+      # The flavor (packages/engine/src/flavor.ts): a v*-test.N tag builds
+      # the test app, which installs beside the prod one under its own
+      # name, folders and `smt`, and points at the dev hub (the SM_TEST_
+      # variables) until the cutover; anything else builds prod. The
+      # later steps read SM_FLAVOR, the app's name and the account
+      # config from the job's environment.
+      - name: Pick the flavor
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          PROD_HUB: ${{ vars.SM_DEVICE_HUB_URL }}
+          PROD_CLERK: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+          PROD_WEB: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
+          TEST_HUB: ${{ vars.SM_TEST_DEVICE_HUB_URL }}
+          TEST_CLERK: ${{ vars.SM_TEST_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+        run: |
+          FLAVOR="$(node --input-type=module -e '
+            import { flavorOfVersion } from "@shigomori/engine/flavor";
+            console.log(flavorOfVersion(process.env.TAG));
+          ')"
+          APP_NAME="$(FLAVOR="$FLAVOR" node --input-type=module -e '
+            import { flavorNames } from "@shigomori/engine/flavor";
+            console.log(flavorNames(process.env.FLAVOR).appName);
+          ')"
+          {
+            echo "SM_FLAVOR=$FLAVOR"
+            echo "SM_APP_NAME=$APP_NAME"
+            if [[ "$FLAVOR" == test ]]; then
+              echo "SM_DEVICE_HUB_URL=$TEST_HUB"
+              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$TEST_CLERK"
+            else
+              echo "SM_DEVICE_HUB_URL=$PROD_HUB"
+              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$PROD_CLERK"
+              echo "SM_ACCOUNT_WEB_ORIGIN=$PROD_WEB"
+            fi
+          } >> "$GITHUB_ENV"
+
       # The prePackage hook regenerates the third-party notices. Stale
       # committed copies would ship a build reporting a "-dirty" commit,
       # so refuse here, naming the fix, rather than build it.
@@ -139,8 +175,10 @@ jobs:
       # features. An unset repository variable expands to "", so warn
       # loudly instead of shipping an unconfigured release in silence.
       - name: Warn when the account service config is unset
-        if: vars.SM_DEVICE_HUB_URL == '' || vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY == ''
-        run: echo "::warning::SM_DEVICE_HUB_URL or SM_ACCOUNT_CLERK_PUBLISHABLE_KEY is not set as a repository variable, so this build ships with remote features unconfigured"
+        run: |
+          if [[ -z "$SM_DEVICE_HUB_URL" || -z "$SM_ACCOUNT_CLERK_PUBLISHABLE_KEY" ]]; then
+            echo "::warning::The hub URL or the Clerk publishable key is not set as a repository variable for the $SM_FLAVOR flavor, so this build ships with remote features unconfigured"
+          fi
 
       - name: Build distributables
         env:
@@ -148,18 +186,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # The account service config baked into the bundle (#238). A
-          # packaged app only sees build-time env, so a build without
-          # these ships with remote features unconfigured. Set them as
-          # repository Actions variables (they are not secrets).
-          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
-          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
+        # The account service config baked into the bundle (#238) comes
+        # from the flavor step: a packaged app only sees build-time env,
+        # so a build without it ships with remote features unconfigured.
+        # They are repository Actions variables (they are not secrets).
         run: pnpm exec electron-forge publish --dry-run
 
       - name: Verify signing and notarization
         run: |
-          APP_PATH="out/Shigoto no Mori-darwin-arm64/Shigoto no Mori.app"
+          APP_PATH="out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           spctl --assess --type execute --verbose "$APP_PATH"
           xcrun stapler validate "$APP_PATH"

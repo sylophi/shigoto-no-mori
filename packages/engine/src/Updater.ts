@@ -44,7 +44,7 @@ import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type { Flavor } from "./flavor.ts";
+import { type Flavor, flavorNames } from "./flavor.ts";
 import { parseJson } from "./json.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText } from "./platformErrors.ts";
@@ -515,10 +515,6 @@ export class Updater extends Context.Service<
 // The repo behind the feeds (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
 const FEED_REPO = "sylophi/shigoto-no-mori";
 
-// CFBundleExecutable of the app, which survives bundle moves and renames,
-// so it tells the app from a process that got a recycled pid.
-const APP_EXECUTABLE = "Shigoto no Mori";
-
 const FEED_TIMEOUT = Duration.seconds(30);
 // A generous budget for the zip (about 200MB on a slow connection). There
 // is no byte progress, so this is what unsticks a blackholed connection.
@@ -671,6 +667,12 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const http = yield* HttpClient.HttpClient;
   const paths = yield* Paths.Paths;
   const temporaries = yield* Ref.make(0);
+  // CFBundleExecutable of the app (forge names it for the flavor), which
+  // survives bundle moves and renames, so it tells the app from a
+  // process that got a recycled pid.
+  const appExecutable = flavorNames(flavor).appName;
+  // Which releases this build is offered, none for dev.
+  const offered = flavorNames(flavor).updates;
 
   const updatesDir = path.join(paths.dataDir, "updates");
   const stagedDir = path.join(updatesDir, "staged");
@@ -739,13 +741,13 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // pid that is gone.
   const appAlive = (pid: number) =>
     run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
-      Effect.map((ps) => ps.ok && ps.output.includes(APP_EXECUTABLE)),
+      Effect.map((ps) => ps.ok && ps.output.includes(appExecutable)),
     );
 
   // Any process with the app's executable name, even one that hasn't
   // published updater.json yet. -x matches exactly, so the "... Helper"
   // processes don't count.
-  const appRunning = run("pgrep", ["-x", APP_EXECUTABLE]).pipe(
+  const appRunning = run("pgrep", ["-x", appExecutable]).pipe(
     Effect.map((ran) => ran.ok),
   );
 
@@ -992,7 +994,12 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     const fromList = Effect.map(
       fetchReleaseList(input),
       ({ releases, confirmed }) => ({
-        release: pickRelease(current, releases, input.running.arch),
+        release: pickRelease(
+          current,
+          releases,
+          input.running.arch,
+          offered ?? "releases",
+        ),
         confirmed,
       }),
     );
@@ -1000,6 +1007,9 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       release,
       confirmed: !isPrerelease(current),
     }));
+    // The update server knows no test line: a test build asks GitHub
+    // alone.
+    if (offered === "test") return yield* fromList;
     if (releaseListUrl(input) === "") return yield* fromServer;
     if (updateServerUrl(input) === "") return yield* fromList;
     return yield* fromList.pipe(
@@ -1514,7 +1524,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // --- the methods ---
 
   const available =
-    flavor === "prod" ? Effect.void : Effect.fail(new UpdatesUnavailable());
+    offered === null ? Effect.fail(new UpdatesUnavailable()) : Effect.void;
 
   const check = Effect.fn("Updater.check")(function* (input: UpdateInput) {
     yield* available;

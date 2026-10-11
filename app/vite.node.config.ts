@@ -7,6 +7,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { ACCOUNT_ENV_KEYS } from "@shigomori/contracts/accountServiceConfig";
+import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 
 // The account service values (ACCOUNT_ENV_KEYS) present in the BUILD
@@ -44,6 +45,9 @@ export default defineConfig({
     // reading forge.config.ts makes). main/index.ts gives only such a
     // build the real macOS keychain: an ad-hoc bundle on it is one
     // login-password prompt per read (main/core/keychain/reset.ts).
+    // The flavor a packaged build runs as (main/flavor.ts). A dev run
+    // is dev whatever this says.
+    __SM_PACKAGED_FLAVOR__: JSON.stringify(buildFlavor(process.env)),
     __SM_SIGNED_MAC_BUILD__: JSON.stringify(
       macSigningIdentity(process.env) !== null,
     ),

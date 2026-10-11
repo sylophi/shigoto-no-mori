@@ -10,13 +10,14 @@ import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { config as loadEnv } from "dotenv";
 import {
-  APP_BUNDLE_ID,
   CLI_DIST_DIR,
   cliBinaryName,
   UPDATE_FEED_NAME,
   UPDATE_FEED_OWNER,
 } from "./shared/packaging/cliDist.mts";
-import { productName, version } from "./package.json";
+import { version } from "./package.json";
+import { flavorNames } from "@shigomori/engine/flavor";
+import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
@@ -50,6 +51,12 @@ import {
 
 loadEnv();
 
+// The flavor this build is made as (SM_FLAVOR, prod when unset), whose
+// row in the flavor table names the bundle, its id, its scheme and its
+// `sm`, so a test build installs beside the prod app.
+const flavor = buildFlavor(process.env);
+const names = flavorNames(flavor);
+
 const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
   ? {
       keychainProfile: process.env.APPLE_NOTARY_KEYCHAIN_PROFILE,
@@ -81,7 +88,7 @@ const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 // the short one the bundle id uses, then the bare version.
 const DMG_VOLUME_NAME_MAX = 27;
 const dmgVolumeName =
-  [`${productName} v${version}`, `Shigomori v${version}`].find(
+  [`${names.appName} v${version}`, `Shigomori v${version}`].find(
     (name) => name.length <= DMG_VOLUME_NAME_MAX,
   ) ?? `v${version}`.slice(0, DMG_VOLUME_NAME_MAX);
 
@@ -123,23 +130,25 @@ const config: ForgeConfig = {
     asar: { unpack: "**/node_modules/node-pty/**" },
     ignore: packagerIgnore,
     icon: "assets/icon",
-    appBundleId: APP_BUNDLE_ID,
+    // The bundle's name, which is also its executable's, and its id.
+    name: names.appName,
+    appBundleId: names.bundleId,
     appCopyright: "© 2026 sylophi",
     // The renderer-origin scheme (main/electron/clerk.ts): packaged
-    // builds load the renderer from shigomori://app, and Clerk's OAuth
+    // builds load the renderer from <scheme>://app, and Clerk's OAuth
     // redirects deep-link back to it. macOS routes the scheme to the
-    // app through this Info.plist entry (CFBundleURLTypes). Prod only:
-    // the dev scheme is claimed by the per-worktree bundle
+    // app through this Info.plist entry (CFBundleURLTypes). Packaged
+    // flavors only: the dev scheme is claimed by the per-worktree bundle
     // scripts/dev-electron.mts registers, so this prod entry is NOT
     // exercised by dev sign-in. Verify changes to it against a
     // packaged build.
-    protocols: [{ name: productName, schemes: [rendererSchemeName("prod")] }],
+    protocols: [{ name: names.appName, schemes: [rendererSchemeName(flavor)] }],
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
     // into the user's bin dir.
     extraResource: [
       "resources/licenses",
-      `${CLI_DIST_DIR}/${cliBinaryName("prod")}`,
+      `${CLI_DIST_DIR}/${cliBinaryName(flavor)}`,
       // The tunnel connector, fetched by the prePackage hook below for
       // the target platform (shared/packaging/cloudflaredDist.mts pins
       // it), so remote access needs nothing installed.
