@@ -114,6 +114,28 @@ export const ResetSoftResultSchema = Schema.Struct({
 });
 export type ResetSoftResult = typeof ResetSoftResultSchema.Type;
 
+// Move the branch, the index and the working tree to `ref`, wherever it
+// is, from where `expectHead` says HEAD still is. The undo puts the
+// reset's snapshot back after (`restore`).
+export const ResetHardPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  ref: GitRefNameSchema,
+  expectHead: Schema.optional(CommitHashSchema),
+  restore: Schema.optional(CommitHashSchema),
+});
+
+export const ResetHardResultSchema = Schema.Struct({
+  // Where HEAD was before the move, what an undo resets back to.
+  previousHead: CommitHashSchema,
+  // Where it is now, what the undo pins.
+  head: CommitHashSchema,
+  // The uncommitted files, snapshotted before the reset for
+  // restoreDiscard. Null with nothing uncommitted.
+  snapshot: Schema.NullOr(CommitHashSchema),
+  worktree: WorktreeSchema,
+});
+export type ResetHardResult = typeof ResetHardResultSchema.Type;
+
 export const CommitChangesResultSchema = Schema.Struct({
   hash: CommitHashSchema,
   worktree: WorktreeSchema,
@@ -227,6 +249,8 @@ export type IntegrateMethod = typeof IntegrateMethodSchema.Type;
 export const MergePreviewPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   ref: GitRefNameSchema,
+  // Without the trial merge: no conflicts or subject, for a hard reset.
+  countsOnly: Schema.optional(Schema.Boolean),
 });
 
 // How the branch and the one to bring in stand: the commits each has

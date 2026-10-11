@@ -35,7 +35,8 @@ export type CommitActions = {
   newWorktreeFrom: (commit: CommitSummary) => void;
   squash: (commit: CommitSummary, head: string) => void;
   reword: (commit: CommitSummary, head: string) => void;
-  // The reword dialog while one is open.
+  hardResetTo: (commit: CommitSummary) => void;
+  // The reword or hard reset dialog while one is open.
   dialog: ReactNode;
 };
 

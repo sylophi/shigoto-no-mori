@@ -84,12 +84,16 @@ export function ModalShell({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || openShells.at(-1) !== id) return;
       if (!closeOnEscapeRef.current) return;
-      // A menu or a list open over the shell (a dropdown inside it)
-      // takes its own Escape first: captured here, the key would close
-      // the dialog under it instead.
+      // A menu, list or popup open over the shell (a dropdown inside
+      // it, or a combobox's popup with its search field) takes its own
+      // Escape first: captured here, the key would close the dialog
+      // under it instead. Focus left outside the shell (on the button
+      // that opened it) is no such thing.
       if (
         e.target instanceof Element &&
-        e.target.closest('[role="menu"], [role="listbox"]') !== null
+        e.target.closest(
+          '[role="menu"], [role="listbox"], [data-slot="combobox-popup"], [data-slot="popover-content"]',
+        ) !== null
       ) {
         return;
       }

@@ -1,9 +1,6 @@
 import { useState } from "react";
-import { GitMerge } from "lucide-react";
-import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
-import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useMergeBranch,
   useMergePreview,
@@ -13,28 +10,9 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { IntegrateMethod, Worktree } from "@shigomori/contracts/schemas";
 import { MergeDialogView } from "@shigomori/ui/views/worktreeDetail/git/MergeDialogView.tsx";
 
-// The Git page's way to bring another branch in, opening the dialog.
-// None on a peer that takes no commands from here.
-export function MergeButton({ worktree }: { worktree: Worktree }) {
-  const [open, setOpen] = useState(false);
-  const { canCommand } = useCommandAccess();
-  if (!canCommand) return null;
-  return (
-    <>
-      <Button variant="ghost" size="xs" onClick={() => setOpen(true)}>
-        <GitMerge />
-        Merge
-      </Button>
-      {open && (
-        <MergeDialog worktree={worktree} onClose={() => setOpen(false)} />
-      )}
-    </>
-  );
-}
-
 // The merge dialog (MergeDialogView): the preview of the move, and the
 // move.
-function MergeDialog({
+export function MergeDialog({
   worktree,
   onClose,
 }: {

@@ -117,6 +117,7 @@ export function worktree(
     divergedClean: false,
     behindPrimary: 0,
     unpushedCount: 0,
+    primaryBranch: "main",
     mergedIntoPrimary: false,
     changedCount: 0,
     recentCommits: [],

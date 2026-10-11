@@ -18,6 +18,7 @@ import {
   discardChanges,
   listChangesForPage,
   readCommitMessage,
+  resetHard,
   resetSoft,
   restoreDiscard,
 } from "@host/lib/git/changes";
@@ -537,6 +538,11 @@ export const worktreesHandlers = {
       })),
     ),
 
+  resetHard: (input) =>
+    mutateAndDescribeWith(input, (wt) =>
+      resetHard(wt.path, input.ref, input.expectHead, input.restore),
+    ).pipe(Effect.map(({ result, worktree }) => ({ ...result, worktree }))),
+
   commitDiff: (input) =>
     atPath(input, (path) => getCommitDiff(path, input.hash)),
 
@@ -652,7 +658,9 @@ export const worktreesHandlers = {
       resolveConflict(wt.path, input.path, input.side),
     ),
   mergePreview: (input) =>
-    atPath(input, (path) => readMergePreview(path, input.ref)),
+    atPath(input, (path) =>
+      readMergePreview(path, input.ref, input.countsOnly),
+    ),
   mergeBranch: (input) =>
     mutateAndDescribeWith(input, (wt) =>
       mergeBranch(wt.path, input.ref, input.method, input.message),
