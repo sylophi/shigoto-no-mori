@@ -13,7 +13,7 @@ item works like this. Remove this section when `release/v3` merges into
    `app/DESIGN.md` for any UI change. `node_modules/effect` for any
    API on an unstable module; never write such a pattern from memory.
 2. **Take a worktree on the branch.** `sm worktrees create --base release/v3`,
-   then name it (`/sm-name-worktree`): a branch name starting with
+   then name it (the `sm-basics` and `sm-for-agents` skills): a branch name starting with
    `v3/`, a title written like a PR title and starting with `V3: `,
    and a description that says which `V3.md` item it closes.
 3. **Keep to the item.** The PR targets `release/v3`, with an ordinary title

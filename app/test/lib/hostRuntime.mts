@@ -1,7 +1,7 @@
 // The host's services, up the way the app's graph (host/process/layer.ts)
 // brings them up, so host code a proof or a bench reaches answers
 // instead of waiting for a graph that never comes (EFFECT.md, runtime
-// boundaries). Every proof's file starts and disposes it (adapters.mts);
+// boundaries). Every proof's file starts and disposes it (hostSetup.mts);
 // a bench under plain node disposes it itself.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
