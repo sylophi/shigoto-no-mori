@@ -25,7 +25,8 @@ export function OnboardingView({
   addingRepo,
   onPickRepo,
 }: {
-  signIn: { readonly state: StepState };
+  // None when the build has no account service: no sign-in to offer.
+  signIn: { readonly state: StepState } | null;
   onSignIn: () => void;
   // `foreign` holds the links another program owns, which only a
   // replace asked for takes over.
@@ -42,11 +43,13 @@ export function OnboardingView({
   const picking = project.state !== "done";
   return (
     <StepsPageView title="Shigoto no Mori">
-      <SignInStepView
-        state={signIn.state}
-        asks={signIn.state !== "done"}
-        onSignIn={onSignIn}
-      />
+      {signIn !== null && (
+        <SignInStepView
+          state={signIn.state}
+          asks={signIn.state !== "done"}
+          onSignIn={onSignIn}
+        />
+      )}
       <StepRowView
         label="Command line tool"
         state={cli.state}

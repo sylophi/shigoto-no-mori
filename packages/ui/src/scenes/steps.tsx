@@ -72,7 +72,7 @@ const picker = (
 );
 
 function onboarding(
-  signIn: StepState,
+  signIn: StepState | null,
   cli: StepState,
   project: StepState,
   foreign: ReadonlyArray<string> = [],
@@ -81,7 +81,7 @@ function onboarding(
     return (
       <SceneWindowFrame sidebar={null}>
         <OnboardingView
-          signIn={{ state: signIn }}
+          signIn={signIn === null ? null : { state: signIn }}
           onSignIn={noop}
           cli={{ state: cli, foreign }}
           onReplaceCli={noop}
@@ -102,3 +102,5 @@ export const OnboardingCliScene = onboarding("done", "waiting", "waiting", [
 ]);
 export const OnboardingProjectScene = onboarding("done", "done", "waiting");
 export const OnboardingDoneScene = onboarding("done", "done", "done");
+// A build with no account service: no sign-in step.
+export const OnboardingNoAccountScene = onboarding(null, "done", "waiting");
