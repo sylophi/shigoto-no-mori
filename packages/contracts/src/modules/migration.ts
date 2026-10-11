@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke } from "../contract.ts";
 import { MigrationSchema, VoidSchema } from "../schemas/index.ts";
 
 // The v3 migration of this device, as it goes, for the page a window
@@ -14,5 +14,5 @@ export const migrationContract = defineContract(
   "client",
   invoke("read", VoidSchema, Schema.NullOr(MigrationSchema)),
   invoke("continue", VoidSchema, VoidSchema),
-  broadcast("changed", Schema.NullOr(MigrationSchema)),
+  push("changed", Schema.NullOr(MigrationSchema)),
 );

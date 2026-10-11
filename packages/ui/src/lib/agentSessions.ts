@@ -1,5 +1,5 @@
 import type { StatusTone } from "../primitives/status-dot.tsx";
-import type { AgentSession } from "@shigomori/contracts/schemas/index";
+import type { AgentSession } from "@shigomori/contracts/schemas";
 
 // How the app names a harness and a session's state (engine Agents.ts).
 // A harness without built-in support shows by the name it gave itself.

@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke, view } from "../contract.ts";
+import { push, defineContract, invoke, view } from "../contract.ts";
 import { broughtPaths } from "../mirrorIgnores.ts";
 import {
   type MirrorIgnoreMode,
@@ -738,7 +738,7 @@ export const mirrorContract = defineContract(
   // Optional because the host may have none to send (no daemon yet, or
   // a list that failed to build or to validate): it then announces the
   // change bare, and a reader re-asks.
-  broadcast("changed", Schema.UndefinedOr(MirrorListResultSchema), {
+  push("changed", Schema.UndefinedOr(MirrorListResultSchema), {
     remote: true,
   }),
   // A served worktree's index was rewritten (something staged or
@@ -746,7 +746,7 @@ export const mirrorContract = defineContract(
   // git:projectChanged. The index is the one git fact that watcher
   // ignores on purpose, so the mirror announces it itself for the
   // follower on the other device.
-  broadcast("gitChanged", MirrorWorktreePayloadSchema, {
+  push("gitChanged", MirrorWorktreePayloadSchema, {
     remote: true,
   }),
 );

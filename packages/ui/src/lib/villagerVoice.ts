@@ -21,7 +21,7 @@ import type {
   VillagerProfile,
   VillagerProfiles,
   Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 import { type VillagerRarity, villagerRarity } from "./villagers/rarity.ts";
 
 // A character speaking for one of their worktrees.

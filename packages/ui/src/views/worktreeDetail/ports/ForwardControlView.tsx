@@ -12,10 +12,7 @@
 // since the fix (pick another local port) is right here.
 import { useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
-import {
-  digitsOnly,
-  parsePortNumber,
-} from "@shigomori/contracts/schemas/index";
+import { digitsOnly, parsePortNumber } from "@shigomori/contracts/schemas";
 import { Input } from "../../../primitives/input.tsx";
 import { TONE_TEXT } from "../../../primitives/status-dot.tsx";
 import { Switch } from "../../../primitives/switch.tsx";

@@ -14,7 +14,7 @@ import {
   type CreatePhase,
   CreatePhaseSchema,
   type Project,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // The run as one ordered line: the pull's steps, with the create's
 // lifecycle phases slotted in right after the create itself. Both

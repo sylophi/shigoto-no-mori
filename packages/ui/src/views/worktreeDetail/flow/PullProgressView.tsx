@@ -16,7 +16,7 @@ import {
 } from "@shigomori/contracts/errors";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
-import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas/index";
+import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas";
 import { Button } from "../../../primitives/button.tsx";
 import { ErrorBanner } from "../../../primitives/error-banner.tsx";
 import { DeviceGlyphView } from "../../shared/DeviceGlyphView.tsx";

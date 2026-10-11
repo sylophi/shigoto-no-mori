@@ -27,7 +27,7 @@ import {
   worktreeLastActivityAt,
   type Project,
   type Worktree,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 import {
   deviceBadgeOf,

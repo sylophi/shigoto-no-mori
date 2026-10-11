@@ -5,7 +5,7 @@ import type {
   MirrorEvent,
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
-import type { Worktree } from "@shigomori/contracts/schemas/index";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 export const endpointState = () => ({
   connected: true,

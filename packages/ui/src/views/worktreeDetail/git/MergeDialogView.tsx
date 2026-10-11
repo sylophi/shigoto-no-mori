@@ -10,7 +10,7 @@ import { pluralize } from "../../../lib/pluralize.ts";
 import type {
   IntegrateMethod,
   MergePreview,
-} from "@shigomori/contracts/schemas/index";
+} from "@shigomori/contracts/schemas";
 
 // How many conflicted files the dialog names before it counts the rest.
 const NAMED_CONFLICTS = 3;

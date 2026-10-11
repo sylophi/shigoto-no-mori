@@ -2,7 +2,7 @@ import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "../../lib/utils.ts";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import type { Project } from "@shigomori/contracts/schemas/index";
+import type { Project } from "@shigomori/contracts/schemas";
 import { PinnedMarkView } from "../shared/PinnedMarkView.tsx";
 import { TerrierPawView } from "../shared/TerrierPawView.tsx";
 

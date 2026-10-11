@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import type { PullRequest } from "@shigomori/contracts/schemas/index";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { cn } from "../../../lib/utils.ts";
 import { useOutside } from "../../../outside.tsx";
 
