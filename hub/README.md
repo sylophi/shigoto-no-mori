@@ -398,6 +398,9 @@ override it, and packaged builds never read it.
 
 ## Develop and test
 
+From a fresh checkout, `pnpm install` at the repo root first (the hub
+needs none of the root's `postinstall`).
+
 ```sh
 pnpm run dev    # wrangler dev with local bindings
 pnpm run check  # typecheck plus the vitest suite
@@ -419,3 +422,24 @@ wins over one in `.dev.vars`. Enrollment also needs the development
 Clerk instance's `CLERK_SECRET_KEY` in a local `.dev.vars`
 (gitignored). Point the dev app at this Worker with
 `SM_DEVICE_HUB_URL` (`app/lab/dev-app.md`, "Other tools").
+
+## Adding a route
+
+A route is an endpoint in the contract's `HttpApi`
+(`packages/contracts/src/hubApi.ts`), in the group whose auth it
+shares: the group's middleware checks the bearer, so a handler reads
+its caller with `yield* HubDevice` and checks nothing itself. Its
+handler goes in that group's `HttpApiBuilder.group(...)` in
+`src/worker.ts`, and holds to the routes beside it:
+
+- A device of another account reads as one that does not exist
+  (`HubUnknownDeviceError`), so a route leaks nothing about foreign
+  ids.
+- A failure of the registry is `HubUnavailableError` with the route's
+  `operation`, a literal the error's schema lists, so a new route adds
+  its own (`unavailable("<operation>")`).
+- A device goes out through `toDeviceInfo`, with presence from
+  `presenceOrNone`, so a hub object's hiccup reads as offline rather
+  than failing the read.
+- A case in `test/http.spec.ts` drives it through the Worker.
+

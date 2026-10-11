@@ -4,7 +4,7 @@ import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import * as Ports from "@host/lib/ports";
+import * as Ports from "@host/lib/Ports";
 
 const listPorts = (worktree: {
   readonly projectId: string;

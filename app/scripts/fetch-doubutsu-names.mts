@@ -12,7 +12,7 @@
 // Category:Special characters through its public MediaWiki API (no key
 // needed). Nothing about the characters beyond their names is kept
 // here: the app downloads their faces and profiles when its user asks
-// (host/lib/villagers.ts). Re-run it when a new game or update adds
+// (host/lib/VillagerData.ts). Re-run it when a new game or update adds
 // characters, then review the diff.
 //
 // Run: node scripts/fetch-doubutsu-names.mts
@@ -183,7 +183,7 @@ for (const { slug } of characters) {
 // Each character's face icon, as the wiki files it: the manifest
 // records the file, its description page (where the file's own credits
 // live), the image's URL, size and sha1. Nothing is downloaded here:
-// the app fetches the images when its user asks (host/lib/villagers)
+// the app fetches the images when its user asks (host/lib/VillagerData.ts)
 // and checks each against this record. Several games drew faces, so
 // each character tries the file names below in order and keeps the
 // first that exists at its game's size, and a few characters the

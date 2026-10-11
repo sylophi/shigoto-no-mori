@@ -2,7 +2,7 @@
 // villager data come from. One module for both of its readers: the
 // maintainer script that refreshes the name pool and the manifest
 // (scripts/fetch-doubutsu-names.mts) and the app's on-request download
-// of the villager data (host/lib/villagers.ts). Pure: the readers do
+// of the villager data (host/lib/VillagerData.ts). Pure: the readers do
 // the fetching.
 //
 // Type-only imports, so plain node can load this file from the script.

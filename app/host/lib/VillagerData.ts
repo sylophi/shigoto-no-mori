@@ -31,25 +31,23 @@
 // four at a time, all under the scripts' User-Agent. Nothing retries on
 // its own: a failure stops the download, and trying again resumes it.
 import { createHash } from "node:crypto";
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { join } from "node:path";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { type ContractSchema, type Decoded } from "@shigomori/contracts/codec";
+import {
+  type ContractSchema,
+  type Decoded,
+  decode,
+} from "@shigomori/contracts/codec";
+import { isAbsent } from "@shigomori/engine/platformErrors";
 import {
   type VillagerDataStatus,
   type VillagerProfile,
@@ -66,13 +64,8 @@ import {
   WIKI_API,
   WIKI_USER_AGENT,
 } from "@shared/villagers/wiki";
-import {
-  atomicWriteJson,
-  readJsonOrNull,
-  tempPathFor,
-  unlinkIfExists,
-} from "./util/atomicJson";
-import { dataDir, isENOENT } from "./util/paths";
+import { tempPathFor } from "./util/atomicJson";
+import { dataDir } from "./util/paths";
 
 // Villagers per API request (the API's cap on titles), and faces in
 // flight at once.
@@ -164,8 +157,8 @@ interface Stored {
 // Disk work runs to its end even when the download is stopped, so a
 // stop never leaves a file half written or races the folder's removal.
 // Its failures are defects: the download reports them as a failed save.
-const disk = <A>(work: () => Promise<A>) =>
-  Effect.uninterruptible(Effect.promise(work));
+const disk = <A, E, R>(work: Effect.Effect<A, E, R>) =>
+  Effect.uninterruptible(Effect.orDie(work));
 
 const make = ({
   dir,
@@ -173,11 +166,69 @@ const make = ({
   fetch = globalThis.fetch,
 }: Options) =>
   Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const entries: ManifestEntry[] = Object.entries(manifest.villagers);
     const slugs = entries.map(([slug]) => slug);
     const total = entries.length;
-    const readyDir = () => join(dir(), "ready");
-    const partialDir = () => join(dir(), "partial");
+    const readyDir = () => path.join(dir(), "ready");
+    const partialDir = () => path.join(dir(), "partial");
+
+    // A file whole or not at all: written beside itself, then renamed in.
+    const writeWhole = (file: string, data: Uint8Array | string) =>
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+        const temp = tempPathFor(file);
+        yield* typeof data === "string"
+          ? fs.writeFileString(temp, data)
+          : fs.writeFile(temp, data);
+        yield* fs
+          .rename(temp, file)
+          .pipe(Effect.tapError(() => Effect.ignore(fs.remove(temp))));
+      });
+    const writeJson = (file: string, value: unknown) =>
+      writeWhole(file, `${JSON.stringify(value, null, 2)}\n`);
+
+    // A file of ours, or null when it is missing; one that doesn't read
+    // or decode fails.
+    const readJson = <S extends ContractSchema>(file: string, schema: S) =>
+      fs.readFileString(file).pipe(
+        Effect.flatMap((raw) =>
+          Effect.try(() => decode(schema, JSON.parse(raw))),
+        ),
+        Effect.catchTags({
+          PlatformError: (error) =>
+            isAbsent(error) ? Effect.succeed(null) : Effect.fail(error),
+        }),
+      );
+    // A file of ours, or null when it's missing or damaged (cut short, or
+    // written by a build with another shape): either way it is fetched
+    // again rather than left to block the data behind it.
+    const readIfValid = <S extends ContractSchema>(file: string, schema: S) =>
+      readJson(file, schema).pipe(
+        Effect.orElseSucceed((): Decoded<S> | null => null),
+      );
+
+    // What a folder holds so far, or null when there is no such folder.
+    const readStored = (folder: string) =>
+      Effect.gen(function* () {
+        const files = yield* fs.readDirectory(path.join(folder, "faces")).pipe(
+          Effect.map((names): string[] | null => names),
+          Effect.catchIf(isAbsent, () => Effect.succeed(null)),
+        );
+        if (files === null) return null;
+        const profiles =
+          (yield* readIfValid(
+            path.join(folder, "profiles.json"),
+            VillagerProfilesSchema,
+          )) ?? {};
+        const faces = new Set(
+          files
+            .filter((file) => file.endsWith(".png"))
+            .map((file) => file.slice(0, -".png".length)),
+        );
+        return { profiles, faces } satisfies Stored;
+      });
 
     // The download under way. Closing the layer stops it and leaves
     // partial/ for the next launch to resume.
@@ -206,8 +257,9 @@ const make = ({
           villagers: total,
         } satisfies VillagerDataStatus;
       }
-      const meta = yield* disk(() =>
-        readIfValid(join(readyDir(), "meta.json"), MetaSchema),
+      const meta = yield* readIfValid(
+        path.join(readyDir(), "meta.json"),
+        MetaSchema,
       );
       if (meta !== null) {
         return {
@@ -216,7 +268,7 @@ const make = ({
           villagers: meta.villagers,
         } satisfies VillagerDataStatus;
       }
-      const stored = yield* disk(() => readStored(partialDir()));
+      const stored = yield* disk(readStored(partialDir()));
       if (stored !== null) {
         return {
           kind: "failed",
@@ -352,47 +404,44 @@ const make = ({
           subject: name,
         });
       }
-      const path = join(folder, "faces", `${slug}.png`);
-      yield* disk(async () => {
-        const temp = tempPathFor(path);
-        await writeFile(temp, body);
-        try {
-          await rename(temp, path);
-        } catch (error) {
-          await unlinkIfExists(temp);
-          throw error;
-        }
-      });
+      yield* disk(writeWhole(path.join(folder, "faces", `${slug}.png`), body));
     });
 
     const fill = Effect.fnUntraced(function* () {
       const folder = partialDir();
-      const stored = yield* disk(async () => {
-        await mkdir(join(folder, "faces"), { recursive: true });
-        const found: Stored = (await readStored(folder)) ?? {
-          profiles: {},
-          faces: new Set(),
-        };
-        // Resuming: a face is kept only while it still matches the
-        // manifest, which an app update in between may have moved.
-        await Promise.all(
-          [...found.faces].map(async (slug) => {
-            const path = join(folder, "faces", `${slug}.png`);
-            // hasOwn, not a lookup: the slugs here are file names.
-            const entry = Object.hasOwn(manifest.villagers, slug)
-              ? manifest.villagers[slug]
-              : undefined;
-            const held =
-              entry !== undefined &&
-              sha1Of(await readFile(path)) === entry.icon.sha1;
-            if (!held) {
-              found.faces.delete(slug);
-              await rm(path, { force: true });
-            }
-          }),
-        );
-        return found;
-      });
+      const stored = yield* disk(
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(path.join(folder, "faces"), {
+            recursive: true,
+          });
+          const found: Stored = (yield* readStored(folder)) ?? {
+            profiles: {},
+            faces: new Set(),
+          };
+          // Resuming: a face is kept only while it still matches the
+          // manifest, which an app update in between may have moved.
+          yield* Effect.forEach(
+            [...found.faces],
+            (slug) =>
+              Effect.gen(function* () {
+                const face = path.join(folder, "faces", `${slug}.png`);
+                // hasOwn, not a lookup: the slugs here are file names.
+                const entry = Object.hasOwn(manifest.villagers, slug)
+                  ? manifest.villagers[slug]
+                  : undefined;
+                const held =
+                  entry !== undefined &&
+                  sha1Of(yield* fs.readFile(face)) === entry.icon.sha1;
+                if (!held) {
+                  found.faces.delete(slug);
+                  yield* fs.remove(face, { force: true });
+                }
+              }),
+            { concurrency: "unbounded", discard: true },
+          );
+          return found;
+        }),
+      );
       const { profiles, faces } = stored;
       const tally = Effect.suspend(() => Ref.set(done, countDone(stored)));
       yield* tally;
@@ -405,9 +454,7 @@ const make = ({
         if (unknown.length > 0) {
           Object.assign(profiles, yield* fetchProfiles(unknown));
           // Saved before its faces start.
-          yield* disk(() =>
-            atomicWriteJson(join(folder, "profiles.json"), profiles),
-          );
+          yield* disk(writeJson(path.join(folder, "profiles.json"), profiles));
           yield* tally;
         }
         // The first failure stops the rest.
@@ -431,18 +478,20 @@ const make = ({
         manifest: manifest.source.retrieved,
         villagers: total,
       };
-      yield* disk(async () => {
-        await atomicWriteJson(join(folder, "meta.json"), meta);
-        await rm(readyDir(), { recursive: true, force: true });
-        await rename(folder, readyDir());
-      });
+      yield* disk(
+        Effect.gen(function* () {
+          yield* writeJson(path.join(folder, "meta.json"), meta);
+          yield* fs.remove(readyDir(), { recursive: true, force: true });
+          yield* fs.rename(folder, readyDir());
+        }),
+      );
     });
 
     // Stops the download under way, dropping what it stored.
     const stop = Effect.gen(function* () {
       if (Option.isNone(yield* FiberHandle.get(download))) return;
       yield* FiberHandle.clear(download);
-      yield* disk(() => rm(partialDir(), { recursive: true, force: true }));
+      yield* disk(fs.remove(partialDir(), { recursive: true, force: true }));
     });
 
     const start = Effect.gen(function* () {
@@ -474,24 +523,21 @@ const make = ({
 
     const remove = Effect.gen(function* () {
       yield* stop;
-      yield* disk(() => rm(dir(), { recursive: true, force: true }));
+      yield* disk(fs.remove(dir(), { recursive: true, force: true }));
       yield* Ref.set(lastFailure, null);
       return yield* status;
     }).pipe(serial.withPermits(1), Effect.withSpan("VillagerData.remove"));
 
     const face = Effect.fn("VillagerData.face")(function* (slug: string) {
       if (!Object.hasOwn(manifest.villagers, slug)) return null;
-      return yield* disk(async () => {
-        try {
-          const bytes = await readFile(
-            join(readyDir(), "faces", `${slug}.png`),
-          );
-          return bytes.toString("base64");
-        } catch (error) {
-          if (isENOENT(error)) return null;
-          throw error;
-        }
-      });
+      return yield* disk(
+        fs.readFile(path.join(readyDir(), "faces", `${slug}.png`)).pipe(
+          Effect.map((bytes): string | null =>
+            Buffer.from(bytes).toString("base64"),
+          ),
+          Effect.catchIf(isAbsent, () => Effect.succeed(null)),
+        ),
+      );
     });
 
     return VillagerData.of({
@@ -503,10 +549,12 @@ const make = ({
       cancel,
       remove,
       face,
-      profiles: disk(() =>
-        readJsonOrNull(
-          join(readyDir(), "profiles.json"),
-          VillagerProfilesSchema,
+      profiles: Effect.suspend(() =>
+        disk(
+          readJson(
+            path.join(readyDir(), "profiles.json"),
+            VillagerProfilesSchema,
+          ),
         ),
       ).pipe(Effect.withSpan("VillagerData.profiles")),
     });
@@ -517,41 +565,9 @@ export const layer = (options: Options) =>
 
 // This device's villager data, in its data dir.
 export const deviceLayer = layer({
-  dir: () => join(dataDir(), "villagers"),
+  dir: () => `${dataDir()}/villagers`,
 });
 
-// What a folder holds so far, or null when there is no such folder.
-async function readStored(folder: string): Promise<Stored | null> {
-  let files: string[];
-  try {
-    files = await readdir(join(folder, "faces"));
-  } catch (error) {
-    if (isENOENT(error)) return null;
-    throw error;
-  }
-  const profiles =
-    (await readIfValid(
-      join(folder, "profiles.json"),
-      VillagerProfilesSchema,
-    )) ?? {};
-  const faces = new Set(
-    files
-      .filter((file) => file.endsWith(".png"))
-      .map((file) => file.slice(0, -".png".length)),
-  );
-  return { profiles, faces };
-}
-
-// A file of ours, or null when it's missing or damaged (cut short, or
-// written by a build with another shape): either way it is fetched
-// again rather than left to block the data behind it.
-function readIfValid<S extends ContractSchema>(
-  path: string,
-  schema: S,
-): Promise<Decoded<S> | null> {
-  return readJsonOrNull(path, schema).catch(() => null);
-}
-
-function sha1Of(bytes: Buffer): string {
+function sha1Of(bytes: Uint8Array): string {
   return createHash("sha1").update(bytes).digest("hex");
 }
