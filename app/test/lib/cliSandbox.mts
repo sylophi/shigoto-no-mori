@@ -133,6 +133,23 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
     await git(repo, ["config", "maintenance.auto", "false"]);
   }
 
+  // An empty repo at <sandbox>/<name> on main, gc off. Returns its path.
+  async function initRepo(name: string): Promise<string> {
+    await git(sandbox, ["init", "-q", "-b", "main", name]);
+    const repo = join(sandbox, name);
+    await disableAutoGc(repo);
+    return repo;
+  }
+
+  // A clone of `repo` at <sandbox>/<name>, gc off: the same project on
+  // another device. Returns its path.
+  async function cloneRepo(repo: string, name: string): Promise<string> {
+    await git(sandbox, ["clone", "-q", "--", repo, name]);
+    const clone = join(sandbox, name);
+    await disableAutoGc(clone);
+    return clone;
+  }
+
   // The terminal binary, on the same data dir.
   const { runCli, sm } = createCliRunner(smBinary, smEnv);
   let wired: WiredHostCli | undefined;
@@ -149,6 +166,8 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
     commitFile,
     addWorktree,
     disableAutoGc,
+    initRepo,
+    cloneRepo,
     runCli,
     sm,
     // Builds the terminal binary, unless an earlier proof has.

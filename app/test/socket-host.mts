@@ -1,7 +1,7 @@
 // Durable proof for the device link's listener (host/socket/server.ts)
 // and its dialer (shared/remote/deviceLink.ts): a real listener on an
 // ephemeral loopback port (test/lib/directBoot.mts), dialed through the
-// ticket handshake by the real client, asserting the calls, the pushes,
+// ticket handshake by the real dialer, asserting the calls, the pushes,
 // the errors crossing as their classes, and the hardening: a refused
 // ticket and the lockout behind it, the protocol version, calls before
 // a hello, the hello timeout, the Origin gate, the frame cap, the
@@ -100,7 +100,6 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import {
   type DeviceConnection,
-  openDevice,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
 import { LinkGroup } from "@shigomori/contracts/link";
@@ -110,7 +109,7 @@ import {
   SEAL_OVERHEAD_BYTES,
   sealDialer,
 } from "@shared/remote/sealedSocket";
-import { generateKeyPair, type KeyPair } from "@shared/crypto/noise";
+import { generateKeyPair } from "@shared/crypto/noise";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import {
   inviteMirror,
@@ -124,16 +123,17 @@ import type { ChannelHandle } from "@shigomori/contracts/link";
 import { delay, type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {
+  DIALER,
+  type DialOpts,
+  dialing,
+  dialListener,
   type DirectListener,
   type DirectListenerOpts,
+  LISTENER,
   mintTicket,
   startDirectListener,
 } from "./lib/directBoot.mts";
 import { testDeviceKey } from "./lib/hubStub.mts";
-
-// The dialing peer every ticket below is minted for.
-const CLIENT = "client";
-const HOST = "B";
 
 // What the test handlers saw.
 type Seen = {
@@ -226,7 +226,6 @@ async function listen(
 ): Promise<{ listener: DirectListener; seen: Seen }> {
   const seen: Seen = { refreshes: 0, hanging: [], channels: new Map() };
   const listener = await startDirectListener(track, {
-    deviceId: HOST,
     ...opts,
     registerHandlers: (binding) => {
       serve({ binding } as DirectListener, seen);
@@ -234,59 +233,6 @@ async function listen(
     },
   });
   return { listener, seen };
-}
-
-type DialOpts = {
-  deviceId?: string;
-  // The key the dialer seals with: the device's own unless a check
-  // names another.
-  localKey?: KeyPair;
-  ticket?: string;
-  headers?: Record<string, string>;
-  onClose?: () => void;
-  protocolVersion?: number;
-  deviceKind?: "desktop" | "web";
-  // Hears the size of every frame the dialer receives, sealed.
-  onFrame?: (bytes: number) => void;
-};
-
-function dialing(listener: DirectListener, opts: DialOpts = {}) {
-  const deviceId = opts.deviceId ?? CLIENT;
-  return openDevice({
-    url: `ws://127.0.0.1:${listener.port}`,
-    ticket: opts.ticket ?? mintTicket(listener.tickets, deviceId),
-    seal: {
-      localKey: opts.localKey ?? testDeviceKey(deviceId).pair,
-      remoteKey: testDeviceKey(HOST).pair.publicKey,
-    },
-    appVersion: "1.0.0",
-    localDeviceId: deviceId,
-    expectedDeviceId: HOST,
-    onClose: opts.onClose ?? (() => {}),
-    openSocket: (url) => {
-      const ws = new WebSocket(url, { headers: opts.headers });
-      const { onFrame } = opts;
-      if (onFrame !== undefined) {
-        ws.on("message", (data: Buffer) => onFrame(data.byteLength));
-      }
-      return ws;
-    },
-    deadlineMs: 3000,
-    ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
-    ...(opts.protocolVersion === undefined
-      ? {}
-      : { protocolVersion: opts.protocolVersion }),
-  });
-}
-
-async function dial(
-  track: Track,
-  listener: DirectListener,
-  opts: DialOpts = {},
-): Promise<DeviceConnection> {
-  const connection = await dialing(listener, opts).authenticate();
-  track(() => connection.close());
-  return connection;
 }
 
 async function dialFails(
@@ -302,6 +248,19 @@ async function dialFails(
   assert.ok(error instanceof RemoteConnectError, String(error));
   return error;
 }
+
+// The dial's socket sending these headers, as a browser or the
+// tunnel's connector does.
+const withHeaders = (headers: Record<string, string>) => (url: string) =>
+  new WebSocket(url, { headers });
+
+// The dial's socket, hearing the size of every frame it receives,
+// sealed.
+const hearingFrames = (onFrame: (bytes: number) => void) => (url: string) => {
+  const ws = new WebSocket(url);
+  ws.on("message", (data: Buffer) => onFrame(data.byteLength));
+  return ws;
+};
 
 const invoke = (
   connection: DeviceConnection,
@@ -332,12 +291,12 @@ async function rawLink(
   const closed = new Promise<number>((resolve) =>
     ws.on("close", (code) => resolve(code)),
   );
-  // Sealed like the dialer's, with a ticket minted for CLIENT.
+  // Sealed like the dialer's, with a ticket minted for DIALER.
   // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
   const sealed = sealDialer(ws as unknown as Socket.WebSocketLike, {
-    ticket: opts.ticket ?? mintTicket(listener.tickets, CLIENT),
-    localKey: testDeviceKey(CLIENT).pair,
-    remoteKey: testDeviceKey(HOST).pair.publicKey,
+    ticket: opts.ticket ?? mintTicket(listener.tickets, DIALER),
+    localKey: testDeviceKey(DIALER).pair,
+    remoteKey: testDeviceKey(LISTENER).pair.publicKey,
   });
   const client = await Effect.runPromise(
     Effect.gen(function* () {
@@ -372,7 +331,7 @@ async function rawLink(
   ) =>
     Effect.runPromiseExit(
       call("link:hello", {
-        deviceId: CLIENT,
+        deviceId: DIALER,
         ...as,
         appVersion: "1.0.0",
         protocolVersion,
@@ -395,8 +354,8 @@ const failureOf = (exit: Exit.Exit<unknown, unknown>) => {
 it("handshake: a proven ticket links, and the welcome names the host and proves the ticket", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
-  const connection = await dial(track, listener);
-  assert.equal(connection.remoteDeviceId, HOST);
+  const connection = await dialListener(track, listener);
+  assert.equal(connection.remoteDeviceId, LISTENER);
   assert.equal(connection.remoteAppVersion, "2.0.0");
 });
 
@@ -404,7 +363,7 @@ it("calls: a read answers with its result, and a failure crosses as its contract
   const track = trackTest;
   const { listener } = await listen(track);
   listener.setAccepts(true);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
   const gone = await rejection(
     invoke(connection, "git:refreshProject", { projectId: "gone" }),
@@ -429,10 +388,8 @@ it("pushes: a broadcast reaches every linked peer, and a handler's notifier only
   const { listener } = await listen(track);
   listener.setAccepts(true);
   const heard = { one: [] as unknown[], two: [] as unknown[] };
-  const one = await dial(track, listener, {
-    deviceId: "one",
-  });
-  const two = await dial(track, listener, { deviceId: "two" });
+  const one = await dialListener(track, listener, { dialer: "one" });
+  const two = await dialListener(track, listener, { dialer: "two" });
   one.transport.subscribe("git:projectChanged", (p) => heard.one.push(p));
   two.transport.subscribe("git:projectChanged", (p) => heard.two.push(p));
   // Each link subscribes as it opens: broadcast until both hear it.
@@ -488,7 +445,7 @@ it("lockout: a device on another version, refused past the threshold, leaves a c
     });
     assert.ok(refused.refusal instanceof ProtocolVersionMismatchError);
   }
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
 });
 
@@ -505,7 +462,7 @@ it("version: a hello on another protocol version is refused with ProtocolVersion
   const raw = await rawLink(track, listener);
   const exit = await raw.hello(PROTOCOL_VERSION + 1);
   assert.ok(failureOf(exit) instanceof ProtocolVersionMismatchError);
-  await dial(track, listener);
+  await dialListener(track, listener);
 });
 
 it("before the hello: a call is refused, and a hello after the timeout cannot link", async () => {
@@ -520,7 +477,7 @@ it("before the hello: a call is refused, and a hello after the timeout cannot li
 it("reach: a call no peer may make never leaves the dialer, and a remote call nothing serves answers no handler", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const local = await rejection(invoke(connection, "runtime:nuke"));
   assert.match(
     String(local),
@@ -543,8 +500,8 @@ it("Origin gate: origin-less, loopback and the configured web origin link, while
     "https://web.example",
   ]) {
     // oxlint-disable-next-line no-await-in-loop -- one dial at a time
-    await dial(track, listener, {
-      headers: origin === undefined ? {} : { origin },
+    await dialListener(track, listener, {
+      openSocket: withHeaders(origin === undefined ? {} : { origin }),
     });
   }
   for (const origin of [
@@ -553,7 +510,9 @@ it("Origin gate: origin-less, loopback and the configured web origin link, while
     "https://evil.example",
   ]) {
     // oxlint-disable-next-line no-await-in-loop -- one dial at a time
-    const refused = await dialFails(listener, { headers: { origin } });
+    const refused = await dialFails(listener, {
+      openSocket: withHeaders({ origin }),
+    });
     assert.equal(refused.blocked, false);
   }
 });
@@ -606,16 +565,16 @@ it("roster: a device dropped after its handshake links nothing: its hello is ref
   // Its handshake done, then the roster drops it, and the sweep has not
   // run: the hello itself refuses.
   const unswept = await rawLink(track, listener);
-  await listener.rosterNow([HOST], { sweep: false });
+  await listener.rosterNow([LISTENER], { sweep: false });
   assert.ok(failureOf(await unswept.hello()) instanceof LinkRefusedError);
   // The sweep closes a socket still to say hello.
-  await listener.rosterNow([HOST, CLIENT]);
+  await listener.rosterNow([LISTENER, DIALER]);
   const waiting = await rawLink(track, listener);
-  const pending = mintTicket(listener.tickets, CLIENT);
-  await listener.rosterNow([HOST]);
+  const pending = mintTicket(listener.tickets, DIALER);
+  await listener.rosterNow([LISTENER]);
   assert.equal(await waiting.closed, 1001);
   // And a ticket it was handed before opens nothing.
-  await listener.rosterNow([HOST, CLIENT]);
+  await listener.rosterNow([LISTENER, DIALER]);
   const refused = await dialFails(listener, { ticket: pending });
   assert.ok(refused.refusal instanceof LinkRefusedError);
 });
@@ -644,14 +603,14 @@ it("hub outage: a hello or a dial the listener cannot check against the roster c
     assert.equal(refused.code, CLOSE_TRY_AGAIN);
   }
   listener.rosterUnavailable(false);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
 });
 
 it("tickets: a ticket survives a socket whose handshake fails and one whose first message is replayed, and only the hello that links spends it", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
-  const ticket = mintTicket(listener.tickets, CLIENT);
+  const ticket = mintTicket(listener.tickets, DIALER);
   // A dialer holding the ticket but not the device's key.
   const wrongKey = await dialFails(listener, {
     ticket,
@@ -672,8 +631,8 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
     recorder as unknown as Socket.WebSocketLike,
     {
       ticket,
-      localKey: testDeviceKey(CLIENT).pair,
-      remoteKey: testDeviceKey(HOST).pair.publicKey,
+      localKey: testDeviceKey(DIALER).pair,
+      remoteKey: testDeviceKey(LISTENER).pair.publicKey,
     },
   );
   await new Promise<void>((resolve) =>
@@ -692,7 +651,7 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
   });
   assert.equal(replayClosed, CLOSE_HANDSHAKE_FAILED);
   // Still pending, so the device links with it, and then it is spent.
-  await dial(track, listener, { ticket });
+  await dialListener(track, listener, { ticket });
   const again = await dialFails(listener, { ticket });
   assert.ok(again.refusal instanceof LinkRefusedError);
 });
@@ -700,7 +659,7 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
 it("in-flight cap: one call past the per-peer cap is refused rather than run", async () => {
   const track = trackTest;
   const { listener, seen } = await listen(track);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const calls = Array.from({ length: MAX_IN_FLIGHT_PER_PEER }, () =>
     invoke(connection, "worktrees:list", { projectId: "p" }),
   );
@@ -741,7 +700,7 @@ it("in-flight cap: streams a peer holds open take no place under it", async () =
 it("command gate: with commands off a command is refused with the typed error and never runs while a read is served, and turning them on needs no reconnect", async () => {
   const track = trackTest;
   const { listener, seen } = await listen(track);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const refused = await rejection(
     invoke(connection, "git:refreshProject", { projectId: "p" }),
   );
@@ -758,12 +717,12 @@ it("invited calls: with commands off a call the host asked for runs while the re
   const invitedPort = 1;
   const { listener, seen } = await listen(track, {
     isInvited: (peer, channel, input) =>
-      peer === CLIENT &&
+      peer === DIALER &&
       channel === "forward:open" &&
       (input as { port: number }).port === invitedPort,
   });
   listener.setAccepts(true);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const read = (id: string) => {
     const got: string[] = [];
     let reset = false;
@@ -816,11 +775,11 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
   setMirrorInviteStore({ load: () => [], save: () => {} });
   track(() => setMirrorInviteStore(null));
   inviteMirror({
-    peerDeviceId: CLIENT,
+    peerDeviceId: DIALER,
     sourceWorktreeId: "0123456789ab",
     identity: "repo-identity",
   });
-  landInvitedMirror(CLIENT, "0123456789ab", copy);
+  landInvitedMirror(DIALER, "0123456789ab", copy);
   const { listener, seen } = await listen(track, {
     isInvited: mirrorInviteAdmits,
     seesPush: mirrorInviteSees,
@@ -829,7 +788,7 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
   });
   listener.setAccepts(true);
   listener.setSharing(false);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const heard: unknown[] = [];
   connection.transport.subscribe("git:projectChanged", (p) => heard.push(p));
   assert.ok(
@@ -880,8 +839,8 @@ it("sharing flipped under a linked peer: its calls and views under way end with 
     registerHandlers: (binding) =>
       binding.view("sharedSettings:watch", () => Stream.never),
   });
-  // Its own device: the raw link below says hello as CLIENT.
-  const connection = await dial(track, listener, { deviceId: "second" });
+  // Its own device: the raw link below says hello as DIALER.
+  const connection = await dialListener(track, listener, { dialer: "second" });
   const flips: unknown[] = [];
   const fence: unknown[] = [];
   connection.transport.subscribe("sharing:changed", (on) => flips.push(on));
@@ -923,7 +882,7 @@ it("byte channels: bytes cross both ways in order, and an end on each side compl
   const track = trackTest;
   const { listener, seen } = await listen(track);
   listener.setAccepts(true);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const id = "abcdefabcdefabcdefabcdefabcdef12";
   const got: string[] = [];
   let ended = false;
@@ -957,7 +916,7 @@ it("byte channels: a reader that holds its pieces holds back its own channel alo
   const track = trackTest;
   const { listener } = await listen(track);
   listener.setAccepts(true);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const id = "abcdefabcdefabcdefabcdefabcdef34";
   // A reader busy elsewhere, as a send's source is while it writes its
   // bundle: the echo's pieces wait untaken.
@@ -995,7 +954,7 @@ it("byte channels: the reads idle channels hold take no place under the in-fligh
   const track = trackTest;
   const { listener } = await listen(track);
   listener.setAccepts(true);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   // Twelve channels with nothing to say, each holding its reads ahead
   // on the host: past the cap's 64 calls.
   let resets = 0;
@@ -1025,8 +984,8 @@ it("streams: a client behind a flood is handed it in messages within the cap, an
   const { listener } = await listen(track);
   listener.setAccepts(true);
   const frames: number[] = [];
-  const connection = await dial(track, listener, {
-    onFrame: (bytes) => frames.push(bytes),
+  const connection = await dialListener(track, listener, {
+    openSocket: hearingFrames((bytes) => frames.push(bytes)),
   });
   let events = 0;
   await new Promise<void>((resolve, reject) => {
@@ -1056,21 +1015,23 @@ it("streams: a frame past the decoder's cap drops the link rather than failing e
   const { listener } = await listen(track);
   listener.setAccepts(true);
   let closes = 0;
-  const connection = await dial(track, listener, { onClose: () => closes++ });
+  const connection = await dialListener(track, listener, {
+    onClose: () => closes++,
+  });
   connection.transport.watch?.(
     "terminals:attach",
     { terminalId: "huge" },
     { value: () => {}, end: () => {} },
   );
   await waitFor(() => closes === 1, "the link to drop");
-  const again = await dial(track, listener);
+  const again = await dialListener(track, listener);
   assert.deepEqual(await invoke(again, "git:sweep"), { leaseMs: 5 });
 });
 
 it("interruption: a call its caller cancels is interrupted on the host, its handler's signal aborted", async () => {
   const track = trackTest;
   const { listener, seen } = await listen(track);
-  const connection = await dial(track, listener);
+  const connection = await dialListener(track, listener);
   const cancel = new AbortController();
   const call = rejection(
     invoke(connection, "worktrees:list", { projectId: "p" }, cancel.signal),
@@ -1088,7 +1049,9 @@ it("drop: a link the host cuts aborts its calls, rejects them as a disconnect, a
   const track = trackTest;
   const { listener, seen } = await listen(track);
   let closes = 0;
-  const connection = await dial(track, listener, { onClose: () => closes++ });
+  const connection = await dialListener(track, listener, {
+    onClose: () => closes++,
+  });
   const call = rejection(
     invoke(connection, "worktrees:list", { projectId: "p" }),
   );
@@ -1103,8 +1066,8 @@ it("supersede: a second link from the same device ends the first", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
   let firstClosed = false;
-  await dial(track, listener, { onClose: () => (firstClosed = true) });
-  const second = await dial(track, listener);
+  await dialListener(track, listener, { onClose: () => (firstClosed = true) });
+  const second = await dialListener(track, listener);
   await waitFor(() => firstClosed, "the first link to end");
   assert.deepEqual(await invoke(second, "git:sweep"), { leaseMs: 5 });
 });
@@ -1114,11 +1077,11 @@ it("tabs: a web device holds a link per tab, each hears its own pushes, and one 
   const { listener } = await listen(track);
   listener.setAccepts(true);
   let firstClosed = false;
-  const first = await dial(track, listener, {
+  const first = await dialListener(track, listener, {
     deviceKind: "web",
     onClose: () => (firstClosed = true),
   });
-  const second = await dial(track, listener, { deviceKind: "web" });
+  const second = await dialListener(track, listener, { deviceKind: "web" });
   const heard = { first: [] as unknown[], second: [] as unknown[] };
   first.transport.subscribe("git:projectChanged", (p) => heard.first.push(p));
   second.transport.subscribe("git:projectChanged", (p) => heard.second.push(p));
@@ -1145,7 +1108,7 @@ it("tabs: a hello with a connection id already held replaces that link alone", a
   const stale = await rawLink(track, listener);
   assert.ok(Exit.isSuccess(await stale.hello(PROTOCOL_VERSION, tab)));
   let siblingClosed = false;
-  await dial(track, listener, {
+  await dialListener(track, listener, {
     deviceKind: "web",
     onClose: () => (siblingClosed = true),
   });
@@ -1170,7 +1133,7 @@ it("stop: the listener stopping closes every link, and nothing answers after", a
   const track = trackTest;
   const { listener } = await listen(track);
   let closed = false;
-  await dial(track, listener, { onClose: () => (closed = true) });
+  await dialListener(track, listener, { onClose: () => (closed = true) });
   await listener.binding.reconcile(null);
   await waitFor(() => closed, "the link to close");
   const after = await dialFails(listener);

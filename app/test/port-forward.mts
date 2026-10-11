@@ -2,11 +2,11 @@
 // cross a REAL DIRECT websocket between the two fixtures on a channel
 // (shared/remote/channels.ts), brokered by the stub device hub
 // exactly as production does (test/lib/directBoot.mts). Nothing
-// here is a double on the forward path: device A registers the REAL
-// forward contract and handlers on a real direct listener, B
-// attaches channels on the real client transport and opens them
-// through the real dialer and bridge cache, and A's handler dials REAL
-// loopback TCP fixture servers. Asserts:
+// here is a double on the forward path: the listener serves the REAL
+// forward contract and handlers, the dialer attaches channels on the
+// real client transport and opens them through the real dialer and
+// bridge cache, and the listener's handler dials REAL loopback TCP
+// fixture servers. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) before
 //     the handler runs, so the fixture server sees no connection,
 //   - a granted echo round trip on a channel (attach, open, write,
@@ -73,6 +73,7 @@ import {
 import {
   bootDirectWire,
   type DirectWire,
+  LISTENER,
   type PeerTransport,
 } from "./lib/directBoot.mts";
 
@@ -96,7 +97,7 @@ function onceWithin(
   });
 }
 
-// A channel driven by hand from B's side: attached on the session
+// A channel driven by hand from the dialer's side: attached on the session
 // BEFORE the open (the production order), collecting every inbound
 // data frame and counting them, with the peer's end and reset
 // observable. `open` runs the real forward:open for the channel id.
@@ -226,7 +227,7 @@ function dialAndCollect(
 let echo: LoopbackServer;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
-let peerA: DirectWire["peerA"];
+let toListener: DirectWire["toListener"];
 let forward: Client<typeof forwardContract>;
 let big: Buffer;
 let engine: PortForwardEngine;
@@ -234,8 +235,8 @@ let started: Awaited<ReturnType<PortForwardEngine["startForward"]>>;
 let fresh: Awaited<ReturnType<PortForwardEngine["startForward"]>>;
 let fromWorktree: { projectId: string; worktreeId: string };
 
-// The direct wire: A hosts the forward surface on a real direct
-// listener, B drives it through the real dialer and bridge cache,
+// The direct wire: the listener serves the forward surface, the dialer
+// drives it through the real dialer and bridge cache,
 // and the stub device hub carries only the broker exchange
 // (bootDirectWire, the shared fixture).
 const { track, teardown } = makeTracker();
@@ -243,10 +244,10 @@ const { track, teardown } = makeTracker();
 beforeAll(async () => {
   echo = await startLoopbackServer((socket) => socket.pipe(socket));
   track(() => echo.close());
-  ({ stub, listener, peerA } = await bootDirectWire(track, {
+  ({ stub, listener, toListener } = await bootDirectWire(track, {
     contracts: [[forwardContract, forwardHandlers]],
   }));
-  forward = buildClient(forwardContract, peerA.transport);
+  forward = buildClient(forwardContract, toListener.transport);
 });
 
 // Reverse creation order via the shared tracker: the direct
@@ -260,7 +261,7 @@ it("ungranted peer: forward:open is refused with the typed CommandRefusedError a
   // runs. The echo server never sees a dial, and the channel this
   // side attached is reset by the failed open.
   await assert.rejects(
-    () => openChannel(peerA, forward, echo.port),
+    () => openChannel(toListener, forward, echo.port),
     (error) =>
       error instanceof CommandRefusedError &&
       /not permitted to run commands/.test(error.message),
@@ -277,7 +278,7 @@ it("granted echo round trip: attach, open, write, read, reset", async () => {
 
   // (2) The basic round trip on a channel: attach, open, write, read
   // the echo, reset.
-  const hello = await openChannel(peerA, forward, echo.port);
+  const hello = await openChannel(toListener, forward, echo.port);
   assert.equal(echo.connections(), 1);
   hello.write(Buffer.from("hello"));
   assert.equal((await hello.readBytes(5)).toString("utf8"), "hello");
@@ -291,7 +292,7 @@ it("server-initiated bytes arrive with no write first", async () => {
   const greeter = await startLoopbackServer((socket) => {
     socket.write("welcome\n");
   });
-  const greeted = await openChannel(peerA, forward, greeter.port);
+  const greeted = await openChannel(toListener, forward, greeter.port);
   assert.equal((await greeted.readBytes(8)).toString("utf8"), "welcome\n");
   greeted.reset();
   await greeter.close();
@@ -304,7 +305,7 @@ it("large transfer: ~1.5 MB crosses in data frames with the device hub flat, byt
   // one-time broker exchange).
   big = randomBytes(1_500_000);
   const hubBaseline = stub.forwardedCount();
-  const bulk = await openChannel(peerA, forward, echo.port);
+  const bulk = await openChannel(toListener, forward, echo.port);
   bulk.write(big);
   const returned = await bulk.readBytes(big.length, 30_000);
   assert.ok(
@@ -333,7 +334,7 @@ it("server close: tail bytes, then the peer's end, and ending here completes the
   const closer = await startLoopbackServer((socket) => {
     socket.end("tail");
   });
-  const closing = await openChannel(peerA, forward, closer.port);
+  const closing = await openChannel(toListener, forward, closer.port);
   assert.equal((await closing.readBytes(4)).toString("utf8"), "tail");
   await closing.waitEnded();
   assert.equal(closing.wasReset(), false);
@@ -353,7 +354,7 @@ it("a large response followed by a server close arrives complete", async () => {
   const dumper = await startLoopbackServer((socket) => {
     socket.end(big);
   });
-  const dumped = await openChannel(peerA, forward, dumper.port);
+  const dumped = await openChannel(toListener, forward, dumper.port);
   const all = await dumped.readBytes(big.length, 30_000);
   assert.ok(
     Buffer.compare(big, all) === 0,
@@ -372,10 +373,10 @@ it('a dead port refuses with "connect-failed", a reused id with "channel-taken"'
   const deadPort = dead.port;
   await dead.close();
   await assert.rejects(
-    () => openChannel(peerA, forward, deadPort),
+    () => openChannel(toListener, forward, deadPort),
     /connect-failed/,
   );
-  const taken = await openChannel(peerA, forward, echo.port);
+  const taken = await openChannel(toListener, forward, echo.port);
   await assert.rejects(
     () => forward.open({ port: echo.port, channelId: taken.channelId }),
     /channel-taken/,
@@ -389,10 +390,10 @@ it('the 33rd channel on one connection refuses with "too-many-conns"', async () 
   const capped = [];
   for (let i = 0; i < 32; i++) {
     // oxlint-disable-next-line no-await-in-loop -- sequential opens by design
-    capped.push(await openChannel(peerA, forward, echo.port));
+    capped.push(await openChannel(toListener, forward, echo.port));
   }
   await assert.rejects(
-    () => openChannel(peerA, forward, echo.port),
+    () => openChannel(toListener, forward, echo.port),
     /too-many-conns/,
   );
   for (const channel of capped) channel.reset();
@@ -401,7 +402,7 @@ it('the 33rd channel on one connection refuses with "too-many-conns"', async () 
 it("end state: a fresh channel opens and round-trips after full teardown", async () => {
   // (8) End state, asserted through behavior: with everything above
   // torn down, a fresh channel still opens and round-trips.
-  const again = await openChannel(peerA, forward, echo.port);
+  const again = await openChannel(toListener, forward, echo.port);
   again.write(Buffer.from("still here"));
   assert.equal((await again.readBytes(10)).toString("utf8"), "still here");
   again.reset();
@@ -410,12 +411,12 @@ it("end state: a fresh channel opens and round-trips after full teardown", async
 it("engine: a local dial round-trips through the whole chain, and a duplicate start returns the existing forward", async () => {
   // ---- The client engine over the same wire ----
 
-  // The engine on device B, its forward api the SAME peer client the
+  // The engine on the dialer, its forward api the SAME peer client the
   // direct scenarios drove, so nothing on the forward path is a
   // double. deviceId is ignored on purpose: this check has one peer.
   engine = createPortForwardEngine({
     forwardApiFor: () => forward,
-    channelsFor: () => peerA.channels,
+    channelsFor: () => toListener.channels,
   });
   // Tracked last, so the finally's teardown stops it first: an
   // assertion failure mid-scenario must not leave its listeners
@@ -425,7 +426,7 @@ it("engine: a local dial round-trips through the whole chain, and a duplicate st
   // (9) Local round trip through the whole chain, and duplicate
   // startForward semantics (one forward per device+port pair).
   started = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: echo.port,
   });
   assert.match(started.forwardId, /^[0-9a-f]{32}$/);
@@ -434,7 +435,7 @@ it("engine: a local dial round-trips through the whole chain, and a duplicate st
   fromWorktree = { projectId: "p1", worktreeId: "w1" };
   assert.equal(engine.listForwards()[0]?.worktree, undefined);
   const dup = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: echo.port,
     worktree: fromWorktree,
   });
@@ -458,7 +459,7 @@ it("engine: a start naming another local port moves the listener", async () => {
   const before = started.localPort;
   const freePort = await freeLoopbackPort();
   const moved = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: echo.port,
     localPort: freePort,
   });
@@ -472,7 +473,7 @@ it("engine: a start naming another local port moves the listener", async () => {
   const movedPing = await dialAndCollect(freePort, Buffer.from("moved"), 5);
   assert.equal(movedPing.toString("utf8"), "moved");
   started = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: echo.port,
     localPort: before,
   });
@@ -506,7 +507,7 @@ it("engine: the fixture closing its socket ends the local client socket", async 
     socket.end("bye");
   });
   const byeForward = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: byeServer.port,
   });
   const bye = await new Promise<Buffer>((resolve, reject) => {
@@ -545,7 +546,7 @@ it("engine: a forward to a dead port starts anyway and reaches a server that com
     earlyLocalPort = await freeLoopbackPort();
   }
   const early = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: latePort,
     localPort: earlyLocalPort,
   });
@@ -608,7 +609,7 @@ it("engine: stopForward closes the listener and live conns, and a fresh forward 
     "the stopped forward's listener still accepts",
   );
   fresh = await engine.startForward({
-    deviceId: "A",
+    deviceId: LISTENER,
     remotePort: echo.port,
   });
   const freshEcho = await dialAndCollect(
@@ -625,7 +626,7 @@ it(`engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of 
   // constant: the first local socket OVER the cap is destroyed
   // immediately while the capped set stands. Mirrors the host's
   // MAX_CONNS without spending a hub round trip on the doomed dial.
-  const capOpensBefore = peerA.invokeCount("forward:open");
+  const capOpensBefore = toListener.invokeCount("forward:open");
   const capSockets: Socket[] = [];
   for (let i = 0; i < MAX_CONNS_PER_DEVICE; i += 1) {
     const socket = connect({ host: "127.0.0.1", port: fresh.localPort });
@@ -639,12 +640,12 @@ it(`engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of 
     () =>
       engine.listForwards().find((f) => f.forwardId === fresh.forwardId)
         ?.connCount === MAX_CONNS_PER_DEVICE &&
-      peerA.invokeCount("forward:open") - capOpensBefore ===
+      toListener.invokeCount("forward:open") - capOpensBefore ===
         MAX_CONNS_PER_DEVICE,
     "the capped conns and their open round trips to register",
     10_000,
   );
-  const overCapOpensBefore = peerA.invokeCount("forward:open");
+  const overCapOpensBefore = toListener.invokeCount("forward:open");
   const overCap = connect({ host: "127.0.0.1", port: fresh.localPort });
   overCap.on("error", () => {});
   await onceWithin(
@@ -655,7 +656,7 @@ it(`engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of 
   // Destroyed at accept means no wire traffic: the doomed dial spent
   // no forward:open round trip.
   assert.equal(
-    peerA.invokeCount("forward:open") - overCapOpensBefore,
+    toListener.invokeCount("forward:open") - overCapOpensBefore,
     0,
     "the capped over-cap socket still spent a forward:open round trip",
   );

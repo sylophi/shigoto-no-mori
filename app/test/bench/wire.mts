@@ -40,11 +40,14 @@ import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
-import { openDevice } from "@shared/remote/deviceLink";
 import { appRoot, delay, makeTracker } from "../lib/checkKit.mts";
-import { mintTicket, startDirectListener } from "../lib/directBoot.mts";
+import {
+  DIALER,
+  dialing,
+  mintTicket,
+  startDirectListener,
+} from "../lib/directBoot.mts";
 import { disposeHost } from "../lib/hostRuntime.mts";
-import { testDeviceKey } from "../lib/hubStub.mts";
 import { startShapedLink, type ShapedLink } from "./lib/shapedLink.mts";
 
 function flag(name: string, fallback: number): number {
@@ -227,7 +230,6 @@ async function main() {
   // connector's header, see connect below), so every ticket is the
   // tunnel kind.
   const listener = await startDirectListener(tracker.track, {
-    deviceId: "bench-host",
     registerHandlers: (binding) => {
       binding.handle(
         READ,
@@ -264,7 +266,7 @@ async function main() {
   });
   // Byte channels ride the command grant, so the bench's client holds it.
   listener.setAccepts(true);
-  const { tickets, port } = listener;
+  const { port } = listener;
   const link = viaTunnel
     ? await startQuickTunnel(port)
     : await startShapedLink({
@@ -294,18 +296,9 @@ async function main() {
   }
 
   const connect = () => {
-    const ticket = mintTicket(tickets, "bench-client", "tunnel");
-    return openDevice({
+    return dialing(listener, {
       url: link.url,
-      ticket,
-      seal: {
-        localKey: testDeviceKey("bench-client").pair,
-        remoteKey: testDeviceKey("bench-host").pair.publicKey,
-      },
-      appVersion: "0.0.0",
-      localDeviceId: "bench-client",
-      expectedDeviceId: "bench-host",
-      onClose: () => {},
+      ticket: mintTicket(listener.tickets, DIALER, "tunnel"),
       deadlineMs: 30_000,
       // The ticket is held to the path a connection arrives on, which
       // the host tells by the header the local cloudflared adds. The

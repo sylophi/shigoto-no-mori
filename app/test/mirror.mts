@@ -1,48 +1,48 @@
 // Durable proof for continuous worktree mirroring (file-sync/,
 // host/mirror/*, mirror:openStream): two REAL directories converge in
 // both directions through the whole production chain, with nothing on
-// the sync path doubled. Device B runs the REAL mirror daemon (a
+// the sync path doubled. The dialer runs the REAL mirror daemon (a
 // freshly built file-sync engine, Mutagen inside) behind the REAL
-// gateway (host/mirror/gateway.ts). The gateway dials device A's REAL
+// gateway (host/mirror/gateway.ts). The gateway dials the listener's REAL
 // mirror:openStream over a REAL direct websocket (brokered by the stub
 // device hub exactly as production does, test/lib/directBoot.mts),
-// A's handler spawns a REAL `file-sync serve` for a REAL registered
+// the listener's handler spawns a REAL `file-sync serve` for a REAL registered
 // worktree. Bytes cross on a byte channel of the direct socket
 // (shared/remote/channels.ts, bridged by
 // host/portForward/bridge.ts). The sm CLI is built too, only to
 // register the fixture project the way the app would. Asserts:
 //   - an ungranted peer: the gateway's open is refused, the daemon's
-//     create fails with the refusal, and A spawned no serve child,
+//     create fails with the refusal, and the listener spawned no serve child,
 //   - a granted create converges seeded content both ways, including a
-//     gitignored-style file, and holds A's .git pointer file back,
+//     gitignored-style file, and holds the listener's .git pointer file back,
 //   - live edits after the first cycle cross both ways within seconds,
 //     and a delete propagates, while the device hub's forwardedCount
 //     stays FLAT (only the direct socket carries the stream),
-//   - A's serving list names the worktree and the caller while the
+//   - the listener's serving list names the worktree and the caller while the
 //     stream is up, and empties when the session is terminated, with
 //     the serve child gone,
 //   - the daemon's state stream reports the session in the app's
 //     vocabulary (watching, both endpoints connected, cycles counted),
 //   - stopping the daemon ends it and the gateway closes clean.
 // Then the git follower (host/mirror/gitFollow.ts), driven against the
-// same wire with B's worktree a real clone of A's repository:
-//   - a commit on A lands on B: same tip, same branch, clean status,
-//   - staging on A shows as staged on B, without touching files,
-//   - a commit on B lands on A the same way (the push direction),
+// same wire with the dialer's worktree a real clone of the listener's repository:
+//   - a commit on the listener lands on the dialer: same tip, same branch, clean status,
+//   - staging on the listener shows as staged on the dialer, without touching files,
+//   - a commit on the dialer lands on the listener the same way (the push direction),
 //   - commits on both sides since they agreed report diverged and move
-//     nothing, and resolving on B brings the session back to synced,
-//   - a checkout on A to a branch another worktree on B holds is
+//     nothing, and resolving on the dialer brings the session back to synced,
+//   - a checkout on the listener to a branch another worktree on the dialer holds is
 //     refused with the path, and checking back restores sync,
-//   - a merge in progress on A, or a rebase on B, reports blocked with
+//   - a merge in progress on the listener, or a rebase on the dialer, reports blocked with
 //     the operation and side named and moves nothing, and finishing it
 //     resumes the follow,
-//   - a half-landed apply (B's ref already at A's tip, its index not)
+//   - a half-landed apply (the dialer's ref already at the listener's tip, its index not)
 //     heals to synced rather than reading as diverged,
 //   - a commit waits while the engine reports the files mid-cycle (or
 //     halted), staging does not, and the idle snapshot releases it,
-//   - B's primary checkout (the original, on the device running the
-//     session) mirrored to a mirror/main worktree on A carries commits
-//     both ways, and A's own main never moves.
+//   - the dialer's primary checkout (the original, on the device running the
+//     session) mirrored to a mirror/main worktree on the listener carries commits
+//     both ways, and the listener's own main never moves.
 // And a peer's removed worktree (worktrees:removal) ends only the
 // sessions into that copy.
 // And the sweep of sessions brought back for a device on no account
@@ -125,8 +125,14 @@ import { createMirrorGateway } from "../host/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
+import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { runHost } from "./lib/hostRuntime.mts";
-import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
+import {
+  bootDirectWire,
+  DIALER,
+  type DirectWire,
+  LISTENER,
+} from "./lib/directBoot.mts";
 import { delay, processAlive } from "./lib/checkKit.mts";
 
 const execFileP = promisify(execFile);
@@ -162,46 +168,12 @@ function listening<T>(value: T | null): T {
   return value;
 }
 
-// A session for the fake daemons below, which only read its id, its
-// peer and its labels.
-const idleEndpoint: MirrorSessionRaw["local"] = {
-  connected: false,
-  scanned: false,
-  directories: 0,
-  files: 0,
-  symbolicLinks: 0,
-  totalFileSize: 0,
-  problems: [],
-  excludedProblems: 0,
-};
-const fakeSession = (
-  fields: Pick<MirrorSessionRaw, "session" | "deviceId" | "labels"> &
-    Partial<MirrorSessionRaw>,
-): MirrorSessionRaw => ({
-  name: fields.session,
-  localRoot: "",
-  projectId: "",
-  worktreeId: "",
-  remoteRoot: "",
-  paused: false,
-  ignores: [],
-  createdAt: 0,
-  status: "watching",
-  statusText: "",
-  successfulCycles: 0,
-  conflicts: [],
-  excludedConflicts: 0,
-  local: idleEndpoint,
-  remote: idleEndpoint,
-  ...fields,
-});
-
-// The pids of the serve children A's handler spawned, observed through
+// The pids of the serve children the listener's handler spawned, observed through
 // the FileSync service production uses, so "no child spawned" and
 // "child gone" are facts about real processes.
 const serveChildren = new Set<number>();
 
-// B's daemon and A's serve children, on the freshly built binary
+// The dialer's daemon and the listener's serve children, on the freshly built binary
 // (built in beforeAll).
 const fileSync = Layer.effect(
   FileSync.FileSync,
@@ -221,7 +193,7 @@ const fileSync = Layer.effect(
   }),
 ).pipe(Layer.provide(FileSync.layer(() => fileSyncBinary)));
 
-// B's daemon, the way host/process/handlers.ts reads it.
+// The dialer's daemon, the way host/process/handlers.ts reads it.
 const daemon = {
   status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
   sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
@@ -235,7 +207,7 @@ const daemon = {
     runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
 };
 
-// B's daemon as the mirror impl reads it (host/process/handlers.ts).
+// The dialer's daemon as the mirror impl reads it (host/process/handlers.ts).
 const onDaemon = <A,>(
   f: (
     d: MirrorDaemon.MirrorDaemon["Service"],
@@ -249,40 +221,34 @@ const onDaemon = <A,>(
         Effect.mapError((error) => new MirrorError({ reason: error.message })),
       ),
   );
-// The impl over B's daemon, the rest of it inert; each check below
-// replaces what it is about.
-const inertImpl = (): MirrorImpl => ({
-  status: Effect.sync(() => daemon.status()),
-  sessions: Effect.sync(() => daemon.sessions()),
-  create: (input) => onDaemon((d) => d.create(input)),
-  recreate: () => Effect.die(new Error("not in this check")),
-  terminate: (id) => Effect.asVoid(onDaemon((d) => d.terminate(id))),
-  pause: (id) => Effect.asVoid(onDaemon((d) => d.pause(id))),
-  resume: (id) => Effect.asVoid(onDaemon((d) => d.resume(id))),
-  gitStatus: () => undefined,
-  refreshGit: () => Effect.succeed(undefined),
-  history: () => [],
-  noteEvent: () => {},
-  forgetHistory: () => {},
-  moveHistory: () => {},
-});
+// The impl over the dialer's daemon, the rest of it inert; each check
+// below replaces what it is about.
+const inertImpl = () =>
+  inertMirrorImpl({
+    status: Effect.sync(() => daemon.status()),
+    sessions: Effect.sync(() => daemon.sessions()),
+    create: (input) => onDaemon((d) => d.create(input)),
+    terminate: (id) => Effect.asVoid(onDaemon((d) => d.terminate(id))),
+    pause: (id) => Effect.asVoid(onDaemon((d) => d.pause(id))),
+    resume: (id) => Effect.asVoid(onDaemon((d) => d.resume(id))),
+  });
 
 // mirror:stop called the way a caller on this device would, its
 // context unread by the handler.
 const stop = (input: Parameters<typeof mirrorHandlers.stop>[0]) =>
   runHost(mirrorHandlers.stop(input));
 
-let repoA: string;
-let worktreeA: string;
-let worktreeIdA: string;
-let repoB: string;
-let rootB: string;
-let worktreeIdB: string;
-let projectIdA: string;
-let projectIdB: string;
+let listenerRepo: string;
+let listenerWorktree: string;
+let listenerWorktreeId: string;
+let dialerRepo: string;
+let dialerRoot: string;
+let dialerWorktreeId: string;
+let listenerProjectId: string;
+let dialerProjectId: string;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
-let peerA: DirectWire["peerA"];
+let toListener: DirectWire["toListener"];
 let mirrorOverWire: ReturnType<typeof buildClient<typeof mirrorContract>>;
 let gateway: ReturnType<typeof createMirrorGateway>;
 let runtime: ManagedRuntime.ManagedRuntime<MirrorDaemon.MirrorDaemon, never>;
@@ -293,8 +259,8 @@ let servePid: number;
 let follower: GitFollower;
 let followerScope: Scope.Closeable;
 let gitHubBaseline: number;
-let tipA1: string;
-let tipA2: string;
+let listenerTip1: string;
+let listenerTip2: string;
 
 const { track, teardown } = makeTracker();
 
@@ -318,7 +284,7 @@ const clean = async (wt: string) =>
   (await gitOut(wt, "status", "--porcelain", "--untracked-files=no")) === "";
 
 beforeAll(async () => {
-  // ---- Fixtures: build the CLI, seed A's repo and worktree, B's dir ----
+  // ---- Fixtures: build the CLI, seed the listener's repo and worktree, the dialer's dir ----
   await Promise.all([
     fixture.buildSm(),
     execFileP("go", ["build", "-o", fileSyncBinary, "."], {
@@ -327,50 +293,48 @@ beforeAll(async () => {
     }),
   ]);
 
-  repoA = join(sandbox, "repo-a");
-  await git(sandbox, ["init", "-q", "-b", "main", "repo-a"]);
-  await fixture.commitFile(repoA, "readme.txt", "base\n", "base");
-  worktreeA = await addWorktree(repoA, "wt-a", "feature");
+  listenerRepo = await fixture.initRepo("listener-repo");
+  await fixture.commitFile(listenerRepo, "readme.txt", "base\n", "base");
+  listenerWorktree = await addWorktree(listenerRepo, "listener-wt", "feature");
   // The content that must cross on the first cycle: a tracked file, a
   // nested one, a gitignored-looking one. And the .git POINTER FILE of
   // a linked worktree, which must never cross.
-  writeFileSync(join(worktreeA, "src.txt"), "from A\n");
-  mkdirSync(join(worktreeA, "deep", "er"), { recursive: true });
-  writeFileSync(join(worktreeA, "deep", "er", "leaf.txt"), "leaf\n");
-  writeFileSync(join(worktreeA, ".env"), "SECRET=1\n");
+  writeFileSync(join(listenerWorktree, "src.txt"), "from the listener\n");
+  mkdirSync(join(listenerWorktree, "deep", "er"), { recursive: true });
+  writeFileSync(join(listenerWorktree, "deep", "er", "leaf.txt"), "leaf\n");
+  writeFileSync(join(listenerWorktree, ".env"), "SECRET=1\n");
   assert.ok(
-    existsSync(join(worktreeA, ".git")) &&
-      read(join(worktreeA, ".git")).startsWith("gitdir:"),
+    existsSync(join(listenerWorktree, ".git")) &&
+      read(join(listenerWorktree, ".git")).startsWith("gitdir:"),
     "fixture: the linked worktree's .git is a pointer file",
   );
-  worktreeIdA = worktreeIdFromPath(worktreeA);
+  listenerWorktreeId = worktreeIdFromPath(listenerWorktree);
 
-  // B's side is a REAL worktree of a clone of A's repository, on the
+  // The dialer's side is a REAL worktree of a clone of the listener's repository, on the
   // same branch at the same tip: the state a mirror start leaves behind
-  // (the original here on B, which runs the session, the copy on A),
+  // (the original here on the dialer, which runs the session, the copy on the listener),
   // and what the git follower needs to have something to follow.
-  repoB = join(sandbox, "repo-b");
-  await git(sandbox, ["clone", "-q", "--", repoA, "repo-b"]);
-  rootB = join(sandbox, "wt-b");
-  await git(repoB, [
+  dialerRepo = await fixture.cloneRepo(listenerRepo, "dialer-repo");
+  dialerRoot = join(sandbox, "dialer-wt");
+  await git(dialerRepo, [
     "worktree",
     "add",
     "-q",
     "-b",
     "feature",
-    rootB,
+    dialerRoot,
     "origin/feature",
   ]);
-  writeFileSync(join(rootB, "from-b.txt"), "from B\n");
-  worktreeIdB = worktreeIdFromPath(rootB);
+  writeFileSync(join(dialerRoot, "from-b.txt"), "from the dialer\n");
+  dialerWorktreeId = worktreeIdFromPath(dialerRoot);
 
   await fixture.useCli();
-  projectIdA = await fixture.projectIdOf(repoA);
-  projectIdB = await fixture.projectIdOf(repoB);
+  listenerProjectId = await fixture.projectIdOf(listenerRepo);
+  dialerProjectId = await fixture.projectIdOf(dialerRepo);
 
-  // ---- The direct wire: A serves the byte wire and its worktree list,
-  // B dials through the real bridge cache. ----
-  ({ stub, listener, peerA } = await bootDirectWire(track, {
+  // ---- The direct wire: the listener serves the byte wire and its worktree list,
+  // the dialer dials through the real bridge cache. ----
+  ({ stub, listener, toListener } = await bootDirectWire(track, {
     provide: fileSync.pipe(Layer.provide(NodeServices.layer)),
     contracts: [
       [forwardContract, forwardHandlers],
@@ -381,20 +345,20 @@ beforeAll(async () => {
       [mirrorContract, mirrorHandlers],
     ],
   }));
-  mirrorOverWire = buildClient(mirrorContract, peerA.transport);
-  // Every peer reach of B's host code (the follower's sync and mirror
+  mirrorOverWire = buildClient(mirrorContract, toListener.transport);
+  // Every peer reach of the dialer's host code (the follower's sync and mirror
   // calls, its source links) rides the same session.
   setPeerReach({
-    transportFor: () => peerA.transport,
-    channelsFor: () => peerA.channels,
-    thisDeviceId: () => "B",
+    transportFor: () => toListener.transport,
+    channelsFor: () => toListener.channels,
+    thisDeviceId: () => DIALER,
   });
 
-  // B's half: the real gateway over the real peer client, the real
+  // The dialer's half: the real gateway over the real peer client, the real
   // daemon on the freshly built binary.
   gateway = createMirrorGateway({
     peerApiFor: () => mirrorOverWire,
-    peerChannelsFor: () => peerA.channels,
+    peerChannelsFor: () => toListener.channels,
     log: () => {},
   });
   track(() => gateway.stop());
@@ -437,7 +401,7 @@ it("gateway refuses a local process that cannot present its token", async () => 
     const socket = netConnect(Number(port), host, () => {
       socket.write(
         `${JSON.stringify({
-          deviceId: "A",
+          deviceId: LISTENER,
           projectId: "p",
           worktreeId: "0123456789ab",
         })}\n`,
@@ -462,21 +426,24 @@ it("gateway refuses a local process that cannot present its token", async () => 
   );
 });
 
-it("ungranted peer: create fails with the grant refusal and A spawns nothing", async () => {
+it("ungranted peer: create fails with the grant refusal and the listener spawns nothing", async () => {
   createInput = {
-    localRoot: rootB,
-    deviceId: "A",
-    projectId: projectIdA,
-    worktreeId: worktreeIdA,
-    remoteRoot: worktreeA,
+    localRoot: dialerRoot,
+    deviceId: LISTENER,
+    projectId: listenerProjectId,
+    worktreeId: listenerWorktreeId,
+    remoteRoot: listenerWorktree,
     name: "feature",
-    localWorktreeId: worktreeIdB,
-    labels: { localWorktreeId: worktreeIdB, localProjectId: projectIdB },
+    localWorktreeId: dialerWorktreeId,
+    labels: {
+      localWorktreeId: dialerWorktreeId,
+      localProjectId: dialerProjectId,
+    },
     // A build folder held back by the create's own ignores.
     ignores: ["/dist"],
   };
 
-  // (1) Ungranted: the gateway's openStream is refused on A's wire, so
+  // (1) Ungranted: the gateway's openStream is refused on the listener's wire, so
   // the daemon's connect fails and create rejects with that reason.
   // No serve child was ever spawned.
   await assert.rejects(
@@ -496,47 +463,47 @@ it("granted create: seeded files converge both ways, .git pointer held back", as
   listener.setAccepts(true);
 
   // (2) Granted: the session comes up, seeded content crosses both
-  // ways on the first cycle, the .git pointer stays on A.
+  // ways on the first cycle, the .git pointer stays on the listener.
   hubBaseline = stub.forwardedCount();
   session = await daemon.create(createInput);
   assert.match(session, /^sync_/);
   await waitFor(
     () =>
-      fileEquals(join(rootB, "src.txt"), "from A\n") &&
-      fileEquals(join(rootB, "deep", "er", "leaf.txt"), "leaf\n") &&
-      fileEquals(join(rootB, ".env"), "SECRET=1\n") &&
-      fileEquals(join(worktreeA, "from-b.txt"), "from B\n"),
+      fileEquals(join(dialerRoot, "src.txt"), "from the listener\n") &&
+      fileEquals(join(dialerRoot, "deep", "er", "leaf.txt"), "leaf\n") &&
+      fileEquals(join(dialerRoot, ".env"), "SECRET=1\n") &&
+      fileEquals(join(listenerWorktree, "from-b.txt"), "from the dialer\n"),
     "the seeded content to converge both ways",
     60_000,
   );
-  // Each side keeps its OWN .git pointer: A's names repo-a's gitdir,
-  // B's names repo-b's, and neither crossed.
+  // Each side keeps its OWN .git pointer: the listener's names listener-repo's gitdir,
+  // the dialer's names dialer-repo's, and neither crossed.
   assert.match(
-    read(join(rootB, ".git")),
-    /repo-b/,
-    "B's .git pointer was overwritten",
+    read(join(dialerRoot, ".git")),
+    /dialer-repo/,
+    "the dialer's .git pointer was overwritten",
   );
   assert.match(
-    read(join(worktreeA, ".git")),
-    /repo-a/,
-    "A's .git pointer was overwritten",
+    read(join(listenerWorktree, ".git")),
+    /listener-repo/,
+    "the listener's .git pointer was overwritten",
   );
 });
 
-it("A serves exactly one stream, attributed to worktree and caller", async () => {
-  // (3) The serving list on A names the worktree and the caller, and
+it("the listener serves exactly one stream, attributed to worktree and caller", async () => {
+  // (3) The serving list on the listener names the worktree and the caller, and
   // exactly one serve child is alive.
   await waitFor(
     () => listMirrorServing().length === 1,
     "A to list one served mirror stream",
   );
   const [served] = listMirrorServing();
-  assert.ok(served !== undefined, "A lists no served mirror stream");
-  assert.equal(served.projectId, projectIdA);
-  assert.equal(served.worktreeId, worktreeIdA);
-  assert.equal(served.peerDeviceId, "B");
-  // The preface carried B's own worktree id for the pair.
-  assert.equal(served.peerWorktreeId, worktreeIdB);
+  assert.ok(served !== undefined, "the listener lists no served mirror stream");
+  assert.equal(served.projectId, listenerProjectId);
+  assert.equal(served.worktreeId, listenerWorktreeId);
+  assert.equal(served.peerDeviceId, DIALER);
+  // The preface carried the dialer's own worktree id for the pair.
+  assert.equal(served.peerWorktreeId, dialerWorktreeId);
   assert.equal(serveChildren.size, 1);
   const [pid] = serveChildren;
   assert.ok(
@@ -549,23 +516,31 @@ it("A serves exactly one stream, attributed to worktree and caller", async () =>
 it("live edits cross both ways, deletes propagate, the device hub stays flat", async () => {
   // (4) Live edits both ways, a delete, a nested create. The hub stays
   // flat throughout.
-  writeFileSync(join(worktreeA, "src.txt"), "from A, edited\n");
+  writeFileSync(
+    join(listenerWorktree, "src.txt"),
+    "from the listener, edited\n",
+  );
   await waitFor(
-    () => fileEquals(join(rootB, "src.txt"), "from A, edited\n"),
-    "A's edit to reach B",
+    () =>
+      fileEquals(join(dialerRoot, "src.txt"), "from the listener, edited\n"),
+    "the listener's edit to reach the dialer",
     30_000,
   );
-  mkdirSync(join(rootB, "node_modules", "dep"), { recursive: true });
-  writeFileSync(join(rootB, "node_modules", "dep", "index.js"), "1\n");
+  mkdirSync(join(dialerRoot, "node_modules", "dep"), { recursive: true });
+  writeFileSync(join(dialerRoot, "node_modules", "dep", "index.js"), "1\n");
   await waitFor(
-    () => fileEquals(join(worktreeA, "node_modules", "dep", "index.js"), "1\n"),
-    "B's nested write to reach A",
+    () =>
+      fileEquals(
+        join(listenerWorktree, "node_modules", "dep", "index.js"),
+        "1\n",
+      ),
+    "the dialer's nested write to reach the listener",
     30_000,
   );
-  rmSync(join(worktreeA, ".env"));
+  rmSync(join(listenerWorktree, ".env"));
   await waitFor(
-    () => !existsSync(join(rootB, ".env")),
-    "A's delete to reach B",
+    () => !existsSync(join(dialerRoot, ".env")),
+    "the listener's delete to reach the dialer",
     30_000,
   );
   assert.equal(
@@ -584,12 +559,12 @@ it("the state stream reports watching, both endpoints connected, cycles counted"
   }, "a watching snapshot");
   const state = daemon.sessions().find((s) => s.session === session);
   assert.ok(state, "the watching session left the state stream");
-  assert.equal(state.deviceId, "A");
-  assert.equal(state.projectId, projectIdA);
-  assert.equal(state.worktreeId, worktreeIdA);
-  assert.equal(state.localRoot, rootB);
-  assert.equal(state.remoteRoot, worktreeA);
-  assert.equal(state.labels.localWorktreeId, worktreeIdB);
+  assert.equal(state.deviceId, LISTENER);
+  assert.equal(state.projectId, listenerProjectId);
+  assert.equal(state.worktreeId, listenerWorktreeId);
+  assert.equal(state.localRoot, dialerRoot);
+  assert.equal(state.remoteRoot, listenerWorktree);
+  assert.equal(state.labels.localWorktreeId, dialerWorktreeId);
   assert.equal(state.local.connected, true);
   assert.equal(state.remote.connected, true);
   assert.ok(state.successfulCycles >= 1);
@@ -599,20 +574,20 @@ it("the state stream reports watching, both endpoints connected, cycles counted"
   assert.ok(changes > 0, "the daemon never signalled a change");
 });
 
-it("the create's ignores hold: /dist stays on A while its sibling crosses", async () => {
-  // The ignore held: a file under it on A never reached B while the
+it("the create's ignores hold: /dist stays on the listener while its sibling crosses", async () => {
+  // The ignore held: a file under it on the listener never reached the dialer while the
   // sibling beside it did.
-  mkdirSync(join(worktreeA, "dist"), { recursive: true });
-  writeFileSync(join(worktreeA, "dist", "bundle.js"), "built\n");
-  writeFileSync(join(worktreeA, "beside-dist.txt"), "crosses\n");
+  mkdirSync(join(listenerWorktree, "dist"), { recursive: true });
+  writeFileSync(join(listenerWorktree, "dist", "bundle.js"), "built\n");
+  writeFileSync(join(listenerWorktree, "beside-dist.txt"), "crosses\n");
   await waitFor(
-    () => fileEquals(join(rootB, "beside-dist.txt"), "crosses\n"),
-    "the sibling of the ignored folder to reach B",
+    () => fileEquals(join(dialerRoot, "beside-dist.txt"), "crosses\n"),
+    "the sibling of the ignored folder to reach the dialer",
     30_000,
   );
   assert.ok(
-    !existsSync(join(rootB, "dist", "bundle.js")),
-    "an ignored path crossed to B",
+    !existsSync(join(dialerRoot, "dist", "bundle.js")),
+    "an ignored path crossed to the dialer",
   );
 });
 
@@ -638,134 +613,159 @@ it("git: a fresh session on equal tips reports synced", async () => {
   await waitGit("synced", "the follower to report synced");
 });
 
-it("git: a commit on A lands on B with the same tip, branch and a clean status", async () => {
-  // (G2) A commit on A lands on B: tip, branch and a clean status.
-  writeFileSync(join(worktreeA, "readme.txt"), "base, edited on A\n");
+it("git: a commit on the listener lands on the dialer with the same tip, branch and a clean status", async () => {
+  // (G2) A commit on the listener lands on the dialer: tip, branch and a clean status.
+  writeFileSync(
+    join(listenerWorktree, "readme.txt"),
+    "base, edited on the listener\n",
+  );
   await waitFor(
-    () => fileEquals(join(rootB, "readme.txt"), "base, edited on A\n"),
+    () =>
+      fileEquals(
+        join(dialerRoot, "readme.txt"),
+        "base, edited on the listener\n",
+      ),
     "the edit to mirror before the commit",
     30_000,
   );
-  await git(worktreeA, ["add", "readme.txt"]);
-  await git(worktreeA, ["commit", "-qm", "on A"]);
-  tipA1 = await gitOut(worktreeA, "rev-parse", "HEAD");
-  // What A's git-directory watcher would push in production.
-  follower.onPeerProjectChanged("A", projectIdA);
+  await git(listenerWorktree, ["add", "readme.txt"]);
+  await git(listenerWorktree, ["commit", "-qm", "on the listener"]);
+  listenerTip1 = await gitOut(listenerWorktree, "rev-parse", "HEAD");
+  // What the listener's git-directory watcher would push in production.
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitFor(
-    async () => (await gitOut(rootB, "rev-parse", "HEAD")) === tipA1,
-    "B's tip to follow A's commit",
+    async () =>
+      (await gitOut(dialerRoot, "rev-parse", "HEAD")) === listenerTip1,
+    "the dialer's tip to follow the listener's commit",
     30_000,
   );
   assert.equal(
-    await gitOut(rootB, "symbolic-ref", "HEAD"),
+    await gitOut(dialerRoot, "symbolic-ref", "HEAD"),
     "refs/heads/feature",
   );
-  await waitFor(() => clean(rootB), "B to read clean after the follow", 30_000);
-  await waitGit("synced", "synced after A's commit");
+  await waitFor(
+    () => clean(dialerRoot),
+    "the dialer to read clean after the follow",
+    30_000,
+  );
+  await waitGit("synced", "synced after the listener's commit");
 });
 
-it("git: a file staged on A is staged on B, with the working tree untouched", async () => {
-  // (G3) Staging on A shows as staged on B, files untouched.
-  await git(worktreeA, ["add", "src.txt"]);
-  // What A's served-index watcher would push in production.
-  follower.onPeerWorktreeChanged("A", projectIdA, worktreeIdA);
+it("git: a file staged on the listener is staged on the dialer, with the working tree untouched", async () => {
+  // (G3) Staging on the listener shows as staged on the dialer, files untouched.
+  await git(listenerWorktree, ["add", "src.txt"]);
+  // What the listener's served-index watcher would push in production.
+  follower.onPeerWorktreeChanged(
+    LISTENER,
+    listenerProjectId,
+    listenerWorktreeId,
+  );
   await waitFor(
     async () =>
-      (await gitOut(rootB, "diff", "--cached", "--name-only")) === "src.txt",
-    "src.txt to show as staged on B",
+      (await gitOut(dialerRoot, "diff", "--cached", "--name-only")) ===
+      "src.txt",
+    "src.txt to show as staged on the dialer",
     30_000,
   );
-  assert.equal(read(join(rootB, "src.txt")), "from A, edited\n");
-  await waitGit("synced", "synced after A's stage");
+  assert.equal(
+    read(join(dialerRoot, "src.txt")),
+    "from the listener, edited\n",
+  );
+  await waitGit("synced", "synced after the listener's stage");
 });
 
-it("git: a commit on B lands on A with the same tip and a clean status", async () => {
-  // (G4) A commit on B lands on A (the push direction).
-  await git(rootB, ["commit", "-qm", "on B"]);
-  const tipB1 = await gitOut(rootB, "rev-parse", "HEAD");
-  assert.notEqual(tipB1, tipA1);
-  // B's own index watcher fires on the commit. The project ping is
+it("git: a commit on the dialer lands on the listener with the same tip and a clean status", async () => {
+  // (G4) A commit on the dialer lands on the listener (the push direction).
+  await git(dialerRoot, ["commit", "-qm", "on the dialer"]);
+  const dialerTip1 = await gitOut(dialerRoot, "rev-parse", "HEAD");
+  assert.notEqual(dialerTip1, listenerTip1);
+  // The dialer's own index watcher fires on the commit. The project ping is
   // what the local git-directory watcher would add.
-  follower.onLocalProjectChanged(projectIdB);
+  follower.onLocalProjectChanged(dialerProjectId);
   await waitFor(
-    async () => (await gitOut(worktreeA, "rev-parse", "HEAD")) === tipB1,
-    "A's tip to follow B's commit",
+    async () =>
+      (await gitOut(listenerWorktree, "rev-parse", "HEAD")) === dialerTip1,
+    "the listener's tip to follow the dialer's commit",
     30_000,
   );
   await waitFor(
-    () => clean(worktreeA),
+    () => clean(listenerWorktree),
     "A to read clean after the follow",
     30_000,
   );
-  await waitGit("synced", "synced after B's commit");
+  await waitGit("synced", "synced after the dialer's commit");
 });
 
 it("git: commits on both sides report diverged and move nothing", async () => {
   // (G5) Commits on both sides since they agreed: diverged, nothing
-  // moves, and resolving on B restores sync.
-  writeFileSync(join(worktreeA, "a-only.txt"), "a\n");
+  // moves, and resolving on the dialer restores sync.
+  writeFileSync(join(listenerWorktree, "a-only.txt"), "a\n");
   await waitFor(
-    () => fileEquals(join(rootB, "a-only.txt"), "a\n"),
+    () => fileEquals(join(dialerRoot, "a-only.txt"), "a\n"),
     "a-only.txt to mirror",
     30_000,
   );
-  await git(worktreeA, ["add", "a-only.txt"]);
-  await git(worktreeA, ["commit", "-qm", "diverge on A"]);
-  tipA2 = await gitOut(worktreeA, "rev-parse", "HEAD");
-  writeFileSync(join(rootB, "b-only.txt"), "b\n");
+  await git(listenerWorktree, ["add", "a-only.txt"]);
+  await git(listenerWorktree, ["commit", "-qm", "diverge on the listener"]);
+  listenerTip2 = await gitOut(listenerWorktree, "rev-parse", "HEAD");
+  writeFileSync(join(dialerRoot, "b-only.txt"), "b\n");
   await waitFor(
-    () => fileEquals(join(worktreeA, "b-only.txt"), "b\n"),
+    () => fileEquals(join(listenerWorktree, "b-only.txt"), "b\n"),
     "b-only.txt to mirror",
     30_000,
   );
-  await git(rootB, ["add", "b-only.txt"]);
-  await git(rootB, ["commit", "-qm", "diverge on B"]);
-  const tipB2 = await gitOut(rootB, "rev-parse", "HEAD");
-  follower.onLocalProjectChanged(projectIdB);
-  follower.onPeerProjectChanged("A", projectIdA);
+  await git(dialerRoot, ["add", "b-only.txt"]);
+  await git(dialerRoot, ["commit", "-qm", "diverge on the dialer"]);
+  const dialerTip2 = await gitOut(dialerRoot, "rev-parse", "HEAD");
+  follower.onLocalProjectChanged(dialerProjectId);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitGit("diverged", "the follower to report diverged");
   assert.match(gitStatus()?.detail ?? "", /both sides have new commits/);
-  assert.equal(await gitOut(worktreeA, "rev-parse", "HEAD"), tipA2);
-  assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipB2);
+  assert.equal(
+    await gitOut(listenerWorktree, "rev-parse", "HEAD"),
+    listenerTip2,
+  );
+  assert.equal(await gitOut(dialerRoot, "rev-parse", "HEAD"), dialerTip2);
 });
 
 it("git: dropping one side's commit lets the other side land again", async () => {
-  // Resolve on B by dropping its own commit: B is back at the tip
-  // both sides last agreed on, so only A has moved and the follower
-  // carries A's commit over. (The reset also removes b-only.txt from
-  // B's tree, and the engine mirrors that removal to A, where it was
+  // Resolve on the dialer by dropping its own commit: the dialer is back at the tip
+  // both sides last agreed on, so only the listener has moved and the follower
+  // carries the listener's commit over. (The reset also removes b-only.txt from
+  // the dialer's tree, and the engine mirrors that removal to the listener, where it was
   // never committed.)
-  await git(rootB, ["reset", "-q", "--hard", "HEAD~1"]);
+  await git(dialerRoot, ["reset", "-q", "--hard", "HEAD~1"]);
   // The staged b-only.txt is gone from the index but the file stays
   // (the engine mirrors it), which is the ordinary dirty case.
-  follower.onLocalProjectChanged(projectIdB);
+  follower.onLocalProjectChanged(dialerProjectId);
   await waitFor(
-    async () => (await gitOut(rootB, "rev-parse", "HEAD")) === tipA2,
-    "B to follow A once B's own commit is dropped",
+    async () =>
+      (await gitOut(dialerRoot, "rev-parse", "HEAD")) === listenerTip2,
+    "the dialer to follow the listener once its own commit is dropped",
     30_000,
   );
   await waitGit("synced", "synced after resolving the divergence");
 });
 
-it("git: a checkout on A to a branch held by another worktree on B is refused with the path", async () => {
+it("git: a checkout on the listener to a branch held by another worktree on the dialer is refused with the path", async () => {
   // (G6) A branch collision: A checks out a branch that another
-  // worktree on B already holds. Refused with the path, nothing
-  // moves. Checking back on A restores sync.
-  await addWorktree(repoB, "wt-b2", "other");
-  await git(worktreeA, ["checkout", "-q", "-b", "other"]);
-  follower.onPeerProjectChanged("A", projectIdA);
+  // worktree on the dialer already holds. Refused with the path, nothing
+  // moves. Checking back on the listener restores sync.
+  await addWorktree(dialerRepo, "dialer-wt2", "other");
+  await git(listenerWorktree, ["checkout", "-q", "-b", "other"]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitGit("blocked", "the follower to report blocked");
   assert.match(gitStatus()?.detail ?? "", /branch other is checked out at/);
   assert.equal(
-    await gitOut(rootB, "symbolic-ref", "HEAD"),
+    await gitOut(dialerRoot, "symbolic-ref", "HEAD"),
     "refs/heads/feature",
   );
 });
 
-it("git: checking back on A restores sync, with the device hub still flat", async () => {
-  await git(worktreeA, ["checkout", "-q", "feature"]);
-  follower.onPeerProjectChanged("A", projectIdA);
-  await waitGit("synced", "synced after A checks back");
+it("git: checking back on the listener restores sync, with the device hub still flat", async () => {
+  await git(listenerWorktree, ["checkout", "-q", "feature"]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
+  await waitGit("synced", "synced after the listener checks back");
   assert.equal(
     stub.forwardedCount(),
     gitHubBaseline,
@@ -773,13 +773,13 @@ it("git: checking back on A restores sync, with the device hub still flat", asyn
   );
 });
 
-it("git: a merge on A or a rebase on B reports blocked with the side named, moves nothing, and finishing it resumes the follow", async () => {
+it("git: a merge on the listener or a rebase on the dialer reports blocked with the side named, moves nothing, and finishing it resumes the follow", async () => {
   // (G7) A git operation in progress on either side blocks the
   // follow, naming the side, and nothing moves until it finishes.
-  // A merge stopped before its commit on A (a no-ff merge of a commit
+  // A merge stopped before its commit on the listener (a no-ff merge of a commit
   // with the same tree, so no file changes):
   const sideTip = await gitOut(
-    worktreeA,
+    listenerWorktree,
     "commit-tree",
     "HEAD^{tree}",
     "-p",
@@ -787,146 +787,161 @@ it("git: a merge on A or a rebase on B reports blocked with the side named, move
     "-m",
     "side",
   );
-  await git(worktreeA, ["update-ref", "refs/heads/side-op", sideTip]);
-  const tipBeforeOps = await gitOut(rootB, "rev-parse", "HEAD");
-  await git(worktreeA, ["merge", "-q", "--no-ff", "--no-commit", "side-op"]);
-  follower.onPeerProjectChanged("A", projectIdA);
-  await waitGit("blocked", "the follower to report A's merge");
+  await git(listenerWorktree, ["update-ref", "refs/heads/side-op", sideTip]);
+  const tipBeforeOps = await gitOut(dialerRoot, "rev-parse", "HEAD");
+  await git(listenerWorktree, [
+    "merge",
+    "-q",
+    "--no-ff",
+    "--no-commit",
+    "side-op",
+  ]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
+  await waitGit("blocked", "the follower to report the listener's merge");
   assert.match(
     gitStatus()?.detail ?? "",
     /a merge is in progress on the other device/,
   );
-  assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipBeforeOps);
-  await git(worktreeA, ["commit", "-qm", "merge side-op"]);
-  const mergeTip = await gitOut(worktreeA, "rev-parse", "HEAD");
-  follower.onPeerProjectChanged("A", projectIdA);
+  assert.equal(await gitOut(dialerRoot, "rev-parse", "HEAD"), tipBeforeOps);
+  await git(listenerWorktree, ["commit", "-qm", "merge side-op"]);
+  const mergeTip = await gitOut(listenerWorktree, "rev-parse", "HEAD");
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitFor(
-    async () => (await gitOut(rootB, "rev-parse", "HEAD")) === mergeTip,
-    "B to follow A's finished merge",
+    async () => (await gitOut(dialerRoot, "rev-parse", "HEAD")) === mergeTip,
+    "the dialer to follow the listener's finished merge",
     30_000,
   );
-  await waitGit("synced", "synced after A's merge finished");
-  // A rebase stopped on B (an exec that fails leaves it mid-way, on a
-  // detached HEAD), which must not reach A as a detached HEAD:
+  await waitGit("synced", "synced after the listener's merge finished");
+  // A rebase stopped on the dialer (an exec that fails leaves it mid-way, on a
+  // detached HEAD), which must not reach the listener as a detached HEAD:
   await assert.rejects(() =>
-    git(rootB, ["rebase", "--exec", "false", "HEAD~1"]),
+    git(dialerRoot, ["rebase", "--exec", "false", "HEAD~1"]),
   );
-  follower.onLocalProjectChanged(projectIdB);
-  await waitGit("blocked", "the follower to report B's rebase");
+  follower.onLocalProjectChanged(dialerProjectId);
+  await waitGit("blocked", "the follower to report the dialer's rebase");
   assert.match(gitStatus()?.detail ?? "", /a rebase is in progress here/);
   assert.equal(
-    await gitOut(worktreeA, "symbolic-ref", "HEAD"),
+    await gitOut(listenerWorktree, "symbolic-ref", "HEAD"),
     "refs/heads/feature",
   );
-  await git(rootB, ["rebase", "--abort"]);
-  follower.onLocalProjectChanged(projectIdB);
-  await waitGit("synced", "synced after B's rebase was aborted");
+  await git(dialerRoot, ["rebase", "--abort"]);
+  follower.onLocalProjectChanged(dialerProjectId);
+  await waitGit("synced", "synced after the dialer's rebase was aborted");
 });
 
 it("git: a half-landed apply heals to synced instead of reading diverged", async () => {
-  // (G8) A half-landed apply heals: B's branch already at A's new
+  // (G8) A half-landed apply heals: the dialer's branch already at the listener's new
   // tip (as if read-tree failed on a held index lock after the ref
   // moved), its index still the old tree. Both tips moved since the
   // agreement, yet the two share one now, so only the indexes count.
-  writeFileSync(join(worktreeA, "half.txt"), "half\n");
+  writeFileSync(join(listenerWorktree, "half.txt"), "half\n");
   await waitFor(
-    () => fileEquals(join(rootB, "half.txt"), "half\n"),
+    () => fileEquals(join(dialerRoot, "half.txt"), "half\n"),
     "half.txt to mirror",
     30_000,
   );
-  await git(worktreeA, ["add", "half.txt"]);
-  await git(worktreeA, ["commit", "-qm", "half-applied on B"]);
-  const halfTip = await gitOut(worktreeA, "rev-parse", "HEAD");
-  await git(repoB, ["fetch", "-q", repoA, "feature"]);
-  await git(rootB, ["update-ref", "refs/heads/feature", halfTip]);
-  assert.notEqual(await gitOut(rootB, "diff", "--cached", "--name-only"), "");
-  follower.onLocalProjectChanged(projectIdB);
+  await git(listenerWorktree, ["add", "half.txt"]);
+  await git(listenerWorktree, ["commit", "-qm", "half-applied on the dialer"]);
+  const halfTip = await gitOut(listenerWorktree, "rev-parse", "HEAD");
+  await git(dialerRepo, ["fetch", "-q", listenerRepo, "feature"]);
+  await git(dialerRoot, ["update-ref", "refs/heads/feature", halfTip]);
+  assert.notEqual(
+    await gitOut(dialerRoot, "diff", "--cached", "--name-only"),
+    "",
+  );
+  follower.onLocalProjectChanged(dialerProjectId);
   await waitFor(
-    async () => (await gitOut(rootB, "diff", "--cached", "--name-only")) === "",
-    "B's index to heal to A's",
+    async () =>
+      (await gitOut(dialerRoot, "diff", "--cached", "--name-only")) === "",
+    "the dialer's index to heal to the listener's",
     30_000,
   );
   await waitGit("synced", "synced after the half-landed apply healed");
-  assert.ok(await clean(rootB), "B is not clean after the heal");
+  assert.ok(await clean(dialerRoot), "the dialer is not clean after the heal");
 });
 
 it("git: a commit waits for the files (staging does not), a halted engine reads blocked, and the idle snapshot releases it", async () => {
   // (G9) Git follows the files: a commit waits while the engine is
   // mid-cycle, staging does not, a halted engine reads blocked, and
   // the idle snapshot releases the wait.
-  writeFileSync(join(worktreeA, "wait.txt"), "wait\n");
+  writeFileSync(join(listenerWorktree, "wait.txt"), "wait\n");
   await waitFor(
-    () => fileEquals(join(rootB, "wait.txt"), "wait\n"),
+    () => fileEquals(join(dialerRoot, "wait.txt"), "wait\n"),
     "wait.txt to mirror",
     30_000,
   );
-  const tipBeforeWait = await gitOut(rootB, "rev-parse", "HEAD");
+  const tipBeforeWait = await gitOut(dialerRoot, "rev-parse", "HEAD");
   filesStatus = "staging-remote";
-  await git(worktreeA, ["add", "wait.txt"]);
-  follower.onPeerWorktreeChanged("A", projectIdA, worktreeIdA);
+  await git(listenerWorktree, ["add", "wait.txt"]);
+  follower.onPeerWorktreeChanged(
+    LISTENER,
+    listenerProjectId,
+    listenerWorktreeId,
+  );
   await waitFor(
     async () =>
-      (await gitOut(rootB, "diff", "--cached", "--name-only")) === "wait.txt",
+      (await gitOut(dialerRoot, "diff", "--cached", "--name-only")) ===
+      "wait.txt",
     "staging to cross while the files are mid-cycle",
     30_000,
   );
-  await git(worktreeA, ["commit", "-qm", "wait for files"]);
-  const waitTip = await gitOut(worktreeA, "rev-parse", "HEAD");
-  follower.onPeerProjectChanged("A", projectIdA);
+  await git(listenerWorktree, ["commit", "-qm", "wait for files"]);
+  const waitTip = await gitOut(listenerWorktree, "rev-parse", "HEAD");
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitFor(
     () => gitStatus()?.detail === "waiting for files to catch up",
     "the commit to wait for the files",
     30_000,
   );
   assert.equal(gitStatus()?.status, "following");
-  assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipBeforeWait);
+  assert.equal(await gitOut(dialerRoot, "rev-parse", "HEAD"), tipBeforeWait);
   filesStatus = "halted-on-root-deletion";
-  follower.onPeerProjectChanged("A", projectIdA);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitGit("blocked", "a halted engine to read blocked");
   assert.match(gitStatus()?.detail ?? "", /file sync has halted/);
-  assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipBeforeWait);
+  assert.equal(await gitOut(dialerRoot, "rev-parse", "HEAD"), tipBeforeWait);
   filesStatus = null;
   // The engine's idle snapshot, as the daemon would send it.
   follower.sessionsChanged();
   await waitFor(
-    async () => (await gitOut(rootB, "rev-parse", "HEAD")) === waitTip,
-    "B to follow once the files are idle",
+    async () => (await gitOut(dialerRoot, "rev-parse", "HEAD")) === waitTip,
+    "the dialer to follow once the files are idle",
     30_000,
   );
   await waitGit("synced", "synced after the files caught up");
 });
 
 it("git: a primary mirrored to a mirror/main worktree carries commits both ways with the copy's own main untouched, and a stray branch on the copy is reported rather than followed", async () => {
-  // (G10) A primary checkout's mirror: B's repo-b itself, the
-  // original on the device running the session, mirrored to A as a
+  // (G10) A primary checkout's mirror: the dialer's repo itself, the
+  // original on the device running the session, mirrored to the listener as a
   // worktree on mirror/main (the session's mirrorBranch label),
-  // beside A's own primary on main. The follower reads the two names
-  // as one: a commit on B's main lands on A's mirror/main, one there
-  // lands on B's main, and A's own main never moves.
-  const rootA2 = join(sandbox, "wt-a-mirror");
-  await git(repoA, [
+  // beside the listener's own primary on main. The follower reads the two names
+  // as one: a commit on the dialer's main lands on the listener's mirror/main, one there
+  // lands on the dialer's main, and the listener's own main never moves.
+  const listenerRoot2 = join(sandbox, "wt-a-mirror");
+  await git(listenerRepo, [
     "worktree",
     "add",
     "-q",
     "-b",
     "mirror/main",
-    rootA2,
+    listenerRoot2,
     "main",
   ]);
-  const worktreeIdA2 = worktreeIdFromPath(rootA2);
-  const primaryIdB = worktreeIdFromPath(repoB);
-  const mainBefore = await gitOut(repoA, "rev-parse", "HEAD");
+  const listenerWorktreeId2 = worktreeIdFromPath(listenerRoot2);
+  const dialerPrimaryId = worktreeIdFromPath(dialerRepo);
+  const mainBefore = await gitOut(listenerRepo, "rev-parse", "HEAD");
   const session2 = await daemon.create({
-    localRoot: repoB,
-    deviceId: "A",
-    projectId: projectIdA,
-    worktreeId: worktreeIdA2,
-    remoteRoot: rootA2,
+    localRoot: dialerRepo,
+    deviceId: LISTENER,
+    projectId: listenerProjectId,
+    worktreeId: listenerWorktreeId2,
+    remoteRoot: listenerRoot2,
     name: "main",
-    localWorktreeId: primaryIdB,
+    localWorktreeId: dialerPrimaryId,
     labels: {
-      localWorktreeId: primaryIdB,
-      localProjectId: projectIdB,
+      localWorktreeId: dialerPrimaryId,
+      localProjectId: dialerProjectId,
       [MIRROR_LABEL_MODE]: "mirror-branch",
     },
     ignores: [],
@@ -942,60 +957,68 @@ it("git: a primary mirrored to a mirror/main worktree carries commits both ways 
   const waitGit2 = (status: MirrorGitStatus["status"], what: string) =>
     waitFor(() => follower.statusOf(session2)?.status === status, what, 30_000);
   await waitGit2("synced", "the primary's mirror to report synced");
-  writeFileSync(join(repoB, "primary-b.txt"), "b\n");
+  writeFileSync(join(dialerRepo, "primary-b.txt"), "b\n");
   await waitFor(
-    () => fileEquals(join(rootA2, "primary-b.txt"), "b\n"),
+    () => fileEquals(join(listenerRoot2, "primary-b.txt"), "b\n"),
     "primary-b.txt to mirror",
     30_000,
   );
-  await git(repoB, ["add", "primary-b.txt"]);
-  await git(repoB, ["commit", "-qm", "on B's primary"]);
-  const tipB3 = await gitOut(repoB, "rev-parse", "HEAD");
-  follower.onLocalProjectChanged(projectIdB);
+  await git(dialerRepo, ["add", "primary-b.txt"]);
+  await git(dialerRepo, ["commit", "-qm", "on the dialer's primary"]);
+  const dialerTip3 = await gitOut(dialerRepo, "rev-parse", "HEAD");
+  follower.onLocalProjectChanged(dialerProjectId);
   await waitFor(
-    async () => (await gitOut(rootA2, "rev-parse", "HEAD")) === tipB3,
-    "A's mirror/main to follow B's primary",
+    async () =>
+      (await gitOut(listenerRoot2, "rev-parse", "HEAD")) === dialerTip3,
+    "the listener's mirror/main to follow the dialer's primary",
     30_000,
   );
   assert.equal(
-    await gitOut(rootA2, "symbolic-ref", "HEAD"),
+    await gitOut(listenerRoot2, "symbolic-ref", "HEAD"),
     "refs/heads/mirror/main",
   );
-  await waitGit2("synced", "synced after B's primary committed");
-  writeFileSync(join(rootA2, "primary-a.txt"), "a\n");
+  await waitGit2("synced", "synced after the dialer's primary committed");
+  writeFileSync(join(listenerRoot2, "primary-a.txt"), "a\n");
   await waitFor(
-    () => fileEquals(join(repoB, "primary-a.txt"), "a\n"),
+    () => fileEquals(join(dialerRepo, "primary-a.txt"), "a\n"),
     "primary-a.txt to mirror",
     30_000,
   );
-  await git(rootA2, ["add", "primary-a.txt"]);
-  await git(rootA2, ["commit", "-qm", "on A's mirror/main"]);
-  const tipA3 = await gitOut(rootA2, "rev-parse", "HEAD");
-  follower.onPeerProjectChanged("A", projectIdA);
+  await git(listenerRoot2, ["add", "primary-a.txt"]);
+  await git(listenerRoot2, ["commit", "-qm", "on the listener's mirror/main"]);
+  const listenerTip3 = await gitOut(listenerRoot2, "rev-parse", "HEAD");
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitFor(
-    async () => (await gitOut(repoB, "rev-parse", "HEAD")) === tipA3,
-    "B's primary to follow A's mirror/main",
+    async () =>
+      (await gitOut(dialerRepo, "rev-parse", "HEAD")) === listenerTip3,
+    "the dialer's primary to follow the listener's mirror/main",
     30_000,
   );
-  assert.equal(await gitOut(repoB, "symbolic-ref", "HEAD"), "refs/heads/main");
-  await waitGit2("synced", "synced after A's mirror/main committed");
   assert.equal(
-    await gitOut(repoA, "rev-parse", "HEAD"),
-    mainBefore,
-    "A's own primary must not move",
+    await gitOut(dialerRepo, "symbolic-ref", "HEAD"),
+    "refs/heads/main",
   );
-  // The copy leaving the mirror/ rule is reported, not followed: B's
+  await waitGit2("synced", "synced after the listener's mirror/main committed");
+  assert.equal(
+    await gitOut(listenerRepo, "rev-parse", "HEAD"),
+    mainBefore,
+    "the listener's own primary must not move",
+  );
+  // The copy leaving the mirror/ rule is reported, not followed: the dialer's
   // primary stays on main until the copy is back on a mirror/ branch.
-  await git(rootA2, ["checkout", "-q", "-b", "stray"]);
-  follower.onPeerProjectChanged("A", projectIdA);
+  await git(listenerRoot2, ["checkout", "-q", "-b", "stray"]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitGit2("blocked", "the follower to report the stray branch");
   assert.match(
     follower.statusOf(session2)?.detail ?? "",
     /without the mirror\//,
   );
-  assert.equal(await gitOut(repoB, "symbolic-ref", "HEAD"), "refs/heads/main");
-  await git(rootA2, ["checkout", "-q", "mirror/main"]);
-  follower.onPeerProjectChanged("A", projectIdA);
+  assert.equal(
+    await gitOut(dialerRepo, "symbolic-ref", "HEAD"),
+    "refs/heads/main",
+  );
+  await git(listenerRoot2, ["checkout", "-q", "mirror/main"]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
   await waitGit2("synced", "synced once the copy is back on mirror/main");
   await daemon.terminate(session2);
   await waitFor(
@@ -1008,7 +1031,7 @@ it("terminate drops the stream, ends the serve child, leaves both copies intact"
   onSnapshot = null;
   await stopFollower();
 
-  // (6) Terminate: the session is gone, A's stream dropped, the serve
+  // (6) Terminate: the session is gone, the listener's stream dropped, the serve
   // child exited, and the files stay put on both sides.
   await daemon.terminate(session);
   await waitFor(
@@ -1017,7 +1040,7 @@ it("terminate drops the stream, ends the serve child, leaves both copies intact"
   );
   await waitFor(
     () => listMirrorServing().length === 0,
-    "A's serving list to empty",
+    "the listener's serving list to empty",
     15_000,
   );
   await waitFor(
@@ -1025,32 +1048,35 @@ it("terminate drops the stream, ends the serve child, leaves both copies intact"
     "the serve child to exit",
     15_000,
   );
-  assert.equal(read(join(rootB, "src.txt")), "from A, edited\n");
-  assert.equal(read(join(worktreeA, "from-b.txt")), "from B\n");
+  assert.equal(
+    read(join(dialerRoot, "src.txt")),
+    "from the listener, edited\n",
+  );
+  assert.equal(read(join(listenerWorktree, "from-b.txt")), "from the dialer\n");
 });
 
 it("one-shot transfer: the admitted file crosses, the rule holds, nothing flows back, the session ends itself", async () => {
   // (6b) A transplant's files step (host/mirror/oneShot.ts): the same
   // daemon run once with the leave-out rule's patterns, settled on
   // its first cycle and ended by itself. A path under the rule stays
-  // on A, one beside it crosses, and no session survives the call.
+  // on the listener, one beside it crosses, and no session survives the call.
   // Only the daemon slot's create/sessions/terminate/status are in
   // play. The rest of the impl is inert here.
   setMirrorImpl(inertImpl());
-  mkdirSync(join(worktreeA, "skip"), { recursive: true });
-  writeFileSync(join(worktreeA, "skip", "me.txt"), "stays\n");
-  writeFileSync(join(worktreeA, "once.txt"), "once\n");
-  // Only on B: a pull is one way, so it must never reach A.
-  writeFileSync(join(rootB, "local-only.txt"), "mine\n");
+  mkdirSync(join(listenerWorktree, "skip"), { recursive: true });
+  writeFileSync(join(listenerWorktree, "skip", "me.txt"), "stays\n");
+  writeFileSync(join(listenerWorktree, "once.txt"), "once\n");
+  // Only on the dialer: a pull is one way, so it must never reach the listener.
+  writeFileSync(join(dialerRoot, "local-only.txt"), "mine\n");
   const once = await runHost(
     transferFilesOnce(
       {
-        localRoot: rootB,
-        localWorktreeId: worktreeIdB,
-        sourceDeviceId: "A",
-        sourceProjectId: projectIdA,
-        sourceWorktreeId: worktreeIdA,
-        remoteRoot: worktreeA,
+        localRoot: dialerRoot,
+        localWorktreeId: dialerWorktreeId,
+        sourceDeviceId: LISTENER,
+        sourceProjectId: listenerProjectId,
+        sourceWorktreeId: listenerWorktreeId,
+        remoteRoot: listenerWorktree,
         name: "feature",
         ignores: ["/skip"],
       },
@@ -1058,16 +1084,16 @@ it("one-shot transfer: the admitted file crosses, the rule holds, nothing flows 
     ),
   );
   assert.deepEqual(once, { crossed: true, conflicts: 0 });
-  assert.equal(read(join(rootB, "once.txt")), "once\n");
+  assert.equal(read(join(dialerRoot, "once.txt")), "once\n");
   assert.equal(
-    existsSync(join(rootB, "skip")),
+    existsSync(join(dialerRoot, "skip")),
     false,
     "a path under the transfer's rule crossed",
   );
   assert.equal(
-    existsSync(join(worktreeA, "local-only.txt")),
+    existsSync(join(listenerWorktree, "local-only.txt")),
     false,
-    "a pull pushed B's own file onto A",
+    "a pull pushed the dialer's own file onto the listener",
   );
   await waitFor(
     () => daemon.sessions().length === 0,
@@ -1075,30 +1101,30 @@ it("one-shot transfer: the admitted file crosses, the rule holds, nothing flows 
   );
   await waitFor(
     () => listMirrorServing().length === 0,
-    "A's serving list to empty after the one-shot",
+    "the listener's serving list to empty after the one-shot",
     15_000,
   );
 });
 
 it("replica pass: the copy takes the original's version of a clash, loses what only it held, keeps what the rule leaves out", async () => {
-  // (6b') A mirror start's first pass (mirror:startTo): the copy (A)
-  // made an exact copy of the original (B) before the two-way session
+  // (6b') A mirror start's first pass (mirror:startTo): the copy (the listener)
+  // made an exact copy of the original (the dialer) before the two-way session
   // opens. A path both hold differently (what a carry-over or a setup
   // script wrote on the copy) takes the original's version instead of
   // standing as a conflict, what only the copy holds goes, and a path
   // under the rule is left alone on the copy.
-  writeFileSync(join(rootB, "clash.txt"), "the original's\n");
-  writeFileSync(join(worktreeA, "clash.txt"), "the copy's create\n");
-  writeFileSync(join(worktreeA, "stray.txt"), "only on the copy\n");
+  writeFileSync(join(dialerRoot, "clash.txt"), "the original's\n");
+  writeFileSync(join(listenerWorktree, "clash.txt"), "the copy's create\n");
+  writeFileSync(join(listenerWorktree, "stray.txt"), "only on the copy\n");
   const replica = await runHost(
     transferFilesOnce(
       {
-        localRoot: rootB,
-        localWorktreeId: worktreeIdB,
-        sourceDeviceId: "A",
-        sourceProjectId: projectIdA,
-        sourceWorktreeId: worktreeIdA,
-        remoteRoot: worktreeA,
+        localRoot: dialerRoot,
+        localWorktreeId: dialerWorktreeId,
+        sourceDeviceId: LISTENER,
+        sourceProjectId: listenerProjectId,
+        sourceWorktreeId: listenerWorktreeId,
+        remoteRoot: listenerWorktree,
         name: "feature",
         ignores: ["/skip"],
         direction: "replica",
@@ -1107,10 +1133,10 @@ it("replica pass: the copy takes the original's version of a clash, loses what o
     ),
   );
   assert.deepEqual(replica, { crossed: true, conflicts: 0 });
-  assert.equal(read(join(worktreeA, "clash.txt")), "the original's\n");
-  assert.equal(read(join(rootB, "clash.txt")), "the original's\n");
-  assert.equal(existsSync(join(worktreeA, "stray.txt")), false);
-  assert.equal(read(join(worktreeA, "skip", "me.txt")), "stays\n");
+  assert.equal(read(join(listenerWorktree, "clash.txt")), "the original's\n");
+  assert.equal(read(join(dialerRoot, "clash.txt")), "the original's\n");
+  assert.equal(existsSync(join(listenerWorktree, "stray.txt")), false);
+  assert.equal(read(join(listenerWorktree, "skip", "me.txt")), "stays\n");
   await waitFor(
     () => daemon.sessions().length === 0,
     "the replica session to be gone",
@@ -1129,18 +1155,18 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
     const live = new Map([
       [
         "s-with-a",
-        fakeSession({
+        rawMirrorSession({
           session: "s-with-a",
-          deviceId: "A",
+          deviceId: LISTENER,
           labels: {
-            [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-a",
+            [MIRROR_LABEL_LOCAL_WORKTREE]: "listener-wt",
             [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
       ],
       [
         "s-with-c",
-        fakeSession({
+        rawMirrorSession({
           session: "s-with-c",
           deviceId: "C",
           labels: {
@@ -1151,9 +1177,9 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
       ],
       [
         "t-with-a",
-        fakeSession({
+        rawMirrorSession({
           session: "t-with-a",
-          deviceId: "A",
+          deviceId: LISTENER,
           labels: { [MIRROR_LABEL_MODE]: "transfer-token" },
         }),
       ],
@@ -1170,15 +1196,36 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         noted.push([worktreeId, kind, detail]),
     });
     await runHost(
-      endMirrorsWithPeers((deviceId) => deviceId !== "A", "A left"),
+      endMirrorsWithPeers(
+        (deviceId) => deviceId !== LISTENER,
+        "the listener left",
+      ),
     );
     assert.deepEqual([...live.keys()], ["s-with-c", "t-with-a"]);
-    assert.deepEqual(noted, [["wt-a", "stopped", "A left"]]);
+    assert.deepEqual(noted, [["listener-wt", "stopped", "the listener left"]]);
     await runHost(endMirrorsWithPeers(() => false, "signed out"));
     assert.deepEqual([...live.keys()], ["t-with-a"]);
     assert.deepEqual(noted.at(-1), ["wt-c", "stopped", "signed out"]);
   }
 });
+
+// A mirror of `original` into the copy `worktreeId` on `deviceId`.
+const into = (
+  id: string,
+  deviceId: string,
+  worktreeId: string,
+  original: string,
+) =>
+  rawMirrorSession({
+    session: id,
+    deviceId,
+    projectId: "p",
+    worktreeId,
+    labels: {
+      [MIRROR_LABEL_LOCAL_WORKTREE]: original,
+      [MIRROR_LABEL_MODE]: "mirror",
+    },
+  });
 
 it("a peer's removed worktree ends only the mirrors into that copy, nothing deleted", async () => {
   // (6e) A copy deleted on its own device: that device announces
@@ -1188,26 +1235,10 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
   // nothing is deleted. Another device's worktree of the same id
   // stays.
   {
-    const into = (
-      id: string,
-      deviceId: string,
-      worktreeId: string,
-      original: string,
-    ) =>
-      fakeSession({
-        session: id,
-        deviceId,
-        projectId: "p",
-        worktreeId,
-        labels: {
-          [MIRROR_LABEL_LOCAL_WORKTREE]: original,
-          [MIRROR_LABEL_MODE]: "mirror",
-        },
-      });
     const live = new Map(
       [
-        into("s-into-a", "A", "wt-copy", "wt-original"),
-        into("s-into-a-other", "A", "wt-other", "wt-original-2"),
+        into("s-into-a", LISTENER, "wt-copy", "wt-original"),
+        into("s-into-a-other", LISTENER, "wt-other", "wt-original-2"),
         into("s-into-c", "C", "wt-copy", "wt-original-3"),
       ].map((raw): [string, MirrorSessionRaw] => [raw.session, raw]),
     );
@@ -1224,15 +1255,15 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
         noted.push([worktreeId, kind, detail]),
     });
     const copy = { projectId: "p", worktreeId: "wt-copy" };
-    await removal("A", { ...copy, state: "removing" });
-    await removal("A", { ...copy, state: "kept" });
+    await removal(LISTENER, { ...copy, state: "removing" });
+    await removal(LISTENER, { ...copy, state: "kept" });
     assert.equal(live.size, 3, "a removal not yet done ended a mirror");
-    await removal("A", { ...copy, state: "removed" });
+    await removal(LISTENER, { ...copy, state: "removed" });
     assert.deepEqual([...live.keys()], ["s-into-a-other", "s-into-c"]);
     assert.deepEqual(noted, [["wt-original", "stopped", COPY_GONE_DETAIL]]);
     // Announced twice (the stop's own end, then the announcement), it
     // ends nothing more.
-    await removal("A", { ...copy, state: "removed" });
+    await removal(LISTENER, { ...copy, state: "removed" });
     assert.equal(noted.length, 1);
   }
 });
@@ -1247,16 +1278,14 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     const settled: Partial<MirrorSessionRaw> = {
       status: "watching",
       successfulCycles: 3,
-      local: { ...idleEndpoint, connected: true, scanned: true },
-      remote: { ...idleEndpoint, connected: true, scanned: true },
     };
     const liveRoot = join(sandbox, "original-here");
     mkdirSync(liveRoot, { recursive: true });
     const goneRoot = join(sandbox, "original-gone");
     const sessionOf = (id: string, fields: Partial<MirrorSessionRaw> = {}) =>
-      fakeSession({
+      rawMirrorSession({
         session: id,
-        deviceId: "A",
+        deviceId: LISTENER,
         projectId: "p",
         worktreeId: `wt-${id}`,
         localRoot: liveRoot,
@@ -1315,7 +1344,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
         subscribe: () => () => {},
       }),
       channelsFor: () => () => Promise.reject(new Error("not in this check")),
-      thisDeviceId: () => "B",
+      thisDeviceId: () => DIALER,
     });
 
     // Git in step but a file held still as a conflict: the copy may
@@ -1519,8 +1548,16 @@ it("the no-account sweep asks about each session once, so a misread credential e
         ends += 1;
       },
     });
-    const one = fakeSession({ session: "s-1", deviceId: "A", labels: {} });
-    const two = fakeSession({ session: "s-2", deviceId: "A", labels: {} });
+    const one = rawMirrorSession({
+      session: "s-1",
+      deviceId: LISTENER,
+      labels: {},
+    });
+    const two = rawMirrorSession({
+      session: "s-2",
+      deviceId: LISTENER,
+      labels: {},
+    });
     sweep.run();
     assert.equal(checks, 0, "nothing to ask about read the credential");
     sessions = [one];
