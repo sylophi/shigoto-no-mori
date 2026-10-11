@@ -1,8 +1,10 @@
 // Compiles the terminal sm (packages/cli) into a standalone Bun binary.
-// Two flavors, mirroring the app's packaged/dev split; naming and data
-// dir policy are the engine's (packages/engine/src/flavor.ts).
-//   default -> dist-cli/sm   targets ~/.sm  (bundled with the app)
-//   --dev   -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
+// The packaged build's flavor (SM_FLAVOR, shared/packaging/buildFlavor.mts),
+// or dev; naming and data dir policy are the flavor table's
+// (packages/engine/src/flavor.ts).
+//   default        -> dist-cli/sm   targets ~/.sm  (bundled with the app)
+//   SM_FLAVOR=test -> dist-cli/smt  targets ~/.smt (bundled with a test build)
+//   --dev          -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
 // The binary finds the darwin helper beside itself, as the app's
 // Resources ship them, so the build gets a copy of the one in
 // dist-macfs/ (build it first, as dev-cli.mts and install-cli.mts do).
@@ -11,6 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { buildFlavor } from "../shared/packaging/buildFlavor.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
   MACFS_BINARY_NAME,
@@ -18,7 +21,9 @@ import {
 } from "../shared/packaging/macfsDist.mts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
-const flavor = process.argv.includes("--dev") ? "dev" : "prod";
+const flavor = process.argv.includes("--dev")
+  ? "dev"
+  : buildFlavor(process.env);
 
 const version =
   flavor === "dev"
@@ -30,12 +35,7 @@ const outfile = join(outdir, cliBinaryName(flavor));
 
 execFileSync(
   "node",
-  [
-    "build.mts",
-    outfile,
-    ...(flavor === "prod" ? ["--prod"] : []),
-    `--version=${version}`,
-  ],
+  ["build.mts", outfile, `--flavor=${flavor}`, `--version=${version}`],
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );
 

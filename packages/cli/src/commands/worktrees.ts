@@ -299,7 +299,7 @@ export const link = Command.make(
       const { worktree, project } = (yield* resolveWorktree(input)).located;
       const { flavor } = yield* Paths.Paths;
       const deviceId = yield* (yield* Registry.Registry).deviceId;
-      const url = `${flavorNames(flavor).alias}://open/devices/${encodeURIComponent(deviceId)}/projects/${encodeURIComponent(project.id)}/worktrees/${encodeURIComponent(worktree.id)}`;
+      const url = `${flavorNames(flavor).scheme}://open/devices/${encodeURIComponent(deviceId)}/projects/${encodeURIComponent(project.id)}/worktrees/${encodeURIComponent(worktree.id)}`;
       const { json } = yield* Effect.service(Output);
       yield* json ? emit({ ok: true, url, worktree: worktree.name }) : out(url);
     }),

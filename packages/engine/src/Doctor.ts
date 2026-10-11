@@ -294,7 +294,6 @@ const INCOMING_REF_STALE_MS = 60 * 60 * 1000;
 // ps reports a start time to the second, stamped just after spawn.
 const SCRIPT_START_TOLERANCE_MS = 5_000;
 
-const APP_NAME = "Shigoto no Mori";
 const INCOMING_PREFIX = "refs/shigomori/incoming/";
 
 // running-scripts.json: the dev servers and scripts the app started,
@@ -541,7 +540,7 @@ const make = Effect.gen(function* () {
   // The app in one of the conventional install locations.
   const findInstalledBundle = Effect.gen(function* () {
     for (const root of appRoots) {
-      const candidate = path.join(root, `${APP_NAME}.app`);
+      const candidate = path.join(root, `${names.appName}.app`);
       if (Option.isSome(yield* statOf(candidate)))
         return Option.some(candidate);
     }
@@ -553,7 +552,7 @@ const make = Effect.gen(function* () {
   const findAsideBundle = Effect.gen(function* () {
     for (const root of appRoots) {
       const [aside] = (yield* listDir(root))
-        .filter((name) => name.startsWith(`${APP_NAME}.app.old-`))
+        .filter((name) => name.startsWith(`${names.appName}.app.old-`))
         .toSorted();
       if (aside !== undefined) return Option.some(path.join(root, aside));
     }
@@ -577,7 +576,7 @@ const make = Effect.gen(function* () {
   const checkApp = ({ version, executable }: RunInput) =>
     Effect.gen(function* () {
       const line = check("Environment", "app", "app");
-      if (flavor !== "prod") {
+      if (flavor === "dev") {
         return line.ok(
           `dev build (${binaryName} ${version}): runs from a checkout, no installed bundle`,
         );
@@ -595,7 +594,7 @@ const make = Effect.gen(function* () {
         if (Option.isSome(aside)) {
           return line.fail(
             `the app is missing, but ${collapseHome(home, aside.value)} is the copy an interrupted update set aside`,
-            `Rename it back to ${APP_NAME}.app.`,
+            `Rename it back to ${names.appName}.app.`,
           );
         }
         return line.warn(
@@ -859,7 +858,7 @@ const make = Effect.gen(function* () {
             names.dataDir,
             "If a data-folder move left it behind, delete it once you've checked nothing in it is newer.",
           )
-        : paths.dataDirSource === "default"
+        : paths.dataDirSource === "default" && names.legacyDataDir !== null
           ? yield* ignoredCopy(
               names.legacyDataDir,
               "Move it aside, or merge what you need from it by hand.",
@@ -1319,7 +1318,7 @@ const make = Effect.gen(function* () {
       home,
       "Library",
       "Application Support",
-      flavor === "prod" ? APP_NAME : `${APP_NAME} (dev)`,
+      names.userDataDir,
     );
     const raw = yield* readText(path.join(userData, "cloudflared.pid"));
     if (Option.isNone(raw)) return [];

@@ -365,9 +365,11 @@ const catalog = (names: Names) => {
           names.pointer +
           " when that file exists (one line holding an absolute path, honoring $XDG_CONFIG_HOME), else ~/" +
           names.dataDir +
-          " (or a pre-2.0 ~/" +
-          names.legacyDataDir +
-          " that still holds state).",
+          (names.legacyDataDir === null
+            ? "."
+            : " (or a pre-2.0 ~/" +
+              names.legacyDataDir +
+              " that still holds state)."),
       ],
     ],
   } satisfies Record<string, ReadonlyArray<Item>>;
@@ -538,7 +540,8 @@ function section(
 
 export type HelpLook = {
   readonly names: Names;
-  readonly dev: boolean;
+  // The build that isn't prod (test, dev), which the title names.
+  readonly unshipped: "test" | "dev" | null;
   readonly color: boolean;
   // The terminal's width, clamped.
   readonly columns: number;
@@ -586,7 +589,7 @@ export const helpPages = (look: HelpLook) => {
           ["Environment", items.environment],
         ];
     const column = inlineColumn(shown.map(([, list]) => list));
-    let out = `${paint.bold(`${bin}: Shigoto no Mori CLI`)}${look.dev ? ` (dev: targets ~/${look.names.dataDir})` : ""}\n\n`;
+    let out = `${paint.bold(`${bin}: Shigoto no Mori CLI`)}${look.unshipped === null ? "" : ` (${look.unshipped}: targets ~/${look.names.dataDir})`}\n\n`;
     out += `${usageLine("[--json] [--verbose] <command> [args]")}\n\n`;
     out += wrapText(
       `Commands target the worktree containing the current directory. From elsewhere, address worktrees as <name>, <project>/<name>, or a path, or pass -p <project>. The reserved names root and primary address a project's primary checkout (\`${bin} cd root\`). Omitting the name in the primary checkout opens a menu. Aliases: c cd, o open, new/n create, w worktrees, p projects.`,

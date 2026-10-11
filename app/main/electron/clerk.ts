@@ -12,9 +12,10 @@
 // modes therefore load the renderer over the scheme: packaged serves
 // the built bundle from disk, dev proxies to the vite server (whose
 // HMR socket the client dials directly, see vite.renderer.config.ts).
+import { flavor } from "../flavor";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { app, net, protocol } from "electron";
+import { net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
@@ -25,11 +26,11 @@ import {
 } from "@shared/packaging/rendererScheme.mts";
 
 export function rendererScheme(): string {
-  return rendererSchemeName(app.isPackaged ? "prod" : "dev");
+  return rendererSchemeName(flavor);
 }
 
 export function rendererSchemeUrl(): string {
-  return `${rendererSchemeOrigin(app.isPackaged ? "prod" : "dev")}/`;
+  return `${rendererSchemeOrigin(flavor)}/`;
 }
 
 // The token store decrypts on every getItem, an OS keychain call on

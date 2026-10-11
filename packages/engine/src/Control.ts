@@ -37,7 +37,7 @@ import * as Stream from "effect/Stream";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
-import type { Flavor } from "./flavor.ts";
+import { type Flavor, flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { pidAlive } from "./processes.ts";
 import * as Registry from "./Registry.ts";
@@ -46,13 +46,13 @@ import * as Registry from "./Registry.ts";
 // isn't the app.
 export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   "AppNotRunning",
-  { flavor: Schema.Literals(["prod", "dev"]) },
+  { flavor: Schema.Literals(["prod", "test", "dev"]) },
 ) {
   override get message(): string {
     const hint =
-      this.flavor === "prod"
-        ? "Open it (sm app), sign in, and try again."
-        : "Start it with `pnpm dev` in a checkout, sign in, and try again.";
+      this.flavor === "dev"
+        ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
+        : `Open it (${flavorNames(this.flavor).binaryName} app), sign in, and try again.`;
     return `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${hint}`;
   }
 

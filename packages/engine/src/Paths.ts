@@ -116,6 +116,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   // pre-2.0 file name is read only when the current one is absent.
   const readPointer = Effect.gen(function* () {
     for (const name of [names.pointer, names.legacyPointer]) {
+      if (name === null) continue;
       const file = path.join(configHome, names.configDir, name);
       const raw = yield* fs.readFileString(file).pipe(Effect.option);
       if (Option.isNone(raw)) continue;
@@ -170,11 +171,15 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       };
     }
     const current = path.join(home, names.dataDir);
-    const legacy = path.join(home, names.legacyDataDir);
+    const legacy =
+      names.legacyDataDir === null
+        ? null
+        : path.join(home, names.legacyDataDir);
     // A pre-2.0 dir that still holds state is used where it stands while
     // the current name holds none, so an upgrade never runs against an
     // empty data dir beside a full one.
     if (
+      legacy !== null &&
       (yield* holdsState(current)) !== "present" &&
       (yield* holdsState(legacy)) !== "absent"
     ) {

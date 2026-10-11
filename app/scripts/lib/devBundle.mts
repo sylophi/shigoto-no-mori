@@ -40,8 +40,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, join, resolve } from "node:path";
-import { DEV_NAME_SUFFIX } from "../../shared/packaging/appName.mts";
-import { APP_BUNDLE_ID } from "../../shared/packaging/cliDist.mts";
+import { flavorNames } from "@shigomori/engine/flavor";
 import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   LOCAL_NETWORK_USAGE_DESCRIPTION,
@@ -51,8 +50,6 @@ import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
 import { appRoot, repoRoot } from "./appRoot.mts";
 
 const require = createRequire(import.meta.url);
-export const productName = require("../../package.json").productName as string;
-
 // Bumped when the bundle recipe below changes shape, so existing
 // clones rebuild. The value-derived stamp fields cover everything
 // else.
@@ -122,13 +119,13 @@ export function ensureDevBundle(): string {
   const srcApp = resolve(stockElectronExecutable(), "..", "..", "..");
   const electronVersion = require("electron/package.json").version as string;
 
-  const devName = `${productName}${DEV_NAME_SUFFIX}`;
-  const bundleId = `${APP_BUNDLE_ID}.dev.${worktreeSuffix()}`;
+  const devName = flavorNames("dev").appName;
+  const bundleId = `${flavorNames("dev").bundleId}.${worktreeSuffix()}`;
   const scheme = rendererSchemeName("dev");
   const stampPath = join(runtimeDir, "stamp.json");
 
   // The stamp carries the values actually baked into the bundle, so a
-  // productName rename or an electron bump rebuilds and a no-op edit
+  // name change in the flavor table or an electron bump rebuilds and a no-op edit
   // to this file does not.
   const stamp = JSON.stringify({
     layout: BUNDLE_LAYOUT,
