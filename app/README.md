@@ -16,6 +16,7 @@ level up.
 - `test/README.md`: the programmatic checks, the proofs `pnpm test`
   and lefthook run.
 - `host/README.md`: what the host serves, and a new call end to end.
+- `main/README.md`: the shell, Electron's main process.
 - `shared/README.md`: the code the host, the shell and the clients
   share.
 
