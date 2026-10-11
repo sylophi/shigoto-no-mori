@@ -60,8 +60,10 @@ export class FileSync extends Context.Service<
       Scope.Scope
     >;
     // A `serve` child in a scope of its own under the service's, ended
-    // when `until` completes.
+    // when `until` completes. It reaches `root` alone, whatever root the
+    // peer's side of the stream names.
     readonly serve: (
+      root: string,
       env: Record<string, string | undefined>,
       until: Effect.Effect<void>,
     ) => Effect.Effect<
@@ -95,13 +97,14 @@ const make = (binaryPath: () => string | null) =>
     });
 
     const serve = Effect.fn("FileSync.serve")(function* (
+      root: string,
       env: Record<string, string | undefined>,
       until: Effect.Effect<void>,
     ) {
       const child = yield* Scope.fork(scope);
       const close = Scope.close(child, Exit.void);
       const input = new PassThrough();
-      const handle = yield* spawn(["serve"], {
+      const handle = yield* spawn(["serve", "--root", root], {
         env,
         stdin: NodeStream.fromReadable({
           evaluate: () => input,

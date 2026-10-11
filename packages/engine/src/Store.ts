@@ -89,6 +89,18 @@ export const layer = (
       const sql = yield* Effect.gen(function* () {
         // A fresh device has no data dir until its first command.
         yield* fs.makeDirectory(dataDir, { recursive: true });
+        // The store holds what the machine's other accounts must not
+        // read, a terminal's saved history among it, so it is the
+        // owner's alone. SQLite gives the journal files it makes the
+        // database's mode, and those an older build made are put right
+        // (a drive with no modes, or a file not there, has none to fix).
+        yield* fs.writeFile(store, new Uint8Array(), {
+          flag: "a",
+          mode: 0o600,
+        });
+        for (const file of [store, `${store}-wal`, `${store}-shm`]) {
+          yield* fs.chmod(file, 0o600).pipe(Effect.ignore);
+        }
         const client = yield* open(store);
         const owed = yield* owesImport(
           path.join(dataDir, "registry.json"),
