@@ -37,6 +37,7 @@ import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
+import * as ClientConfig from "./electron/clientConfig";
 import { confirmBusyAction } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
@@ -190,6 +191,8 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       Observability.layer({ packaged: app.isPackaged, writeTraceLine }),
     ),
+    // The client config, read before the first window (below).
+    Layer.provideMerge(ClientConfig.layer),
     Layer.provideMerge(NodeServices.layer),
   ),
 );
@@ -304,6 +307,15 @@ app.on("ready", async () => {
   // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();
   installFatalRecovery({ isShuttingDown, rememberWindows });
+  // The saved theme and welcome before the first window. A graph that
+  // failed first has no config to wait for, and its defaults stand.
+  await Promise.race([
+    ClientConfig.clientConfigRead(),
+    graph.then(
+      () => undefined,
+      () => undefined,
+    ),
+  ]);
   openWindowsAtStart({ restart: takeRestartVisibility(), isShuttingDown });
   reconcileLaunchAtLogin();
   rememberVisibilityAtShutdown();

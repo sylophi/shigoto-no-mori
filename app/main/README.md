@@ -26,8 +26,9 @@ decisions 6 and 9).
   live half, the log file.
 - `core/`: the shell's logic that runs without Electron, so a proof
   drives it under plain node: the account's credential store and default
-  device name, the keychain reset, liveness's rate limits, and the start
-  after a nuke.
+  device name, the keychain reset, liveness's rate limits, the start
+  after a nuke, and the shell's own JSON files (`files/`: the ones it
+  writes on the way out, synchronously, and the rest on `FileSystem`).
 
 A window reaches its host over the loopback like any other device; its
 shell serves only the calls that belong to the machine the window runs

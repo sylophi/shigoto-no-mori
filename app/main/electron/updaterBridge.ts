@@ -4,125 +4,103 @@
 // updater.json ({ pid, appVersion, state }) on boot and on every state
 // change, and consumes updater-request.json ({ action, requestedAt })
 // written by the CLI. Requests are picked up at boot (a request can
-// land in the gap around a restart) and via an fs watch afterwards.
-// Everything here is best-effort: a failed write or a malformed
-// request degrades `sm update`, never the updater itself.
-import { watch } from "node:fs";
-import { rename } from "node:fs/promises";
+// land in the gap around a restart) and via a watch of the data dir
+// afterwards. Everything here is best-effort: a failed write or a
+// malformed request degrades `sm update`, never the updater itself.
 import { join } from "node:path";
 import { app } from "electron";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as FiberHandle from "effect/FiberHandle";
+import * as FileSystem from "effect/FileSystem";
+import * as Semaphore from "effect/Semaphore";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import type {
   UpdateRequest,
   UpdaterState,
   UpdaterStatus,
 } from "@shigomori/contracts/schemas";
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
-import {
-  atomicWriteJson,
-  readJsonOrNull,
-  unlinkIfExists,
-} from "@host/lib/util/atomicJson";
 import { dataDir } from "@host/lib/util/paths";
+import { readJson, writeJson } from "../core/files/jsonFile";
 
 const REQUEST_STALE_MS = 2 * 60_000;
+const REQUEST_FILE = "updater-request.json";
 
 const updaterStatePath = () => join(dataDir(), "updater.json");
-const updateRequestPath = () => join(dataDir(), "updater-request.json");
+const updateRequestPath = () => join(dataDir(), REQUEST_FILE);
 
-// Publishes are serialized through a chain: setState can fire twice in
-// one tick (a synchronous throw right after entering "checking"), and
-// two racing tmp+rename writes could land out of order, freezing the
-// file on the older state.
-let publishChain: Promise<void> = Promise.resolve();
+// One publish at a time: setState can fire twice in one tick (a
+// synchronous throw right after entering "checking"), and two racing
+// writes could land out of order, freezing the file on the older state.
+const publishing = Semaphore.makeUnsafe(1);
 
-export function publishUpdaterState(state: UpdaterState): Promise<void> {
-  // Captured now, not when the chain gets to it, so each link writes
-  // the state its setState call carried.
+export const publishUpdaterState = (state: UpdaterState) => {
+  // Captured now, not when the write gets its turn, so each writes the
+  // state its setState call carried.
   const status: UpdaterStatus = {
     pid: process.pid,
     appVersion: app.getVersion(),
     state,
   };
-  publishChain = publishChain.then(async () => {
-    try {
-      await atomicWriteJson(updaterStatePath(), status);
-    } catch {
-      // The CLI treats a missing/stale file as "app not reachable".
-    }
-  });
-  return publishChain;
-}
+  // The CLI treats a missing or stale file as "app not reachable".
+  return publishing.withPermit(
+    Effect.ignore(writeJson(updaterStatePath(), status)),
+  );
+};
 
-export function startUpdaterBridge(
+// The watch, so the data-folder move can let go of the data dir.
+let watching: FiberHandle.FiberHandle | null = null;
+
+// Consumes the request at boot, then each time the watch sees it
+// written, for the length of the scope (the updater's layer). The
+// watch's events burst (the CLI's temp and rename, this side's own
+// cleanup echoing back), so a request is claimed by renaming it aside
+// before it is read: a fresh one landing mid-read keeps its own file
+// and its own event instead of being deleted unread, and the claimed
+// file always goes, since unparseable leftovers must not shadow the
+// next request. The events are handled one at a time.
+export const updaterBridge = (
   handle: (action: UpdateRequest["action"]) => void,
-): void {
-  // Watch events burst (the atomic write's tmp+rename, our own cleanup
-  // echoing back), so consumes are single-flight. An event that lands
-  // mid-consume is still deferred via `rerun`, never dropped: it may
-  // be the only event a just-written request ever gets.
-  let consuming = false;
-  let rerun = false;
-  const consumingPath = () => updateRequestPath() + ".consuming";
-  const consume = async () => {
-    if (consuming) {
-      rerun = true;
-      return;
-    }
-    consuming = true;
-    try {
-      /* oxlint-disable no-await-in-loop -- the loop is a retry latch:
-         each pass must fully finish before rerunning for a deferred
-         event, so there is nothing to parallelize. */
-      do {
-        rerun = false;
-        // Claim atomically before reading: a fresh request landing
-        // mid-consume keeps its own file (and its own watch event,
-        // deferred through `rerun`) instead of being deleted unread by
-        // this pass's cleanup. The claimed file is always removed,
-        // since unparseable leftovers must not shadow the next request.
-        try {
-          await rename(updateRequestPath(), consumingPath());
-        } catch {
-          continue; // nothing to consume
-        }
-        const request = await readJsonOrNull(
-          consumingPath(),
-          UpdateRequestSchema,
-        ).catch(() => null);
-        await unlinkIfExists(consumingPath());
-        if (request === null) continue;
-        if (Date.now() - request.requestedAt > REQUEST_STALE_MS) continue;
-        handle(request.action);
-      } while (rerun);
-      /* oxlint-enable no-await-in-loop */
-    } catch {
-      // Dropped request. The CLI times out and says so.
-    } finally {
-      consuming = false;
-    }
-  };
-  void consume();
-  try {
-    bridgeWatcher = watch(
-      dataDir(),
-      { persistent: false },
-      (_eventType, file) => {
-        if (file === "updater-request.json") void consume();
-      },
+): Effect.Effect<void, never, FileSystem.FileSystem | Scope.Scope> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const consumingPath = () => updateRequestPath() + ".consuming";
+    const consume = Effect.gen(function* () {
+      yield* fs.rename(updateRequestPath(), consumingPath());
+      const request = yield* readJson(
+        consumingPath(),
+        UpdateRequestSchema,
+      ).pipe(Effect.orElseSucceed(() => null));
+      yield* Effect.ignore(fs.remove(consumingPath(), { force: true }));
+      if (request === null) return;
+      const now = yield* Clock.currentTimeMillis;
+      if (now - request.requestedAt > REQUEST_STALE_MS) return;
+      handle(request.action);
+    }).pipe(
+      // Nothing to consume, or a dropped request: the CLI times out and
+      // says so.
+      Effect.ignore,
     );
-    bridgeWatcher.on("error", () => {
-      // Data dir vanished (nuke). The next launch starts a fresh watch.
-    });
-  } catch {
-    // Data dir missing entirely. Boot creates it, the next launch watches.
-  }
-}
+    // A data dir that is missing or goes (a nuke) ends the watch; the
+    // next launch watches afresh. Watched before the first consume, so
+    // a request written meanwhile is either consumed or heard.
+    watching = yield* FiberHandle.make();
+    yield* FiberHandle.run(
+      watching,
+      fs.watch(dataDir()).pipe(
+        Stream.filter((event) => event.path === REQUEST_FILE),
+        Stream.runForEach(() => consume),
+        Effect.ignore,
+      ),
+    );
+    yield* consume;
+  });
 
-let bridgeWatcher: ReturnType<typeof watch> | null = null;
-
-// Same contract as releaseStore: released before the data-folder
-// move renames the data dir. The post-move relaunch starts a fresh bridge.
+// Released before the data-folder move renames the data dir. The
+// post-move relaunch starts a fresh bridge.
 export function stopUpdaterBridge(): void {
-  bridgeWatcher?.close();
-  bridgeWatcher = null;
+  if (watching !== null) Effect.runFork(FiberHandle.clear(watching));
+  watching = null;
 }
