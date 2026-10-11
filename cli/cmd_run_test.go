@@ -76,3 +76,101 @@ func TestRunArgv(t *testing.T) {
 		}
 	}
 }
+
+func TestParseJustfile(t *testing.T) {
+	raw := `set shell := ["bash", "-c"]
+version := "1.0"
+alias b := build
+
+# Builds it
+build target="all":
+    @echo building {{target}}
+    go build ./...
+
+[private]
+helper:
+    echo hidden
+
+_also-hidden:
+    echo hidden
+
+[group('ci')]
+test: build
+@quiet:
+	-echo quiet
+build:
+    echo duplicate
+`
+	want := []packageScript{
+		{Name: "just build", Command: "echo building {{target}}; go build ./...", runner: "just", target: "build"},
+		{Name: "just test", Command: "build", runner: "just", target: "test"},
+		{Name: "just quiet", Command: "echo quiet", runner: "just", target: "quiet"},
+	}
+	if got := parseJustfile(raw); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}
+
+func TestParseMakefile(t *testing.T) {
+	raw := "CC := gcc\n" +
+		"FLAGS = -a:b\n" +
+		".PHONY: build test\n" +
+		"\n" +
+		"build: deps\n" +
+		"\t@echo building\n" +
+		"\t# a comment line\n" +
+		"\tgo build \\\n" +
+		"\t  ./...\n" +
+		"\n" +
+		"test: build ; go test ./...\n" +
+		"lint fmt:\n" +
+		"\t-golangci-lint run\n" +
+		"main.o: main.c\n" +
+		"\t$(CC) -c main.c\n" +
+		"%.o: %.c\n" +
+		"\t$(CC) -c $<\n" +
+		"debug: FLAGS += -g\n" +
+		"deps:\n" +
+		"define TEMPLATE\n" +
+		"inside: rule\n" +
+		"endef\n" +
+		"deps:\n" +
+		"\tgo mod download\n"
+	want := []packageScript{
+		{Name: "make build", Command: "echo building; go build ./...", runner: "make", target: "build"},
+		{Name: "make test", Command: "go test ./...", runner: "make", target: "test"},
+		{Name: "make lint", Command: "golangci-lint run", runner: "make", target: "lint"},
+		{Name: "make fmt", Command: "golangci-lint run", runner: "make", target: "fmt"},
+		{Name: "make deps", Command: "go mod download", runner: "make", target: "deps"},
+	}
+	if got := parseMakefile(raw); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}
+
+func TestFindScript(t *testing.T) {
+	scripts := []packageScript{
+		{Name: "build", Command: "vite build"},
+		{Name: "just build", runner: "just", target: "build"},
+		{Name: "make test", runner: "make", target: "test"},
+	}
+	cases := []struct {
+		positionals []string
+		want        string
+		extra       []string
+	}{
+		{[]string{"build", "--watch"}, "build", []string{"--watch"}},
+		{[]string{"just build"}, "just build", []string{}},
+		{[]string{"just", "build", "x"}, "just build", []string{"x"}},
+		{[]string{"make", "test"}, "make test", []string{}},
+	}
+	for _, c := range cases {
+		got, extra, ok := findScript(scripts, c.positionals)
+		if !ok || got.Name != c.want || !reflect.DeepEqual(extra, c.extra) {
+			t.Errorf("findScript(%v) = %q %v %v, want %q %v", c.positionals, got.Name, extra, ok, c.want, c.extra)
+		}
+	}
+	if _, _, ok := findScript(scripts, []string{"make", "nope"}); ok {
+		t.Error("an unknown target should not be found")
+	}
+}

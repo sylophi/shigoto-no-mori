@@ -81,6 +81,7 @@ func TestRunListJSON(t *testing.T) {
 	want := map[string]any{
 		"ok":             true,
 		"packageManager": "pnpm",
+		"files":          []any{"package.json"},
 		"scripts": []any{
 			map[string]any{"name": "dev", "command": "vite"},
 			map[string]any{"name": "build", "command": "vite build"},
@@ -103,11 +104,11 @@ func TestRunListJSON(t *testing.T) {
 		t.Errorf("defaults: sort %v order %v, want frequent and []", doc["sort"], doc["order"])
 	}
 
-	// No package.json is a coded failure the panel reads as "no scripts".
+	// No script file is a coded failure the panel reads as "no scripts".
 	primaryID := worktreeIDFromPath(proj.Path)
 	captureJSON(t, func() {
-		if _, err := cmdRun(ctx, []string{"--worktree-id", primaryID}); errorKindOf(err) != "no-package-json" {
-			t.Errorf("no package.json: %v (kind %q), want no-package-json", err, errorKindOf(err))
+		if _, err := cmdRun(ctx, []string{"--worktree-id", primaryID}); errorKindOf(err) != "no-scripts" {
+			t.Errorf("no script file: %v (kind %q), want no-scripts", err, errorKindOf(err))
 		}
 	})
 }

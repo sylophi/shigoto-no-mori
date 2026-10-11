@@ -665,6 +665,7 @@ function hostHandlersFor(
         "theme:check": "node scripts/check-theme-contract.mjs",
       },
       packageManager: "pnpm",
+      files: ["package.json"],
       usage: {
         dev: { lastUsed: Date.now() - 12 * 60_000, recentCount: 9 },
         test: { lastUsed: Date.now() - 26 * 60_000, recentCount: 3 },

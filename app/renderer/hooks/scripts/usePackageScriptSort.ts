@@ -63,7 +63,7 @@ export function usePackageScriptOrder(
   });
 }
 
-// A worktree's package.json scripts in the project's chosen order: the
+// A worktree's scripts in the project's chosen order: the
 // one order the Scripts section, the launch row and the ⌘K palette all
 // list them in. Empty while `pkg` is still being read, or absent.
 export function useSortedPackageScripts(

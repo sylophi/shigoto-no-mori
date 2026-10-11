@@ -16,8 +16,9 @@ export const RunScriptPayloadSchema = WorktreeScopedPayloadSchema.extend({
   script: ScriptNameSchema,
 });
 
-const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
-export type PackageManager = z.infer<typeof PackageManagerSchema>;
+// Null without a package.json (a worktree with only a justfile or a
+// Makefile).
+const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]).nullable();
 
 const PackageScriptUsageSchema = z.object({
   // Epoch ms of the most recent run; 0 when the script has never been run.
@@ -29,9 +30,16 @@ const PackageScriptUsageSchema = z.object({
 });
 export type PackageScriptUsage = z.infer<typeof PackageScriptUsageSchema>;
 
+// A worktree's scripts: package.json's by their own names, then a
+// justfile's recipes as "just <recipe>" and a Makefile's targets as
+// "make <target>" (cli/script_files.go).
 export const PackageScriptsResultSchema = z.object({
   scripts: z.record(z.string(), z.string()),
   packageManager: PackageManagerSchema,
+  // The files the scripts come from: package.json, the justfile, the
+  // Makefile. Absent from a host on an older build, which reads
+  // package.json alone.
+  files: z.array(z.string()).optional(),
   usage: z.record(z.string(), PackageScriptUsageSchema),
   // The scripts picked for the launch row under the "manual" sort,
   // project-wide (see readLaunchRow). Rides the listing rather than a
@@ -49,11 +57,13 @@ export const PackageScriptSortModeSchema = z.enum([
 ]);
 export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
-// `sm run --json` with no script: the worktree's package.json scripts
-// in manifest order, the manager its lockfile selects, each script's
-// use stats, and the project's saved sort and manual order.
+// `sm run --json` with no script: the worktree's scripts in file
+// order, the manager its lockfile selects, the files they come from,
+// each script's use stats, and the project's saved sort and manual
+// order.
 export const PackageScriptsDocSchema = z.object({
   packageManager: PackageManagerSchema,
+  files: z.array(z.string()),
   scripts: z.array(z.object({ name: z.string(), command: z.string() })),
   usage: z.record(z.string(), PackageScriptUsageSchema),
   sort: PackageScriptSortModeSchema,
@@ -157,8 +167,8 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
 export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
 
 // The slot a run occupies on its worktree, in the renderer's terms
-// (store/scriptSlot.ts): a lifecycle script, or a package.json script
-// by name.
+// (store/scriptSlot.ts): a lifecycle script, or a package.json,
+// justfile or Makefile script by name.
 const ScriptRunSlotSchema = z.discriminatedUnion("kind", [
   ...LifecycleSlotSchema.options,
   z.object({ kind: z.literal("package"), name: z.string() }),

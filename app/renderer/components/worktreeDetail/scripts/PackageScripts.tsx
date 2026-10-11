@@ -106,8 +106,8 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
               expanded && "rotate-90",
             )}
           />
-          <span className="font-mono text-muted-foreground group-hover:text-foreground">
-            package.json
+          <span className="truncate font-mono text-muted-foreground group-hover:text-foreground">
+            {(pkg.files ?? ["package.json"]).join(" · ")}
           </span>
         </button>
         {expanded &&

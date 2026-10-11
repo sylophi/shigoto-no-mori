@@ -719,7 +719,7 @@ async function main() {
   );
 
   await check(
-    "scripts: packageScripts:list reads the manifest in order with the lockfile's manager, and null without a package.json",
+    "scripts: packageScripts:list reads the manifest in order with the lockfile's manager, then the justfile and Makefile, and null without any",
     async () => {
       const worktreeId = worktreeIdFromPath(repo);
       assert.equal(
@@ -745,6 +745,26 @@ async function main() {
       ]);
       assert.equal(listed.packageManager, "pnpm");
       assert.deepEqual(listed.usage.zeta, { lastUsed: 0, recentCount: 0 });
+
+      writeFileSync(join(repo, "justfile"), "check:\n    echo check\n");
+      writeFileSync(join(repo, "Makefile"), "build:\n\tgo build\n");
+      const withRunners = await packageScriptsHandlers.list(
+        { projectId, worktreeId },
+        ctx,
+      );
+      assert.deepEqual(withRunners?.files, [
+        "package.json",
+        "justfile",
+        "Makefile",
+      ]);
+      assert.deepEqual(Object.entries(withRunners?.scripts ?? {}), [
+        ["zeta", "echo z"],
+        ["alpha", "echo a"],
+        ["just check", "echo check"],
+        ["make build", "go build"],
+      ]);
+      rmSync(join(repo, "justfile"));
+      rmSync(join(repo, "Makefile"));
       await assert.rejects(
         async () =>
           packageScriptsHandlers.list(

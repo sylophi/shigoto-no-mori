@@ -20,9 +20,10 @@ export const packageScriptsHandlers: Handlers<
   typeof packageScriptsContract,
   HandlerContext
 > = {
-  // `sm run` with no script: the scripts in manifest order (an object
-  // keeps that order), the manager the lockfile selects, and each
-  // script's use stats. Null when there is no readable package.json.
+  // `sm run` with no script: the scripts in file order (an object
+  // keeps that order), the manager the lockfile selects, the files
+  // they come from, and each script's use stats. Null when there is no
+  // package.json, justfile or Makefile, or one doesn't read.
   list: async ({ projectId, worktreeId }) => {
     const doc = await packageScriptsViaCli(projectId, worktreeId);
     if (doc === null) return null;
@@ -31,6 +32,7 @@ export const packageScriptsHandlers: Handlers<
         doc.scripts.map((script) => [script.name, script.command]),
       ),
       packageManager: doc.packageManager,
+      files: doc.files,
       usage: doc.usage,
       launchRow: readLaunchRow(projectId),
     };
@@ -73,7 +75,7 @@ export const packageScriptsHandlers: Handlers<
     // script should fail this IPC call, not surface as error output in
     // an already-opened console run.
     if (!doc?.scripts.some((script) => script.name === scriptName)) {
-      throw new Error(`Script "${scriptName}" is not defined in package.json`);
+      throw new Error(`No script named "${scriptName}" in this worktree`);
     }
 
     // `sm run` is the engine: it picks the manager, sets the
