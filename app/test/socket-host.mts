@@ -28,20 +28,18 @@
 // their values. Tracing: the host's span for a call continues the
 // caller's trace.
 //
-// The golden read surface: every channel servable ungated (remote:true,
-// gated:false) is pinned in read-surface.golden.json, so flipping a
-// mutating tag shows up as a reviewed diff instead of silently opening
-// or closing the ungated wire. Regenerate deliberately with
-// `pnpm test socket-host -u`.
+// What each call may do over the link, its annotations, is held whole
+// in packages/contracts/fixtures/wire/classification.json
+// (packages/contracts/README.md, "Classification"). Here, the registrar's
+// rule over them: every call classifies itself, and the consent table
+// names exactly the calls that name each line.
 //
 // Run: pnpm test socket-host.
 //
-// covers: app/test/read-surface.golden.json app/host/process/wires.ts
+// covers: app/host/process/wires.ts
 import assert from "node:assert/strict";
 import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -55,7 +53,7 @@ import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import { WebSocket } from "ws";
-import { expect, it } from "vitest";
+import { it } from "vitest";
 import {
   CommandRefusedError,
   LinkRefusedError,
@@ -70,11 +68,7 @@ import {
   callOf,
   callsOf,
   channelOf,
-  Gated,
   Grant,
-  isBroadcast,
-  payloadOf,
-  Remote,
   scopeOf,
 } from "@shigomori/contracts/contract";
 import { GRANTS } from "@shigomori/contracts/grants";
@@ -82,21 +76,9 @@ import { controlContract } from "@shigomori/contracts/modules/control";
 import { safeDecode } from "@shigomori/contracts/codec";
 import { classificationGap } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { accountContract } from "@shigomori/contracts/modules/account";
 import { allContractModules } from "@shigomori/contracts/allModules";
-import { cliContract } from "@shigomori/contracts/modules/cli";
-import { forwardContract } from "@shigomori/contracts/modules/forward";
-import { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import { fsContract } from "@shigomori/contracts/modules/fs";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
-import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
-import { projectsContract } from "@shigomori/contracts/modules/projects";
-import { runtimeContract } from "@shigomori/contracts/modules/runtime";
-import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import { syncContract } from "@shigomori/contracts/modules/sync";
-import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import {
   type DeviceConnection,
@@ -1220,154 +1202,8 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       `grants.ts ${grant} lists other calls than the ones naming it`,
     );
   }
-  // Spot-check the load-bearing decisions so a silent flip is caught.
-  assert.equal(annotation(callOf(runtimeContract, "nuke"), Remote), false);
-  // A peer may relocate the data folder, but only as a command.
-  assert.equal(
-    annotation(callOf(runtimeContract, "moveDataDir"), Remote),
-    true,
-  );
-  assert.equal(annotation(callOf(runtimeContract, "moveDataDir"), Gated), true);
-  // info is the one runtime call a peer may make: the project pages
-  // under a device twin spell worktree paths off its data dir. It
-  // rides the command grant like the fs reads, since it names the
-  // host's paths.
-  assert.equal(annotation(callOf(runtimeContract, "info"), Remote), true);
-  assert.equal(annotation(callOf(runtimeContract, "info"), Gated), true);
-  assert.equal(annotation(callOf(launchersContract, "launch"), Remote), false);
-  // The cli module rides the wire wholly behind the grant: even
-  // its status reads name host paths, so none of it is ungated.
-  for (const call of callsOf(cliContract)) {
-    assert.equal(annotation(call, Remote), true);
-    assert.equal(annotation(call, Gated), true);
-  }
-  assert.equal(annotation(callOf(globalConfigContract, "read"), Remote), true);
-  assert.equal(annotation(callOf(worktreesContract, "create"), Remote), true);
-  // Spot-check the mutating classification so a read cannot silently
-  // become a command (served ungated to every peer) or a command a
-  // read (served ungated too).
-  assert.equal(annotation(callOf(worktreesContract, "create"), Gated), true);
-  assert.equal(annotation(callOf(worktreesContract, "list"), Gated), false);
-  assert.equal(annotation(callOf(worktreesContract, "push"), Gated), true);
-  assert.equal(annotation(callOf(scriptsContract, "run"), Gated), true);
-  assert.equal(annotation(callOf(gitContract, "refreshProject"), Gated), true);
-  // The sweep is the host's own scheduled pass. A peer's request
-  // only decides when it runs, so it is read-class despite the git
-  // and gh it spawns.
-  assert.equal(annotation(callOf(gitContract, "sweep"), Gated), false);
-  assert.equal(annotation(callOf(globalConfigContract, "read"), Gated), false);
-  // Every fs call is remote AND
-  // gated: they read, but they disclose arbitrary absolute
-  // paths, so they ride the command grant rather than the ungated
-  // read set.
-  for (const key of [
-    "listDirectory",
-    "scanForGitRepos",
-    "isGitRepo",
-  ] as const) {
-    assert.equal(
-      annotation(callOf(fsContract, key), Remote),
-      true,
-      `fs.${key} remote`,
-    );
-    assert.equal(
-      annotation(callOf(fsContract, key), Gated),
-      true,
-      `fs.${key} must require the command grant`,
-    );
-  }
-  // The projects registry writes and the packageScripts preference
-  // write are commands on the remote surface now.
-  for (const key of ["add", "remove", "reorder"] as const) {
-    assert.equal(
-      annotation(callOf(projectsContract, key), Remote),
-      true,
-      `projects.${key} remote`,
-    );
-    assert.equal(
-      annotation(callOf(projectsContract, key), Gated),
-      true,
-      `projects.${key} mutating`,
-    );
-  }
-  assert.equal(
-    annotation(callOf(packageScriptsContract, "setSort"), Remote),
-    true,
-  );
-  assert.equal(
-    annotation(callOf(packageScriptsContract, "setSort"), Gated),
-    true,
-  );
-  // The sync surface a peer drives: every call is a command, so the
-  // whole transfer path rides the command grant. The source links
-  // (openSource, receiveWorktree, receiveBundle) are the only way
-  // commits cross, bytes on a channel the grant already gates.
-  for (const key of [
-    "ignoredPaths",
-    "worktreeFolder",
-    "hasCommits",
-    "openSource",
-    "receiveWorktree",
-    "receiveBundle",
-    "cancelMove",
-  ] as const) {
-    assert.equal(
-      annotation(callOf(syncContract, key), Remote),
-      true,
-      `sync.${key} remote`,
-    );
-    assert.equal(
-      annotation(callOf(syncContract, key), Gated),
-      true,
-      `sync.${key} must require the command grant`,
-    );
-  }
-  // The byte-stream opens: both
-  // are grant-gated commands. The bytes themselves ride the
-  // channel, never invokes.
-  for (const [name, call] of [
-    ["forward.open", callOf(forwardContract, "open")],
-    ["mirror.openStream", callOf(mirrorContract, "openStream")],
-  ] as const) {
-    assert.equal(annotation(call, Remote), true, `${name} remote`);
-    assert.equal(
-      annotation(call, Gated),
-      true,
-      `${name} must require the command grant`,
-    );
-  }
-  // The move orchestrators and the teardown are LOCAL-only: a
-  // device's own renderer drives them, and they must never be
-  // servable to a peer -- a remote:false host invoke is simply not
-  // registered on the direct listener. What a peer drives is the
-  // landing half above, which rides the command grant.
-  for (const name of [
-    "pullWorktree",
-    "sendWorktree",
-    "teardownSource",
-  ] as const) {
-    assert.equal(annotation(callOf(syncContract, name), Remote), false);
-    assert.equal(annotation(callOf(syncContract, name), Gated), true);
-  }
-  // The pull's progress frames go back to the invoking renderer
-  // only: an untagged broadcast never reaches a remote wire.
-  assert.notEqual(
-    annotation(callOf(syncContract, "pullProgress"), Remote),
-    true,
-  );
-  // The command-access switch reaches peers as a push carrying it:
-  // the one client-scoped broadcast tagged remote. The switch's
-  // read and write stay client-scoped and untagged, so neither is
-  // ever served to a peer.
-  const commandAccessChanged = callOf(accountContract, "commandAccessChanged");
-  assert.equal(scopeOf(accountContract), "client");
-  assert.equal(annotation(commandAccessChanged, Remote), true);
-  assert.equal(safeDecode(payloadOf(commandAccessChanged), true).success, true);
-  for (const key of ["acceptsCommands", "setAcceptsCommands"] as const) {
-    assert.notEqual(annotation(callOf(accountContract, key), Remote), true);
-  }
-  // The device-settings write, the only settings write: a command,
-  // and its STRICT patch schema must reject every key the Settings
+  // The device-settings write, the only settings write: its STRICT
+  // patch schema must reject every key the Settings
   // form does not manage, so a peer cannot stop this device serving
   // peers or point it at another connector binary. The rejection is
   // structural (unknown key -> parse error), not a strip.
@@ -1375,8 +1211,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
     globalConfigContract,
     "writeDeviceSettings",
   );
-  assert.equal(annotation(writeDeviceSettings, Remote), true);
-  assert.equal(annotation(writeDeviceSettings, Gated), true);
   for (const patch of [
     { directConnections: false },
     { cloudflaredPath: "/tmp/not-cloudflared" },
@@ -1399,43 +1233,4 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
     true,
     "a managed-keys patch must parse",
   );
-});
-
-it("golden read surface: the ungated read channels match read-surface.golden.json", async () => {
-  // The spot-checks above prove chosen tags, but nothing proved the
-  // WHOLE read/mutate axis: a single gated:true flipped to false
-  // would serve that channel ungated to any account peer with the
-  // battery still green. Pinning the full ungated surface in a
-  // committed golden file turns any such flip into a reviewed diff.
-  const goldenPath = join(import.meta.dirname, "read-surface.golden.json");
-  const derived = allContractModules
-    .filter((module) => scopeOf(module) === "host")
-    .flatMap((module) => callsOf(module))
-    .filter(
-      (call) =>
-        !isBroadcast(call) &&
-        annotation(call, Remote) === true &&
-        annotation(call, Gated) === false,
-    )
-    .map((call) => channelOf(call))
-    .toSorted();
-  // `-u` rewrites the golden from the derived surface. Otherwise a
-  // mismatch fails with the channels that drifted, named against the
-  // committed file.
-  const golden: string[] = existsSync(goldenPath)
-    ? JSON.parse(readFileSync(goldenPath, "utf8"))
-    : [];
-  const goldenSet = new Set(golden);
-  const derivedSet = new Set(derived);
-  const opened = derived.filter((channel) => !goldenSet.has(channel));
-  const closed = golden.filter((channel) => !derivedSet.has(channel));
-  await expect(
-    `${JSON.stringify(derived, null, 2)}\n`,
-    [
-      "the ungated read surface drifted from test/read-surface.golden.json",
-      ...opened.map((channel) => `  now servable ungated: ${channel}`),
-      ...closed.map((channel) => `  no longer servable:   ${channel}`),
-      "if the change is deliberate, regenerate with: pnpm test socket-host -u",
-    ].join("\n"),
-  ).toMatchFileSnapshot(goldenPath);
 });
