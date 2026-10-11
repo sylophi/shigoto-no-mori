@@ -259,7 +259,9 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
       "installed-unsigned",
       "other-team",
       "other-app",
+      "no-identifier",
       "not-newer",
+      "other-version",
     ]),
     bundle: Schema.String,
     team: Schema.optional(Schema.String),
@@ -285,8 +287,12 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
         return `The downloaded update is signed by a different team (${this.team}, installed app: ${this.installedTeam}). Refusing to install.`;
       case "other-app":
         return `The downloaded update is a different app (${this.identifier}, installed app: ${this.installedIdentifier}). Refusing to install.`;
+      case "no-identifier":
+        return `codesign reported no Identifier for ${this.bundle}.`;
       case "not-newer":
-        return `The downloaded update is version ${this.version}, which is not newer than this build. Refusing to install.`;
+        return `The update is version ${this.version}, which is not newer than the app it would replace. Refusing to install.`;
+      case "other-version":
+        return `The downloaded update is version ${this.version}, not the release it was offered as. Refusing to install.`;
     }
   }
 }
@@ -556,6 +562,13 @@ const upToDate = (running: Running): UpToDate => ({
   status: "up-to-date",
   version: running.version,
 });
+
+// Whether `version` is a version newer than `than`.
+const isNewer = (version: string, than: string) => {
+  const a = parseSemver(version);
+  const b = parseSemver(than);
+  return a !== undefined && b !== undefined && compareSemver(a, b) > 0;
+};
 
 const newerThan = (running: Running, version: string) => {
   const current = parseSemver(running.version);
@@ -1064,50 +1077,48 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       (signer): Anchor => ({ bundle, signer }),
     );
 
-  // A valid deep, strict signature from a certificate Apple issued, the
-  // installed app's Team ID, and the installed app's identifier, so a
-  // release of another flavor is no update for this one. An unsigned
-  // installed app refuses too: with no anchor there is nothing to
-  // trust, and release builds are always signed. The checks run at
-  // once, and fail in the order Go's sm made them, the identifier last.
+  // A valid deep, strict signature that satisfies one requirement made
+  // from the installed app: a certificate Apple issued, to the installed
+  // app's team, for the installed app's identifier. So a release of
+  // another flavor, another team's or one signed outside Apple's chain
+  // is no update for this one. An installed app with no team or no
+  // identifier refuses: with no anchor there is nothing to trust, and
+  // release builds always have both. The candidate's own team and
+  // identifier are read too, to say which one differed.
   const verify = Effect.fn("Updater.verify")(function* (
     installed: Anchor,
     candidate: string,
   ) {
-    const [checked, installedSigner, signer] = yield* Effect.all(
-      [
-        run("codesign", [
-          "--verify",
-          "--deep",
-          "--strict",
-          "-R=anchor apple generic",
-          "--",
-          candidate,
-        ]),
-        Effect.result(installed.signer),
-        Effect.result(signerOf(candidate)),
-      ],
-      { concurrency: "unbounded" },
-    );
-    if (!checked.ok) {
-      return yield* new SignatureRejected({
-        reason: "invalid",
-        bundle: candidate,
-        cause: new Error(checked.output.trim()),
-      });
-    }
-    if (Result.isFailure(installedSigner)) {
-      return yield* installedSigner.failure;
-    }
-    if (Result.isFailure(signer)) return yield* signer.failure;
-    const ours = installedSigner.success;
-    const theirs = signer.success;
-    if (ours.team === "") {
+    const ours = yield* installed.signer;
+    if (ours.team === "" || !/^[A-Z0-9]+$/.test(ours.team)) {
       return yield* new SignatureRejected({
         reason: "installed-unsigned",
         bundle: installed.bundle,
       });
     }
+    if (!/^[A-Za-z0-9.-]+$/.test(ours.identifier)) {
+      return yield* new SignatureRejected({
+        reason: "no-identifier",
+        bundle: installed.bundle,
+      });
+    }
+    const requirement = `anchor apple generic and certificate leaf[subject.OU] = "${ours.team}" and identifier "${ours.identifier}"`;
+    const [checked, signer] = yield* Effect.all(
+      [
+        run("codesign", [
+          "--verify",
+          "--deep",
+          "--strict",
+          `-R=${requirement}`,
+          "--",
+          candidate,
+        ]),
+        Effect.result(signerOf(candidate)),
+      ],
+      { concurrency: "unbounded" },
+    );
+    if (Result.isFailure(signer)) return yield* signer.failure;
+    const theirs = signer.success;
     if (theirs.team !== ours.team) {
       return yield* new SignatureRejected({
         reason: "other-team",
@@ -1122,6 +1133,13 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         bundle: candidate,
         identifier: theirs.identifier,
         installedIdentifier: ours.identifier,
+      });
+    }
+    if (!checked.ok) {
+      return yield* new SignatureRejected({
+        reason: "invalid",
+        bundle: candidate,
+        cause: new Error(checked.output.trim()),
       });
     }
   });
@@ -1287,11 +1305,10 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         ),
       );
 
-  // A bundle whose own version is newer than this build's, so a feed
-  // that names an older release of ours as the newest gets nothing.
-  const newerBundle = (bundle: string, running: Running) =>
-    Effect.gen(function* () {
-      const read = yield* run(
+  // A bundle's own version (its Info.plist's), "" when it has none.
+  const bundleVersion = (bundle: string) =>
+    Effect.map(
+      run(
         "plutil",
         [
           "-extract",
@@ -1302,9 +1319,24 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
           path.join(bundle, "Contents", "Info.plist"),
         ],
         "stdout",
-      );
-      const version = read.output.trim();
-      if (!read.ok || !newerThan(running, version)) {
+      ),
+      (read) => (read.ok ? read.output.trim() : ""),
+    );
+
+  // The downloaded bundle is the release the feed offered and newer than
+  // this build, so a feed that serves an older release of ours under a
+  // newer name gets nothing.
+  const offeredBundle = (bundle: string, release: string, running: Running) =>
+    Effect.gen(function* () {
+      const version = yield* bundleVersion(bundle);
+      if (version !== release) {
+        return yield* new SignatureRejected({
+          reason: "other-version",
+          bundle,
+          version,
+        });
+      }
+      if (!isNewer(version, running.version)) {
         return yield* new SignatureRejected({
           reason: "not-newer",
           bundle,
@@ -1373,7 +1405,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
 
     yield* report(input, { phase: "verifying", version: release.version });
     yield* verify(installed, candidate).pipe(
-      Effect.andThen(newerBundle(candidate, running)),
+      Effect.andThen(offeredBundle(candidate, release.version, running)),
       Effect.tapError(() => removeAll(extractDir)),
     );
     yield* clearStaged;
@@ -1447,7 +1479,21 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     }
     // The installed app's Team ID read afresh, as the app may have changed
     // since staging.
+    // And never older than the app it replaces, which another install
+    // may have moved past the staged release meanwhile.
     yield* verify({ bundle: target, signer: signerOf(target) }, incoming).pipe(
+      Effect.andThen(
+        Effect.gen(function* () {
+          const version = yield* bundleVersion(incoming);
+          if (!isNewer(version, yield* bundleVersion(target))) {
+            return yield* new SignatureRejected({
+              reason: "not-newer",
+              bundle: incoming,
+              version,
+            });
+          }
+        }),
+      ),
       Effect.tapError(() => removeAll(incoming)),
     );
     const aside = path.join(dir, `${base}.old-${pid}`);
