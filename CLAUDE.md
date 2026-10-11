@@ -18,10 +18,9 @@ item works like this. Remove this section when `release/v3` merges into
    and a description that says which `V3.md` item it closes.
 3. **Keep to the item.** The PR targets `release/v3`, with an ordinary title
    and the `easy-pr` body style. A neighboring improvement goes in
-   the report, not the PR, unless the brief says otherwise. A
-   converted subsystem keeps a Promise adapter for unconverted callers
-   (`EFFECT.md`, runtime boundaries) until the last caller moves. The
-   Go CLI gets bug fixes only; its verbs, flags and JSON are frozen.
+   the report, not the PR, unless the brief says otherwise. The
+   terminal `sm` keeps the Go `sm`'s verbs, flags and JSON (decision
+   13); a new verb or flag is the owner's call.
    Comments describe how a thing is used and move with the code; the
    ordering and cleanup prose that the structure now enforces goes.
    Run the targeted checks (lefthook on commit, `pnpm test <name>` for

@@ -3,47 +3,18 @@
 // device's changelog shows. Pure, so the views, the app's update checks
 // and the changelog's reader (the app's shared/releases.ts) share it.
 import type { Release } from "./schemas/index.ts";
+import { compareSemver, isPrerelease, parseSemver } from "./semver.ts";
 
-// Semver precedence, as far as release tags need it: the core numbers,
-// then a prerelease sorts below its release, identifier by identifier
-// (numeric ones numerically and below any word). What parses is the
-// engine's rule (parseSemver in semver.ts): x.y.z without leading zeros,
-// prerelease identifiers that are non-empty, alphanumeric or hyphens,
-// and numeric ones without a leading zero. Anything else sorts below
-// everything, so a stray tag can't pass for newest.
-const NUMBER = "(0|[1-9]\\d*)";
-const IDENTIFIER = "(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
-const SEMVER = new RegExp(
-  `^v?${NUMBER}\\.${NUMBER}\\.${NUMBER}(?:-(${IDENTIFIER}(?:\\.${IDENTIFIER})*))?(?:\\+.*)?$`,
-);
-
+// Precedence between two version strings. Anything that doesn't parse
+// (parseSemver) sorts below everything, so a stray tag can't pass for
+// newest.
 export function compareVersions(a: string, b: string): number {
-  const left = SEMVER.exec(a);
-  const right = SEMVER.exec(b);
-  if (left === null || right === null) {
-    return (left === null ? 0 : 1) - (right === null ? 0 : 1);
+  const left = parseSemver(a);
+  const right = parseSemver(b);
+  if (left === undefined || right === undefined) {
+    return (left === undefined ? 0 : 1) - (right === undefined ? 0 : 1);
   }
-  for (const index of [1, 2, 3]) {
-    const diff = Number(left[index]) - Number(right[index]);
-    if (diff !== 0) return Math.sign(diff);
-  }
-  const leftPre = left[4]?.split(".") ?? [];
-  const rightPre = right[4]?.split(".") ?? [];
-  if (leftPre.length === 0 || rightPre.length === 0) {
-    return Math.sign(rightPre.length - leftPre.length);
-  }
-  for (let i = 0; i < Math.max(leftPre.length, rightPre.length); i++) {
-    const l = leftPre[i];
-    const r = rightPre[i];
-    if (l === undefined || r === undefined) return l === undefined ? -1 : 1;
-    if (l === r) continue;
-    const ln = /^\d+$/.test(l);
-    const rn = /^\d+$/.test(r);
-    if (ln && rn) return Math.sign(Number(l) - Number(r));
-    if (ln !== rn) return ln ? -1 : 1;
-    return l < r ? -1 : 1;
-  }
-  return 0;
+  return compareSemver(left, right);
 }
 
 // A build's version as the release list spells it: a production
@@ -51,7 +22,7 @@ export function compareVersions(a: string, b: string): number {
 // number ("2.15.0"). A build that isn't a release ("dev", "unknown")
 // has none, "".
 export function releaseVersionOf(raw: string): string {
-  return SEMVER.test(raw) ? raw.replace(/^v/, "") : "";
+  return parseSemver(raw) === undefined ? "" : raw.replace(/^v/, "");
 }
 
 // Precedence between two builds' versions, when both are releases:
@@ -64,7 +35,8 @@ export function compareAppVersions(a: string, b: string): number | null {
 }
 
 export function isPrereleaseVersion(version: string): boolean {
-  return SEMVER.exec(version)?.[4] !== undefined;
+  const parsed = parseSemver(version);
+  return parsed !== undefined && isPrerelease(parsed);
 }
 
 // A device's changelog, newest first. `build` is its version in
