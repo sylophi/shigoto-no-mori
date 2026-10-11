@@ -84,3 +84,10 @@ export function matchRoutePath(
   const groups = pathname.match(pattern)?.groups;
   return groups ? { ...groups } : null;
 }
+
+// A dialog of the worktree page asked for from off it (the sidebar's
+// worktree menu), in the route's search like the changes page's
+// `amend` (useTakeWorktreeDialog). mirror and transplant start one,
+// mirroring manages the running one.
+export const WORKTREE_DIALOGS = ["mirror", "transplant", "mirroring"] as const;
+export type WorktreeDialog = (typeof WORKTREE_DIALOGS)[number];

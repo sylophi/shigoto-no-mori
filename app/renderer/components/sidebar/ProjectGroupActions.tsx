@@ -225,10 +225,7 @@ export function ProjectGroupActions({
         <DropdownMenuContent align="end" sideOffset={2}>
           {creator !== undefined && (
             <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
-              <ProjectCreateMenuItems
-                project={creator.project}
-                subject="project"
-              />
+              <ProjectCreateMenuItems project={creator.project} />
             </MaybeHostScope>
           )}
           {onLocate !== undefined && (
@@ -247,11 +244,10 @@ export function ProjectGroupActions({
             onOpenChange={onOpenChange}
           />
           <MaybeHostScope deviceId={primary.deviceId} api={primary.api}>
-            <ProjectPageMenuItems project={primary.project} subject="project" />
+            <ProjectPageMenuItems project={primary.project} />
             {!listsRemoves && (
               <ProjectRemoveMenuItem
                 project={primary.project}
-                subject="project"
                 removeArm={removeArm}
               />
             )}
@@ -308,7 +304,6 @@ function RemoveSubmenu({
             >
               <ProjectRemoveMenuItem
                 project={member.project}
-                subject="project"
                 removeArm={removeArm}
                 device={{
                   id: member.deviceId,

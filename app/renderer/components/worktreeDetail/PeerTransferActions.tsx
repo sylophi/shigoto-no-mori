@@ -16,17 +16,19 @@ import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import {
   useLocalMirrorBlocker,
   useWorktreeMirrorLinks,
+  type WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import type { WorktreeDialog } from "@/lib/routePaths";
 import { FooterActionButton } from "./FooterActionButton";
 import { LABEL_RANK } from "./footerFit";
 import { OptionAction } from "./WorktreeOptions";
-import { usePeerTargets } from "./flow/peerTargets";
+import { usePeerTargets, type PeerTarget } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
 
 // Which transfer dialog is open, held by the page across both parts.
-export type TransferDialog = "mirror" | "transplant" | null;
+export type TransferDialog = Exclude<WorktreeDialog, "mirroring"> | null;
 
 export interface TransferPartProps {
   worktree: Worktree;
@@ -36,16 +38,64 @@ export interface TransferPartProps {
   setOpen: (open: TransferDialog) => void;
 }
 
+// The repo identity a transfer of the worktree goes by, or null when
+// it has none to go by: both transfers need a real branch of its own
+// and a repo identity, on either page.
+export function transferSource(
+  worktree: Worktree,
+  project: Project,
+): string | null {
+  return worktree.detached || !isRealBranch(worktree.branch)
+    ? null
+    : (project.identity ?? null);
+}
+
+// What the transfers offer a worktree with a transferSource, read by
+// the footer and the sidebar's worktree menu alike. A worktree already
+// part of a mirror offers neither: its running mirror's button
+// (MirrorAction) is where that one is managed, a worktree holds one
+// mirror, and moving one half of a live pair away is what the mirror's
+// own stop is for.
+export interface TransferOffers {
+  mirror: boolean;
+  mirrorBlocker: string | undefined;
+  transplant: boolean;
+  // A running mirror there is a session to manage through.
+  mirroring: boolean;
+}
+
+export function hasManageableMirror(
+  links: readonly WorktreeMirrorLink[],
+): boolean {
+  return links.some(
+    (link) => link.session !== undefined && link.runnerApi !== undefined,
+  );
+}
+
+// This device's worktree: the transfers also wait on another device
+// that hosts projects (one without the repo clones it first).
+export function usePeerTransferOffers(
+  worktree: Worktree,
+  project: Project,
+): TransferOffers & { targets: PeerTarget[] } {
+  const targets = usePeerTargets(project);
+  const links = useWorktreeMirrorLinks(worktree);
+  const mirrorBlocker = useLocalMirrorBlocker();
+  const canOpen = targets.length > 0 && links.length === 0;
+  return {
+    targets,
+    // App only, like "Mirror here": the daemon lives in main.
+    mirror: canOpen && canForwardPorts,
+    mirrorBlocker,
+    transplant: canOpen && !worktree.isPrimary,
+    mirroring: hasManageableMirror(links),
+  };
+}
+
 export function PeerTransferActions(props: TransferPartProps) {
-  const { worktree, project } = props;
-  if (
-    worktree.detached ||
-    !isRealBranch(worktree.branch) ||
-    project.identity == null
-  ) {
-    return null;
-  }
-  return <TransferButtons {...props} sourceIdentity={project.identity} />;
+  const sourceIdentity = transferSource(props.worktree, props.project);
+  if (sourceIdentity === null) return null;
+  return <TransferButtons {...props} sourceIdentity={sourceIdentity} />;
 }
 
 function TransferButtons({
@@ -56,24 +106,10 @@ function TransferButtons({
   setOpen,
   sourceIdentity,
 }: TransferPartProps & { sourceIdentity: string }) {
-  const targets = usePeerTargets(project);
-  // A worktree already part of a mirror, run here or by a peer, has
-  // its Mirror button beside these (MirrorAction), which is where that
-  // one is managed, and a worktree holds one mirror.
-  const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
-  const mirrorBlocker = useLocalMirrorBlocker();
-  // The buttons need a target. An OPEN dialog does not: a run in
-  // progress keeps its progress, its finish-up step and its report
-  // when the roster empties under it (a sign-out, a revoke), and says
-  // what failed rather than vanishing mid-run.
-  const canOpen = targets.length > 0;
+  const offers = usePeerTransferOffers(worktree, project);
   if (part === "option") {
-    // Not while mirrored: moving one half of a live pair away is what
-    // the mirror's own stop is for.
     return (
-      canOpen &&
-      !worktree.isPrimary &&
-      !mirrored && (
+      offers.transplant && (
         <OptionAction
           icon={<Shovel />}
           label="Transplant"
@@ -87,22 +123,25 @@ function TransferButtons({
     worktree,
     project,
     sourceIdentity,
-    targets,
+    targets: offers.targets,
     onClose: () => setOpen(null),
   };
   return (
     <>
-      {/* App only, like "Mirror here": the daemon lives in main. */}
-      {canOpen && canForwardPorts && !mirrored && (
+      {offers.mirror && (
         <FooterActionButton
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror"
           tip="Keep a live copy of this worktree on another device"
-          disabledReason={mirrorBlocker}
+          disabledReason={offers.mirrorBlocker}
           onClick={() => setOpen("mirror")}
         />
       )}
+      {/* The buttons need a target. An OPEN dialog does not: a run in
+          progress keeps its progress, its finish-up step and its report
+          when the roster empties under it (a sign-out, a revoke), and
+          says what failed rather than vanishing mid-run. */}
       {open === "mirror" && <MirrorToDialog {...dialog} />}
       {open === "transplant" && <TransplantToDialog {...dialog} />}
     </>
