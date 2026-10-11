@@ -12,6 +12,9 @@ import * as Graph from "./graph";
 import type { HostServices } from "./services";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
+import { launchGuide } from "@host/lib/engineOps";
+import { dirname } from "node:path";
+import * as HostFacts from "@host/lib/HostFacts";
 import {
   applyAccount,
   noteAccountDevices,
@@ -71,6 +74,17 @@ export function startHost(options: {
         Effect.andThen(
           Effect.sync(() => broadcastAll(updaterContract, "state", state)),
         ),
+      ),
+    // A release's agent reads the source at its tag, a dev build's the
+    // checkout it runs from.
+    guideLaunch: (input) =>
+      Effect.flatMap(HostFacts.HostFacts, (facts) =>
+        launchGuide({
+          ...input,
+          source: facts.packaged
+            ? { tag: `v${facts.appVersion}` }
+            : { checkout: dirname(facts.appPath) },
+        }).pipe(Effect.mapError(callFailureOf)),
       ),
     quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
   };

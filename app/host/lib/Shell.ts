@@ -5,6 +5,10 @@
 import type { CallFailure } from "@shigomori/contracts/errors";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
+import type {
+  GuideDrivePayload,
+  GuideReply,
+} from "@shigomori/contracts/modules/guide";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
@@ -39,5 +43,10 @@ export class Shell extends Context.Service<
     readonly migration: (
       progress: MigrationProgress,
     ) => Effect.Effect<void, CallFailure>;
+    // An action of `sm guide mcp`'s, run in the window its session
+    // guides.
+    readonly guide: (
+      payload: GuideDrivePayload,
+    ) => Effect.Effect<GuideReply, CallFailure>;
   }
 >()("sm/host/Shell") {}

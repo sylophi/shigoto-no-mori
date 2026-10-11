@@ -29,6 +29,7 @@ export const layer = (calls: Client<typeof shellCallsContract>) =>
         },
         stopUpdaterBridge: Effect.sync(() => void calls.stopUpdaterBridge()),
         migration: (progress) => onShell(() => calls.migration(progress)),
+        guide: (payload) => onShell(() => calls.guide(payload)),
       }),
     ),
   );

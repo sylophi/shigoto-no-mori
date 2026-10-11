@@ -48,6 +48,7 @@ import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import { controlContract } from "@shigomori/contracts/modules/control";
+import { guideDriveContract } from "@shigomori/contracts/modules/guide";
 import { terrierContract } from "@shigomori/contracts/modules/terrier";
 import { agentsContract } from "@shigomori/contracts/modules/agents";
 import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
@@ -113,6 +114,7 @@ import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
+import { guideDriveHandlers } from "@host/ipc/modules/guideDrive";
 import {
   AccountPeers,
   listDevicesFailure,
@@ -867,6 +869,7 @@ export function registerHostHandlers(): void {
   // (packages/contracts/src/modules/control.ts), over the account
   // (rootServices) and the peers' reach.
   registerLoopbackContract(controlContract, controlHandlers, controlTransfers);
+  registerLoopbackContract(guideDriveContract, guideDriveHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(worktreeDataContract, worktreeDataHandlers);
   registerContract(syncContract, syncHandlers);
