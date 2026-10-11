@@ -1,0 +1,351 @@
+// Landing's errors, documents and the pure helpers its areas share (EFFECT.md, section 2). `Landing.ts` re-exports what consumers use.
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { errorDocument } from "../errorDocument.ts";
+import * as Git from "../Git.ts";
+import * as GitHub from "../GitHub.ts";
+import type { MergeMethod, PullRequestSummary } from "../GitHub.ts";
+import type { RegisteredProject } from "../Registry.ts";
+import * as Worktrees from "../Worktrees.ts";
+
+// A document `sm --json` prints.
+export type Document = Readonly<Record<string, unknown>>;
+
+// What landing won't do, the reason in its message. `numbers` and
+// `names` are the PRs, branches and paths the message names, in order.
+export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
+  "LandingRefused",
+  {
+    reason: Schema.Literals([
+      "no-branch",
+      "no-pull-request",
+      "not-open",
+      "no-such-number",
+      "fork",
+      "stacked",
+      "stack-still-open",
+      "no-methods",
+      "method-not-allowed",
+      "stack-closed",
+      "stack-draft",
+      "stack-all-merged",
+      "stack-above",
+      "stack-step",
+      "no-primary",
+      "not-merged",
+      "not-on-branch",
+      "vanished",
+      "guard",
+    ]),
+    // Which verb refused, where the wording differs by verb.
+    verb: Schema.Literals(["land", "merge", "done", "pr", "rm"]),
+    numbers: Schema.Array(Schema.Int),
+    names: Schema.Array(Schema.String),
+    binary: Schema.String,
+  },
+) {
+  override get message(): string {
+    const [n0 = 0, n1 = 0] = this.numbers;
+    const [a = "", b = "", c = "", d = ""] = this.names;
+    const bin = this.binary;
+    switch (this.reason) {
+      case "no-branch":
+        return this.verb === "land"
+          ? "No branch checked out to land"
+          : this.verb === "merge"
+            ? "No branch checked out to merge"
+            : this.verb === "done"
+              ? "No branch checked out to clean up"
+              : this.verb === "pr"
+                ? "No branch checked out to look up"
+                : "No branch checked out";
+      case "no-pull-request":
+        return this.verb === "land"
+          ? `No pull request found for branch ${a}. Push the branch and open a PR first`
+          : this.verb === "rm"
+            ? `No pull request found for branch ${a}, so no stack to clean up`
+            : `No pull request found for branch ${a}`;
+      case "not-open":
+        return this.verb === "land"
+          ? `PR #${n0} for ${a} is ${b}, not open. Reopen it, or clean up with \`${bin} rm ${c}\``
+          : a === ""
+            ? `PR #${n0} is ${b}, not open`
+            : `PR #${n0} for ${a} is ${b}, not open`;
+      case "no-such-number":
+        return `No pull request #${n0}`;
+      case "fork":
+        return `PR #${n0} is from a fork, and its branch here wasn't checked out from it. Merge it on GitHub instead.`;
+      case "stacked":
+        return `PR #${n0} (${a}) is stacked on open PR #${n1} (${b}). \`${bin} land --stack\` lands both. to merge it into ${b} alone, \`${bin} merge\` then \`${bin} rm ${c}\``;
+      case "stack-still-open":
+        return `PR #${n0} for ${a} is still open. \`${bin} land --stack\` lands it`;
+      case "no-methods":
+        return "The repo's settings allow no merge method";
+      case "method-not-allowed":
+        return `The repo's settings don't allow ${a} merges (allowed: ${b})`;
+      case "stack-closed":
+        return `PR #${n0} (${a}) under the stack is closed without merging; reopen or rebase past it first`;
+      case "stack-draft":
+        return `PR #${n0} (${a}) in the stack is a draft; mark it ready first`;
+      case "stack-all-merged":
+        return "Every PR in the stack is already merged";
+      case "stack-above":
+        return `PR #${n0} sits above open pull requests in its GitHub stack. Merge the stack instead (\`${bin} merge --stack\` or \`${bin} land --stack\`)`;
+      case "stack-step":
+        // `a` lists what landed before the step that failed, and `b` is
+        // what failed it.
+        return a === ""
+          ? `PR #${n0}: ${b}`
+          : `merged ${a}, then PR #${n0} failed: ${b}`;
+      case "no-primary":
+        return `No local branches found in ${a}`;
+      case "not-merged":
+        return `Branch ${a} isn't merged into ${b} (no merge found, no merged PR). Merge it first, or pass --force to discard it.`;
+      case "not-on-branch":
+        return `${a} is on ${b}, not ${c}`;
+      case "vanished":
+        return "worktree disappeared after switching branches";
+      case "guard":
+        // A worktree a stack land would remove refused the removal.
+        return `worktree ${a} (${b}): ${c}${d}`;
+    }
+  }
+}
+
+// A PR merge and land waited on that GitHub won't merge without a
+// person: `problem` says why.
+export class MergeNeedsAttention extends Schema.TaggedError<MergeNeedsAttention>()(
+  "MergeNeedsAttention",
+  {
+    number: Schema.Int,
+    problem: Schema.String,
+    url: Schema.String,
+    command: Schema.String,
+  },
+) {
+  get documentCode(): string {
+    return "needs-attention";
+  }
+
+  override get message(): string {
+    return `PR #${this.number} needs attention: ${this.problem} (${this.url}). Run \`${this.command}\` again once it's dealt with`;
+  }
+}
+
+// The wait couldn't read the PR, several times in a row.
+export class MergeLostTrack extends Schema.TaggedError<MergeLostTrack>()(
+  "MergeLostTrack",
+  {
+    number: Schema.Int,
+    command: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Lost track of PR #${this.number}: ${errorDocument(this.cause).error}. Run \`${this.command}\` again to keep waiting`;
+  }
+}
+
+// How a merge ended, in the app's spelling: it landed, a merge queue took
+// it, or auto-merge is armed and GitHub lands it once its requirements
+// are met. The last two leave the PR open, and merge and land wait on
+// them (awaitMerge).
+export type Outcome = "merged" | "queued" | "auto-merge";
+
+export type MergeOutcome = {
+  readonly method: MergeMethod;
+  readonly outcome: Outcome;
+  // An auto-merge armed before this merge, which it left as it was.
+  readonly alreadyArmed?: boolean;
+};
+
+// How long the wait for GitHub to merge sleeps between reads.
+export const MergePollInterval = Context.Reference<Duration.Duration>(
+  "sm/engine/Landing/MergePollInterval",
+  { defaultValue: () => Duration.seconds(10) },
+);
+
+// A read that fails this many times in a row ends the wait. One that
+// fails now and then (a network blip) is waited out.
+export const MERGE_READ_ATTEMPTS = 5;
+
+// How many polls in a row (about five minutes) a PR may sit BLOCKED
+// with nothing the wait can see to wait on before it counts as stuck: a
+// required check that never reports, say, or a rule the reads don't
+// cover.
+export const MERGE_STALL_POLLS = 30;
+
+// Where a land's steps go: the merged layers of a stack, the scripts of
+// a removal.
+export type Reporter = Worktrees.Reporter & {
+  // A layer of a stack merged: its document, and the PR, whose title a
+  // person's line names.
+  readonly merged?: (
+    event: Document,
+    pr: PullRequestSummary,
+  ) => Effect.Effect<void>;
+  // The PR a merge by number is about to merge, whose title the
+  // document leaves out and a person's line names.
+  readonly target?: (pr: PullRequestSummary) => Effect.Effect<void>;
+  // A PR that didn't merge on the spot, which the command now waits on
+  // until GitHub merges it, and each change in what it waits on.
+  readonly pending?: (
+    pr: PullRequestSummary,
+    outcome: MergeOutcome,
+  ) => Effect.Effect<void>;
+  readonly waiting?: (line: string) => Effect.Effect<void>;
+  // A word for a person beside the document: a stack land that leaves
+  // the primary checkout on a landed branch says how it gets back.
+  readonly note?: (line: string) => Effect.Effect<void>;
+};
+
+// What each verb can fail with. A stack land is the cleanup of
+// `rm --stack` after the merge of `merge --stack`.
+export type MergeError =
+  | LandingRefused
+  | GitHub.GitHubCliError
+  | GitHub.GitHubOutputError
+  | GitHub.StackMergeFailed
+  | MergeNeedsAttention
+  | MergeLostTrack;
+export type DoneError =
+  | LandingRefused
+  | Git.GitError
+  | Git.BranchNotMergedError;
+export type RemoveStackError =
+  | DoneError
+  | GitHub.GitHubCliError
+  | GitHub.GitHubOutputError
+  | Worktrees.WorktreeRefused
+  | Worktrees.DirtyWorktree;
+export type LandError =
+  | RemoveStackError
+  | GitHub.StackMergeFailed
+  | MergeNeedsAttention
+  | MergeLostTrack;
+
+export type RemoveOptions = {
+  readonly force: boolean;
+  readonly keepBranch: boolean;
+  readonly skipCleanup: boolean;
+};
+
+// The fields a merge verdict needs, which only the merge paths ask for.
+export const MERGE_FIELDS = ["mergeStateStatus", "autoMergeRequest"];
+
+export const SETTLE_TIMEOUT_MS = 20 * 1000;
+
+// Bounds the walk down a chain: the rows are a snapshot, so a loop in
+// stale ones must end.
+export const MAX_STACK_DEPTH = 64;
+
+// The verdicts auto-merge is for: the base branch's rules aren't met yet,
+// or the head must catch up with a base that requires it. Anything else
+// merges now, or keeps the plain merge's refusal.
+export const autoMergeArms = (status: string | undefined) =>
+  status === "BLOCKED" || status === "BEHIND";
+
+// The merge's fields in merge's document and land's "merged". No method
+// means the PR was merged before the command ran.
+export const mergeResultFields = (
+  pr: PullRequestSummary,
+  branch: string,
+  method: MergeMethod | undefined,
+): Record<string, unknown> => ({
+  number: pr.number,
+  title: pr.title,
+  branch,
+  url: pr.url,
+  ...(method === undefined ? { alreadyMerged: true } : { method }),
+});
+
+export const outcomeFields = (o: MergeOutcome) => ({
+  outcome: o.outcome,
+  queued: o.outcome === "queued",
+});
+
+// The document of a merge that went through, landed or not.
+export const mergeDocument = (
+  pr: PullRequestSummary,
+  branch: string,
+  o: MergeOutcome,
+): Document => ({
+  ...mergeResultFields(pr, branch, o.method),
+  ok: true,
+  ...outcomeFields(o),
+});
+
+// The chain from the bottom of the stack up to `number`, or just that PR
+// when nothing sits under it: a PR whose base is another PR's head is
+// stacked on it. The newest PR wins a reused head branch, and a fork's
+// PR never does. The trunk is never a member.
+export function stackBelow(
+  prs: ReadonlyArray<PullRequestSummary>,
+  number: number,
+  trunk: string,
+): PullRequestSummary[] | undefined {
+  const byHead = new Map<string, PullRequestSummary>();
+  let own: PullRequestSummary | undefined;
+  for (const pr of prs) {
+    if (!byHead.has(pr.headRefName) && pr.isCrossRepository !== true) {
+      byHead.set(pr.headRefName, pr);
+    }
+    if (pr.number === number && own === undefined) own = pr;
+  }
+  if (own === undefined) return undefined;
+  const chain = [own];
+  const visited = new Set([own.headRefName]);
+  let cursor = own;
+  while (chain.length < MAX_STACK_DEPTH) {
+    const parent = byHead.get(cursor.baseRefName);
+    if (
+      parent === undefined ||
+      cursor.baseRefName === trunk ||
+      visited.has(parent.headRefName)
+    ) {
+      break;
+    }
+    visited.add(parent.headRefName);
+    chain.push(parent);
+    cursor = parent;
+  }
+  return chain.toReversed();
+}
+
+export const projectScope = (project: RegisteredProject) =>
+  ({ kind: "project", projectId: project.id, path: project.path }) as const;
+
+export const mergedEvent = (pr: PullRequestSummary, method: MergeMethod) => ({
+  event: "merged",
+  number: pr.number,
+  branch: pr.headRefName,
+  method,
+});
+
+export const doneDocument = (
+  row: Worktrees.WorktreeRow,
+  branch: string,
+  deleted: boolean,
+  extra: Record<string, unknown>,
+): Document => ({
+  ok: true,
+  worktree: row,
+  deletedBranch: deleted ? branch : null,
+  ...extra,
+});
+
+// A cleanup failure after the merge: the document keeps the merge's
+// fields, since one without them would read as nothing changed.
+export const cleanupFailed = (
+  error: unknown,
+  extra: Record<string, unknown>,
+): Document =>
+  error instanceof Worktrees.CleanupFailed
+    ? {
+        ...extra,
+        ok: false,
+        cleanupError: Worktrees.cleanupErrorOf(error),
+      }
+    : { ...extra, ok: false, ...errorDocument(error) };
