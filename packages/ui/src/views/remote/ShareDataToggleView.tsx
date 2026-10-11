@@ -18,6 +18,7 @@ export function ShareDataToggleView({
       onCheckedChange={onChange}
       disabled={disabled}
       label="Share with other devices"
+      alone="access"
       description={
         on === false
           ? "Your other devices can't see anything on this machine."

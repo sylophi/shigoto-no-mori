@@ -10,10 +10,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shared/ipc/registerContract";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
-import {
-  cachedIgnoredPaths,
-  listWorktreeFolder,
-} from "@host/lib/worktrees/carryOver";
+import * as Worktrees from "@host/lib/Worktrees";
 import { hasCommit } from "@host/lib/git/refs";
 import * as Effect from "effect/Effect";
 import {
@@ -44,25 +41,29 @@ export const syncHandlers = {
     ),
 
   worktreeFolder: ({ relative, ruleIgnored, ...input }) =>
-    Effect.flatMap(findWorktreePath(input), (path) =>
-      listWorktreeFolder(path, relative, ruleIgnored),
+    Effect.flatMap(
+      Effect.all([findWorktreePath(input), Worktrees.Worktrees]),
+      ([path, worktrees]) =>
+        worktrees.worktreeFolder(path, relative, ruleIgnored),
     ),
 
   // The ignored files a capture leaves behind (see the contract note):
   // listed against the worktree, not the project, so a peer's
   // transplant dialog can name what a teardown would take with it.
   ignoredPaths: (input) =>
-    Effect.flatMap(findWorktreePath(input), (path) =>
-      Effect.map(
-        Effect.all([cachedIgnoredPaths(path), listIgnoreRules(path)], {
-          concurrency: 2,
-        }),
-        ([paths, patterns]) => ({
-          paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
-          total: paths.length,
-          patterns,
-        }),
-      ),
+    Effect.flatMap(
+      Effect.all([findWorktreePath(input), Worktrees.Worktrees]),
+      ([path, worktrees]) =>
+        Effect.map(
+          Effect.all([worktrees.ignoredPaths(path), listIgnoreRules(path)], {
+            concurrency: 2,
+          }),
+          ([paths, patterns]) => ({
+            paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
+            total: paths.length,
+            patterns,
+          }),
+        ),
     ),
 
   // A pull's link (and the git follower's fetch): this host is the

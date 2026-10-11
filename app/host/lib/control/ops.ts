@@ -50,8 +50,9 @@ import {
   peerSyncFor,
   peerWorktree,
   peerWorktreesFor,
-  thisDeviceId,
-} from "@host/ipc/peerSync";
+} from "@host/ipc/PeerReach";
+import * as DeviceId from "@host/lib/config/DeviceId";
+import type { DirectPeer } from "./AccountPeers";
 import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import {
@@ -78,7 +79,6 @@ import {
 import {
   candidates,
   cloneIntoOn,
-  type DirectPeer,
   directPeers,
   mirrorOf,
   peerMirrorOf,
@@ -272,7 +272,7 @@ const alreadyMirrored = Effect.fnUntraced(function* (
   const registry = yield* registryOrEmpty;
   const names = namesOf(registry);
   const { session } = running;
-  const ranHere = running.deviceId === thisDeviceId();
+  const ranHere = running.deviceId === (yield* DeviceId.current);
   const view = ranHere
     ? mirrorView(session, names)
     : peerMirrorView(running, names);
@@ -395,7 +395,7 @@ export const send = settled<"send">((input, ctx) =>
       const running =
         own === undefined
           ? yield* peerMirrorOf(input, registryOrEmpty)
-          : { deviceId: thisDeviceId(), session: own };
+          : { deviceId: yield* DeviceId.current, session: own };
       if (running !== undefined) {
         return { done: yield* alreadyMirrored(running, input.device) };
       }
@@ -543,7 +543,7 @@ export const bring = settled<"bring">((input, ctx) =>
                 session.localProjectId === found.projectId &&
                 session.localWorktreeId === found.worktree.id,
             )
-          : { deviceId: thisDeviceId(), session: own };
+          : { deviceId: yield* DeviceId.current, session: own };
       if (running !== undefined) {
         return { done: yield* alreadyMirrored(running, undefined) };
       }

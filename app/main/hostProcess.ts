@@ -26,16 +26,16 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { log } from "@shared/log";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
-import { HOST_FACTS_FLAG, type HostFacts } from "@host/process/facts";
+import { HOST_FACTS_FLAG, type HostFacts } from "@host/lib/HostFacts";
 import { appPlace } from "./electron/appPlace";
 import { noteMigration } from "./ipc/modules/migration";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { stopUpdaterBridge } from "./electron/updaterBridge";
-import { setDeviceId } from "@host/lib/config/deviceId";
 import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
 import { createShellRegistrar, makePortServer } from "./ipc/shellLink";
+import { deviceIdWithin } from "./core/host/deviceId";
 
 type Address = {
   readonly port: number;
@@ -48,12 +48,20 @@ type Address = {
 type Reported = Address & { readonly shellToken: string };
 
 // A promise and its resolve, settled by whoever learns the value.
-function deferred<A>(): { promise: Promise<A>; resolve: (value: A) => void } {
+function deferred<A>(): {
+  promise: Promise<A>;
+  resolve: (value: A) => void;
+  settled: () => boolean;
+} {
   let resolve!: (value: A) => void;
+  let settled = false;
   const promise = new Promise<A>((settle) => {
-    resolve = settle;
+    resolve = (value) => {
+      settled = true;
+      settle(value);
+    };
   });
-  return { promise, resolve };
+  return { promise, resolve, settled: () => settled };
 }
 
 export type HostFailure = {
@@ -61,7 +69,7 @@ export type HostFailure = {
   readonly storeReport: string | null;
 };
 
-function hostFacts(): HostFacts {
+function hostFacts(): HostFacts["Service"] {
   return {
     ...appPlace(),
     appVersion: app.getVersion(),
@@ -86,6 +94,7 @@ const crashes: number[] = [];
 // The current host's address, once it is up. Replaced as a host forks,
 // so a window redialing meanwhile waits for the next one.
 let address = deferred<Reported>();
+let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 
 const session = () => buildClient(sessionContract, link);
@@ -103,8 +112,9 @@ function tell(said: Promise<unknown>): void {
 const registrar = createShellRegistrar();
 const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
-    // The device the host is, which the shell's account calls name.
-    setDeviceId(reported.deviceId);
+    // The device the host is rides along, which the shell's account
+    // calls name.
+    reportedDeviceId = reported.deviceId;
     address.resolve(reported);
     if (started) {
       link.reconnect();
@@ -162,7 +172,8 @@ function fork(): void {
     child = null;
     if (quitting) return;
     log.warn(`[host] exited unasked (code ${code}), starting it again`);
-    address = deferred<Reported>();
+    // One that died before it was up leaves its waiters to the next.
+    if (address.settled()) address = deferred<Reported>();
     const now = Date.now();
     crashes.push(now);
     while (crashes[0] !== undefined && crashes[0] < now - CRASH_WINDOW_MS) {
@@ -212,6 +223,14 @@ export function hostAddress(): Promise<Address> {
     deviceId,
   }));
 }
+
+// The device the host is, which the shell's account calls name: the
+// last one reported, or one waited for as long as the restarts a
+// minute allows.
+export const hostDeviceId = (): Promise<string> =>
+  Effect.runPromise(
+    deviceIdWithin(reportedDeviceId, hostAddress, CRASH_WINDOW_MS),
+  );
 
 // The updater moved. A host that is not up yet hears it as it starts.
 export function noteUpdaterState(state: UpdaterState): void {

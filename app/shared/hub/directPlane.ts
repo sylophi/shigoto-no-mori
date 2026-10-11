@@ -65,8 +65,7 @@ export type DirectPlaneDeps = {
   // binding must resolve lazily.
   connection(): DirectPlaneConnection;
   // Identity facts, as getters because the host's deviceId and appVersion
-  // are post-boot facts (getDeviceId, app.getVersion) read on first
-  // dial, not at wiring time.
+  // are post-boot facts read on first dial, not at wiring time.
   localDeviceId(): string;
   localAppVersion(): string;
   // The owner's fan-out sinks: every window the host serves, the tab's

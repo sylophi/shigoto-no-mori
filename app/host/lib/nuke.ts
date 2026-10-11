@@ -75,8 +75,10 @@ export const leftIf = <R>(
       : [],
   );
 
-export const nukeEverything = Effect.fnUntraced(function* <R, U>(options: {
-  readonly onProgress: (progress: NukeProgress) => void;
+export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
+  readonly onProgress: (
+    progress: NukeProgress,
+  ) => Effect.Effect<void, never, P>;
   // Every script's kill chain, waited for (host/lib/scripts).
   readonly killAllScripts: Effect.Effect<void, never, R>;
   // Every terminal closed, none saved for the next start.
@@ -97,7 +99,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U>(options: {
   // Dev servers and watchers may have their cwd inside the worktrees
   // about to go: reap them first, or they'd hold their ports with their
   // directories deleted. The terminals likewise.
-  onProgress({ phase: "scripts" });
+  yield* onProgress({ phase: "scripts" });
   yield* options.killAllScripts;
   yield* options.closeTerminals;
 
@@ -128,7 +130,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U>(options: {
   for (const id of marked) markDeleteInflight(id);
   yield* Effect.gen(function* () {
     let removed = 0;
-    onProgress({ phase: "worktrees", done: 0, total: marked.length });
+    yield* onProgress({ phase: "worktrees", done: 0, total: marked.length });
     // One removal at a time within a project: each one rewrites the
     // repo's worktree metadata and branch refs.
     yield* Effect.forEach(
@@ -148,7 +150,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U>(options: {
               left.push({ what: target.path, why: failed });
             }
             removed += 1;
-            onProgress({
+            yield* onProgress({
               phase: "worktrees",
               done: removed,
               total: marked.length,
@@ -167,7 +169,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U>(options: {
     ),
   );
 
-  onProgress({ phase: "hooks" });
+  yield* onProgress({ phase: "hooks" });
   left.push(...(yield* options.uninstall));
   return { left } satisfies NukeReport;
 });

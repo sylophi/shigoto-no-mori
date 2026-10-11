@@ -30,8 +30,6 @@ import { scriptsViews } from "../host/ipc/modules/scripts.ts";
 import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
 import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
-import { setDeviceId } from "../host/lib/config/deviceId.ts";
-import { deviceId as storedDeviceId } from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
 import * as Views from "../host/lib/views.ts";
 import * as Sharing from "../host/lib/sharing.ts";
@@ -40,7 +38,8 @@ import { addProject } from "../host/lib/projects/index.ts";
 import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
 import { sharedSettingsCopy } from "../host/lib/sharedSettings/store.ts";
 import { initDataDirAt } from "../host/lib/util/paths.ts";
-import { setMirrorImpl, type MirrorImpl } from "../host/mirror/registry.ts";
+import type { MirrorEngine } from "../host/mirror/MirrorEngine.ts";
+import { standInMirror } from "./lib/hostStandIns.mts";
 import {
   engineDataDir,
   hostContext,
@@ -63,7 +62,6 @@ let repo: string;
 
 beforeAll(async () => {
   initDataDirAt(engineDataDir);
-  await runHost(storedDeviceId).then(setDeviceId);
   repo = join(tempDir("sm-views-", track), "repo");
   mkdirSync(repo);
   git(repo, "init", "-q", "-b", "main");
@@ -307,8 +305,8 @@ it("script runs: a run started shows, on scripts:changed", async () => {
 });
 
 it("mirrors: the daemon coming up, on mirror:changed", async () => {
-  let status: Effect.Success<MirrorImpl["status"]> = "starting";
-  setMirrorImpl({
+  let status: Effect.Success<MirrorEngine["Service"]["status"]> = "starting";
+  standInMirror({
     status: Effect.sync(() => status),
     sessions: Effect.succeed([]),
     create: refused,

@@ -16,12 +16,14 @@ import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSetti
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
-import { getDeviceId } from "../config/deviceId";
+import * as DeviceId from "../config/DeviceId";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
 import { layerLatch } from "../util/layerLatch";
 
 let held: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
+// The device a pick here is stamped with, read with the copy.
+let deviceId = "";
 // The changes not stored yet, in the order they were made, which the
 // layer's writer stores one at a time.
 const unstored: SharedSettingsDoc[] = [];
@@ -53,6 +55,7 @@ const loaded = layerLatch<void>("The shared settings");
 export const layer = Layer.effectDiscard(
   loaded.provide(
     Effect.gen(function* () {
+      deviceId = yield* DeviceId.current;
       held = yield* Ops.readSharedSettings;
       yield* Effect.forkScoped(writer);
     }),
@@ -68,7 +71,7 @@ const changeListeners = new Set<ChangeListener>();
 
 // Followers of "this copy moved", fired after the write landed and
 // never for a merge that learned nothing. The host's root fans it
-// out to every window and peer (process/impls.ts).
+// out to every window and peer (process/handlers.ts).
 export function onSharedSettingsChange(listener: ChangeListener): () => void {
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);
@@ -85,7 +88,7 @@ export const sharedSettingsCopy = createSharedSettingsCopy(
     },
   },
   {
-    deviceId: getDeviceId,
+    deviceId: () => deviceId,
     // The write has landed, so a listener's failure must not read as
     // the write's (onGlobalConfigChange's rule).
     announce: (doc) => {
