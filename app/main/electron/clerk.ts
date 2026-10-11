@@ -19,6 +19,7 @@ import { net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
+import { clerkFrontendHost, rendererContentPolicy } from "./contentPolicy";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
@@ -131,6 +132,20 @@ function fileHandler(rendererDir: string): SchemeHandler {
   });
 }
 
+// Every response under the window's policy (contentPolicy.ts).
+function underPolicy(serve: SchemeHandler, policy: string): SchemeHandler {
+  return async (request) => {
+    const response = await serve(request);
+    const headers = new Headers(response.headers);
+    headers.set("Content-Security-Policy", policy);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
 // Serves the renderer over the scheme origin: the packaged bundle from
 // disk, or a proxy onto the vite dev server. Must run after "ready"
 // (protocol.handle) and before the window's loadURL. The mode is fixed
@@ -138,11 +153,17 @@ function fileHandler(rendererDir: string): SchemeHandler {
 // request.
 export function serveRendererOverScheme(
   target: { rendererDir: string } | { devServerUrl: string },
+  clerkPublishableKey: string,
 ): void {
+  const dev = "devServerUrl" in target;
   protocol.handle(
     rendererScheme(),
-    "devServerUrl" in target
-      ? proxyHandler(target.devServerUrl)
-      : fileHandler(target.rendererDir),
+    underPolicy(
+      dev ? proxyHandler(target.devServerUrl) : fileHandler(target.rendererDir),
+      rendererContentPolicy({
+        clerkHost: clerkFrontendHost(clerkPublishableKey),
+        dev,
+      }),
+    ),
   );
 }
