@@ -26,13 +26,12 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { log } from "@shared/log";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
-import { HOST_FACTS_FLAG, type HostFacts } from "@host/process/facts";
+import { HOST_FACTS_FLAG, type HostFacts } from "@host/lib/HostFacts";
 import { appPlace } from "./electron/appPlace";
 import { noteMigration } from "./ipc/modules/migration";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { stopUpdaterBridge } from "./electron/updaterBridge";
-import { setDeviceId } from "@host/lib/config/deviceId";
 import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
 import { createShellRegistrar, makePortServer } from "./ipc/shellLink";
 
@@ -56,7 +55,7 @@ export type HostFailure = {
   readonly storeReport: string | null;
 };
 
-function hostFacts(): HostFacts {
+function hostFacts(): HostFacts["Service"] {
   return {
     ...appPlace(),
     appVersion: app.getVersion(),
@@ -98,8 +97,8 @@ function tell(said: Promise<unknown>): void {
 const registrar = createShellRegistrar();
 const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
-    // The device the host is, which the shell's account calls name.
-    setDeviceId(reported.deviceId);
+    // The device the host is rides along, which the shell's account
+    // calls name.
     address.resolve(reported);
     if (started) {
       link.reconnect();

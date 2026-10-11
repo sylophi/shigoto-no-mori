@@ -13,7 +13,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Ops from "@host/lib/engineOps";
-import { peerWorktreeDataFor } from "@host/ipc/peerSync";
+import { peerWorktreeDataFor } from "@host/ipc/PeerReach";
 
 export type WorktreeRef = { projectId: string; worktreeId: string };
 

@@ -6,6 +6,7 @@
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as HostPushes from "@host/lib/hostPushes";
 import type { HostServices } from "./services";
@@ -46,7 +47,7 @@ import { makeConnectInfo } from "@host/direct/connectInfo";
 import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
-import { getDeviceId } from "@host/lib/config/deviceId";
+import * as DeviceId from "@host/lib/config/DeviceId";
 import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
@@ -167,14 +168,25 @@ export const tunnelLayer = () =>
 // machine: the windows, the shell, and the terminal's control ops.
 const loopbackRegistrar = DeviceLink.createLinkRegistrar();
 export const loopbackLayer = () =>
-  Loopback.layer({
-    registrar: loopbackRegistrar,
-    deviceId: () => getDeviceId(),
-    appVersion: hostFacts().appVersion,
-    file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
-    // The window's own page dials it, from the renderer scheme.
-    allowedOrigin: hostFacts().rendererOrigin,
-    services: Graph.services,
+  Layer.unwrap(
+    Effect.map(DeviceId.current, (deviceId) =>
+      Loopback.layer({
+        registrar: loopbackRegistrar,
+        deviceId: () => deviceId,
+        appVersion: hostFacts().appVersion,
+        file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
+        // The window's own page dials it, from the renderer scheme.
+        allowedOrigin: hostFacts().rendererOrigin,
+        services: Graph.services,
+      }),
+    ),
+  );
+
+// This device's id, for the root's synchronous callbacks, which run
+// once the graph is up.
+const deviceIdNow = () =>
+  Graph.readNow(DeviceId.current, () => {
+    throw new Error("The device id was asked before launch read it.");
   });
 
 // The host's own consumers of peer pushes (the mirror's git follower
@@ -198,7 +210,7 @@ let plane: ReturnType<typeof createDirectPlane> | undefined;
 const directPlane = () =>
   (plane ??= createDirectPlane({
     connection: () => hubServer,
-    localDeviceId: () => getDeviceId(),
+    localDeviceId: deviceIdNow,
     localAppVersion: () => hostFacts().appVersion,
     broadcastStatus: (status) =>
       broadcastAll(hubContract, "statusChanged", status),
@@ -213,7 +225,7 @@ const directPlane = () =>
     // permessage-deflate: the link's frames are ciphertext, which does
     // not compress.
     openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
-    dialableKinds: devDialKinds(),
+    dialableKinds: devDialKinds(hostFacts().packaged),
     host: {
       // A device the roster dropped loses its links and the tickets it
       // was handed but has not spent (DeviceLink.closePeersNotIn).
@@ -238,7 +250,7 @@ const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = linkStatus();
     return current.listening && current.port !== null
-      ? devFrontPort(current.port)
+      ? devFrontPort(current.port, hostFacts().packaged)
       : null;
   },
   mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
@@ -391,7 +403,7 @@ export async function refreshHubConnection(): Promise<void> {
         accountId: inputs.accountId,
         deviceKey: inputs.deviceKey,
         mintTicket: inputs.mintTicket,
-        deviceId: getDeviceId(),
+        deviceId: await Graph.run(DeviceId.current),
       };
     }),
   );
@@ -453,7 +465,7 @@ export async function refreshDirectHost(): Promise<void> {
             return {
               port: 0,
               bindAddress: "::",
-              deviceId: getDeviceId(),
+              deviceId: await Graph.run(DeviceId.current),
               appVersion: hostFacts().appVersion,
               accountId: inputs.accountId,
               // The web client's origin, so a browser can dial the wss tunnel
@@ -473,7 +485,7 @@ export async function refreshDirectHost(): Promise<void> {
     const listener = linkStatus();
     const wanted =
       listener.listening && listener.port !== null
-        ? { port: devFrontPort(listener.port) }
+        ? { port: devFrontPort(listener.port, hostFacts().packaged) }
         : null;
     // Nothing to reconcile once the app is quitting: the layer's close
     // has stopped the child.

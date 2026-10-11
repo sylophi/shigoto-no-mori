@@ -60,7 +60,7 @@ import {
 import { strict } from "@shigomori/contracts/schemas/strict";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
-import { peerChannelsFor, peerSyncFor } from "@host/ipc/peerSync";
+import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { refTip, treeOf } from "@host/lib/git/refs";
 import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
@@ -770,6 +770,7 @@ export const peerSource = (
   worktree: { projectId: string; worktreeId: string },
 ) =>
   Effect.gen(function* () {
+    const reach = yield* PeerReach;
     let attached: Link | undefined;
     // This device's end of the link is attached BEFORE the call that
     // opens the peer's end is sent, so the peer's first bytes always
@@ -783,7 +784,7 @@ export const peerSource = (
         .openSource({ ...worktree, channelId })
         .pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
       return link;
-    });
+    }).pipe(Effect.provideService(PeerReach, reach));
     const linkOf = yield* Effect.cached(open);
     // A cancel must not wait on a peer that never answered the open,
     // so the link goes as soon as it is attached.

@@ -108,14 +108,16 @@ import {
   followTransfer,
 } from "@host/ipc/modules/control";
 import { bring, send } from "@host/lib/control/ops";
-import { listDevicesFailure, setControlImpl } from "@host/lib/control/peers";
+import { listDevicesFailure } from "@host/lib/control/AccountPeers";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
   isTransferSession,
-  setMirrorImpl,
-  type MirrorCreateInput,
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
+import {
+  type MirrorCreateInput,
+  MirrorEngine,
+} from "@host/mirror/MirrorEngine";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
@@ -125,7 +127,6 @@ import {
   setWorktreeRemovalBroadcaster,
   worktreesHandlers,
 } from "@host/ipc/modules/worktrees";
-import { setPeerReach } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { listMirrorInvites } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
@@ -157,6 +158,12 @@ import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
 import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
+import {
+  standInAccount,
+  standInDeviceId,
+  standInMirror,
+  standInPeers,
+} from "./lib/hostStandIns.mts";
 
 const fixture = cliSandbox("sm-control-check-");
 const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
@@ -492,25 +499,20 @@ it("no loopback.json, a dead pid and a dead port all read as app-not-running", a
 });
 
 it("loopback.json is owner-only, a call before the hello is refused, and a stale token reads as app-not-running and locks no one out", async () => {
-  // Each device's mirror engine. The dialer's is the slot's own. The peer
-  // runs the mirrors whose original it holds (mirror --from), on its
-  // own engine: the slot is process-wide, so a mirror call on the listener's
-  // wire swaps the listener's in for its duration. The calls come one at a
-  // time (each CLI run is awaited), the dialer's side idle meanwhile.
+  // Each device's mirror engine. The peer runs the mirrors whose
+  // original it holds (mirror --from), on its own engine, which its
+  // handlers run on.
   engine = fakeMirrorEngine();
   listenerEngine = fakeMirrorEngine();
   listenerEngine.state.git = "synced";
-  setMirrorImpl(engine.impl);
-  // The listener's engine is swapped in for the run of each of the listener's handlers.
+  standInMirror(engine.impl);
   const onListener =
     <I, A, E, R>(
       run: (input: I, ctx: HandlerContext) => Effect.Effect<A, E, R>,
     ) =>
     (input: I, ctx: HandlerContext) =>
-      Effect.acquireUseRelease(
-        Effect.sync(() => setMirrorImpl(listenerEngine.impl)),
-        () => run(input, ctx),
-        () => Effect.sync(() => setMirrorImpl(engine.impl)),
+      run(input, ctx).pipe(
+        Effect.provideService(MirrorEngine, listenerEngine.impl),
       );
   const listenerMirror: EffectHandlers<
     typeof mirrorContract,
@@ -588,7 +590,7 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
         : result;
     },
   };
-  setControlImpl({
+  standInAccount({
     listDevices: Effect.suspend(() =>
       registryFails === null
         ? Effect.succeed(registry)
@@ -608,11 +610,11 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   });
   // Every reach into the peer: its contracts, and the session's byte
   // channels, which a move's source link rides.
-  setPeerReach({
+  standInPeers({
     transportFor: () => peerTransport,
     channelsFor: () => toListener.channels,
-    thisDeviceId: () => DIALER,
   });
+  standInDeviceId(DIALER);
   // The delete's removal, as the host fans it out to every window and
   // peer. Each record notes which sessions had ended by then: the
   // copy a stop removes is announced only once its session is gone,

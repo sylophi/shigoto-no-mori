@@ -24,7 +24,6 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { coalesce } from "@host/lib/util/coalesce";
 import {
   GitStateCoreSchema,
   MirrorEventSchema,
@@ -83,11 +82,9 @@ import {
   whileRecreating,
   isOrphanedTransfer,
   mirrorSessions,
-  setMirrorImpl,
-  MirrorError,
-  type MirrorImpl,
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
+import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
 import {
   MirrorInviteSchema,
   reconcileMirrorInvites,
@@ -96,11 +93,8 @@ import {
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { onRunningScriptsChanged } from "@host/lib/scripts";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
-import {
-  portForwardHandlers,
-  setPortForwardEngine,
-  stopPortForwardsTo,
-} from "@host/ipc/modules/portForward";
+import { portForwardHandlers } from "@host/ipc/modules/portForward";
+import * as PortForwards from "@host/portForward/PortForwards";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { portsHandlers, portsViews } from "@host/ipc/modules/ports";
 import { projectsHandlers, projectsViews } from "@host/ipc/modules/projects";
@@ -110,12 +104,19 @@ import {
   sharedSettingsHandlers,
   sharedSettingsViews,
 } from "@host/ipc/modules/sharedSettings";
-import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
+import {
+  onSharedSettingsChange,
+  sharedSettingsCopy,
+} from "@host/lib/sharedSettings/store";
+import { onGlobalConfigChange } from "@host/lib/config/global";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
-import { listDevicesFailure, setControlImpl } from "@host/lib/control/peers";
+import {
+  AccountPeers,
+  listDevicesFailure,
+} from "@host/lib/control/AccountPeers";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { agentsHandlers } from "@host/ipc/modules/agents";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
@@ -129,8 +130,7 @@ import {
   worktreesViews,
 } from "@host/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
-import { peerClient, setPeerReach } from "@host/ipc/peerSync";
-import { createPortForwardEngine } from "@host/portForward/engine";
+import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import { createMirrorGateway } from "@host/mirror/gateway";
 import { createMirrorHistory } from "@host/mirror/history";
@@ -141,7 +141,6 @@ import {
 } from "@host/lib/util/atomicJson";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@host/lib/util/paths";
-import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   type AccountFacts,
   acceptsPeerCommands,
@@ -154,6 +153,7 @@ import {
   broadcastAll,
   clearDirectTickets,
   refreshHubConnection,
+  refreshDirectHost,
   registerContract,
   registerLoopbackContract,
   registerViews,
@@ -184,9 +184,12 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
     }),
 });
 
-// The byte channels of the same session.
-const peerChannelsFor = (deviceId: string) => () =>
-  hubHandlers().peerChannels(deviceId);
+// Every peer reach of the host (host/ipc/PeerReach.ts), riding
+// peerTransportFor above and the byte channels of the same session.
+const peerReach = PeerReach.make({
+  transportFor: peerTransportFor,
+  channelsFor: (deviceId) => () => hubHandlers().peerChannels(deviceId),
+});
 
 // Continuous worktree mirroring, this device's half: the loopback
 // gateway the daemon dials peers through and the daemon itself
@@ -196,13 +199,21 @@ const peerChannelsFor = (deviceId: string) => () =>
 // (layer.ts). A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
 const mirrorGateway = createMirrorGateway({
-  peerApiFor: (deviceId) => peerClient(mirrorContract, deviceId),
-  peerChannelsFor,
+  peerApiFor: (deviceId) => peerReach.client(mirrorContract, deviceId),
+  peerChannelsFor: peerReach.channels,
 });
+// A change push's window: a burst goes out as one ping this long after
+// its first member.
+const CHANGE_WINDOW_MS = 150;
 // The daemon snapshots on every cycle of every session and the
-// follower reports every verdict. The renderer's ping is coalesced so
-// a busy mirror costs viewers one re-read per beat, not one per cycle.
-const broadcastMirrorChanged = coalesce(() => {
+// follower reports every verdict. The renderer's ping goes out once a
+// window (mirrorChangesLayer), so a busy mirror costs viewers one
+// re-read per beat, not one per cycle. One change waiting is all a
+// burst needs.
+const mirrorChanges = Effect.runSync(Queue.sliding<void>(1));
+const broadcastMirrorChanged = () =>
+  void Queue.offerUnsafe(mirrorChanges, undefined);
+const pushMirrorChanged = () =>
   void Graph.run(currentMirrorList).then(
     (list) => {
       // The list is validated against its strict schema on the way
@@ -219,7 +230,33 @@ const broadcastMirrorChanged = coalesce(() => {
     },
     () => {},
   );
-}, 150);
+// The mirror's changed push, for the length of the graph.
+export const mirrorChangesLayer = Layer.effectDiscard(
+  Stream.fromQueue(mirrorChanges).pipe(
+    Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
+    Stream.runForEach(() => Effect.sync(pushMirrorChanged)),
+    Effect.forkScoped,
+  ),
+);
+// Every script start and end, whoever ran it, to every window and
+// peer, for the length of the graph. A burst (a lifecycle starting
+// setup and port-pool together, a project's scripts stopped at once)
+// goes out as one ping.
+export const scriptsChangedLayer = Layer.effectDiscard(
+  Stream.callback<void>(
+    (queue) =>
+      Effect.sync(() =>
+        onRunningScriptsChanged(() => void Queue.offerUnsafe(queue, undefined)),
+      ),
+    { bufferSize: 1, strategy: "sliding" },
+  ).pipe(
+    Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
+    Stream.runForEach(() =>
+      Effect.sync(() => broadcastAll(scriptsContract, "changed", undefined)),
+    ),
+    Effect.forkScoped,
+  ),
+);
 const fileSyncDir = () => join(dataDir(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
 const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
@@ -286,8 +323,8 @@ const daemonSessions = mirror.get.pipe(
   Effect.orElseSucceed((): readonly MirrorSessionRaw[] => []),
 );
 
-// The mirror surface's impl (host/mirror/registry.ts MirrorImpl).
-const mirrorImpl: MirrorImpl = {
+// The mirror surface's engine (host/mirror/MirrorEngine.ts).
+const mirrorImpl: MirrorEngine["Service"] = {
   status: mirror.get.pipe(
     Effect.flatMap(({ daemon }) => daemon.status),
     Effect.orElseSucceed(() => "unavailable" as const),
@@ -629,7 +666,69 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
   stopPortForwardsTo(stillOn);
 }
 
+// The services the root provides the graph from its own wiring: the
+// peers' reach, the mirror engine, and the account the control ops
+// read, its device registry riding the stored credential.
+export const rootServices = Layer.mergeAll(
+  Layer.succeed(PeerReach.PeerReach, peerReach),
+  Layer.succeed(MirrorEngine, mirrorImpl),
+  Layer.succeed(
+    AccountPeers,
+    AccountPeers.of({
+      listDevices: Effect.tryPromise({
+        try: listAccountDevices,
+        catch: listDevicesFailure,
+      }),
+      directPeers: Effect.map(
+        Effect.promise(async () => hubHandlers().status(undefined, undefined)),
+        (status) =>
+          Object.fromEntries(
+            Object.entries(status.peerAcceptsCommands).map(
+              ([deviceId, acceptsCommands]) => [
+                deviceId,
+                {
+                  acceptsCommands,
+                  sharesData: status.peerSharesData[deviceId] ?? true,
+                },
+              ],
+            ),
+          ),
+      ),
+    }),
+  ),
+);
+
+// The port forwards, whose changes go to every window.
+export const portForwardsLayer = PortForwards.layer({
+  onChange: () => broadcastAll(portForwardContract, "changed", undefined),
+});
+
+// The forwards onto devices no longer on the account, stopped. Before
+// the graph is up there are none.
+const stopPortForwardsTo = (keep: (deviceId: string) => boolean): void =>
+  Graph.readNow(
+    Effect.map(PortForwards.PortForwards, (engine) =>
+      engine.stopForwardsTo(keep),
+    ),
+    () => undefined,
+  );
+
 export function registerHostHandlers(): void {
+  // Reconcile the listener on every config change, whatever the path:
+  // the write handler and a terminal write the store's changes show both
+  // end in globalConfigChanged (host/lib/config/global.ts), which calls
+  // this one subscriber, so the directConnections opt-out applies
+  // without a restart. The refresh never rejects, so fire and forget is
+  // safe. The start's pass is the account's first report (applyAccount).
+  onGlobalConfigChange(() => {
+    void refreshDirectHost();
+  });
+  // This device's copy of the shared settings moved (a pick here, or a
+  // peer's entries merged in): every window re-reads it off the push,
+  // and every peer's window folds it into its own copy.
+  onSharedSettingsChange((doc) =>
+    broadcastAll(sharedSettingsContract, "changed", doc),
+  );
   // The windows' bridge onto the host's hub socket: status, invokes
   // over the keeper-held direct sessions, and the peerPush and
   // statusChanged fan-outs. Built in wires.ts, which owns every dep.
@@ -664,13 +763,6 @@ export function registerHostHandlers(): void {
         ),
       ),
   });
-  // Every peer reach of the host (host/ipc/peerSync.ts), riding
-  // peerTransportFor above.
-  setPeerReach({
-    transportFor: peerTransportFor,
-    channelsFor: peerChannelsFor,
-    thisDeviceId: getDeviceId,
-  });
   // The mirrors this device asked peers for (host/mirror/invites.ts),
   // which its switch does not gate: one file beside the follower's.
   setMirrorInviteStore({
@@ -690,29 +782,13 @@ export function registerHostHandlers(): void {
       (error: unknown) => !isEntityGoneError(error),
     ),
   );
-  // The port-forward engine's peer reach, through the same seam as
-  // every other (setPeerReach above) and for the same reason:
-  // a second session would supersede the one the renderer's
-  // remote-forest queries ride. The engine itself is electron-free
-  // (host/portForward/engine.ts), and this is its only binding to the
-  // peer sessions and to the renderer's changed signal.
-  setPortForwardEngine(
-    createPortForwardEngine({
-      forwardApiFor: (deviceId) => peerClient(forwardContract, deviceId),
-      channelsFor: peerChannelsFor,
-      onChange: () => {
-        broadcastAll(portForwardContract, "changed", undefined);
-      },
-    }),
-  );
   // The listeners belong to this machine, so the surface never mounts
   // on a remote wire.
   registerContract(portForwardContract, portForwardHandlers);
   // The mirror surface: host-scoped (a device's mirrors are its facts,
-  // and peers read the list), its daemon injected from above. The
-  // serving set (streams this host serves for peers) fans out on the
-  // same changed signal.
-  setMirrorImpl(mirrorImpl);
+  // and peers read the list), its daemon provided from above
+  // (rootServices). The serving set (streams this host serves for
+  // peers) fans out on the same changed signal.
   setMirrorServingListener(broadcastMirrorChanged);
   // A delete's removal, to every window and peer (remote:true by
   // contract): the row a mirror stop or a peer's teardown is taking
@@ -782,41 +858,14 @@ export function registerHostHandlers(): void {
   registerViews(scriptsContract, scriptsViews);
   registerContract(terminalsContract, terminalsHandlers);
   registerViews(terminalsContract, terminalsViews);
-  // A burst (a lifecycle starting setup and port-pool together, a
-  // project's scripts stopped at once) goes out as one ping.
-  onRunningScriptsChanged(
-    coalesce(() => broadcastAll(scriptsContract, "changed", undefined), 150),
-  );
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerViews(sharedSettingsContract, sharedSettingsViews);
   registerContract(sharingContract, sharingHandlers);
   registerViews(sharingContract, sharingViews);
   registerContract(cliContract, cliHandlers);
   // The terminal's cross-device verbs, on the loopback alone
-  // (packages/contracts/src/modules/control.ts). The device registry rides the
-  // stored credential, and the peers are reached through the seam
-  // above.
-  setControlImpl({
-    listDevices: Effect.tryPromise({
-      try: listAccountDevices,
-      catch: listDevicesFailure,
-    }),
-    directPeers: Effect.map(
-      Effect.promise(async () => hubHandlers().status(undefined, undefined)),
-      (status) =>
-        Object.fromEntries(
-          Object.entries(status.peerAcceptsCommands).map(
-            ([deviceId, acceptsCommands]) => [
-              deviceId,
-              {
-                acceptsCommands,
-                sharesData: status.peerSharesData[deviceId] ?? true,
-              },
-            ],
-          ),
-        ),
-    ),
-  });
+  // (packages/contracts/src/modules/control.ts), over the account
+  // (rootServices) and the peers' reach.
   registerLoopbackContract(controlContract, controlHandlers, controlTransfers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(worktreeDataContract, worktreeDataHandlers);
