@@ -88,6 +88,36 @@ export const layer = Layer.effect(Registry, make);
   a scoped constructor for one that owns a resource (section 5).
 - **Tag names** are `sm/<package>/<Service>`.
 - **Moving a service** updates every consumer. No re-export shims.
+- **A service too big to hold at once spans a few modules**, one per
+  area of what it does, in a folder named for it beside its module
+  (`Worktrees.ts`, then `worktrees/listing.ts`, `worktrees/changes.ts`).
+  Each area is a sub-maker: an `Effect.gen` that takes the services it
+  needs from the environment, and as a parameter what an earlier area
+  built for it, and returns that area's methods. The service's `make`
+  runs the sub-makers in dependency order and composes `Service.of`
+  from what they return. The tag, `make` and `layer` stay in the
+  service module. The errors, schemas and documents the areas share go
+  in the folder too (`worktrees/errors.ts`), so no area imports the
+  service module back, and a consumer imports them from there. A
+  sub-maker has no tag and no layer, and nothing outside the service
+  imports it.
+
+  ```ts
+  // worktrees/listing.ts
+  export const makeListing = Effect.gen(function* () {
+    const git = yield* Git.Git;
+    const registry = yield* Registry.Registry;
+    const list = Effect.fn("Worktrees.list")(function* (/* ... */) {});
+    return { list, identities };
+  });
+
+  // Worktrees.ts
+  const make = Effect.gen(function* () {
+    const listing = yield* makeListing;
+    const changes = yield* makeChanges(listing);
+    return Worktrees.of({ ...listing, ...changes });
+  });
+  ```
 
 ## 3. Runtime boundaries
 
