@@ -73,6 +73,9 @@ export default defineConfig(({ mode }) => {
       entries: ["index.html", "../packages/ui/src/**/*.{ts,tsx}"],
       exclude: ["@shigomori/contracts", "effect"],
     },
+    // The web client's public files, for the boot script the window's
+    // page loads too (index.html).
+    publicDir: resolve(__dirname, "web/public"),
     define: {
       __APP_VERSION__: JSON.stringify(version),
       __APP_COMMIT__: JSON.stringify(commit),

@@ -69,18 +69,20 @@ beforeAll(() => {
   mkdirSync(bin);
   mkdirSync(zips);
   // A bundle's team is its Contents/TEAM file, none for an ad hoc
-  // signature, and Contents/UNSIGNED fails verification. With
-  // control/real-codesign the real one answers.
+  // signature, its identifier its Contents/ID file, and
+  // Contents/UNSIGNED fails verification. With control/real-codesign
+  // the real one answers.
   script(
     "codesign",
     `echo "codesign $*" >> "${control}/calls"
 [ -e "${control}/real-codesign" ] && exec /usr/bin/codesign "$@"
 if [ "$1" = "--verify" ]; then
-  if [ -e "$5/Contents/UNSIGNED" ]; then echo "$5: code object is not signed at all" >&2; exit 1; fi
+  if [ -e "$6/Contents/UNSIGNED" ]; then echo "$6: code object is not signed at all" >&2; exit 1; fi
   exit 0
 fi
 if [ "$1" = "-dvv" ]; then
   echo "Executable=$3/Contents/MacOS/x" >&2
+  echo "Identifier=$(cat "$3/Contents/ID")" >&2
   if [ -e "$3/Contents/TEAM" ]; then echo "TeamIdentifier=$(cat "$3/Contents/TEAM")" >&2
   else echo "TeamIdentifier=not set" >&2; fi
   exit 0
@@ -152,19 +154,27 @@ const APP = "Shigoto no Mori.app";
 type BundleOptions = {
   readonly team?: string | null;
   readonly unsigned?: boolean;
+  readonly identifier?: string;
+  // The version its Info.plist says, the release's when not given.
+  readonly bundleVersion?: string;
 };
 
 const makeBundle = (
   at: string,
   version: string,
-  { team = "TEAM1", unsigned = false }: BundleOptions = {},
+  {
+    team = "TEAM1",
+    unsigned = false,
+    identifier = "test.shigomori",
+    bundleVersion = version,
+  }: BundleOptions = {},
 ) => {
   mkdirSync(join(at, "Contents", "Resources"), { recursive: true });
   mkdirSync(join(at, "Contents", "MacOS"), { recursive: true });
   writeFileSync(
     join(at, "Contents", "Info.plist"),
     `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict><key>CFBundleExecutable</key><string>x</string><key>CFBundleIdentifier</key><string>test.shigomori</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>
+<plist version="1.0"><dict><key>CFBundleExecutable</key><string>x</string><key>CFBundleIdentifier</key><string>${identifier}</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>${bundleVersion}</string></dict></plist>
 `,
   );
   writeFileSync(join(at, "Contents", "MacOS", "x"), "#!/bin/sh\n", {
@@ -175,6 +185,7 @@ const makeBundle = (
   });
   writeFileSync(join(at, "Contents", "Resources", "version"), version);
   if (team !== null) writeFileSync(join(at, "Contents", "TEAM"), team);
+  writeFileSync(join(at, "Contents", "ID"), identifier);
   if (unsigned) writeFileSync(join(at, "Contents", "UNSIGNED"), "");
   return at;
 };
@@ -913,7 +924,7 @@ describe("staging", () => {
     assert.deepEqual(
       calls().toSorted(),
       [
-        `codesign --verify --deep --strict -- ${box.updates}/extract/${APP}`,
+        `codesign --verify --deep --strict -R=anchor apple generic -- ${box.updates}/extract/${APP}`,
         `codesign -dvv -- ${box.installed}`,
         `codesign -dvv -- ${box.updates}/extract/${APP}`,
       ].toSorted(),
@@ -1038,6 +1049,31 @@ describe("staging", () => {
     assert.deepEqual(manifestOf(box), { version: "1.5.0", bundleName: APP });
   });
 
+  it("refuses another flavor's app, and a release no newer than this build, under our team", async () => {
+    const box = newBox();
+    seedStaged(box, "1.5.0");
+    const errorFor = (options: BundleOptions) =>
+      failure(
+        {
+          box,
+          http: network(
+            serverFor("2.0.0", zipOf([{ version: "2.0.0", ...options }])),
+          ).client,
+        },
+        (u) => u.stage({ running: running(box) }),
+      );
+    assert.equal(
+      words(await errorFor({ identifier: "test.shigomori.test" })),
+      "The downloaded update is a different app (test.shigomori.test, installed app: test.shigomori). Refusing to install.",
+    );
+    assert.equal(
+      words(await errorFor({ bundleVersion: "1.0.0" })),
+      "The downloaded update is version 1.0.0, which is not newer than this build. Refusing to install.",
+    );
+    assert.equal(existsSync(join(box.updates, "extract")), false);
+    assert.deepEqual(manifestOf(box), { version: "1.5.0", bundleName: APP });
+  });
+
   it("refuses when the installed app has no team to compare against", async () => {
     const box = newBox("1.0.0", { team: null });
     const error = await failure(
@@ -1067,7 +1103,7 @@ describe("staging", () => {
       words(plain),
       /^The downloaded update failed code-signature verification: .*code object is not signed at all/,
     );
-    // Ad hoc signatures verify, and carry no team, so they refuse too.
+    // Ad hoc signatures carry no certificate Apple issued, so they refuse too.
     const box = newBox();
     execFileSync("/usr/bin/codesign", ["-s", "-", "--deep", box.installed]);
     const dir = mkdtempSync(join(zips, "adhoc-"));
@@ -1083,9 +1119,9 @@ describe("staging", () => {
       },
       (u) => u.stage({ running: running(box) }),
     );
-    assert.equal(
+    assert.match(
       words(adhoc),
-      "The installed app has no Team ID to verify the update against. Refusing to install.",
+      /^The downloaded update failed code-signature verification: .*code failed to satisfy specified code requirement/,
     );
   });
 });
@@ -1322,7 +1358,7 @@ describe("installing", () => {
     // Verified again where it was placed.
     assert.ok(
       calls().includes(
-        `codesign --verify --deep --strict -- ${dirname(box.installed)}/.${APP}.new-${process.pid}`,
+        `codesign --verify --deep --strict -R=anchor apple generic -- ${dirname(box.installed)}/.${APP}.new-${process.pid}`,
       ),
     );
   });

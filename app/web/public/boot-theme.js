@@ -2,9 +2,10 @@
 // page loads this right after) synchronously, before React runs, so
 // the first paint matches the user's choice. Loaded as an external
 // classic script (a render-blocking script keeps the pre-paint
-// guarantee) rather than inline, so the deploy's
-// Content-Security-Policy can stay at script-src 'self' with no inline
-// allowance. Keys must match THEME_STORAGE_KEY in
+// guarantee) rather than inline, so the deploy's and the desktop
+// window's Content-Security-Policy (main/electron/contentPolicy.ts) can
+// stay at script-src 'self' with no inline allowance. The desktop page
+// loads it too (vite.renderer.config.ts). Keys must match THEME_STORAGE_KEY in
 // renderer/hooks/ui/useTheme.tsx and STORAGE_KEYS in
 // renderer/hooks/ui/usePalette.tsx, and the palette defaults
 // packages/ui/src/lib/themes.ts.
