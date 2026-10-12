@@ -18,6 +18,7 @@ import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
+  currentWorktreeId,
   findProject,
   findProjectAndWorktree,
   findWorktreeIdentity,
@@ -282,11 +283,14 @@ export const worktreesHandlers = {
     }),
 
   delete: (
-    { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
+    { projectId, worktreeId: named, force, skipCleanup, refuseRunningScripts },
     ctx,
   ) =>
     Effect.gen(function* () {
       const project = yield* findProject(projectId);
+      // A mirror's stop names its copy by the id it may have had before a
+      // move.
+      const worktreeId = yield* currentWorktreeId(projectId, named);
       // Local delete kills scripts by design (withDeleteInflight reaps
       // them). The transplant orchestrator refuses instead, since its
       // teardown must never take down work still running on the source

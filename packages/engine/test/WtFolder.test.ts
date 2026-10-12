@@ -78,6 +78,23 @@ it("moves v2 worktrees into wt at the first start, and keeps a locked one where 
   assert.match(unmoved[0]?.error ?? "", /locked/);
 });
 
+it("answers the id each moved worktree had for the one it has now", async () => {
+  const { v2, wt } = v2Project();
+  await state();
+  const ids = (await box.engine(
+    Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedIds),
+  )) as ReadonlyMap<string, string>;
+  assert.deepEqual(
+    new Map(ids),
+    new Map(
+      ["a", "b"].map((name) => [
+        worktreeIdFromPath(join(v2, name)),
+        worktreeIdFromPath(join(wt, name)),
+      ]),
+    ),
+  );
+});
+
 it("reports a worktree the move couldn't take, and the fix moves it once it can", async () => {
   const { repo, dataDir, v2, wt } = v2Project();
   await state();

@@ -18,7 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { FileSync } from "@host/fileSync/FileSync";
 import { dataDir } from "@shared/paths";
-import { findProjectAndWorktree, findWorktreePath } from "@host/lib/projects";
+import { findProjectAndWorktree } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
@@ -62,14 +62,17 @@ function forgetServing(signals: MirrorSignals["Service"], key: string): void {
 // channel: a peer reset, an end from both sides or the socket dying all
 // kill it, and a child that exits on its own ends the channel the
 // ordinary way. The child serves the worktree's path alone: the root
-// the peer's Mutagen side names in the protocol is replaced by it.
+// the peer's Mutagen side names in the protocol is replaced by it. A
+// session from before the copy moved (the v3 migration's move into
+// wt/) names it by its old id, which the lookup follows.
 export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   { projectId, worktreeId, channelId, peerWorktreeId }: MirrorOpenStreamPayload,
   ctx: HandlerContext,
 ) {
   requireChannels(ctx, channelId);
   const signals = yield* MirrorSignals;
-  const worktreePath = yield* findWorktreePath({ projectId, worktreeId });
+  const { worktree } = yield* findProjectAndWorktree(projectId, worktreeId);
+  const worktreePath = worktree.path;
   // The child ends when its channel does.
   const closed = yield* Deferred.make<void>();
   // Its own data directory under this host's: unset, the engine's
@@ -82,7 +85,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   );
   child.stderr?.on("data", (chunk: Buffer) => {
     const text = chunk.toString("utf8").trim();
-    if (text !== "") log.warn(`[mirror] serve ${worktreeId}: ${text}`);
+    if (text !== "") log.warn(`[mirror] serve ${worktree.id}: ${text}`);
   });
   const key = servingKey(ctx, channelId);
   const stopChild = () => {
@@ -109,7 +112,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
     entry: {
       channelId,
       projectId,
-      worktreeId,
+      worktreeId: worktree.id,
       peerDeviceId: ctx.callerDeviceId ?? "",
       ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
       since: Date.now(),
@@ -117,10 +120,15 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
     stopIndexWatch: null,
   };
   serving.set(key, served);
+  // Under the id the peer's session holds, and this device's own.
+  const indexChanged = () => {
+    signals.gitChanged({ projectId, worktreeId });
+    if (worktree.id !== worktreeId) {
+      signals.gitChanged({ projectId, worktreeId: worktree.id });
+    }
+  };
   yield* Effect.forkDetach(
-    watchIndexFile(worktreePath, () =>
-      signals.gitChanged({ projectId, worktreeId }),
-    ).pipe(
+    watchIndexFile(worktreePath, indexChanged).pipe(
       Effect.tap((stop) =>
         Effect.sync(() => {
           if (serving.get(key) === served) served.stopIndexWatch = stop;
@@ -141,7 +149,7 @@ export const servedGitState = ({
   Effect.flatMap(
     findProjectAndWorktree(projectId, worktreeId),
     ({ project, worktree }) =>
-      readGitState(project.path, worktree.path, worktreeId),
+      readGitState(project.path, worktree.path, worktree.id),
   );
 
 export const applyServedGitState = ({
@@ -158,7 +166,7 @@ export const applyServedGitState = ({
     );
     const result = yield* applyGitState(
       project,
-      { id: worktreeId, path: worktree.path },
+      { id: worktree.id, path: worktree.path },
       { expect, state, sweep },
     );
     if (!result.applied) {
