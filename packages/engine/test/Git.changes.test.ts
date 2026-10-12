@@ -2,12 +2,19 @@
 // undo and redo, and discard with its snapshot.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 import {
   DISCARD_REF_PREFIX,
+  BranchMovedError,
   GitCommandError,
   UndoRefusedError,
 } from "../src/Git.ts";
@@ -180,8 +187,11 @@ it("undo refuses a moved HEAD, a commit off the line, and a range over a merge",
     );
   };
 
+  const moved = await failureAs(BranchMovedError, (g) =>
+    g.resetSoft({ worktree: repo, target: root, expectHead: root }),
+  );
   assert.equal(
-    (await refusal(root, root)).message,
+    moved.message,
     "The branch has moved on since this was loaded. Reload and try again.",
   );
 
@@ -197,6 +207,20 @@ it("undo refuses a moved HEAD, a commit off the line, and a range over a merge",
   git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side");
   assert.equal((await refusal(root)).reason, "across-merge");
   assert.equal(rev(repo, "HEAD~1"), second);
+
+  // The merge on top, undone to its first parent, comes off whole, and
+  // its redo puts it back.
+  const merge = rev(repo, "HEAD");
+  assert.equal(
+    await withGit((g) => g.resetSoft({ worktree: repo, target: second })),
+    merge,
+  );
+  assert.equal(rev(repo, "HEAD"), second);
+  assert.equal(git(repo, "status", "--porcelain").trim(), "");
+  await withGit((g) =>
+    g.resetSoft({ worktree: repo, target: merge, expectHead: second }),
+  );
+  assert.equal(rev(repo, "HEAD"), merge);
 });
 
 it("discard restores tracked files, removes untracked ones, and keeps a snapshot ref", async () => {
@@ -333,4 +357,40 @@ it("only the newest 40 discard snapshots are kept", async () => {
     seeded.slice(2),
   );
   assert.equal(refs.at(-1)?.[1], snapshot);
+});
+
+it("undoing a discard fails when a file it would delete can't go", async () => {
+  const repo = seedRepo();
+  rmSync(join(repo, "b.txt"));
+  const snapshot = await withGit((g) =>
+    g.discard({ worktree: repo, paths: ["b.txt"] }),
+  );
+  // The discard put b.txt back. Where it was is a folder now, which the
+  // undo's deletion can't take.
+  rmSync(join(repo, "b.txt"));
+  mkdirSync(join(repo, "b.txt"));
+  writeFileSync(join(repo, "b.txt", "inside.txt"), "x\n");
+  await failureOf((g) => g.restoreDiscard({ worktree: repo, snapshot }));
+  assert.ok(existsSync(join(repo, "b.txt", "inside.txt")));
+});
+
+it("a squash message that can't be cleared fails the read rather than lingering", async () => {
+  const repo = seedRepo();
+  const message = join(repo, ".git", "SQUASH_MSG");
+  mkdirSync(message);
+  writeFileSync(join(message, "stuck"), "x\n");
+  await failureOf((g) => g.readOperation(repo));
+});
+
+it("a commit's patch keeps the files git printed before a later one failed", async () => {
+  const repo = seedRepo();
+  write(repo, ".gitattributes", "b.txt diff=broken\n");
+  git(repo, "config", "diff.broken.textconv", "false");
+  write(repo, "a.txt", "changed\n");
+  write(repo, "b.txt", "changed too\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "both");
+  const patch = await withGit((g) => g.commitDiff(repo, rev(repo, "HEAD")));
+  assert.match(patch, /^diff --git a\/\.gitattributes/m);
+  assert.match(patch, /^diff --git a\/a\.txt/m);
 });

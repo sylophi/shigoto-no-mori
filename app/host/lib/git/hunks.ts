@@ -24,10 +24,17 @@ import {
   type LineChange,
 } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { onIndex, snapshotPaths } from "./changes";
 import { GitRefusal, run } from "./core";
+
+// The engine's index lock, which every write to a worktree's index
+// takes, until this moves to the engine's Git too.
+const onIndex = <A, E, R>(worktreePath: string, task: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Git.Git, (git) => git.withIndexLock(worktreePath, task));
+const snapshotPaths = (worktreePath: string, paths: readonly string[]) =>
+  Effect.flatMap(Git.Git, (git) => git.snapshotPaths(worktreePath, paths));
 
 // The working tree's file could not be read.
 class FileReadError extends Schema.TaggedError<FileReadError>()(

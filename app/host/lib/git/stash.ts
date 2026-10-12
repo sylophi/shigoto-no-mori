@@ -3,10 +3,16 @@
 // made on its own branch. Each is addressed by its commit hash, since
 // the stash@{n} positions shift whenever any worktree stashes or drops.
 import type { StashEntry } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
-import { onIndex } from "./changes";
 import { GitRefusal, PATCH_MAX_BUFFER, run, splitZ } from "./core";
-import { conflictedPaths } from "./operation";
+
+// The engine's index lock, which every write to a worktree's index
+// takes, until this moves to the engine's Git too.
+const onIndex = <A, E, R>(worktreePath: string, task: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Git.Git, (git) => git.withIndexLock(worktreePath, task));
+const conflictedPaths = (worktreePath: string) =>
+  Effect.flatMap(Git.Git, (git) => git.conflictedPaths(worktreePath));
 
 interface RawStash {
   ref: string;

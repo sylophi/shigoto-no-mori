@@ -49,7 +49,6 @@ import * as Schema from "effect/Schema";
 import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
 import { type GitError, run, runLenient } from "@host/lib/git/core";
-import { gitDirOf, operationInProgress } from "@host/lib/git/operation";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 
 // A state that can't be read or applied, in the words the other device
@@ -154,7 +153,7 @@ const readHeadFacts = Effect.fnUntraced(function* (worktreePath: string) {
     tip,
     headTree,
     gitDir,
-    operation: yield* Effect.promise(() => operationInProgress(gitDir)),
+    operation: yield* (yield* Git.Git).operationInProgress(gitDir),
   } satisfies HeadFacts;
 });
 
@@ -561,25 +560,28 @@ export const watchIndexFile = (
   onChange: () => void,
   debounceMs = 300,
 ) =>
-  Effect.map(gitDirOf(worktreePath), (gitDir) => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let watcher: ReturnType<typeof watch>;
-    try {
-      watcher = watch(gitDir, { persistent: false });
-    } catch {
-      return () => {};
-    }
-    watcher.on("change", (_event, file) => {
-      if (file !== "index") return;
-      if (timer !== null) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        onChange();
-      }, debounceMs);
-    });
-    watcher.on("error", () => {});
-    return () => {
-      if (timer !== null) clearTimeout(timer);
-      watcher.close();
-    };
-  });
+  Effect.map(
+    Effect.flatMap(Git.Git, (git) => git.gitDir(worktreePath)),
+    (gitDir) => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let watcher: ReturnType<typeof watch>;
+      try {
+        watcher = watch(gitDir, { persistent: false });
+      } catch {
+        return () => {};
+      }
+      watcher.on("change", (_event, file) => {
+        if (file !== "index") return;
+        if (timer !== null) clearTimeout(timer);
+        timer = setTimeout(() => {
+          timer = null;
+          onChange();
+        }, debounceMs);
+      });
+      watcher.on("error", () => {});
+      return () => {
+        if (timer !== null) clearTimeout(timer);
+        watcher.close();
+      };
+    },
+  );
