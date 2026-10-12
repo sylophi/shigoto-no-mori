@@ -171,6 +171,7 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
           every: WATCH_EVERY,
           limit: SILENT_LIMIT,
           watching: () => child === watched && !quitting,
+          wakes: () => wakes,
           silent: () => {
             log.warn("[host] silent for 30 s, starting it again");
             watched.kill();
@@ -237,18 +238,35 @@ export function host(): ReturnType<typeof session> {
 
 // What the host is busy with, as a quit or an update asks: idle when
 // it cannot say within a few seconds, since a host that does not
-// answer has nothing to lose to them. One that did not answer is not
-// waited on to close either.
-let unanswered = false;
+// answer has nothing to lose to them.
 export const hostBusy = () =>
   busyWithin(session().busy(), BUSY_DEADLINE).pipe(
-    Effect.tap((busy) =>
-      Effect.sync(() => {
-        unanswered = Option.isNone(busy);
-      }),
-    ),
     Effect.map(Option.getOrElse(() => IDLE)),
   );
+
+// The quit's own ask: a host that did not answer it is killed, not
+// waited on to close.
+let unanswered: UtilityProcess | null = null;
+export const hostBusyForQuit = () =>
+  Effect.suspend(() => {
+    const asked = child;
+    return busyWithin(session().busy(), BUSY_DEADLINE).pipe(
+      Effect.tap((busy) =>
+        Effect.sync(() => {
+          unanswered = Option.isNone(busy) ? asked : null;
+        }),
+      ),
+      Effect.map(Option.getOrElse(() => IDLE)),
+    );
+  });
+
+// The machine is going to sleep, or woke: a watchdog round it slept
+// through proves nothing. Counted at both, since the round's deadline
+// can come due on waking before the resume is heard.
+let wakes = 0;
+export function noteSleep(): void {
+  wakes += 1;
+}
 
 export function hostAddress(): Promise<Address> {
   return address.promise.then(({ port, token, deviceId }) => ({
@@ -297,7 +315,7 @@ const stop = (hurried: boolean) =>
     const exited = new Promise<void>((resolve) =>
       running.once("exit", () => resolve()),
     );
-    if (unanswered) {
+    if (unanswered === running) {
       running.kill();
       return Effect.promise(() => exited);
     }

@@ -20,23 +20,29 @@ export const busyWithin = <A, E>(
 // Asks `probe` every `every` while `watching` holds, and calls `silent`
 // once a probe goes `limit` without an answer. A probe that fails is an
 // answer: the host is there, and its link is what went (a restart the
-// next probe sees).
+// next probe sees). A round the machine slept through (`wakes` counts
+// the wakes) proves nothing, since the clock ran on while the host could
+// not answer, and the next round asks again.
 export const watchHost = (options: {
   readonly probe: Effect.Effect<unknown, unknown>;
   readonly every: Duration.Input;
   readonly limit: Duration.Input;
   readonly watching: () => boolean;
+  readonly wakes: () => number;
   readonly silent: () => void;
 }): Effect.Effect<void> =>
   Effect.gen(function* () {
     while (true) {
       yield* Effect.sleep(options.every);
       if (!options.watching()) return;
+      const woken = options.wakes();
       const answered = yield* options.probe.pipe(
         Effect.ignore,
         Effect.timeoutOption(options.limit),
       );
       if (!options.watching()) return;
-      if (Option.isNone(answered)) return options.silent();
+      if (Option.isNone(answered) && options.wakes() === woken) {
+        return options.silent();
+      }
     }
   });

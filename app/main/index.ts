@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { app, dialog, session } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -21,7 +22,7 @@ import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { type HostFailure, host, hostBusy } from "./hostProcess";
+import { type HostFailure, host, hostBusyForQuit } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import { dataDir, dataDirPointerRead, initDataDir } from "@shared/paths";
 import { applyUserShellEnv } from "@shared/shellEnv";
@@ -371,7 +372,7 @@ app.on("before-quit", (event) => {
     return;
   }
   askingToQuit = true;
-  void Effect.runPromise(hostBusy())
+  void Effect.runPromise(hostBusyForQuit())
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
       // A host that cannot answer has nothing to lose to the quit.
@@ -409,15 +410,21 @@ function quit(): void {
   // The host is given its own deadline to close (hostProcess.ts); the
   // rest of the graph closes beside it, and a finalizer that hangs past
   // both does not keep the app, or a logout, waiting.
+  // The close runs on a fiber of its own, since a scope closes
+  // uninterruptibly: only the wait for it is bounded.
   void Effect.runPromise(
-    runtime.disposeEffect.pipe(
-      Effect.timeoutOrElse({
-        duration: QUIT_CLOSE_DEADLINE,
-        orElse: () =>
-          Effect.sync(() =>
-            log.error("[quit] the graph did not close in time, exiting"),
-          ),
-      }),
+    Effect.forkDetach(runtime.disposeEffect).pipe(
+      Effect.flatMap((closing) =>
+        Fiber.join(closing).pipe(
+          Effect.timeoutOrElse({
+            duration: QUIT_CLOSE_DEADLINE,
+            orElse: () =>
+              Effect.sync(() =>
+                log.error("[quit] the graph did not close in time, exiting"),
+              ),
+          }),
+        ),
+      ),
     ),
   )
     .catch((error: unknown) => {

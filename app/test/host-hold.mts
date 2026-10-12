@@ -2,8 +2,9 @@
 // where it does not need Electron. Asserts:
 //   - the watchdog (main/core/host/watchdog.ts) leaves a host that
 //     answers, or whose link failed, alone, and calls a host silent
-//     past its limit silent once, then stops; it stops with the host
-//     it watched.
+//     past its limit silent once, then stops; a round the machine
+//     slept through is asked again rather than read as silence; it
+//     stops with the host it watched.
 //   - a quit's busy check takes the host's answer, or none once the
 //     deadline passes or the call fails, so a quit never waits on a
 //     host that does not answer.
@@ -48,6 +49,7 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
     Effect.runPromiseWith(clock.context)(effect);
   let answers: "yes" | "fails" | "never" = "yes";
   let watching = true;
+  let wakes = 0;
   let silent = 0;
   const probe = Effect.suspend(() =>
     answers === "yes"
@@ -62,6 +64,7 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
       every: "10 seconds",
       limit: "30 seconds",
       watching: () => watching,
+      wakes: () => wakes,
       silent: () => {
         silent += 1;
       },
@@ -71,6 +74,15 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
   answers = "fails";
   await clock.advance(60_000);
   assert.equal(silent, 0, "an answer, or a failed link, is not silence");
+  // The machine sleeps through a round with its probe out: the clock
+  // runs on, and on waking the round is asked again.
+  answers = "never";
+  await clock.advance(10_000 + 5_000);
+  wakes += 1;
+  await clock.advance(25_000);
+  assert.equal(silent, 0, "a round the machine slept through");
+  answers = "yes";
+  await clock.advance(20_000);
   answers = "never";
   await clock.advance(10_000 + 29_000);
   assert.equal(silent, 0, "not before the limit");
@@ -89,6 +101,7 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
       every: "10 seconds",
       limit: "30 seconds",
       watching: () => watching,
+      wakes: () => wakes,
       silent: () => {
         silent += 1;
       },
