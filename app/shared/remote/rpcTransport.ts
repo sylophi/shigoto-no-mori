@@ -277,19 +277,21 @@ export function linkTransport(
     watch(channel, input, observer) {
       let stopped = false;
       const fiber = runFork(
-        link.view(channel, input).pipe(
-          Stream.runForEach((value) =>
-            Effect.sync(() => observer.value(value)),
-          ),
-          Effect.exit,
-          Effect.map((exit) => {
-            if (stopped) return;
-            observer.end(
-              Exit.isSuccess(exit) ? undefined : rejectionOf(exit.cause),
-            );
-          }),
+        Stream.runForEach(link.view(channel, input), (value) =>
+          Effect.sync(() => observer.value(value)),
         ),
       );
+      // Interrupted with no stop, the view went with its link's scope.
+      fiber.addObserver((exit) => {
+        if (stopped) return;
+        observer.end(
+          Exit.isSuccess(exit)
+            ? undefined
+            : Cause.hasInterruptsOnly(exit.cause)
+              ? new RemoteDisconnectedError()
+              : Cause.squash(exit.cause),
+        );
+      });
       return () => {
         stopped = true;
         runFork(Fiber.interrupt(fiber));
