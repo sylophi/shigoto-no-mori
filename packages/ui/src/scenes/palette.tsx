@@ -1,7 +1,7 @@
 // The ⌘K palette over the fixtures: shigoto-no-mori's worktrees found by
 // "port", a project and a page it names and the worktree it could make,
-// with the highlighted row's verbs beside them, and the verbs holding
-// the keys once ⇥ picks the row.
+// with the highlighted row's verbs beside them, the verbs holding the
+// keys once ⇥ picks the row, and a pasted URL nothing matches.
 import type { ReactNode } from "react";
 import { Copy, FileDiff, Folder, GitPullRequest, Settings } from "lucide-react";
 import type { PaletteProject } from "../views/palette/paletteEntries.ts";
@@ -39,6 +39,8 @@ import { projectNamed } from "./world.ts";
 
 const noop = () => {};
 const QUERY = "port";
+// A repo's URL, which is no branch to offer and names nothing here.
+const UNMATCHED = "https://github.com/acme/rocket.git";
 const NOW = Date.now();
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const POOL = projectNamed(LOCAL_DEVICE_ID, "port-pool");
@@ -229,7 +231,11 @@ function verbs() {
   );
 }
 
-function palette(picked: boolean) {
+// What the palette shows: "port" found, its first row picked, or
+// nothing matched.
+function palette(shown: "found" | "picked" | "none") {
+  const picked = shown === "picked";
+  const none = shown === "none";
   return (
     <SceneWindowFrame
       sidebar={<SceneSidebar view="projects" open />}
@@ -238,7 +244,9 @@ function palette(picked: boolean) {
         <SceneDialog className="h-full max-w-3xl">
           <PaletteDialogView
             picked={picked}
-            highlighted={picked ? "detail" : (FIRST?.key ?? "")}
+            highlighted={
+              picked ? "detail" : none ? "" : (FIRST?.key ?? "")
+            }
             onHighlight={noop}
             chip={
               picked &&
@@ -253,13 +261,13 @@ function palette(picked: boolean) {
                 />
               )
             }
-            query={picked ? "" : QUERY}
+            query={picked ? "" : none ? UNMATCHED : QUERY}
             onQueryChange={noop}
             onInputKeyDown={noop}
-            list={list(picked ? (FIRST?.key ?? null) : null)}
+            list={!none && list(picked ? (FIRST?.key ?? null) : null)}
             emptyList="No worktrees match."
-            verbs={verbs()}
-            current={FIRST?.kind}
+            verbs={!none && verbs()}
+            current={none ? undefined : FIRST?.kind}
             changesKeys={defaultBinding("paletteChanges").label}
           />
         </SceneDialog>
@@ -270,10 +278,15 @@ function palette(picked: boolean) {
 
 // The palette finding "port".
 export function PaletteScene() {
-  return palette(false);
+  return palette("found");
 }
 
 // The first row picked, its verbs holding the keys.
 export function PalettePickedScene() {
-  return palette(true);
+  return palette("picked");
+}
+
+// A query nothing matches.
+export function PaletteEmptyScene() {
+  return palette("none");
 }

@@ -25,7 +25,6 @@ const ENTER_LABELS: Record<PaletteRow["kind"], string> = {
   project: "Open",
   page: "Open",
   create: "Create",
-  ask: "Ask",
 };
 
 export function PaletteDialogView({
@@ -237,7 +236,5 @@ function PickedLabel({ row, icon }: { row: PaletteRow; icon: ReactNode }) {
       return <span className="truncate">{row.page.label}</span>;
     case "create":
       return <span className="truncate font-mono">{row.branch}</span>;
-    case "ask":
-      return <span className="truncate">{row.question}</span>;
   }
 }
