@@ -15,6 +15,7 @@ import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
+import { unmountedVolume } from "./core/files/unmountedVolume";
 import { finishPendingNuke } from "./core/nuke/finish";
 import { asksForRemoteDebugging } from "./electron/debugSwitches";
 import { enableDevCdpPort } from "./electron/devCdp";
@@ -24,7 +25,12 @@ import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import { type HostFailure, host, hostBusyForQuit } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
-import { dataDir, dataDirPointerRead, initDataDir } from "@shared/paths";
+import {
+  dataDir,
+  dataDirPointerRead,
+  dataDirSource,
+  initDataDir,
+} from "@shared/paths";
 import { applyUserShellEnv } from "@shared/shellEnv";
 import { cliBinaryName } from "@shared/packaging/cliDist.mts";
 import * as Observability from "@shared/observability";
@@ -54,6 +60,7 @@ import {
   installChildProcessLogging,
   installFatalRecovery,
   reconcileLaunchAtLogin,
+  tryFatalRelaunch,
 } from "./electron/liveness";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
@@ -283,12 +290,26 @@ app.on("ready", async () => {
   // onto. The host comes up while the window loads.
   try {
     await initDataDir(flavor);
+    // A pointer to a folder on a volume that isn't there (an external
+    // drive unplugged) finds nothing to stand on: said here, rather than
+    // as a host that couldn't start.
+    const volume =
+      dataDirSource() === "pointer" ? unmountedVolume(dataDir()) : null;
+    if (volume !== null) {
+      throw new Error(`${volume} isn't connected.`);
+    }
   } catch (err) {
     // A pointer file can aim the data dir somewhere that isn't reachable
     // right now (external drive unplugged, permissions changed). A
     // silent unhandled rejection here would leave the app running with
-    // no window. Say what's wrong and how to recover instead.
-    const pointer = dataDirPointerRead();
+    // no window. Say what's wrong and how to recover instead. The data
+    // dir itself may be what failed to resolve, the pointer with it.
+    let pointer: string | null = null;
+    try {
+      pointer = dataDirPointerRead();
+    } catch {
+      pointer = null;
+    }
     const recovery =
       pointer !== null
         ? "If you moved the data folder to an external drive, reconnect " +
@@ -340,6 +361,18 @@ app.on("window-all-closed", () => {
 // A host that could not start: the store it could not open, with what
 // the engine's doctor found, or why it kept stopping.
 function showHostFailure(failure: HostFailure): void {
+  // A host that kept stopping, on a machine kept reachable for other
+  // devices: relaunched within the fatal-relaunch budget rather than
+  // left on a dialog nobody may be there to dismiss. A store that won't
+  // open is no better for a relaunch, and says so.
+  if (
+    failure.storeReport === null &&
+    !isShuttingDown() &&
+    tryFatalRelaunch(rememberWindows)
+  ) {
+    app.exit(1);
+    return;
+  }
   if (failure.storeReport !== null) {
     dialog.showErrorBox(
       "Shigoto no Mori can't open its data",
