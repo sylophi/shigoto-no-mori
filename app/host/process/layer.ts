@@ -5,6 +5,7 @@
 // subsystem, and the scope closing stops it.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { log } from "@shared/log";
 import * as Cause from "effect/Cause";
@@ -183,6 +184,8 @@ const gitWatcher = logged(
   "the git watcher",
   GitWatcher.layer({
     onChange: announceProjectChanged,
+    onFilesChanged: (projectId) =>
+      broadcastAll(worktreesContract, "filesChanged", { projectId }),
   }),
 );
 

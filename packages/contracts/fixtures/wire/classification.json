@@ -1551,6 +1551,11 @@
     "remote": true,
     "gated": false
   },
+  "worktrees:filesChanged": {
+    "kind": "push",
+    "scope": "host",
+    "gated": false
+  },
   "worktrees:idleAgents": {
     "kind": "invoke",
     "scope": "host",
@@ -1698,6 +1703,12 @@
     "gated": true,
     "grant": "changeCode",
     "tracksProjectUsage": true
+  },
+  "worktrees:reread": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
   },
   "worktrees:resetHard": {
     "kind": "invoke",

@@ -3174,6 +3174,11 @@
       ]
     }
   },
+  "worktrees:filesChanged": {
+    "payload": {
+      "projectId": "\udc00"
+    }
+  },
   "worktrees:idleAgents": {
     "payload": {
       "projectId": "1",
@@ -3828,6 +3833,7 @@
       "autoPull": true
     }
   },
+  "worktrees:reread": {},
   "worktrees:resetHard": {
     "payload": {
       "projectId": "0Z",
