@@ -25,7 +25,12 @@ import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import { type HostFailure, host, hostBusyForQuit } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
-import { dataDir, dataDirPointerRead, initDataDir } from "@shared/paths";
+import {
+  dataDir,
+  dataDirPointerRead,
+  dataDirSource,
+  initDataDir,
+} from "@shared/paths";
 import { applyUserShellEnv } from "@shared/shellEnv";
 import { cliBinaryName } from "@shared/packaging/cliDist.mts";
 import * as Observability from "@shared/observability";
@@ -289,7 +294,7 @@ app.on("ready", async () => {
     // drive unplugged) finds nothing to stand on: said here, rather than
     // as a host that couldn't start.
     const holder = path.dirname(dataDir());
-    if (dataDirPointerRead() !== null && !existsSync(holder)) {
+    if (dataDirSource() === "pointer" && !existsSync(holder)) {
       throw new Error(`${holder} isn't there.`);
     }
   } catch (err) {
