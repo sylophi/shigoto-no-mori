@@ -1,6 +1,7 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import {
+  DropdownMenuArmedLabel,
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
@@ -138,7 +139,11 @@ export function ProjectRemoveMenuItem({
         removeArm.trigger(armKey, () => removeProject.mutate(project.id));
       }}
     >
-      {armed ? "Click again to confirm" : (deviceRow ?? "Remove")}
+      <DropdownMenuArmedLabel
+        armed={armed}
+        label={deviceRow ?? "Remove"}
+        armedLabel="Click again to confirm"
+      />
     </DropdownMenuItem>
   );
 }

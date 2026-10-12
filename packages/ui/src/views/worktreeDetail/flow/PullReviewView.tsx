@@ -535,7 +535,7 @@ function DevicePickView({
         {picked ? name : "Pick a device"}
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-56">
+      <DropdownMenuContent align="start">
         <DropdownMenuRadioGroup
           value={toPeer.pickedId ?? ""}
           onValueChange={(deviceId) => toPeer.onPick(String(deviceId))}

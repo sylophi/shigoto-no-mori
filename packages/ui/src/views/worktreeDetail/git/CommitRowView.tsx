@@ -158,12 +158,12 @@ export function CommitRowView({
           >
             <Ellipsis aria-hidden className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4} className="min-w-52">
+          <DropdownMenuContent align="end" sideOffset={4}>
             {items}
           </DropdownMenuContent>
         </DropdownMenu>
       </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-52">{items}</ContextMenuContent>
+      <ContextMenuContent>{items}</ContextMenuContent>
     </ContextMenu>
   );
 }
