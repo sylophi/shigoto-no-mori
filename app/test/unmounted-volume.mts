@@ -29,6 +29,18 @@ it("a path on a volume not mounted names it, through links too; one on a mounted
   symlinkSync(GONE, linkedParent);
   assert.equal(unmountedVolume(join(linkedParent, "nested", ".sm")), GONE);
 
+  // A relative link whose `..` is read from the link's target, not
+  // folded away before it: drive/../.sm is the drive's .sm.
+  const nested = join(home, "nested-drive");
+  symlinkSync(join(GONE, "nested"), nested);
+  const relative = join(home, "relative-link");
+  symlinkSync("nested-drive/../.sm", relative);
+  assert.equal(unmountedVolume(relative), GONE);
+  // Links that go round end without an answer rather than for good.
+  symlinkSync("loop-b", join(home, "loop-a"));
+  symlinkSync("loop-a", join(home, "loop-b"));
+  assert.equal(unmountedVolume(join(home, "loop-a", ".sm")), null);
+
   assert.equal(unmountedVolume(join(home, "new", "nested", ".sm")), null);
   mkdirSync(join(home, "here"));
   assert.equal(unmountedVolume(join(home, "here")), null);
