@@ -964,6 +964,34 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
   );
 });
 
+it("a pull whose source can't make its temporary files is answered with why, not left waiting", async () => {
+  // A commit the target lacks, so the source has a capture and a
+  // bundle to make, each in a temporary folder.
+  const wtPath = await addWorktree(sourceRepo, "wt-no-tmp", "no-tmp", "n.txt");
+  // Nowhere to make a temporary folder: a disk that's full, or one the
+  // app may not write.
+  const tmp = process.env["TMPDIR"];
+  process.env["TMPDIR"] = join(sandbox, "no-such-tmp");
+  try {
+    await assert.rejects(
+      pullWorktree(
+        {
+          sourceDeviceId: LISTENER,
+          sourceProjectId,
+          sourceWorktreeId: worktreeIdFromPath(wtPath),
+          sourceIdentity: identity,
+          branch: "no-tmp",
+        },
+        pullCtx,
+      ),
+      /Couldn't capture the worktree's uncommitted changes: no such file or directory\./,
+    );
+  } finally {
+    if (tmp === undefined) delete process.env["TMPDIR"];
+    else process.env["TMPDIR"] = tmp;
+  }
+}, 60_000);
+
 it("transplant (clean): the worktree lands here and the source worktree, its sm data, and its branch are torn down", async () => {
   // ---- The transplant: the pull above plus tearing the
   // source worktree down on the listener through its wire-served

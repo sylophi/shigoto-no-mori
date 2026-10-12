@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import { errnoText } from "./platformErrors.ts";
 import { messageOf } from "./errorDocument.ts";
 import { entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
@@ -44,6 +45,17 @@ export class NoHead extends Schema.TaggedError<NoHead>()("NoHead", {
 }) {
   override get message(): string {
     return `Couldn't resolve the worktree's HEAD (${messageOf(this.cause)}).`;
+  }
+}
+
+// The capture's scratch space couldn't be made: a full disk, or a
+// temporary folder the process may not write.
+export class CaptureFailed extends Schema.TaggedError<CaptureFailed>()(
+  "CaptureFailed",
+  { reason: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Couldn't capture the worktree's uncommitted changes: ${this.reason}.`;
   }
 }
 
@@ -110,7 +122,7 @@ export class Dirty extends Context.Service<
     // worktree's ref. A clean worktree drops any capture it had.
     readonly capture: (
       target: DirtyTarget,
-    ) => Effect.Effect<Captured, NoHead | Git.GitError>;
+    ) => Effect.Effect<Captured, NoHead | CaptureFailed | Git.GitError>;
     // The capture's changes back onto the worktree, which must be on
     // the commit it was taken on. Untracked files come back untracked.
     readonly apply: (
@@ -173,7 +185,11 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const dir = yield* fs
           .makeTempDirectoryScoped({ prefix: "sm-dirty-" })
-          .pipe(Effect.orDie);
+          .pipe(
+            Effect.mapError(
+              (cause) => new CaptureFailed({ reason: errnoText(cause), cause }),
+            ),
+          );
         const options = {
           env: { GIT_INDEX_FILE: path.join(dir, "index") },
         };

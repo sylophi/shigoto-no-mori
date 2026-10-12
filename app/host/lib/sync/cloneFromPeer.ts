@@ -20,6 +20,7 @@ import {
   type SyncCloneInto,
 } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
+import { errnoWords } from "@shigomori/engine/platformErrors";
 import { expandHome } from "@shared/paths";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 
@@ -70,7 +71,13 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   const branchRef = decodeBundleRef(`refs/heads/${branch}`);
   const incomingRef = incomingRefFor(branch);
 
-  yield* Effect.promise(() => mkdir(dest));
+  yield* Effect.tryPromise({
+    try: () => mkdir(dest),
+    catch: (error) =>
+      new Git.GitRefusedError({
+        reason: `Couldn't make ${dest}: ${errnoWords(error, error instanceof Error ? error.message : String(error))}.`,
+      }),
+  });
   yield* Effect.gen(function* () {
     const git = yield* Git.Git;
     yield* git.run(dest, ["init", "--quiet"]);
