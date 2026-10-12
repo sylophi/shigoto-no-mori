@@ -46,7 +46,7 @@ const catalog = (names: Names) => {
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        "A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook), the data dir (the pointer file, config, registry and state parse, stale locks, leftover update downloads and worktree marks, port-pool leases, global launchers, the terrier registry), processes a crashed app left running, then each project, terrier's included (its repo, git's worktree metadata vs the disk, moved worktrees, scripts, carry-over, launchers, leftover transfer refs). Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched.",
+        "A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook), the data dir (the pointer file, config, registry and state parse, stale locks, leftover update downloads and worktree marks, port-pool leases, global launchers, the terrier registry), processes a crashed app left running, then each project, terrier's included (its repo, git's worktree metadata vs the disk, moved worktrees, scripts, carry-over, launchers, leftover transfer refs). Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
       ],
       [
         "help [<command>] [--all]",

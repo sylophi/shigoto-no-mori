@@ -41,7 +41,7 @@ import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
 import * as Transfer from "../../src/Transfer.ts";
 import * as Usage from "../../src/Usage.ts";
-import { doctorLayer, engineLayer } from "../../src/layer.ts";
+import { doctorLayer, migratingEngineLayer } from "../../src/layer.ts";
 import * as Migration from "../../src/Migration.ts";
 import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
@@ -190,6 +190,9 @@ export type Sandbox = {
   // own, which closes once it is up: each value its migration takes,
   // from before the store opens.
   readonly start: () => Promise<ReadonlyArray<MigrationProgress>>;
+  // The app's start on side `name`, which migrates a 2.x data dir there,
+  // as no terminal command but `doctor --fix` does.
+  readonly migrate: (name: string) => Promise<void>;
   // A run of the doctor as the terminal builds it, which opens the
   // store inside the run.
   readonly doctor: (input: Doctor.RunInput) => Promise<Doctor.DoctorDocument>;
@@ -218,8 +221,9 @@ export function sandbox(
     return dir;
   };
 
-  // The platform under the engine's side, its data dir seeded first.
-  const platform = () =>
+  // The platform under a side, the engine's by default, its data dir
+  // seeded first.
+  const platform = (side = "engine") =>
     Layer.merge(
       NodeServices.layer,
       ConfigProvider.layer(
@@ -227,14 +231,14 @@ export function sandbox(
           env: {
             HOME: root,
             PATH: process.env.PATH ?? "",
-            SHIGOMORI_DATA_DIR: sideDir("engine"),
+            SHIGOMORI_DATA_DIR: sideDir(side),
             ...options.env,
           },
         }),
       ),
     );
   const graph = () =>
-    engineLayer({
+    migratingEngineLayer({
       flavor: "dev",
       store: Store.layer(openNode),
       macfs: macfs(),
@@ -273,6 +277,16 @@ export function sandbox(
       Effect.scoped,
       Effect.provide(Layer.merge(Migration.layer, platform())),
       Effect.runPromise,
+    );
+
+  // What the app's start makes of side `name`'s data dir: a 2.x one
+  // imported into the store and its worktrees moved into `wt/`.
+  const migrate = (name: string) =>
+    Effect.runPromise(
+      Effect.scoped(Layer.build(graph())).pipe(
+        Effect.provide(Layer.merge(Migration.layer, platform(name))),
+        Effect.asVoid,
+      ),
     );
 
   // Read when a command runs, so a test's PATH change reaches it.
@@ -340,6 +354,7 @@ export function sandbox(
     home: root,
     side: sideDir,
     start,
+    migrate,
     write: (file, value) => {
       mkdirSync(dirname(join(seed, file)), { recursive: true });
       writeFileSync(join(seed, file), JSON.stringify(value));

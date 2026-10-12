@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { refuseUnmigrated } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
 import { resolveWorktree, worktreeFlags } from "../here.ts";
@@ -63,4 +64,5 @@ export const dirty = Command.make(
     }),
 ).pipe(
   Command.withDescription("Capture or apply a worktree's uncommitted state"),
+  Command.provideEffectDiscard(refuseUnmigrated),
 );

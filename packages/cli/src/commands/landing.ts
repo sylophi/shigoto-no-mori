@@ -11,6 +11,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { refuseUnmigrated } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
@@ -256,7 +257,10 @@ export const pr = Command.make("pr", target, (input) =>
     );
     yield* note(styles(stderrColor).dim(url));
   }),
-).pipe(Command.withDescription("Open a worktree's pull request"));
+).pipe(
+  Command.withDescription("Open a worktree's pull request"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const merge = Command.make(
   "merge",
@@ -299,7 +303,10 @@ export const merge = Command.make(
         ),
       );
     }),
-).pipe(Command.withDescription("Merge a worktree's pull request"));
+).pipe(
+  Command.withDescription("Merge a worktree's pull request"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const land = Command.make(
   "land",
@@ -332,7 +339,10 @@ export const land = Command.make(
       }
       yield* reportCleanup(doc, located);
     }),
-).pipe(Command.withDescription("Merge a worktree's pull request and clean up"));
+).pipe(
+  Command.withDescription("Merge a worktree's pull request and clean up"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const done = Command.make(
   "done",
@@ -357,7 +367,10 @@ export const done = Command.make(
         yield* note(styles(stderrColor).dim(`skipped catch-up: ${skipped}`));
       }
     }),
-).pipe(Command.withDescription("Put a checkout back on the primary branch"));
+).pipe(
+  Command.withDescription("Put a checkout back on the primary branch"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 // rm --stack: the cleanup half of a stack land.
 export const removeStack = (
