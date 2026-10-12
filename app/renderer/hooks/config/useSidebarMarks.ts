@@ -1,9 +1,7 @@
 import type { SidebarMarks } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
-import { useQuery } from "@tanstack/react-query";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { useHasLocalHost } from "@/lib/localHost";
-import { useApi } from "@/lib/runtime/pageApi";
-import { clientConfigQueryOptions } from "./useClientConfig";
+import { useClientConfig } from "./useClientConfig";
 import { useLocalGlobalConfig } from "./useGlobalConfig";
 
 // The sidebar's optional marks, read off this window's client config
@@ -12,12 +10,8 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 // them, and folding a project writes the same doc. False until the
 // config has loaded, so a mark switched off never flashes in.
 function useClientFlag(select: (config: ClientConfig) => boolean): boolean {
-  const { data } = useQuery({
-    ...clientConfigQueryOptions(useApi()),
-    select,
-    meta: { errorTitle: "Couldn't load appearance settings" },
-  });
-  return data === true;
+  const { data } = useClientConfig();
+  return data !== undefined && select(data);
 }
 
 const markTerrierProjects = (config: ClientConfig) =>

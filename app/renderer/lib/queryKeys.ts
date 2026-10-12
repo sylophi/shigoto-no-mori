@@ -51,10 +51,6 @@ export function hostKeyDeviceId(queryKey: readonly unknown[]): unknown {
 // The client-scoped builders: they carry no device id and build the
 // same tuple whichever device a caller is looking at.
 export const queryKeys = {
-  // Client-scoped: the store lives in this app instance's userData, so
-  // no host sentinel and no device id.
-  clientConfig: () => ["clientConfig"] as const,
-
   // Client-scoped: the v3 migration as the shell serves it.
   migration: () => ["migration"] as const,
 

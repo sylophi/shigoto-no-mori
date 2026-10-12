@@ -4,7 +4,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
-import { useView } from "@/lib/runtime/viewHooks";
+import { useView, useViewErrorToast } from "@/lib/runtime/viewHooks";
 
 // A device's config, as its host streams it (globalConfig:watch). Writes
 // go through useSettingsSave (this machine) and useDeviceSettingsSave (a
@@ -19,11 +19,16 @@ const globalConfigAtom = Atom.family((deviceId: string) =>
 
 // The scoped device's config. A hostless client has no local device
 // config at all, so the local scope reads none there (a peer's does).
-// A failure is the caller's to show (the remote settings pane says it
-// inline).
+// This machine's failure is a toast; a peer's the remote settings pane
+// says inline.
 export function useGlobalConfig() {
   const { deviceId, hasHost } = useHostScope();
-  return useView(hasHost ? globalConfigAtom(deviceId) : null);
+  const state = useView(hasHost ? globalConfigAtom(deviceId) : null);
+  useViewErrorToast(
+    deviceId === useApi().deviceId ? state : { error: null },
+    "Couldn't load settings",
+  );
+  return state;
 }
 
 // The same pinned to THIS machine whatever scope the caller sits under,

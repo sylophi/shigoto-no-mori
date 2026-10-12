@@ -8,7 +8,11 @@ import { viteEnv } from "./account/config";
 import { browserHintsOf } from "./account/deviceName";
 import { ACCOUNT_KEY } from "./account/store";
 import { disposeWithPage } from "@/lib/runtime/client";
-import { createWebBridge, type WebBridge } from "./ipc/register";
+import {
+  CLIENT_CONFIG_KEY,
+  createWebBridge,
+  type WebBridge,
+} from "./ipc/register";
 
 let installed: WebBridge | null = null;
 
@@ -43,6 +47,9 @@ export function installWebBridge(): WebBridge {
   window.addEventListener("storage", (event) => {
     if (event.key === ACCOUNT_KEY || event.key === null) {
       bridge.notifyAccountChanged();
+    }
+    if (event.key === CLIENT_CONFIG_KEY || event.key === null) {
+      bridge.notifyClientConfigChanged();
     }
   });
   // A tab coming back to the foreground, or the browser reporting the

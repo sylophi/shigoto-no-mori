@@ -5,9 +5,6 @@
 // and shows its keys with useBinding. The menu's actions are the
 // shell's: their keys go to its menu (useMenuChords), which runs them.
 import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { windowContract } from "@shigomori/contracts/modules/window";
-import type { ClientConfig } from "@shigomori/contracts/schemas";
 import {
   createExternalStore,
   useExternalStore,
@@ -21,7 +18,6 @@ import {
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
-import { queryKeys } from "@/lib/queryKeys";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // ⌘ or Ctrl: which key `Mod` is here. A phone or tablet browser counts
@@ -122,7 +118,6 @@ const TERMINAL_ACTIONS = new Set(
 export function useKeymapListener(): void {
   const keymap = useKeymap();
   const paused = useExternalStore(recording);
-  useKeymapFollowsOtherWindows();
   useEffect(() => {
     if (paused) return;
     const run = (
@@ -163,30 +158,6 @@ export function useKeymapListener(): void {
     };
   }, [keymap, paused]);
   useMenuChords(keymap, paused);
-}
-
-// Another window's Settings may have saved new keys: a window takes the
-// stored ones as it gains focus, the keys of the menu with them.
-function useKeymapFollowsOtherWindows(): void {
-  const api = useApi();
-  const hasLocalHost = useHasLocalHost();
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!hasLocalHost) return;
-    return api.listen(api.pushes(windowContract, "focused"), () => {
-      void api.run(api.clientConfig.read()).then(({ keybindings }) => {
-        const key = queryKeys.clientConfig();
-        const cached = queryClient.getQueryData<ClientConfig>(key);
-        if (!cached) return;
-        if (
-          JSON.stringify(cached.keybindings) === JSON.stringify(keybindings)
-        ) {
-          return;
-        }
-        queryClient.setQueryData<ClientConfig>(key, { ...cached, keybindings });
-      });
-    });
-  }, [queryClient, api, hasLocalHost]);
 }
 
 // The menu's actions' keys, handed to the shell's menu, which shows the

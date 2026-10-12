@@ -131,7 +131,24 @@ export function useFinishRedirectSignIn(): void {
   }, [clerk, isLoaded, hasLocalHost]);
 }
 
-export function useEnrollment(): {
+// Where this device's enrollment stands. `again` decides on the Clerk
+// session alone, for a device that reads enrolled and still needs one
+// of the two (useEnrollment).
+export function enrollmentStep(facts: {
+  readonly enrolled: boolean;
+  readonly enrolling: boolean;
+  readonly sessionLives: boolean;
+  readonly again: boolean;
+}): EnrollmentStep {
+  if (facts.enrolled && !facts.again) return "done";
+  if (facts.enrolling) return "enrolling";
+  return facts.sessionLives ? "enroll" : "sign-in";
+}
+
+// `again`: decided on the Clerk session alone, for a device that reads
+// enrolled and still needs one of the two (the account page's banners:
+// its session lapsed, or the hub refused its credential).
+export function useEnrollment({ again = false } = {}): {
   step: EnrollmentStep;
   needsDeviceKey: boolean;
   // The last enrollment's failure here, cleared by the next run.
@@ -144,14 +161,12 @@ export function useEnrollment(): {
   const hasLocalHost = useHasLocalHost();
   const enroll = useEnroll();
   const enrolling = useIsMutating({ mutationKey: ENROLL_MUTATION_KEY }) > 0;
-  const step: EnrollmentStep =
-    status?.signedIn === true
-      ? "done"
-      : enrolling
-        ? "enrolling"
-        : isSignedIn
-          ? "enroll"
-          : "sign-in";
+  const step = enrollmentStep({
+    enrolled: status?.signedIn === true,
+    enrolling,
+    sessionLives: isSignedIn === true,
+    again,
+  });
   return {
     step,
     needsDeviceKey: status?.needsDeviceKey === true,
