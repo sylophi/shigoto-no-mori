@@ -192,6 +192,23 @@ export const makeStacks = ({
               ],
             );
           }
+          // gh exits 0 on a PR a merge queue only queued, and the next
+          // layer retargeted onto the trunk before this one lands would
+          // carry its commits in: read back, and stop at one that isn't
+          // merged (or can't be read), as a queued stack stops.
+          const after = yield* github
+            .mergeProgress(project.path, pr.number)
+            .pipe(Effect.option);
+          if (Option.isNone(after) || after.value.state !== "MERGED") {
+            if (reporter.waiting !== undefined) {
+              yield* reporter.waiting(
+                Option.isSome(after) && after.value.isInMergeQueue
+                  ? `PR #${pr.number} is in the merge queue; land again once it merges, for the rest of the stack`
+                  : `PR #${pr.number} hasn't merged yet; land again once it has, for the rest of the stack`,
+              );
+            }
+            return true;
+          }
           landed.push(pr);
           yield* report(pr);
         }

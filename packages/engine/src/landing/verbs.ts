@@ -523,13 +523,23 @@ export const makeVerbs = ({
           }
         }
       }
-      const deleted = yield* execDone(project, target, worktree, true);
+      const { deleted, catchUpSkipped } = yield* execDone(
+        project,
+        target,
+        worktree,
+        true,
+      );
       const row = yield* describeAfterDone(
         project,
         worktree,
         yield* worktrees.identities(project),
       );
-      return doneDocument(row, branch, deleted, {});
+      return doneDocument(
+        row,
+        branch,
+        deleted,
+        catchUpSkipped === undefined ? {} : { catchUpSkipped },
+      );
     });
 
     return { pullRequest, merge, land, removeStack, done };

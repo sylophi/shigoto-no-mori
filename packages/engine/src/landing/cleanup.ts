@@ -185,9 +185,14 @@ export const makeCleanup = ({
       });
 
     // The checkout back on the primary branch (a tracking branch made from
-    // the remote ref when needed, then pulled current), and the branch it
-    // sat on deleted. The checkout frees the branch first: git refuses to
-    // delete one that is out. The branch landed on is never deleted.
+    // the remote ref when needed), the branch it sat on deleted, then the
+    // primary pulled current. The checkout frees the branch first: git
+    // refuses to delete one that is out. The branch landed on is never
+    // deleted. The pull comes last and doesn't fail it: by then the merge
+    // is in and the branch gone, and a pull that failed (offline, a
+    // primary that went its own way) is said beside them, where a
+    // failure here once left the branch for good, since a land again
+    // looks up the primary's PR and a done finds nothing to delete.
     const execDone = (
       project: RegisteredProject,
       target: Worktrees.PrimaryTarget,
@@ -200,18 +205,24 @@ export const makeCleanup = ({
           target.primaryRef,
           target.remotes,
         );
-        if (target.remote !== "") {
-          yield* ffPull(worktree.path, target.remote, target.primaryBranch);
-        }
+        let deleted = false;
         if (deleteBranch && worktree.branch !== target.primaryBranch) {
           yield* git.deleteBranch({
             repo: project.path,
             name: worktree.branch,
             force: true,
           });
-          return true;
+          deleted = true;
         }
-        return false;
+        if (target.remote === "") return { deleted };
+        const pulled = yield* ffPull(
+          worktree.path,
+          target.remote,
+          target.primaryBranch,
+        ).pipe(Effect.result);
+        return Result.isFailure(pulled)
+          ? { deleted, catchUpSkipped: errorDocument(pulled.failure).error }
+          : { deleted };
       });
 
     // The worktree's fresh row, as the app's describe after a mutation,
@@ -242,7 +253,7 @@ export const makeCleanup = ({
         const { project, worktree } = located;
         if (worktree.isPrimary) {
           if (Result.isFailure(target)) return yield* target.failure;
-          const deleted = yield* execDone(
+          const { deleted, catchUpSkipped } = yield* execDone(
             project,
             target.success,
             worktree,
@@ -250,12 +261,15 @@ export const makeCleanup = ({
           );
           const listed = yield* worktrees.identities(project);
           const row = yield* describeAfterDone(project, worktree, listed);
-          // execDone pulled the primary branch. A PR into another line
-          // still leaves that line's checkout behind.
+          // execDone pulled the primary branch, or says why it couldn't.
+          // A PR into another line still leaves that line's checkout
+          // behind.
           const caught =
             base !== "" && base !== target.success.primaryBranch
               ? yield* catchUpBase(target.success, base, Effect.succeed(listed))
-              : undefined;
+              : catchUpSkipped === undefined
+                ? undefined
+                : { catchUpSkipped };
           if (caught !== undefined && reporter.caughtUp !== undefined) {
             yield* reporter.caughtUp(caught);
           }
