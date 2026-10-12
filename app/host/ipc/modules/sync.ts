@@ -9,9 +9,8 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import { listIgnoreRules } from "@host/lib/git/ignoreRules";
+import * as Git from "@shigomori/engine/Git";
 import * as Worktrees from "@host/lib/Worktrees";
-import { hasCommit } from "@host/lib/git/refs";
 import * as Effect from "effect/Effect";
 import {
   findProject,
@@ -32,13 +31,15 @@ import { teardownSource } from "@host/lib/sync/receipts";
 
 export const syncHandlers = {
   hasCommits: ({ projectId, commits }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const git = yield* Git.Git;
       // A handful of cheap probes, one at a time.
-      Effect.map(
-        Effect.filter(commits, (commit) => hasCommit(project.path, commit)),
-        (present) => ({ present }),
-      ),
-    ),
+      const present = yield* Effect.filter(commits, (commit) =>
+        git.hasCommit(project.path, commit),
+      );
+      return { present };
+    }),
 
   worktreeFolder: ({ relative, ruleIgnored, ...input }) =>
     Effect.flatMap(
@@ -52,12 +53,13 @@ export const syncHandlers = {
   // transplant dialog can name what a teardown would take with it.
   ignoredPaths: (input) =>
     Effect.flatMap(
-      Effect.all([findWorktreePath(input), Worktrees.Worktrees]),
-      ([path, worktrees]) =>
+      Effect.all([findWorktreePath(input), Worktrees.Worktrees, Git.Git]),
+      ([path, worktrees, git]) =>
         Effect.map(
-          Effect.all([worktrees.ignoredPaths(path), listIgnoreRules(path)], {
-            concurrency: 2,
-          }),
+          Effect.all(
+            [worktrees.ignoredPaths(path), git.listIgnoreRules(path)],
+            { concurrency: 2 },
+          ),
           ([paths, patterns]) => ({
             paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
             total: paths.length,

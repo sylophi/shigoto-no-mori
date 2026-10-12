@@ -5,7 +5,7 @@
 // leaves the picked paths out, and "gitignored, except these" brings
 // only the picked paths. Nothing resolves to no patterns (the engine
 // still holds .git back). Gitignored resolves to the worktree's
-// gitignore rules (host/lib/git/ignoreRules.ts: every .gitignore,
+// gitignore rules (the engine's Git.listIgnoreRules: every .gitignore,
 // anchored, plus info/exclude), so a file ignored later stays out too.
 // An exception to nothing resolves to the paths the user picked,
 // anchored to the root, and an exception to gitignored to the rules

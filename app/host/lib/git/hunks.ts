@@ -23,7 +23,7 @@ import {
   type FileHunks,
   type LineChange,
 } from "@shigomori/contracts/schemas";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { onIndex, snapshotPaths } from "./changes";
@@ -106,7 +106,7 @@ const readTree = Effect.fnUntraced(function* (
       (await lstat(file)).isSymbolicLink() ? null : await readFile(file),
     catch: (error) =>
       new FileReadError({
-        reason: errorMessageOf(error),
+        reason: errorWordsOf(error),
         code: (error as NodeJS.ErrnoException).code ?? null,
       }),
   });

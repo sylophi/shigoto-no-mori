@@ -9,7 +9,8 @@
 // or the link dropping tears it down. No
 // registry, no idle sweep, nothing to leak past the connection.
 import type { Socket } from "node:net";
-import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
 import {
   FORWARD_CONNECT_FAILED,
@@ -54,7 +55,7 @@ async function open(port: number, channelId: string, ctx: HandlerContext) {
   try {
     socket = await dialLoopback(port, DIAL_TIMEOUT_MS);
   } catch (error) {
-    throw new Error(`${FORWARD_CONNECT_FAILED}: ${errorMessageOf(error)}`, {
+    throw new Error(`${FORWARD_CONNECT_FAILED}: ${errorWordsOf(error)}`, {
       cause: error,
     });
   }

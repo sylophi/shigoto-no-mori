@@ -2,7 +2,14 @@
 // history, refs, the default ref, the remote sync and its guards,
 // clone, and the diffs.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
@@ -11,6 +18,7 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { it, vi } from "vitest";
 import {
+  BranchMovedError,
   BranchNotMergedError,
   CloneDestinationError,
   GitCommandError,
@@ -18,7 +26,9 @@ import {
   NoRemoteError,
   OverwriteRefusedError,
   stderrOf,
+  UnknownRevisionError,
 } from "../src/Git.ts";
+import { SPAWN_SLOTS } from "../src/git/documents.ts";
 import { LOG_FORMAT, parseLog } from "../src/gitParse.ts";
 import {
   failureAs,
@@ -54,6 +64,47 @@ it("a failure carries git's own words, in English, and its exit code", async () 
   assert.equal(error.exitCode, 1);
   assert.match(stderrOf(error), /did not match any file\(s\) known to git/);
   assert.equal(error.message, "git checkout exited with 1.");
+});
+
+it("a write held by the user's hook leaves the probes their slots", async () => {
+  const repo = seedRepo();
+  const head = rev(repo, "HEAD");
+  // Every ref update leaves a mark and waits in its
+  // reference-transaction hook until the release file appears.
+  const marks = tempDir("held-");
+  const release = join(tempDir("release-"), "go");
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\ncat >/dev/null\ntouch '${marks}'/$$\nwhile [ ! -e '${release}' ]; do sleep 0.05; done\n`,
+  );
+  chmodSync(hook, 0o755);
+  await withGit((g) =>
+    Effect.gen(function* () {
+      const writes = yield* Effect.forkChild(
+        Effect.forEach(
+          Array.from({ length: SPAWN_SLOTS + 1 }, (_, n) => n),
+          (n) =>
+            g.updateRef({ repo, ref: `refs/heads/held-${n}`, commit: head }),
+          { concurrency: "unbounded", discard: true },
+        ),
+      );
+      // As many writes as there are slots are waiting on the hook, and
+      // a probe still answers. Released whatever happens, so no hook
+      // outlives the test.
+      yield* Effect.gen(function* () {
+        while (readdirSync(marks).length < SPAWN_SLOTS) {
+          yield* Effect.sleep("20 millis");
+        }
+        assert.equal(yield* g.verifyRev(repo, "HEAD"), head);
+      }).pipe(
+        Effect.timeout("15 seconds"),
+        Effect.ensuring(Effect.sync(() => writeFileSync(release, ""))),
+      );
+      yield* Fiber.join(writes);
+    }),
+  );
+  assert.equal(rev(repo, `refs/heads/held-${SPAWN_SLOTS}`), head);
 });
 
 it("output past the cap is an error, not a prefix", async () => {
@@ -325,6 +376,66 @@ it("reads, moves and compares refs", async () => {
     await withGit((g) => g.treeOf(repo, two)),
     rev(repo, `${two}^{tree}`),
   );
+});
+
+it("resolves a name to its commit or says there is none, and refuses a HEAD that moved", async () => {
+  const repo = seedRepo();
+  const head = rev(repo, "HEAD");
+  assert.equal(await withGit((g) => g.resolveCommit(repo, "main")), head);
+  const unknown = await failureAs(UnknownRevisionError, (g) =>
+    g.resolveCommit(repo, "nope"),
+  );
+  assert.equal(unknown.message, "There is no branch or commit named nope.");
+  assert.equal(await withGit((g) => g.headAt(repo, undefined)), head);
+  assert.equal(await withGit((g) => g.headAt(repo, head)), head);
+  write(repo, "n.txt", "n\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "n");
+  const moved = await failureAs(BranchMovedError, (g) => g.headAt(repo, head));
+  assert.equal(
+    moved.message,
+    "The branch has moved on since this was loaded. Reload and try again.",
+  );
+});
+
+it("names the upstream and counts HEAD's own commits past a ref", async () => {
+  const { clone } = withRemote();
+  assert.deepEqual(
+    await withGit((g) => g.upstreamName(clone)),
+    Option.some("origin/main"),
+  );
+  git(clone, "checkout", "-q", "-b", "loose");
+  assert.deepEqual(await withGit((g) => g.upstreamName(clone)), Option.none());
+  write(clone, "a.txt", "a\n");
+  git(clone, "add", ".");
+  git(clone, "commit", "-q", "-m", "a");
+  git(clone, "checkout", "-q", "-b", "side", "HEAD~1");
+  write(clone, "b.txt", "b\n");
+  git(clone, "add", ".");
+  git(clone, "commit", "-q", "-m", "b");
+  git(clone, "checkout", "-q", "loose");
+  git(clone, "merge", "-q", "--no-edit", "side");
+  git(clone, "push", "-q", "origin", "side");
+  assert.deepEqual(
+    await withGit((g) => g.ownCommitCounts(clone, "origin/main")),
+    { own: 3, merges: 1, unpushed: 2 },
+  );
+  assert.equal(
+    await withGit((g) =>
+      g.countCommits(clone, ["origin/main..HEAD"], ["--merges"]),
+    ),
+    1,
+  );
+});
+
+it("lists branches by git's short names, a tag's namesake qualified and no symbolic ref", async () => {
+  const { clone } = withRemote();
+  git(clone, "tag", "main");
+  git(clone, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
+  assert.deepEqual(await withGit((g) => g.listBranches(clone)), {
+    local: ["heads/main"],
+    remote: ["origin/main"],
+  });
 });
 
 it("a safe delete of an unmerged branch says so, and the forced one goes through", async () => {

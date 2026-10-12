@@ -10,13 +10,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { afterAll } from "vitest";
 import * as Git from "../../src/Git.ts";
+import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
 
 // The service runs git under this process's environment. A pre-commit
 // hook's GIT_* variables would point it at the commit in progress, and
 // the user's own config would leak in, so both go before any test
 // runs. Commits need an identity.
 for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
+  if (isOutsideGitVariable(key)) delete process.env[key];
 }
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",

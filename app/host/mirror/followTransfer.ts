@@ -7,8 +7,8 @@
 // (followPlan.ts), but the transfers name each side's own branch: a
 // pull asks for the peer's own head, a push lands this side's.
 import type { Project } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
-import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { offer, peerSource } from "@host/lib/sync/sourceLink";
 import { peerMirrorFor, peerSyncFor } from "@host/ipc/PeerReach";
 import {
@@ -37,9 +37,10 @@ export const chooseDirection = Effect.fnUntraced(function* (
 ) {
   const planned = decide(agreed, local, peer);
   if (planned !== "ancestry") return planned;
-  if (!(yield* hasCommit(projectPath, peer.tip))) return "diverged";
-  if (yield* isAncestor(projectPath, local.tip, peer.tip)) return "pull";
-  if (yield* isAncestor(projectPath, peer.tip, local.tip)) return "push";
+  const git = yield* Git.Git;
+  if (!(yield* git.hasCommit(projectPath, peer.tip))) return "diverged";
+  if (yield* git.isAncestor(projectPath, local.tip, peer.tip)) return "pull";
+  if (yield* git.isAncestor(projectPath, peer.tip, local.tip)) return "push";
   return "diverged" as Direction;
 });
 
@@ -56,12 +57,13 @@ const pullHaves = Effect.fnUntraced(function* (
   localTip: string,
   agreedTip: string | null,
 ) {
+  const git = yield* Git.Git;
   const [agreedHere, branchTips] = yield* Effect.all(
     [
       agreedTip === null || agreedTip === localTip
         ? Effect.succeed(false)
-        : hasCommit(projectPath, agreedTip),
-      localBranchTips(projectPath),
+        : git.hasCommit(projectPath, agreedTip),
+      git.localBranchTips(projectPath),
     ],
     { concurrency: 2 },
   );
@@ -75,12 +77,13 @@ export const pull = Effect.fnUntraced(function* (
   peerHead: GitHead,
   agreedTip: string | null,
 ) {
+  const git = yield* Git.Git;
   const [tipIsLocal, indexCommitIsLocal] = yield* Effect.all(
     [
-      hasCommit(project.path, peer.tip),
+      git.hasCommit(project.path, peer.tip),
       peer.indexCommit === null
         ? Effect.succeed(true)
-        : hasCommit(project.path, peer.indexCommit),
+        : git.hasCommit(project.path, peer.indexCommit),
     ],
     { concurrency: 2 },
   );

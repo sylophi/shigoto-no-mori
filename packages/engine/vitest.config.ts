@@ -3,6 +3,11 @@
 // repos and runs git against them gets longer than vitest's
 // default to finish.
 import { defineConfig } from "vitest/config";
+import { isolateGit } from "../../gitIsolation";
+
+// Before any test's process forks, so none inherits a way into this
+// repository (../../gitIsolation.ts).
+isolateGit();
 
 export default defineConfig({
   test: {

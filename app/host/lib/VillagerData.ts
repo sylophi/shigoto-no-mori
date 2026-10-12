@@ -42,7 +42,7 @@ import * as Random from "effect/Random";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import {
   type ContractSchema,
   type Decoded,
@@ -507,7 +507,7 @@ const make = ({
             Effect.catchDefect((defect) =>
               Ref.set(
                 lastFailure,
-                `Couldn't save the villager data: ${errorMessageOf(defect)}`,
+                `Couldn't save the villager data: ${errorWordsOf(defect)}`,
               ),
             ),
           ),

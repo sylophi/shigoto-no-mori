@@ -37,12 +37,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import {
   type SyncCapture,
   SyncCaptureSchema,
@@ -61,9 +62,8 @@ import {
 import { strict } from "@shigomori/contracts/schemas/strict";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
+import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
-import { refTip, treeOf } from "@host/lib/git/refs";
-import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
 import { primaryRef } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
@@ -407,7 +407,10 @@ export type SourceFacts = {
 
 export function localSource(project: Project, worktreeId: string): SourceFacts {
   return {
-    tip: (branch) => refTip(project.path, `refs/heads/${branch}`),
+    tip: (branch) =>
+      Effect.flatMap(Git.Git, (git) =>
+        git.refTip(project.path, `refs/heads/${branch}`),
+      ).pipe(Effect.map(Option.getOrNull)),
     capture: Effect.gen(function* () {
       const capture = yield* Ops.dirtyCapture(project, worktreeId);
       if (!capture.captured || capture.commit === undefined) {
@@ -416,7 +419,7 @@ export function localSource(project: Project, worktreeId: string): SourceFacts {
       return {
         captured: true,
         commit: capture.commit,
-        tree: yield* treeOf(project.path, capture.commit),
+        tree: yield* (yield* Git.Git).treeOf(project.path, capture.commit),
       } satisfies SyncCapture;
     }),
   };
@@ -489,7 +492,7 @@ const sendBundle = (
             }
           }).pipe(
             Effect.mapError(
-              (error) => new BrokenLink({ reason: errorMessageOf(error) }),
+              (error) => new BrokenLink({ reason: errorWordsOf(error) }),
             ),
           ),
         (file) => Effect.promise(() => file.close()),
@@ -562,7 +565,7 @@ export const serveSource = (
         Effect.catch((error): Effect.Effect<void, LinkError | BrokenLink> => {
           if (error instanceof BrokenLink) return Effect.fail(error);
           if (opts.failure !== undefined) opts.failure.error ??= error;
-          return link.write({ error: errorMessageOf(error) });
+          return link.write({ error: errorWordsOf(error) });
         }),
       );
     }
@@ -575,9 +578,13 @@ export const serveSource = (
 // shared/cloneUrl.ts).
 const cloneFactsOf = (project: Project) =>
   Effect.map(
-    Effect.all([primaryRef(project), listRemoteEntries(project.path)], {
-      concurrency: 2,
-    }),
+    Effect.all(
+      [
+        primaryRef(project),
+        Effect.flatMap(Git.Git, (git) => git.listRemoteEntries(project.path)),
+      ],
+      { concurrency: 2 },
+    ),
     ([branch, remotes]): CloneFacts => ({
       branch,
       remoteUrl: pickCloneUrl(remotes),

@@ -110,7 +110,7 @@ export const isWorktreeSettingUpError = Schema.is(WorktreeSettingUpError);
 // Safe branch delete (`git branch -d`) refused because the branch has
 // commits unreachable from other refs. The renderer swaps its confirm
 // dialog into a force-delete prompt with friendlier copy than git's
-// stderr, which host/lib/git/branches.ts detects and rethrows as this.
+// stderr, which the engine's Git.deleteBranch fails with.
 export class BranchNotMergedError extends Schema.TaggedError<BranchNotMergedError>()(
   "BranchNotMergedError",
   { branch: Schema.String },

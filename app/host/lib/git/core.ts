@@ -104,12 +104,6 @@ export function splitZ(stdout: string): string[] {
   return stdout.split("\0").filter((entry) => entry.length > 0);
 }
 
-export const isGitRepo = (path: string) =>
-  run(path, ["rev-parse", "--git-dir"]).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  );
-
 // A git action the app refuses, in words for the user.
 export class GitRefusal extends Schema.TaggedError<GitRefusal>()("GitRefusal", {
   reason: Schema.String,

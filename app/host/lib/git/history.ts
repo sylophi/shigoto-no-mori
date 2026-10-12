@@ -1,11 +1,11 @@
 // What the Git section's commit menu does to history beyond amend and
 // undo (changes.ts): revert a commit, copy one onto another worktree's
 // branch, and reword or squash commits that exist nowhere but here.
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import { onIndex } from "./changes";
 import { GitRefusal, run, runLenient } from "./core";
 import { conflictedPaths, refuseMidOperation } from "./operation";
-import { headAt, isAncestor } from "./refs";
 
 // --- revert and cherry-pick -------------------------------------------
 
@@ -143,8 +143,9 @@ const rewriteLine = (
     worktreePath,
     Effect.gen(function* () {
       yield* refuseMidOperation(worktreePath);
-      const head = yield* headAt(worktreePath, expectHead);
-      if (!(yield* isAncestor(worktreePath, oldest, head))) {
+      const git = yield* Git.Git;
+      const head = yield* git.headAt(worktreePath, expectHead);
+      if (!(yield* git.isAncestor(worktreePath, oldest, head))) {
         return yield* new GitRefusal({
           reason: "That commit isn't on this branch's history.",
         });

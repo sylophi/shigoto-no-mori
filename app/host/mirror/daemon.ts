@@ -24,7 +24,7 @@ import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as FileSync from "@host/fileSync/FileSync";
 import type { MirrorCreateInput } from "@host/mirror/MirrorEngine";
 import {
@@ -179,7 +179,7 @@ const make = (options: Options) =>
     const changed = Effect.try(() => options.onChange?.()).pipe(
       Effect.catch((error) =>
         Effect.logWarning(
-          `[mirror] a daemon change listener failed: ${errorMessageOf(error)}`,
+          `[mirror] a daemon change listener failed: ${errorWordsOf(error)}`,
         ),
       ),
     );
@@ -333,7 +333,7 @@ const make = (options: Options) =>
           FileSync.isFileSyncUnavailable(error)
             ? Effect.void
             : Effect.logWarning(
-                `[mirror] daemon spawn failed: ${errorMessageOf(error)}`,
+                `[mirror] daemon spawn failed: ${errorWordsOf(error)}`,
               ),
         ),
         Effect.option,
@@ -379,7 +379,7 @@ const make = (options: Options) =>
       // restart ladder, never the supervisor with it.
       Effect.catchDefect((defect) =>
         Effect.logWarning(
-          `[mirror] daemon run failed, restarting: ${errorMessageOf(defect)}`,
+          `[mirror] daemon run failed, restarting: ${errorWordsOf(defect)}`,
         ),
       ),
       Effect.timed,

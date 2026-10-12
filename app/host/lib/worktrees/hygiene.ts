@@ -13,12 +13,8 @@ import {
   type WorktreeHygiene,
 } from "@shigomori/contracts/schemas";
 import { run, runLenient } from "../git/core";
-import { treeOf } from "../git/refs";
-import {
-  listRemotes,
-  localBranchExists,
-  splitRemoteRefSync,
-} from "../git/remotes";
+import * as Git from "@shigomori/engine/Git";
+import { splitRemoteRef } from "@shigomori/engine/gitParse";
 import type { WorktreeIdentity } from "../git/worktrees";
 import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
@@ -150,17 +146,18 @@ const primaryRefCandidates = Effect.fnUntraced(function* (
   remotes: string[],
 ) {
   if (!primaryRef) return [];
-  const split = splitRemoteRefSync(primaryRef, remotes);
+  const git = yield* Git.Git;
+  const split = splitRemoteRef(primaryRef, remotes);
   const refs = [primaryRef];
   if (split && split.branch !== primaryRef) {
-    if (yield* localBranchExists(projectPath, split.branch)) {
+    if (yield* git.localBranchExists(projectPath, split.branch)) {
       refs.push(split.branch);
     }
   }
   return yield* Effect.forEach(
     refs,
     (ref) =>
-      treeOf(projectPath, ref).pipe(
+      git.treeOf(projectPath, ref).pipe(
         Effect.orElseSucceed(() => null),
         Effect.map((tree): PrimaryCandidate => ({ ref, tree })),
       ),
@@ -328,7 +325,9 @@ export const makeHygiene = Effect.gen(function* () {
       const [listed, remotes] = yield* Effect.all(
         [
           Cache.get(identities, projectId),
-          listRemotes(projectPath).pipe(Effect.provide(context)),
+          Effect.flatMap(Git.Git, (git) => git.listRemotes(projectPath)).pipe(
+            Effect.provide(context),
+          ),
         ],
         { concurrency: 2 },
       );

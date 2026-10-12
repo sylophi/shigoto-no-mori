@@ -1,5 +1,5 @@
 import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { reorderProjects } from "@shared/reorder";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -8,12 +8,10 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
+import * as Git from "@shigomori/engine/Git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
-import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
-import { isGitRepo } from "@host/lib/git/core";
 import { createRepo } from "@host/lib/git/init";
-import { listRemoteEntries } from "@host/lib/git/remotes";
 import {
   addProject,
   findProject,
@@ -100,7 +98,7 @@ const registerNewCheckout = (
         new CheckoutUnregisteredError({
           path,
           made,
-          reason: errorMessageOf(cause),
+          reason: errorWordsOf(cause),
           cause,
         }),
     ),
@@ -159,7 +157,7 @@ export const projectsHandlers = {
   add: ({ path: rawPath, terrier }) =>
     Effect.gen(function* () {
       const path = expandHome(rawPath);
-      if (!(yield* isGitRepo(path))) {
+      if (!(yield* (yield* Git.Git).isRepo(path))) {
         return yield* new NotGitRepositoryError({ path });
       }
       return yield* register(path, terrier);
@@ -243,14 +241,18 @@ export const projectsHandlers = {
     Effect.flatMap(findProject(projectId), primaryRef),
 
   cloneUrl: ({ projectId }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      listRemoteEntries(project.path),
-    ).pipe(Effect.map(pickCloneUrl)),
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      return pickCloneUrl(
+        yield* (yield* Git.Git).listRemoteEntries(project.path),
+      );
+    }),
 
   listBranches: ({ projectId }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      listBranches(project.path),
-    ),
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      return yield* (yield* Git.Git).listBranches(project.path);
+    }),
 
   // The name the engine would pick for a new worktree right now.
   pickWorktreeName: ({ projectId }) =>

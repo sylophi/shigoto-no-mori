@@ -279,11 +279,20 @@ export function parseBranchRefs(stdout: string): BranchRefs {
   return { locals, remotes, remoteHeads };
 }
 
-// The branch lists a base-ref picker offers.
-export const branchListOf = (refs: BranchRefs): BranchList => ({
-  local: [...refs.locals],
-  remote: [...refs.remotes],
-});
+// The branch lists a base-ref picker offers, from `for-each-ref
+// --format=%(refname)\t%(refname:short)\t%(symref)`: git's short names,
+// and no symbolic ref, since one aliases a branch listed already.
+export function parseBranchList(stdout: string): BranchList {
+  const local: string[] = [];
+  const remote: string[] = [];
+  for (const line of stdout.split("\n")) {
+    const [full, short, symref] = line.split("\t");
+    if (!full || !short || symref) continue;
+    if (full.startsWith("refs/heads/")) local.push(short);
+    else if (full.startsWith("refs/remotes/")) remote.push(short);
+  }
+  return { local, remote };
+}
 
 // Upstream first, then origin, then the rest alphabetically: the
 // precedence repo identity's remote rule applies too, so the default

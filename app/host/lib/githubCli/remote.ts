@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { envSetting } from "@shared/config";
 import * as Effect from "effect/Effect";
-import { listRemoteEntries } from "../git/remotes";
+import * as Git from "@shigomori/engine/Git";
 
 export interface GithubRepoInfo {
   // Hostname only, matched against the gh hosts.yml set.
@@ -84,7 +84,7 @@ export const remoteNameForUrl = Effect.fnUntraced(function* (
 ) {
   const target = parseRemoteUrl(url);
   if (!target) return null;
-  for (const entry of yield* listRemoteEntries(cwd)) {
+  for (const entry of yield* (yield* Git.Git).listRemoteEntries(cwd)) {
     const parsed = parseRemoteUrl(entry.url);
     // GitHub treats owner and repo case-insensitively, and a remote
     // typed by hand often disagrees with the API's casing.

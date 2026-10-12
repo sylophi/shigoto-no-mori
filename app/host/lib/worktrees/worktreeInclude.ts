@@ -13,10 +13,7 @@ import {
 } from "@shigomori/contracts/git/gitPaths";
 import { pathExists } from "@shared/paths";
 import type { WorktreeIncludeStatus } from "@shigomori/contracts/schemas";
-import {
-  listIgnoredPaths,
-  listUntrackedMatchingExcludeFile,
-} from "../git/branches";
+import * as Git from "@shigomori/engine/Git";
 import type { CarryOverCheckout } from "./carryOver";
 
 const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
@@ -30,15 +27,17 @@ const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 // node_modules-scale trees.
 const resolveMatchedPaths = (projectPath: string) =>
   Effect.map(
-    Effect.all(
-      [
-        listUntrackedMatchingExcludeFile(
-          projectPath,
-          join(projectPath, WORKTREE_INCLUDE_FILE),
-        ),
-        listIgnoredPaths(projectPath),
-      ],
-      { concurrency: 2 },
+    Effect.flatMap(Git.Git, (git) =>
+      Effect.all(
+        [
+          git.listUntrackedMatching(
+            projectPath,
+            join(projectPath, WORKTREE_INCLUDE_FILE),
+          ),
+          git.listIgnoredPaths(projectPath),
+        ],
+        { concurrency: 2 },
+      ),
     ),
     ([candidates, ignored]) => {
       const isIgnored = makeIgnoreMatcher(ignored);
