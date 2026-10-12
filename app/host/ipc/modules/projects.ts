@@ -86,13 +86,16 @@ class CheckoutUnregisteredError extends Schema.TaggedError<CheckoutUnregisteredE
 // Registers a checkout the app just made (a clone, a new repository).
 // The checkout stays if registering fails, so the error says where it
 // is: a retry would only find the folder taken. Terrier first, for
-// add's reason.
+// add's reason. Uninterruptible: once the checkout exists, a Cancel or a
+// caller gone would leave it unregistered, so it is registered whatever
+// the caller did and shows up through the projects watch.
 const registerNewCheckout = (
   path: string,
   terrier: boolean | undefined,
   made: string,
 ) =>
   register(path, terrier).pipe(
+    Effect.uninterruptible,
     Effect.mapError(
       (cause) =>
         new CheckoutUnregisteredError({
