@@ -103,18 +103,21 @@ export function startApp({
   });
 
   // A peer's views start again on each new session to it, and its
-  // worktree lifecycle is heard from the moment its session lands until
-  // the account goes (worktreeLifecycleAtom says why), in both shells:
-  // the web shell views peers' removals too. What the atoms keep of a
-  // peer goes with the account.
+  // worktree lifecycle and git fetches are heard from the moment its
+  // session lands until the account goes (worktreeLifecycleAtom and
+  // gitFetchingAtom say why), in both shells: the web shell views
+  // peers' removals and fetches too. What the atoms keep of a peer goes
+  // with the account.
   const peerLifecycles = new Map<string, () => void>();
   onSessionLanded((deviceId) => {
     registry.update(peerSessionAtom(deviceId), (count) => count + 1);
     if (!peerLifecycles.has(deviceId)) {
-      peerLifecycles.set(
-        deviceId,
-        registry.mount(worktreeLifecycleAtom(deviceId)),
-      );
+      const lifecycle = registry.mount(worktreeLifecycleAtom(deviceId));
+      const fetching = registry.mount(gitFetchingAtom(deviceId));
+      peerLifecycles.set(deviceId, () => {
+        lifecycle();
+        fetching();
+      });
     }
   });
   onAccountLeft(() => {

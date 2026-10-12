@@ -322,6 +322,20 @@ it("git fetches: per device, a peer's over on a new session", async () => {
   registry.dispose();
 });
 
+it("git fetches: a peer's, mounted as its session lands, heard with no page reading it", async () => {
+  const { registry, peerPush } = page();
+  // As the boot mounts it when the peer's session lands.
+  const unmount = registry.mount(gitFetchingAtom(PEER));
+  registry.update(peerSessionAtom(PEER), (count) => count + 1);
+  await peerPush(gitContract, "fetchActive", { projectId: "p1", active: true });
+  await waitFor(
+    () => valueOf(registry.get(gitFetchingAtom(PEER))).has("p1"),
+    "the peer's fetch, heard before any read",
+  );
+  unmount();
+  registry.dispose();
+});
+
 const status = (over: Partial<HubStatus> = {}): HubStatus => ({
   socket: { phase: "connected", remoteDeviceId: "", remoteAppVersion: "" },
   onlineDeviceIds: [],

@@ -17,13 +17,11 @@ const NONE: ReadonlySet<string> = new Set();
 
 // Which of a device's projects are fetching refs right now, off its
 // git:fetchActive pushes, read by the worktree page under that device's
-// scope. Kept once read (the boot mounts this machine's where it has a
-// host), so a fetch that starts while no page shows reads as fetching
-// when one opens. A fetch that started before anything heard it reads
-// as not fetching, which is safe: the absence of a fetchActive=true is
-// "not fetching". A peer's starts over on each new session to it, since
-// a fetch that ended while its session was down never says so, and with
-// the account.
+// scope. The boot mounts this machine's where it has a host, and a
+// peer's from the moment its session lands (boot.tsx), so a fetch that
+// starts while no page shows reads as fetching when one opens. A peer's
+// starts over on each new session to it, since a fetch that ended while
+// its session was down never says so, and with the account.
 export const gitFetchingAtom = Atom.family((deviceId: string) =>
   Atom.keepAlive(
     clientAtoms.atom(
