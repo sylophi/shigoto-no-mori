@@ -17,7 +17,8 @@ import { strict } from "../schemas/strict.ts";
 // on a remote wire, and the web client's local registrar rejects them
 // fail-closed (unclassified client channels). That refusal is correct,
 // not a gap: a browser cannot bind a local port, so the feature is
-// app-only and the UI additionally gates itself on window.api.isElectron.
+// app-only and the UI additionally gates itself on the page api's
+// isElectron.
 
 // forwardIds are engine-minted (schemas/hexId.ts pins the shape)
 // for the same reason forward.ts pins channel ids: a caller can only name

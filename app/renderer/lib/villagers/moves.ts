@@ -26,6 +26,7 @@ import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { onWorktreeLists } from "@/lib/viewFeed";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import {
@@ -61,11 +62,15 @@ const showing = new Map<
 // when.
 const quiet = new Map<string, number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
-let client: QueryClient | undefined;
+// The page's api and query client, from the boot.
+let started: { api: RendererApi; queryClient: QueryClient } | undefined;
 
 // Boot wiring, once per window, like the other boot subscriptions.
-export function startVillagerMoves(queryClient: QueryClient): void {
-  client = queryClient;
+export function startVillagerMoves(
+  api: RendererApi,
+  queryClient: QueryClient,
+): void {
+  started = { api, queryClient };
   onWorktreeLists(({ key, deviceId, list }) => {
     if (list === null) {
       lastSeen.delete(key);
@@ -76,7 +81,7 @@ export function startVillagerMoves(queryClient: QueryClient): void {
     lastSeen.set(key, list);
     // The album counts every villager it sees, a list's first reading
     // included (visitLog.ts).
-    void recordVisits(queryClient, deviceId, list, isQuiet);
+    void recordVisits(api, queryClient, deviceId, list, isQuiet);
     if (before === undefined) return;
     const { movedIn, movedOut } = worktreeMoves(before, list);
     if (movedIn.length === 0 && movedOut.length === 0) return;
@@ -121,7 +126,7 @@ export function isQuiet(worktree: Worktree): boolean {
 function settle(): void {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    if (holds === 0 && client !== undefined) void tell(client);
+    if (holds === 0 && started !== undefined) void tell(started);
   }, SETTLE_MS);
 }
 
@@ -141,21 +146,28 @@ function forget(key: string, id: string): () => void {
   };
 }
 
-async function tell(queryClient: QueryClient): Promise<void> {
+async function tell({
+  api,
+  queryClient,
+}: {
+  api: RendererApi;
+  queryClient: QueryClient;
+}): Promise<void> {
   const batch = [...pending];
   pending.clear();
   // Village news off, the moves go untold. The album still counts
   // them (visitLog.ts).
   const config = await queryClient
-    .ensureQueryData({ ...clientConfigQueryOptions, retry: false })
+    .ensureQueryData({ ...clientConfigQueryOptions(api), retry: false })
     .catch(() => undefined);
   if (!config || !villageNewsEnabled(config)) return;
   await Promise.all(
     batch.map(async ([deviceId, moves]) => {
       const { movedIn, movedOut } = settled(moves);
-      const scope = hostScopeOf(deviceId);
+      const scope = hostScopeOf(api, deviceId);
       if (scope === undefined) return;
       const speakers = await speakersFor(
+        api,
         queryClient,
         [...movedIn, ...movedOut],
         { withColor: true },

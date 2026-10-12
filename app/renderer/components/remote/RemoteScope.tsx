@@ -1,6 +1,6 @@
 // Route-level device scoping for the /devices/$deviceId/... pages:
 // this machine's id renders the page under the default local scope
-// (window.api), a peer's resolves the device from the registry, scopes
+// (the page's api), a peer's resolves the device from the registry, scopes
 // the subtree's queries to its api (HostScopeProvider), and says
 // honestly when the device is not reachable. Push refresh is not a
 // scope concern: every device's boot-scoped push watch
@@ -12,8 +12,8 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
@@ -106,6 +106,7 @@ function UnreachableDevice({ device }: { device: RemoteDevice | undefined }) {
 }
 
 function OpenDevicesButton() {
+  const hasLocalHost = useHasLocalHost();
   const navigate = useNavigate();
   return (
     <OpenDevicesButtonView
@@ -130,6 +131,7 @@ export function withDeviceScope(
   // it all the same.
   const DeviceScoped = () => {
     const { deviceId } = useParams({ strict: false }) as { deviceId: string };
+    const localDeviceId = useApi().deviceId;
     if (deviceId === localDeviceId) return <Page />;
     return <RemoteScopeGate key={deviceId} deviceId={deviceId} Page={Page} />;
   };

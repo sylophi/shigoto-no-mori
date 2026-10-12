@@ -37,7 +37,7 @@ export function AddToDeviceSubmenu({
   const candidates = tabs.filter((tab) => !holders.has(tab.deviceId));
   // The tab's api rather than the member's: a member's is withheld
   // without the command grant, which a read doesn't need, and a tab's
-  // is simply the device's session (window.api for this one). A peer
+  // is simply the device's session (the page's api for this one). A peer
   // in the roster has an api before it has a session to carry a call,
   // so a member that can answer now goes ahead of one that may not.
   const sources = members.flatMap((member) => {

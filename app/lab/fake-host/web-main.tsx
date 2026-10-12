@@ -3,13 +3,15 @@
 // Same pose params as the desktop fake host entry (?theme, ?doubutsu,
 // ?light, ?dark, ?peers), minus ?to: the route comes from the path
 // itself, since the web router rides real browser history.
+import { bootWeb } from "../../web/boot";
 import { applyPose } from "./pose";
 import { installFakeHostBridge } from "./bridge";
+import { exposeToLab } from "@/lib/runtime/labHandle";
 
 applyPose();
 
-// Fake host stand-in for web/preload.ts: the web page boots on the fixture
-// window.api instead of the real hub-backed bridge.
-const links = installFakeHostBridge({ webShell: true });
-
-void import("../../web/boot").then(({ bootWeb }) => bootWeb(links));
+// Fake host stand-in for web/preload.ts: the web page boots on the
+// fixture api instead of the real hub-backed bridge.
+const page = installFakeHostBridge({ webShell: true });
+exposeToLab(page.api);
+bootWeb(page);

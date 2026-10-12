@@ -11,13 +11,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { it } from "vitest";
+import { useSignInStep } from "@/components/steps/useSignInStep";
+import { ApiProvider, type RendererApi } from "@/lib/runtime/pageApi";
 
-// The bridge as a build with no key hands it over. The hooks' imports
-// read window.api at load.
-const api = { deviceId: "welcome-no-account", isElectron: true };
-// @ts-expect-error a stand-in for the preload's window, with no key
-globalThis.window = { api };
-const { useSignInStep } = await import("@/components/steps/useSignInStep");
+// The page's api as a build with no key hands it over: the facts the
+// hook reads, and no calls.
+const api = {
+  deviceId: "welcome-no-account",
+  isElectron: true,
+  clerkPublishableKey: "",
+} as RendererApi;
 
 it("offers no sign-in, and touches no Clerk hook, without an account service", () => {
   let seen: ReturnType<typeof useSignInStep> | undefined;
@@ -25,12 +28,17 @@ it("offers no sign-in, and touches no Clerk hook, without an account service", (
     seen = useSignInStep(true);
     return null;
   }
-  // The app's query client, and no ClerkProvider, as ClerkGate leaves it.
+  // The page's api and the app's query client, and no ClerkProvider,
+  // as ClerkGate leaves it.
   renderToString(
     createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(Probe),
+      ApiProvider,
+      { api },
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(Probe),
+      ),
     ),
   );
   assert.equal(seen?.signIn, null);

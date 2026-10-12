@@ -25,8 +25,9 @@ import type {
 import type { MirrorIgnoreChoice } from "@shigomori/contracts/leaveOutRule";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
+import { invalidateHostDevice, queryKeysFor } from "@/lib/queryKeys";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The teardown reports a kept source with its raw reason. scripts-running
 // is the one code worth spelling out, and every surface that reports a
@@ -44,9 +45,13 @@ export function keptSourceReason(
 // branches refresh (its lists are the host's views, which follow on
 // their own). Also what a send's teardown refreshes, the removed source
 // being this device's.
-function invalidateLanded(queryClient: QueryClient, landed: Landed): void {
+function invalidateLanded(
+  queryClient: QueryClient,
+  localDeviceId: string,
+  landed: Landed,
+): void {
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.branches(landed.worktree.projectId),
+    queryKey: queryKeysFor(localDeviceId).branches(landed.worktree.projectId),
   });
 }
 
@@ -133,6 +138,7 @@ export function useMoveMutation<Result extends Landed>(
   },
 ): MoveMutation<Result> {
   const { deviceId } = useHostScope();
+  const localDeviceId = useApi().deviceId;
   const queryClient = useQueryClient();
   const sourceWorktreeId =
     move.direction === "pull" ? move.source.worktree.id : move.worktree.id;
@@ -151,7 +157,7 @@ export function useMoveMutation<Result extends Landed>(
           worktreeName: pullWorktreeName(worktree),
           ...choice,
         });
-        invalidateLanded(queryClient, landed);
+        invalidateLanded(queryClient, localDeviceId, landed);
         return landed;
       }
       const { worktree, targetDeviceId } = move;
@@ -172,13 +178,13 @@ export function useMoveMutation<Result extends Landed>(
 
 // The transplant's move, run by this device either way round.
 export function useMoveWorktree(move: Move) {
+  const api = useApi();
   return useMoveMutation(move, {
     pull: (payload): Promise<SyncPullWorktreeResult> =>
-      window.api.sync.pullWorktree(payload),
+      api.sync.pullWorktree(payload),
     send: (payload): Promise<SyncPullWorktreeResult> =>
-      window.api.sync.sendWorktree(payload),
-    cancel: (sourceWorktreeId) =>
-      window.api.sync.cancelMove({ sourceWorktreeId }),
+      api.sync.sendWorktree(payload),
+    cancel: (sourceWorktreeId) => api.sync.cancelMove({ sourceWorktreeId }),
   });
 }
 
@@ -191,12 +197,13 @@ export function useMoveWorktree(move: Move) {
 // whole cached view (the sweep its own resolved-mutation ping runs),
 // or this machine's forest.
 export function useTeardownSource(move: Move) {
+  const api = useApi();
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => {
       if (move.direction === "pull") {
-        return window.api.sync.teardownSource({
+        return api.sync.teardownSource({
           direction: "pull",
           deviceId,
           projectId: move.source.sourceProjectId,
@@ -204,7 +211,7 @@ export function useTeardownSource(move: Move) {
         });
       }
       if (move.targetDeviceId === undefined) throw new Error(UNPICKED);
-      return window.api.sync.teardownSource({
+      return api.sync.teardownSource({
         direction: "send",
         deviceId: move.targetDeviceId,
         projectId: move.worktree.projectId,
@@ -215,7 +222,9 @@ export function useTeardownSource(move: Move) {
       if (move.direction === "pull") {
         invalidateHostDevice(queryClient, deviceId);
       } else {
-        invalidateLanded(queryClient, { worktree: move.worktree });
+        invalidateLanded(queryClient, api.deviceId, {
+          worktree: move.worktree,
+        });
       }
     },
     meta: { errorTitle: "Couldn't tear down the source worktree" },

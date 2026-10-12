@@ -17,6 +17,7 @@ import { useResident } from "@/hooks/villagers/useResident";
 import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 
 import { routeDeviceId, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // What the two sidebar rows share in behaviour (their shared look is
 // WorktreeEntryView): "am I the open one", "what's running here",
@@ -37,7 +38,7 @@ export function useWorktreeEntry(
   const running = useWorktreeScriptActivity(worktree.id, deviceId);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const params = {
-    deviceId: routeDeviceId(deviceId),
+    deviceId: routeDeviceId(useApi().deviceId, deviceId),
     projectId: worktree.projectId,
     worktreeId: worktree.id,
   };

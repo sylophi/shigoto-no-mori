@@ -4,7 +4,7 @@
 // plane below), and serves only itself, in the page: the client modules
 // (clientConfig, account, hub, shell, releases) and its copy of the
 // shared settings, on the tab's local registrar (localRegistrar.ts). It
-// builds the SAME window.api surface the desktop does: the scalar facts
+// builds the SAME page api the desktop does: the scalar facts
 // (deviceId, appVersion, isDev, isElectron) plus the clients over that
 // registrar, on the tab's client runtime (renderer/lib/runtime), so
 // renderer components mount unmodified.
@@ -22,7 +22,7 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
-import type { ClientApi } from "@/lib/runtime/Api";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import {
   accountContract,
   type AccountStatus,
@@ -97,15 +97,8 @@ export type WebBridgeDeps = {
 };
 
 export type WebBridge = {
-  // The window.api surface. Assigning it to window.api is what
-  // typechecks it against RendererApi (renderer/window.d.ts).
-  api: {
-    deviceId: string;
-    appVersion: string;
-    clerkPublishableKey: string;
-    isDev: boolean;
-    isElectron: boolean;
-  } & ClientApi;
+  // The page's api (renderer/lib/runtime/pageApi.tsx).
+  api: RendererApi;
   // The tab's links, for the boot's atoms.
   links: ClientLinks["Service"];
   // Cross-tab correction: another tab changed the persisted account

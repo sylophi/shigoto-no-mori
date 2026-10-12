@@ -1,4 +1,4 @@
-// The fake host's window.api: the same surface the desktop builds,
+// The fake host's page api: the same surface the desktop builds,
 // served entirely from fixtures.ts. The real renderer
 // boots on top of it unmodified: startRemoteDeviceSync, HostScope, the
 // sidebar tree and every remote view all derive from these answers
@@ -68,6 +68,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { disposeWithPage, startClientNow } from "@/lib/runtime/client";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import {
   FAKE_DIFF,
@@ -1758,7 +1759,7 @@ export function installFakeHostBridge(
     // unless it stands in for the released app (frames.tsx).
     dev?: boolean;
   } = {},
-): ClientLinks["Service"] {
+): { api: RendererApi; links: ClientLinks["Service"] } {
   WEB_SHELL = opts.webShell === true;
   villageLife =
     opts.villageLife ??
@@ -2055,7 +2056,9 @@ export function installFakeHostBridge(
     ),
   );
   disposeWithPage(fixtureClient);
-  const api = {
+  // Typed as the page's api, the proof the fake host bridge has the
+  // same surface.
+  const api: RendererApi = {
     deviceId: selfDeviceId,
     appVersion: FAKE_APP_VERSION,
     clerkPublishableKey: "pk_test_fake",
@@ -2063,9 +2066,6 @@ export function installFakeHostBridge(
     isElectron: !WEB_SHELL,
     ...fixtureClient.api,
   };
-  // The renderer's window.d.ts types window.api, so this assignment is
-  // the proof the fake host bridge has the same surface.
-  window.api = api;
 
   const pushHub = () => client.emit("hub:statusChanged", hubSnapshot());
 
@@ -2163,5 +2163,5 @@ export function installFakeHostBridge(
     });
   }
 
-  return fixtureClient.links;
+  return { api, links: fixtureClient.links };
 }

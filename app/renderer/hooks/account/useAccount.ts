@@ -16,8 +16,9 @@ import {
   MACHINE_FALLBACK_ICON,
   type DeviceIcon,
 } from "@shigomori/contracts/deviceIcon";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // Account status: configured/signedIn plus this device's stored name.
 // staleTime Infinity: `configured` is launch env and cannot change
@@ -27,9 +28,10 @@ import { queryKeys } from "@/lib/queryKeys";
 // observer in an always-mounted component would re-run the read (a main-process credential-file read
 // plus keychain decrypt) on every window focus.
 export function useAccountStatus() {
+  const api = useApi();
   return useQuery<AccountStatus>({
     queryKey: queryKeys.accountStatus(),
-    queryFn: () => window.api.account.status(),
+    queryFn: () => api.account.status(),
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't read account status" },
   });
@@ -54,6 +56,7 @@ export function useLocalDevice(): { name: string; icon: DeviceIcon } {
 // desktop app is a machine, a hostless client a browser), so a mark
 // never waits on the read.
 export function useLocalDeviceIcon(): DeviceIcon {
+  const hasLocalHost = useHasLocalHost();
   const { data: account } = useAccountStatus();
   return (
     account?.deviceIcon ?? (hasLocalHost ? MACHINE_FALLBACK_ICON : "browser")
@@ -69,30 +72,32 @@ export function useLocalDeviceIcon(): DeviceIcon {
 // could only ever be corrected by this process's own account:changed
 // fan-out, which says nothing about a peer renaming itself or being
 // removed from the account elsewhere: the hub pushes neither.
-export const accountDevicesQueryOptions = queryOptions<readonly DeviceInfo[]>({
-  queryKey: queryKeys.accountDevices(),
-  queryFn: () => window.api.account.listDevices(),
-  // The registry renders the failure inline (DeviceRegistry), so no
-  // toast on top.
-  meta: { silentError: true },
-});
+export const accountDevicesQueryOptions = (api: RendererApi) =>
+  queryOptions<readonly DeviceInfo[]>({
+    queryKey: queryKeys.accountDevices(),
+    queryFn: () => api.account.listDevices(),
+    // The registry renders the failure inline (DeviceRegistry), so no
+    // toast on top.
+    meta: { silentError: true },
+  });
 
 // Both of this hook's call sites render only under a signed-in guard,
 // so a signed-out or unconfigured app never mounts it and never hits
 // the network. The handler returns [] in those states anyway, which is
 // also all the device sync's own read of the entry can get.
 export function useAccountDevices() {
-  return useQuery(accountDevicesQueryOptions);
+  return useQuery(accountDevicesQueryOptions(useApi()));
 }
 
 // Re-read status and the device list whenever main fans out a change
 // (any sign-in, sign-out or rename), so every window stays in sync
 // without polling. The subscribe call returns its own unsubscribe.
 export function useWatchAccountChanges(): void {
+  const api = useApi();
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      window.api.account.onChanged(() => {
+      api.account.onChanged(() => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.account() });
         // A departure drops the peer-keyed client config picks on
         // disk (main's fan-out, before this broadcast). The cached
@@ -101,7 +106,7 @@ export function useWatchAccountChanges(): void {
           queryKey: queryKeys.clientConfig(),
         });
       }),
-    [queryClient],
+    [queryClient, api],
   );
 }
 
@@ -120,12 +125,13 @@ export function useWatchAccountChanges(): void {
 export const ENROLL_MUTATION_KEY = ["account", "enroll"];
 
 export function useEnroll() {
+  const api = useApi();
   return useMutation<AccountStatus, Error, () => Promise<string | null>>({
     mutationKey: ENROLL_MUTATION_KEY,
     mutationFn: async (mintToken) => {
       const token = await mintToken();
       if (!token) throw new Error("Clerk returned no session token");
-      return window.api.account.enroll(token);
+      return api.account.enroll(token);
     },
     meta: { errorTitle: "Couldn't enroll this device" },
   });
@@ -136,8 +142,9 @@ export function useEnroll() {
 // session ends, while the UI buttons go through useClerkSignOut, which ends
 // the Clerk session first and then this same IPC call.
 export function useAccountSignOut() {
+  const api = useApi();
   return useMutation<void, Error, void>({
-    mutationFn: () => window.api.account.signOut(),
+    mutationFn: () => api.account.signOut(),
     meta: { errorTitle: "Couldn't sign out" },
   });
 }
@@ -150,16 +157,18 @@ export function useAccountSignOut() {
 // Clerk session ends first and ClerkAccountSync cannot re-enroll it
 // back onto the account.
 export function useRevokeDevice() {
+  const api = useApi();
   return useMutation<void, Error, string>({
-    mutationFn: (deviceId) => window.api.account.revokeDevice(deviceId),
+    mutationFn: (deviceId) => api.account.revokeDevice(deviceId),
     meta: { errorTitle: "Couldn't remove this device" },
   });
 }
 
 // A rename of any device of the account, this one or a peer.
 export function useSetDeviceName() {
+  const api = useApi();
   return useMutation<AccountStatus, Error, { deviceId: string; name: string }>({
-    mutationFn: (target) => window.api.account.setDeviceName(target),
+    mutationFn: (target) => api.account.setDeviceName(target),
     meta: { errorTitle: "Couldn't rename the device" },
   });
 }
@@ -167,12 +176,13 @@ export function useSetDeviceName() {
 // The icon pick for any device of the account, this one or a peer.
 // Picking a device's detected icon puts it back to its default.
 export function useSetDeviceIcon() {
+  const api = useApi();
   return useMutation<
     AccountStatus,
     Error,
     { deviceId: string; icon: DeviceIcon }
   >({
-    mutationFn: (target) => window.api.account.setDeviceIcon(target),
+    mutationFn: (target) => api.account.setDeviceIcon(target),
     meta: { errorTitle: "Couldn't change the device's icon" },
   });
 }
@@ -182,9 +192,10 @@ export function useSetDeviceIcon() {
 // as useAccountDevices, and the handler answers false signed out. Kept
 // off the "account" prefix so the toggle invalidates only this.
 export function useAcceptsCommands() {
+  const api = useApi();
   return useQuery<boolean>({
     queryKey: queryKeys.accountCommandAccess(),
-    queryFn: () => window.api.account.acceptsCommands(),
+    queryFn: () => api.account.acceptsCommands(),
     meta: { errorTitle: "Couldn't read command access" },
   });
 }
@@ -194,21 +205,23 @@ export function useAcceptsCommands() {
 // state without polling. Separate from the account.changed watch so
 // the toggle never re-reads status or the device list.
 export function useWatchCommandAccessChanges(): void {
+  const api = useApi();
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      window.api.account.onCommandAccessChanged((accepts) => {
+      api.account.onCommandAccessChanged((accepts) => {
         queryClient.setQueryData(queryKeys.accountCommandAccess(), accepts);
       }),
-    [queryClient],
+    [queryClient, api],
   );
 }
 
 // An imperative write. It does not update itself: main emits
 // commandAccessChanged and useWatchCommandAccessChanges writes it.
 export function useSetAcceptsCommands() {
+  const api = useApi();
   return useMutation<void, Error, boolean>({
-    mutationFn: (enabled) => window.api.account.setAcceptsCommands(enabled),
+    mutationFn: (enabled) => api.account.setAcceptsCommands(enabled),
     meta: { errorTitle: "Couldn't change command access" },
   });
 }

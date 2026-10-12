@@ -9,6 +9,8 @@ import { existsSync, readFileSync, rmSync, type WriteStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright-core";
+import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
+import { pageApi, withPageApi } from "./pageApi.mts";
 import { appDir, freePort, waitFor, type TraceLine } from "./util.mts";
 
 export type DevAppOptions = {
@@ -110,11 +112,11 @@ export class DevApp {
     const needsTunnel = this.options.needsTunnel;
     await waitFor(
       `${this.profile} to be signed in and on the hub${needsTunnel ? ", with its tunnel up" : ""}`,
-      () =>
-        page.evaluate(async (tunnel) => {
+      async () =>
+        (await pageApi(page)).evaluate(async (api, tunnel) => {
           const [account, hub] = await Promise.all([
-            window.api.account.status(),
-            window.api.hub.status(),
+            api.account.status(),
+            api.hub.status(),
           ]);
           return (
             account.signedIn &&
@@ -141,10 +143,11 @@ export class DevApp {
     return context;
   }
 
-  async eval<T>(fn: () => T | Promise<T>): Promise<T> {
+  // Runs `fn` in its first window with the window's api.
+  async eval<T>(fn: (api: RendererApi) => T | Promise<T>): Promise<T> {
     const page = this.windows()[0];
     if (page === undefined) throw new Error(`no ${this.profile} window`);
-    return await page.evaluate(fn);
+    return await withPageApi(page, fn);
   }
 
   // Its host (the shell's utility process for the profile), which the
@@ -274,7 +277,7 @@ export class DevApp {
   // session (dev-app.md, "Rules"), so this is the account layer's.
   async revoke(): Promise<void> {
     if (this.windows().length === 0) return;
-    await this.eval(() => window.api.account.signOut()).catch(() => {});
+    await this.eval((api) => api.account.signOut()).catch(() => {});
   }
 
   removeProfile(): void {

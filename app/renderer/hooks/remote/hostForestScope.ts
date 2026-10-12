@@ -1,29 +1,14 @@
 // Which device a request reads, and over which api, for the queries a
 // scoped caller (a useHostScope consumer, the sidebar's remote fan-out)
-// runs on any device. Both default to the local machine, so a
-// scope-less call reads this machine's, and a peer's data caches under
-// its own id.
+// runs on any device. A peer's data caches under its own id, and an api
+// of undefined means "this device has no connection": nothing is asked.
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
-import { localDeviceId } from "@/lib/queryKeys";
-import type { HostApi, HostScope } from "@/hooks/remote/useHostScope";
+import type { HostApi } from "@/hooks/remote/useHostScope";
 
-export type HostForestScope = Partial<HostScope>;
-
-// The (device, api) pair a scope names. The api falls back to
-// window.api only when the KEY is absent (a scope-less local call): a
-// caller passing `api: undefined` means "this device has no
-// connection", and a default parameter would silently swap the local
-// api in, so every offline device would fetch and cache THIS machine's
-// data under its own device key.
-export function resolveForestScope(scope: HostForestScope): {
-  deviceId: string;
-  api: HostApi | undefined;
-} {
-  return {
-    deviceId: scope.deviceId ?? localDeviceId,
-    api: "api" in scope ? scope.api : window.api,
-  };
-}
+export type HostForestScope = {
+  readonly deviceId: string;
+  readonly api: HostApi | undefined;
+};
 
 // How many of the per-project reads (a project's pull requests, its
 // config, its icon, its GitHub description) go to one device at once.

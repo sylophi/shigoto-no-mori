@@ -19,6 +19,7 @@ import {
 } from "@/lib/routePaths";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import { drawerKey, openScriptTab } from "@/store/terminalDrawer";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The worktree pages' params, read non-strictly because the pages
 // share them across five routes (the router can only type params
@@ -48,6 +49,7 @@ export function useWorktreeNav() {
   const navigate = useNavigate();
   const matchRoute = useMatchRoute();
   const { deviceId } = useHostScope();
+  const localDeviceId = useApi().deviceId;
 
   // `on` names the device whose page to open. The router can only
   // check params against ONE literal `to`, and this one is a union of
@@ -213,7 +215,7 @@ export function useWorktreeNav() {
       page: WorktreePage,
       params: WorktreePageParams,
     ) {
-      goOn(routeDeviceId(on), page, params);
+      goOn(routeDeviceId(localDeviceId, on), page, params);
     },
 
     // Where "leave this worktree's pages" lands. While the sidebar
@@ -224,10 +226,10 @@ export function useWorktreeNav() {
     // the root is the merged tree's home either way (the web shell's
     // root dispatches to /account).
     toFallback(gone: readonly string[], replace = false) {
-      const next = inboxTopRow(rowDeviceId(deviceId), gone);
+      const next = inboxTopRow(rowDeviceId(localDeviceId, deviceId), gone);
       if (next) {
         goOn(
-          routeDeviceId(next.device?.deviceId),
+          routeDeviceId(localDeviceId, next.device?.deviceId),
           "detail",
           { projectId: next.project.id, worktreeId: next.worktree.id },
           replace,

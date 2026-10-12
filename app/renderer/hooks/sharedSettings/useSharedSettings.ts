@@ -14,16 +14,18 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { sharedStringSetting } from "@shigomori/contracts/sharedSettings";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { localDeviceId } from "@/lib/queryKeys";
+import * as Atom from "effect/reactivity/Atom";
 import { writeSharedSetting } from "@/lib/remote/sharedSettingsSync";
 import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useApi } from "@/lib/runtime/pageApi";
 
-const sharedSettingsAtom = hostViewAtom({
-  deviceId: localDeviceId,
-  localDeviceId,
-  view: callOf(sharedSettingsContract, "watch"),
-  input: undefined,
-});
+const sharedSettingsAtom = Atom.family((deviceId: string) =>
+  hostViewAtom({
+    deviceId,
+    view: callOf(sharedSettingsContract, "watch"),
+    input: undefined,
+  }),
+);
 
 const docOf = (
   result: AsyncResult.AsyncResult<SharedSettingsDoc, unknown>,
@@ -37,7 +39,7 @@ const docOf = (
 export function useSharedStringSetting(
   key: string | undefined,
 ): string | undefined {
-  return useAtomValue(sharedSettingsAtom, (result) => {
+  return useAtomValue(sharedSettingsAtom(useApi().deviceId), (result) => {
     const doc = docOf(result);
     return doc === undefined || key === undefined
       ? undefined
@@ -53,7 +55,7 @@ export function useSharedSettingsView<T>(
   select: (doc: SharedSettingsDoc) => T,
 ): T | undefined {
   const last = useRef<{ json: string; value: T } | null>(null);
-  return useAtomValue(sharedSettingsAtom, (result) => {
+  return useAtomValue(sharedSettingsAtom(useApi().deviceId), (result) => {
     const doc = docOf(result);
     if (doc === undefined) return undefined;
     const value = select(doc);
@@ -70,7 +72,7 @@ export function useSharedSettingsView<T>(
 // holds off.
 export function useSharedSettingsSettled(): boolean {
   return useAtomValue(
-    sharedSettingsAtom,
+    sharedSettingsAtom(useApi().deviceId),
     (result) => !AsyncResult.isInitial(result),
   );
 }
@@ -81,9 +83,10 @@ export function useSetSharedSetting(
   key: string | undefined,
   errorTitle: string,
 ) {
+  const api = useApi();
   const mutation = useMutation({
     mutationFn: (write: { key: string; value: SharedSettingValue }) =>
-      writeSharedSetting(write.key, write.value),
+      writeSharedSetting(api, write.key, write.value),
     meta: { errorTitle },
   });
   return (value: SharedSettingValue) => {

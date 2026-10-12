@@ -44,6 +44,6 @@ export function buildApi(
   return api as RendererContractApi;
 }
 
-// The host-scoped slice of the api: what a device serves, so window.api
+// The host-scoped slice of the api: what a device serves, so the page's api
 // and a connected remote device's api both satisfy it.
 export type HostApi = HostApiOf<AllContractModule>;

@@ -10,6 +10,7 @@ import type { Theme } from "@shigomori/contracts/schemas";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useClientConfig } from "../config/useClientConfig";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { useApi } from "@/lib/runtime/pageApi";
 
 interface ThemeState {
   // Persisted value from clientConfig.json: what the settings UI
@@ -66,6 +67,7 @@ export function ThemeProvider({
   fromRoot: boolean;
   children: ReactNode;
 }) {
+  const api = useApi();
   const root = useWindowRoot();
   const rootTheme = useRootTheme(root);
   const { data: config, isLoading } = useClientConfig();
@@ -110,8 +112,8 @@ export function ThemeProvider({
   // the applied theme (including unsaved previews). Non-persisting: the
   // saved value lands through the clientConfig write instead.
   useEffect(() => {
-    if (!fromRoot) void window.api.window.previewTheme({ theme: applied });
-  }, [fromRoot, applied]);
+    if (!fromRoot) void api.window.previewTheme({ theme: applied });
+  }, [fromRoot, applied, api]);
 
   // Mirror the saved value into localStorage so the next launch can paint
   // without waiting for clientConfig to load.

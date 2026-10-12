@@ -6,12 +6,12 @@ over the device link through the hub, and it serves only itself, in the
 page.
 
 - `main.tsx`, `preload.ts`, `boot.tsx`: the page's entry. `preload.ts`
-  installs the bridge on `window.api` before any renderer module
-  evaluates (several read it at module scope), then `boot.tsx` runs the
-  renderer's shared boot with plain `@clerk/react` and real browser
-  history. The twins of `main/preload.ts` and `renderer/index.tsx`.
+  makes the bridge and wires the page's events, then `boot.tsx` runs
+  the renderer's shared boot on the bridge's api with plain
+  `@clerk/react` and real browser history. The twins of
+  `main/preload.ts` and `renderer/index.tsx`.
 - `ipc/register.ts`: the tab's composition root. It builds the same
-  `window.api` the desktop does over the tab's client runtime, from
+  page api the desktop does over the tab's client runtime, from
   `WebBridgeDeps`, so a check can run it headless.
   `ipc/localRegistrar.ts` serves what a tab serves itself (the account,
   the client config, the hub bridge, the shell, the releases, its copy

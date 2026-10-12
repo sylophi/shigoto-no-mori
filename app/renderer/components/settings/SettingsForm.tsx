@@ -22,8 +22,7 @@ import {
 import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
 import type {
   ClientConfig,
   GlobalConfig,
@@ -72,6 +71,7 @@ import {
   type SettingsHeading,
   SettingsPageView,
 } from "@shigomori/ui/views/settings/SettingsFormView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this
@@ -105,6 +105,8 @@ export function SettingsForm({
   initialConfig: GlobalConfig;
   initialClientConfig: ClientConfig;
 }) {
+  const localDeviceId = useApi().deviceId;
+  const hasLocalHost = useHasLocalHost();
   const save = useSettingsSave({ initialConfig, initialClientConfig });
   const { setOverride } = useTheme();
   const { setOverride: setPaletteOverride } = usePalette();

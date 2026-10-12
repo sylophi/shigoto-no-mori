@@ -6,6 +6,7 @@ import { migrationOwed } from "@shigomori/contracts/schemas/migration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import { migrationEnded } from "@shigomori/ui/views/steps/migrationEnded.ts";
 import { useSignInStep } from "@/components/steps/useSignInStep";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The v3 migration as this machine's shell serves it, in place of the app
 // (the /migration route), with this device's enrollment for its key
@@ -13,6 +14,7 @@ import { useSignInStep } from "@/components/steps/useSignInStep";
 // button once it has lapsed. With every step done it opens the app, and
 // with nothing to migrate at once.
 export function MigrationPage() {
+  const api = useApi();
   const migration = useMigration();
   // Shown from the moment the device key is due, and done once it no
   // longer is.
@@ -30,7 +32,7 @@ export function MigrationPage() {
   // On to the app, for every window: the shell keeps the page until one
   // goes on past it.
   const goOn = () => {
-    void window.api.migration.continue();
+    void api.migration.continue();
     void navigate({ to: "/", replace: true });
   };
 
@@ -40,12 +42,12 @@ export function MigrationPage() {
     (migration !== undefined && migration.planned && !migrationOwed(migration));
   useEffect(() => {
     if (open) {
-      void window.api.migration.continue();
+      void api.migration.continue();
       void navigate({ to: "/", replace: true });
     } else if (nothing) {
       void navigate({ to: "/", replace: true });
     }
-  }, [open, nothing, navigate]);
+  }, [open, nothing, navigate, api]);
 
   // Nothing drawn on the way out, so a migration that finished clean
   // never flashes the page.

@@ -39,10 +39,11 @@ import {
   useEveryHost,
   useRemoteDeviceApi,
 } from "@/hooks/remote/useRemoteDevices";
-import { hasLocalHost } from "@/lib/localHost";
-import { invalidateHostDevice, localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
+import { invalidateHostDevice } from "@/lib/queryKeys";
 import { forgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError, toast } from "@/lib/toast";
+import { useApi } from "@/lib/runtime/pageApi";
 
 const EMPTY: MirrorListResult = {
   daemon: "stopped",
@@ -54,7 +55,6 @@ const EMPTY: MirrorListResult = {
 const mirrorsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(mirrorContract, "watch"),
     input: undefined,
   }),
@@ -79,6 +79,8 @@ export function useMirrors(): MirrorListResult {
 // the host's refusal. A list not read yet blocks nothing: the refusal
 // still stands behind it.
 export function useLocalMirrorBlocker(): string | undefined {
+  const localDeviceId = useApi().deviceId;
+  const hasLocalHost = useHasLocalHost();
   const list = useDeviceMirrors(localDeviceId, hasLocalHost);
   return list === undefined ? undefined : mirrorEngineBlocker(list.daemon);
 }
@@ -336,9 +338,9 @@ export function useWorktreeMirrorLinks(
 // so the cancel is the ordinary one, which startFrom forwards to the
 // peer running the send.
 export function useStartMirror(move: Move) {
+  const api = useApi();
   return useMoveMutation(move, {
-    cancel: (sourceWorktreeId) =>
-      window.api.sync.cancelMove({ sourceWorktreeId }),
+    cancel: (sourceWorktreeId) => api.sync.cancelMove({ sourceWorktreeId }),
     pull: ({
       sourceDeviceId,
       sourceProjectId,
@@ -349,7 +351,7 @@ export function useStartMirror(move: Move) {
       ignores,
       cloneInto,
     }) =>
-      window.api.mirror.startFrom({
+      api.mirror.startFrom({
         sourceDeviceId,
         sourceProjectId,
         sourceWorktreeId,
@@ -359,7 +361,7 @@ export function useStartMirror(move: Move) {
         ignores,
         cloneInto,
       }),
-    send: (payload) => window.api.mirror.startTo(payload),
+    send: (payload) => api.mirror.startTo(payload),
   });
 }
 
@@ -394,6 +396,8 @@ export function useSetMirrorIgnores() {
 // so a page at the far end drives the session through the peer). The
 // list refreshes off that daemon's own state snapshot.
 export function useMirrorControls() {
+  const page = useApi();
+  const localDeviceId = page.deviceId;
   const { api } = useHostScope();
   const queryClient = useQueryClient();
   const registry = useRegistry();
@@ -442,6 +446,7 @@ export function useMirrorControls() {
       const removed = error === null && result?.removedCopy !== false;
       if (removed && session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
+          page,
           queryClient,
           registry,
           localDeviceId,

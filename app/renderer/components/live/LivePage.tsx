@@ -30,6 +30,7 @@ import {
   LivePageView,
 } from "@shigomori/ui/views/live/LivePageView.tsx";
 import { buildLive, countLive, type LiveDevice } from "./liveModel";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // "1 agent needs you, with 2 scripts, 1 port forward and 1 mirror
 // running", leaving out what is none.
@@ -101,11 +102,13 @@ export function LivePage() {
 // go: the end of a day's work, or a machine bogged down by dev servers
 // left behind. Armed by a first click, like the app's other removals.
 function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
+  const page = useApi();
   const registry = useRemoteDevices();
   const { armed, trigger } = useConfirmTwice();
   const runs = hosts.flatMap(({ deviceId, api, runs: hostRuns }) =>
     api !== undefined &&
     commandAccessOf(
+      page.deviceId,
       deviceId,
       registry.find((device) => device.deviceId === deviceId),
     ).canCommand
@@ -115,7 +118,9 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
   const stopAll = useMutation({
     mutationFn: () =>
       Promise.allSettled(
-        runs.map(({ deviceId, run }) => scriptRunsFor(deviceId).stopRun(run)),
+        runs.map(({ deviceId, run }) =>
+          scriptRunsFor(page, deviceId).stopRun(run),
+        ),
       ),
     // The rows go as each script ends, so the outcome is said once,
     // here, rather than left to the page emptying.

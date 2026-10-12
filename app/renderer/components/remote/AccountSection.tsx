@@ -1,5 +1,5 @@
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import {
   AccountLoadingView,
@@ -7,6 +7,7 @@ import {
   SignedOutPanelView,
 } from "@shigomori/ui/views/remote/AccountPanelsView.tsx";
 import { DeviceRegistry } from "./DeviceRegistry";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // "Account": sign in to the device hub so this device can reach the
 // account's other devices. Three states. Not
@@ -16,12 +17,12 @@ import { DeviceRegistry } from "./DeviceRegistry";
 // carries the account line (who is signed in, sign-out) itself, since
 // that line is the registry's caption and nothing else.
 export function AccountSection() {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const { data: status } = useAccountStatus();
   if (status === undefined) return <AccountLoadingView />;
   if (!status.configured) {
-    return (
-      <NotConfiguredPanelView isDev={window.api.isDev} desktop={hasLocalHost} />
-    );
+    return <NotConfiguredPanelView isDev={api.isDev} desktop={hasLocalHost} />;
   }
   if (!status.signedIn) {
     return (

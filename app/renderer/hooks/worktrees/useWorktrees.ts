@@ -3,7 +3,6 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import {
   endWith,
@@ -32,7 +31,6 @@ export const worktreesAtom = Atom.family((key: string) => {
   const [deviceId = "", projectId = ""] = key.split("\n");
   return hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(worktreesContract, "watch"),
     input: { projectId },
     onValue: (list) => noteWorktreeList({ key, deviceId, list }),

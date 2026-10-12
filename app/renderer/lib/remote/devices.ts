@@ -6,16 +6,15 @@
 // the external store a React binding reads through useSyncExternalStore,
 // so device status renders live without prop threading.
 //
-// This file is renderer-only: it reads window.api for the local device's
-// facts. It is NOT the transport machinery (that is the hub bridge in
-// main); it is the renderer's wiring around it, so it stays out of the
-// headless proof.
+// This file is renderer-only. It is NOT the transport machinery (that
+// is the hub bridge in main); it is the renderer's wiring around it, so
+// it stays out of the headless proof.
 import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 import type { RendererContractApi } from "@shared/ipc/client";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
-// The api over one device's transports. Same shape as window.api's
+// The api over one device's transports. Same shape as the page api's
 // contract methods, minus the bridge-only extras (deviceId, appVersion).
 export type RemoteDeviceApi = RendererContractApi;
 

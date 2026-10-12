@@ -13,19 +13,10 @@ import assert from "node:assert/strict";
 import { it } from "vitest";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-
-// The renderer's key registry reads this device's id off window.api as
-// it loads.
-// @ts-expect-error a stand-in for the preload's window
-globalThis.window = { api: { deviceId: "forest-reads-check" } };
-const { projectPullRequestsQueryOptions } =
-  await import("@/hooks/projects/useProjectPullRequests");
-const { shigomoriConfigQueryOptions } =
-  await import("@/hooks/config/useShigomoriConfig");
-const { projectIconQueryOptions } =
-  await import("@/hooks/projects/useProjectIcon");
-const { repoDescriptionQueryOptions } =
-  await import("@/hooks/projects/useRepoDescription");
+import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
+import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
+import { projectIconQueryOptions } from "@/hooks/projects/useProjectIcon";
+import { repoDescriptionQueryOptions } from "@/hooks/projects/useRepoDescription";
 
 // A host api whose three reads answer after a tick, counting how many
 // are out at once.

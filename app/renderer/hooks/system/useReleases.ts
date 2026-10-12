@@ -3,6 +3,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { RATE_LIMITED } from "@shared/releases";
 import type { Release } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The app's GitHub releases, fetched when a changelog opens. GitHub
 // allows 60 unauthenticated calls an hour per address (shared with
@@ -14,9 +15,10 @@ import { queryKeys } from "@/lib/queryKeys";
 const HALF_HOUR_MS = 30 * 60 * 1000;
 
 export function useReleases() {
+  const api = useApi();
   return useQuery<readonly Release[]>({
     queryKey: queryKeys.releases(),
-    queryFn: () => window.api.releases.list(),
+    queryFn: () => api.releases.list(),
     staleTime: HALF_HOUR_MS,
     gcTime: HALF_HOUR_MS,
     retry: (failures, error) =>

@@ -21,7 +21,6 @@ import {
 import {
   combineFanOut,
   forestRead,
-  resolveForestScope,
   type HostForestScope,
 } from "@/hooks/remote/hostForestScope";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -100,13 +99,13 @@ export async function syncProjectPullRequests(
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest, and checks this map only to decide whether to
 // hold the section's place while that loads.
-// Scope rule as resolveForestScope's: a peer's map caches under its
+// Scope rule as HostForestScope's: a peer's map caches under its
 // own device id, and a device with no session never fetches.
 export function projectPullRequestsQueryOptions(
   projectId: string,
-  scope: HostForestScope = {},
+  scope: HostForestScope,
 ) {
-  const { deviceId, api } = resolveForestScope(scope);
+  const { deviceId, api } = scope;
   return queryOptions<Record<string, PullRequest>>({
     queryKey: queryKeysFor(deviceId).projectPullRequests(projectId),
     queryFn:

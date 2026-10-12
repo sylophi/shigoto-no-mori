@@ -10,8 +10,10 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { notifyError } from "@/lib/toast";
 import { DangerZoneView } from "@shigomori/ui/views/settings/DangerZoneView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function DangerZone() {
+  const api = useApi();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
@@ -19,7 +21,7 @@ export function DangerZone() {
   const [progress, setProgress] = useState<NukeProgress | null>(null);
   const [left, setLeft] = useState<NukeReport["left"] | null>(null);
 
-  useEffect(() => window.api.runtime.onNukeProgress(setProgress), []);
+  useEffect(() => api.runtime.onNukeProgress(setProgress), [api]);
 
   const home = runtime?.homedir ?? null;
   const root = runtime?.dataDir ? tildify(runtime.dataDir, home) : "~/.sm";
@@ -32,8 +34,8 @@ export function DangerZone() {
         // The host's half, then the shell's (sign-out, the marker that
         // deletes the files at the next start). Either may leave
         // something it says why for.
-        const host = await window.api.runtime.nuke();
-        const shell = await window.api.window.nuke();
+        const host = await api.runtime.nuke();
+        const shell = await api.window.nuke();
         // Every cached query now describes what is going. A blanket
         // invalidateQueries() would refetch them all and raise a burst
         // of "Unknown project/worktree" toasts. Cancel in-flight fetches
@@ -43,7 +45,7 @@ export function DangerZone() {
         setOpenProject(null);
         const all = [...host.left, ...shell.left];
         if (all.length === 0) {
-          void window.api.window.relaunch();
+          void api.window.relaunch();
           return;
         }
         setLeft(all);
@@ -64,7 +66,7 @@ export function DangerZone() {
       left={left}
       armed={armed}
       onNuke={handleNuke}
-      onRelaunch={() => void window.api.window.relaunch()}
+      onRelaunch={() => void api.window.relaunch()}
     />
   );
 }

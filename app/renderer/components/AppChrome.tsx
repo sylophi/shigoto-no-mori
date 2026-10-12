@@ -6,15 +6,17 @@ import { type ToastClassnames, Toaster } from "sonner";
 import { ErrorFallbackView } from "@shigomori/ui/views/ErrorFallbackView.tsx";
 import { VillageToaster } from "@/components/villagers/toasts";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function AppErrorFallback({ error }: FallbackProps) {
+  const api = useApi();
   const err = error instanceof Error ? error : new Error(String(error));
   return (
     <ErrorFallbackView
       error={err}
       scope="app"
       action={{
-        label: window.api.isElectron ? "Reload window" : "Reload page",
+        label: api.isElectron ? "Reload window" : "Reload page",
         onClick: () => window.location.reload(),
       }}
     />

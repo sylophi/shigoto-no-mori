@@ -6,7 +6,7 @@ import {
   type LightTheme,
 } from "@shigomori/ui/lib/themes.ts";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { AppearanceSectionView } from "@shigomori/ui/views/settings/AppearanceSectionView.tsx";
 import { ThemePicker } from "./ThemePicker";
 import { VillageLifeSetting } from "./VillageLifeSetting";
@@ -40,6 +40,7 @@ export function AppearanceSection({
   onVillageNewsChange: (next: boolean) => void;
   heading?: string;
 }) {
+  const hasLocalHost = useHasLocalHost();
   return (
     <AppearanceSectionView
       {...props}

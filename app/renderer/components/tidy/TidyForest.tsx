@@ -11,7 +11,6 @@ import {
   type DeviceTab,
 } from "@/components/shared/DeviceTabs";
 import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
-import { localDeviceId } from "@/lib/queryKeys";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
   useAllProjectHygiene,
@@ -44,6 +43,7 @@ import {
 import { TidyGroupHeadingView } from "@shigomori/ui/views/tidy/TidyGroupHeadingView.tsx";
 import { TidyRow } from "./TidyRow";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // One shared object for every un-started row: a fresh literal per render
 // would give all 40 rows a new `status` prop each time a disk walk
@@ -60,6 +60,8 @@ const IDLE: RowStatus = { kind: "idle" };
 // with its own forest under it: every read and every removal below
 // rides the host scope the tab mounts.
 export function TidyForest() {
+  const page = useApi();
+  const localDeviceId = page.deviceId;
   const tabs = useDeviceTabs();
   // The device the Settings host sections show, which opens on this
   // device: one pick for Tidy and those sections, so stepping between
@@ -76,7 +78,7 @@ export function TidyForest() {
     icon: "desktop",
     isThisDevice: true,
     status: null,
-    api: window.api,
+    api: page,
     block: undefined,
   };
   return (

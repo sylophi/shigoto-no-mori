@@ -26,6 +26,7 @@ import { useBinding } from "@/hooks/ui/useKeymap";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 interface AddExistingFormProps {
   // The input value IS the path. Tildified paths are expanded server-side.
@@ -52,6 +53,7 @@ export function AddExistingForm({
   onClose,
   escapeRef,
 }: AddExistingFormProps) {
+  const page = useApi();
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
   const confirmKeys = useBinding("confirm");
@@ -124,7 +126,7 @@ export function AddExistingForm({
   const pickViaDialog = async () => {
     let picked: string | null;
     try {
-      picked = await window.api.dialog.pickFolder();
+      picked = await page.dialog.pickFolder();
     } catch (err) {
       // A cancelled dialog resolves to null, so this is a real failure.
       notifyError("Couldn't open the folder picker", err);

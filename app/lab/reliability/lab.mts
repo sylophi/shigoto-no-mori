@@ -31,7 +31,9 @@ import {
   type CDPSession,
   type Page,
 } from "playwright-core";
+import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { DevApp } from "./devApp.mts";
+import { withPageApi } from "./pageApi.mts";
 import {
   HubFront,
   ListenerFront,
@@ -100,7 +102,7 @@ const PAGE_HOOKS = `(() => {
   }).observe(document, { childList: true, subtree: true });
 })();`;
 
-// What the harness reaches in a page besides window.api: its own hooks
+// What the harness reaches in a page besides its api: its own hooks
 // (PAGE_HOOKS), and the part of Clerk's global it uses.
 declare global {
   interface Window {
@@ -423,13 +425,13 @@ export class Lab {
       this.note(`launching C, ${this.remote.profile}`);
       await this.remote.launch(remoteFresh);
     }
-    const [status, projects] = await this.hostApp.eval(() =>
-      Promise.all([window.api.account.status(), window.api.projects.list()]),
+    const [status, projects] = await this.hostApp.eval((api) =>
+      Promise.all([api.account.status(), api.projects.list()]),
     );
     const project = projects.find((p) => p.name === this.hostApp.profile);
     if (project === undefined) throw new Error("the host lists no project");
     this.host = {
-      deviceId: await this.hostApp.eval(() => window.api.deviceId),
+      deviceId: await this.hostApp.eval((api) => api.deviceId),
       label: status.deviceName,
       projectId: project.id,
       projectName: project.name,
@@ -437,9 +439,7 @@ export class Lab {
     this.note(`host ${this.host.label} is ${this.host.deviceId}`);
     if (this.desk !== null) {
       // A's sends and brings are commands B runs.
-      await this.hostApp.eval(() =>
-        window.api.account.setAcceptsCommands(true),
-      );
+      await this.hostApp.eval((api) => api.account.setAcceptsCommands(true));
       await this.adoptWindows(this.desk, "desk", this.has("desktop") ? 2 : 0);
     }
     if (this.remote !== null) await this.adoptWindows(this.remote, "tun", 1);
@@ -456,7 +456,7 @@ export class Lab {
     await context.addInitScript(PAGE_HOOKS);
     while (app.windows().length < Math.max(count, 1)) {
       const before = app.windows().length;
-      await app.eval(() => window.api.window.open({ route: "/" }));
+      await app.eval((api) => api.window.open({ route: "/" }));
       await waitFor(
         `${app.profile}'s new window`,
         async () => app.windows().length > before,
@@ -486,7 +486,7 @@ export class Lab {
   // A new window of A's, as a client.
   async openWindow(app: DevApp, prefix: string): Promise<Tab> {
     const before = new Set(app.windows());
-    await app.eval(() => window.api.window.open({ route: "/" }));
+    await app.eval((api) => api.window.open({ route: "/" }));
     const page = await waitFor(
       `${app.profile}'s new window`,
       async () => app.windows().find((each) => !before.has(each)),
@@ -522,7 +522,7 @@ export class Lab {
     await this.hostApp.launch(cloneLogin);
   }
 
-  async hostEval<T>(fn: () => T | Promise<T>): Promise<T> {
+  async hostEval<T>(fn: (api: RendererApi) => T | Promise<T>): Promise<T> {
     return await this.hostApp.eval(fn);
   }
 
@@ -684,7 +684,7 @@ export class Lab {
       const [tab] = this.tabs;
       if (tab !== undefined) {
         await step("signing the browser out", () =>
-          tab.page.evaluate(() => window.api.account.signOut()),
+          withPageApi(tab.page, (api) => api.account.signOut()),
         );
       }
       for (const app of apps) {

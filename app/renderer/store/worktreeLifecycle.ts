@@ -15,14 +15,14 @@ import type {
   CreatePhase,
   WorktreeRemoval,
 } from "@shigomori/contracts/schemas";
-import { localDeviceId } from "@/lib/queryKeys";
 import {
   apiFor,
   onAccountLeft,
   onSessionLanded,
 } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
-import type { RendererApi } from "@/window";
+import type { RendererApi } from "@/lib/runtime/pageApi";
+import { useApi } from "@/lib/runtime/pageApi";
 import { KeyedSubscribers } from "./keyedSubscribers";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
@@ -72,10 +72,12 @@ class WorktreeLifecycleStore {
   private subs = new KeyedSubscribers<string>();
   private unsubscribes: Array<() => void> = [];
   private deviceId: string;
+  private local: boolean;
   private api: WorktreesApi;
 
-  constructor(deviceId: string, api: WorktreesApi) {
+  constructor(deviceId: string, local: boolean, api: WorktreesApi) {
     this.deviceId = deviceId;
+    this.local = local;
     this.api = api;
   }
 
@@ -100,7 +102,7 @@ class WorktreeLifecycleStore {
         }
       }),
     );
-    if (this.deviceId !== localDeviceId) return;
+    if (!this.local) return;
     this.unsubscribes.push(
       this.api.onLifecyclePhase((evt) => {
         this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
@@ -205,37 +207,54 @@ class WorktreeLifecycleStore {
   }
 }
 
-// `start()` is called by the renderer entry point so subscription
-// lifecycle has a single owner. Importing this module just constructs
-// the singleton; it does not attach IPC listeners as a side effect.
-export const worktreeLifecycle = new WorktreeLifecycleStore(
-  localDeviceId,
-  window.api.worktrees,
-);
+// A page's stores: this machine's over the page's api, whose `start()`
+// the boot calls so subscription lifecycle has a single owner (making
+// one attaches no IPC listener), and a peer's, dropped with the account
+// like the script run stores. One listens from the moment the peer's
+// session lands, not from the first row that asks: the row a mirror
+// folds away is never rendered, so nothing would open the store before
+// the peer announces the copy's removal, and a broadcast is not
+// replayed.
+type PageStores = {
+  readonly local: WorktreeLifecycleStore;
+  readonly peers: Map<string, WorktreeLifecycleStore>;
+};
 
-// A peer's stores, dropped with the account like the script run
-// stores. One listens from the moment the peer's session lands, not
-// from the first row that asks: the row a mirror folds away is never
-// rendered, so nothing would open the store before the peer announces
-// the copy's removal, and a broadcast is not replayed.
-const peerStores = new Map<string, WorktreeLifecycleStore>();
+const pages = new WeakMap<RendererApi, PageStores>();
 
-onAccountLeft(() => {
-  for (const store of peerStores.values()) store.stop();
-  peerStores.clear();
-});
+function storesOf(api: RendererApi): PageStores {
+  const existing = pages.get(api);
+  if (existing !== undefined) return existing;
+  const stores: PageStores = {
+    local: new WorktreeLifecycleStore(api.deviceId, true, api.worktrees),
+    peers: new Map(),
+  };
+  onAccountLeft(() => {
+    for (const store of stores.peers.values()) store.stop();
+    stores.peers.clear();
+  });
+  onSessionLanded((deviceId) => {
+    worktreeLifecycleFor(api, deviceId).clearRemoving();
+  });
+  pages.set(api, stores);
+  return stores;
+}
 
-onSessionLanded((deviceId) => {
-  worktreeLifecycleFor(deviceId).clearRemoving();
-});
-
-function worktreeLifecycleFor(deviceId: string): WorktreeLifecycleStore {
-  if (deviceId === localDeviceId) return worktreeLifecycle;
-  let store = peerStores.get(deviceId);
+export function worktreeLifecycleFor(
+  api: RendererApi,
+  deviceId: string,
+): WorktreeLifecycleStore {
+  const { local, peers } = storesOf(api);
+  if (deviceId === api.deviceId) return local;
+  let store = peers.get(deviceId);
   if (store === undefined) {
-    store = new WorktreeLifecycleStore(deviceId, apiFor(deviceId).worktrees);
+    store = new WorktreeLifecycleStore(
+      deviceId,
+      false,
+      apiFor(deviceId).worktrees,
+    );
     store.start();
-    peerStores.set(deviceId, store);
+    peers.set(deviceId, store);
   }
   return store;
 }
@@ -245,12 +264,11 @@ function worktreeLifecycleFor(deviceId: string): WorktreeLifecycleStore {
 export function useWorktreeCreatePhase(
   worktreeId: string | null,
 ): CreatePhase | null {
+  const api = useApi();
+  const store = worktreeLifecycleFor(api, api.deviceId);
   return useSyncExternalStore(
-    (cb) =>
-      worktreeId === null
-        ? () => {}
-        : worktreeLifecycle.subscribe(worktreeId, cb),
-    () => (worktreeId === null ? null : worktreeLifecycle.phase(worktreeId)),
+    (cb) => (worktreeId === null ? () => {} : store.subscribe(worktreeId, cb)),
+    () => (worktreeId === null ? null : store.phase(worktreeId)),
     () => null,
   );
 }
@@ -262,7 +280,7 @@ export function useWorktreeRemoving(
   worktreeId: string,
   deviceId: string,
 ): boolean {
-  const store = worktreeLifecycleFor(deviceId);
+  const store = worktreeLifecycleFor(useApi(), deviceId);
   return useSyncExternalStore(
     (cb) => store.subscribe(worktreeId, cb),
     () => store.isRemoving(worktreeId),

@@ -23,7 +23,7 @@ import { useCustomPortsWrite } from "@/hooks/ports/useCustomPorts";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
 import { ForwardAllButton } from "./ForwardAllButton";
@@ -136,6 +136,7 @@ export function PortList({
 }
 
 export function PortActions({ state }: { state: PortListState }) {
+  const canForwardPorts = useCanForwardPorts();
   const {
     deviceId,
     remote,

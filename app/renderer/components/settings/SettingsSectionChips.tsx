@@ -4,7 +4,7 @@
 // the edge. The same store underneath, so the header and the panels
 // follow a pick here exactly as they follow the sidebar's.
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { SettingsSectionChipsView } from "@shigomori/ui/views/settings/SettingsNavView.tsx";
 import { selectSettingsTab, useSettingsPanelControls } from "./settingsNav";
 import { settingsSections } from "@shigomori/ui/views/settings/settingsSections.ts";
@@ -18,6 +18,7 @@ export function SettingsSectionChips({
   // Whether any device holds a staged update (settingsSections).
   update: boolean;
 }) {
+  const hasLocalHost = useHasLocalHost();
   const phone = usePhoneLayout();
   const villageLife = useVillageLife();
   const controls = useSettingsPanelControls();

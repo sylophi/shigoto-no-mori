@@ -3,6 +3,7 @@ import { isEditableTarget, isRawKeySurface } from "@/lib/dom";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { DARK_THEMES, LIGHT_THEMES } from "@shigomori/ui/lib/themes.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The swatches' own palettes, leaving hidden variants to their hotkey.
 const DARK_CYCLE = DARK_THEMES.map((option) => option.id);
@@ -26,9 +27,10 @@ const LIGHT_CYCLE = LIGHT_THEMES.map((option) => option.id);
 // closed" and exit on, so a theme toggle typed into a focused console
 // would silently take the run down.
 export function DevThemeHotkeys() {
+  const api = useApi();
   // A client fact off the preload bridge, not runtime.info: the hotkeys
   // must key off this build, never the host it talks to.
-  const isDev = window.api.isDev;
+  const isDev = api.isDev;
   const { resolved, setOverride: setTheme } = useTheme();
   // The three primitives, not the picks object: a fresh object each
   // render would re-subscribe the listener on every one.

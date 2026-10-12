@@ -4,18 +4,17 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   combineFanOut,
   forestRead,
-  resolveForestScope,
   type HostForestScope,
 } from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
-// Scope rule as resolveForestScope's: a peer's config caches under its
+// Scope rule as HostForestScope's: a peer's config caches under its
 // own device id, and a device with no session never fetches.
 export function shigomoriConfigQueryOptions(
   projectId: string | null,
-  scope: HostForestScope = {},
+  scope: HostForestScope,
 ) {
-  const { deviceId, api } = resolveForestScope(scope);
+  const { deviceId, api } = scope;
   return queryOptions<ShigomoriConfig | null>({
     queryKey: queryKeysFor(deviceId).shigomoriConfig(projectId),
     queryFn: () => {

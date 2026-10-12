@@ -22,17 +22,17 @@ import {
   useRemoteDevices,
 } from "@/hooks/remote/useRemoteDevices";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
 import type { DeviceRosterEntry as ViewRosterEntry } from "@shigomori/ui/lib/deviceRoster.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export interface DeviceRosterEntry extends ViewRosterEntry {
-  // The api the body is scoped to: window.api for this device, a
+  // The api the body is scoped to: the page's api for this device, a
   // peer's only while it has a session.
   api: HostApi | undefined;
 }
@@ -50,6 +50,9 @@ export interface DeviceTab extends DeviceRosterEntry {
 // hosts no forest, so no pick offers it. The tabs below layer the
 // command grant on it; the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
+  const page = useApi();
+  const localDeviceId = page.deviceId;
+  const hasLocalHost = useHasLocalHost();
   const devices = useHostDevices();
   const local = useLocalDevice();
   const here: DeviceRosterEntry[] = hasLocalHost
@@ -60,7 +63,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
           icon: local.icon,
           isThisDevice: true,
           status: null,
-          api: window.api,
+          api: page,
         },
       ]
     : [];
@@ -87,6 +90,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
 // rule, rather than flashing a refusal that turns into a body a moment
 // later.
 export function useDeviceTabs(): DeviceTab[] {
+  const localDeviceId = useApi().deviceId;
   const devices = useRemoteDevices();
   const tabs: DeviceTab[] = [];
   for (const entry of useDeviceRoster()) {
@@ -95,6 +99,7 @@ export function useDeviceTabs(): DeviceTab[] {
       : !entry.status?.reachable || entry.api === undefined
         ? "offline"
         : commandAccessOf(
+              localDeviceId,
               entry.deviceId,
               devices.find((device) => device.deviceId === entry.deviceId),
             ).canCommand
@@ -133,10 +138,11 @@ export function usePickedDevice<T extends DeviceTab>(
 // sections and Tidy), so stepping between them stays on the machine
 // being looked at. Module state on purpose, like Settings' own
 // section pick: a navigation nicety for this window's lifetime. It
-// opens on this device. A remembered peer that has left falls back
-// like any pick, while the raw pick stays, so a peer merely not
-// rostered YET takes over the moment it appears.
-const hostPick = createExternalStore<string>(localDeviceId);
+// opens on this device (null until something else is picked). A
+// remembered peer that has left falls back like any pick, while the raw
+// pick stays, so a peer merely not rostered YET takes over the moment
+// it appears.
+const hostPick = createExternalStore<string | null>(null);
 
 export function pickHostDevice(deviceId: string): void {
   if (hostPick.get() === deviceId) return;
@@ -146,7 +152,9 @@ export function pickHostDevice(deviceId: string): void {
 export function useHostDevicePick<T extends { deviceId: string }>(
   tabs: readonly T[],
 ): T | undefined {
-  return resolvePick(tabs, useExternalStore(hostPick), localDeviceId);
+  const localDeviceId = useApi().deviceId;
+  const pick = useExternalStore(hostPick) ?? localDeviceId;
+  return resolvePick(tabs, pick, localDeviceId);
 }
 
 // The body under the picked tab: the page itself under that device's

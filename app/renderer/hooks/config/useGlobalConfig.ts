@@ -2,9 +2,8 @@ import { callOf } from "@shigomori/contracts/contract";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
 import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useView } from "@/lib/runtime/viewHooks";
 
 // A device's config, as its host streams it (globalConfig:watch). Writes
@@ -13,7 +12,6 @@ import { useView } from "@/lib/runtime/viewHooks";
 const globalConfigAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(globalConfigContract, "watch"),
     input: undefined,
   }),
@@ -33,5 +31,6 @@ export function useGlobalConfig() {
 // (launchScripts on a peer's worktree page). Never read on a hostless
 // client.
 export function useLocalGlobalConfig() {
-  return useView(hasLocalHost ? globalConfigAtom(localDeviceId) : null);
+  const api = useApi();
+  return useView(api.isElectron ? globalConfigAtom(api.deviceId) : null);
 }

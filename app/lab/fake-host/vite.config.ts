@@ -1,6 +1,6 @@
 // Vite config for the fake host (design exploration only, never
 // deployed): the DESKTOP renderer tree mounted in a browser over a
-// fixture window.api bridge (bridge.ts), so every
+// fixture page api (bridge.ts), so every
 // multi-device surface can be posed and screenshotted without a device
 // hub, a second machine, or Clerk. Mirrors the app-root
 // vite.web.config.ts (same plugins, same aliases) with three

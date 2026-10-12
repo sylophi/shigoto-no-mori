@@ -8,14 +8,17 @@
 // links.
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function useDeepLinks(): void {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const navigate = useNavigate();
   useEffect(() => {
     if (!hasLocalHost) return;
     const take = () => {
-      window.api.nav
+      api.nav
         .takeDeepLink()
         .then((route) => {
           if (route !== null) void navigate({ href: route });
@@ -25,6 +28,6 @@ export function useDeepLinks(): void {
         });
     };
     take();
-    return window.api.nav.onDeepLink(take);
-  }, [navigate]);
+    return api.nav.onDeepLink(take);
+  }, [navigate, api, hasLocalHost]);
 }

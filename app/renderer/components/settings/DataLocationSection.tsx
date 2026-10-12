@@ -6,10 +6,12 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import { notifyError, toast } from "@/lib/toast";
 import { DataLocationSectionView } from "@shigomori/ui/views/settings/DataLocationSectionView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // Where the shigomori data dir lives (DataLocationSectionView), and
 // the move that relaunches the app holding it.
 export function DataLocationSection() {
+  const page = useApi();
   const { api, remote } = useHostScope();
   // Whose app the copy below is talking about.
   const there = remote ? " on that device" : "";
@@ -43,7 +45,7 @@ export function DataLocationSection() {
       // Acknowledge: the main process relaunches only after this call,
       // which can't fire before the moveDataDir reply above was delivered.
       // Fire-and-forget, because the app quits out from under the promise.
-      void window.api.window.relaunch();
+      void page.window.relaunch();
     } catch (err) {
       notifyError("Couldn't move data folder", err);
       setMoving(false);
@@ -68,7 +70,7 @@ export function DataLocationSection() {
       resetArmed={reset.armed}
       onReveal={() => {
         if (root) {
-          window.api.shell
+          page.shell
             .showItemInFolder({ path: root })
             .catch((err) => notifyError("Couldn't reveal folder", err));
         }

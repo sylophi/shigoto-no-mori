@@ -4,7 +4,7 @@ import {
   type EnrollmentStep,
   useEnrollment,
 } from "@/hooks/account/useEnrollment";
-import { hasAccountService } from "@/lib/accountService";
+import { useHasAccountService } from "@/lib/accountService";
 
 const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
   done: { state: "done", asks: false },
@@ -26,10 +26,12 @@ type SignInStepHook = (due: boolean) => {
 // enrollment, waits on the button, which tries again. A build with no
 // account service has no ClerkProvider to enroll under (ClerkGate), so
 // it has no sign-in step and calls no Clerk hook; which of the two runs
-// is fixed for the window's life.
-export const useSignInStep: SignInStepHook = hasAccountService
-  ? useEnrollmentStep
-  : () => NO_SIGN_IN;
+// is fixed for the page's life.
+export const useSignInStep: SignInStepHook = (due) => {
+  const hasAccountService = useHasAccountService();
+  // oxlint-disable-next-line react-hooks/rules-of-hooks -- which branch runs is fixed for the page's life, so the hooks called never change
+  return hasAccountService ? useEnrollmentStep(due) : NO_SIGN_IN;
+};
 
 const NO_SIGN_IN = { signIn: null, needsDeviceKey: false, run: () => {} };
 

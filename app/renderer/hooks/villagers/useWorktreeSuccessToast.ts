@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ExternalToast } from "sonner";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { toastVillagerSuccess } from "@/components/villagers/toasts";
+import { useApi } from "@/lib/runtime/pageApi";
 import { speakersFor } from "@/lib/villagers/speakers";
 
 // A success toast about one worktree, said by its villager when it has
@@ -10,13 +11,14 @@ import { speakersFor } from "@/lib/villagers/speakers";
 // reads that find the speaker, which the cache usually holds already,
 // and shows plain if they fail.
 export function useWorktreeSuccessToast() {
+  const api = useApi();
   const queryClient = useQueryClient();
   return (
     worktree: Pick<Worktree, "id" | "name">,
     message: string,
     options?: ExternalToast,
   ): void => {
-    void speakersFor(queryClient, [worktree]).then((speakers) =>
+    void speakersFor(api, queryClient, [worktree]).then((speakers) =>
       toastVillagerSuccess(speakers.get(worktree.id), message, options),
     );
   };

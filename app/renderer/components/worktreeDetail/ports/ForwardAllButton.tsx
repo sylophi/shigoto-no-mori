@@ -19,6 +19,7 @@ import {
   type ForwardAllMode,
   ForwardAllButtonView,
 } from "@shigomori/ui/views/worktreeDetail/ports/ForwardAllButtonView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 type Mode = ForwardAllMode;
 
@@ -33,6 +34,7 @@ export function ForwardAllButton({
   ports: readonly WorktreePort[];
   granted: boolean;
 }) {
+  const api = useApi();
   const { forwards } = usePortForwards(deviceId);
   const configQuery = useClientConfig();
   const forwarded = new Set(forwards.map((forward) => forward.remotePort));
@@ -55,7 +57,7 @@ export function ForwardAllButton({
           };
           try {
             // oxlint-disable-next-line no-await-in-loop -- one probe channel at a time, in list order (see the header).
-            await window.api.portForward.start({
+            await api.portForward.start({
               deviceId,
               worktree,
               ...target,
@@ -72,7 +74,7 @@ export function ForwardAllButton({
         for (const forward of toStop) {
           try {
             // oxlint-disable-next-line no-await-in-loop -- same pacing as the starts.
-            await window.api.portForward.stop({ forwardId: forward.forwardId });
+            await api.portForward.stop({ forwardId: forward.forwardId });
           } catch (error) {
             failures.push(errorMessageOf(error));
           }

@@ -17,7 +17,7 @@
 // checkout can only be mirrored: a transplant would have to tear the
 // project itself down. The page renders it in two parts, the way it
 // does the local footer's (PeerTransferActions.tsx).
-import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   hasManageableMirror,
   type TransferOffers,
@@ -84,6 +84,7 @@ function TransferActions(props: TransferPartProps) {
 export function useRemoteTransferOffers(
   worktree: Worktree,
 ): TransferOffers & { deviceLabel: string } {
+  const canForwardPorts = useCanForwardPorts();
   const { granted } = useCommandAccess();
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
