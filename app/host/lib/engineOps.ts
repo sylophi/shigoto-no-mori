@@ -931,6 +931,12 @@ export const wtFolderMovedTo = Effect.fnUntraced(function* (fromPath: string) {
   return Option.getOrNull(moved);
 });
 
+// The id each worktree a recorded move took had, to the one it has
+// now (WtFolder.movedIds).
+export const wtFolderMovedIds = Effect.suspend(() =>
+  asCall(Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedIds)),
+);
+
 const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
 const decodeWorktreeIdentities = Schema.decodeUnknownSync(
   Schema.Array(WorktreeIdentitySchema),

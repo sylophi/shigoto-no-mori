@@ -486,10 +486,12 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
   opts: {
     contracts?: ServedContracts<C>;
     provide?: DirectListenerOpts["provide"];
+    isInvited?: DirectListenerOpts["isInvited"];
   } = {},
 ): Promise<DirectWire> {
   const listener = await startDirectListener(track, {
     ...(opts.provide === undefined ? {} : { provide: opts.provide }),
+    ...(opts.isInvited === undefined ? {} : { isInvited: opts.isInvited }),
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
         binding.served.serve(contract, handlers);

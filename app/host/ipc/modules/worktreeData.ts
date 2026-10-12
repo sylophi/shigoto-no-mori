@@ -3,15 +3,15 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
-import { findProject } from "@host/lib/projects";
+import { currentWorktreeId, findProject } from "@host/lib/projects";
 
 export const worktreeDataHandlers = {
   // Validate projectId against the project list before any read, so a
-  // bogus id names nothing.
+  // bogus id names nothing. A mirror's peer may name its copy by the id
+  // it had before a move, here and in describe.
   read: ({ projectId, worktreeId }) =>
-    Effect.andThen(
-      findProject(projectId),
-      Ops.readWorktreeData(projectId, worktreeId),
+    Effect.andThen(findProject(projectId), currentWorktreeId(worktreeId)).pipe(
+      Effect.flatMap((id) => Ops.readWorktreeData(projectId, id)),
     ),
 
   // The renderer only surfaces a ports editor for managed worktrees
@@ -26,10 +26,12 @@ export const worktreeDataHandlers = {
     ).pipe(Effect.asVoid),
 
   describe: ({ projectId, worktreeId, description }) =>
-    Effect.andThen(
-      findProject(projectId),
-      Ops.writeWorktreeDescription(projectId, worktreeId, description),
-    ).pipe(Effect.asVoid),
+    Effect.andThen(findProject(projectId), currentWorktreeId(worktreeId)).pipe(
+      Effect.flatMap((id) =>
+        Ops.writeWorktreeDescription(projectId, id, description),
+      ),
+      Effect.asVoid,
+    ),
 } satisfies EffectHandlers<
   typeof worktreeDataContract,
   unknown,

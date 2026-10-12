@@ -27,6 +27,12 @@
 // process that made it. The gates read them synchronously, so they are
 // held here too, read from the store as the mirror layer comes up and
 // written back as they change.
+//
+// The v3 migration moved every worktree into wt/, and a worktree's id is
+// a hash of its path, so a copy that landed before it has a new id while
+// the peer running its mirror still names the old one. The invitations
+// are re-keyed to the new ids as they load, and admit a call naming an
+// old id as the copy it became (WtFolder.movedIds).
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -45,6 +51,7 @@ import {
   type MirrorWorktreePayload,
 } from "@shigomori/contracts/modules/mirror";
 import * as MirrorInvites from "@shigomori/engine/MirrorInvites";
+import * as WtFolder from "@shigomori/engine/WtFolder";
 import { SyncCloneIntoSchema } from "@shigomori/contracts/modules/sync";
 import {
   ProjectScopedPayloadSchema,
@@ -55,6 +62,13 @@ import {
 type Landed = MirrorInvite & { copy: MirrorWorktreePayload };
 
 let invites: Types.Mutable<MirrorInvite>[] = [];
+// The old id of each worktree a move took to a new one, to the new.
+let movedIds: ReadonlyMap<string, string> = new Map();
+
+// Whether `worktreeId`, as a peer names it, is the copy `copy`.
+const namesCopy = (copy: MirrorWorktreePayload, worktreeId: string) =>
+  copy.worktreeId === worktreeId ||
+  copy.worktreeId === movedIds.get(worktreeId);
 
 function isLanded(invite: MirrorInvite): invite is Landed {
   return invite.copy !== undefined;
@@ -119,7 +133,10 @@ export const landInvitedMirror = (
 // The copy is gone (the stop's delete, or any other), and with it the
 // invitation.
 export const forgetMirrorInvitesOf = (worktreeId: string) =>
-  keepInvites((invite) => invite.copy?.worktreeId !== worktreeId);
+  keepInvites(
+    (invite) =>
+      invite.copy === undefined || !namesCopy(invite.copy, worktreeId),
+  );
 
 // The peers this device no longer shares an account with lose their
 // invitations, like their mirrors.
@@ -128,22 +145,42 @@ export const dropMirrorInvitesWithPeers = (
 ) => keepInvites((invite) => stillOnAccount(invite.peerDeviceId));
 
 // The landed invitations as the store has them, read as the mirror
-// layer comes up, in place of whatever is held. A store that fails to
-// read starts empty: the mirrors it named can be asked for again.
-export const loadMirrorInvites = Effect.flatMap(
-  MirrorInvites.MirrorInvites,
-  (store) => store.load,
-).pipe(
-  Effect.catchCause((cause) =>
-    Effect.logWarning(
-      "[mirror] the invitations could not be read, starting with none",
-      cause,
-    ).pipe(Effect.as([])),
-  ),
-  Effect.map((loaded) => {
-    invites = structuredClone(loaded.filter(isLanded));
-  }),
-);
+// layer comes up, in place of whatever is held, each copy under the id
+// it has now. A store that fails to read starts empty: the mirrors it
+// named can be asked for again.
+export const loadMirrorInvites = Effect.gen(function* () {
+  movedIds = yield* Effect.flatMap(
+    WtFolder.WtFolder,
+    (folder) => folder.movedIds,
+  ).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(
+        "[mirror] the moved worktrees could not be read",
+        cause,
+      ).pipe(Effect.as(new Map<string, string>())),
+    ),
+  );
+  const loaded = yield* Effect.flatMap(
+    MirrorInvites.MirrorInvites,
+    (store) => store.load,
+  ).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(
+        "[mirror] the invitations could not be read, starting with none",
+        cause,
+      ).pipe(Effect.as([])),
+    ),
+  );
+  invites = structuredClone(loaded.filter(isLanded));
+  let rekeyed = false;
+  for (const invite of invites.filter(isLanded)) {
+    const now = movedIds.get(invite.copy.worktreeId);
+    if (now === undefined) continue;
+    invite.copy = { ...invite.copy, worktreeId: now };
+    rekeyed = true;
+  }
+  if (rekeyed) yield* persist;
+});
 
 // A copy removed while the app was not running (a folder deleted by
 // hand, a repo re-cloned) never passed the delete that forgets its
@@ -256,7 +293,7 @@ export function mirrorInviteAdmits(
           (invite) =>
             isLanded(invite) &&
             invite.copy.projectId === input.projectId &&
-            invite.copy.worktreeId === input.worktreeId,
+            namesCopy(invite.copy, input.worktreeId),
         )
       );
     }

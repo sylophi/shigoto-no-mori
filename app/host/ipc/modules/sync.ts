@@ -74,14 +74,14 @@ export const syncHandlers = {
   openSource: ({ projectId, worktreeId, channelId }, ctx) =>
     Effect.gen(function* () {
       const link = attachLinkFarEnd(ctx, channelId);
-      const { project } = yield* findProjectAndWorktree(
+      const { project, worktree } = yield* findProjectAndWorktree(
         projectId,
         worktreeId,
       ).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
       // Served past this call's answer, its answers continuing the
       // trace of the peer's call.
       yield* Effect.forkDetach(
-        Effect.ignore(serveSource(link, project, worktreeId)),
+        Effect.ignore(serveSource(link, project, worktree.id)),
       );
     }),
 

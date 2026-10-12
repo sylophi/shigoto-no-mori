@@ -29,7 +29,9 @@
 import assert from "node:assert/strict";
 import type { MirrorInvite } from "@shigomori/contracts/modules/mirror";
 import * as MirrorInvites from "@shigomori/engine/MirrorInvites";
+import * as WtFolder from "@shigomori/engine/WtFolder";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import {
   dropMirrorInvitesWithPeers,
   forgetMirrorInvitesOf,
@@ -88,8 +90,8 @@ const PROJECT_CALLS = [
 ];
 
 // The store as the engine serves it: recording what is saved and
-// answering with a seed, or saying no either way. `run` runs an effect
-// of the invitations on it.
+// answering with a seed, or saying no either way, beside a device whose
+// worktrees never moved. `run` runs an effect of the invitations on it.
 function standInStore(seed: readonly MirrorInvite[] = [], broken = false) {
   const saved: MirrorInvite[][] = [];
   const store = MirrorInvites.MirrorInvites.of({
@@ -101,11 +103,25 @@ function standInStore(seed: readonly MirrorInvite[] = [], broken = false) {
             saved.push(structuredClone([...invites]));
           }),
   });
+  const unmoved = WtFolder.WtFolder.of({
+    drain: Effect.void,
+    unmoved: Effect.succeed([]),
+    retry: () => Effect.succeed([]),
+    movedTo: () => Effect.succeed(Option.none()),
+    movedIds: Effect.succeed(new Map()),
+  });
   const run = <A,>(
-    effect: Effect.Effect<A, never, MirrorInvites.MirrorInvites>,
+    effect: Effect.Effect<
+      A,
+      never,
+      MirrorInvites.MirrorInvites | WtFolder.WtFolder
+    >,
   ) =>
     Effect.runSync(
-      Effect.provideService(effect, MirrorInvites.MirrorInvites, store),
+      effect.pipe(
+        Effect.provideService(MirrorInvites.MirrorInvites, store),
+        Effect.provideService(WtFolder.WtFolder, unmoved),
+      ),
     );
   // Loaded, as the mirror layer does at boot.
   run(loadMirrorInvites);
