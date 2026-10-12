@@ -228,19 +228,26 @@ try {
       },
     );
   } catch (error) {
-    const which = execFileSync(
-      "sh",
-      ["-c", "command -v pnpm; pnpm --version"],
-      {
+    // Which pnpm answered, if it can say so quickly: the install's own
+    // failure stands either way.
+    let which = "unknown";
+    try {
+      which = execFileSync("sh", ["-c", "command -v pnpm; pnpm --version"], {
         cwd: baseCheckout,
         encoding: "utf8",
-      },
-    );
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 10_000,
+      })
+        .trim()
+        .replace("\n", ", ");
+    } catch {
+      which = "not found, or not answering";
+    }
     const said = Predicate.hasProperty(error, "stderr")
       ? String(error.stderr)
       : "";
     throw new Error(
-      `the base's install failed (pnpm at ${which.trim().replace("\n", ", ")}):\n${said || String(error)}`,
+      `the base's install failed (pnpm: ${which}):\n${said || String(error)}`,
       { cause: error },
     );
   }
