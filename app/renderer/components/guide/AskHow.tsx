@@ -32,13 +32,12 @@ function AskHowDialog({ onClose }: { onClose: () => void }) {
   const [asking, setAsking] = useState<GuideHarness | null>(null);
   const ask = (harness: GuideHarness) => {
     setAsking(harness);
-    void api.run(api.guide.ask({ harness, question: question.trim() })).then(
-      onClose,
-      (error: unknown) => {
+    void api
+      .run(api.guide.ask({ harness, question: question.trim() }))
+      .then(onClose, (error: unknown) => {
         setAsking(null);
         notifyError("Couldn't open the guide", error);
-      },
-    );
+      });
   };
   return (
     <ModalShell

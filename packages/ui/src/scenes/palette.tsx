@@ -244,9 +244,7 @@ function palette(shown: "found" | "picked" | "none") {
         <SceneDialog className="h-full max-w-3xl">
           <PaletteDialogView
             picked={picked}
-            highlighted={
-              picked ? "detail" : none ? "" : (FIRST?.key ?? "")
-            }
+            highlighted={picked ? "detail" : none ? "" : (FIRST?.key ?? "")}
             onHighlight={noop}
             chip={
               picked &&
