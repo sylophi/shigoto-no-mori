@@ -9,7 +9,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
-import { given, here, projectFlags, worktreeFlags } from "../here.ts";
+import { given, here, projectFlags, rest, worktreeFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
 // A flag as Go read it: absent, or given (blank included).
@@ -31,7 +31,7 @@ const transferFlags = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
   // The first positional is read and the rest let be, as the Go sm did.
-  rest: Argument.String("args").pipe(Argument.variadic()),
+  rest,
   to: Flag.String("to").pipe(
     Flag.withDescription("The device it goes to"),
     Flag.optional,
@@ -162,7 +162,7 @@ export const unmirror = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDescription("Stop it even if the two sides aren't in step"),
@@ -203,42 +203,39 @@ export const unmirror = Command.make(
     }),
 ).pipe(Command.withDescription("Stop a mirror and remove its copy"));
 
-export const mirrors = Command.make(
-  "mirrors",
-  { rest: Argument.String("args").pipe(Argument.variadic()) },
-  ({ rest }) =>
-    Effect.gen(function* () {
-      if (rest.length > 0) {
-        return yield* new UsageError({
-          problem: "mirrors takes no arguments.",
-        });
-      }
-      const listed = yield* (yield* Transfer.Transfer).mirrors;
-      const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
-      if (json) return yield* emit(listed);
-      if (listed.daemon !== "running") {
-        yield* note(
-          styles(stderrColor).yellow(`! the mirror engine is ${listed.daemon}`),
-        );
-      }
-      const { dim } = styles(stdoutColor);
-      if (listed.mirrors.length === 0) {
-        return yield* out(dim("No mirrors running on this device."));
-      }
-      yield* out(
-        renderTable(
-          ["WORKTREE", "DEVICE", "COPY", "FILES", "GIT"],
-          listed.mirrors.map((one) => [
-            one.localRoot,
-            one.device.name,
-            one.copySide === "local" ? "copy here" : "copy there",
-            `${one.paused ? "paused" : one.status}${one.conflicts > 0 ? ` (${one.conflicts} conflicts)` : ""}`,
-            one.git === undefined || one.git === "" ? "-" : one.git,
-          ]),
-          stdoutColor,
-        ),
+export const mirrors = Command.make("mirrors", { rest }, (input) =>
+  Effect.gen(function* () {
+    if (input.rest.length > 0) {
+      return yield* new UsageError({
+        problem: "mirrors takes no arguments.",
+      });
+    }
+    const listed = yield* (yield* Transfer.Transfer).mirrors;
+    const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
+    if (json) return yield* emit(listed);
+    if (listed.daemon !== "running") {
+      yield* note(
+        styles(stderrColor).yellow(`! the mirror engine is ${listed.daemon}`),
       );
-    }),
+    }
+    const { dim } = styles(stdoutColor);
+    if (listed.mirrors.length === 0) {
+      return yield* out(dim("No mirrors running on this device."));
+    }
+    yield* out(
+      renderTable(
+        ["WORKTREE", "DEVICE", "COPY", "FILES", "GIT"],
+        listed.mirrors.map((one) => [
+          one.localRoot,
+          one.device.name,
+          one.copySide === "local" ? "copy here" : "copy there",
+          `${one.paused ? "paused" : one.status}${one.conflicts > 0 ? ` (${one.conflicts} conflicts)` : ""}`,
+          one.git === undefined || one.git === "" ? "-" : one.git,
+        ]),
+        stdoutColor,
+      ),
+    );
+  }),
 ).pipe(Command.withDescription("The mirrors this device is part of"));
 
 const BLOCKS: Readonly<Record<string, string>> = {
@@ -248,43 +245,46 @@ const BLOCKS: Readonly<Record<string, string>> = {
   "no-grant": "doesn't accept commands",
 };
 
-export const devices = Command.make("devices", projectFlags, (input) =>
-  Effect.gen(function* () {
-    const at = yield* here;
-    const ref = {
-      project: Option.getOrUndefined(given(input.project)),
-      projectId: Option.getOrUndefined(given(input.projectId)),
-    };
-    const listed = yield* (yield* Transfer.Transfer).devices(at, ref);
-    const { json, stdoutColor } = yield* Effect.service(Output);
-    if (json) return yield* emit(listed);
-    const { dim, green, yellow } = styles(stdoutColor);
-    yield* out(dim(`This device is "${listed.thisDevice.name}".`));
-    if (listed.devices.length === 0) {
-      return yield* out(dim("The account has no other device."));
-    }
-    const scoped =
-      ref.project !== undefined ||
-      ref.projectId !== undefined ||
-      at.current !== undefined;
-    yield* out(
-      renderTable(
-        ["DEVICE", "PLATFORM", "STATUS"],
-        listed.devices.map((device) => {
-          // A reason from a newer app than this build shows as it came.
-          const block: string = device.block ?? "";
-          return [
-            device.name,
-            device.platform,
-            block === ""
-              ? green(scoped ? "ready" : "connected")
-              : yellow(BLOCKS[block] ?? block),
-          ];
-        }),
-        stdoutColor,
-      ),
-    );
-  }),
+export const devices = Command.make(
+  "devices",
+  { ...projectFlags, rest },
+  (input) =>
+    Effect.gen(function* () {
+      const at = yield* here;
+      const ref = {
+        project: Option.getOrUndefined(given(input.project)),
+        projectId: Option.getOrUndefined(given(input.projectId)),
+      };
+      const listed = yield* (yield* Transfer.Transfer).devices(at, ref);
+      const { json, stdoutColor } = yield* Effect.service(Output);
+      if (json) return yield* emit(listed);
+      const { dim, green, yellow } = styles(stdoutColor);
+      yield* out(dim(`This device is "${listed.thisDevice.name}".`));
+      if (listed.devices.length === 0) {
+        return yield* out(dim("The account has no other device."));
+      }
+      const scoped =
+        ref.project !== undefined ||
+        ref.projectId !== undefined ||
+        at.current !== undefined;
+      yield* out(
+        renderTable(
+          ["DEVICE", "PLATFORM", "STATUS"],
+          listed.devices.map((device) => {
+            // A reason from a newer app than this build shows as it came.
+            const block: string = device.block ?? "";
+            return [
+              device.name,
+              device.platform,
+              block === ""
+                ? green(scoped ? "ready" : "connected")
+                : yellow(BLOCKS[block] ?? block),
+            ];
+          }),
+          stdoutColor,
+        ),
+      );
+    }),
 ).pipe(Command.withDescription("The account's other devices"));
 
 // list --remote [--from <device>]: the project's worktrees on the other

@@ -18,6 +18,7 @@ import {
   projectFlags,
   resolveProject,
   resolveWorktree,
+  rest,
   worktreeFlags,
 } from "../here.ts";
 import {
@@ -114,7 +115,7 @@ const list = Command.make(
     ),
     from: Flag.String("from").pipe(Flag.optional),
     // Positionals are let be, as the Go sm did.
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
   },
   (input) =>
     Effect.gen(function* () {
@@ -264,7 +265,7 @@ const path = Command.make(
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
     // The first is read and the rest let be, as the Go sm did.
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
   },
   (input) =>
     Effect.gen(function* () {
@@ -292,7 +293,7 @@ export const link = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
   },
   (input) =>
     Effect.gen(function* () {
@@ -312,7 +313,7 @@ const destination = Command.make(
   {
     ...projectFlags,
     name: Flag.String("name").pipe(Flag.optional),
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
   },
   (input) =>
     Effect.gen(function* () {

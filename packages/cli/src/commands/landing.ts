@@ -18,6 +18,7 @@ import {
   given,
   resolveProject,
   resolveWorktree,
+  rest,
   worktreeFlags,
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
@@ -93,7 +94,7 @@ const removeFlags = {
 const target = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
-  rest: Argument.String("args").pipe(Argument.variadic()),
+  rest,
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -131,39 +132,54 @@ const docOutcome = (doc: Doc) => ({
 });
 
 // The landing reporter: the worktree events as the other verbs report
-// them, each layer of a stack as it merges, and the wait for GitHub to
-// merge a PR that didn't on the spot.
-const landingReporter = (title: { current: string }) =>
-  Effect.gen(function* () {
-    const base = yield* reporter();
-    const output = yield* Effect.service(Output);
-    const { json, stdoutColor, stderrColor } = output;
-    return {
-      ...base,
-      pending: (pr, outcome) =>
-        json
-          ? Effect.void
-          : mergeLine({ ...outcome, number: pr.number }, pr.title).pipe(
-              Effect.provideService(Output, output),
+// them, each layer of a stack as it merges, the wait for GitHub to merge
+// a PR that didn't on the spot (said under --json too, as Go did), and a
+// land's cleanup as it goes.
+const landingReporter = Effect.gen(function* () {
+  const base = yield* reporter();
+  const output = yield* Effect.service(Output);
+  const { json, stdoutColor, stderrColor } = output;
+  const { dim } = styles(stderrColor);
+  const { green } = styles(stdoutColor);
+  const person = (line: Effect.Effect<void, never, Output>) =>
+    json ? Effect.void : line.pipe(Effect.provideService(Output, output));
+  return {
+    ...base,
+    pending: (pr, outcome) =>
+      person(mergeLine({ ...outcome, number: pr.number }, pr.title)),
+    outcome: (pr, outcome) =>
+      person(mergeLine({ ...outcome, number: pr.number }, pr.title)),
+    waiting: (line) => note(dim(line)),
+    note: (line) => person(note(dim(line))),
+    merged: (event: Doc, pr: { readonly title: string }) =>
+      json
+        ? emit(event)
+        : out(
+            green(
+              `merged PR #${String(event["number"])} (${text(event["method"])}): ${pr.title}`,
             ),
-      waiting: (line) =>
-        json ? Effect.void : note(styles(stderrColor).dim(line)),
-      note: (line) =>
-        json ? Effect.void : note(styles(stderrColor).dim(line)),
-      merged: (event: Doc, pr: { readonly title: string }) =>
-        json
-          ? emit(event)
-          : out(
-              styles(stdoutColor).green(
-                `merged PR #${String(event["number"])} (${text(event["method"])}): ${pr.title}`,
+          ),
+    landing: (pr, method) =>
+      person(
+        method === undefined
+          ? note(dim(`PR #${pr.number} already merged: ${pr.title}`))
+          : out(green(`merged PR #${pr.number} (${method}): ${pr.title}`)),
+      ),
+    caughtUp: ({ caughtUp, catchUpSkipped }) =>
+      person(
+        caughtUp !== undefined
+          ? note(
+              dim(
+                `${caughtUp.isPrimary ? "primary checkout" : `worktree ${caughtUp.name}`} caught up (${caughtUp.ref})`,
               ),
-            ),
-      target: (pr: { readonly title: string }) =>
-        Effect.sync(() => {
-          title.current = pr.title;
-        }),
-    } satisfies Landing.Reporter;
-  });
+            )
+          : catchUpSkipped !== undefined
+            ? note(dim(`skipped catch-up: ${catchUpSkipped}`))
+            : Effect.void,
+      ),
+    removedOther: (removed) => person(out(green(`removed ${removed.name}`))),
+  } satisfies Landing.Reporter;
+});
 
 // What a cleanup's failed document says, as Go said it.
 const failureOf = (doc: Doc) => {
@@ -175,9 +191,9 @@ const failureOf = (doc: Doc) => {
     : text(doc["error"]);
 };
 
-// The cleanup half of land and rm --stack, from its document: the
-// other worktrees a stack removed, the catch-up, and this checkout
-// removed or put back on the primary branch.
+// How land, done and rm --stack end, from the document: this checkout
+// removed or put back on the primary branch. The steps before it were
+// said as they happened (landingReporter).
 const reportCleanup = (doc: Doc, located: Worktrees.Located) =>
   Effect.gen(function* () {
     const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
@@ -198,29 +214,7 @@ const reportCleanup = (doc: Doc, located: Worktrees.Located) =>
       return yield* emit(hint === "" ? doc : { ...doc, cdHint: hint });
     }
     const { dim, green } = styles(stdoutColor);
-    const stack = doc["stack"] as
-      | { readonly removed: ReadonlyArray<Worktrees.Removed> }
-      | undefined;
-    for (const other of stack?.removed ?? []) {
-      yield* out(green(`removed ${other.name}`));
-    }
-    const caught = doc["caughtUp"] as
-      | {
-          readonly ref: string;
-          readonly name: string;
-          readonly isPrimary: boolean;
-        }
-      | undefined;
     const quiet = styles(stderrColor).dim;
-    if (caught !== undefined) {
-      yield* note(
-        quiet(
-          `${caught.isPrimary ? "primary checkout" : `worktree ${caught.name}`} caught up (${caught.ref})`,
-        ),
-      );
-    } else if (typeof doc["catchUpSkipped"] === "string") {
-      yield* note(quiet(`skipped catch-up: ${doc["catchUpSkipped"]}`));
-    }
     const worktree = doc["worktree"] as Worktrees.WorktreeRow | undefined;
     if (worktree !== undefined) {
       const deleted = text(doc["deletedBranch"]);
@@ -277,8 +271,7 @@ export const merge = Command.make(
       const method = yield* methodOf(input.method);
       const landing = yield* Landing.Landing;
       const { json, binaryName, stderrColor } = yield* Effect.service(Output);
-      const title = { current: "" };
-      const report = yield* landingReporter(title);
+      const report = yield* landingReporter;
       const options = { method, stack: input.stack };
       const raw = Option.getOrUndefined(given(input.number));
       if (raw !== undefined) {
@@ -290,8 +283,8 @@ export const merge = Command.make(
         }
         const project = yield* resolveProject(input);
         const doc = yield* landing.merge({ project, number }, options, report);
-        if (json) return yield* emit(doc);
-        if (!input.stack) yield* mergeLine(docOutcome(doc), title.current);
+        // A person was told how it ended (landingReporter).
+        if (json) yield* emit(doc);
         return;
       }
       const { located } = yield* resolveWorktree(input);
@@ -315,8 +308,7 @@ export const land = Command.make(
     Effect.gen(function* () {
       const method = yield* methodOf(input.method);
       const { located } = yield* resolveWorktree(input);
-      const { json, binaryName, stdoutColor, stderrColor } =
-        yield* Effect.service(Output);
+      const { json, binaryName, stderrColor } = yield* Effect.service(Output);
       const doc = yield* (yield* Landing.Landing).land(
         located,
         {
@@ -326,11 +318,10 @@ export const land = Command.make(
           method,
           stack: input.stack,
         },
-        yield* landingReporter({ current: "" }),
+        yield* landingReporter,
       );
-      const merged = doc["merged"] as Doc | undefined;
       // A stack a merge queue took: nothing to clean up yet.
-      if (merged === undefined && doc["outcome"] !== undefined) {
+      if (doc["merged"] === undefined && doc["outcome"] !== undefined) {
         if (json) return yield* emit(doc);
         yield* mergeLine(docOutcome(doc), text(doc["title"]));
         return yield* note(
@@ -338,22 +329,6 @@ export const land = Command.make(
             `nothing removed yet. Run \`${binaryName} land\` again once GitHub has merged it`,
           ),
         );
-      }
-      if (!json && merged !== undefined) {
-        if (merged["alreadyMerged"] === true) {
-          yield* note(
-            styles(stderrColor).dim(
-              `PR #${String(merged["number"])} already merged: ${text(merged["title"])}`,
-            ),
-          );
-        } else if (!input.stack) {
-          // A stack's layers were said as they merged.
-          yield* out(
-            styles(stdoutColor).green(
-              `merged PR #${String(merged["number"])} (${text(merged["method"])}): ${text(merged["title"])}`,
-            ),
-          );
-        }
       }
       yield* reportCleanup(doc, located);
     }),
@@ -392,7 +367,7 @@ export const removeStack = (
     const doc = yield* (yield* Landing.Landing).removeStack(
       located,
       options,
-      yield* reporter(),
+      yield* landingReporter,
     );
     yield* reportCleanup(doc, located);
   });

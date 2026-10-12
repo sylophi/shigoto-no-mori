@@ -7,7 +7,7 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
-import { given, here, projectAt, worktreeFlags } from "../here.ts";
+import { given, here, projectAt, rest, worktreeFlags } from "../here.ts";
 import { pickLauncher, pickWorktree } from "../pickers.ts";
 import { interactive } from "../prompt.ts";
 import { emit, out, Output } from "../output.ts";
@@ -78,16 +78,13 @@ export const open = Command.make(
 ).pipe(Command.withDescription("Open a worktree in a launcher"));
 
 // sm app: the installed app, opened or brought forward.
-export const app = Command.make(
-  "app",
-  { rest: Argument.String("args").pipe(Argument.variadic()) },
-  ({ rest }) =>
-    Effect.gen(function* () {
-      if (rest.length > 0) {
-        return yield* new UsageError({ problem: "app takes no arguments." });
-      }
-      yield* (yield* Open.Open).app;
-      const { json } = yield* Effect.service(Output);
-      yield* json ? emit({ ok: true }) : out("opened Shigoto no Mori");
-    }),
+export const app = Command.make("app", { rest }, (input) =>
+  Effect.gen(function* () {
+    if (input.rest.length > 0) {
+      return yield* new UsageError({ problem: "app takes no arguments." });
+    }
+    yield* (yield* Open.Open).app;
+    const { json } = yield* Effect.service(Output);
+    yield* json ? emit({ ok: true }) : out("opened Shigoto no Mori");
+  }),
 ).pipe(Command.withDescription("Open the Shigoto no Mori app"));

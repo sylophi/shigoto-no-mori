@@ -4,8 +4,8 @@ import * as Doctor from "@shigomori/engine/Doctor";
 import { plural } from "@shigomori/engine/doctorParse";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Effect from "effect/Effect";
-import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
 import { version } from "../build.ts";
 import { ExitCode, UsageError } from "../errors.ts";
@@ -115,7 +115,7 @@ const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
 export const doctorCommand = Command.make(
   "doctor",
   {
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
     fix: Flag.Boolean("fix").pipe(
       Flag.withDescription("Apply the repairs the checks offer"),
       Flag.withDefault(false),
@@ -126,9 +126,9 @@ export const doctorCommand = Command.make(
       Flag.withDefault(false),
     ),
   },
-  ({ rest, fix, yes }) =>
+  ({ rest: extra, fix, yes }) =>
     Effect.gen(function* () {
-      if (rest.length > 0) {
+      if (extra.length > 0) {
         return yield* new UsageError({
           problem: "doctor takes no arguments (flags: --fix, --yes).",
         });

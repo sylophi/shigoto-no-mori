@@ -165,14 +165,17 @@ export const makeVerbs = ({
             ["", pr.state.toLowerCase()],
           );
         }
-        if (reporter.target !== undefined) yield* reporter.target(pr);
         const outcome = yield* execMerge(
           project,
           pr,
           options.method,
           settings,
           "merge",
+          reporter,
         );
+        if (reporter.outcome !== undefined) {
+          yield* reporter.outcome(pr, outcome);
+        }
         return {
           ok: true,
           number,
@@ -213,6 +216,7 @@ export const makeVerbs = ({
         options.method,
         settings,
         "merge",
+        reporter,
       );
       yield* awaitMerge(located.project.path, pr, outcome, "merge", reporter);
       return mergeDocument(pr, branch, { ...outcome, outcome: "merged" });
@@ -293,6 +297,8 @@ export const makeVerbs = ({
           if (queued) {
             return mergeDocument(pr, branch, { method, outcome: "queued" });
           }
+        } else if (reporter.landing !== undefined) {
+          yield* reporter.landing(pr, undefined);
         }
         return yield* execStackCleanup(
           located,
@@ -332,6 +338,7 @@ export const makeVerbs = ({
           options.method,
           settings,
           "land",
+          reporter,
         );
         yield* awaitMerge(project.path, pr, outcome, "land", reporter);
         // The wait can take as long as the checks do, time enough for new
@@ -341,6 +348,7 @@ export const makeVerbs = ({
         }
         method = outcome.method;
       }
+      if (reporter.landing !== undefined) yield* reporter.landing(pr, method);
       return yield* landCleanup(
         located,
         pr.baseRefName,

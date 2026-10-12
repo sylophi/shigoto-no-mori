@@ -5,8 +5,8 @@
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
 import { version } from "../build.ts";
 import { UsageError } from "../errors.ts";
@@ -51,7 +51,7 @@ const text = (flag: Option.Option<string>) =>
 export const update = Command.make(
   "update",
   {
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
     check: Flag.Boolean("check").pipe(
       Flag.withDescription("Only say whether there is an update"),
       Flag.withDefault(false),
