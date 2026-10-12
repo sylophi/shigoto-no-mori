@@ -143,6 +143,7 @@ import * as Sink from "effect/Sink";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";
 import * as Layer from "effect/Layer";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -209,7 +210,7 @@ import {
   createConnectTicketStore,
   DIRECT_TICKET_PREFIX,
 } from "@host/direct/tickets";
-import { makeConnectInfo } from "@host/direct/connectInfo";
+import { makeConnectInfo, TUNNEL_HOLD_MS } from "@host/direct/connectInfo";
 import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
 import { CLOSE_HANDSHAKE_FAILED } from "@shared/remote/sealedSocket";
 import {
@@ -1717,7 +1718,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   };
   // Unhealthy tunnel: lan candidates only, with IPv6 literals
   // bracketed into dialable URLs.
-  const without = connectInfo(DIALER, all);
+  const without = await connectInfo(DIALER, all);
   assert.equal(without.available, true);
   // Beside the candidates, the host's command-access switch.
   assert.equal(without.acceptsCommands, false);
@@ -1731,7 +1732,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   // Healthy tunnel: one more candidate with a ticket of its own,
   // aligned with the minted set.
   tunnel = "wss://sm-0123456789ab.sm.example.test";
-  const withTunnel = connectInfo(DIALER, all);
+  const withTunnel = await connectInfo(DIALER, all);
   assert.equal(withTunnel.available, true);
   assert.deepEqual(withTunnel.candidates.at(-1), {
     kind: "tunnel",
@@ -1746,7 +1747,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   // A tunnel with NO interface addresses still advertises: data
   // is direct or nothing, so a host reachable only through its
   // tunnel must stay dialable.
-  const only = makeConnectInfo({
+  const only = await makeConnectInfo({
     listenerPort: () => 42017,
     mintTickets: (_peer, kinds) => kinds.map((_kind, i) => `smpt_only_${i}`),
     candidateAddresses: () => [],
@@ -1765,7 +1766,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   // and a tunnel-only caller against a tunnel-less host gets
   // available:false with nothing minted at all.
   const before = minted.length;
-  const tunnelOnly = connectInfo(DIALER, {
+  const tunnelOnly = await connectInfo(DIALER, {
     dialableKinds: ["tunnel"],
     connectionId: ONE_CONNECTION,
   });
@@ -1776,7 +1777,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   );
   assert.equal(minted.length, before + 1);
   assert.equal(minted.at(-1)?.length, 1, "a lan ticket was minted anyway");
-  const lanOnly = connectInfo(DIALER, {
+  const lanOnly = await connectInfo(DIALER, {
     dialableKinds: ["lan"],
     connectionId: ONE_CONNECTION,
   });
@@ -1786,7 +1787,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
     ["lan", "lan"],
   );
   tunnel = null;
-  const nothing = connectInfo(DIALER, {
+  const nothing = await connectInfo(DIALER, {
     dialableKinds: ["tunnel"],
     connectionId: ONE_CONNECTION,
   });
@@ -1797,6 +1798,58 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
     mintsSoFar,
     "a ticket was minted for an undialable caller",
   );
+});
+
+it("a host just restarted: an ask only its tunnel could answer waits for the tunnel that is starting and carries it once it is up, while an ask it can answer now is answered at once", async () => {
+  let tunnel: string | null = null;
+  let comes: (up: boolean) => void = notYetSet;
+  let waits = 0;
+  const connectInfo = makeConnectInfo({
+    listenerPort: () => 42017,
+    mintTickets: (_peer, kinds) => kinds.map((_kind, i) => `smpt_held_${i}`),
+    candidateAddresses: () => ["127.0.0.1"],
+    tunnelUrl: () => tunnel,
+    tunnelStartingThenUp: (withinMs) => {
+      waits += 1;
+      assert.equal(withinMs, TUNNEL_HOLD_MS);
+      return new Promise((resolve) => {
+        comes = resolve;
+      });
+    },
+    acceptsCommands: () => false,
+    sharesData: () => true,
+  });
+  const lanToo = await connectInfo(DIALER, {
+    dialableKinds: ["lan", "tunnel"],
+    connectionId: ONE_CONNECTION,
+  });
+  assert.equal(lanToo.available, true);
+  assert.equal(waits, 0, "an ask the LAN answers waited on the tunnel");
+  const tunnelOnly = {
+    dialableKinds: ["tunnel"],
+    connectionId: ONE_CONNECTION,
+  };
+  let answered: DirectConnectInfo | undefined;
+  const held = connectInfo(DIALER, tunnelOnly).then((answer) => {
+    answered = answer;
+    return answer;
+  });
+  await waitFor(() => waits === 1, "the ask to wait on the tunnel");
+  assert.equal(answered, undefined, "answered before the tunnel was up");
+  tunnel = "wss://sm-0123456789ab.sm.example.test";
+  comes(true);
+  const up = await held;
+  assert.ok(up.available);
+  assert.deepEqual(
+    up.candidates.map(({ kind, url }) => ({ kind, url })),
+    [{ kind: "tunnel", url: tunnel }],
+  );
+  // A tunnel that does not come up in time: nothing, as before.
+  tunnel = null;
+  const late = connectInfo(DIALER, tunnelOnly);
+  await waitFor(() => waits === 2, "the second ask to wait");
+  comes(false);
+  assert.deepEqual(await late, { available: false });
 });
 
 it("dialableKinds (the web path): the declared capability reaches the host over the wire, which mints only the tunnel ticket, and a tunnel-less peer is the plain unreachable outcome", async () => {
@@ -2290,6 +2343,10 @@ async function tunnelHarness(deps: {
     },
     status: () => runtime.runSync(onTunnel((tunnel) => tunnel.status)),
     tunnelUrl: () => runtime.runSync(onTunnel((tunnel) => tunnel.tunnelUrl)),
+    startingThenUp: (ms: number) =>
+      runtime.runPromise(
+        onTunnel((tunnel) => tunnel.startingThenUp(Duration.millis(ms))),
+      ),
     advance: async (ms: number) => {
       await runtime.runPromise(TestClock.adjust(ms));
       await settleTunnel();
@@ -2541,11 +2598,20 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
     1,
     "a not-yet-routable child was re-provisioned",
   );
+  // A wait on a starting tunnel gives up at its bound, and one under
+  // way when the tunnel comes up says so.
+  const givesUp = notYetRoutable.startingThenUp(1_000);
+  await notYetRoutable.advance(1_000);
+  assert.equal(await givesUp, false);
+  const comesUp = notYetRoutable.startingThenUp(10 * TUNNEL_PROBE_SLOW_MS);
   // DNS catches up: the next (slow-rung) probe advertises the same
   // child.
   lateRoutable = true;
   await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
+  assert.equal(await comesUp, true);
   assert.equal(notYetRoutable.status().state, "up");
+  // With none starting, at once.
+  assert.equal(await notYetRoutable.startingThenUp(0), true);
   assert.equal(notYetRoutable.tunnelUrl(), "wss://h.example.test");
   assert.equal(notYetRoutable.spawned.length, 1);
   await notYetRoutable.dispose();

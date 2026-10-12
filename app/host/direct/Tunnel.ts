@@ -25,6 +25,8 @@ import * as Cause from "effect/Cause";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
@@ -278,6 +280,12 @@ export class Tunnel extends Context.Service<
     // The wss dial URL while the tunnel is healthy, else null. What the
     // connectInfo answer advertises.
     readonly tunnelUrl: Effect.Effect<string | null>;
+    // Whether a tunnel that is starting comes up within `within`: false
+    // once it fails or the time is out. With none starting, at once,
+    // whether it is up.
+    readonly startingThenUp: (
+      within: Duration.Duration,
+    ) => Effect.Effect<boolean>;
   }
 >()("sm/host/Tunnel") {}
 
@@ -372,7 +380,7 @@ const make = (options: Options) =>
       ChildProcessSpawner.ChildProcessSpawner,
       spawner,
     );
-    const status = yield* Ref.make<TunnelStatus>({
+    const status = yield* SubscriptionRef.make<TunnelStatus>({
       state: "off",
       hostname: null,
     });
@@ -381,7 +389,7 @@ const make = (options: Options) =>
       Ref.update(memory, (current) => ({ ...current, ...change }));
 
     const setStatus = (next: TunnelStatus) =>
-      Ref.getAndSet(status, next).pipe(
+      SubscriptionRef.getAndSet(status, next).pipe(
         Effect.flatMap((previous) =>
           previous.state === next.state && previous.hostname === next.hostname
             ? Effect.void
@@ -487,7 +495,7 @@ const make = (options: Options) =>
         // From here to a successful probe the connector is not serving,
         // and "starting" (which reads as tunnelUrl() null) must never
         // advertise a dead child.
-        const previous = (yield* Ref.get(status)).state;
+        const previous = (yield* SubscriptionRef.get(status)).state;
         yield* setStatus({ state: "starting", hostname: null });
         yield* remember({ denied: false });
         if ((yield* Ref.get(memory)).unconfigured) {
@@ -660,7 +668,7 @@ const make = (options: Options) =>
             // hostname onto a port anything local may rebind.
             yield* reapStaleOnce;
             if (wanted === null) return yield* stopNow;
-            const current = yield* Ref.get(status);
+            const current = yield* SubscriptionRef.get(status);
             const known = yield* Ref.get(memory);
             // No-op whenever the port is unchanged and the runner is not
             // "off": a live child, a scheduled retry and the cached
@@ -699,8 +707,20 @@ const make = (options: Options) =>
 
     return Tunnel.of({
       reconcile,
-      status: Ref.get(status),
-      tunnelUrl: Ref.get(status).pipe(
+      status: SubscriptionRef.get(status),
+      startingThenUp: (within) =>
+        SubscriptionRef.changes(status).pipe(
+          Stream.takeUntil((current) => current.state !== "starting"),
+          Stream.runLast,
+          Effect.map(
+            (last) => Option.isSome(last) && last.value.state === "up",
+          ),
+          Effect.timeoutOrElse({
+            duration: within,
+            orElse: () => Effect.succeed(false),
+          }),
+        ),
+      tunnelUrl: SubscriptionRef.get(status).pipe(
         Effect.map((current) =>
           current.state === "up" && current.hostname !== null
             ? `wss://${current.hostname}`

@@ -5,6 +5,7 @@
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
@@ -258,6 +259,10 @@ const serveConnectInfo = makeConnectInfo({
       onTunnel((tunnel) => tunnel.tunnelUrl),
       () => null,
     ),
+  tunnelStartingThenUp: (withinMs) =>
+    Graph.run(
+      onTunnel((tunnel) => tunnel.startingThenUp(Duration.millis(withinMs))),
+    ).catch(() => false),
   acceptsCommands: acceptsPeerCommands,
   // Before the graph is up the link serves nobody, so it reads as off.
   sharesData: () =>
