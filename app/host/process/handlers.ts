@@ -603,14 +603,12 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
   if (!first && previous?.acceptsCommands !== next?.acceptsCommands) {
     broadcastCommandAccessChanged();
   }
-  // Also reconciles the listener from its tail, which follows the same
-  // enrollment condition.
-  const reconnect =
-    first ||
-    previous?.accountId !== next?.accountId ||
-    previous?.hubUrl !== next?.hubUrl ||
-    previous?.webOrigin !== next?.webOrigin;
-  if (reconnect) await refreshHubConnection();
+  // Every report, as the socket's own inputs decide whether anything
+  // changed: a device enrolled again under the same account (Retry
+  // enrollment) has a new credential and key, and a blocked socket
+  // restarts only here. Also reconciles the listener from its tail,
+  // which follows the same enrollment condition.
+  await refreshHubConnection();
   if (leaving) {
     await teardownStep("dropping the shared settings", () =>
       sharedSettingsCopy.clear(),
