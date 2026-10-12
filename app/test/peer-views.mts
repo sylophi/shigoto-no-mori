@@ -16,6 +16,7 @@ import { callOf } from "@shigomori/contracts/contract";
 import {
   NoDirectConnectionError,
   NotSharingError,
+  RemoteCallError,
 } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -49,6 +50,7 @@ const ROWS = [
 function page({
   peerAnswers = 0,
   hostFails = false,
+  hostAnswersFailure = false,
   peerRefuses = false,
 } = {}) {
   let peerAsks = 0;
@@ -61,6 +63,11 @@ function page({
     view: () => {
       if (local) {
         hostAsks += 1;
+        if (hostAnswersFailure) {
+          return Stream.fail(
+            new RemoteCallError({ text: "Couldn't read or write the store." }),
+          );
+        }
         return hostFails ? Stream.fail(noSession) : Stream.make(ROWS);
       }
       peerAsks += 1;
@@ -167,3 +174,18 @@ it("this machine's host is asked for good", async () => {
     unmount();
   }
 }, 30_000);
+
+it("a view the host answers with its own failure ends, and shows it, rather than being asked again unseen", async () => {
+  const { registry, hostAsks } = page({ hostAnswersFailure: true });
+  const atom = projectsOf(LOCAL);
+  const unmount = registry.mount(atom);
+  try {
+    await waitFor(
+      () => AsyncResult.isFailure(registry.get(atom)),
+      "the view to read as failed",
+    );
+    assert.equal(hostAsks(), 1, "asked once");
+  } finally {
+    unmount();
+  }
+});
