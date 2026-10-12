@@ -10,6 +10,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
+import { unmountedVolume } from "@shared/unmountedVolume";
 import {
   MIRROR_LABEL_MODE,
   MIRROR_LABEL_REPLACES,
@@ -113,12 +114,15 @@ export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
 // The engine when it can take a session, or the reason it cannot:
 // the mirror start and the transplant's file transfer both begin here.
 export const requireRunningEngine = Effect.flatMap(MirrorEngine, (daemon) =>
-  Effect.flatMap(daemon.status, (status) => {
-    const blocker = mirrorEngineBlocker(status);
-    return blocker === undefined
-      ? Effect.succeed(daemon)
-      : Effect.fail(new MirrorError({ reason: blocker }));
-  }),
+  Effect.flatMap(
+    Effect.all([daemon.status, daemon.failure]),
+    ([status, failure]) => {
+      const blocker = mirrorEngineBlocker(status, undefined, failure);
+      return blocker === undefined
+        ? Effect.succeed(daemon)
+        : Effect.fail(new MirrorError({ reason: blocker }));
+    },
+  ),
 );
 
 // The daemon, or null where none is provided, for a caller that has a
@@ -341,12 +345,15 @@ export function holdRootChecks(worktreeIds: readonly string[]): () => void {
 }
 
 // Whether a session's root is still there. Only "no such file" says it
-// is gone: a volume not mounted yet, or a folder macOS has not granted
-// this app, fails the look too, and must not end a mirror.
-export const rootExists = (path: string) =>
+// is gone, and not on a volume that isn't mounted (a drive unplugged,
+// asleep, not mounted yet), whose every path reads as none: a folder
+// macOS has not granted this app fails the look too, and neither may
+// end a mirror.
+export const rootExists = (path: string): Promise<boolean> =>
   access(path).then(
     () => true,
-    (error: NodeJS.ErrnoException) => error.code !== "ENOENT",
+    (error: NodeJS.ErrnoException) =>
+      error.code !== "ENOENT" || unmountedVolume(path) !== null,
   );
 
 export const settleMirrorBookkeeping = Effect.gen(function* () {

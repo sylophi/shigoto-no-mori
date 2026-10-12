@@ -57,6 +57,7 @@ export const inertMirrorImpl = (
   impl: Partial<MirrorEngine["Service"]> = {},
 ): MirrorEngine["Service"] => ({
   status: Effect.succeed("running"),
+  failure: Effect.succeed(undefined),
   sessions: Effect.succeed([]),
   create: notHere,
   recreate: notHere,

@@ -1708,12 +1708,6 @@
     "grant": "changeCode",
     "tracksProjectUsage": true
   },
-  "worktrees:reread": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
   "worktrees:resetHard": {
     "kind": "invoke",
     "scope": "host",

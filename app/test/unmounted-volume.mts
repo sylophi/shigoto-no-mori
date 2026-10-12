@@ -1,17 +1,18 @@
-// Durable proof for the start's look at where the data folder lives
-// (main/core/files/unmountedVolume.ts): a pointer to a folder on a
-// drive that isn't connected is said at the start, before a host is
-// forked to make the folder there. Asserts that a path on a volume not
-// mounted names that volume, at its mount point and below it and
-// through a link (a dangling one), and that a path on a mounted volume
-// is fine, a folder whose parents don't exist yet among them.
+// Durable proof for the look at whether a path's drive is connected
+// (shared/unmountedVolume.ts): a data folder on a drive that isn't
+// connected is said at the start, before a host is forked to make the
+// folder there, and a mirror rooted there waits for the drive.
+// Asserts that a path on a volume not mounted names that volume, at
+// its mount point and below it and through a link (a dangling one),
+// and that a path on a mounted volume is fine, a folder whose parents
+// don't exist yet among them.
 //
 // Run: pnpm test unmounted-volume.
 import assert from "node:assert/strict";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, it } from "vitest";
-import { unmountedVolume } from "../main/core/files/unmountedVolume.ts";
+import { unmountedVolume } from "../shared/unmountedVolume.ts";
 import { makeTracker, tempDir } from "./lib/checkKit.mts";
 
 const { track, teardown } = makeTracker();

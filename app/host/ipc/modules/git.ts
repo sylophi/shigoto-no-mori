@@ -11,5 +11,6 @@ export const gitHandlers = {
       const project = yield* findProject(projectId);
       yield* (yield* BackgroundFetch).refreshProject(project.id, project.path);
     }),
-  sweep: () => Effect.flatMap(BackgroundFetch, (fetch) => fetch.sweepForPeer),
+  sweep: ({ renewal }) =>
+    Effect.flatMap(BackgroundFetch, (fetch) => fetch.sweepForPeer(renewal)),
 } satisfies EffectHandlers<typeof gitContract, unknown, HostServices>;

@@ -364,7 +364,9 @@ it("calls: a read answers with its result, and a failure crosses as its contract
   const { listener } = await listen(track);
   listener.setAccepts(true);
   const connection = await dialListener(track, listener);
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
   const gone = await rejection(
     invoke(connection, "git:refreshProject", { projectId: "gone" }),
   );
@@ -446,7 +448,9 @@ it("lockout: a device on another version, refused past the threshold, leaves a c
     assert.ok(refused.refusal instanceof ProtocolVersionMismatchError);
   }
   const connection = await dialListener(track, listener);
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
 });
 
 it("version: a hello on another protocol version is refused with ProtocolVersionMismatchError, a blocked verdict the dialer hands on", async () => {
@@ -479,7 +483,9 @@ it("before the hello: a call is refused, and a hello after the timeout cannot li
   const track = trackTest;
   const { listener } = await listen(track, { start: { helloTimeoutMs: 200 } });
   const raw = await rawLink(track, listener);
-  const early = failureOf(await Effect.runPromiseExit(raw.call("git:sweep")));
+  const early = failureOf(
+    await Effect.runPromiseExit(raw.call("git:sweep", { renewal: true })),
+  );
   assert.ok(early instanceof LinkUnauthenticatedError);
   assert.equal(await raw.closed, 4002);
 });
@@ -551,10 +557,9 @@ it("frame cap: a call's frame of 1 MiB crosses the real listener, sealed, whethe
       ),
       `the frame closed the socket (compression ${deflate ? "offered" : "off"})`,
     );
+    const swept = raw.call("git:sweep", { renewal: true });
     // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
-    assert.deepEqual(await Effect.runPromise(raw.call("git:sweep")), {
-      leaseMs: 5,
-    });
+    assert.deepEqual(await Effect.runPromise(swept), { leaseMs: 5 });
   }
 });
 
@@ -614,7 +619,9 @@ it("hub outage: a hello or a dial the listener cannot check against the roster c
   }
   listener.rosterUnavailable(false);
   const connection = await dialListener(track, listener);
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
 });
 
 it("tickets: a ticket survives a socket whose handshake fails and one whose first message is replayed, and only the hello that links spends it", async () => {
@@ -706,9 +713,12 @@ it("in-flight cap: streams a peer holds open take no place under it", async () =
   );
   // Let every stream reach the host before the call.
   await Effect.runPromise(raw.call("link:ping"));
-  assert.deepEqual(await Effect.runPromise(raw.call("git:sweep")), {
-    leaseMs: 5,
-  });
+  assert.deepEqual(
+    await Effect.runPromise(raw.call("git:sweep", { renewal: true })),
+    {
+      leaseMs: 5,
+    },
+  );
 });
 
 it("command gate: with commands off a command is refused with the typed error and never runs while a read is served, and turning them on needs no reconnect", async () => {
@@ -720,7 +730,9 @@ it("command gate: with commands off a command is refused with the typed error an
   );
   assert.ok(refused instanceof CommandRefusedError);
   assert.equal(seen.refreshes, 0);
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
   listener.setAccepts(true);
   await invoke(connection, "git:refreshProject", { projectId: "p" });
   assert.equal(seen.refreshes, 1);
@@ -877,8 +889,9 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
   const heard: unknown[] = [];
   connection.transport.subscribe("git:projectChanged", (p) => heard.push(p));
   assert.ok(
-    (await rejection(invoke(connection, "git:sweep"))) instanceof
-      NotSharingError,
+    (await rejection(
+      invoke(connection, "git:sweep", { renewal: true }),
+    )) instanceof NotSharingError,
   );
   assert.ok(
     (await rejection(
@@ -909,7 +922,9 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
   }, "the mirror to hear its copy");
   assert.equal(has(heard, "elsewhere"), false);
   listener.setSharing(true);
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
   await waitFor(() => {
     listener.binding.broadcastAll("git:projectChanged", {
       projectId: "elsewhere",
@@ -1022,7 +1037,7 @@ it("byte channels: a reader that holds its pieces holds back its own channel alo
   // Past where a reader's stalled stream once stopped the whole socket.
   await delay(200);
   const answered = await Promise.race([
-    invoke(connection, "git:sweep").then(() => true),
+    invoke(connection, "git:sweep", { renewal: true }).then(() => true),
     delay(3_000).then(() => false),
   ]);
   assert.equal(answered, true, "a call on the link answers past the stall");
@@ -1058,7 +1073,9 @@ it("byte channels: the reads idle channels hold take no place under the in-fligh
     // oxlint-disable-next-line no-await-in-loop -- one open at a time
     await invoke(connection, "forward:open", { port: 2, channelId: id });
   }
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
   await delay(200);
   assert.equal(resets, 0, "no channel was refused its reads");
   assert.ok(ids.every((id) => connection.channels.has(id)));
@@ -1092,7 +1109,9 @@ it("streams: a client behind a flood is handed it in messages within the cap, an
     Math.max(...frames) <= MAX_MESSAGE_BYTES + 1024,
     `a frame of ${Math.max(...frames)} bytes`,
   );
-  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
 });
 
 it("streams: a frame past the decoder's cap drops the link rather than failing every call after it, and a dial again answers", async () => {
@@ -1110,7 +1129,9 @@ it("streams: a frame past the decoder's cap drops the link rather than failing e
   );
   await waitFor(() => closes === 1, "the link to drop");
   const again = await dialListener(track, listener);
-  assert.deepEqual(await invoke(again, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(again, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
 });
 
 it("interruption: a call its caller cancels is interrupted on the host, its handler's signal aborted", async () => {
@@ -1154,7 +1175,9 @@ it("supersede: a second link from the same device ends the first", async () => {
   await dialListener(track, listener, { onClose: () => (firstClosed = true) });
   const second = await dialListener(track, listener);
   await waitFor(() => firstClosed, "the first link to end");
-  assert.deepEqual(await invoke(second, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(second, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
 });
 
 it("tabs: a web device holds a link per tab, each hears its own pushes, and one closing leaves the other", async () => {
@@ -1183,7 +1206,9 @@ it("tabs: a web device holds a link per tab, each hears its own pushes, and one 
   assert.equal(has(heard.first, "mine"), false);
   // A tab that goes leaves its sibling linked.
   first.close();
-  assert.deepEqual(await invoke(second, "git:sweep"), { leaseMs: 5 });
+  assert.deepEqual(await invoke(second, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
 });
 
 it("tabs: a hello with a connection id already held replaces that link alone", async () => {
@@ -1256,7 +1281,7 @@ it("tracing: the host's span for a call continues the caller's trace", async () 
   const raw = await rawLink(track, listener);
   assert.ok(Exit.isSuccess(await raw.hello()));
   const traceId = await Effect.runPromise(
-    raw.call("git:sweep").pipe(
+    raw.call("git:sweep", { renewal: true }).pipe(
       Effect.andThen(Effect.currentSpan),
       Effect.map((span) => span.traceId),
       Effect.withSpan("caller"),

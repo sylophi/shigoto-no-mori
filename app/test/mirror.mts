@@ -1274,7 +1274,7 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
   }
 });
 
-it("stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, a root that went under a seen session ends it the same way whatever the engine calls it, and leftovers and delayed stops are swept, sparing a running re-open and a held root and retrying a failed end", async () => {
+it("stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, a root that went under a seen session ends it the same way whatever the engine calls it, and leftovers and delayed stops are swept, sparing a running re-open, a held root and a root on a volume not mounted, and retrying a failed end", async () => {
   // (6e) The stop's safety and its keep-the-copy, the original gone
   // behind the app's back, a re-open's leftover, and a stop that
   // came while the daemon was down. Against a recording daemon and
@@ -1480,6 +1480,18 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     await settleBookkeeping();
     assert.ok(!live.has("new"));
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
+
+    // A root on a volume that isn't mounted (a drive unplugged or
+    // asleep) reads as no such file too, and is no original gone: the
+    // mirror waits for the drive.
+    put(
+      sessionOf("unplugged", {
+        localRoot: "/Volumes/sm-proof-not-mounted/repo",
+      }),
+    );
+    await settleBookkeeping();
+    assert.ok(live.has("unplugged"));
+    live.delete("unplugged");
 
     // What the mirror leaves out changes only on a pair in step.
     put(sessionOf("paused", { paused: true }));

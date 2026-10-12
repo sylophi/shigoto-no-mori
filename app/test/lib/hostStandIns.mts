@@ -69,6 +69,7 @@ const standIns = Layer.mergeAll(
     MirrorEngine,
     MirrorEngine.of({
       status: Effect.suspend(() => mirror.status),
+      failure: Effect.suspend(() => mirror.failure),
       sessions: Effect.suspend(() => mirror.sessions),
       create: (input) => mirror.create(input),
       recreate: (session, input) => mirror.recreate(session, input),

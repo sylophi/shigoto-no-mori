@@ -92,6 +92,7 @@ const HALT_DETAIL: Record<string, string> = {
 type MirrorContext = {
   runnerAway?: string;
   engine?: MirrorDaemonStatus;
+  engineFailure?: string;
 };
 
 export function describeMirror(
@@ -118,6 +119,13 @@ export function describeMirror(
       "slate",
       "Offline",
       `${context.runnerAway} runs this mirror and is offline. It picks up when ${context.runnerAway} is back.`,
+    );
+  }
+  if (context.engine === "failing") {
+    return look(
+      "rose",
+      "Engine failing",
+      `the mirror engine ${context.engineFailure ?? "stopped"}, and restarts on its own`,
     );
   }
   if (context.engine !== undefined && context.engine !== "running") {

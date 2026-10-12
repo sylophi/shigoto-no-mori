@@ -283,6 +283,10 @@ const mirrorImpl: MirrorEngine["Service"] = {
     Effect.flatMap(({ daemon }) => daemon.status),
     Effect.orElseSucceed(() => "unavailable" as const),
   ),
+  failure: mirror.get.pipe(
+    Effect.flatMap(({ daemon }) => daemon.failure),
+    Effect.orElseSucceed(() => undefined),
+  ),
   sessions: daemonSessions,
   // A start's long leg (the copy across) can straddle a sign-out; the
   // sweep that ran meanwhile found nothing, so this is the last gate

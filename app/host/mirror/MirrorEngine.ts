@@ -54,6 +54,8 @@ export class MirrorEngine extends Context.Service<
   MirrorEngine,
   {
     readonly status: Effect.Effect<MirrorDaemonStatus>;
+    // Why a "failing" engine last stopped or couldn't start.
+    readonly failure: Effect.Effect<string | undefined>;
     readonly sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
     readonly create: (
       input: MirrorCreateInput,
