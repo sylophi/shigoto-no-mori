@@ -43,6 +43,7 @@ import {
 } from "@shared/packaging/cloudflaredDist.mts";
 import * as TunnelService from "@host/direct/Tunnel";
 import { makeConnectInfo } from "@host/direct/connectInfo";
+import { rememberedPort, rememberPort } from "@host/direct/listenerPort";
 import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
@@ -442,14 +443,17 @@ export function probeRemoteConnections(): void {
   up?.plane.probe();
 }
 
+const listenerPortPath = () => join(hostFacts().userDataPath, "direct-port");
+
 // Reconciles the listener with the account and the device's config: run
 // from refreshHubConnection's tail and on every global-config change,
 // so the directConnections opt-out applies without a restart. The
 // config read runs inside the binding's serialized lifecycle. Dual-stack
-// ("::") because connectInfo advertises IPv6 candidates too, on an
-// ephemeral port read back from status. accountId rides the opts as an
-// identity field, so an account switch restarts the listener and drops
-// every socket authed under the old account.
+// ("::") because connectInfo advertises IPv6 candidates too, on the
+// port it listened on last (listenerPort.ts), read back from status.
+// accountId rides the opts as an identity field, so an account switch
+// restarts the listener and drops every socket authed under the old
+// account.
 export async function refreshDirectHost(): Promise<void> {
   await Graph.run(
     onLink((link) =>
@@ -462,7 +466,7 @@ export async function refreshDirectHost(): Promise<void> {
           const config = await Graph.run(Ops.readGlobalConfig());
           if (config.directConnections === false) return null;
           return {
-            port: 0,
+            port: await Graph.run(rememberedPort(listenerPortPath())),
             bindAddress: "::",
             deviceId: await Graph.run(DeviceId.current),
             appVersion: hostFacts().appVersion,
@@ -474,6 +478,14 @@ export async function refreshDirectHost(): Promise<void> {
         }),
       ),
     ).pipe(
+      Effect.andThen(
+        Effect.suspend(() => {
+          const listener = linkStatus();
+          return listener.listening && listener.port !== null
+            ? rememberPort(listenerPortPath(), listener.port)
+            : Effect.void;
+        }),
+      ),
       Effect.catchCause((cause) =>
         Effect.logWarning("[direct] listener refresh failed", cause),
       ),

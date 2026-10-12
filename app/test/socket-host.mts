@@ -44,6 +44,10 @@
 //
 // covers: app/host/process/wires.ts
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rememberedPort, rememberPort } from "@host/direct/listenerPort";
 import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
 import * as Effect from "effect/Effect";
@@ -1407,6 +1411,28 @@ it("stop: the listener stopping closes every link, and nothing answers after", a
   await waitFor(() => closed, "the link to close");
   const after = await dialFails(listener);
   assert.equal(after.blocked, false);
+});
+
+it("port: a host that restarts asks for the port it listened on last and listens on it again, so its LAN address and its tunnel's ingress stay right, and a port another process holds falls back to any", async () => {
+  const track = trackTest;
+  const { listener: first } = await listen(track);
+  const port = first.port;
+  await first.binding.reconcile(null);
+  const { listener: again } = await listen(track, { start: { port } });
+  assert.equal(again.port, port);
+  const { listener: taken } = await listen(track, { start: { port } });
+  assert.notEqual(taken.port, port);
+  assert.ok(taken.port > 0);
+  // The port remembered across the restart: none at first, then the
+  // last one, and anything unreadable is none.
+  const dir = mkdtempSync(join(tmpdir(), "sm-port-"));
+  track(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, "direct-port");
+  assert.equal(await runHost(rememberedPort(path)), 0);
+  await runHost(rememberPort(path, port));
+  assert.equal(await runHost(rememberedPort(path)), port);
+  writeFileSync(path, "not a port\n");
+  assert.equal(await runHost(rememberedPort(path)), 0);
 });
 
 it("views: a view streams its values over the link, and one nothing serves fails as RemoteCallError", async () => {
