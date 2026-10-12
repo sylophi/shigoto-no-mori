@@ -1752,6 +1752,50 @@ esac`,
     );
   });
 
+  it("checks a stack land's branch again after the merge, and keeps a commit made while it waited", async () => {
+    const { fox } = project();
+    const head = box.git(fox, "rev-parse", "HEAD").trim();
+    // gh merging the stack is when the commit lands: work made while
+    // GitHub took its time.
+    box.fakeBin(
+      "gh",
+      `case "$*" in
+  "pr list --state all --head fox "*) cat <<'ANSWER'
+[${pr(5, "fox", "bear", "OPEN", { mergeStateStatus: "CLEAN" })}]
+ANSWER
+  ;;
+  "pr list --state all --limit 200 "*) cat <<'ANSWER'
+[${pr(4, "bear", "main", "OPEN")},${pr(5, "fox", "bear", "OPEN")}]
+ANSWER
+  ;;
+  "api repos/{owner}/{repo}/stacks?pull_request=5") echo '[{"pull_requests":[{"number":4,"state":"open"},{"number":5,"state":"open"}]}]';;
+  "api graphql "*) cat <<'ANSWER'
+${settings(false)}
+ANSWER
+  ;;
+  "pr view 5 --json headRefOid") echo '{"headRefOid":"${head}"}';;
+  "api -X PUT repos/{owner}/{repo}/pulls/5/merge-async "*)
+    git -C '${fox}' commit -q --allow-empty -m late
+    echo '{"status":"merged","details":{"message":"","uuid":"t"}}';;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+    const landed = await runAt(
+      box.home,
+      "land",
+      "--stack",
+      "-p",
+      "repo",
+      "fox",
+    );
+    assert.equal(landed.code, 1, landed.stderr);
+    assert.match(
+      landed.stderr,
+      /Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\./,
+    );
+    assert.ok(existsSync(fox), "the worktree stays");
+  });
+
   it("says an auto-merge by number was already armed", async () => {
     project();
     fakeGh([

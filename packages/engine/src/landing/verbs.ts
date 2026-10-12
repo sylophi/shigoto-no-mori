@@ -300,13 +300,14 @@ export const makeVerbs = ({
             "land",
           );
         }
-        const plan = yield* planStackCleanup(
+        const planCleanup = planStackCleanup(
           located,
           chain,
           set,
           options,
           lookups.target.remote,
         );
+        let plan = yield* planCleanup;
         if (method !== undefined) {
           const queued = yield* mergeStackSet(
             project,
@@ -322,6 +323,20 @@ export const makeVerbs = ({
           if (queued) {
             return mergeDocument(pr, branch, { method, outcome: "queued" });
           }
+          // The merge can wait minutes on GitHub, time enough for new work
+          // in any of the worktrees, so the guards run again, on the heads
+          // the PRs merged with.
+          if (guarded) {
+            yield* guardCommits(
+              project.path,
+              branch,
+              pr.number,
+              yield* github.headOf(project.path, pr.number),
+              remote,
+              "land",
+            );
+          }
+          plan = yield* planCleanup;
         } else if (reporter.landing !== undefined) {
           yield* reporter.landing(pr, undefined);
         }
