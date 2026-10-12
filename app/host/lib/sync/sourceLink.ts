@@ -35,15 +35,18 @@
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorWordsOf } from "@host/lib/errorWords";
+import { errnoWords } from "@shigomori/engine/platformErrors";
 import {
   type SyncCapture,
   SyncCaptureSchema,
@@ -435,13 +438,34 @@ class BrokenLink extends Schema.TaggedError<BrokenLink>()("BrokenLink", {
   }
 }
 
+// An errno the words don't know, by its code alone: the message would
+// carry this device's paths to the other.
+const codeWords = (error: unknown) =>
+  Predicate.hasProperty(error, "code")
+    ? `error ${String(error.code)}`
+    : "an unexpected file error";
+
+// A step on this device's files, its failure (a full disk, a folder
+// it may not write) in words the other device can be answered with, or
+// the user told.
+const onFiles = <A>(what: string, step: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: step,
+    catch: (error) =>
+      new LinkError({
+        reason: `Couldn't ${what}: ${errnoWords(error, codeWords(error))}.`,
+      }),
+  });
+
 // A bundle's temp dir, removed whatever happens.
 const inTempDir = <A, E, R>(
   prefix: string,
   use: (dir: string) => Effect.Effect<A, E, R>,
 ) =>
   Effect.acquireUseRelease(
-    Effect.promise(() => mkdtemp(join(tmpdir(), prefix))),
+    onFiles("make the transfer's temporary folder", () =>
+      mkdtemp(join(tmpdir(), prefix)),
+    ),
     use,
     (dir) =>
       Effect.promise(() =>
@@ -469,7 +493,7 @@ const sendBundle = (
         [...haves],
       );
       yield* Effect.acquireUseRelease(
-        Effect.promise(() => openFile(path, "r")),
+        onFiles("read the bundle", () => openFile(path, "r")),
         (file) =>
           Effect.gen(function* () {
             yield* link.write({ bundle: { bytes } });
@@ -479,7 +503,7 @@ const sendBundle = (
               const piece = Buffer.allocUnsafe(
                 Math.min(CHANNEL_MAX_WRITE_BYTES, bytes - offset),
               );
-              const { bytesRead } = yield* Effect.promise(() =>
+              const { bytesRead } = yield* onFiles("read the bundle", () =>
                 file.read(piece, 0, piece.length, offset),
               );
               if (bytesRead === 0) {
@@ -491,11 +515,23 @@ const sendBundle = (
               offset += bytesRead;
             }
           }).pipe(
-            Effect.mapError(
-              (error) => new BrokenLink({ reason: errorWordsOf(error) }),
+            // The header is out: whatever ends the bytes early, a failure
+            // or a defect, breaks the link, since an answer now would be
+            // read as bundle bytes.
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.interrupt
+                : Effect.fail(
+                    new BrokenLink({
+                      reason: Option.match(Cause.findErrorOption(cause), {
+                        onNone: () => "the bundle stopped short",
+                        onSome: errorWordsOf,
+                      }),
+                    }),
+                  ),
             ),
           ),
-        (file) => Effect.promise(() => file.close()),
+        (file) => Effect.promise(() => file.close().catch(() => {})),
       );
     }),
   );
@@ -562,11 +598,32 @@ export const serveSource = (
         Effect.withSpan("SourceLink.answer", {
           attributes: { ask: request.ask },
         }),
-        Effect.catch((error): Effect.Effect<void, LinkError | BrokenLink> => {
-          if (error instanceof BrokenLink) return Effect.fail(error);
-          if (opts.failure !== undefined) opts.failure.error ??= error;
-          return link.write({ error: errorWordsOf(error) });
-        }),
+        // Every ask is answered: a failure in words, and a defect too (a
+        // file step that threw), which would otherwise end this serving
+        // silently and leave the other device waiting for good. Only an
+        // interruption (the link going) and a link broken mid-bundle
+        // end it.
+        Effect.catchCause(
+          (cause): Effect.Effect<void, LinkError | BrokenLink> => {
+            if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
+            const error = Cause.squash(cause);
+            if (error instanceof BrokenLink) return Effect.fail(error);
+            if (opts.failure !== undefined) opts.failure.error ??= error;
+            // A defect's own words are this device's (its paths among
+            // them): the other device hears a fixed line, and the log
+            // here keeps the rest.
+            return Option.isSome(Cause.findErrorOption(cause))
+              ? link.write({ error: errorWordsOf(error) })
+              : Effect.logError("[sync] a source step failed", cause).pipe(
+                  Effect.andThen(
+                    link.write({
+                      error:
+                        "The other device hit an unexpected error answering this.",
+                    }),
+                  ),
+                );
+          },
+        ),
       );
     }
   }).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
@@ -739,11 +796,11 @@ function askSource(
           Effect.gen(function* () {
             const path = join(dir, "incoming.bundle");
             yield* Effect.acquireUseRelease(
-              Effect.promise(() => openFile(path, "w")),
+              onFiles("write the incoming bundle", () => openFile(path, "w")),
               (file) => {
                 let received = 0;
                 return link.readBytes(bytes, (piece) =>
-                  Effect.promise(async () => {
+                  onFiles("write the incoming bundle", async () => {
                     await file.write(piece);
                     received += piece.length;
                     report(received);

@@ -23,6 +23,8 @@ const ERRNO_TEXT: Record<string, string> = {
   EACCES: "permission denied",
   EPERM: "operation not permitted",
   ENOTDIR: "not a directory",
+  ENOSPC: "no space left on device",
+  EROFS: "read-only file system",
   EISDIR: "is a directory",
   ELOOP: "too many levels of symbolic links",
 };
