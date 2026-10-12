@@ -31,7 +31,8 @@ the packages share. The root scripts run the app's through pnpm filters
 (`pnpm dev`, `pnpm test`), and `pnpm typecheck` runs every package's.
 `pnpm -C <package> …` works too. The repo-wide checks (`lefthook.yml`,
 `.oxlintrc.json`, `.oxfmtrc.json`, `knip.jsonc`) and their tools stay at
-the root. `pnpm check` runs every check CI runs.
+the root, with `gitIsolation.ts`, which every test runner applies so no
+test's git can reach the repository. `pnpm check` runs every check CI runs.
 
 Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,

@@ -1,6 +1,11 @@
 // The tests build the terminal binary and run it, so each file runs
 // alone and a test gets longer than vitest's default.
 import { defineConfig } from "vitest/config";
+import { isolateGit } from "../../gitIsolation";
+
+// Before any test's process forks, so none inherits a way into this
+// repository (../../gitIsolation.ts).
+isolateGit();
 
 export default defineConfig({
   test: {
