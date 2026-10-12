@@ -2,8 +2,9 @@
 // worktree rows (the `worktrees:watch` view, which the sidebar and the
 // worktree page read): through the host's watch on the working trees
 // (host/lib/GitWatcher.ts) within a couple of seconds, with no window
-// focused, and through `worktrees:reread`, which a window sends as it
-// regains focus, for an edit no watch saw.
+// focused, and for an edit no watch saw: through a window here gaining
+// focus (BackgroundFetch reads the rows again), and through
+// `worktrees:reread`, which a peer's window sends.
 //
 // Run: pnpm test working-tree-edits.
 import assert from "node:assert/strict";
@@ -11,6 +12,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { Worktree } from "@shigomori/contracts/schemas";
+import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -22,6 +24,7 @@ import {
   worktreesHandlers,
   worktreesViews,
 } from "../host/ipc/modules/worktrees.ts";
+import * as BackgroundFetch from "../host/lib/BackgroundFetch.ts";
 import * as GitWatcher from "../host/lib/GitWatcher.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
 import { addProject } from "../host/lib/projects/index.ts";
@@ -125,6 +128,47 @@ it("an edit outside the app reaches the rows through the working tree's watch, w
       );
       yield* worktreesHandlers.reread();
       assert.equal(yield* changedCountWithin(values, "2 seconds"), 3);
+    }).pipe(Effect.scoped),
+  );
+});
+
+it("each window here gaining focus reads the rows again, for an edit no watch saw", async () => {
+  await runHost(
+    Effect.gen(function* () {
+      const pushes = yield* HostPushes.HostPushes;
+      const values = yield* Stream.toQueue(
+        worktreesViews.watch({ projectId }),
+        { capacity: "unbounded" },
+      );
+      const [first] = yield* Queue.take(values);
+      const before = first?.changedCount ?? 0;
+      // The real one, its pushes as the host's root wires them.
+      const context = yield* Layer.build(
+        BackgroundFetch.layer({
+          broadcast: (module, key, payload) => {
+            Effect.runFork(
+              HostPushes.push(module, key, payload).pipe(
+                Effect.provideService(HostPushes.HostPushes, pushes),
+              ),
+            );
+          },
+          announceProjectChanged: () => {},
+        }),
+      );
+      const fetch = Context.get(context, BackgroundFetch.BackgroundFetch);
+      writeFileSync(join(repo, "d.txt"), "d\n");
+      assert.equal(
+        yield* changedCountWithin(values, "1 second"),
+        "no new rows",
+        "nothing watches the tree here",
+      );
+      fetch.setWindowFocused(true);
+      assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 1);
+      // Focus moving to another of this machine's windows: the app stays
+      // focused, and the window that gained it reads the rows again.
+      writeFileSync(join(repo, "e.txt"), "e\n");
+      fetch.setWindowFocused(true);
+      assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 2);
     }).pipe(Effect.scoped),
   );
 });

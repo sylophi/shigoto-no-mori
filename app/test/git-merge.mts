@@ -1,4 +1,4 @@
-// Durable proof for bringing another branch in (host/lib/git/merge.ts)
+// Durable proof for bringing another branch in (the engine's Git)
 // against a REAL repository: the preview's counts and conflicts, a
 // merge commit even where a fast-forward would do, a fast-forward
 // refused once the branch has its own commits, a squash into one commit
@@ -25,7 +25,8 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { engineGit, promised } from "./lib/gitPromises.mts";
+import type { IntegrateMethod } from "@shigomori/contracts/schemas";
+import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -36,9 +37,24 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { mergeBranch, mergeKeepingConflicts, readMergePreview } = promised(
-  await import("../host/lib/git/merge.ts"),
-);
+const mergeBranch = (
+  worktree: string,
+  ref: string,
+  method: IntegrateMethod,
+  message: string | undefined,
+) => engineGit.mergeBranch({ worktree, ref, method, message });
+// The merge kept on its conflicts, through the primary's way to it.
+const mergeKeepingConflicts = (worktree: string, ref: string) =>
+  engineGit.mergePrimaryKeepingConflicts({
+    worktree,
+    repo: worktree,
+    primaryRef: ref,
+  });
+const readMergePreview = (
+  worktree: string,
+  ref: string,
+  countsOnly?: boolean,
+) => engineGit.readMergePreview(worktree, ref, countsOnly);
 // The engine's Git, in the shapes these cases call it by.
 const abortOperation = (worktree: string) => engineGit.abortOperation(worktree);
 const continueOperation = (worktree: string) =>
@@ -49,12 +65,14 @@ const resolveConflict = (
   path: string,
   side: "mine" | "theirs" | "as-is",
 ) => engineGit.resolveConflict({ worktree, path, side });
-const { readBranchHistory } = promised(
-  await import("../host/lib/git/worktrees.ts"),
-);
+const readBranchHistory = (
+  worktree: string,
+  opts: { base: string | undefined; count: number },
+) => engineGit.readBranchHistory(worktree, opts);
 const getCommitDiff = (worktree: string, hash: string) =>
   engineGit.commitDiff(worktree, hash);
-const { revertCommit } = promised(await import("../host/lib/git/history.ts"));
+const revertCommit = (worktree: string, hash: string) =>
+  engineGit.revertCommit(worktree, hash);
 const resetSoft = (
   worktree: string,
   target: string,

@@ -89,12 +89,6 @@ export function chunked<T>(items: readonly T[]): T[][] {
   return chunks;
 }
 
-// For `-z` output: NUL-separated records, with a trailing NUL that
-// would otherwise yield a phantom empty entry.
-export function splitZ(stdout: string): string[] {
-  return stdout.split("\0").filter((entry) => entry.length > 0);
-}
-
 // A git action the app refuses, in words for the user.
 export class GitRefusal extends Schema.TaggedError<GitRefusal>()("GitRefusal", {
   reason: Schema.String,

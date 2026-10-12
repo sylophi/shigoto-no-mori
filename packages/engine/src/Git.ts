@@ -4,13 +4,16 @@
 // it, so the spawn cap, the locale and the errors are the same for
 // every caller.
 import type {
+  BranchHistory,
   BranchList,
   ChangedFile,
   CommitMessage,
   CommitSummary,
   FileHunks,
   GitOperationState,
+  IntegrateMethod,
   LineChange,
+  MergePreview,
   StashEntry,
 } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
@@ -41,6 +44,9 @@ import { makeOperation } from "./git/operation.ts";
 import { makeHunks } from "./git/hunks.ts";
 import { makeCommit } from "./git/commit.ts";
 import { makeStash } from "./git/stash.ts";
+import { makeMerging } from "./git/merging.ts";
+import { makeRewriting } from "./git/rewriting.ts";
+import type { SyncConflictsError } from "@shigomori/contracts/errors";
 import {
   type BranchMovedError,
   BranchNotMergedError,
@@ -51,7 +57,6 @@ import {
   LOCAL_TIPS_LIMIT,
   NestedRepositoryError,
   NoRemoteError,
-  OverwriteRefusedError,
   PATCH_MAX_OUTPUT,
   type PrimaryRelation,
   type RunOptions,
@@ -69,7 +74,6 @@ export {
   GitOutputTooLargeError,
   NestedRepositoryError,
   NoRemoteError,
-  OverwriteRefusedError,
   UndoRefusedError,
   UnknownRevisionError,
   ZERO_SHA,
@@ -197,10 +201,25 @@ export class Git extends Context.Service<
     readonly unpushedCount: (worktree: string) => Effect.Effect<number>;
     // A page of `git log HEAD`, newest first. Empty on any failure (an
     // unborn branch, a rebase in progress).
+    // `query` searches the messages (literal, case blind), `from` starts
+    // somewhere other than HEAD, and `firstParentStats` counts a merge's
+    // lines against its first parent, what it brought in.
     readonly listCommits: (
       worktree: string,
-      page: { readonly skip: number; readonly count: number },
+      page: {
+        readonly skip: number;
+        readonly count: number;
+        readonly query?: string | undefined;
+        readonly from?: string | undefined;
+        readonly firstParentStats?: boolean | undefined;
+      },
     ) => Effect.Effect<CommitSummary[]>;
+    // The branch's own commits back to where it left `base`, and how it
+    // stands against its upstream: what the Git page's History tab draws.
+    readonly readBranchHistory: (
+      worktree: string,
+      opts: { readonly base: string | undefined; readonly count: number },
+    ) => Effect.Effect<BranchHistory, GitError>;
     // The first-parent chain of `ref`, as far back as
     // primaryRelation can ask about. None when it can't be read.
     readonly firstParentChain: (
@@ -405,7 +424,19 @@ export class Git extends Context.Service<
     // a fetch and a fresh look at what that would destroy.
     readonly overwriteFromUpstream: (
       worktree: string,
-    ) => Effect.Effect<void, GitError | OverwriteRefusedError>;
+    ) => Effect.Effect<
+      void,
+      | GitError
+      | GitRefusedError
+      | BranchMovedError
+      | UnknownRevisionError
+      | PlatformError.PlatformError
+    >;
+    // Uncommitted changes, untracked files included whatever the user's
+    // status setting says.
+    readonly hasUncommittedOrUntracked: (
+      worktree: string,
+    ) => Effect.Effect<boolean, GitError>;
     // Pushes the current branch to the repository's first remote and
     // tracks it there.
     readonly publish: (input: {
@@ -413,10 +444,11 @@ export class Git extends Context.Service<
       readonly repo: string;
     }) => Effect.Effect<void, GitError | NoRemoteError>;
     // The diverged-but-mergeable resolution: fetch, rebase onto the
-    // upstream (a whole-tree merge when a commit conflicts), push.
+    // upstream where that is safe or merge, push. A merge that conflicts
+    // fails with SyncConflictsError.
     readonly pullRebaseOrMergeAndPush: (
       worktree: string,
-    ) => Effect.Effect<void, GitError>;
+    ) => Effect.Effect<void, GitError | SyncConflictsError>;
     // Brings the primary ref's commits in the same way, after fetching
     // every remote (the primary can live on another remote than the
     // branch tracks).
@@ -424,7 +456,85 @@ export class Git extends Context.Service<
       readonly worktree: string;
       readonly repo: string;
       readonly primaryRef: string;
-    }) => Effect.Effect<void, GitError>;
+    }) => Effect.Effect<void, GitError | SyncConflictsError>;
+    // The way on from a sync that conflicts: the merge, left stopped on
+    // its conflicts. Whether it stopped.
+    readonly mergeUpstreamKeepingConflicts: (
+      worktree: string,
+    ) => Effect.Effect<
+      boolean,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
+    readonly mergePrimaryKeepingConflicts: (input: {
+      readonly worktree: string;
+      readonly repo: string;
+      readonly primaryRef: string;
+    }) => Effect.Effect<
+      boolean,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
+
+    // --- merges and rewrites ---
+    // How far apart HEAD and `ref` are, and which files a merge would
+    // conflict on (none read when `countsOnly`).
+    readonly readMergePreview: (
+      worktree: string,
+      ref: string,
+      countsOnly?: boolean,
+    ) => Effect.Effect<MergePreview, GitError | UnknownRevisionError>;
+    // Brings `ref` in by `method`. Whether it stopped on conflicts.
+    readonly mergeBranch: (input: {
+      readonly worktree: string;
+      readonly ref: string;
+      readonly method: IntegrateMethod;
+      readonly message?: string | undefined;
+    }) => Effect.Effect<
+      boolean,
+      | GitError
+      | GitRefusedError
+      | UnknownRevisionError
+      | PlatformError.PlatformError
+    >;
+    readonly revertCommit: (
+      worktree: string,
+      hash: string,
+    ) => Effect.Effect<
+      void,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
+    readonly cherryPickCommit: (
+      worktree: string,
+      hash: string,
+    ) => Effect.Effect<
+      void,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
+    // Rewrites `hash`'s message, its descendants rebuilt on top.
+    readonly rewordCommit: (input: {
+      readonly worktree: string;
+      readonly hash: string;
+      readonly summary: string;
+      readonly description?: string | undefined;
+      readonly expectHead: string;
+    }) => Effect.Effect<
+      void,
+      | GitError
+      | GitRefusedError
+      | BranchMovedError
+      | PlatformError.PlatformError
+    >;
+    // Folds `hash` into the commit before it.
+    readonly squashIntoParent: (
+      worktree: string,
+      hash: string,
+      expectHead: string,
+    ) => Effect.Effect<
+      void,
+      | GitError
+      | GitRefusedError
+      | BranchMovedError
+      | PlatformError.PlatformError
+    >;
     // `parentDir/name`, refused unless the parent is a folder and the
     // destination is not there yet: where a new checkout may land.
     readonly checkDestination: (
@@ -642,16 +752,25 @@ const make = Effect.gen(function* () {
   const running = yield* makeRunning;
   const worktreeVerbs = yield* makeWorktreeVerbs({ running });
   const workingTree = yield* makeWorkingTree({ running });
-  const history = yield* makeHistory({ running });
   const refs = yield* makeRefs({ running });
+  const history = yield* makeHistory({ running, refs });
   const branches = yield* makeBranches({ running, worktreeVerbs });
-  const remote = yield* makeRemote({ running, worktreeVerbs, workingTree });
   const operation = yield* makeOperation({ running });
   const gitIndex = yield* makeGitIndex({
     running,
     refs,
     operation,
     workingTree,
+  });
+  const merging = yield* makeMerging({ running, refs, operation });
+  const rewriting = yield* makeRewriting({ running, refs, operation });
+  const remote = yield* makeRemote({
+    running,
+    worktreeVerbs,
+    refs,
+    operation,
+    gitIndex,
+    merging,
   });
   const diffs = yield* makeDiffs({ running });
   const { checkDestination, clone, createRepository } = yield* makeRepositories(
@@ -675,6 +794,7 @@ const make = Effect.gen(function* () {
     upstreamSync,
     unpushedCount,
     listCommits,
+    readBranchHistory,
     firstParentChain,
     primaryRelation,
     readCommitMessage,
@@ -701,7 +821,7 @@ const make = Effect.gen(function* () {
     listOthersIgnored,
     listIgnoreRules,
   } = branches;
-  const { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish } = remote;
+  const { fetchAll, overwriteFromUpstream, publish } = remote;
   const { resetSoft, resetHard, snapshotPaths, discard, restoreDiscard } =
     gitIndex;
   const hunks = yield* makeHunks({ running, gitIndex });
@@ -718,6 +838,15 @@ const make = Effect.gen(function* () {
     discardHunks: hunks.discardHunks,
     commitPicks,
     ...stash,
+    ...rewriting,
+    readMergePreview: merging.readMergePreview,
+    mergeBranch: merging.mergeBranch,
+    pullRebaseOrMergeAndPush: remote.pullRebaseOrMergeAndPush,
+    syncWithPrimary: remote.syncWithPrimary,
+    mergeUpstreamKeepingConflicts: remote.mergeUpstreamKeepingConflicts,
+    mergePrimaryKeepingConflicts: remote.mergePrimaryKeepingConflicts,
+    hasUncommittedOrUntracked: remote.hasUncommittedOrUntracked,
+    readBranchHistory,
     adminDirOf: (worktreePath) =>
       fs.readFileString(path.join(worktreePath, ".git")).pipe(
         Effect.map((text) => {
@@ -878,19 +1007,6 @@ const make = Effect.gen(function* () {
     ),
     overwriteFromUpstream,
     publish,
-    // The merge-tree probe that offers this already found the
-    // whole-tree merge clean, which is what makes the fallback safe.
-    pullRebaseOrMergeAndPush: Effect.fn("Git.pullRebaseOrMergeAndPush")(
-      function* (worktree) {
-        yield* run(worktree, ["fetch"]);
-        yield* rebaseOrMerge(worktree, "@{u}");
-        yield* run(worktree, ["push"]);
-      },
-    ),
-    syncWithPrimary: Effect.fn("Git.syncWithPrimary")(function* (input) {
-      yield* fetchAll(input.repo);
-      yield* rebaseOrMerge(input.worktree, input.primaryRef);
-    }),
     checkDestination,
     clone,
     createRepository,

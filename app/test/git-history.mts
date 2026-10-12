@@ -22,7 +22,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { engineGit, promised } from "./lib/gitPromises.mts";
+import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // Same as git-changes: the hook's GIT_* variables go before the git
@@ -35,8 +35,18 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { cherryPickCommit, revertCommit, rewordCommit, squashIntoParent } =
-  promised(await import("../host/lib/git/history.ts"));
+const revertCommit = (worktree: string, hash: string) =>
+  engineGit.revertCommit(worktree, hash);
+const cherryPickCommit = (worktree: string, hash: string) =>
+  engineGit.cherryPickCommit(worktree, hash);
+const rewordCommit = (
+  worktree: string,
+  hash: string,
+  message: { summary: string; description?: string },
+  expectHead: string,
+) => engineGit.rewordCommit({ worktree, hash, ...message, expectHead });
+const squashIntoParent = (worktree: string, hash: string, expectHead: string) =>
+  engineGit.squashIntoParent(worktree, hash, expectHead);
 const applyStash = (worktree: string, hash: string, drop: boolean) =>
   engineGit.applyStash({ worktree, hash, drop });
 const dropStash = (worktree: string, hash: string) =>
@@ -64,16 +74,26 @@ const resolveConflict = (
   path: string,
   side: "mine" | "theirs" | "as-is",
 ) => engineGit.resolveConflict({ worktree, path, side });
-const {
-  mergePrimaryKeepingConflicts,
-  mergeUpstreamKeepingConflicts,
-  pullRebaseOrMergeAndPush,
-  syncWithPrimary,
-} = promised(await import("../host/lib/git/sync.ts"));
+const mergePrimaryKeepingConflicts = (
+  worktree: string,
+  repo: string,
+  primaryRef: string,
+) => engineGit.mergePrimaryKeepingConflicts({ worktree, repo, primaryRef });
+const mergeUpstreamKeepingConflicts = (worktree: string) =>
+  engineGit.mergeUpstreamKeepingConflicts(worktree);
+const pullRebaseOrMergeAndPush = (worktree: string) =>
+  engineGit.pullRebaseOrMergeAndPush(worktree);
+const syncWithPrimary = (worktree: string, repo: string, primaryRef: string) =>
+  engineGit.syncWithPrimary({ worktree, repo, primaryRef });
 const { isSyncConflictsError } = await import("@shigomori/contracts/errors");
-const { listCommits, readBranchHistory } = promised(
-  await import("../host/lib/git/worktrees.ts"),
-);
+const listCommits = (
+  worktree: string,
+  page: { skip: number; count: number; query?: string; from?: string },
+) => engineGit.listCommits(worktree, { ...page, firstParentStats: true });
+const readBranchHistory = (
+  worktree: string,
+  opts: { base: string | undefined; count: number },
+) => engineGit.readBranchHistory(worktree, opts);
 
 const git = sandboxGit(gitEnv);
 
