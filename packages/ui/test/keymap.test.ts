@@ -23,7 +23,7 @@ import {
   chordOfPress,
   chordText,
   conflictOf,
-  defaultMenuAccelerators,
+  menuAccelerators,
   KEYMAP_ACTIONS,
   keymapGroups,
   type Chord,
@@ -211,11 +211,47 @@ it("answers a ⌘ chord with extra modifiers unless another binding takes the pr
   );
 });
 
-it("gives the menu its default accelerators before a window sends its own", () => {
-  const defaults = defaultMenuAccelerators();
+it("gives the menu the device's accelerators before a window sends its own", () => {
+  const moved = menuAccelerators({ newWindow: "Mod+Shift+M" });
+  expect(moved.newWindow).toBe("Cmd+Shift+M");
+  const defaults = menuAccelerators(undefined);
   expect(defaults.settings).toBe("Cmd+,");
   expect(defaults.newWindow).toBe("Cmd+N");
   expect(defaults.addProject).toBe("Cmd+Shift+N");
   expect(defaults.launchTool1).toBe("Cmd+1");
   expect(defaults.palette).toBe(undefined);
+});
+
+it("takes a letter as typed on any key, the physical key with Alt held, and AltGr as no extra", () => {
+  const mac = resolveKeymap(undefined, { mac: true, desktop: true });
+  const other = resolveKeymap(undefined, { mac: false, desktop: true });
+  // AZERTY types M on the key QWERTY calls ;.
+  expect(
+    chordOfPress(press("Semicolon", { key: "m", metaKey: true }), true)?.key,
+  ).toBe("M");
+  // A German Mac's ⌥L types @: still L.
+  expect(
+    chordOfPress(press("KeyL", { key: "@", altKey: true, metaKey: true }), true)
+      ?.key,
+  ).toBe("L");
+  // Windows AltGr (Ctrl+Alt) typing ł on K is no palette.
+  expect(
+    other
+      .get("palette")
+      ?.matches(press("KeyK", { key: "ł", ctrlKey: true, altKey: true })),
+  ).toBe(false);
+  // A binding out of reach takes nothing: ⇧⌘↩ still commits with the
+  // palette's changes moved onto it.
+  const moved = resolveKeymap(
+    { paletteChanges: "Mod+Shift+Enter" },
+    { mac: true, desktop: true },
+  );
+  expect(
+    moved
+      .get("commit")
+      ?.matches(
+        press("Enter", { key: "Enter", metaKey: true, shiftKey: true }),
+      ),
+  ).toBe(true);
+  expect(mac.get("palette")).toBeDefined();
 });
