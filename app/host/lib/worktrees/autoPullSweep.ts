@@ -18,7 +18,6 @@
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { fastForwardToUpstream, hasUncommittedOrUntracked } from "../git/sync";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 
 type AutoPullSkipReason =
@@ -55,10 +54,11 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
   if (counts.ahead > 0) return skipped("ahead");
   if (options.busy) return skipped("busy");
   return yield* Effect.gen(function* () {
-    if (yield* hasUncommittedOrUntracked(worktree.path)) {
+    const git = yield* Git.Git;
+    if (yield* git.hasUncommittedOrUntracked(worktree.path)) {
       return skipped("dirty");
     }
-    yield* fastForwardToUpstream(worktree.path);
+    yield* git.fastForwardToUpstream(worktree.path);
     return { kind: "pulled", commits: counts.behind } as AutoPullOutcome;
   }).pipe(
     Effect.catch((error) =>

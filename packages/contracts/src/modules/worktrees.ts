@@ -378,8 +378,10 @@ export const worktreesContract = defineContract(
   // watch on them, host/lib/GitWatcher.ts): its rows are read again.
   // The host's own signal to its views; a viewer reads the rows.
   push("filesChanged", ProjectScopedPayloadSchema),
-  // A window looking at this host again (it regained focus, or a
-  // session landed): every project's rows are read again, for an edit
-  // no watch saw. Read-class, like the view it refreshes.
+  // A peer's window looking at this host again (it regained focus, or
+  // a session landed): every project's rows are read again, for an edit
+  // no watch saw. This machine's own windows reach the same through the
+  // shell's focus report (the host's BackgroundFetch). Read-class, like
+  // the view it refreshes.
   invoke("reread", VoidSchema, VoidSchema, { remote: true, gated: false }),
 );

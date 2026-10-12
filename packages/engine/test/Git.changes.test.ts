@@ -394,3 +394,19 @@ it("a commit's patch keeps the files git printed before a later one failed", asy
   assert.match(patch, /^diff --git a\/\.gitattributes/m);
   assert.match(patch, /^diff --git a\/a\.txt/m);
 });
+
+it("a hunk discard in a file that starts with a byte order mark keeps the mark", async () => {
+  const repo = seedRepo();
+  const BOM = "﻿";
+  write(repo, "bom.txt", `${BOM}one\ntwo\nthree\nfour\nfive\nsix\n`);
+  git(repo, "add", "bom.txt");
+  git(repo, "commit", "-q", "-m", "bom");
+  write(repo, "bom.txt", `${BOM}one\n2\nthree\nfour\nfive\n6\n`);
+  const hunks = await withGit((g) => g.readHunks(repo, "bom.txt"));
+  const [first] = hunks.changes;
+  assert.ok(first);
+  await withGit((g) =>
+    g.discardHunks({ worktree: repo, path: "bom.txt", changes: [first] }),
+  );
+  assert.equal(read(repo, "bom.txt"), `${BOM}one\ntwo\nthree\nfour\nfive\n6\n`);
+});

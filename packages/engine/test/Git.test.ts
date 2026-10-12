@@ -24,8 +24,8 @@ import {
   CloneDestinationError,
   GitCommandError,
   GitOutputTooLargeError,
+  GitRefusedError,
   NoRemoteError,
-  OverwriteRefusedError,
   stderrOf,
   UnknownRevisionError,
 } from "../src/Git.ts";
@@ -554,17 +554,20 @@ it("overwrite from upstream refuses dirty work and ignored files in the way", as
   git(repo, "push", "-q");
 
   write(clone, "a.txt", "uncommitted\n");
-  const dirty = await failureAs(OverwriteRefusedError, (g) =>
+  const dirty = await failureAs(GitRefusedError, (g) =>
     g.overwriteFromUpstream(clone),
   );
-  assert.equal(dirty.reason, "uncommitted");
+  assert.equal(
+    dirty.message,
+    "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
+  );
   git(clone, "checkout", "-q", "--", "a.txt");
 
   write(clone, "secret.env", "mine\n");
   const ignored = await failureOf((g) => g.overwriteFromUpstream(clone));
   assert.equal(
     ignored.message,
-    "Overwriting would replace ignored local file(s) the upstream branch tracks: secret.env. Move them aside first.",
+    "This would replace ignored local file(s) that refs/remotes/origin/main tracks: secret.env. Move them aside first.",
   );
   assert.equal(readFileSync(join(clone, "secret.env"), "utf8"), "mine\n");
 

@@ -240,6 +240,14 @@ export function noteWindowFocused(focused: boolean): void {
   if (child !== null) tell(session().windowFocused(focused));
 }
 
+// A window here gained focus, told every time, also when focus moves
+// from one of ours to another: the host reads the rows again for the
+// window that comes back to them.
+export function noteWindowGainedFocus(): void {
+  windowFocused = true;
+  if (child !== null) tell(session().windowFocused(true));
+}
+
 // Quit: the host closes its graph (its quit sequence) and exits. One
 // that does not within the deadline is killed.
 const stop = (hurried: boolean) =>

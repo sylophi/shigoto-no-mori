@@ -22,7 +22,11 @@ type Promised<M> = {
     : M[K];
 };
 
-export const promised = <M extends object>(module: M): Promised<M> =>
+// `relay` turns a failure into what the Promise rejects with.
+export const promised = <M extends object>(
+  module: M,
+  relay: (error: unknown) => unknown = (error) => error,
+): Promised<M> =>
   Object.fromEntries(
     Object.entries(module).map(([name, value]) => [
       name,
@@ -30,14 +34,24 @@ export const promised = <M extends object>(module: M): Promised<M> =>
         ? (...args: unknown[]) => {
             const result: unknown = value(...args);
             return Effect.isEffect(result)
-              ? runtime.runPromise(
-                  result as Effect.Effect<unknown, unknown, Services>,
-                )
+              ? runtime
+                  .runPromise(
+                    result as Effect.Effect<unknown, unknown, Services>,
+                  )
+                  .catch((error: unknown) => {
+                    throw relay(error);
+                  })
               : result;
           }
         : value,
     ]),
   ) as Promised<M>;
 
-// The engine's Git itself, every call a Promise, on the same runtime.
-export const engineGit = promised(runtime.runSync(Git.Git));
+// The engine's Git itself, every call a Promise on the same runtime
+// that rejects as the host relays a failure: a git that failed in git's
+// own words, a refusal as itself.
+export const engineGit = promised(runtime.runSync(Git.Git), (error) =>
+  error instanceof Git.GitCommandError
+    ? new Error(Git.stderrOf(error), { cause: error })
+    : error,
+);

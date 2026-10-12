@@ -262,11 +262,6 @@ function startLocalHost(
   // This machine's broadcasts, into its cache, exactly as a peer's
   // land in theirs.
   watchHost(queryClient, api.deviceId, api);
-  // The host watches the working trees; this window regaining focus
-  // asks for the rows again, for an edit the watch missed.
-  focusManager.subscribe((focused) => {
-    if (focused) void api.run(api.worktrees.reread()).catch(() => undefined);
-  });
   registry.mount(scriptRunsAtom(api.deviceId));
   registry.mount(worktreeLifecycleAtom(api.deviceId));
   registry.mount(gitFetchingAtom(api.deviceId));

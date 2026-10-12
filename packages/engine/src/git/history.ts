@@ -1,4 +1,5 @@
 // Git's history: commits, logs and what a commit holds.
+import { type BranchHistory, isCommitHash } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
@@ -8,11 +9,18 @@ import {
   splitLines,
 } from "../gitParse.ts";
 import { FIRST_PARENT_LIMIT, UNPUSHED_LIMIT } from "./documents.ts";
+import type { RefsArea } from "./refs.ts";
 import type { RunningArea } from "./running.ts";
 
-export const makeHistory = ({ running }: { readonly running: RunningArea }) =>
+export const makeHistory = ({
+  running,
+  refs,
+}: {
+  readonly running: RunningArea;
+  readonly refs: RefsArea;
+}) =>
   Effect.sync(() => {
-    const { run, succeeds } = running;
+    const { run, runLenient, succeeds } = running;
     // --- history ---
 
     const aheadBehind = Effect.fn("Git.aheadBehind")(function* (
@@ -76,18 +84,137 @@ export const makeHistory = ({ running }: { readonly running: RunningArea }) =>
 
     const listCommits = Effect.fn("Git.listCommits")(function* (
       worktree: string,
-      page: { readonly skip: number; readonly count: number },
+      page: {
+        readonly skip: number;
+        readonly count: number;
+        readonly query?: string | undefined;
+        readonly from?: string | undefined;
+        readonly firstParentStats?: boolean | undefined;
+      },
     ) {
       return yield* run(worktree, [
         "log",
         `--skip=${page.skip}`,
         `-${page.count}`,
+        // A search of the messages, literal and case blind.
+        ...(page.query
+          ? ["--fixed-strings", "--regexp-ignore-case", `--grep=${page.query}`]
+          : []),
         `--pretty=format:${LOG_FORMAT}`,
         "--shortstat",
+        ...(page.firstParentStats ? ["--diff-merges=first-parent"] : []),
+        // History from a commit other than HEAD.
+        ...(page.from ? ["--end-of-options", page.from, "--"] : []),
       ]).pipe(
         Effect.map(parseLog),
         Effect.orElseSucceed(() => []),
       );
+    });
+
+    // What the Git page's History tab draws: the branch's own commits,
+    // newest first (children before parents, so a merge never lists its
+    // side above what it was merged into), back to where it left `base`
+    // (the project's primary ref), and which commit that is. Without a
+    // base (the primary checkout, a branch that is the primary branch, a
+    // detached HEAD) it is the newest commits of HEAD. `more` says the
+    // list was cut at `count`.
+    //
+    // Against the upstream: which of HEAD's commits it lacks
+    // (`unpushed`, by the same short hash the list uses), which of its
+    // own HEAD lacks (`incoming`, cut at `count` too), and where the two
+    // last agreed (`upstreamFork`). Without an upstream all are empty.
+    // `merges` are the listed commits with more than one parent, with
+    // the first: the commit menu won't rewrite across one, and a merge
+    // on top is undone back to its first parent. Every commit's counts
+    // are against its first parent, so a merge's are what it brought in.
+    const readBranchHistory = Effect.fn("Git.readBranchHistory")(function* (
+      worktree: string,
+      opts: { readonly base: string | undefined; readonly count: number },
+    ) {
+      const short = (rev: string) =>
+        runLenient(worktree, [
+          "log",
+          "-1",
+          "--format=%h",
+          "--end-of-options",
+          rev,
+          "--",
+        ]).pipe(Effect.map((out) => out.trim()));
+      const log = (range: string) =>
+        runLenient(worktree, [
+          "log",
+          `-${opts.count + 1}`,
+          "--topo-order",
+          `--pretty=format:${LOG_FORMAT}`,
+          "--shortstat",
+          "--diff-merges=first-parent",
+          "--end-of-options",
+          range,
+          "--",
+        ]);
+      // Two rounds: everything that needs no answer from another, then
+      // what reads past where the branch left its base. Without an
+      // upstream the reads against it fail and come back empty.
+      const [upstream, mergeBase, unpushedOut, incoming, forkOut] =
+        yield* Effect.all(
+          [
+            refs.upstreamName(worktree).pipe(Effect.map(Option.getOrNull)),
+            opts.base
+              ? runLenient(worktree, ["merge-base", "HEAD", opts.base])
+              : Effect.succeed(""),
+            runLenient(worktree, [
+              "log",
+              "--format=%h",
+              "--max-count=1000",
+              "--end-of-options",
+              "@{u}..HEAD",
+              "--",
+            ]),
+            log("HEAD..@{u}").pipe(Effect.map(parseLog)),
+            runLenient(worktree, ["merge-base", "HEAD", "@{u}"]),
+          ],
+          { concurrency: "unbounded" },
+        );
+      const baseHash = mergeBase.trim();
+      const forkHash = forkOut.trim();
+      const range = baseHash ? `${baseHash}..HEAD` : "HEAD";
+      const [base, own, merges, upstreamFork] = yield* Effect.all(
+        [
+          opts.base && baseHash
+            ? short(baseHash).pipe(
+                Effect.map((hash) => ({ ref: opts.base ?? "", hash })),
+              )
+            : Effect.succeed(null),
+          log(range).pipe(Effect.map(parseLog)),
+          runLenient(worktree, [
+            "log",
+            "--merges",
+            "--format=%h %p",
+            `-${opts.count}`,
+            "--end-of-options",
+            range,
+            "--",
+          ]),
+          forkHash ? short(forkHash) : Effect.succeed(""),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return {
+        commits: own.slice(0, opts.count),
+        more: own.length > opts.count,
+        base,
+        upstream,
+        unpushed: unpushedOut.split("\n").filter(isCommitHash),
+        incoming: incoming.slice(0, opts.count),
+        incomingMore: incoming.length > opts.count,
+        upstreamFork: upstreamFork || null,
+        merges: merges.split("\n").flatMap((line) => {
+          const [hash = "", firstParent = ""] = line.split(" ");
+          return isCommitHash(hash) && isCommitHash(firstParent)
+            ? [{ hash, firstParent }]
+            : [];
+        }),
+      } satisfies BranchHistory;
     });
 
     const firstParentChain = Effect.fn("Git.firstParentChain")(function* (
@@ -167,6 +294,7 @@ export const makeHistory = ({ running }: { readonly running: RunningArea }) =>
       upstreamSync,
       unpushedCount,
       listCommits,
+      readBranchHistory,
       firstParentChain,
       primaryRelation,
       readCommitMessage,

@@ -1,5 +1,5 @@
-// Durable proof for the commit-list parser (parseLog in
-// host/lib/git/worktrees.ts), which turns `git log` output into the
+// Durable proof for the commit-list parser (parseLog in the engine's
+// gitParse.ts), which turns `git log` output into the
 // rows of a worktree's history.
 //
 // Asserts: the format and every case in shared/fixtures/git-log.json
@@ -15,10 +15,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as Worktrees from "@host/lib/git/worktrees";
-import { promised } from "./lib/gitPromises.mts";
+import { LOG_FORMAT, parseLog } from "@shigomori/engine/gitParse";
+import { engineGit } from "./lib/gitPromises.mts";
 
-const { LOG_FORMAT, listCommits, parseLog } = promised(Worktrees);
+const listCommits = (
+  worktree: string,
+  page: { skip: number; count: number; query?: string },
+) => engineGit.listCommits(worktree, { ...page, firstParentStats: true });
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import { afterAll, beforeAll, it } from "vitest";
 import { appRoot, scrubProcessGitEnv } from "./lib/checkKit.mts";

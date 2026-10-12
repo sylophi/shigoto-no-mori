@@ -73,24 +73,6 @@ export class BranchMovedError extends Schema.TaggedError<BranchMovedError>()(
   }
 }
 
-// What an overwrite from the upstream would destroy: uncommitted work,
-// or ignored files the upstream tracks at the same paths. `paths` names
-// the first few, `count` all of them.
-export class OverwriteRefusedError extends Schema.TaggedError<OverwriteRefusedError>()(
-  "OverwriteRefusedError",
-  {
-    reason: Schema.Literals(["uncommitted", "ignored-files"]),
-    paths: Schema.Array(Schema.String),
-    count: Schema.Int,
-  },
-) {
-  override get message(): string {
-    return this.reason === "uncommitted"
-      ? "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream."
-      : `Overwriting would replace ignored local file(s) the upstream branch tracks: ${listed(this.paths, this.count)}. Move them aside first.`;
-  }
-}
-
 export class NoRemoteError extends Schema.TaggedError<NoRemoteError>()(
   "NoRemoteError",
   {},
@@ -271,7 +253,9 @@ export const BINARY_SNIFF_BYTES = 8000;
 export const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
 
 export const encoder = new TextEncoder();
-export const decoder = new TextDecoder();
+// A byte order mark git prints first is the content's own (a blob that
+// starts with one), so it stays.
+export const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
 
 // Reads a pipe to its end. Past `limit` bytes it fails with
 // `tooLarge`, or without one keeps the first `limit` bytes and drains

@@ -16,26 +16,6 @@ import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
-import { GitRefusal } from "@host/lib/git/core";
-import {
-  cherryPickCommit,
-  revertCommit,
-  rewordCommit,
-  squashIntoParent,
-} from "@host/lib/git/history";
-import { mergeBranch, readMergePreview } from "@host/lib/git/merge";
-import {
-  mergePrimaryKeepingConflicts,
-  mergeUpstreamKeepingConflicts,
-  overwriteFromUpstream,
-  publishCurrentBranch,
-  pullFastForward,
-  pullRebaseOrMergeAndPush,
-  pushFastForward,
-  pushForceWithLease,
-  syncWithPrimary,
-} from "@host/lib/git/sync";
-import { listCommits, readBranchHistory } from "@host/lib/git/worktrees";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
   findProject,
@@ -586,7 +566,17 @@ export const worktreesHandlers = {
     atPath(input, (path) => withGit((git) => git.commitDiff(path, input.hash))),
 
   listCommits: ({ skip, count, query, from, ...input }) =>
-    atPath(input, (path) => listCommits(path, { skip, count, query, from })),
+    atPath(input, (path) =>
+      withGit((git) =>
+        git.listCommits(path, {
+          skip,
+          count,
+          query,
+          from,
+          firstParentStats: true,
+        }),
+      ),
+    ),
 
   branchHistory: (input) =>
     Effect.gen(function* () {
@@ -595,7 +585,7 @@ export const worktreesHandlers = {
         input.worktreeId,
         { primaryRef: true },
       );
-      return yield* readBranchHistory(identity.path, {
+      return yield* (yield* Git.Git).readBranchHistory(identity.path, {
         base: branchBaseOf(identity),
         count: BRANCH_HISTORY_COUNT,
       });
@@ -610,7 +600,7 @@ export const worktreesHandlers = {
       );
       const base = branchBaseOf(identity);
       if (base === undefined) {
-        return yield* new GitRefusal({
+        return yield* new Git.GitRefusedError({
           reason: "This branch has no primary branch to compare with.",
         });
       }
@@ -622,16 +612,30 @@ export const worktreesHandlers = {
     }),
 
   revertCommit: (input) =>
-    mutateAndDescribe(input, (wt) => revertCommit(wt.path, input.hash)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.revertCommit(wt.path, input.hash)),
+    ),
   cherryPick: (input) =>
-    mutateAndDescribe(input, (wt) => cherryPickCommit(wt.path, input.hash)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.cherryPickCommit(wt.path, input.hash)),
+    ),
   rewordCommit: (input) =>
     mutateAndDescribe(input, (wt) =>
-      rewordCommit(wt.path, input.hash, input, input.expectHead),
+      withGit((git) =>
+        git.rewordCommit({
+          worktree: wt.path,
+          hash: input.hash,
+          summary: input.summary,
+          description: input.description,
+          expectHead: input.expectHead,
+        }),
+      ),
     ),
   squashCommit: (input) =>
     mutateAndDescribe(input, (wt) =>
-      squashIntoParent(wt.path, input.hash, input.expectHead),
+      withGit((git) =>
+        git.squashIntoParent(wt.path, input.hash, input.expectHead),
+      ),
     ),
 
   stashes: (input) =>
@@ -681,28 +685,50 @@ export const worktreesHandlers = {
       });
     }),
 
-  push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
-  pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt.path)),
+  push: (input) =>
+    mutateAndDescribe(input, (wt) => withGit((git) => git.push(wt.path))),
+  pull: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.pullFastForward(wt.path)),
+    ),
   pushForce: (input) =>
-    mutateAndDescribe(input, (wt) => pushForceWithLease(wt.path)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.pushForceWithLease(wt.path)),
+    ),
   overwrite: (input) =>
-    mutateAndDescribe(input, (wt) => overwriteFromUpstream(wt.path)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.overwriteFromUpstream(wt.path)),
+    ),
   publish: (input) =>
     mutateAndDescribe(input, (wt, project) =>
-      publishCurrentBranch(wt.path, project.path),
+      withGit((git) => git.publish({ worktree: wt.path, repo: project.path })),
     ),
   pullAndPush: (input) =>
-    mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPush(wt.path)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.pullRebaseOrMergeAndPush(wt.path)),
+    ),
   syncWithPrimary: (input) =>
     mutateAndDescribe(input, (target, project) =>
       Effect.flatMap(primaryRefToSync(target, project), (primaryRef) =>
-        syncWithPrimary(target.path, project.path, primaryRef),
+        withGit((git) =>
+          git.syncWithPrimary({
+            worktree: target.path,
+            repo: project.path,
+            primaryRef,
+          }),
+        ),
       ),
     ),
   mergePrimary: (input) =>
     mutateAndDescribeWith(input, (target, project) =>
       Effect.flatMap(primaryRefToSync(target, project), (primaryRef) =>
-        mergePrimaryKeepingConflicts(target.path, project.path, primaryRef),
+        withGit((git) =>
+          git.mergePrimaryKeepingConflicts({
+            worktree: target.path,
+            repo: project.path,
+            primaryRef,
+          }),
+        ),
       ),
     ).pipe(
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
@@ -710,7 +736,7 @@ export const worktreesHandlers = {
 
   mergeUpstream: (input) =>
     mutateAndDescribeWith(input, (wt) =>
-      mergeUpstreamKeepingConflicts(wt.path),
+      withGit((git) => git.mergeUpstreamKeepingConflicts(wt.path)),
     ).pipe(
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
     ),
@@ -729,11 +755,18 @@ export const worktreesHandlers = {
     ),
   mergePreview: (input) =>
     atPath(input, (path) =>
-      readMergePreview(path, input.ref, input.countsOnly),
+      withGit((git) => git.readMergePreview(path, input.ref, input.countsOnly)),
     ),
   mergeBranch: (input) =>
     mutateAndDescribeWith(input, (wt) =>
-      mergeBranch(wt.path, input.ref, input.method, input.message),
+      withGit((git) =>
+        git.mergeBranch({
+          worktree: wt.path,
+          ref: input.ref,
+          method: input.method,
+          message: input.message,
+        }),
+      ),
     ).pipe(
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
     ),
@@ -781,12 +814,12 @@ const primaryRefToSync = Effect.fnUntraced(function* (
   project: Project,
 ) {
   if (target.isPrimary) {
-    return yield* new GitRefusal({
+    return yield* new Git.GitRefusedError({
       reason: "The primary checkout can't be synced from itself",
     });
   }
   if (target.detached) {
-    return yield* new GitRefusal({
+    return yield* new Git.GitRefusedError({
       reason: "Detached worktrees can't be synced with the primary branch",
     });
   }
@@ -794,7 +827,7 @@ const primaryRefToSync = Effect.fnUntraced(function* (
     primaryRef: true,
   });
   if (primaryRef === undefined) {
-    return yield* new GitRefusal({
+    return yield* new Git.GitRefusedError({
       reason: `No primary branch resolves in ${project.path}`,
     });
   }

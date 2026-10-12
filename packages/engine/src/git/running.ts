@@ -90,6 +90,19 @@ export const makeRunning = Effect.gen(function* () {
     ).pipe(SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity);
   });
 
+  // What git printed, whatever its exit, for a read that has an answer
+  // either way (a merge-tree that exits 1 on a conflict, a log of a ref
+  // that may not resolve). A git that never ran answers empty, and
+  // output past the cap still fails: a prefix isn't the answer.
+  const runLenient = (
+    cwd: string,
+    args: readonly string[],
+    options: RunOptions = {},
+  ) =>
+    run(cwd, args, { ...options, anyExit: true }).pipe(
+      Effect.catchTags({ GitCommandError: () => Effect.succeed("") }),
+    );
+
   // Exit 0 or not, for the checks git answers with its exit code.
   const succeeds = (cwd: string, args: readonly string[]) =>
     run(cwd, args).pipe(
@@ -124,7 +137,7 @@ export const makeRunning = Effect.gen(function* () {
       return lock.withPermit(task);
     });
 
-  return { run, succeeds, runChunked, onIndex };
+  return { run, runLenient, succeeds, runChunked, onIndex };
 });
 
 export type RunningArea = Effect.Success<typeof makeRunning>;
