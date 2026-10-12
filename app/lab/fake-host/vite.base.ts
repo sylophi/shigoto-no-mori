@@ -8,6 +8,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { reactCompiler } from "../../vite.reactCompiler";
+import { materialIcons } from "../../vite.materialIcons";
 import { dedupe } from "../../vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
@@ -66,6 +67,6 @@ export function fakeHostBaseConfig(opts: {
     define: fixtureDefine,
     // The package's stylesheet stops at the theme root.
     css: { postcss: { plugins: [insideTheRoot()] } },
-    plugins: [tailwindcss(), react(), reactCompiler()],
+    plugins: [tailwindcss(), react(), reactCompiler(), materialIcons()],
   };
 }
