@@ -196,9 +196,7 @@ export const makeStacks = ({
           // layer retargeted onto the trunk before this one lands would
           // carry its commits in: read back, and stop at one that isn't
           // merged (or can't be read), as a queued stack stops.
-          const after = yield* github
-            .mergeProgress(project.path, pr.number)
-            .pipe(Effect.option);
+          const after = yield* mergedOrQueued(project.path, pr.number);
           if (Option.isNone(after) || after.value.state !== "MERGED") {
             if (reporter.waiting !== undefined) {
               yield* reporter.waiting(
@@ -213,6 +211,28 @@ export const makeStacks = ({
           yield* report(pr);
         }
         return false;
+      });
+
+    // A merge just asked for, as GitHub reports it once it has taken it:
+    // merged, or in the merge queue. GitHub can report the PR as it was
+    // for a moment after `gh pr merge` returns, so it is read a second
+    // apart for twenty seconds at most; past that, the last answer.
+    const mergedOrQueued = (repo: string, number: number) =>
+      Effect.gen(function* () {
+        const deadline = (yield* Clock.currentTimeMillis) + SETTLE_TIMEOUT_MS;
+        while (true) {
+          const read = yield* github
+            .mergeProgress(repo, number)
+            .pipe(Effect.option);
+          if (
+            Option.isSome(read) &&
+            (read.value.state === "MERGED" || read.value.isInMergeQueue)
+          ) {
+            return read;
+          }
+          if ((yield* Clock.currentTimeMillis) >= deadline) return read;
+          yield* Effect.sleep(Duration.seconds(1));
+        }
       });
 
     // GitHub recomputes a PR's mergeability after a retarget, and merging
