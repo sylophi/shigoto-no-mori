@@ -89,16 +89,19 @@ function AddProjectDialog() {
   // view leaves this null otherwise, and whenever it isn't mounted (a
   // tab that can only show a note), so the key closes the dialog.
   const escapeRef = useRef<(() => void) | null>(null);
+  const [working, setWorking] = useState(false);
 
   return (
     <ModalShell
       label="Add project"
       onClose={onClose}
       onEscape={() => (escapeRef.current ?? onClose)()}
+      dismissable={!working}
     >
       <AddProjectHeaderView
         mode={mode}
         onMode={setMode}
+        working={working}
         tabs={
           tabs.length > 1 &&
           picked && (
@@ -130,6 +133,7 @@ function AddProjectDialog() {
               setUrl={setUrl}
               addToTerrier={addToTerrier}
               setAddToTerrier={setAddToTerrier}
+              setWorking={setWorking}
               onClose={onClose}
             />
           )}
@@ -139,6 +143,7 @@ function AddProjectDialog() {
               setName={setName}
               addToTerrier={addToTerrier}
               setAddToTerrier={setAddToTerrier}
+              setWorking={setWorking}
               onClose={onClose}
             />
           )}

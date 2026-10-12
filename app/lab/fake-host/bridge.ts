@@ -181,7 +181,11 @@ type FixtureWire = {
   // A call's answer, for the hub hop's fixture (hub:invokePeer), after
   // which `touch` has the wire's views read again, as a call over its
   // link does.
-  answer: (channel: string, input: unknown) => Promise<unknown>;
+  answer: (
+    channel: string,
+    input: unknown,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
   touch: () => void;
   emit: (channel: string, payload: unknown) => void;
 };
@@ -208,12 +212,17 @@ function createFixtureWire(
     for (const listener of moved) listener();
   };
   // Read by channel name off the wire, which loses the link between a
-  // channel and its input type. The parse below restores it.
+  // channel and its input type. The parse below restores it. A handler
+  // that takes a while hears its call's interruption on the signal.
   const handlers = handlersFor(emit) as Record<
     string,
-    ((input: unknown) => unknown) | undefined
+    ((input: unknown, signal?: AbortSignal) => unknown) | undefined
   >;
-  const answer = async (channel: string, input: unknown) => {
+  const answer = async (
+    channel: string,
+    input: unknown,
+    signal?: AbortSignal,
+  ) => {
     const call = index.get(channel);
     if (call === undefined) {
       throw new Error(`[fake-host] no contract entry for ${channel}`);
@@ -226,7 +235,9 @@ function createFixtureWire(
       // handlers can hand back the fixture world's own rows and change
       // them in place later: a cached answer that is the same object as
       // the next one would never look changed.
-      return structuredClone(await handler(decode(inputOf(call), input)));
+      return structuredClone(
+        await handler(decode(inputOf(call), input), signal),
+      );
     }
     const stub = stubValueFor(outputOf(call), { fabricateArms: true });
     if (stub === NO_STRUCTURAL_STUB) {
@@ -243,8 +254,8 @@ function createFixtureWire(
       // A call may move the fixture world the way a host's store write
       // does, so the views read again after it.
       call: (channel, input) =>
-        Effect.callback<unknown, unknown>((resume) => {
-          answer(channel, input).then(
+        Effect.callback<unknown, unknown>((resume, signal) => {
+          answer(channel, input, signal).then(
             (value) => {
               resume(Effect.succeed(value));
               for (const listener of moved) listener();
@@ -425,9 +436,20 @@ function hostHandlersFor(
     "projects:list": () => [...forest.projects],
     "projects:add": ({ path }) =>
       registerProject(disk, forest, resolveOnDisk(disk, path)),
-    // Takes a moment, as a clone does, so the cloning stage is seen.
-    "projects:clone": async ({ url, parentDir, name }) => {
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+    // Takes a moment, as a clone does, so the cloning stage is seen. An
+    // interrupted call (the dialog's Cancel) stops it with nothing
+    // made, as the host's git does.
+    "projects:clone": async (
+      { url, parentDir, name },
+      signal?: AbortSignal,
+    ) => {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 2200);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new Error("The clone was interrupted"));
+        });
+      });
       const parent = resolveOnDisk(disk, parentDir);
       const entries = disk.dirs[parent];
       if (entries === undefined) throw new Error(`${parent} is not a folder`);
@@ -1966,7 +1988,7 @@ export function installFakeHostBridge(
       localStorage.setItem("sm.fakeHost.clientConfig", JSON.stringify(next));
     },
     "hub:status": hubSnapshot,
-    "hub:invokePeer": ({ deviceId, channel, input }) => {
+    "hub:invokePeer": ({ deviceId, channel, input }, signal?: AbortSignal) => {
       const wire = peerWires.get(deviceId);
       if (wire === undefined) {
         return Promise.reject(
@@ -1977,7 +1999,7 @@ export function installFakeHostBridge(
       if (notSharing.has(deviceId)) {
         return Promise.reject(new NotSharingError());
       }
-      return wire.answer(channel, input).finally(wire.touch);
+      return wire.answer(channel, input, signal).finally(wire.touch);
     },
     "shell:openExternal": ({ url }) => {
       window.open(url, "_blank", "noopener,noreferrer");

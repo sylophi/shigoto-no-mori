@@ -11,6 +11,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { once } from "node:events";
+import { createServer, type AddressInfo } from "node:net";
 import { basename, join } from "node:path";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
@@ -696,6 +698,74 @@ it("clone checks its destination, and keeps a URL's userinfo out of the error", 
     }),
   );
   assert.doesNotMatch(stderrOf(leaked), /s3cret/);
+});
+
+it("an interrupted clone leaves no folder behind", async () => {
+  const parent = tempDir("clone-into-");
+  const dest = join(parent, "c");
+  // A remote that takes the connection and never answers, so the clone
+  // is under way, its folder made, when it is interrupted.
+  const server = createServer((socket) => socket.unref());
+  const connected = once(server, "connection");
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const outcome = await withGit((g) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(
+          g.clone({
+            url: `http://127.0.0.1:${port}/owner/repo.git`,
+            parentDir: parent,
+            name: "c",
+          }),
+        );
+        yield* Effect.promise(() => connected);
+        assert.ok(existsSync(dest));
+        yield* Fiber.interrupt(fiber);
+        return yield* Effect.exit(Fiber.join(fiber));
+      }),
+    );
+    assert.ok(Exit.hasInterrupts(outcome));
+    assert.ok(!existsSync(dest));
+  } finally {
+    server.close();
+  }
+});
+
+it("an interrupted create leaves no folder behind", async () => {
+  const parent = tempDir("create-into-");
+  const dest = join(parent, "c");
+  // A hook from the global config (`--no-verify` doesn't skip this
+  // one) holds the first commit's ref update, so the folder is made and
+  // the commit under way when the create is interrupted.
+  const hooks = tempDir("hooks-");
+  const held = join(tempDir("held-"), "held");
+  const release = join(tempDir("release-"), "go");
+  writeFileSync(
+    join(hooks, "reference-transaction"),
+    `#!/bin/sh\ngrep -q refs/heads/ || exit 0\ntouch '${held}'\nwhile [ ! -e '${release}' ]; do sleep 0.05; done\n`,
+  );
+  chmodSync(join(hooks, "reference-transaction"), 0o755);
+  const config = join(hooks, "config");
+  writeFileSync(config, `[core]\n\thooksPath = ${hooks}\n`);
+  vi.stubEnv("GIT_CONFIG_GLOBAL", config);
+  try {
+    const outcome = await withGit((g) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(g.createRepository(parent, "c"));
+        while (!existsSync(held)) {
+          yield* Effect.sleep("20 millis");
+        }
+        yield* Fiber.interrupt(fiber);
+        return yield* Effect.exit(Fiber.join(fiber));
+      }),
+    );
+    assert.ok(Exit.hasInterrupts(outcome));
+    assert.ok(!existsSync(dest));
+  } finally {
+    vi.unstubAllEnvs();
+    writeFileSync(release, "");
+  }
 });
 
 it("a new repository lands on main with one empty commit, and never over a folder", async () => {

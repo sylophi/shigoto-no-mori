@@ -4,13 +4,18 @@
 // the projects:clone handler against a REAL git repository for what
 // the schema can't say: the checkout lands where asked, neither an
 // existing folder nor a missing parent is written over or conjured, and
-// git's words for a failure never carry the URL's credentials.
+// git's words for a failure never carry the URL's credentials, and a
+// clone interrupted (the dialog's Cancel, a caller gone) leaves no
+// folder behind, while one interrupted after the checkout exists is
+// still registered.
 //
 // Run: pnpm test clone.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import { it } from "vitest";
 import { sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mts";
@@ -27,7 +32,13 @@ const { projectsHandlers } = await import("../host/ipc/modules/projects.ts");
 const { GithubCli } = await import("../host/lib/githubCli/GithubCli.ts");
 const { errorWordsOf } = await import("../host/lib/errorWords.ts");
 const { runHost } = await import("./lib/hostRuntime.mts");
-const { flatMap } = await import("effect/Effect");
+const Effect = await import("effect/Effect");
+const { flatMap } = Effect;
+const Exit = await import("effect/Exit");
+const Fiber = await import("effect/Fiber");
+const Deferred = await import("effect/Deferred");
+const { Terrier } = await import("../host/lib/Terrier.ts");
+const { freshProjects } = await import("../host/lib/projects/index.ts");
 // The checkout's path, as the project it was registered as.
 const cloneRepo = (url: string, parentDir: string, name: string) =>
   runHost(projectsHandlers.clone({ url, parentDir, name })).then(
@@ -228,4 +239,79 @@ it("a failed clone's message never carries the URL's credentials", async () => {
     `the token is in the message: ${words}`,
   );
   assert.ok(!existsSync(join(sandbox, "repo")));
+});
+
+it("an interrupted clone stops and leaves nothing behind", async () => {
+  const sandbox = tempDir("sm-clone-", trackTest);
+  // A remote that takes the connection and never answers, so the clone
+  // is mid-flight, its folder made, when the interrupt lands.
+  const server = createServer((socket) => socket.unref());
+  const connected = once(server, "connection");
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const outcome = await runHost(
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(
+          projectsHandlers.clone({
+            url: `http://127.0.0.1:${port}/owner/repo.git`,
+            parentDir: sandbox,
+            name: "repo",
+          }),
+        );
+        yield* Effect.promise(() => connected);
+        yield* Fiber.interrupt(fiber);
+        return yield* Effect.exit(Fiber.join(fiber));
+      }),
+    );
+    assert.ok(Exit.hasInterrupts(outcome));
+    assert.ok(!existsSync(join(sandbox, "repo")));
+  } finally {
+    server.close();
+  }
+});
+
+it("a clone interrupted once its checkout exists is still registered", async () => {
+  const sandbox = tempDir("sm-clone-", trackTest);
+  const source = join(sandbox, "source");
+  mkdirSync(source);
+  git(source, "init", "-q", "-b", "main");
+  git(source, "commit", "-q", "--allow-empty", "-m", "init");
+  const dest = join(sandbox, "copy");
+  // Registration's terrier step stands in for the spawned `terrier
+  // add`: it says when the clone has returned and takes a moment, so
+  // the interrupt lands between the clone and the store write.
+  const projects = await runHost(
+    Effect.gen(function* () {
+      const real = yield* Terrier;
+      const registering = yield* Deferred.make<void>();
+      const fiber = yield* Effect.forkChild(
+        projectsHandlers
+          .clone({
+            url: source,
+            parentDir: sandbox,
+            name: "copy",
+            terrier: true,
+          })
+          .pipe(
+            Effect.provideService(Terrier, {
+              ...real,
+              add: () =>
+                Effect.andThen(
+                  Deferred.succeed(registering, undefined),
+                  Effect.sleep("100 millis"),
+                ),
+            }),
+          ),
+      );
+      yield* Deferred.await(registering);
+      yield* Fiber.interrupt(fiber);
+      return yield* freshProjects;
+    }),
+  );
+  assert.ok(existsSync(join(dest, ".git")));
+  assert.ok(
+    projects.some((project) => project.path === dest),
+    "the checkout was left unregistered",
+  );
 });
