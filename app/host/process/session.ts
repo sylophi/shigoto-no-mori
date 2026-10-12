@@ -23,6 +23,7 @@ import {
 } from "./handlers";
 import * as Shell from "@host/lib/Shell";
 import * as WtFolder from "@shigomori/engine/WtFolder";
+import { asChange } from "@host/lib/Engine";
 import {
   broadcastAll,
   probeRemoteConnections,
@@ -91,10 +92,13 @@ export function startHost(options: {
           Effect.catchDefect((defect) => Effect.fail(callFailureOf(defect))),
         ),
       ),
+    // Counted as a change, so a quit or an update waits for its move.
     migrationRetry: () =>
       onRoot(() =>
         Graph.run(
-          Effect.flatMap(WtFolder.WtFolder, (folder) => folder.retryStuck),
+          asChange(
+            Effect.flatMap(WtFolder.WtFolder, (folder) => folder.retryStuck),
+          ),
         ),
       ),
     imageHosts: () => onRoot(() => Graph.run(projectImageHosts)),

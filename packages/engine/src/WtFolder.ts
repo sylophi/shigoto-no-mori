@@ -19,6 +19,7 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Git from "./Git.ts";
 import * as Migration from "./Migration.ts";
@@ -401,26 +402,41 @@ const make = Effect.gen(function* () {
     }));
   }).pipe(Effect.withSpan("WtFolder.drain"));
 
-  const retryStuck = Effect.gen(function* () {
-    const stuck = (yield* migrationRows.pipe(Effect.orDie)).filter(
-      (row) => row.moved === 0 && row.error !== null,
-    );
-    if (stuck.length === 0) return;
-    yield* moving((step) => ({
-      ...step,
-      state: "running",
-      current: null,
-      stuck: [],
-    }));
-    for (const projectId of new Set(stuck.map((row) => row.project_id))) {
-      yield* moveProject(projectId, true, report);
-    }
-    yield* moving((step) => ({
-      ...step,
-      state: step.stuck.length > 0 ? "stuck" : "done",
-      current: null,
-    }));
-  }).pipe(Effect.withSpan("WtFolder.retryStuck"));
+  // The move's step as the store has it now: what another path (the
+  // doctor's fix) moved since is counted, and its stuck rows listed.
+  const stepNow = (state: WorktreeMoveStep["state"]) =>
+    Effect.gen(function* () {
+      const rows = yield* migrationRows.pipe(Effect.orDie);
+      const stuck = rows.flatMap((row) =>
+        row.moved === 0 && row.error !== null
+          ? [stuckOf(row.from_path, row.error)]
+          : [],
+      );
+      yield* moving(() => ({
+        state: state === "running" || stuck.length === 0 ? state : "stuck",
+        moved: rows.filter((row) => row.moved === 1).length,
+        total: rows.length,
+        current: null,
+        stuck: state === "running" ? [] : stuck,
+      }));
+    });
+
+  // One retry at a time: every window on the page has its own Retry.
+  const retrying = yield* Semaphore.make(1);
+  const retryStuck = retrying
+    .withPermit(
+      Effect.gen(function* () {
+        const stuck = (yield* migrationRows.pipe(Effect.orDie)).filter(
+          (row) => row.moved === 0 && row.error !== null,
+        );
+        yield* stepNow("running");
+        for (const projectId of new Set(stuck.map((row) => row.project_id))) {
+          yield* moveProject(projectId, true, report);
+        }
+        yield* stepNow("done");
+      }),
+    )
+    .pipe(Effect.withSpan("WtFolder.retryStuck"));
 
   const retry = Effect.fn("WtFolder.retry")(function* (projectId: string) {
     yield* moveProject(projectId, true);

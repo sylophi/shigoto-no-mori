@@ -187,14 +187,43 @@ it("tries a stuck move again from the page, moving it once nothing runs in it", 
       ],
     },
   );
+  // Two windows' Retry at once count each move once.
   held.kill();
   await once(held, "exit");
-  const moved = await retried();
+  const [moved] = await Promise.all([retried(), retried()]);
   assert.deepEqual(
     { state: moved.state, moved: moved.moved, stuck: moved.stuck },
     { state: "done", moved: 3, stuck: [] },
   );
   assert.ok(existsSync(join(wt, "b")));
+});
+
+it("reads the move's step from the store on a retry, after the doctor moved what was stuck", async () => {
+  const { repo, v2 } = v2Project();
+  box.git(repo, "worktree", "unlock", join(v2, "c"));
+  await state();
+  const fixed = await box.doctor({
+    version: "dev",
+    executable: "",
+    terminal: false,
+    fix: { approve: () => Effect.succeed(true), failed: () => Effect.void },
+  });
+  assert.deepEqual(found(fixed), []);
+  const step = (await box.engine(
+    Effect.gen(function* () {
+      yield* (yield* WtFolder.WtFolder).retryStuck;
+      return (yield* (yield* Migration.Migration).current).worktrees;
+    }),
+  )) as WorktreeMoveStep;
+  assert.deepEqual(
+    {
+      state: step.state,
+      moved: step.moved,
+      total: step.total,
+      stuck: step.stuck,
+    },
+    { state: "done", moved: 3, total: 3, stuck: [] },
+  );
 });
 
 it("keeps every worktree where it is when lsof can't say what runs in them", async () => {
