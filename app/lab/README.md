@@ -18,7 +18,7 @@ Commands and paths are relative to `app/`. The repo root's
 | [`scene-compare/README.md`](scene-compare/README.md) | See what a change does to the look: every scene in both themes against a base ref, with a report of the pairs that differ (`pnpm scenes:compare`) |
 | [`reliability/README.md`](reliability/README.md) | Prove every client (the web client, the desktop app's windows, a device on the tunnel, the terminal) recovers on its own: the network dropped, the hub redeployed, the host killed or asleep, the laptop asleep, a tab or window reloaded, a token expired, scripted against the dev hub with a report (`pnpm reliability`), once or as a soak for hours |
 | [`devices.md`](devices.md) | Check the real thing: dev apps as devices on this machine, moving and mirroring worktrees between them for real |
-| [`bridge.md`](bridge.md) | Ask a device window what it knows (`window.api`), or run the same verbs from the CLI |
+| [`bridge.md`](bridge.md) | Ask a device window what it knows (its page api), or run the same verbs from the CLI |
 | [`dev-app.md`](dev-app.md) | Look up how the dev app is built, where it keeps its state, and how dev profiles work |
 | [`relaunch.mts`](relaunch.mts) | Prove a packaged build's relaunch (the migration's restart, a data-folder move, a nuke) leaves a live window: `node lab/relaunch.mts "<path to the .app>"` on a build from `pnpm package` (`SM_FLAVOR=test` for one that runs beside the installed app) |
 | [`weblab.md`](weblab.md) | Know what weblab can do (read, click, ask, capture, film) and how it starts and stops things here |
