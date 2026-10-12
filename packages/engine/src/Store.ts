@@ -60,7 +60,7 @@ type Platform = Context.Context<
 const history = (platform: Platform, lenient: boolean) => ({
   "1_tables": tables,
   "2_import_json": Effect.provideContext(importFiles(lenient), platform),
-  "3_agent_sessions": agentSessions,
+  "3_agent_sessions": Effect.provideContext(agentSessions, platform),
   "4_changes": changes,
   "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
   "6_terminals": terminals,
