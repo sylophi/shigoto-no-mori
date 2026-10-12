@@ -63,7 +63,7 @@ const applied = (
   return next as ClientConfig;
 };
 
-export const clientConfigAtom = Atom.readable((get) => {
+const clientConfigAtom = Atom.readable((get) => {
   const stored = get(storedAtom);
   const pending = get(pendingAtom);
   return AsyncResult.map(stored, (config) => pending.reduce(applied, config));
