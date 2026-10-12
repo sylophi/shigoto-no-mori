@@ -174,6 +174,56 @@ it("keeps every worktree where it is when lsof can't say what runs in them", asy
   assert.ok(existsSync(join(v2, "a")));
 });
 
+it("carries v2's agent sessions over, bound to their worktree's new id", async () => {
+  const repo = box.repo("repo", { "README.md": "hi\n" });
+  const v2 = join(box.home, "engine", "worktrees", "repo");
+  const wt = join(box.home, "engine", "wt", "repo");
+  box.write("registry.json", {
+    projects: [{ id: "P1", name: "repo", path: repo }],
+    agentSessions: {
+      [worktreeIdFromPath(join(v2, "a"))]: [
+        {
+          harness: "claude",
+          session: "s1",
+          state: "waiting",
+          at: 1700000000000,
+          waits: ["Bash:1"],
+          title: "Fix the build",
+          tool: "Bash",
+          need: "pnpm test",
+        },
+        { harness: "codex", session: "s2", state: "idle", at: 1700000000001 },
+        { harness: "claude", state: "idle" },
+      ],
+    },
+  });
+  box.side("engine");
+  box.git(repo, "worktree", "add", "-q", "-b", "a", join(v2, "a"));
+  const bound = (await box.engine(
+    Effect.flatMap(Effect.service(Registry.Registry), (registry) =>
+      Effect.map(registry.agentSessions, (sessions) => [...sessions]),
+    ),
+  )) as ReadonlyArray<readonly [string, ReadonlyArray<unknown>]>;
+  assert.deepEqual(bound, [
+    [
+      worktreeIdFromPath(join(wt, "a")),
+      [
+        {
+          harness: "claude",
+          session: "s1",
+          state: "waiting",
+          at: 1700000000000,
+          waits: ["Bash:1"],
+          title: "Fix the build",
+          tool: "Bash",
+          need: "pnpm test",
+        },
+        { harness: "codex", session: "s2", state: "idle", at: 1700000000001 },
+      ],
+    ],
+  ]);
+});
+
 it("carries the id of a worktree git moved before a crash", async () => {
   const { repo, v2, wt } = v2Project();
   await state();
