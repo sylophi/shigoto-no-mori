@@ -129,8 +129,8 @@ export const makePullRequests = Effect.gen(function* () {
   // --auto merges at once when the verdict has moved since the lookup,
   // and on a base branch with a merge queue either merge queues the PR.
   // So the outcome is read back off the PR rather than assumed. A read
-  // that fails leaves the one asked for, since it only shapes the report
-  // and the wait.
+  // that fails is never taken for a merge: the wait then reads the PR
+  // until GitHub has merged it.
   const readBack = (repo: string, number: number, asked: MergeOutcome) =>
     github.mergeProgress(repo, number).pipe(
       Effect.map(
@@ -143,7 +143,10 @@ export const makePullRequests = Effect.gen(function* () {
                 ? { ...asked, outcome: "auto-merge" }
                 : asked,
       ),
-      Effect.orElseSucceed(() => asked),
+      Effect.orElseSucceed(
+        (): MergeOutcome =>
+          asked.outcome === "merged" ? { ...asked, outcome: "queued" } : asked,
+      ),
     );
 
   // Waits for a PR that didn't merge on the spot (auto-merge armed, or a
