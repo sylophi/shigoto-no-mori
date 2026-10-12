@@ -71,7 +71,7 @@ it("has no window", () => {
   expect((globalThis as { window?: unknown }).window).toBeUndefined();
 });
 
-// One case per scene, so each stays well inside the default timeout.
+// One case per scene, so a failure names its scene.
 it.each(Object.entries(scenes))("renders %s", (name, { Scene }) => {
   const html = renderToStaticMarkup(createElement(Scene));
   assert.ok(html.length > 0, `${name} rendered nothing`);

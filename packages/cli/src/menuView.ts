@@ -178,7 +178,15 @@ export const showMenu = async (props: MenuProps) => {
         choice = picked;
       },
     }),
-    { stdout: process.stderr, exitOnCtrlC: false, patchConsole: false },
+    {
+      stdout: process.stderr,
+      exitOnCtrlC: false,
+      patchConsole: false,
+      // A menu shows only at a terminal, so ink's reading of CI in the
+      // environment (an agent's shell, a CI job's pty), which draws
+      // nothing until the end, would leave it waiting unseen.
+      interactive: true,
+    },
   );
   await instance.waitUntilExit();
   return choice;

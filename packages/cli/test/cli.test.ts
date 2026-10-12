@@ -614,6 +614,21 @@ describe("at a terminal", () => {
     assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
   });
 
+  it("draws the menu with CI set in the environment", async () => {
+    projects();
+    const shown = await inTerminal(
+      ["path"],
+      [
+        ["Select a project:", DOWN],
+        ["▸ beta", "\r"],
+        ["Select a worktree in beta:", DOWN],
+        ["▸ fox", "\r"],
+      ],
+      { CI: "true" },
+    );
+    assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
+  });
+
   it("writes stderr as it is, with no color of Bun's", async () => {
     const shown = await inTerminal(["path", "nosuch"], []);
     // After script's echo of the end of input.

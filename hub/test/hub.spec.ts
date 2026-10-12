@@ -2,7 +2,7 @@
 // nacks, supersede, revoke and cross-account isolation. Everything
 // runs against the real DeviceHub Durable Object under workerd.
 import { afterEach, describe, expect, it } from "vitest";
-import { env, listDurableObjectIds } from "cloudflare:test";
+import { env, listDurableObjectIds, runInDurableObject } from "cloudflare:test";
 import {
   CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
@@ -18,6 +18,7 @@ import {
   HUB_PING,
   HUB_PONG,
 } from "@shigomori/contracts/hubProtocol";
+import { type DeviceHub, RELAY_BURST } from "../src/hubObject.ts";
 import { buildTicket } from "../src/ticket.ts";
 import {
   BASE,
@@ -423,16 +424,23 @@ describe("what a socket may send", () => {
     expect((await socket.closed).code).toBe(1009);
   });
 
-  // A thousand messages through workerd take seconds on a loaded
-  // machine, past vitest's default 5 s.
   it("cuts a socket that sends faster than its budget", async () => {
     const { socket } = await enrollAndConnect("acct-input-rate", "dev-rate");
     await socket.untilPresence(["dev-rate"]);
+    // The budget's clock stopped, so nothing refills however long the
+    // hub takes over each message.
+    await runInDurableObject(
+      env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-input-rate")),
+      (hub: DeviceHub) => {
+        const stopped = Date.now();
+        hub.relayClock = () => stopped;
+      },
+    );
     // Malformed, so nothing is relayed or answered: only the count
-    // matters. Far more than the burst, in less time than it refills.
-    for (let i = 0; i < 1000; i++) socket.ws.send("{}");
+    // matters. One past the burst.
+    for (let i = 0; i <= RELAY_BURST; i++) socket.ws.send("{}");
     expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
-  }, 30_000);
+  });
 
   it("lets a dial storm's worth of asks through", async () => {
     const { socket } = await enrollAndConnect("acct-input-storm", "dev-storm");
