@@ -4,11 +4,18 @@ import {
   GuideCalloutView,
 } from "@shigomori/ui/views/guide/GuideView.tsx";
 import { useGuide } from "@/hooks/useGuide";
+import {
+  centerOf,
+  GUIDE_TARGET,
+  type Point,
+  refindTarget,
+  targetKey,
+} from "@/lib/guideTarget";
 import { useWindowRoot } from "@/lib/themeRoot";
 
 // The element the guide points at, which its shell marks in the page
 // (main/core/guide/Guide.ts).
-const TARGET = "[data-guide-target]";
+const TARGET = `[${GUIDE_TARGET}]`;
 
 // The sentence's widest (the view's max-w-72), its room from the
 // window's edges, and the height it is given room for under the target.
@@ -49,7 +56,9 @@ const samePlace = (a: GuideCalloutPlace | null, b: GuideCalloutPlace | null) =>
 
 // The ring and sentence over what the guide points at, following it as
 // the page scrolls, resizes or changes under it (measured at most once a
-// frame), and gone while it is off the page.
+// frame), and gone while it is off the page. A re-render that replaces
+// the target's element takes the shell's mark with it, so the control
+// it was is found again and marked (lib/guideTarget.ts).
 export function GuideCallout() {
   const point = useGuide()?.point ?? null;
   const root = useWindowRoot();
@@ -61,13 +70,22 @@ export function GuideCallout() {
       return;
     }
     let frame = 0;
+    // What it last followed, and where.
+    let followed: { key: string; at: Point } | null = null;
     const resized = new ResizeObserver(() => measure());
     const measure = () => {
       if (frame !== 0) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const target = root.querySelector(TARGET);
-        if (target !== null) resized.observe(target);
+        let target = root.querySelector(TARGET);
+        if (target === null && followed !== null) {
+          target = refindTarget(root, followed.key, followed.at);
+          target?.setAttribute(GUIDE_TARGET, "");
+        }
+        if (target !== null) {
+          resized.observe(target);
+          followed = { key: targetKey(target), at: centerOf(target) };
+        }
         const next = target === null ? null : placeOf(target, root);
         setPlace((current) => (samePlace(current, next) ? current : next));
       });
@@ -77,7 +95,7 @@ export function GuideCallout() {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["data-guide-target"],
+      attributeFilter: [GUIDE_TARGET],
     });
     resized.observe(root);
     const doc = root.ownerDocument;
@@ -90,6 +108,11 @@ export function GuideCallout() {
       doc.removeEventListener("scroll", measure, true);
     };
   }, [seq, root]);
+  // No point, no mark: one this window put back is the window's to take.
+  const pointing = point !== null;
+  useEffect(() => {
+    if (!pointing) root.querySelector(TARGET)?.removeAttribute(GUIDE_TARGET);
+  }, [pointing, root]);
   if (point === null || place === null) return null;
   return <GuideCalloutView place={place} say={point.say} />;
 }
