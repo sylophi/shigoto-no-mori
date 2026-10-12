@@ -35,7 +35,7 @@ import {
 import { dataDir } from "@shared/paths";
 import { readJson } from "../core/files/jsonFile";
 import { busyRemoteRefusal } from "@shared/busy";
-import { host, noteUpdaterState } from "../hostProcess";
+import { hostBusy, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
@@ -323,16 +323,13 @@ async function installUpdate(unattended: boolean): Promise<void> {
   if (!(await hasInstallableStaged())) return;
   if (unattended) {
     const refusal = busyRemoteRefusal(
-      await Effect.runPromise(host().busy()),
+      await Effect.runPromise(hostBusy()),
       "restart",
     );
     if (refusal !== null) throw new Error(refusal);
   } else {
     if (
-      !(await confirmBusyAction(
-        "restart",
-        await Effect.runPromise(host().busy()),
-      ))
+      !(await confirmBusyAction("restart", await Effect.runPromise(hostBusy())))
     )
       return;
     // The dialog can sit open arbitrarily long. Re-check that another
@@ -392,7 +389,7 @@ async function updateNow(unattended: boolean): Promise<void> {
   if (!started) throw new Error("This build doesn't update itself.");
   if (unattended) {
     const refusal = busyRemoteRefusal(
-      await Effect.runPromise(host().busy()),
+      await Effect.runPromise(hostBusy()),
       "restart",
     );
     if (refusal !== null) throw new Error(refusal);

@@ -15,12 +15,20 @@ import { shellLinkLayer } from "./ipc/register";
 // without a close: on resume, the host probes the hub socket and every
 // direct session, so the dead ones are redialed within seconds rather
 // than read as connected until the next heartbeat.
-const wake = () =>
+const wake = () => {
+  HostProcess.noteWake();
   void Effect.runFork(Effect.ignore(HostProcess.host().wake()));
+};
 const resumeProbe = lifetime(
   "the resume probe",
-  Effect.sync(() => void powerMonitor.on("resume", wake)),
-  () => void powerMonitor.off("resume", wake),
+  Effect.sync(() => {
+    powerMonitor.on("suspend", HostProcess.noteSleep);
+    powerMonitor.on("resume", wake);
+  }),
+  () => {
+    powerMonitor.off("suspend", HostProcess.noteSleep);
+    powerMonitor.off("resume", wake);
+  },
 );
 
 export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
