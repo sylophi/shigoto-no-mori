@@ -30,6 +30,7 @@ import {
 } from "@shigomori/ui/lib/externalStore.ts";
 import type { DeviceRosterEntry as ViewRosterEntry } from "@shigomori/ui/lib/deviceRoster.ts";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useThisDeviceStatus } from "@/lib/runtime/hostAnswering";
 
 export interface DeviceRosterEntry extends ViewRosterEntry {
   // The api the body is scoped to: the page's api for this device, a
@@ -55,6 +56,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
   const hasLocalHost = useHasLocalHost();
   const devices = useHostDevices();
   const local = useLocalDevice();
+  const thisDeviceStatus = useThisDeviceStatus();
   const here: DeviceRosterEntry[] = hasLocalHost
     ? [
         {
@@ -62,7 +64,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
           label: local.name,
           icon: local.icon,
           isThisDevice: true,
-          status: null,
+          status: thisDeviceStatus,
           api: page,
         },
       ]

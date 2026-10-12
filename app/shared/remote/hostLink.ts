@@ -40,6 +40,10 @@ export const hostLink = Effect.fnUntraced(function* (options: {
   readonly address: Effect.Effect<HostAddress, unknown>;
   readonly appVersion: string;
   readonly openSocket: OpenClientSocket;
+  // Told when a link drops under its caller (the host stopped, or was
+  // stopped by the shell's watchdog) and when a dial lands again. A
+  // reconnect asked for is no drop.
+  readonly onAnswering?: (answering: boolean) => void;
 }): Effect.fn.Return<
   Link & {
     // Drops the link and dials again: the shell's, when a host it forked
@@ -73,8 +77,13 @@ export const hostLink = Effect.fnUntraced(function* (options: {
       onPush: fanOut.emit,
     });
     yield* Deferred.succeed(yield* Ref.get(current), dialed.link);
-    yield* Effect.raceFirst(dialed.dropped, Queue.take(reconnects));
+    options.onAnswering?.(true);
+    const dropped = yield* Effect.raceFirst(
+      dialed.dropped.pipe(Effect.as(true)),
+      Queue.take(reconnects).pipe(Effect.as(false)),
+    );
     yield* Ref.set(current, yield* Deferred.make<Link>());
+    if (dropped) options.onAnswering?.(false);
   }).pipe(
     Effect.scoped,
     Effect.tapError((error) =>

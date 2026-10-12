@@ -42,6 +42,7 @@ import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
 import { WorktreeMissingView } from "../views/shared/WorktreeMissingView.tsx";
 import { WorktreeMoveDetailsView } from "../views/shared/WorktreeMoveDetailsView.tsx";
 import type { ScriptRunState } from "../lib/scriptRun.ts";
+import { THIS_DEVICE_NOT_RESPONDING_VIEW } from "../lib/deviceStatus.ts";
 import { LOCAL_DEVICE_ID, MINI_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
@@ -221,6 +222,20 @@ export function MarksScene() {
             </span>
           );
         })}
+      </Strip>
+      <Strip label="Host down">
+        {/* This device while its window's host doesn't answer. */}
+        <DeviceTabBarView
+          tabs={[
+            {
+              ...deviceById(LOCAL_DEVICE_ID),
+              status: THIS_DEVICE_NOT_RESPONDING_VIEW,
+            },
+            ...deviceTabs([THINKPAD_ID]),
+          ]}
+          selectedId={LOCAL_DEVICE_ID}
+          onSelect={noop}
+        />
       </Strip>
       <Strip label="Projects">
         <ProjectIconView src={undefined} name="loading" className="size-5" />
