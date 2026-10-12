@@ -4,6 +4,7 @@
 // host/process/handlers.ts. The account is the shell's (its credential
 // is in the keychain), and every change to it is reported to the host,
 // which runs the hub socket and the peer-facing state it gates.
+import * as Effect from "effect/Effect";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import { dialogContract } from "@shigomori/contracts/modules/dialog";
@@ -64,7 +65,7 @@ export function registerShellHandlers(): void {
       }
       // The host tears down what was the account's and follows it with
       // the hub socket, while the windows re-read the status.
-      const applied = host().account(accountFactsForHost());
+      const applied = Effect.runPromise(host().account(accountFactsForHost()));
       broadcastAll(accountContract, "changed", { accountId });
       // An account switch that stays signed in changes the switch's
       // answer too, which `changed` does not refresh.
@@ -92,12 +93,16 @@ export function registerShellHandlers(): void {
         "commandAccessChanged",
         acceptsPeerCommands(),
       );
-      void host().account(accountFactsForHost());
+      Effect.runFork(Effect.ignore(host().account(accountFactsForHost())));
     },
     // The registry as the hub last listed it, which the host's mirrors
     // and forwards follow.
     (devices) =>
-      void host().accountDevices(devices.map((device) => device.deviceId)),
+      void Effect.runFork(
+        Effect.ignore(
+          host().accountDevices(devices.map((device) => device.deviceId)),
+        ),
+      ),
   );
   registerContract(accountContract, accountHandlers);
   registerContract(windowContract, windowHandlers);

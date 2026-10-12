@@ -122,7 +122,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
-import type { ClientTransport } from "@shared/ipc/transport";
+import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
@@ -190,7 +190,7 @@ const peerReach = PeerReach.make({
 // (layer.ts). A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
 const mirrorGateway = createMirrorGateway({
-  peerApiFor: (deviceId) => peerReach.client(mirrorContract, deviceId),
+  peerApiFor: (deviceId) => peerReach.calls(mirrorContract, deviceId),
   peerChannelsFor: peerReach.channels,
 });
 // A change push's window: a burst goes out as one ping this long after
@@ -740,7 +740,10 @@ export function registerHostHandlers(): void {
         try: async () => hubHandlers().status(undefined, undefined),
         catch: callFailureOf,
       }),
-    invokePeer: (input, ctx) =>
+    invokePeer: (
+      input: Parameters<HubHandlers["invokePeer"]>[0],
+      ctx: HandlerContext,
+    ) =>
       Effect.tryPromise({
         try: async () => hubHandlers().invokePeer(input, ctx),
         catch: callFailureOf,

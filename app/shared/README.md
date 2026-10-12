@@ -9,9 +9,15 @@ is here is the app's own.
   client and its sealed socket, the loopback the windows dial
   (`remote/hostLink.ts`), the hub connection and the direct plane that
   dials peers through it, and the Noise handshake and device keys.
-- `ipc/`: the channel layer the host's handler modules and the clients
-  ride over the RPC groups (`registerContract.ts`, `buildClient.ts`,
-  `client.ts`), and the window's port to its shell (`shell.ts`).
+- `ipc/`: what a side serves, module by module, for its RPC server
+  (`served.ts`); the clients, as effects (`effectClient.ts`) and as the
+  renderer's Promise surface (`buildClient.ts`, `client.ts`, which go
+  with the renderer's move onto the runtime, V3.md step 7, Leftover
+  mechanisms); and the window's port to its shell (`shell.ts`).
+- `paths.ts`, `shellEnv.ts`, `observability.ts`, `lifetimes.ts`,
+  `layerLatch.ts`, `hostFacts.ts`: what the host and the shell both
+  compile (the data dir, the login shell's environment, the logger and
+  tracer, the layer helpers, the facts the shell hands its host).
 - `account/`: enrollment and the credential store both shells use.
 - `log.ts`: the app's `logger`, which writes Effect code's `Effect.log*`
   lines, and `log` for Promise code, so a line from either reads the

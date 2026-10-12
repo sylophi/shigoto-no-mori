@@ -1,5 +1,5 @@
 import { cliContract } from "@shigomori/contracts/modules/cli";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import { requireCliBinary } from "@host/lib/cli/binary";
 import {
   cliLinkStatus,

@@ -33,7 +33,6 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
-import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shigomori/contracts/types";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
@@ -139,7 +138,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     fetchImpl: deps.fetchImpl,
   });
   const tab = createLocalRegistrar();
-  const registrarOpts = { validateOutputs: deps.isDev };
   // A sign-out whose revoke never reached the hub is delivered at the
   // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
   void retryParkedRevoke({ config, service, store, deviceId });
@@ -166,10 +164,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         localAppVersion: () => deps.appVersion,
         broadcastStatus: (status) => {
           traceHub(status);
-          broadcastAll(hubContract, "statusChanged", status, tab.server);
+          tab.push(hubContract, "statusChanged", status);
         },
-        broadcastPeerPush: (push) =>
-          broadcastAll(hubContract, "peerPush", push, tab.server),
+        broadcastPeerPush: (push) => tab.push(hubContract, "peerPush", push),
         dialableKinds: deps.dialableKinds ?? ["tunnel"],
         // One device per browser profile, a link per tab: a host keeps a set
         // of links per web device, and the hub relays to each.
@@ -301,7 +298,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         ),
       );
     }
-    broadcastAll(accountContract, "changed", { accountId }, tab.server);
+    tab.push(accountContract, "changed", { accountId });
     void refreshHub();
   }
 
@@ -465,7 +462,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     {
       deviceId: () => deviceId,
       announce: (doc) => {
-        broadcastAll(sharedSettingsContract, "changed", doc, tab.server);
+        tab.push(sharedSettingsContract, "changed", doc);
         for (const watcher of sharedSettingsWatchers) watcher(doc);
       },
     },
@@ -488,40 +485,27 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     showItemInFolder: () => {},
   };
 
-  registerContract(accountContract, accountHandlers, tab.server, registrarOpts);
-  registerContract(
-    clientConfigContract,
-    clientConfigHandlers,
-    tab.server,
-    registrarOpts,
-  );
-  registerContract(hubContract, hubHandlers, tab.server, registrarOpts);
-  tab.view("hub:watchPeer", (input, observer) =>
+  tab.served.serve(accountContract, accountHandlers);
+  tab.served.serve(clientConfigContract, clientConfigHandlers);
+  tab.served.serve(hubContract, hubHandlers);
+  tab.view(hubContract, "watchPeer", (input, observer) =>
     hubHandlers.watchPeer(
       input as Parameters<typeof hubHandlers.watchPeer>[0],
       observer,
     ),
   );
-  registerContract(
-    sharedSettingsContract,
-    sharedSettingsHandlers,
-    tab.server,
-    registrarOpts,
-  );
-  tab.view("sharedSettings:watch", (_input, observer) => {
+  tab.served.serve(sharedSettingsContract, sharedSettingsHandlers);
+  tab.view(sharedSettingsContract, "watch", (_input, observer) => {
     observer.value(sharedSettingsCopy.read());
     sharedSettingsWatchers.add(observer.value);
     return () => {
       sharedSettingsWatchers.delete(observer.value);
     };
   });
-  registerContract(shellContract, shellHandlers, tab.server, registrarOpts);
-  registerContract(
-    releasesContract,
-    { list: () => fetchReleases(deps.fetchImpl) },
-    tab.server,
-    registrarOpts,
-  );
+  tab.served.serve(shellContract, shellHandlers);
+  tab.served.serve(releasesContract, {
+    list: () => fetchReleases(deps.fetchImpl),
+  });
 
   // The tab serves both scopes itself: the client modules, and the host
   // ones it has (its copy of the shared settings) or refuses.

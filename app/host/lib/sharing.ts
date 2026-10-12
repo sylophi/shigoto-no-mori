@@ -17,6 +17,8 @@ export class Sharing extends Context.Service<
   Sharing,
   {
     readonly current: Effect.Effect<boolean>;
+    // The same, for a callback that answers at once.
+    readonly now: () => boolean;
     // The switch, then each time it moves.
     readonly changes: Stream.Stream<boolean>;
     readonly set: (on: boolean) => Effect.Effect<void>;
@@ -69,6 +71,7 @@ const make = (options: {
 
     return Sharing.of({
       current: SubscriptionRef.get(ref),
+      now: () => SubscriptionRef.getUnsafe(ref),
       changes: SubscriptionRef.changes(ref),
       set,
     });

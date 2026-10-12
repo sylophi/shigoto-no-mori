@@ -4,8 +4,8 @@
 //
 // host/lib/** should `import type` from this barrel. Schemas are part of
 // the contract: runtime parsing happens at the contract boundary (input
-// in the registrar, shared/ipc/registerContract.ts, payload in
-// `broadcast`), not inside backend logic. Renderer code, main/ipc/**,
+// as the RPC server's group decodes it, payload as a push goes out),
+// not inside backend logic. Renderer code, main/ipc/**,
 // and host/ipc/** are free to runtime-import.
 export * from "./payloads.ts";
 export * from "./project.ts";

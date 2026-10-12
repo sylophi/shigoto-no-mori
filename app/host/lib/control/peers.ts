@@ -32,7 +32,6 @@ import type { DirectPeer } from "./AccountPeers";
 import * as Ops from "@host/lib/engineOps";
 import { mirrorList } from "@host/mirror/sessions";
 import type { PeerEffects } from "@host/ipc/PeerReach";
-import type { Client } from "@shigomori/contracts/types";
 import {
   listed,
   matchDevices,
@@ -200,7 +199,7 @@ export const registryOrEmpty = probe(
 // A session a peer runs against one of this device's worktrees, with
 // the peer and the client to drive it through.
 export type PeerMirror = Running & {
-  api: PeerEffects<Client<typeof mirrorContract>>;
+  api: PeerEffects<typeof mirrorContract>;
 };
 
 // The sessions peers run against this device's worktrees, found by

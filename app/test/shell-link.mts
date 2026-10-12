@@ -1,6 +1,6 @@
 // Durable proof for the window's link to its shell: Effect RPC over a
 // MessagePort, the window's end (shared/ipc/shell.ts) against the
-// shell's (main/ipc/shellLink.ts), on node's own ports. Asserted: a
+// shell's (main/ipc/ShellLink.ts), on node's own ports. Asserted: a
 // value crosses as it is, a contract error comes back as its class with
 // its fields, any other failure as a plain Error with its message, a
 // push to every window reaches each, a push to one window reaches that
@@ -15,16 +15,14 @@ import {
 } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as PubSub from "effect/PubSub";
+import { windowContract } from "@shigomori/contracts/modules/window";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { afterEach, it } from "vitest";
-import {
-  createShellRegistrar,
-  layer,
-  ShellLink,
-  type ShellRegistrar,
-} from "../main/ipc/shellLink";
+import { layer, ShellLink, type ShellRegistrar } from "../main/ipc/ShellLink";
+import { createShellRegistrar } from "../main/ipc/shellRegistrar";
 import * as FiberSet from "effect/FiberSet";
 import { shellLink } from "@shared/ipc/shell";
 import { linkTransport } from "@shared/remote/rpcTransport";
@@ -93,7 +91,7 @@ async function serve(registrar: ShellRegistrar) {
 
 it("a value crosses as it is", async () => {
   const registrar = createShellRegistrar();
-  registrar.handle("window:hostAddress", async () => ADDRESS);
+  registrar.serveOne(windowContract, "hostAddress", async () => ADDRESS);
   const { open } = await serve(registrar);
   const { transport } = await open();
   assert.deepEqual(
@@ -104,7 +102,7 @@ it("a value crosses as it is", async () => {
 
 it("a contract error comes back as its class, fields and message", async () => {
   const registrar = createShellRegistrar();
-  registrar.handle("window:hostAddress", async () => {
+  registrar.serveOne(windowContract, "hostAddress", async () => {
     throw new BranchNotMergedError({ branch: "feat/x" });
   });
   const { open } = await serve(registrar);
@@ -120,7 +118,7 @@ it("a contract error comes back as its class, fields and message", async () => {
 
 it("any other failure comes back as a plain Error with its message", async () => {
   const registrar = createShellRegistrar();
-  registrar.handle("window:hostAddress", async () => {
+  registrar.serveOne(windowContract, "hostAddress", async () => {
     throw new Error("boom");
   });
   const { open } = await serve(registrar);
@@ -149,7 +147,10 @@ it("a push to every window reaches each, and one to a window that one alone", as
   // Each window subscribes as its link opens, in a fiber of its own: a
   // push that goes before that is lost, so it is sent until heard.
   await until(() => {
-    registrar.broadcastAll("window:focused", undefined);
+    PubSub.publishUnsafe(registrar.pushes, {
+      channel: "window:focused",
+      payload: undefined,
+    });
     return heard.first.has("all") && heard.second.has("all");
   });
   await until(() => {
@@ -168,10 +169,14 @@ it("a push to every window reaches each, and one to a window that one alone", as
 it("a port that closes aborts its calls' connection", async () => {
   const registrar = createShellRegistrar();
   let connection: AbortSignal | undefined;
-  registrar.handle("window:hostAddress", async (ctx: HandlerContext) => {
-    connection = ctx.connection;
-    return ADDRESS;
-  });
+  registrar.serveOne(
+    windowContract,
+    "hostAddress",
+    async (_input: void, ctx: HandlerContext) => {
+      connection = ctx.connection;
+      return ADDRESS;
+    },
+  );
   const { open } = await serve(registrar);
   const window = await open();
   await window.transport.invoke("window:hostAddress", undefined);

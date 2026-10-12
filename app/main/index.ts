@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { app, dialog, session } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -360,8 +361,7 @@ app.on("before-quit", (event) => {
     return;
   }
   askingToQuit = true;
-  void host()
-    .busy()
+  void Effect.runPromise(host().busy())
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
       // A host that cannot answer has nothing to lose to the quit.

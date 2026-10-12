@@ -1,5 +1,5 @@
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type { HostServices } from "@host/process/services";
 import { findProject } from "@host/lib/projects";

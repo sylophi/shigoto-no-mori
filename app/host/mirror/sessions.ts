@@ -81,7 +81,7 @@ import { MirrorEngine, MirrorError } from "./MirrorEngine";
 import { announceServingChange, listMirrorServing } from "./serving";
 import { log } from "@shared/log";
 
-const decodePullProgress = Schema.decodeOption(SyncPullProgressSchema);
+const decodePullProgress = Schema.decodeUnknownOption(SyncPullProgressSchema);
 const decodeMirrorStartToResult = Schema.decodeUnknownSync(
   MirrorStartToResultSchema,
 );
@@ -287,9 +287,11 @@ export const startMirrorFrom = (
   return Effect.acquireUseRelease(
     Effect.map(PeerReach, (reach) => {
       const notify = ctx.notifier(syncContract, "pullProgress");
-      return reach
-        .client(syncContract, sourceDeviceId)
-        .onPullProgress((frame) => {
+      return reach.onPush(
+        syncContract,
+        "pullProgress",
+        sourceDeviceId,
+        (frame) => {
           const parsed = decodePullProgress(frame);
           if (
             Option.isSome(parsed) &&
@@ -297,7 +299,8 @@ export const startMirrorFrom = (
           ) {
             notify(parsed.value);
           }
-        });
+        },
+      );
     }),
     // A move like the others (Moves.ts), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a

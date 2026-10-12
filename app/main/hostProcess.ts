@@ -24,8 +24,7 @@ import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { buildClient } from "@shared/ipc/buildClient";
-import { registerContract } from "@shared/ipc/registerContract";
+import { effectClient } from "@shared/ipc/effectClient";
 import { log } from "@shared/log";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
@@ -37,7 +36,8 @@ import { onGuide } from "./electron/guide";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { stopUpdaterBridge } from "./electron/updaterBridge";
 import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
-import { createShellRegistrar, makePortServer } from "./ipc/shellLink";
+import { makePortServer } from "./ipc/ShellLink";
+import { createShellRegistrar } from "./ipc/shellRegistrar";
 import { deviceIdWithin } from "./core/host/deviceId";
 
 type Address = {
@@ -118,14 +118,18 @@ const link = () =>
     // Origin, which the loopback admits.
     openSocket: (url) => new WsWebSocket(url),
   }));
-const session = () => buildClient(sessionContract, link());
+const session = () => effectClient(sessionContract, link());
 
 // A word to the host that nothing waits on. A host that went away
 // meanwhile hears it again as its successor starts.
-function tell(said: Promise<unknown>): void {
-  void said.catch((error: unknown) => {
-    log.warn("[host] could not tell the host:", error);
-  });
+function tell(said: Effect.Effect<unknown, unknown>): void {
+  Effect.runFork(
+    said.pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => log.warn("[host] could not tell the host:", error)),
+      ),
+    ),
+  );
 }
 
 // What the host asks of the shell.
@@ -246,17 +250,24 @@ const stop = (hurried: boolean) =>
     const exited = new Promise<void>((resolve) =>
       running.once("exit", () => resolve()),
     );
-    void session()
+    return session()
       .quit({ hurried })
-      .catch((error: unknown) => {
-        log.warn("[quit] the host did not take the quit:", error);
-      });
-    return Effect.promise(() => exited).pipe(
-      Effect.timeoutOrElse({
-        duration: QUIT_DEADLINE_MS,
-        orElse: () => Effect.sync(() => void running.kill()),
-      }),
-    );
+      .pipe(
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            log.warn("[quit] the host did not take the quit:", error),
+          ),
+        ),
+        // Beside the wait, not in the hold's scope, which is closing.
+        Effect.forkChild,
+        Effect.andThen(Effect.promise(() => exited)),
+      )
+      .pipe(
+        Effect.timeoutOrElse({
+          duration: QUIT_DEADLINE_MS,
+          orElse: () => Effect.sync(() => void running.kill()),
+        }),
+      );
   });
 
 // The hold, for the length of the shell's graph: the port the host
@@ -271,9 +282,7 @@ export const layer = (options: {
   Layer.effectDiscard(
     Effect.gen(function* () {
       onFailed = options.failed;
-      registerContract(shellCallsContract, shellCalls, registrar, {
-        validateOutputs: !app.isPackaged,
-      });
+      registrar.serve(shellCallsContract, shellCalls);
       server = yield* makePortServer(registrar, ShellCallsGroup);
       yield* Effect.acquireRelease(Effect.sync(fork), () =>
         stop(options.hurried()),

@@ -1,7 +1,7 @@
 // A MessagePort as the WebSocket surface Effect's Socket reads
 // (Socket.fromWebSocket), so Effect RPC runs over a port exactly as it
 // runs over the device link's socket: the desktop window's calls to the
-// shell (main/ipc/shellLink.ts) ride one. The two ends hand over
+// shell (main/ipc/ShellLink.ts) ride one. The two ends hand over
 // different ports, the DOM's in the window and Electron's MessagePortMain
 // in the shell, so each passes how to listen to its own.
 import type * as Socket from "effect/socket/Socket";

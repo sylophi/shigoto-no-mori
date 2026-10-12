@@ -3,7 +3,7 @@
 // host's view streams re-read off it, and the device link serves it.
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
-import { resolveBroadcast } from "@shared/ipc/registerContract";
+import { resolvePush } from "@shared/ipc/served";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -68,11 +68,6 @@ export const push = <M extends ContractModule, K extends PushKeys<M>>(
 ) =>
   Effect.flatMap(HostPushes, (pushes) =>
     Effect.suspend(() => {
-      const { channel, parsed, remote } = resolveBroadcast(
-        module,
-        key,
-        payload,
-      );
-      return pushes.publish({ channel, payload: parsed, remote });
+      return pushes.publish(resolvePush(module, key, payload));
     }),
   );

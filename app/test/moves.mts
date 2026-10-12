@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import type { HandlerContext } from "@shared/ipc/transport";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import { it } from "vitest";
@@ -114,7 +115,10 @@ it("over the device link: a peer's move cancelled by key fails its call with the
         mirrorContract,
         {
           ...mirrorHandlers,
-          startTo: (input, ctx) =>
+          startTo: (
+            input: Parameters<typeof mirrorHandlers.startTo>[0],
+            ctx: HandlerContext,
+          ) =>
             Effect.flatMap(Moves.Moves, (moves) =>
               moves.run(
                 ctx,

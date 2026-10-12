@@ -39,8 +39,9 @@ decisions 6 and 9). Its data model is the engine's
    nothing else. The table `satisfies` the contract's handlers type, so
    typecheck fails until the call has one.
 4. A new module's table is registered in `process/handlers.ts`
-   (`registerContract`); a new call in an existing module needs
-   nothing there.
+   (`registerContract`, onto `shared/ipc/served.ts`); a new call in an
+   existing module needs nothing there. The group's RPC server decodes
+   each payload and encodes each answer with the call's schemas.
 5. A proof in `app/test` calls the handler on the host's services with
    `runHost(handlers.call(...))` (`app/test/README.md`).
 6. The renderer reaches it through its client; the lab's fake host

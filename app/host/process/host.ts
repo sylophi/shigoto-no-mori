@@ -13,7 +13,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
-import { buildClient } from "@shared/ipc/buildClient";
+import { effectClient } from "@shared/ipc/effectClient";
 import { log } from "@shared/log";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
       if (handed !== undefined) resolve(handed);
     });
   });
-  const shell = buildClient(
+  const shell = effectClient(
     shellCallsContract,
     await openPortLink(
       {
@@ -149,19 +149,21 @@ async function main(): Promise<void> {
     Graph.failed(errorMessageOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
-    await shell.failed({
-      message: errorMessageOf(error),
-      storeReport: await storeFailureReport(error, {
-        ...engine,
-        version: facts.appVersion,
-      }),
+    const storeReport = await storeFailureReport(error, {
+      ...engine,
+      version: facts.appVersion,
     });
+    await Effect.runPromise(
+      shell.failed({ message: errorMessageOf(error), storeReport }),
+    );
     process.exit(1);
   }
-  await shell.ready({
-    ...(await Graph.run(Effect.flatMap(Loopback.Loopback, (it) => it.address))),
-    deviceId: await Graph.run(DeviceId.current),
-  });
+  const address = await Graph.run(
+    Effect.flatMap(Loopback.Loopback, (it) => it.address),
+  );
+  await Effect.runPromise(
+    shell.ready({ ...address, deviceId: await Graph.run(DeviceId.current) }),
+  );
 }
 
 void main().catch((error: unknown) => {

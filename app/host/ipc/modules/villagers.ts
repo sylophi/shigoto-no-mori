@@ -1,5 +1,5 @@
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import { VillagerData } from "@host/lib/VillagerData";
 

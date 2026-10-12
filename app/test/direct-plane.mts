@@ -6,7 +6,7 @@
 //
 // Boots the stub Durable Object (test/lib/hubStub.mts) with two
 // REAL hub connections (the dialer and the listener) plus a
-// REAL direct ws listener (host/socket/server.ts with a
+// REAL direct ws listener (host/socket/DeviceLink.ts with a
 // WsServerTicketAuth) on an ephemeral loopback port, and drives the
 // real connectInfo server (host/direct/connectInfo.ts, wired as the
 // hub connection's one answer) and the REAL shared composition

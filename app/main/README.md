@@ -18,7 +18,7 @@ decisions 6 and 9).
   with. The preload reads the facts main hands it on argv (`argFlags.ts`,
   one module for both sides) and asks for the port the window's calls
   to its shell ride.
-- `ipc/`: the shell's link to its windows (`shellLink.ts`), and
+- `ipc/`: the shell's link to its windows (`ShellLink.ts`), and
   `modules/`, one handler table per client-scoped contract module (the
   window, menu, dialogs, shell, nav, migration, account, client config,
   releases).

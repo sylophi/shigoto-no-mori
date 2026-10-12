@@ -24,7 +24,7 @@ export const layer = (options: { readonly onChange: () => void }) =>
     Effect.gen(function* () {
       const reach = yield* PeerReach;
       const engine = yield* makePortForwardEngine({
-        forwardApiFor: (deviceId) => reach.client(forwardContract, deviceId),
+        forwardApiFor: (deviceId) => reach.calls(forwardContract, deviceId),
         channelsFor: reach.channels,
         onChange: options.onChange,
       });

@@ -30,7 +30,7 @@ import { scriptsViews } from "../host/ipc/modules/scripts.ts";
 import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
 import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
-import * as HostPushes from "../host/lib/hostPushes.ts";
+import * as HostPushes from "../host/lib/HostPushes.ts";
 import * as Views from "../host/lib/views.ts";
 import * as Sharing from "../host/lib/sharing.ts";
 import { listWorktrees } from "../host/lib/git/worktrees.ts";

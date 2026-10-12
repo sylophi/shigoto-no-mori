@@ -1,6 +1,6 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Effect from "effect/Effect";
-import * as HostPushes from "@host/lib/hostPushes";
+import * as HostPushes from "@host/lib/HostPushes";
 import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Option from "effect/Option";
@@ -10,7 +10,7 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";

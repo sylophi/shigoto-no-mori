@@ -1,4 +1,4 @@
-// The host's pushes as a stream (host/lib/hostPushes.ts), on a hub the
+// The host's pushes as a stream (host/lib/HostPushes.ts), on a hub the
 // root publishes on synchronously (host/process/wires.ts): a push
 // reaches a subscriber in order with its remote flag, and one made
 // before anyone subscribed goes nowhere.
@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import { it } from "vitest";
-import * as HostPushes from "../host/lib/hostPushes.ts";
+import * as HostPushes from "../host/lib/HostPushes.ts";
 
 it("a published push reaches a subscriber, in order, with its remote flag", async () => {
   const hub = Effect.runSync(PubSub.unbounded<HostPushes.Push>());

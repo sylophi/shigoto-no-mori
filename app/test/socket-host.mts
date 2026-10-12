@@ -1,4 +1,4 @@
-// Durable proof for the device link's listener (host/socket/server.ts)
+// Durable proof for the device link's listener (host/socket/DeviceLink.ts)
 // and its dialer (shared/remote/deviceLink.ts): a real listener on an
 // ephemeral loopback port (test/lib/directBoot.mts), dialed through the
 // ticket handshake by the real dialer, asserting the calls, the pushes,
@@ -75,7 +75,7 @@ import { GRANTS } from "@shigomori/contracts/grants";
 import { controlContract } from "@shigomori/contracts/modules/control";
 import { guideDriveContract } from "@shigomori/contracts/modules/guide";
 import { safeDecode } from "@shigomori/contracts/codec";
-import { classificationGap } from "@shared/ipc/registerContract";
+import { classificationGap } from "@shared/ipc/served";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import { gitContract } from "@shigomori/contracts/modules/git";

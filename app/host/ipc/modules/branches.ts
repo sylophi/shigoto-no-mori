@@ -1,5 +1,5 @@
 import { branchesContract } from "@shigomori/contracts/modules/branches";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "@host/lib/engine";

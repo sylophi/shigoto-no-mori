@@ -315,10 +315,19 @@ async function installUpdate(unattended: boolean): Promise<void> {
   if (installing) return;
   if (!(await hasInstallableStaged())) return;
   if (unattended) {
-    const refusal = busyRemoteRefusal(await host().busy(), "restart");
+    const refusal = busyRemoteRefusal(
+      await Effect.runPromise(host().busy()),
+      "restart",
+    );
     if (refusal !== null) throw new Error(refusal);
   } else {
-    if (!(await confirmBusyAction("restart", await host().busy()))) return;
+    if (
+      !(await confirmBusyAction(
+        "restart",
+        await Effect.runPromise(host().busy()),
+      ))
+    )
+      return;
     // The dialog can sit open arbitrarily long. Re-check that another
     // path didn't start the install during it, and that the staged
     // update still exists -- a terminal run whose feed answered 204
@@ -375,7 +384,10 @@ async function updateNow(unattended: boolean): Promise<void> {
   }
   if (!started) throw new Error("This build doesn't update itself.");
   if (unattended) {
-    const refusal = busyRemoteRefusal(await host().busy(), "restart");
+    const refusal = busyRemoteRefusal(
+      await Effect.runPromise(host().busy()),
+      "restart",
+    );
     if (refusal !== null) throw new Error(refusal);
   }
   installWhenStaged = unattended;

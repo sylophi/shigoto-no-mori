@@ -8,7 +8,7 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import * as Worktrees from "@host/lib/Worktrees";
 import { hasCommit } from "@host/lib/git/refs";

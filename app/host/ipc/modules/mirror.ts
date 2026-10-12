@@ -5,7 +5,7 @@
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
 import type { HostServices } from "@host/process/services";

@@ -66,7 +66,7 @@ import { connect as netConnect } from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
-import { buildClient } from "@shared/ipc/buildClient";
+import * as PeerReach from "@host/ipc/PeerReach";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
   MIRROR_LABEL_MODE,
@@ -252,7 +252,7 @@ let dialerProjectId: string;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
-let mirrorOverWire: ReturnType<typeof buildClient<typeof mirrorContract>>;
+let mirrorOverWire: PeerReach.PeerCalls<typeof mirrorContract>;
 let gateway: ReturnType<typeof createMirrorGateway>;
 let runtime: ManagedRuntime.ManagedRuntime<MirrorDaemon.MirrorDaemon, never>;
 let createInput: MirrorCreateInput;
@@ -348,7 +348,10 @@ beforeAll(async () => {
       [mirrorContract, mirrorHandlers],
     ],
   }));
-  mirrorOverWire = buildClient(mirrorContract, toListener.transport);
+  mirrorOverWire = PeerReach.make({
+    transportFor: () => toListener.transport,
+    channelsFor: () => toListener.channels,
+  }).calls(mirrorContract, LISTENER);
   // Every peer reach of the dialer's host code (the follower's sync and mirror
   // calls, its source links) rides the same session.
   standInPeers({

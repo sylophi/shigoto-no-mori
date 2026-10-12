@@ -2,7 +2,7 @@ import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fsContract } from "@shigomori/contracts/modules/fs";
 import { callFailureOf } from "@shigomori/contracts/errors";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { isGitRepo } from "@host/lib/git/core";

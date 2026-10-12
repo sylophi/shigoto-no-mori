@@ -28,15 +28,6 @@ export function safeDecode<S extends ContractSchema>(
     : { success: false, error: result.failure };
 }
 
-// A handler's answer checked against the output schema, as the wire
-// will carry it.
-export function encode<S extends ContractSchema>(
-  schema: S,
-  value: Decoded<S>,
-): Encoded<S> {
-  return Schema.encodeUnknownSync(schema)(value);
-}
-
 export function decode<S extends ContractSchema>(
   schema: S,
   value: unknown,

@@ -61,9 +61,8 @@ import {
   isChannelRefusedError,
 } from "@shigomori/contracts/errors";
 import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
-import { buildClient } from "@shared/ipc/buildClient";
+import * as PeerReach from "@host/ipc/PeerReach";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
-import type { Client } from "@shigomori/contracts/types";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import { mintHexId } from "@host/lib/hexId";
 import {
@@ -112,7 +111,7 @@ function onceWithin(
 // observable. `open` runs the real forward:open for the channel id.
 async function openChannel(
   peer: PeerTransport,
-  forward: Client<typeof forwardContract>,
+  forward: PeerReach.PeerCalls<typeof forwardContract>,
   port: number,
 ) {
   const mux = await peer.channels();
@@ -145,7 +144,7 @@ async function openChannel(
     onWritable: () => {},
   });
   try {
-    await forward.open({ port, channelId });
+    await Effect.runPromise(forward.open({ port, channelId }));
   } catch (error) {
     handle.reset();
     throw error;
@@ -237,7 +236,7 @@ let echo: LoopbackServer;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
-let forward: Client<typeof forwardContract>;
+let forward: PeerReach.PeerCalls<typeof forwardContract>;
 let big: Buffer;
 let engine: PortForwardEngine;
 let started: Awaited<ReturnType<PortForwardEngine["startForward"]>>;
@@ -256,7 +255,10 @@ beforeAll(async () => {
   ({ stub, listener, toListener } = await bootDirectWire(track, {
     contracts: [[forwardContract, forwardHandlers]],
   }));
-  forward = buildClient(forwardContract, toListener.transport);
+  forward = PeerReach.make({
+    transportFor: () => toListener.transport,
+    channelsFor: () => toListener.channels,
+  }).calls(forwardContract, LISTENER);
 });
 
 // Reverse creation order via the shared tracker: the direct
@@ -387,7 +389,10 @@ it('a dead port refuses with "connect-failed", a reused id with "channel-taken"'
   );
   const taken = await openChannel(toListener, forward, echo.port);
   await assert.rejects(
-    () => forward.open({ port: echo.port, channelId: taken.channelId }),
+    () =>
+      Effect.runPromise(
+        forward.open({ port: echo.port, channelId: taken.channelId }),
+      ),
     (error) => isChannelRefusedError(error) && error.reason === "channel-taken",
   );
   taken.reset();

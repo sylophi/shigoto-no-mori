@@ -11,36 +11,52 @@ import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData"
 import type { ChannelMux } from "@shared/remote/channels";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { buildClient } from "@shared/ipc/buildClient";
 import type { ClientTransport } from "@shared/ipc/transport";
 import * as Context from "effect/Context";
-import type * as Tracer from "effect/Tracer";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
-import { nameOf } from "@shigomori/contracts/contract";
+import {
+  callOf,
+  callsOf,
+  channelOf,
+  type ContractModule,
+  isInvoke,
+  keyOf,
+} from "@shigomori/contracts/contract";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type { ContractModule } from "@shigomori/contracts/contract";
-import type { Client } from "@shigomori/contracts/types";
+import type { EffectClient, PushKeys } from "@shigomori/contracts/types";
 
 // The byte channels of a peer's cached session, which the source links
 // ride (host/lib/sync/sourceLink.ts): resolving once the direct
 // session exists, rejecting when there is none.
 export type PeerChannels = () => Promise<Pick<ChannelMux, "attach" | "has">>;
 
+// A peer's surface for one contract as effects: built per call, never
+// held. Each call continues the caller's span, interrupting it cancels
+// it on the peer, and a failure crosses as the contract's error or a
+// RemoteCallError (callFailureOf).
+export type PeerCalls<M extends ContractModule> = {
+  readonly [K in keyof EffectClient<M>]: EffectClient<M>[K] extends (
+    ...args: infer A
+  ) => Effect.Effect<infer R, unknown>
+    ? (...args: A) => Effect.Effect<R, CallFailure>
+    : never;
+};
+
 export class PeerReach extends Context.Service<
   PeerReach,
   {
-    // A peer's surface for one contract, on the cached direct session:
-    // built per call, never held. Each call continues `span`, and
-    // `signal` cancels it on the peer.
-    readonly client: <M extends ContractModule>(
+    readonly calls: <M extends ContractModule>(
       contract: M,
       deviceId: string,
-      options?: {
-        readonly signal?: AbortSignal;
-        readonly span?: Tracer.AnySpan | undefined;
-      },
-    ) => Client<M>;
+    ) => PeerCalls<M>;
+    // A push of the peer's, until the returned stop.
+    readonly onPush: <M extends ContractModule>(
+      contract: M,
+      key: PushKeys<M>,
+      deviceId: string,
+      handler: (payload: unknown) => void,
+    ) => () => void;
     readonly channels: (deviceId: string) => PeerChannels;
   }
 >()("sm/host/PeerReach") {}
@@ -50,59 +66,61 @@ export const make = (reach: {
   readonly channelsFor: (deviceId: string) => PeerChannels;
 }): PeerReach["Service"] =>
   PeerReach.of({
-    client: (contract, deviceId, options = {}) => {
+    calls: <M extends ContractModule>(contract: M, deviceId: string) => {
       const transport = reach.transportFor(deviceId);
-      return buildClient(contract, {
-        invoke: (channel, input) =>
-          transport.invoke(channel, input, {
-            signal: options.signal,
-            span: options.span,
-          }),
-        subscribe: transport.subscribe,
-      });
+      const calls: Record<string, (input?: unknown) => unknown> = {};
+      for (const call of callsOf(contract)) {
+        if (!isInvoke(call)) continue;
+        const channel = channelOf(call);
+        calls[keyOf(call)] = (input) =>
+          Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
+            Effect.tryPromise({
+              try: (signal) =>
+                transport.invoke(channel, input, {
+                  signal,
+                  span: Option.getOrUndefined(span),
+                }),
+              catch: callFailureOf,
+            }),
+          );
+      }
+      // oxlint-disable-next-line shigomori/no-double-cast -- built from the contract's own calls, each answering as its call
+      return calls as unknown as PeerCalls<M>;
     },
+    onPush: (contract, key, deviceId, handler) =>
+      reach
+        .transportFor(deviceId)
+        .subscribe(channelOf(callOf(contract, key)), handler),
     channels: reach.channelsFor,
   });
 
-// The same surfaces for effects: each call answers with an effect,
-// whose interruption cancels it on the peer and whose span the call
-// continues. A failure crosses as the contract's error or a
-// RemoteCallError (callFailureOf).
-export type PeerEffects<C> = {
-  readonly [K in keyof C]: C[K] extends (...args: infer A) => Promise<infer R>
-    ? (...args: A) => Effect.Effect<R, CallFailure, PeerReach>
-    : C[K];
-};
-
+// The same, for an effect that has the service to hand.
 export const peerEffects = <M extends ContractModule>(
   contract: M,
   deviceId: string,
-): PeerEffects<Client<M>> =>
-  new Proxy({} as PeerEffects<Client<M>>, {
+): PeerEffects<M> =>
+  new Proxy({} as PeerEffects<M>, {
     get:
       (_, method: string) =>
       (...args: unknown[]) =>
-        Effect.flatMap(
-          Effect.all([PeerReach, Effect.option(Effect.currentSpan)]),
-          ([reach, span]) =>
-            Effect.tryPromise({
-              try: (signal) => {
-                const call: unknown = Reflect.get(
-                  reach.client(contract, deviceId, {
-                    signal,
-                    span: Option.getOrUndefined(span),
-                  }),
-                  method,
-                );
-                if (typeof call !== "function") {
-                  throw new Error(`${nameOf(contract)}:${method} is no call`);
-                }
-                return Promise.resolve(call(...args));
-              },
-              catch: callFailureOf,
-            }),
-        ),
+        Effect.flatMap(PeerReach, (reach) => {
+          const call: unknown = Reflect.get(
+            reach.calls(contract, deviceId),
+            method,
+          );
+          return typeof call === "function"
+            ? (call(...args) as Effect.Effect<unknown, CallFailure>)
+            : Effect.die(new Error(`no call ${method} on the peer`));
+        }),
   });
+
+export type PeerEffects<M extends ContractModule> = {
+  readonly [K in keyof PeerCalls<M>]: PeerCalls<M>[K] extends (
+    ...args: infer A
+  ) => Effect.Effect<infer R, CallFailure>
+    ? (...args: A) => Effect.Effect<R, CallFailure, PeerReach>
+    : never;
+};
 
 export const peerSyncFor = (deviceId: string) =>
   peerEffects(syncContract, deviceId);

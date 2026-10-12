@@ -4,9 +4,8 @@
 // hub (shared/hub/directPlane.ts). What stays in the page are the
 // client modules (the account, the client config, the hub bridge, the
 // shell, the releases) and the browser's own copy of the shared
-// settings, mounted through the shared registrar
-// (shared/ipc/registerContract.ts) like every binding's, and called
-// through buildApi like every window's.
+// settings, registered (shared/ipc/served.ts) like every binding's, and
+// called through buildApi like every window's.
 //
 // A host call nothing here serves is the renderer asking a local host
 // the browser does not have, which it still does in a few places. Those
@@ -32,29 +31,34 @@
 // answering it would hide a real wiring bug.
 import {
   annotation,
+  callOf,
   callsOf,
   channelOf,
   type ContractCall,
+  type ContractModule,
   type ContractScope,
   Gated,
+  inputOf,
   isInvoke,
   outputOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
+import { decode } from "@shigomori/contracts/codec";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import type {
-  HandlerContext,
-  Link,
-  ServerTransport,
-} from "@shared/ipc/transport";
+import type { HandlerContext, Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
-import { resolveBroadcast } from "@shared/ipc/registerContract";
-import type { ViewObserver } from "@shigomori/contracts/types";
+import { createServed, resolvePush, type Served } from "@shared/ipc/served";
+import type {
+  PushKeys,
+  PushProducerPayload,
+  ViewObserver,
+} from "@shigomori/contracts/types";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 
 // The hand-judged exceptions to the gated:false rule. Every entry
@@ -93,9 +97,15 @@ type LocalView = (
 ) => () => void;
 
 export type LocalRegistrar = {
-  server: ServerTransport;
+  served: Served<HandlerContext>;
   link: Link;
-  view: (channel: string, view: LocalView) => void;
+  view: (module: ContractModule, key: string, view: LocalView) => void;
+  // A push to the page, as a host's reaches its windows.
+  push: <M extends ContractModule, K extends PushKeys<M>>(
+    module: M,
+    key: K,
+    payload: PushProducerPayload<M, K>,
+  ) => void;
 };
 
 // Every invoke (of one scope, when given), keyed by channel, for the
@@ -117,10 +127,7 @@ export function invokeIndexFor(
 }
 
 export function createLocalRegistrar(): LocalRegistrar {
-  const handlers = new Map<
-    string,
-    (ctx: HandlerContext, raw: unknown) => Promise<unknown>
-  >();
+  const served = createServed<HandlerContext>();
   const fanOut = pushFanOut();
   const views = new Map<string, LocalView>();
   const invokeIndex = invokeIndexFor();
@@ -158,41 +165,31 @@ export function createLocalRegistrar(): LocalRegistrar {
   const pageLifetime = new AbortController();
   const context: HandlerContext = {
     notifier: (module, key) => (payload) => {
-      const { channel, parsed } = resolveBroadcast(module, key, payload);
-      fanOut.emit(channel, parsed);
+      const push = resolvePush(module, key, payload);
+      fanOut.emit(push.channel, push.payload);
     },
     connection: pageLifetime.signal,
-  };
-
-  const server: ServerTransport = {
-    handle(channel, fn) {
-      handlers.set(channel, (ctx, raw) => fn(ctx, raw));
-    },
-    broadcastAll(channel, payload) {
-      fanOut.emit(channel, payload);
-    },
   };
 
   const link: Link = {
     local: true,
     call(channel, input) {
-      const handler = handlers.get(channel);
-      if (handler !== undefined) {
-        // What the handler rejects with (a contract error, any Error) is
-        // the call's failure as it is, and a synchronous throw is too.
-        return Effect.callback<unknown, unknown>((resume) => {
-          Promise.resolve()
-            .then(() => handler(context, input))
-            .then(
-              (value) => resume(Effect.succeed(value)),
-              (error: unknown) => resume(Effect.fail(error)),
-            );
-        });
-      }
       const call = invokeIndex.get(channel);
       if (call === undefined) {
         return Effect.die(
           new Error(`no handler and no contract entry for channel ${channel}`),
+        );
+      }
+      // In the page, so nothing on a wire decodes the input: it is
+      // decoded here as a server's group would.
+      const handler = served.invokeOf(call);
+      if (handler !== undefined) {
+        return Effect.flatMap(
+          Effect.try({
+            try: () => decode(inputOf(call), input),
+            catch: callFailureOf,
+          }),
+          (decoded) => handler(decoded, context),
         );
       }
       let verdict = verdictCache.get(channel);
@@ -232,10 +229,14 @@ export function createLocalRegistrar(): LocalRegistrar {
   };
 
   return {
-    server,
+    served,
     link,
-    view: (channel, view) => {
-      views.set(channel, view);
+    view: (module, key, view) => {
+      views.set(channelOf(callOf(module, key)), view);
+    },
+    push: (module, key, payload) => {
+      const push = resolvePush(module, key, payload);
+      fanOut.emit(push.channel, push.payload);
     },
   };
 }

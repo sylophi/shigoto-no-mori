@@ -1,10 +1,9 @@
 // The node hub connection: the shared lifecycle core in
 // shared/hub/connection.ts bound to the node `ws` client, owned by the
 // host process (host/process/wires.ts), asking peers for their connect
-// info and answering theirs. Deliberately NOT a ServerTransport: the
-// wire answers one question, handed in at creation as a function, so
-// re-adding the hub to a wire loop that expects a ServerTransport is a
-// type error rather than a discouraged one-liner.
+// info and answering theirs. Deliberately not a wire the host's
+// modules register on: it answers one question, handed in at creation
+// as a function.
 //
 // This file must stay Electron free (pnpm test host-boundary).
 // Everything Electron or account flavored (deviceId, accountId, the

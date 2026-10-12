@@ -3,33 +3,37 @@
 import { callFailureOf } from "@shigomori/contracts/errors";
 import type { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
-import type { Client } from "@shigomori/contracts/types";
+import type { EffectClient } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Shell from "@host/lib/Shell";
 
-const onShell = <A>(call: () => Promise<A>) =>
-  Effect.tryPromise({ try: call, catch: callFailureOf });
+const ask = <A>(call: Effect.Effect<A, unknown>) =>
+  Effect.mapError(call, callFailureOf);
 
-export const layer = (calls: Client<typeof shellCallsContract>) =>
+export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
   Layer.effect(
     Shell.Shell,
-    Effect.map(Ref.make<UpdaterState>({ kind: "idle" }), (state) =>
-      Shell.Shell.of({
-        relaunch: Effect.sync(() => void calls.relaunch()),
+    Effect.gen(function* () {
+      const state = yield* Ref.make<UpdaterState>({ kind: "idle" });
+      // What is asked without waiting, run for as long as the layer is.
+      const runFork = yield* FiberSet.makeRuntime<never>();
+      const tell = (call: Effect.Effect<void, unknown>) =>
+        Effect.sync(() => void runFork(Effect.ignore(call)));
+      return Shell.Shell.of({
+        relaunch: tell(calls.relaunch()),
         updater: {
-          check: onShell(() => calls.updaterCheck()),
-          install: (unattended) =>
-            onShell(() => calls.updaterInstall({ unattended })),
-          update: (unattended) =>
-            onShell(() => calls.updaterUpdate({ unattended })),
+          check: ask(calls.updaterCheck()),
+          install: (unattended) => ask(calls.updaterInstall({ unattended })),
+          update: (unattended) => ask(calls.updaterUpdate({ unattended })),
           state: Ref.get(state),
           noteState: (next) => Ref.set(state, next),
         },
-        stopUpdaterBridge: Effect.sync(() => void calls.stopUpdaterBridge()),
-        migration: (progress) => onShell(() => calls.migration(progress)),
-        guide: (payload) => onShell(() => calls.guide(payload)),
-      }),
-    ),
+        stopUpdaterBridge: tell(calls.stopUpdaterBridge()),
+        migration: (progress) => ask(calls.migration(progress)),
+        guide: (payload) => ask(calls.guide(payload)),
+      });
+    }),
   );

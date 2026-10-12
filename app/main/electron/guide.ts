@@ -93,10 +93,7 @@ const windowsLayer = Layer.succeed(
         }
       }),
     launch: (input) =>
-      Effect.tryPromise({
-        try: () => host().guideLaunch(input),
-        catch: callFailureOf,
-      }),
+      host().guideLaunch(input).pipe(Effect.mapError(callFailureOf)),
     closed: Stream.callback<number>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() =>

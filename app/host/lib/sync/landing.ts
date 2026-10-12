@@ -47,7 +47,7 @@ import {
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { notifierFor } from "@host/ipc/modules/worktrees";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
 import { landInvitedMirror } from "@host/mirror/invites";
 
