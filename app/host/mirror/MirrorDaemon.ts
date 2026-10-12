@@ -199,8 +199,16 @@ const make = (options: Options) =>
     // A daemon that stopped or couldn't start reads as failing, with
     // why, until it is ready again: its restarts in between are the
     // ladder's, not a fresh start.
+    // A new reason while already failing is a change too, which the
+    // status alone wouldn't announce.
     const failed = (why: string) =>
-      Ref.set(failure, why).pipe(Effect.andThen(setStatus("failing")));
+      Effect.gen(function* () {
+        const previous = yield* Ref.getAndSet(failure, why);
+        if ((yield* Ref.get(status)) !== "failing") {
+          return yield* setStatus("failing");
+        }
+        if (previous !== why) yield* changed;
+      });
     const starting = Ref.get(status).pipe(
       Effect.flatMap((current) =>
         current === "failing" ? Effect.void : setStatus("starting"),

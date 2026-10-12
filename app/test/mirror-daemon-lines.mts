@@ -78,6 +78,8 @@ async function harness() {
   const logs: string[] = [];
   const out = Effect.runSync(Queue.unbounded<Uint8Array>());
   const err = Effect.runSync(Queue.unbounded<Uint8Array>());
+  // How often the daemon announced a change.
+  const changes = { count: 0 };
   // What the next spawns fail with, while set.
   const spawning: {
     refusal?: FileSync.FileSyncUnavailableError | PlatformError.PlatformError;
@@ -134,6 +136,9 @@ async function harness() {
       gatewayAddress: () => "127.0.0.1:1",
       gatewayToken: () => "token",
       dataDir: () => "unused",
+      onChange: () => {
+        changes.count += 1;
+      },
     }).pipe(
       Layer.provide(fakeFileSync),
       Layer.provide(Logger.layer([captured])),
@@ -174,7 +179,18 @@ async function harness() {
     Effect.runSync(Deferred.succeed(deferred, 1));
     await settle();
   };
-  return { daemon, send, say, spawning, requests, logs, exits, adjust, exit };
+  return {
+    daemon,
+    send,
+    say,
+    spawning,
+    changes,
+    requests,
+    logs,
+    exits,
+    adjust,
+    exit,
+  };
 }
 
 it("a well-formed state line is the sessions", async () => {
@@ -307,7 +323,8 @@ it("a daemon that exits is restarted on the ladder, from its bottom after a long
 });
 
 it("a daemon that stops reads failing with why until it is ready, one that can't start says why, and only a missing one is unavailable", async () => {
-  const { daemon, send, say, spawning, exit, adjust, exits } = await harness();
+  const { daemon, send, say, spawning, changes, exit, adjust, exits } =
+    await harness();
   await send({ event: "ready" });
   assert.equal(daemon.failure(), undefined);
   await say("panic: the session store is locked");
@@ -334,9 +351,12 @@ it("a daemon that stops reads failing with why until it is ready, one that can't
     description: "the engine can't be run",
   });
   await exit(1);
+  const announced = changes.count;
   await adjust(30_000);
   assert.equal(daemon.status(), "failing");
   assert.match(daemon.failure() ?? "", /^couldn't start: /);
+  // The new reason is announced, though the status stayed failing.
+  assert.ok(changes.count > announced, "the new reason went unannounced");
   // And one that isn't there at all.
   spawning.refusal = new FileSync.FileSyncUnavailableError();
   await adjust(30_000);
