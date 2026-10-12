@@ -24,8 +24,10 @@ import {
   someWorktreesAtom,
   worktreeListKey,
 } from "@/hooks/worktrees/useWorktrees";
+import { useAtomValue } from "@effect/atom-react";
+import * as Atom from "effect/reactivity/Atom";
 import { peerSessionAtom } from "@/lib/runtime/atoms";
-import { useRegistry, useViews, viewsOf } from "@/lib/runtime/viewHooks";
+import { useViews, viewsOf } from "@/lib/runtime/viewHooks";
 import { useRemoteDevices } from "./useRemoteDevices";
 
 // The peers' projects, each as its host streams it. A peer that has had
@@ -34,16 +36,34 @@ import { useRemoteDevices } from "./useRemoteDevices";
 // views redial; one that never had one reads nothing.
 const peersProjectsAtom = viewsOf((deviceId) => projectsAtom(deviceId));
 
-// Whether a peer's views are read: while it can be asked, and after
-// that for as long as the page lives once it had a session.
-export function useViewsWanted(): (device: {
-  readonly deviceId: string;
-  readonly api?: unknown;
-}) => boolean {
-  const registry = useRegistry();
-  return (device) =>
-    device.api !== undefined ||
-    registry.get(peerSessionAtom(device.deviceId)) > 0;
+// The devices among `joined` (ids, one separator apart) that had a
+// session on this page.
+const hadSessionAtom = Atom.family((joined: string) =>
+  Atom.readable((get) =>
+    joined === ""
+      ? []
+      : joined
+          .split(SEPARATOR)
+          .filter((deviceId) => get(peerSessionAtom(deviceId)) > 0),
+  ),
+);
+const SEPARATOR = "\u0001";
+
+type Peer = { readonly deviceId: string; readonly api?: unknown };
+
+// Whether each of `devices`' views is read: while it can be asked, and
+// after that for as long as the page lives once it had a session, so a
+// surface that shows what a device holds keeps showing it while it is
+// away.
+export function useViewsWanted(
+  devices: readonly Peer[],
+): (device: Peer) => boolean {
+  const had = new Set(
+    useAtomValue(
+      hadSessionAtom(devices.map((device) => device.deviceId).join(SEPARATOR)),
+    ),
+  );
+  return (device) => device.api !== undefined || had.has(device.deviceId);
 }
 
 export interface RemoteForests {
@@ -76,17 +96,20 @@ export interface RemoteProjectPair {
 // "Create on" pick) and have no use for the worktree, PR and config
 // fan-outs the forests add on top. The forests compose this, so the
 // two can never list different projects.
+// A peer away keeps the projects it last had, for every caller (the
+// sidebar's rows, a project's device tabs, the pickers), as v2's cache
+// did: what a sleeping machine holds still exists.
 export function useRemoteProjects(): {
   pairs: RemoteProjectPair[];
   loading: boolean;
   // Peers whose projects could not be read, after the retries.
   failed: readonly string[];
 } {
-  const wanted = useViewsWanted();
   // A peer that isn't sharing lists nothing.
   const devices = useRemoteDevices().filter(
     (device) => device.status.phase !== "notSharing",
   );
+  const wanted = useViewsWanted(devices);
   const projectViews = useViews(
     peersProjectsAtom,
     devices.map((device) => (wanted(device) ? device.deviceId : null)),
@@ -112,8 +135,8 @@ export function useRemoteForests(
   const { inboxFacts = false } = options;
   // Flattened (device, project) pairs, so the worktree fan-out is one
   // flat read whatever shape the forests have.
-  const wanted = useViewsWanted();
   const { pairs, loading: projectsLoading, failed } = useRemoteProjects();
+  const wanted = useViewsWanted(pairs.map(({ device }) => device));
   const worktreeQueries = useViews(
     someWorktreesAtom,
     pairs.map(({ device, project }) =>

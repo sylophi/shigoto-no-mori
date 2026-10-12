@@ -184,8 +184,10 @@ export function TerminalView({
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
   // handed back, so Tab and the app's bare-key shortcuts work again. One
-  // that comes alive (a script's run past its start) takes focus and
-  // claims its size, which its process could not take before it ran.
+  // that comes alive (a script's run past its start) claims its size,
+  // which its process could not take before it ran, and takes focus
+  // unless something else on the page holds it (a field typed in
+  // meanwhile).
   const wasLive = useRef(live);
   useEffect(() => {
     const term = termRef.current;
@@ -198,7 +200,16 @@ export function TerminalView({
     }
     if (live && !wasLive.current) {
       proposeRef.current?.(true);
-      term.focus();
+      const document = host?.ownerDocument;
+      const active = document?.activeElement;
+      const drawer = host?.closest("[data-slot=terminal-drawer]");
+      if (
+        active == null ||
+        active === document?.body ||
+        drawer?.contains(active) === true
+      ) {
+        term.focus();
+      }
     }
     wasLive.current = live;
   }, [live, fontsIn]);

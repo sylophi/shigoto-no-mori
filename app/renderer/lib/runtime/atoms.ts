@@ -115,11 +115,12 @@ const REDIAL = Schedule.exponential("250 millis", 2).pipe(
   ),
 );
 
-// How many failed asks a peer's view that never showed a value takes
-// before it gives up (hostViewAtom): about eight seconds on REDIAL's
-// ladder, room for a session still dialing at boot, as v2's three
-// retries a second, two and four apart gave.
-const PEER_TRIES = 6;
+// How many asks a peer's view that never showed a value makes with no
+// session to the peer before it gives up (hostViewAtom): about eight
+// seconds on REDIAL's ladder (250 ms doubling to 2 s), room for a session
+// still dialing at boot, as v2's three retries a second, two and four
+// apart gave.
+const PEER_TRIES = 7;
 
 // One device's host modules: this machine's over its own link, a peer's
 // over the hub hop.
@@ -278,6 +279,9 @@ export function hostViewAtom<R extends ContractCall>(options: {
 }): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
   type A = Decoded<PayloadOf<R>>;
   const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
+  // Whether this view ever showed a value, for as long as the atom
+  // lives: a new session starts its stream again, not its history.
+  let seen = false;
   const valuesOn = (localDeviceId: string) => {
     // A peer's view that has never shown a value gives up after a few
     // asks, as v2's queries did, so a peer listed and never reached
@@ -285,7 +289,6 @@ export function hostViewAtom<R extends ContractCall>(options: {
     // One that has shown rows keeps them, and redials for as long as
     // anything reads it. This machine's host is asked for good.
     const peer = options.deviceId !== localDeviceId;
-    let seen = false;
     let failures = 0;
     return Stream.unwrap(
       Effect.map(hostLinkOf(options.deviceId, localDeviceId), (link: Link) =>
@@ -306,9 +309,11 @@ export function hostViewAtom<R extends ContractCall>(options: {
           failures = 0;
         }),
       ),
-      Stream.tapError(() =>
+      // A refusal is the peer's answer, which a grant may change: only
+      // asks that found no way to it count.
+      Stream.tapError((error) =>
         Effect.sync(() => {
-          failures += 1;
+          if (!isRefusal(error)) failures += 1;
         }),
       ),
       Stream.catchIf(

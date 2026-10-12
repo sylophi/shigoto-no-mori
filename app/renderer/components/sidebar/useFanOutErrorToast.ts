@@ -9,7 +9,7 @@ import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 // A peer whose projects could not be read, after the retries: listed,
 // and never reached.
 export function useUnreachedDevicesToast(devices: readonly string[]): void {
-  const names = devices.join(", ");
+  const names = [...new Set(devices)].join(", ");
   useEffect(() => {
     const id = "devices-fanout-error";
     if (names === "") {

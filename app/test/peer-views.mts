@@ -1,17 +1,22 @@
 // Durable proof for a peer's views when it cannot be reached
 // (renderer/lib/runtime/atoms.ts, hostViewAtom), over a stand-in hub
 // link whose peer has no session:
-//   - a peer that never showed a value gives up after its tries (about
-//     eight seconds), so the sidebar reads it empty and says so, as v2's
-//     queries did, rather than loading for good,
+//   - a peer that never showed a value gives up after its tries with no
+//     session to it (about eight seconds), so the sidebar reads it empty
+//     and says so, as v2's queries did, rather than loading for good,
 //   - a peer that showed rows and then lost its session keeps them, and
 //     goes on asking,
+//   - a peer that refuses (its sharing off) is asked again for good, since
+//     a switch may flip back,
 //   - this machine's host is asked for good.
 //
 // Run: pnpm test peer-views.
 import assert from "node:assert/strict";
 import { callOf } from "@shigomori/contracts/contract";
-import { NoDirectConnectionError } from "@shigomori/contracts/errors";
+import {
+  NoDirectConnectionError,
+  NotSharingError,
+} from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type { ContractModule } from "@shigomori/contracts/contract";
@@ -40,8 +45,12 @@ const ROWS = [
 ];
 
 // A registry over a host link and a hub link whose views fail as a peer
-// with no session does, after `firstValues` subscriptions that answered.
-function page({ peerAnswers = 0, hostFails = false } = {}) {
+// with no session does, after `peerAnswers` subscriptions that answered.
+function page({
+  peerAnswers = 0,
+  hostFails = false,
+  peerRefuses = false,
+} = {}) {
   let peerAsks = 0;
   let hostAsks = 0;
   const noSession = new NoDirectConnectionError({ deviceId: PEER });
@@ -55,6 +64,7 @@ function page({ peerAnswers = 0, hostFails = false } = {}) {
         return hostFails ? Stream.fail(noSession) : Stream.make(ROWS);
       }
       peerAsks += 1;
+      if (peerRefuses) return Stream.fail(new NotSharingError());
       return peerAsks <= peerAnswers
         ? Stream.concat(Stream.make(ROWS), Stream.fail(noSession))
         : Stream.fail(noSession);
@@ -128,6 +138,19 @@ it("a peer that showed rows keeps them through a lost session, and goes on askin
       AsyncResult.getOrElse(result, () => null),
       ROWS,
     );
+  } finally {
+    unmount();
+  }
+}, 30_000);
+
+it("a peer that refuses is asked again for good", async () => {
+  const { registry, peerAsks } = page({ peerRefuses: true });
+  const atom = projectsOf(PEER);
+  const unmount = registry.mount(atom);
+  try {
+    // 2, 4 and 8 seconds apart on the refusal ladder.
+    await waitFor(() => peerAsks() >= 4, "asks past a few refusals", 25_000);
+    assert.ok(!AsyncResult.isFailure(registry.get(atom)), "it never gives up");
   } finally {
     unmount();
   }

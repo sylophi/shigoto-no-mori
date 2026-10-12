@@ -58,7 +58,7 @@ export function useStackCleanup(
   );
   // A device asleep now still says what it held when last seen, so the
   // box can say how many more it would take.
-  const wanted = useViewsWanted();
+  const wanted = useViewsWanted(holders);
   const listings = useViews(
     someWorktreesAtom,
     holders.map((holder) =>
