@@ -114,12 +114,10 @@ export const makeCommit = ({
           // git holds leaves the index to it.
           const restore = Effect.gen(function* () {
             const lock = `${indexFile}.lock`;
+            // Taken empty, so a lock this made is never one a failed write
+            // half filled and left; one another git holds is left to it.
             const held = yield* fs
-              .writeFile(
-                lock,
-                Option.isSome(saved) ? saved.value : new Uint8Array(),
-                { flag: "wx" },
-              )
+              .writeFile(lock, new Uint8Array(), { flag: "wx" })
               .pipe(
                 Effect.as(true),
                 Effect.orElseSucceed(() => false),
@@ -127,10 +125,12 @@ export const makeCommit = ({
             if (!held) return;
             yield* Effect.gen(function* () {
               if ((yield* headOf) !== before) return yield* fs.remove(lock);
-              if (Option.isSome(saved))
-                return yield* fs.rename(lock, indexFile);
-              yield* fs.remove(indexFile, { force: true });
-              yield* fs.remove(lock);
+              if (Option.isNone(saved)) {
+                yield* fs.remove(indexFile, { force: true });
+                return yield* fs.remove(lock);
+              }
+              yield* fs.writeFile(lock, saved.value);
+              yield* fs.rename(lock, indexFile);
             }).pipe(
               Effect.onError(() =>
                 Effect.ignore(fs.remove(lock, { force: true })),
