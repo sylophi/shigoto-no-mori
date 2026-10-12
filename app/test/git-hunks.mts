@@ -10,7 +10,14 @@
 //
 // Run: pnpm test git-hunks.
 import assert from "node:assert/strict";
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { LineChange } from "@shigomori/contracts/schemas";
 import {
@@ -238,4 +245,19 @@ it("a symlink or a file that isn't UTF-8 has no hunks and is never written by th
   git(repo, "commit", "-q", "-m", "latin");
   writeFileSync(join(repo, "l.txt"), Buffer.concat([latin, latin]));
   assert.deepEqual((await readHunks(repo, "l.txt")).changes, []);
+});
+
+it("a discard keeps an executable file's mode", async () => {
+  const repo = tempDir("sm-hunks-mode-", trackTest);
+  git(repo, "init", "-q", "-b", "main");
+  writeFileSync(join(repo, "f.txt"), lines(20));
+  chmodSync(join(repo, "f.txt"), 0o755);
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "init");
+  writeFileSync(join(repo, "f.txt"), EDITED);
+  const [edit] = (await readHunks(repo, "f.txt")).changes;
+  assert.ok(edit);
+  await discardHunks(repo, "f.txt", [edit]);
+  assert.equal(read(repo), EDITED.replace("line two\n", "line 2\n"));
+  assert.equal(statSync(join(repo, "f.txt")).mode & 0o777, 0o755);
 });
