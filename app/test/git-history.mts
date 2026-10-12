@@ -86,10 +86,6 @@ const pullRebaseOrMergeAndPush = (worktree: string) =>
 const syncWithPrimary = (worktree: string, repo: string, primaryRef: string) =>
   engineGit.syncWithPrimary({ worktree, repo, primaryRef });
 const { isSyncConflictsError } = await import("@shigomori/contracts/errors");
-const listCommits = (
-  worktree: string,
-  page: { skip: number; count: number; query?: string; from?: string },
-) => engineGit.listCommits(worktree, { ...page, firstParentStats: true });
 const readBranchHistory = (
   worktree: string,
   opts: { base: string | undefined; count: number },
@@ -352,7 +348,7 @@ it("the timeline reads a branch's own commits back to where it left main, and it
   assert.equal(plain.upstream, null);
 
   // The history before the branch: from where it left main.
-  const earlier = await listCommits(repo, {
+  const earlier = await engineGit.listCommits(repo, {
     skip: 0,
     count: 10,
     from: fork,
