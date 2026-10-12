@@ -15,8 +15,10 @@ The base defaults to `origin/release/v3` while v3 is built there. Once
 that branch is in main, the default becomes `origin/main`. Fetch first,
 since the script compares against the ref as it stands locally.
 
-It checks the base out into a temporary git worktree, installs it, starts
-both fake hosts' servers on free ports, and drives the system's Chrome
+It checks the base out into a temporary git worktree, installs it, copies
+the file icons into both sides (the app's own `copy-material-icons.mts`,
+which an install with scripts off never runs), starts both fake hosts'
+servers on free ports, and drives the system's Chrome
 (`playwright-core`, `channel: "chrome"`). Each scene loads from the
 viewer (`/scenes.html?scene=<name>&theme=<theme>`). The shot is the
 theme root, with reduced motion and animations off. A pixel counts as

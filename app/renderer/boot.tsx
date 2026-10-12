@@ -127,6 +127,7 @@ export function startApp({
     registry.update(accountsLeftAtom, (count) => count + 1);
   });
 
+  followFocus(api);
   if (api.isElectron) startLocalHost(api, queryClient, registry);
 
   // The shared settings exchange: this device's copy follows its peers'
@@ -203,7 +204,7 @@ export function mountWindow(
   // looking: a running animation asks the compositor for a frame every
   // vsync, which was ~88% of the app's idle energy. Rides React Query's
   // focus signal (window focus/blur, visibilitychange, plus the
-  // desktop's IPC channel wired in startLocalHost).
+  // desktop's IPC channel, wired in followFocus).
   const syncFocusClass = (focused: boolean) =>
     element.classList.toggle("unfocused", !focused);
   syncFocusClass(documentFocused());
@@ -288,13 +289,17 @@ function startLocalHost(
   // The network gone or back, as this window's Chromium sees it.
   window.addEventListener("online", () => networkChanged(api));
   window.addEventListener("offline", () => networkChanged(api));
+}
 
-  // React Query's default focus listener subscribes to `window.focus`
-  // and `visibilitychange`, but those don't fire on every Electron
-  // focus transition (notably ⌘Tab back into the app, where focus
-  // arrives at the BrowserWindow level rather than the document). Add
-  // the window's IPC channel on top of the web events so
-  // refetch-on-focus is reliable.
+// Whether someone is looking at the page, for React Query's focus
+// refetches, the animations `.unfocused` pauses and the hosts' sweeps.
+// React Query's own listener follows `visibilitychange` alone, so a tab
+// behind another app's window would count as looked at and draw the
+// wallpaper's drift every frame; the window's focus and blur say it. In
+// Electron they don't fire on every focus transition (notably ⌘Tab back
+// into the app, where focus arrives at the BrowserWindow level rather
+// than the document), so the window's IPC channel comes on top.
+function followFocus(api: RendererApi): void {
   focusManager.setEventListener((handleFocus) => {
     const onFocus = () => handleFocus(true);
     const onBlur = () => handleFocus(false);
@@ -303,17 +308,17 @@ function startLocalHost(
     window.addEventListener("focus", onFocus);
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
-    const unsubFocus = api.listen(
-      api.pushes(windowContract, "focused"),
-      onFocus,
-    );
-    const unsubBlur = api.listen(api.pushes(windowContract, "blurred"), onBlur);
+    const unsubscribes = api.isElectron
+      ? [
+          api.listen(api.pushes(windowContract, "focused"), onFocus),
+          api.listen(api.pushes(windowContract, "blurred"), onBlur),
+        ]
+      : [];
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibility);
-      unsubFocus();
-      unsubBlur();
+      for (const unsubscribe of unsubscribes) unsubscribe();
     };
   });
 }

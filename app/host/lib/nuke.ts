@@ -30,6 +30,10 @@ import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { clearDeleteInflight, markDeleteInflight } from "./scripts";
 import { dataDir } from "@shared/paths";
 
+// How long one worktree's teardown may run during a nuke, as a move's
+// rollback cleanup allows (sync/landing.ts).
+const TEARDOWN_TIMEOUT_MS = 60_000;
+
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
   { reason: Schema.String },
@@ -88,6 +92,8 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   // what it couldn't (leftIf).
   readonly uninstall: Effect.Effect<ReadonlyArray<Left>, never, U>;
   readonly home?: string;
+  // How long one worktree's teardown may run (TEARDOWN_TIMEOUT_MS).
+  readonly teardownTimeoutMs?: number;
 }) {
   const { onProgress } = options;
   const projects = yield* freshProjects;
@@ -138,10 +144,11 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
       ({ project, targets }) =>
         Effect.gen(function* () {
           for (const target of targets) {
-            const failed = yield* Ops.forceRemoveWorktree(
-              project,
-              target.id,
-            ).pipe(
+            // A teardown script that never ends is a cleanup failure,
+            // not a nuke that never finishes.
+            const failed = yield* Ops.forceRemoveWorktree(project, target.id, {
+              timeoutMs: options.teardownTimeoutMs ?? TEARDOWN_TIMEOUT_MS,
+            }).pipe(
               Effect.as(null),
               Effect.catch((error) => Effect.succeed(errorWordsOf(error))),
             );

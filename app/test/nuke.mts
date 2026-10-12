@@ -1,7 +1,8 @@
 // Durable proof for "Nuke everything" against REAL git repositories:
 // the host's half refuses for a trap and touches nothing, removes every
 // worktree the app made (and only those) with a second run finishing
-// what an interrupted first left, and reports what it couldn't; the
+// what an interrupted first left, with no teardown script holding it
+// up, and reports what it couldn't; the
 // next start's half deletes what the marker names and all of userData
 // but the lock and the dev profiles, and finishes after a start that
 // died halfway through.
@@ -15,6 +16,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -43,6 +45,7 @@ const { nukeEverything, nukeTrap, leftIf } =
 const nuke = (
   uninstalled: string[],
   onProgress: (progress: { phase: string }) => void = () => {},
+  teardownTimeoutMs?: number,
 ) =>
   runHost(
     nukeEverything({
@@ -54,6 +57,7 @@ const nuke = (
         return [];
       }),
       home: join(sandbox, "home"),
+      ...(teardownTimeoutMs === undefined ? {} : { teardownTimeoutMs }),
     }),
   );
 
@@ -165,6 +169,32 @@ it("removes every worktree the app made, and a second run finishes an interrupte
 
   // A third run finds nothing to do.
   assert.deepEqual((await nuke([])).left, []);
+});
+
+it("a teardown script that never ends, deaf to SIGTERM, holds no nuke up", async () => {
+  const project = await repo("slow");
+  await fixture.projectIdOf(project);
+  await fixture.sm(
+    "projects",
+    "config",
+    "-p",
+    "slow",
+    "--teardown",
+    // A sleep no other process runs, to look for after.
+    "trap '' TERM; sleep 6017",
+  );
+  const kite = join(dataDir, "wt", "slow", "kite");
+  await git(project, ["worktree", "add", "-q", "-b", "kite", kite]);
+  const started = Date.now();
+  await nuke([], undefined, 1000);
+  assert.ok(Date.now() - started < 30_000, "the nuke waited on the teardown");
+  assert.ok(!existsSync(kite), "the worktree went all the same");
+  // The script's shell is killed; what it started in the background
+  // outlives it by design (Lifecycle.ts), so the proof ends its own.
+  const orphans = spawnSync("pgrep", ["-f", "sleep 6017"]).stdout.toString();
+  for (const pid of orphans.split("\n").filter(Boolean)) {
+    process.kill(Number(pid), "SIGKILL");
+  }
 });
 
 it("reports what it couldn't uninstall, with why", async () => {

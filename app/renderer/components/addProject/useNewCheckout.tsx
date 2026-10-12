@@ -54,8 +54,9 @@ export function useNewCheckout({
   // back to this device's.
   const peerLabel = useRemoteDeviceLabel(scope.deviceId);
   const onDevice = scope.remote ? ` on ${peerLabel}` : "";
-  // A clone or a publish outlives the dialog, so what follows has to
-  // know whether anyone is still looking.
+  // A clone or a publish can outlive its view (a peer that leaves
+  // midway takes its tab with it), so what follows has to know whether
+  // anyone is still looking.
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -69,8 +70,8 @@ export function useNewCheckout({
   // resolved it, absolute.
   const dest = tildify(`${parent}${folder}`, home);
 
-  // Lands on the project, or, closed meanwhile, says it landed and
-  // leaves the user where they are.
+  // Lands on the project, or, its view gone meanwhile, says it landed
+  // and leaves the user where they are.
   const finish = (project: Project, made: string) => {
     if (!mounted.current) {
       toast.success(`${made} ${project.name}${onDevice}`);

@@ -47,6 +47,14 @@ export const shellCallsContract = defineContract(
   // Restart the app with nobody at it to answer a prompt: after a
   // data-folder move a peer asked for.
   invoke("relaunch", VoidSchema, VoidSchema),
+  // A data-folder move here failed after the host let go of the folder:
+  // the shell says why and offers a restart, the app not running on
+  // without its watchers.
+  invoke(
+    "moveFailed",
+    strict(Schema.Struct({ reason: Schema.String })),
+    VoidSchema,
+  ),
   invoke("updaterCheck", VoidSchema, VoidSchema),
   // `unattended` marks a call another device made: a busy host refuses
   // it instead of prompting a screen nobody watches.

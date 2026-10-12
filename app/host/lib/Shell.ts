@@ -19,6 +19,10 @@ export class Shell extends Context.Service<
     // data-folder move a peer asked for. Asked without waiting, since
     // the shell stops this process to do it.
     readonly relaunch: Effect.Effect<void>;
+    // A move at this machine failed after the folder was let go: the
+    // shell shows why with one way on, a restart. Asked without
+    // waiting.
+    readonly moveFailed: (reason: string) => Effect.Effect<void>;
     // The updater, which a peer's Settings page reads and drives here.
     // `unattended` marks a call another device made: a busy host
     // refuses it instead of prompting a screen nobody watches.

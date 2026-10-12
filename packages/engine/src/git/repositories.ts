@@ -63,6 +63,8 @@ export const makeRepositories = ({
       // of all for a clone asked for from another device), so git's own
       // is off and an unauthenticated remote fails rather than waits.
       // `config` is written into the new checkout's config too.
+      // Interrupted (a caller's cancel), the runner ends git and waits
+      // for it, and git removes the folder it made on its way out.
       yield* run(
         input.parentDir,
         [
@@ -94,7 +96,8 @@ export const makeRepositories = ({
 
     // A repository at `parentDir/name`, with an empty first commit: a
     // worktree branches off the default branch, and an unborn one has
-    // nothing to branch off. A failed start leaves nothing behind.
+    // nothing to branch off. A start that fails or is interrupted (the
+    // add-project dialog's Cancel) leaves nothing behind.
     const createRepository = Effect.fn("Git.createRepository")(function* (
       parentDir: string,
       name: string,
@@ -123,7 +126,7 @@ export const makeRepositories = ({
           "Initial commit",
         ]);
       }).pipe(
-        Effect.tapError(() =>
+        Effect.onError(() =>
           Effect.ignore(fs.remove(dest, { recursive: true })),
         ),
       );

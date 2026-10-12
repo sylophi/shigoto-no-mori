@@ -13,10 +13,7 @@ import { ChevronRightIcon, CheckIcon } from "lucide-react";
 import type { WithoutTitle } from "./tooltip.tsx";
 import { useThemeRoot } from "../root.tsx";
 
-const MENU_SURFACE_CLASS = cn(
-  FLOATING_SURFACE_CLASS,
-  "min-w-40 overflow-x-hidden",
-);
+const MENU_SURFACE_CLASS = cn(FLOATING_SURFACE_CLASS, "overflow-x-hidden");
 const MENU_LABEL_CLASS =
   "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7";
 const MENU_ITEM_CLASS =
@@ -81,7 +78,8 @@ type MenuPopupSurfaceProps = MenuPrimitive.Popup.Props &
 // Portal, Positioner, Popup: the surface every menu popup renders.
 // Base UI's ContextMenu parts are the same components, so
 // primitives/context-menu.tsx renders this too, with placement left unset,
-// which is how Base UI knows to anchor at the pointer.
+// which is how Base UI knows to anchor at the pointer. It sets no
+// minimum width, so a menu is as wide as its widest item.
 export function MenuPopupSurface({
   align,
   alignOffset,
@@ -192,6 +190,26 @@ function DropdownMenuItem({
   );
 }
 
+// The label of an item that asks for a second click, swapping to its
+// confirm prompt once armed. Both are laid out, one hidden, so the
+// menu keeps its width through the swap.
+function DropdownMenuArmedLabel({
+  armed,
+  label,
+  armedLabel,
+}: {
+  armed: boolean;
+  label: ReactNode;
+  armedLabel: ReactNode;
+}) {
+  return (
+    <span className="grid *:col-start-1 *:row-start-1 *:flex *:items-center *:gap-1.5">
+      <span className={cn(armed && "invisible")}>{label}</span>
+      <span className={cn(!armed && "invisible")}>{armedLabel}</span>
+    </span>
+  );
+}
+
 function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
   if (use(StaticMenuContext)) return props.children as ReactNode;
   return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />;
@@ -245,10 +263,7 @@ function DropdownMenuSubContent({
   return (
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
-      className={cn(
-        "w-auto min-w-[96px] rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-        className,
-      )}
+      className={cn("shadow-lg", className)}
       align={align}
       alignOffset={alignOffset}
       side={side}
@@ -363,6 +378,7 @@ export {
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuArmedLabel,
   DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

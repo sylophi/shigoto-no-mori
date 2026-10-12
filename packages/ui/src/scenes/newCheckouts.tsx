@@ -333,6 +333,7 @@ export function AddProjectPartsScene() {
           title="sylophi/kawaii-cam"
           status="Cloning…"
           dest={`${DEV}/kawaii-cam`}
+          onCancel={noop}
         />
       </ModalBox>
       <ModalBox>
