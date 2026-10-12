@@ -392,7 +392,7 @@ function DiscardMenu({
       >
         <Ellipsis aria-hidden className="size-3.5" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={4} className="min-w-48">
+      <DropdownMenuContent align="end" sideOffset={4}>
         <DropdownMenuItem disabled={changes.busy} onClick={changes.onStash}>
           <Archive />
           Stash all changes
@@ -625,7 +625,7 @@ function FileMenu({
   const { row } = entry;
   const ticked = row && changes ? tickedOf(changes.picks, row) : undefined;
   return (
-    <ContextMenuContent className="min-w-48">
+    <ContextMenuContent>
       {row?.conflicted && changes && (
         <>
           <DropdownMenuItem
