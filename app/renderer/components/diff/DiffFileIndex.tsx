@@ -87,6 +87,8 @@ export function DiffFileIndex({
   const listRef = useRef<HTMLDivElement>(null);
   // The changes list's moves, unless it only reads.
   const editable = changes && !changes.readOnly ? changes : undefined;
+  // ...and the header's bulk ones, while there is something to act on.
+  const bulk = editable && editable.files.length > 0 ? editable : undefined;
   const needle = query.trim().toLowerCase();
   const matches = needle
     ? entries.filter(
@@ -120,11 +122,16 @@ export function DiffFileIndex({
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscard | null>(
     null,
   );
-  // The row whose context menu is up. One menu serves the whole list,
-  // anchored at the pointer: a menu per row would mount a menu's worth
-  // of state on every one of hundreds of rows to show one at a time.
-  // The key outlives `open` so the menu keeps its items while it closes.
-  const [menu, setMenu] = useState<{ key: string; open: boolean } | null>(null);
+  // The row whose context menu is up, or null for the list's empty
+  // space, which has the header's bulk menu. One menu serves the whole
+  // list, anchored at the pointer: a menu per row would mount a menu's
+  // worth of state on every one of hundreds of rows to show one at a
+  // time. The key outlives `open` so the menu keeps its items while it
+  // closes.
+  const [menu, setMenu] = useState<{
+    key: string | null;
+    open: boolean;
+  } | null>(null);
   const menuEntry = menu && entries.find((entry) => entry.key === menu.key);
   // A long press on a touch screen can end in a click on the row it
   // opened over, which would select the file (on a phone, closing the
@@ -134,6 +141,11 @@ export function DiffFileIndex({
     if (!menuOpenRef.current) onSelect(key);
   };
   const requestDiscard = (key: string) => setPendingDiscard({ key });
+  // The header's ⋯, a right click on the header, and one on the list's
+  // empty space all open these.
+  const bulkItems = bulk && (
+    <ChangesMenuItems changes={bulk} onPick={setPendingDiscard} />
+  );
 
   // Empty lists say so: a changes list in its header (or that it is
   // still loading), a patch's in the list.
@@ -197,20 +209,36 @@ export function DiffFileIndex({
 
       {changes && (
         // The changes list's own header: the box that ticks every row,
-        // what the ticks add up to, and the bulk discards.
-        <div className="flex items-center gap-2 pt-2 pr-2 pb-1 pl-3">
-          {/* Nothing to tick or throw away on an empty list, so the
-              header is just its line. */}
-          {editable && changes.files.length > 0 && (
-            <SelectAllCheckbox changes={editable} />
-          )}
-          <span className="tabular min-h-5 min-w-0 flex-1 truncate text-xs leading-5 text-muted-foreground">
-            {describeSelection(changes)}
-          </span>
-          {editable && changes.files.length > 0 && (
-            <DiscardMenu changes={editable} onPick={setPendingDiscard} />
-          )}
-        </div>
+        // what the ticks add up to, and the bulk actions, on its ⋯ and
+        // on a right click anywhere on it. Nothing to tick or throw away
+        // on an empty list, so there the header is just its line.
+        <ContextMenu disabled={!bulkItems}>
+          <ContextMenuTrigger
+            render={
+              <div className="flex items-center gap-2 pt-2 pr-2 pb-1 pl-3" />
+            }
+          >
+            {bulk && <SelectAllCheckbox changes={bulk} />}
+            <span className="tabular min-h-5 min-w-0 flex-1 truncate text-xs leading-5 text-muted-foreground">
+              {describeSelection(changes)}
+            </span>
+            {bulkItems && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="Change actions"
+                  data-icon-button
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground"
+                >
+                  <Ellipsis aria-hidden className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" sideOffset={4}>
+                  {bulkItems}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </ContextMenuTrigger>
+          {bulkItems && <ContextMenuContent>{bulkItems}</ContextMenuContent>}
+        </ContextMenu>
       )}
 
       <ContextMenu
@@ -221,14 +249,13 @@ export function DiffFileIndex({
             setMenu((current) => current && { ...current, open: false });
             return;
           }
-          // Only a row has a menu: a right click on the list's empty
-          // space finds no key and leaves it closed.
+          // A row has its own menu. The list's empty space has the
+          // header's, while it has one, and otherwise stays closed.
           const target = details.event.target;
-          const key =
-            target instanceof Element
-              ? target.closest("[data-row-key]")?.getAttribute("data-row-key")
-              : null;
-          if (key) {
+          const row =
+            target instanceof Element ? target.closest("[data-row-key]") : null;
+          const key = row?.getAttribute("data-row-key") ?? null;
+          if (key || bulkItems) {
             menuOpenRef.current = true;
             setMenu({ key, open: true });
           }
@@ -262,12 +289,15 @@ export function DiffFileIndex({
                 />
               ))}
         </ContextMenuTrigger>
-        {menuEntry && (
+        {menuEntry ? (
           <FileMenu
             entry={menuEntry}
             changes={editable}
             onDiscard={() => setPendingDiscard({ key: menuEntry.key })}
           />
+        ) : (
+          menu?.key === null &&
+          bulkItems && <ContextMenuContent>{bulkItems}</ContextMenuContent>
         )}
       </ContextMenu>
 
@@ -371,51 +401,41 @@ function describeDiscard(
 }
 
 // "Unticked" is disabled while nothing is ticked, since "the rest" would
-// then be all of it and the item below already says so.
-function DiscardMenu({
+// then be all of it and the item above already says so.
+function ChangesMenuItems({
   changes,
   onPick,
 }: {
   changes: DiffChangesControls;
   onPick: (pending: PendingDiscard) => void;
 }) {
-  const total = changes.files.length;
   const unticked = discardFiles("unticked", changes).length;
-  const canDiscardUnticked = unticked > 0 && unticked < total && !changes.busy;
+  const canDiscardUnticked =
+    unticked > 0 && unticked < changes.files.length && !changes.busy;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Change actions"
-        disabled={total === 0}
-        data-icon-button
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
+    <>
+      <DropdownMenuItem
+        variant="destructive"
+        disabled={changes.busy}
+        onClick={() => onPick("all")}
       >
-        <Ellipsis aria-hidden className="size-3.5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={4}>
-        <DropdownMenuItem disabled={changes.busy} onClick={changes.onStash}>
-          <Archive />
-          Stash all changes
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={!canDiscardUnticked}
-          onClick={() => onPick("unticked")}
-        >
-          <Undo2 />
-          Discard unticked files
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={changes.busy}
-          onClick={() => onPick("all")}
-        >
-          <Undo2 />
-          Discard all changes
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <Undo2 />
+        Discard all changes
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        variant="destructive"
+        disabled={!canDiscardUnticked}
+        onClick={() => onPick("unticked")}
+      >
+        <Undo2 />
+        Discard unticked files
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={changes.busy} onClick={changes.onStash}>
+        <Archive />
+        Stash all changes
+      </DropdownMenuItem>
+    </>
   );
 }
 
