@@ -207,6 +207,40 @@ function consumeRelaunchBudget(now: number): boolean {
   return true;
 }
 
+// Best-effort, opt-in, rate-limited relaunch. Returns true when it has
+// scheduled a relaunch (the caller then exits so the fresh instance
+// takes over), false when no relaunch is warranted (not opted in, or
+// the budget is exhausted) so the caller still exits as before. A wrong
+// relaunch is worse than none, so it happens only when the user opted
+// into keepReachable, and only within the persisted rate limit.
+export function tryFatalRelaunch(rememberWindows: () => void): boolean {
+  // The opt-in gate. On a normal user's machine a stray uncaught error
+  // must not become a restart, so respawn only a machine the user
+  // asked to keep reachable.
+  if (!keepReachableEnabled()) return false;
+  if (!consumeRelaunchBudget(Date.now())) {
+    log.error(
+      "[liveness] fatal-relaunch rate limit reached, letting the crash stand",
+    );
+    return false;
+  }
+  log.error(
+    "[liveness] keepReachable is on, attempting a best-effort relaunch",
+  );
+  try {
+    // Mark relaunching first so a quit that somehow starts is a
+    // hurried one, with no busy-action prompt.
+    scheduleRelaunch();
+    rememberWindows();
+    rememberVisibilityForRestart();
+  } catch (error) {
+    log.error(
+      `[liveness] scheduling the relaunch failed: ${errorMessageOf(error)}`,
+    );
+  }
+  return true;
+}
+
 // Install the last-resort handlers for an otherwise-fatal main-process
 // error. Conservative by design: a wrong relaunch is worse than none, so
 // a relaunch happens only when the user opted into keepReachable, only
@@ -220,38 +254,7 @@ export function installFatalRecovery(deps: {
   // The windows to bring back, as a quit remembers them.
   rememberWindows: () => void;
 }): void {
-  // Best-effort, opt-in, rate-limited relaunch. Returns true when it has
-  // scheduled a relaunch (the caller then exits so the fresh instance
-  // takes over), false when no relaunch is warranted (not opted in, or
-  // the budget is exhausted) so the caller still exits to preserve the
-  // prior crash-and-exit behavior.
-  const tryRelaunch = (): boolean => {
-    // The opt-in gate. On a normal user's machine a stray uncaught error
-    // must not become a restart, so respawn only a machine the user
-    // asked to keep reachable.
-    if (!keepReachableEnabled()) return false;
-    if (!consumeRelaunchBudget(Date.now())) {
-      log.error(
-        "[liveness] fatal-relaunch rate limit reached, letting the crash stand",
-      );
-      return false;
-    }
-    log.error(
-      "[liveness] keepReachable is on, attempting a best-effort relaunch",
-    );
-    try {
-      // Mark relaunching first so a quit that somehow starts is a
-      // hurried one, with no busy-action prompt.
-      scheduleRelaunch();
-      deps.rememberWindows();
-      rememberVisibilityForRestart();
-    } catch (error) {
-      log.error(
-        `[liveness] scheduling the relaunch failed: ${errorMessageOf(error)}`,
-      );
-    }
-    return true;
-  };
+  const tryRelaunch = () => tryFatalRelaunch(deps.rememberWindows);
   process.on("uncaughtException", (error) => {
     log.error("[liveness] uncaughtException:", error);
     // A process uncaughtException listener suppresses Node and Electron's
