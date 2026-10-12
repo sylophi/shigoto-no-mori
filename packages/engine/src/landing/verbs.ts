@@ -112,7 +112,7 @@ export const makeVerbs = ({
         const method = yield* resolveMethod(project, flag, allowed, "merge");
         const chain = yield* stackChain(project, number, lookups, "merge");
         const set = yield* stackMergeSet(chain, "merge");
-        yield* mergeStackSet(
+        const queued = yield* mergeStackSet(
           project,
           number,
           method,
@@ -123,7 +123,11 @@ export const makeVerbs = ({
           reporter,
         );
         yield* persistMethod(project, method);
-        return { ok: true, method };
+        // A stack a merge queue took (or one layer of it) is still open:
+        // the app reads a document with no outcome as merged.
+        return queued
+          ? { ok: true, method, outcome: "queued" }
+          : { ok: true, method };
       });
 
     const merge = Effect.fn("Landing.merge")(function* (

@@ -1756,7 +1756,11 @@ esac`,
       "fox",
     );
     assert.equal(merged.code, 0, merged.stderr);
-    assert.deepEqual(merged.doc, { ok: true, method: "squash" });
+    assert.deepEqual(merged.doc, {
+      ok: true,
+      method: "squash",
+      outcome: "queued",
+    });
     assert.ok(
       merged.stderr.endsWith(
         "\nthe stack is in the merge queue; it lands when the queue processes it\n",

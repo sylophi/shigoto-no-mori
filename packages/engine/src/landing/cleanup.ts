@@ -264,18 +264,26 @@ export const makeCleanup = ({
           // execDone pulled the primary branch, or says why it couldn't.
           // A PR into another line still leaves that line's checkout
           // behind.
+          const skipped =
+            catchUpSkipped === undefined ? undefined : { catchUpSkipped };
           const caught =
             base !== "" && base !== target.success.primaryBranch
               ? yield* catchUpBase(target.success, base, Effect.succeed(listed))
-              : catchUpSkipped === undefined
-                ? undefined
-                : { catchUpSkipped };
-          if (caught !== undefined && reporter.caughtUp !== undefined) {
-            yield* reporter.caughtUp(caught);
+              : undefined;
+          for (const said of [skipped, caught]) {
+            if (said !== undefined && reporter.caughtUp !== undefined) {
+              yield* reporter.caughtUp(said);
+            }
           }
+          // The base's catch-up as the document has it, and the primary's
+          // skipped pull beside it.
           return doneDocument(row, worktree.branch, deleted, {
             ...extra,
+            ...skipped,
             ...caught,
+            ...(skipped !== undefined && caught !== undefined
+              ? { catchUpSkipped }
+              : {}),
           });
         }
         const caught: CatchUp = Result.isFailure(target)
