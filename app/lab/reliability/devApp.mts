@@ -115,8 +115,8 @@ export class DevApp {
       async () =>
         (await pageApi(page)).evaluate(async (api, tunnel) => {
           const [account, hub] = await Promise.all([
-            api.account.status(),
-            api.hub.status(),
+            api.run(api.account.status()),
+            api.run(api.hub.status()),
           ]);
           return (
             account.signedIn &&
@@ -277,7 +277,7 @@ export class DevApp {
   // session (dev-app.md, "Rules"), so this is the account layer's.
   async revoke(): Promise<void> {
     if (this.windows().length === 0) return;
-    await this.eval((api) => api.account.signOut()).catch(() => {});
+    await this.eval((api) => api.run(api.account.signOut())).catch(() => {});
   }
 
   removeProfile(): void {

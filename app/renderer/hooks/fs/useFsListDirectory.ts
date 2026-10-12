@@ -6,7 +6,8 @@ export function useFsListDirectory(path: string, enabled = true) {
   const { api, keys } = useHostScope();
   return useQuery<DirectoryListing>({
     queryKey: keys.fsListDirectory(path),
-    queryFn: () => api.fs.listDirectory({ path }),
+    queryFn: ({ signal }) =>
+      api.run(api.fs.listDirectory({ path }), { signal }),
     enabled,
     meta: { errorTitle: "Couldn't read folder" },
   });

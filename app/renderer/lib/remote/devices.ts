@@ -11,13 +11,13 @@
 // is the hub bridge in main); it is the renderer's wiring around it.
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import type { RendererContractApi } from "@shared/ipc/client";
+import type { HostApi } from "@/lib/runtime/Api";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
-// The api over one device's transports. Same shape as the page api's
-// contract methods, minus the bridge-only extras (deviceId, appVersion).
-export type RemoteDeviceApi = RendererContractApi;
+// A peer's api over the hub hop: its host modules (lib/runtime/Api.ts,
+// peerApi).
+export type RemoteDeviceApi = HostApi;
 
 export type RemoteDevice = {
   // The remote host's device id, from the account registry (always

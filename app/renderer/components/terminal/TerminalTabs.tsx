@@ -68,8 +68,8 @@ export function TerminalTabs({
   const pickedSlot = slots.find((slot) => scriptTabId(slot) === selectedId);
 
   const open = () =>
-    void api.terminals
-      .open({ owner })
+    void api
+      .run(api.terminals.open({ owner }))
       .then(({ terminalId }) => pick(terminalId))
       .catch((error: unknown) =>
         notifyError("Couldn't open a terminal", error),
@@ -105,8 +105,8 @@ export function TerminalTabs({
           scripts?.onClose(slot);
           return;
         }
-        void api.terminals
-          .close({ terminalId: id })
+        void api
+          .run(api.terminals.close({ terminalId: id }))
           .catch((error: unknown) =>
             notifyError("Couldn't close the terminal", error),
           );

@@ -1,5 +1,5 @@
 // How a contract's schemas are read: the registrar, the client over a
-// peer's transport (shared/ipc/buildClient.ts), the lab bridge, the web
+// peer's link (renderer/lib/runtime/atoms.ts), the lab bridge, the web
 // stubs and the JSON file readers decode through here.
 //
 // A schema's decoded value serializes to the JSON it decodes from, so

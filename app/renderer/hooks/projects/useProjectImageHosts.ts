@@ -17,8 +17,10 @@ export function useProjectImageHosts(projectId: string): readonly string[] {
     queryFn:
       api === undefined
         ? skipToken
-        : () =>
-            forestRead(deviceId, () => api.projects.cloneUrl({ projectId })),
+        : ({ signal }) =>
+            forestRead(deviceId, () =>
+              api.run(api.projects.cloneUrl({ projectId }), { signal }),
+            ),
     select: (url) => {
       const host = url === null ? null : remoteHost(url);
       return host === null ? NONE : [host];

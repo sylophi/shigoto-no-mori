@@ -14,7 +14,10 @@ export function useWorktreeFile(
   const { api, keys, remote } = useHostScope();
   return useQuery<WorktreeFile>({
     queryKey: keys.worktreeFile(projectId, worktreeId, path),
-    queryFn: () => api.worktrees.readFile({ projectId, worktreeId, path }),
+    queryFn: ({ signal }) =>
+      api.run(api.worktrees.readFile({ projectId, worktreeId, path }), {
+        signal,
+      }),
     // Long enough that stepping between files already looked at doesn't
     // read (and, from a peer, ship) each one again.
     staleTime: 5_000,

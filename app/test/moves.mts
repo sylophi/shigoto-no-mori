@@ -24,11 +24,11 @@ import {
   MOVE_CANCELLED,
   syncContract,
 } from "@shigomori/contracts/modules/sync";
-import { buildClient } from "@shared/ipc/buildClient";
+import { effectClient } from "@shared/ipc/effectClient";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import * as Moves from "../host/lib/sync/Moves.ts";
-import { bootDirectWire } from "./lib/directBoot.mts";
+import { bootDirectWire, linkOver } from "./lib/directBoot.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const run = <A, E>(effect: Effect.Effect<A, E, Moves.Moves>) =>
@@ -135,29 +135,34 @@ it("over the device link: a peer's move cancelled by key fails its call with the
     ],
   });
   listener.setAccepts(true);
-  const mirror = buildClient(mirrorContract, toListener.transport);
-  const sync = buildClient(syncContract, toListener.transport);
-  const start = mirror
-    .startTo({
+  const link = linkOver(toListener.transport);
+  const mirror = effectClient(mirrorContract, link);
+  const sync = effectClient(syncContract, link);
+  const start = Effect.runPromise(
+    mirror.startTo({
       targetDeviceId: "copy-device",
       projectId: "p",
       worktreeId: "0123456789ab",
       ignoreMode: "gitignored",
       ignores: [],
-    })
-    .then(
-      () => assert.fail("a cancelled move answered"),
-      (error: unknown) => error,
-    );
+    }),
+  ).then(
+    () => assert.fail("a cancelled move answered"),
+    (error: unknown) => error,
+  );
   await Effect.runPromise(Deferred.await(started));
   assert.deepEqual(
-    await sync.cancelMove({ sourceWorktreeId: "0123456789ab" }),
+    await Effect.runPromise(
+      sync.cancelMove({ sourceWorktreeId: "0123456789ab" }),
+    ),
     { cancelled: true },
   );
   const error = await start;
   assert.ok(isMoveCancelledError(error), String(error));
   assert.deepEqual(
-    await sync.cancelMove({ sourceWorktreeId: "0123456789ab" }),
+    await Effect.runPromise(
+      sync.cancelMove({ sourceWorktreeId: "0123456789ab" }),
+    ),
     { cancelled: false },
   );
 });

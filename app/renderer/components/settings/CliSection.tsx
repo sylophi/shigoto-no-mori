@@ -26,7 +26,7 @@ export function CliSection() {
   const { data: runtime } = useRuntimeInfo();
   const { data: status, error } = useQuery<CliStatus>({
     queryKey: keys.cli(),
-    queryFn: () => api.cli.status(),
+    queryFn: ({ signal }) => api.run(api.cli.status(), { signal }),
     staleTime: peerStaleTime(remote),
     meta: gatedHostReadMeta(remote, "Couldn't check the CLI install"),
   });
@@ -35,12 +35,13 @@ export function CliSection() {
     queryClient.setQueryData(keys.cli(), next);
   };
   const install = useMutation({
-    mutationFn: (payload: { force: boolean }) => api.cli.install(payload),
+    mutationFn: (payload: { force: boolean }) =>
+      api.run(api.cli.install(payload)),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't install the CLI" },
   });
   const uninstall = useMutation({
-    mutationFn: () => api.cli.uninstall(),
+    mutationFn: () => api.run(api.cli.uninstall()),
     onSuccess: (next) => {
       applyStatus(next);
       // CLI uninstall sweeps the shell hooks too.
@@ -107,7 +108,7 @@ function ShellIntegrationBlock({ name }: { name: string }) {
   const home = runtime?.homedir ?? null;
   const { data: status, error } = useQuery<ShellIntegrationStatus>({
     queryKey: keys.cliShell(),
-    queryFn: () => api.cli.shellStatus(),
+    queryFn: ({ signal }) => api.run(api.cli.shellStatus(), { signal }),
     staleTime: peerStaleTime(remote),
     meta: gatedHostReadMeta(remote, "Couldn't check shell integration"),
   });
@@ -116,12 +117,12 @@ function ShellIntegrationBlock({ name }: { name: string }) {
     queryClient.setQueryData(keys.cliShell(), next);
   };
   const enable = useMutation({
-    mutationFn: () => api.cli.shellInstall(),
+    mutationFn: () => api.run(api.cli.shellInstall()),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't enable shell integration" },
   });
   const remove = useMutation({
-    mutationFn: () => api.cli.shellUninstall(),
+    mutationFn: () => api.run(api.cli.shellUninstall()),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't remove shell integration" },
   });

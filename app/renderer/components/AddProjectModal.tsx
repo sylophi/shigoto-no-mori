@@ -17,6 +17,7 @@ import {
   AddProjectHeaderView,
   AddProjectNoDeviceView,
 } from "@shigomori/ui/views/AddProjectModalView.tsx";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // Standalone host for the add-project flow (File → Add Project… and
@@ -27,7 +28,8 @@ export function AddProjectModal() {
   const { addProjectOpen, addProjectRequest, openAddProject } = useOverlays();
 
   useEffect(
-    () => api.nav.onAddProject(() => openAddProject()),
+    () =>
+      api.listen(api.pushes(navContract, "addProject"), () => openAddProject()),
     [openAddProject, api],
   );
 

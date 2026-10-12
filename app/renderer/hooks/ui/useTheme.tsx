@@ -112,7 +112,7 @@ export function ThemeProvider({
   // the applied theme (including unsaved previews). Non-persisting: the
   // saved value lands through the clientConfig write instead.
   useEffect(() => {
-    if (!fromRoot) void api.window.previewTheme({ theme: applied });
+    if (!fromRoot) void api.run(api.window.previewTheme({ theme: applied }));
   }, [fromRoot, applied, api]);
 
   // Mirror the saved value into localStorage so the next launch can paint

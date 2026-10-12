@@ -32,7 +32,7 @@ export function MigrationPage() {
   // On to the app, for every window: the shell keeps the page until one
   // goes on past it.
   const goOn = () => {
-    void api.migration.continue();
+    void api.run(api.migration.continue());
     void navigate({ to: "/", replace: true });
   };
 
@@ -42,7 +42,7 @@ export function MigrationPage() {
     (migration !== undefined && migration.planned && !migrationOwed(migration));
   useEffect(() => {
     if (open) {
-      void api.migration.continue();
+      void api.run(api.migration.continue());
       void navigate({ to: "/", replace: true });
     } else if (nothing) {
       void navigate({ to: "/", replace: true });

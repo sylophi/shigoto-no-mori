@@ -9,7 +9,7 @@ export function useDetectedLaunchers() {
   const { api, keys } = useHostScope();
   return useQuery<readonly DetectedLauncher[]>({
     queryKey: keys.detectedLaunchers(),
-    queryFn: () => api.launchers.detect(),
+    queryFn: ({ signal }) => api.run(api.launchers.detect(), { signal }),
     // Detection spawns ~15 `which` calls; cache for the session. The
     // answer only changes when the user installs/removes an app.
     staleTime: Number.POSITIVE_INFINITY,
@@ -30,7 +30,8 @@ export function useLauncherForProject(projectId: string | null) {
     queryKey: keys.projectLaunchers(projectId),
     queryFn:
       projectId !== null
-        ? () => api.launchers.forProject({ projectId })
+        ? ({ signal }) =>
+            api.run(api.launchers.forProject({ projectId }), { signal })
         : skipToken,
     // Lock the order for the lifetime of the route mount. The page picks
     // up a fresh list when the user navigates in (refetchOnMount: "always"
@@ -53,7 +54,7 @@ export function useLaunch() {
   const { api } = useHostScope();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject pins order for the route mount so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
   return useMutation<void, Error, LaunchInput>({
-    mutationFn: (input) => api.launchers.launch(input),
+    mutationFn: (input) => api.run(api.launchers.launch(input)),
     meta: { errorTitle: "Couldn't launch" },
   });
 }

@@ -2,8 +2,10 @@
 
 What a `js` step can ask a device window, and the same verbs from a
 terminal. The page's api (`renderer/lib/runtime/pageApi.tsx`) is built
-over the window's real links, to its shell and to its host, and a `js`
-step awaits what a call returns.
+over the window's real links, to its shell and to its host. A call is an
+effect, and the api runs it on the window's runtime: `api.run(call)` is
+the call's answer as a Promise, which a `js` step awaits. The calls below
+are written bare; run each the same way.
 
 The app keeps it in a React context, not on `window`. A dev build, the
 fake host and an app started with `--sm-lab` hand it to tools outside
@@ -12,7 +14,7 @@ which `api` below stands for. Reaching it takes a debugging port, which
 a packaged build refuses (`dev-app.md`, "Packaged build"):
 
 ```json
-{ "js": "window.__smLab.api.hub.status()" }
+{ "js": "const api = window.__smLab.api; return api.run(api.hub.status())" }
 ```
 
 The lab's scripts read it through `reliability/pageApi.mts`.
@@ -29,7 +31,7 @@ The lab's scripts read it through `reliability/pageApi.mts`.
 | `api.account.signOut()`                                             | Revokes this device and clears the credential. Clerk is untouched.                                                                                                                                                                                                                                   |
 | `api.hub.status()`                                                  | Socket phase, `onlineDeviceIds`, `peerAppVersions` (one key per direct session), `peerAcceptsCommands` (whether each runs this device's commands), `peerSharesData` (whether each shares with it at all), `tunnel`.                                                                                                                                         |
 | `api.hub.invokePeer({deviceId, channel, input})`                    | Any host call on a peer, e.g. `projects:list`, `worktrees:list`, `worktrees:create`.                                                                                                                                                                                                                 |
-| `api.peerApi(deviceId)`                                             | A peer's api over the same hop: its host modules, e.g. `api.peerApi(id).projects.list()`, and its views (`terminals.attach`). Its client modules refuse.                                                                                                                                        |
+| `api.peerApi(deviceId)`                                             | A peer's api over the same hop: its host modules, e.g. `peer.run(peer.projects.list())`, and its pushes and views (`peer.view(terminalsContract, "attach", input)`). It has no client modules.                                                                                                     |
 | `api.sync.pullWorktree({...})`                                      | Brings a peer's worktree here. The payload is the contract's, in `packages/contracts/src/modules/sync.ts`. With `ignoreMode` and `ignores` (the mirror's leave-out rule) it also brings the ignored files the rule admits, through the mirror engine run once and one way, source to here (the `files` step, reported as `files` on the result). `gitignored` has nothing to bring and skips it. |
 | `api.sync.sendWorktree({targetDeviceId, projectId, worktreeId, ...})` | The pull turned around: sends one of this device's worktrees to a peer (the local page's "Transplant to"). The peer runs the pull's own landing, asking back over a link this device opens, and its progress (the create's phases included) comes back here. Takes the pull's `runSetup`, `ignoreMode`, `ignores` and `cloneInto`, and returns the pull's result, with `worktree` the copy on the peer. Only the peer has to accept commands. |
 | `api.sync.cancelMove({sourceWorktreeId})`                           | Cancels a move in flight, by the source worktree its progress is keyed under: a `pullWorktree` or `sendWorktree` this device runs, or a `mirror.startTo` (asked of the device running it, the peer for "Mirror here"). The move fails with `The move was cancelled`, whatever it was waiting on: the create's CLI child (and the setup script it runs) is killed, the worktree it made is removed with `sm rm --force` (its cleanup on a one-minute clock), a link is reset, a files-step session ended, and a mirror's session terminated if the open outran the cancel. A repo the move cloned first stays as a project. Nothing on the source changes, and no receipt is kept, so no teardown follows. `cancelled: false` means nothing by that key was in flight (the move is over). A caller that goes away (the window reloads, a peer's or the CLI's socket dies) cancels the same way. The dialogs' running step has the Cancel button. Escape and the backdrop still don't close it. |
@@ -53,8 +55,9 @@ The lab's scripts read it through `reliability/pageApi.mts`.
 `api.<module>.<call>` and `hub.invokePeer` both take the call's
 contract payload, from `packages/contracts/src/modules/<module>.ts`,
 e.g. `portForward.stop({forwardId})` and
-`ports.list({projectId, worktreeId})`. A push subscribes as
-`on` and its capitalized name, e.g. `mirror.onChanged(handler)`.
+`ports.list({projectId, worktreeId})`. A push is a stream, by its
+module and name, and `api.listen` reads it until the stop it returns:
+`api.listen(api.pushes(mirrorContract, "changed"), handler)`.
 
 A rejection naming a missing or unexpected key means the payload does not
 match the call's contract schema.

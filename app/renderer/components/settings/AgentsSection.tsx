@@ -12,7 +12,7 @@ export function AgentsSection() {
   const queryClient = useQueryClient();
   const { data: harnesses } = useQuery<readonly AgentHarnessStatus[]>({
     queryKey: keys.agents(),
-    queryFn: () => api.agents.status(),
+    queryFn: ({ signal }) => api.run(api.agents.status(), { signal }),
     meta: gatedHostReadMeta(remote, "Couldn't check the agent hooks"),
   });
   const applyStatus = (next: readonly AgentHarnessStatus[]) => {
@@ -20,7 +20,7 @@ export function AgentsSection() {
   };
   const setHooks = useMutation({
     mutationFn: (input: { harness: string; install: boolean }) =>
-      api.agents.setHooks(input),
+      api.run(api.agents.setHooks(input)),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't change the hooks" },
   });

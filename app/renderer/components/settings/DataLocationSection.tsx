@@ -35,7 +35,7 @@ export function DataLocationSection() {
   const moveTo = async (parent?: string) => {
     setMoving(true);
     try {
-      await api.runtime.moveDataDir({ parentDir: parent });
+      await api.run(api.runtime.moveDataDir({ parentDir: parent }));
       if (remote) {
         toast.success(`Data folder moved. The app${there} is restarting.`);
         setMovedFrom(root);
@@ -45,7 +45,7 @@ export function DataLocationSection() {
       // Acknowledge: the main process relaunches only after this call,
       // which can't fire before the moveDataDir reply above was delivered.
       // Fire-and-forget, because the app quits out from under the promise.
-      void page.window.relaunch();
+      void page.run(page.window.relaunch());
     } catch (err) {
       notifyError("Couldn't move data folder", err);
       setMoving(false);
@@ -70,8 +70,8 @@ export function DataLocationSection() {
       resetArmed={reset.armed}
       onReveal={() => {
         if (root) {
-          page.shell
-            .showItemInFolder({ path: root })
+          page
+            .run(page.shell.showItemInFolder({ path: root }))
             .catch((err) => notifyError("Couldn't reveal folder", err));
         }
       }}

@@ -9,7 +9,7 @@ export function fsIsGitRepoQueryOptions(
 ) {
   return queryOptions<boolean>({
     queryKey: keys.fsIsGitRepo(path),
-    queryFn: () => api.fs.isGitRepo({ path }),
+    queryFn: ({ signal }) => api.run(api.fs.isGitRepo({ path }), { signal }),
     // Boolean UI hint. Failure falls back to "not a repo" cleanly.
     meta: { silentError: true },
   });

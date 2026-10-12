@@ -16,7 +16,7 @@ import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import type { HubHandlers } from "@shared/hub/bridgeHandlers";
+import { type HubHandlers, servedInvokePeer } from "@shared/hub/bridgeHandlers";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -122,7 +122,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
-import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
+import type { ClientTransport } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
@@ -740,14 +740,7 @@ export function registerHostHandlers(): void {
         try: async () => hubHandlers().status(undefined, undefined),
         catch: callFailureOf,
       }),
-    invokePeer: (
-      input: Parameters<HubHandlers["invokePeer"]>[0],
-      ctx: HandlerContext,
-    ) =>
-      Effect.tryPromise({
-        try: async () => hubHandlers().invokePeer(input, ctx),
-        catch: callFailureOf,
-      }),
+    invokePeer: servedInvokePeer(hubHandlers),
   });
   registerViews(hubContract, {
     watchPeer: (input: Parameters<HubHandlers["watchPeer"]>[0]) =>

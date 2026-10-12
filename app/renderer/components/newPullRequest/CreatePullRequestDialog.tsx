@@ -200,7 +200,7 @@ export function CreatePullRequestDialog({
     }
     for (const { attachment, url, stem, alt } of fetched) {
       const { id } = attachment;
-      api.githubCli.stageAttachmentFromUrl({ id, stem, url }).then(
+      api.run(api.githubCli.stageAttachmentFromUrl({ id, stem, url })).then(
         ({ name, type }) => {
           // Taken out while it was fetched: what came goes too.
           if (!formOf(key).attachments.some((a) => a.id === id)) {

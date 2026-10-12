@@ -10,10 +10,8 @@ is here is the app's own.
   (`remote/hostLink.ts`), the hub connection and the direct plane that
   dials peers through it, and the Noise handshake and device keys.
 - `ipc/`: what a side serves, module by module, for its RPC server
-  (`served.ts`); the clients, as effects (`effectClient.ts`) and as the
-  renderer's Promise surface (`buildClient.ts`, `client.ts`, which go
-  with the renderer's move onto the runtime, V3.md step 7, Leftover
-  mechanisms); and the window's port to its shell (`shell.ts`).
+  (`served.ts`); a module's client, its invokes as effects over a link
+  (`effectClient.ts`); and the window's port to its shell (`shell.ts`).
 - `paths.ts`, `shellEnv.ts`, `observability.ts`, `lifetimes.ts`,
   `layerLatch.ts`, `hostFacts.ts`: what the host and the shell both
   compile (the data dir, the login shell's environment, the logger and

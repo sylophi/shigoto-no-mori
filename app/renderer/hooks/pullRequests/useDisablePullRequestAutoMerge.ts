@@ -16,7 +16,7 @@ export function useDisablePullRequestAutoMerge() {
   return useMutation({
     mutationKey: pullRequestMutationKey(keys),
     mutationFn: ({ projectId, number }: DisableAutoMergeVariables) =>
-      api.githubCli.disablePullRequestAutoMerge({ projectId, number }),
+      api.run(api.githubCli.disablePullRequestAutoMerge({ projectId, number })),
     ...optimisticPullRequestDetail<DisableAutoMergeVariables>(
       qc,
       keys,

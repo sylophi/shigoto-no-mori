@@ -37,6 +37,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Link } from "@shared/ipc/transport";
+import { UnreadableAnswerError } from "@shared/remote/rpcTransport";
 import { ClientLinks } from "./ClientLinks";
 import { peerLink } from "./peerLink";
 
@@ -127,7 +128,7 @@ const hostLinkOf = (deviceId: string, localDeviceId: string) =>
 // A push's payloads on a link, decoded where they may come from another
 // build (a peer's). One this build does not read is dropped, there
 // being no caller to fail.
-function pushesOn<R extends ContractCall>(
+export function pushesOn<R extends ContractCall>(
   link: Link,
   push: R,
 ): Stream.Stream<Decoded<PayloadOf<R>>> {
@@ -148,6 +149,30 @@ function pushesOn<R extends ContractCall>(
     ),
     Stream.filter(Option.isSome),
     Stream.map((some) => some.value),
+  );
+}
+
+// A view's values on a link, decoded where they may come from another
+// build (a peer's). One this build does not read ends the view, naming
+// it.
+export function viewOn<R extends ContractCall>(
+  link: Link,
+  view: R,
+  input: unknown,
+): Stream.Stream<Decoded<PayloadOf<R>>, unknown> {
+  type A = Decoded<PayloadOf<R>>;
+  const channel = channelOf(view);
+  const values = link.view(channel, input);
+  if (link.local === true) return values as Stream.Stream<A, unknown>;
+  const decode = Schema.decodeUnknownEffect(payloadOf(view));
+  return values.pipe(
+    Stream.mapEffect((value) =>
+      decode(value).pipe(
+        Effect.mapError(
+          (cause) => new UnreadableAnswerError({ channel, cause }),
+        ),
+      ),
+    ),
   );
 }
 

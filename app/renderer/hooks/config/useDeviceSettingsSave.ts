@@ -25,9 +25,11 @@ export function useDeviceSettingsSave() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (state: SettingsFormState) =>
-      api.globalConfig.writeDeviceSettings({
-        patch: toDeviceSettingsPatch(state),
-      }),
+      api.run(
+        api.globalConfig.writeDeviceSettings({
+          patch: toDeviceSettingsPatch(state),
+        }),
+      ),
     onSuccess: () => invalidateDeviceSettingsQueries(queryClient, keys),
     meta: { errorTitle: "Couldn't save settings" },
   });

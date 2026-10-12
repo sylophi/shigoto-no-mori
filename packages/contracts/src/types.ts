@@ -1,8 +1,8 @@
 // The types a contract module gives its two sides: the handler table
 // that serves it and the client that calls it. Both key a call by its
-// name, its channel without the module prefix. A client subscribes to a
-// push as `on` and the push's capitalized name. A view is served as a
-// stream, and watched with an observer on a wire that carries views.
+// name, its channel without the module prefix. A client's invokes are
+// effects; a push and a view are streams, read by the module and the
+// call's name.
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type { Decoded, Encoded } from "./codec.ts";
@@ -78,52 +78,55 @@ export type ViewObserver<A> = {
   readonly end: (failure?: unknown) => void;
 };
 
-export type Client<M extends ContractModule> = {
-  [V in ViewsOf<M> as KeyOf<V["_tag"]>]: (
-    input: Encoded<InputOf<V>>,
-    observer: ViewObserver<Decoded<PayloadOf<V>>>,
-  ) => () => void;
-} & {
-  [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
-    ...args: Args<Encoded<InputOf<R>>>
-  ) => Promise<Decoded<OutputOf<R>>>;
-} & {
-  [R in PushesOf<M> as `on${Capitalize<KeyOf<R["_tag"]>>}`]: (
-    handler: (payload: PushPayload<R>) => void,
-  ) => () => void;
-};
-
 type ContractInfo<M> = NonNullable<
   M extends { readonly "~contract"?: infer C } ? C : never
 >;
 
-// The API over a set of modules (a union of them): one namespace per
-// module, named for it, holding its client.
-export type Api<M extends ContractModule> = {
-  [K in M as ContractInfo<K> extends { readonly name: infer N extends string }
-    ? N
-    : never]: Client<K>;
-};
-
 // A module's invokes as effects, for a caller that runs on Effect (the
-// host's link to its shell, the shell's session with its host, a
-// peer's surface): each call's answer as its output decodes, and its
-// failure as the far side sent it.
+// renderer's client runtime, the host's link to its shell, the shell's
+// session with its host, a peer's surface): each call's answer as its
+// output decodes, and its failure as the far side sent it.
 export type EffectClient<M extends ContractModule> = {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
     ...args: Args<Encoded<InputOf<R>>>
   ) => Effect.Effect<Decoded<OutputOf<R>>, unknown>;
 };
 
-// The API over the host-scoped modules of the set only.
-export type HostApiOf<M extends ContractModule> = Api<
-  Extract<M, { readonly "~contract"?: { readonly scope: "host" } }>
+// The effect clients over a set of modules (a union of them): one
+// namespace per module, named for it, holding its client.
+export type EffectApi<M extends ContractModule> = {
+  [K in M as ContractInfo<K> extends { readonly name: infer N extends string }
+    ? N
+    : never]: EffectClient<K>;
+};
+
+// The host-scoped modules of a set.
+export type HostModulesOf<M extends ContractModule> = Extract<
+  M,
+  { readonly "~contract"?: { readonly scope: "host" } }
 >;
 
-// What a push's subscriber receives.
-type PushPayload<R> = Decoded<PayloadOf<R>>;
-
 export type PushKeys<M extends ContractModule> = KeyOf<PushesOf<M>["_tag"]>;
+
+// What a push's reader receives.
+export type PushPayload<M extends ContractModule, K extends string> = Decoded<
+  PayloadOf<Extract<PushesOf<M>, { readonly _tag: `${string}:${K}` }>>
+>;
+
+export type ViewKeys<M extends ContractModule> = KeyOf<ViewsOf<M>["_tag"]>;
+
+type ViewOf<M extends ContractModule, K extends string> = Extract<
+  ViewsOf<M>,
+  { readonly _tag: `${string}:${K}` }
+>;
+
+// What a view is asked with, and each value it gives.
+export type ViewInput<M extends ContractModule, K extends string> = Encoded<
+  InputOf<ViewOf<M, K>>
+>;
+export type ViewValue<M extends ContractModule, K extends string> = Decoded<
+  PayloadOf<ViewOf<M, K>>
+>;
 
 export type PushProducerPayload<
   M extends ContractModule,

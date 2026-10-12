@@ -57,11 +57,13 @@ export function ForwardAllButton({
           };
           try {
             // oxlint-disable-next-line no-await-in-loop -- one probe channel at a time, in list order (see the header).
-            await api.portForward.start({
-              deviceId,
-              worktree,
-              ...target,
-            });
+            await api.run(
+              api.portForward.start({
+                deviceId,
+                worktree,
+                ...target,
+              }),
+            );
           } catch (error) {
             // A refusal already surfaces centrally.
             if (!isCommandRefusedError(error)) {
@@ -74,7 +76,9 @@ export function ForwardAllButton({
         for (const forward of toStop) {
           try {
             // oxlint-disable-next-line no-await-in-loop -- same pacing as the starts.
-            await api.portForward.stop({ forwardId: forward.forwardId });
+            await api.run(
+              api.portForward.stop({ forwardId: forward.forwardId }),
+            );
           } catch (error) {
             failures.push(errorMessageOf(error));
           }

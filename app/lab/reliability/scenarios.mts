@@ -54,14 +54,16 @@ async function stateOf(lab: Lab, tab: Tab): Promise<PageState> {
     pageApi(tab.page).then((handle) =>
       handle.evaluate(
         async (api, { deviceId, projectId, label }) => {
-          const status = await api.hub.status();
+          const status = await api.run(api.hub.status());
           const listed = await Promise.race([
-            api.hub
-              .invokePeer({
-                deviceId,
-                channel: "worktrees:list",
-                input: { projectId },
-              })
+            api
+              .run(
+                api.hub.invokePeer({
+                  deviceId,
+                  channel: "worktrees:list",
+                  input: { projectId },
+                }),
+              )
               .then((rows) =>
                 (rows as Array<{ branch: string | null }>)
                   .map((row) => row.branch ?? "")
@@ -785,7 +787,7 @@ const tokenExpiry: Scenario = {
         const session = window.Clerk?.session;
         if (session == null) return false;
         const token = await session.getToken({ skipCache: true });
-        const devices = await api.account.listDevices();
+        const devices = await api.run(api.account.listDevices());
         return token !== null && token.length > 0 && devices.length > 0;
       });
       if (!fresh) throw new Error(`${tab.name} could not mint a fresh token`);
@@ -843,7 +845,7 @@ const signOutWithSibling: Scenario = {
     lab.note(
       `signing ${first.name} out of the account, the Clerk session kept`,
     );
-    await withPageApi(first.page, (api) => api.account.signOut());
+    await withPageApi(first.page, (api) => api.run(api.account.signOut()));
     const pressed = Date.now();
     await waitUntil(
       "both tabs to read signed out",
@@ -859,7 +861,9 @@ const signOutWithSibling: Scenario = {
     if (enrolls.length > 0) {
       throw new Error(`enrolled again from ${enrolls.join(", ")}`);
     }
-    const listed = await lab.hostEval((api) => api.account.listDevices());
+    const listed = await lab.hostEval((api) =>
+      api.run(api.account.listDevices()),
+    );
     if (listed.some((device) => device.deviceId === deviceId)) {
       throw new Error("the host still lists the browser");
     }
@@ -871,7 +875,8 @@ const signOutWithSibling: Scenario = {
 };
 
 async function signedOut(tab: Tab): Promise<boolean> {
-  return !(await withPageApi(tab.page, (api) => api.account.status())).signedIn;
+  return !(await withPageApi(tab.page, (api) => api.run(api.account.status())))
+    .signedIn;
 }
 
 async function waitUntil(

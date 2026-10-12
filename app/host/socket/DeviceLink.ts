@@ -61,6 +61,7 @@ import { boundedMessages } from "./boundedMessages";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -187,9 +188,11 @@ const SWITCHES = new Set([
   COMMAND_ACCESS_CHANGED,
 ]);
 
-// A channel's numbered calls, which hold no place under the in-flight
-// cap: the channel bounds them.
-const CHANNEL_CALLS = new Set(["link:read", "link:write"]);
+// Calls that hold no place under the in-flight cap: a channel's
+// numbered calls, which the channel bounds, and the link's ping, which
+// answers at once and must, or a link with a full cap would read as
+// dropped (a wake's probe, shared/remote/deviceLink.ts).
+const UNCOUNTED_CALLS = new Set(["link:read", "link:write", "link:ping"]);
 
 export type WsServerStartOpts = {
   port: number;
@@ -798,18 +801,18 @@ export const make = (options: {
               return Effect.fail(new LinkUnauthenticatedError());
             }
             // A stream (a push, a view) lives as long as its reader
-            // wants it, and a channel's bytes are bounded per channel
-            // (CHANNEL_CALLS_IN_FLIGHT), so neither holds a place.
+            // wants it, a channel's bytes are bounded per channel
+            // (CHANNEL_CALLS_IN_FLIGHT), and a ping answers at once,
+            // so none holds a place.
             const call = rpc as ContractCall;
             const streaming =
-              !isInvoke(call) || CHANNEL_CALLS.has(channelOf(call));
+              !isInvoke(call) || UNCOUNTED_CALLS.has(channelOf(call));
             if (!streaming && connection.inFlight >= MAX_IN_FLIGHT_PER_PEER) {
               return Effect.fail(
                 new RemoteCallError({ text: "too many in-flight requests" }),
               );
             }
-            if (!streaming) connection.inFlight += 1;
-            return effect.pipe(
+            const served = effect.pipe(
               Effect.provideService(LinkPeer, {
                 deviceId: local ? undefined : deviceId,
                 closed: connection.closed.signal,
@@ -822,12 +825,36 @@ export const make = (options: {
                   });
                 },
               }),
-              Effect.ensuring(
-                Effect.sync(() => {
-                  if (!streaming) connection.inFlight -= 1;
-                }),
-              ),
             );
+            if (streaming) return served;
+            // A call's place frees the moment it is interrupted, not once
+            // its cleanup (the git it spawned, killed) ends: the client's
+            // gate frees its own when it sends the interrupt, and a page
+            // that drops its calls and makes as many new ones would
+            // otherwise find the old still counted here.
+            connection.inFlight += 1;
+            let held = true;
+            const free = Effect.sync(() => {
+              if (!held) return;
+              held = false;
+              connection.inFlight -= 1;
+            });
+            // Started at once, so a call still begins before the next
+            // one on the connection (a channel's bytes after its open).
+            return Effect.uninterruptibleMask((restore) =>
+              Effect.forkDetach(served, {
+                startImmediately: true,
+                uninterruptible: false,
+              }).pipe(
+                Effect.flatMap((fiber) =>
+                  restore(Fiber.join(fiber)).pipe(
+                    Effect.onInterrupt(() =>
+                      free.pipe(Effect.andThen(Fiber.interrupt(fiber))),
+                    ),
+                  ),
+                ),
+              ),
+            ).pipe(Effect.ensuring(free));
           }),
         );
 

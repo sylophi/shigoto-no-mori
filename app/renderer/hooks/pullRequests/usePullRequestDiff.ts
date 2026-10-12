@@ -14,7 +14,10 @@ export function usePullRequestDiff(
     queryKey: keys.pullRequestDiff(projectId, number),
     queryFn:
       number !== undefined
-        ? () => api.githubCli.pullRequestDiff({ projectId, number })
+        ? ({ signal }) =>
+            api.run(api.githubCli.pullRequestDiff({ projectId, number }), {
+              signal,
+            })
         : skipToken,
     staleTime: 30_000,
     refetchOnWindowFocus: false,

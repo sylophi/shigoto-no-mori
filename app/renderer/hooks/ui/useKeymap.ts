@@ -6,6 +6,7 @@
 // shell's: their keys go to its menu (useMenuChords), which runs them.
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { windowContract } from "@shigomori/contracts/modules/window";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import {
   createExternalStore,
@@ -172,8 +173,8 @@ function useKeymapFollowsOtherWindows(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!hasLocalHost) return;
-    return api.window.onFocused(() => {
-      void api.clientConfig.read().then(({ keybindings }) => {
+    return api.listen(api.pushes(windowContract, "focused"), () => {
+      void api.run(api.clientConfig.read()).then(({ keybindings }) => {
         const key = queryKeys.clientConfig();
         const cached = queryClient.getQueryData<ClientConfig>(key);
         if (!cached) return;
@@ -205,6 +206,6 @@ function useMenuChords(
         chords[action.id] = chordAccelerator(binding.chord);
       }
     }
-    void api.menu.setChords({ chords });
+    void api.run(api.menu.setChords({ chords }));
   }, [keymap, paused, api, hasLocalHost]);
 }

@@ -23,6 +23,9 @@
 //   - a direct dial completes the handshake, pins the welcome
 //     identity, and invokes flow over the direct socket while the stub
 //     hub's forwardedCount stays flat (the whole point).
+//   - a call over the hop interrupted where it was made (hub:invokePeer
+//     as a window's host and a web tab serve it, servedInvokePeer)
+//     cancels the listener's handler, which sees its signal abort.
 //   - tickets are single use, expire, are bound to the peer they were
 //     minted for, and are bookkept PER PEER: one peer's mint replaces
 //     only its own pending set, and the global backstop refuses
@@ -143,6 +146,7 @@ import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import type * as Context from "effect/Context";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
@@ -160,7 +164,11 @@ import {
   DirectConnectInfoSchema,
 } from "@shigomori/contracts/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
-import { type HubHandlers, makeHubHandlers } from "@shared/hub/bridgeHandlers";
+import {
+  type HubHandlers,
+  makeHubHandlers,
+  servedInvokePeer,
+} from "@shared/hub/bridgeHandlers";
 import {
   createDirectDialer,
   type DirectDialerDeps,
@@ -247,6 +255,8 @@ const BLACKHOLE = "203.0.113.1";
 const ECHO = "projects:defaultBranch";
 const WHOAMI = "projects:pickWorktreeName";
 const MUTATE = "git:refreshProject";
+// A read the listener holds until the call is cancelled.
+const HOLD = "projects:cloneUrl";
 const echoOf = (value: string) => ({ projectId: value });
 
 // The shared listener fixture (test/lib/directBoot.mts) with this
@@ -257,6 +267,8 @@ async function startDirectListener(
   opts: DirectListenerOpts = {},
 ) {
   let mutateRuns = 0;
+  // The held read's progress: started, then aborted by its caller.
+  const hold = { started: false, aborted: false };
   const listener = await startListenerFixture(track, {
     ...opts,
     registerHandlers: (binding) => {
@@ -270,9 +282,20 @@ async function startDirectListener(
       binding.handle(MUTATE, async () => {
         mutateRuns += 1;
       });
+      binding.handle(
+        HOLD,
+        (ctx) =>
+          new Promise((resolve) => {
+            hold.started = true;
+            ctx.signal.addEventListener("abort", () => {
+              hold.aborted = true;
+              resolve(null);
+            });
+          }),
+      );
     },
   });
-  return { ...listener, mutateRuns: () => mutateRuns };
+  return { ...listener, mutateRuns: () => mutateRuns, hold };
 }
 
 // One dial straight at a listener (dialing, the shared sandbox's),
@@ -580,6 +603,25 @@ it("direct dial: the handshake completes with the pinned identity and invokes fl
     stub.forwardedCount(),
     baseline,
     "direct invokes still rode the device hub",
+  );
+});
+
+it("interrupted over the hop: a call a window or a tab drops cancels the listener's handler", async () => {
+  const listener = await startDirectListener(trackTest);
+  const { bridge } = await bridgeTo(trackTest, listener);
+  await bridge.dialPeer(LISTENER);
+  const fiber = Effect.runFork(
+    servedInvokePeer(() => bridge)({
+      deviceId: LISTENER,
+      channel: HOLD,
+      input: echoOf("p"),
+    }),
+  );
+  await waitFor(() => listener.hold.started, "the held read to start");
+  await Effect.runPromise(Fiber.interrupt(fiber));
+  await waitFor(
+    () => listener.hold.aborted,
+    "the listener's handler to see its call cancelled",
   );
 });
 

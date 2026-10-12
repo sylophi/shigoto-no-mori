@@ -5,7 +5,7 @@ export function usePortPoolInstalled() {
   const { api, keys } = useHostScope();
   return useQuery<boolean>({
     queryKey: keys.portPoolInstalled(),
-    queryFn: () => api.portPool.isInstalled(),
+    queryFn: ({ signal }) => api.run(api.portPool.isInstalled(), { signal }),
     meta: { errorTitle: "Couldn't check if port-pool is installed" },
   });
 }

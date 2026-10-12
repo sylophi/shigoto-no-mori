@@ -10,7 +10,10 @@
 // React's next effect flush is the run's first, not a casualty of the
 // reset.
 import { useEffect, useState } from "react";
-import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
+import {
+  syncContract,
+  type SyncPullProgress,
+} from "@shigomori/contracts/modules/sync";
 import type { CreatePhase } from "@shigomori/contracts/schemas";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -29,16 +32,19 @@ export function usePullProgress(sourceWorktreeId: string): {
   const [phasesSeen, setPhasesSeen] = useState(NO_PHASES);
   useEffect(
     () =>
-      api.sync.onPullProgress((evt: SyncPullProgress) => {
-        if (evt.sourceWorktreeId !== sourceWorktreeId) return;
-        setFrame(evt);
-        const phase = evt.createPhase;
-        if (phase !== undefined) {
-          setPhasesSeen((seen) =>
-            seen.has(phase) ? seen : new Set(seen).add(phase),
-          );
-        }
-      }),
+      api.listen(
+        api.pushes(syncContract, "pullProgress"),
+        (evt: SyncPullProgress) => {
+          if (evt.sourceWorktreeId !== sourceWorktreeId) return;
+          setFrame(evt);
+          const phase = evt.createPhase;
+          if (phase !== undefined) {
+            setPhasesSeen((seen) =>
+              seen.has(phase) ? seen : new Set(seen).add(phase),
+            );
+          }
+        },
+      ),
     [sourceWorktreeId, api],
   );
   return {

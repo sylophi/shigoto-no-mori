@@ -18,8 +18,9 @@ export function startRemoteSweepRequests(
   const request = (deviceId: string): void => {
     clearTimeout(renewals.get(deviceId));
     renewals.delete(deviceId);
-    apiFor(deviceId)
-      .git.sweep()
+    const api = apiFor(deviceId);
+    api
+      .run(api.git.sweep())
       .then(({ leaseMs }) => {
         if (!focused) return;
         renewals.set(

@@ -17,13 +17,16 @@ export function useFileDiff(
     queryKey: keys.worktreeFileDiff(projectId, worktreeId, paths, untracked),
     queryFn:
       worktreeId && paths.length > 0
-        ? () =>
-            api.worktrees.fileDiff({
-              projectId,
-              worktreeId,
-              paths: [...paths],
-              untracked,
-            })
+        ? ({ signal }) =>
+            api.run(
+              api.worktrees.fileDiff({
+                projectId,
+                worktreeId,
+                paths: [...paths],
+                untracked,
+              }),
+              { signal },
+            )
         : skipToken,
     staleTime: 0,
     // Every file looked at leaves a patch behind, and a long review
@@ -46,7 +49,10 @@ export function useCommitDiff(
     queryKey: keys.commitDiff(projectId, worktreeId, hash),
     queryFn:
       worktreeId && hash.length > 0
-        ? () => api.worktrees.commitDiff({ projectId, worktreeId, hash })
+        ? ({ signal }) =>
+            api.run(api.worktrees.commitDiff({ projectId, worktreeId, hash }), {
+              signal,
+            })
         : skipToken,
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't compute diff" },
@@ -63,7 +69,10 @@ export function useBranchDiff(
   return useQuery<string>({
     queryKey: keys.branchDiff(projectId, worktreeId ?? ""),
     queryFn: worktreeId
-      ? () => api.worktrees.branchDiff({ projectId, worktreeId })
+      ? ({ signal }) =>
+          api.run(api.worktrees.branchDiff({ projectId, worktreeId }), {
+            signal,
+          })
       : skipToken,
     staleTime: 0,
     meta: { errorTitle: "Couldn't compute diff" },
@@ -82,7 +91,10 @@ export function useStashDiff(
     queryKey: keys.stashDiff(projectId, worktreeId ?? "", hash),
     queryFn:
       worktreeId && hash
-        ? () => api.worktrees.stashDiff({ projectId, worktreeId, hash })
+        ? ({ signal }) =>
+            api.run(api.worktrees.stashDiff({ projectId, worktreeId, hash }), {
+              signal,
+            })
         : skipToken,
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't read the stash" },

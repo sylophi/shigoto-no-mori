@@ -37,7 +37,7 @@ export function useVillagerProfiles(): VillagerProfiles | undefined {
 export function villagerFaceQueryOptions(api: RendererApi, slug: string) {
   return queryOptions({
     queryKey: queryKeysFor(api.deviceId).villagerFace(slug),
-    queryFn: () => api.villagers.face({ slug }),
+    queryFn: ({ signal }) => api.run(api.villagers.face({ slug }), { signal }),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     meta: { silentError: true },
@@ -47,7 +47,7 @@ export function villagerFaceQueryOptions(api: RendererApi, slug: string) {
 export function villagerProfilesQueryOptions(api: RendererApi) {
   return queryOptions({
     queryKey: queryKeysFor(api.deviceId).villagerProfiles(),
-    queryFn: () => api.villagers.profiles(),
+    queryFn: ({ signal }) => api.run(api.villagers.profiles(), { signal }),
     staleTime: Number.POSITIVE_INFINITY,
     meta: { silentError: true },
   });

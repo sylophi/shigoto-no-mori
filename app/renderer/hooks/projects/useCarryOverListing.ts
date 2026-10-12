@@ -25,13 +25,16 @@ export function carryOverListingQueryOptions(
       relative,
       ruleIgnored,
     ),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!api) return [];
-      return api.projects.carryOverListing({
-        projectId,
-        relative,
-        ...(ruleIgnored && { ruleIgnored }),
-      });
+      return api.run(
+        api.projects.carryOverListing({
+          projectId,
+          relative,
+          ...(ruleIgnored && { ruleIgnored }),
+        }),
+        { signal },
+      );
     },
     enabled: api !== undefined && deviceId !== "",
     // Each fetch walks every checkout's ignored tree on the host. Dampen

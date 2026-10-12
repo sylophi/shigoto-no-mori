@@ -196,7 +196,7 @@ for (const { dir, root, contractLayer } of LAYERS) {
       );
     }
 
-    // 5. Everything above the port speaks ClientTransport.
+    // 5. Nothing above the port reaches ipcRenderer.
     if (!IPC_RENDERER_ALLOWLIST.has(rel) && IPC_RENDERER.test(src)) {
       failures.push(
         `${rel} references ipcRenderer -- the one sanctioned consumer is main/preloadPort.ts`,

@@ -19,7 +19,8 @@ const WATCH_FIRST_DELAY_MS = 60_000;
 function doctorQuery(api: HostApi, keys: QueryKeyRegistry) {
   return {
     queryKey: keys.doctor(),
-    queryFn: () => api.cli.doctor(),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      api.run(api.cli.doctor(), { signal }),
     meta: { silentError: true },
   };
 }
@@ -72,7 +73,7 @@ export function useDoctorRepair() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: keys.doctor(),
-    mutationFn: () => api.cli.doctorFix(),
+    mutationFn: () => api.run(api.cli.doctorFix()),
     onSuccess: (report) => {
       queryClient.setQueryData(keys.doctor(), report);
       // An unregistered project or a pruned worktree is forest state. A

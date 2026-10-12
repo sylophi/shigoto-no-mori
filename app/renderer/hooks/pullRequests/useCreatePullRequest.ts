@@ -23,7 +23,8 @@ export function usePullRequestDraft(worktree: Worktree) {
       input.worktreeId,
       worktree.branch,
     ),
-    queryFn: () => api.githubCli.pullRequestDraft(input),
+    queryFn: ({ signal }) =>
+      api.run(api.githubCli.pullRequestDraft(input), { signal }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
@@ -38,8 +39,11 @@ export function usePullRequestCompare(worktree: Worktree, base: string) {
   const { projectId, id: worktreeId } = worktree;
   return useQuery({
     queryKey: keys.pullRequestCompare(projectId, worktreeId, base),
-    queryFn: () =>
-      api.githubCli.pullRequestCompare({ projectId, worktreeId, base }),
+    queryFn: ({ signal }) =>
+      api.run(
+        api.githubCli.pullRequestCompare({ projectId, worktreeId, base }),
+        { signal },
+      ),
     enabled: base !== "",
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
@@ -50,7 +54,8 @@ export function usePullRequestOptions(projectId: string) {
   const { api, keys } = useHostScope();
   return useQuery({
     queryKey: keys.pullRequestOptions(projectId),
-    queryFn: () => api.githubCli.pullRequestOptions({ projectId }),
+    queryFn: ({ signal }) =>
+      api.run(api.githubCli.pullRequestOptions({ projectId }), { signal }),
     staleTime: 5 * 60_000,
     meta: { silentError: true },
   });
@@ -82,7 +87,9 @@ export async function stageAttachment(
       // oxlint-disable-next-line no-await-in-loop -- the host appends in order
       const base64 = await blobToBase64(chunk);
       // oxlint-disable-next-line no-await-in-loop -- the host appends in order
-      await api.githubCli.stageAttachment({ id, name, offset, base64 });
+      await api.run(
+        api.githubCli.stageAttachment({ id, name, offset, base64 }),
+      );
     }
   } finally {
     uploads.delete(id);
@@ -100,7 +107,7 @@ export function removeAttachment(api: HostApi, id: string): void {
 
 // Nothing waits on it: the host sweeps what's left anyway.
 function discard(api: HostApi, id: string): Promise<void> {
-  return api.githubCli.discardAttachment({ id }).catch(() => {});
+  return api.run(api.githubCli.discardAttachment({ id })).catch(() => {});
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -133,7 +140,7 @@ export function useCreatePullRequest() {
       branch: _,
       ...input
     }: CreatePullRequestPayload & { branch: string }) =>
-      api.githubCli.createPullRequest(input),
+      api.run(api.githubCli.createPullRequest(input)),
     onSuccess: ({ warning }, { projectId, worktreeId, branch }) => {
       invalidatePullRequestsForProject(qc, keys, projectId);
       dropPullRequestDraft(pullRequestDraftKey(deviceId, worktreeId, branch));

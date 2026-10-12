@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";
 import { useLaunch } from "./useLaunchers";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -28,16 +29,18 @@ export function useLaunchShortcuts(
   useEffect(() => {
     if (!held) return;
     const menuEntries = entries.map((e) => ({ id: e.id, label: e.label }));
-    void api.menu.setLaunchToolsEnabled({
-      enabled: true,
-      entries: menuEntries,
-    });
+    void api.run(
+      api.menu.setLaunchToolsEnabled({
+        enabled: true,
+        entries: menuEntries,
+      }),
+    );
   }, [held, entries, api]);
 
   useEffect(() => {
     if (!held) return;
     return () => {
-      void api.menu.setLaunchToolsEnabled({ enabled: false });
+      void api.run(api.menu.setLaunchToolsEnabled({ enabled: false }));
     };
   }, [held, api]);
 
@@ -45,7 +48,7 @@ export function useLaunchShortcuts(
   const worktreeId = target?.id;
   useEffect(() => {
     if (projectId === undefined || worktreeId === undefined) return;
-    return api.nav.onLaunchById((launcherId) => {
+    return api.listen(api.pushes(navContract, "launchById"), (launcherId) => {
       launch({ projectId, worktreeId, launcherId });
       onLaunch?.();
     });

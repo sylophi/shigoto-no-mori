@@ -24,10 +24,12 @@ export function Terminal({ terminalId }: { terminalId: string }) {
       // A keystroke or a size for a shell on its way out is not worth
       // telling: its end shows.
       onInput={(data) =>
-        void api.terminals.write({ terminalId, data }).catch(() => {})
+        void api.run(api.terminals.write({ terminalId, data })).catch(() => {})
       }
       onFit={(cols, rows) =>
-        void api.terminals.resize({ terminalId, cols, rows }).catch(() => {})
+        void api
+          .run(api.terminals.resize({ terminalId, cols, rows }))
+          .catch(() => {})
       }
       onLink={openUrl}
     />

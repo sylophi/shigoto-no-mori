@@ -50,7 +50,11 @@ import { createServed, resolvePush, type View } from "@shared/ipc/served";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
-import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
+import type {
+  ClientTransport,
+  HandlerContext,
+  Link,
+} from "@shared/ipc/transport";
 import { WebSocket as WsClient } from "ws";
 import type { KeyPair } from "@shared/crypto/noise";
 import {
@@ -556,6 +560,17 @@ export type PeerTransport = {
   invokeCount(channel: string): number;
   channels(): ReturnType<HubHandlers["peerChannels"]>;
 };
+
+// A transport's invokes as a link's calls, for an effect client over it
+// (shared/ipc/effectClient.ts): a call it cancels interrupts, and its
+// failure is what a link's would be.
+export const linkOver = (transport: ClientTransport): Pick<Link, "call"> => ({
+  call: (channel, input) =>
+    Effect.tryPromise({
+      try: (signal) => transport.invoke(channel, input, { signal }),
+      catch: callFailureOf,
+    }),
+});
 
 // A ClientTransport riding the bridge's cached direct session, with a
 // per-channel invoke counter so a transfer check can pin poll-side

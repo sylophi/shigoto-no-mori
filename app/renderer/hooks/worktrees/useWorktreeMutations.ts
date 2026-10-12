@@ -14,6 +14,7 @@ import {
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
 import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
+import type * as Effect from "effect/Effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { worktreeQueriesOn } from "@/lib/queryKeys";
 import { useRegistry } from "@/lib/runtime/viewHooks";
@@ -44,7 +45,7 @@ export function useCreateWorktree() {
   const registry = useRegistry();
   const { api, deviceId } = useHostScope();
   return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
-    mutationFn: (input) => api.worktrees.create(input),
+    mutationFn: (input) => api.run(api.worktrees.create(input)),
     onSuccess: (result) => {
       spliceWorktreeRow(registry, deviceId, result.worktree);
     },
@@ -75,17 +76,18 @@ export function useCreateWorktreeFromPullRequest() {
     CreateWorktreeFromPullRequestInput
   >({
     mutationFn: async ({ projectId, worktreeName, number, cloneFiles }) => {
-      const { branch } = await api.githubCli.resolvePullRequestCheckout({
-        projectId,
-        number,
-      });
-      return api.worktrees.create({
-        projectId,
-        worktreeName,
-        base: branch,
-        checkout: true,
-        cloneFiles,
-      });
+      const { branch } = await api.run(
+        api.githubCli.resolvePullRequestCheckout({ projectId, number }),
+      );
+      return api.run(
+        api.worktrees.create({
+          projectId,
+          worktreeName,
+          base: branch,
+          checkout: true,
+          cloneFiles,
+        }),
+      );
     },
     onSuccess: (result, vars) => {
       spliceWorktreeRow(registry, deviceId, result.worktree);
@@ -111,7 +113,7 @@ function useReplaceWorktree<
   Input extends { projectId: string; worktreeId: string },
   Result,
 >(
-  call: (api: HostApi, input: Input) => Promise<Result>,
+  call: (api: HostApi, input: Input) => Effect.Effect<Result, unknown>,
   rowOf: (result: Result) => Worktree,
   // The page surfaces per-row errors inline; a toast on top would be noise.
   meta: Record<string, unknown> = { silentError: true },
@@ -120,7 +122,7 @@ function useReplaceWorktree<
   const { api, deviceId } = useHostScope();
   const scriptRuns = useScriptRuns();
   return useMutation<Result, Error, Input>({
-    mutationFn: (input) => call(api, input),
+    mutationFn: (input) => api.run(call(api, input)),
     onSuccess: (result, vars) => {
       spliceWorktreeRow(registry, deviceId, rowOf(result), vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
@@ -259,7 +261,7 @@ export function useDeleteWorktree() {
   const { api, deviceId } = useHostScope();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
-    mutationFn: (input) => api.worktrees.delete(input),
+    mutationFn: (input) => api.run(api.worktrees.delete(input)),
     onMutate: async (vars) => {
       // Cancel this worktree's in-flight fetches (a focus-triggered
       // diff/data refetch) before the host starts removing it: left to
@@ -327,12 +329,14 @@ export function useDeleteStackWorktrees() {
       await Promise.all(
         devices.map(async (device) => {
           try {
-            const result = await device.api.worktrees.deleteStack({
-              projectId: device.projectId,
-              worktreeId: device.target.id,
-              force,
-              skipCleanup,
-            });
+            const result = await device.api.run(
+              device.api.worktrees.deleteStack({
+                projectId: device.projectId,
+                worktreeId: device.target.id,
+                force,
+                skipCleanup,
+              }),
+            );
             outcome.removed.set(device.deviceId, result.removed);
             forgetDeletedWorktrees(
               queryClient,
@@ -392,7 +396,7 @@ type WorktreeVars = { projectId: string; worktreeId: string };
 type AgentSessionVars = WorktreeVars & { harness: string; session: string };
 
 function useWorktreeRowMutation<V extends WorktreeVars>(
-  call: (api: HostApi, input: V) => Promise<Worktree>,
+  call: (api: HostApi, input: V) => Effect.Effect<Worktree, unknown>,
   patch: (worktree: Worktree, input: V) => Worktree,
   errorTitle: string,
   onSettled?: (api: HostApi, input: V) => void,
@@ -409,7 +413,7 @@ function useWorktreeRowMutation<V extends WorktreeVars>(
         (w) => patch(w, input),
       );
       try {
-        const worktree = await call(api, input);
+        const worktree = await api.run(call(api, input));
         change.answered(worktree);
         return worktree;
       } catch (error) {
@@ -481,7 +485,7 @@ export function useResumeAgent() {
   const { api } = useHostScope();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: resuming opens a terminal and leaves the session's binding as it was
   return useMutation<void, Error, AgentSessionVars>({
-    mutationFn: (input) => api.worktrees.resumeAgent(input),
+    mutationFn: (input) => api.run(api.worktrees.resumeAgent(input)),
     meta: { errorTitle: "Couldn't resume the agent session" },
   });
 }
@@ -500,7 +504,7 @@ export function useSetAutoPull() {
     "Couldn't update auto-pull",
     (api, input) => {
       if (input.autoPull)
-        void api.git.refreshProject({ projectId: input.projectId });
+        void api.run(api.git.refreshProject({ projectId: input.projectId }));
     },
   );
 }

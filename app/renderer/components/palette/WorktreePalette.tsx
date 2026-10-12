@@ -52,6 +52,7 @@ import {
   PaletteDialogView,
   PickedChipView,
 } from "@shigomori/ui/views/palette/WorktreePaletteView.tsx";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // The palette (⌘K, the keymap's): every worktree on every machine, one
@@ -111,7 +112,9 @@ export function WorktreePalette() {
 
   // The Help menu's Ask, which is a question for the palette.
   useEffect(() =>
-    hasLocalHost ? api.nav.onAskHow(() => void openPalette()) : undefined,
+    hasLocalHost
+      ? api.listen(api.pushes(navContract, "askHow"), () => void openPalette())
+      : undefined,
   );
 
   useKeymapAction("palette", () => (open ? setOpen(false) : openPalette()), {
@@ -368,7 +371,7 @@ function PaletteDialog({
     ask: (harness, question) => {
       if (asking !== null) return;
       setAsking(question);
-      void api.guide.ask({ harness, question }).then(
+      void api.run(api.guide.ask({ harness, question })).then(
         () => onClose(),
         (error: unknown) => {
           setAsking(null);

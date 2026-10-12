@@ -79,7 +79,7 @@ export function useAddProject() {
     // Settles once the list has it: callers navigate into the new
     // project right away, and routes render "not found" against a list
     // without it.
-    mutationFn: (input) => api.projects.add(input).then(whenListed),
+    mutationFn: (input) => api.run(api.projects.add(input)).then(whenListed),
     meta: { errorTitle: "Couldn't add project" },
   });
 }
@@ -91,7 +91,7 @@ export function useCloneProject() {
   const whenListed = useWhenListed();
   return useMutation<Project, Error, CloneProjectPayload>({
     // Settles once listed, as useAddProject does.
-    mutationFn: (input) => api.projects.clone(input).then(whenListed),
+    mutationFn: (input) => api.run(api.projects.clone(input)).then(whenListed),
     meta: { errorTitle: "Couldn't clone the repository" },
   });
 }
@@ -102,7 +102,7 @@ export function useCreateProject() {
   const whenListed = useWhenListed();
   return useMutation<Project, Error, CreateProjectPayload>({
     // Settles once listed, as useAddProject does.
-    mutationFn: (input) => api.projects.create(input).then(whenListed),
+    mutationFn: (input) => api.run(api.projects.create(input)).then(whenListed),
     meta: { errorTitle: "Couldn't create the repository" },
   });
 }
@@ -112,7 +112,7 @@ export function useRemoveProject() {
   const router = useRouter();
   const { api, deviceId } = useHostScope();
   return useMutation<void, Error, string>({
-    mutationFn: (id) => api.projects.remove({ id }),
+    mutationFn: (id) => api.run(api.projects.remove({ id })),
     onMutate: async (id) => {
       // Cancel this project's in-flight fetches before the host starts the
       // removal (mirrors the nuke path): left to settle, one would
@@ -159,7 +159,7 @@ export function useRelocateProject(id: string) {
   const { api, deviceId } = useHostScope();
   return useMutation<Project, Error, string>({
     mutationKey: relocateProjectKey(deviceId, id),
-    mutationFn: (path) => api.projects.relocate({ id, path }),
+    mutationFn: (path) => api.run(api.projects.relocate({ id, path })),
     // Any host key naming the id: the one predicate that sweeps a
     // worktree's queries sweeps a project's just as well.
     onSuccess: () =>
