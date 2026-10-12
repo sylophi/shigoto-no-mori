@@ -8,13 +8,24 @@
 // what is still an experiment: the dev builds' theme keys and the
 // palettes' hidden variants (usePaletteVariantHotkey).
 //
-// A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere, and
-// the key is the physical one, named as on a US keyboard
-// (`KeyboardEvent.code`), so a chord holds on any layout and with ⌥ held.
+// A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere. A
+// letter or a digit is the one the key types, as the app's shortcuts
+// always were, so ⌘K on Dvorak or Colemak is the key that types K. Where
+// the layout types no Latin letter or digit there (Cyrillic, Greek, or
+// ⌥ composing a symbol), it is the physical key, named as on a US
+// keyboard (`KeyboardEvent.code`), as macOS's own ⌘ shortcuts fall back.
+// Every other key is the physical one: the terminal's Ctrl+` names the
+// key left of 1, which many layouts type no backtick on.
 
 // Where an action acts. The window is every page; a page or a dialog
 // is only itself, so two of them can share a chord.
-type KeymapScope = "window" | "worktree" | "changes" | "palette" | "folders";
+type KeymapScope =
+  | "window"
+  | "worktree"
+  | "changes"
+  | "palette"
+  | "folders"
+  | "editing";
 
 const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   window: "Anywhere",
@@ -22,6 +33,7 @@ const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   changes: "Changes",
   palette: "The palette",
   folders: "Adding a project, picking a folder",
+  editing: "Editing a description or a commit's message",
 };
 
 export interface KeymapAction {
@@ -105,6 +117,12 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     chord: "Mod+Enter",
     scope: "folders",
   },
+  {
+    id: "save",
+    label: "Save what is being edited",
+    chord: "Mod+Enter",
+    scope: "editing",
+  },
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(launchTool),
 ];
 
@@ -166,6 +184,23 @@ function keyOfCode(code: string): string | null {
   if (digit) return digit[1] ?? null;
   if (/^F([1-9]|1[0-2])$/.test(code)) return code;
   return NAMED_CODES[code] ?? null;
+}
+
+// The key a press names: a letter or digit as typed, where the layout
+// types one, the physical key otherwise (the header says why).
+function keyOfPress(e: KeyPress): string | null {
+  const physical = keyOfCode(e.code);
+  if (!/^(Key[A-Z]|Digit\d)$/.test(e.code) || e.key.length !== 1) {
+    return physical;
+  }
+  const typed = e.key.toUpperCase();
+  if (/^[A-Z0-9]$/.test(typed)) return typed;
+  // Shift on a digit types its symbol (⇧1 is !): still the digit.
+  if (e.code.startsWith("Digit")) return physical;
+  // A letter key typing ASCII punctuation (Dvorak's ' where QWERTY has
+  // Q) names no letter; one typing another script, or ⌥'s symbol, is
+  // the key itself.
+  return e.key.charCodeAt(0) < 128 ? null : physical;
 }
 
 const KEYS = new Set([
@@ -238,6 +273,7 @@ const samePressed = (a: Pressed, b: Pressed): boolean =>
 // The fields of a key event a chord is read from.
 export interface KeyPress {
   readonly code: string;
+  readonly key: string;
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
   readonly altKey: boolean;
@@ -247,7 +283,7 @@ export interface KeyPress {
 // The chord a key press makes, or null for one that makes none: a
 // modifier alone, or the Windows key off macOS.
 export function chordOfPress(e: KeyPress, mac: boolean): Chord | null {
-  const key = keyOfCode(e.code);
+  const key = keyOfPress(e);
   if (key === null || (!mac && e.metaKey)) return null;
   return {
     mod: mac ? e.metaKey : e.ctrlKey,
@@ -378,7 +414,46 @@ export function resolveKeymap(
       (own === undefined ? null : parseChord(own)) ?? parseChord(action.chord);
     if (chord) keymap.set(action.id, bindingOf(chord, mac));
   }
+  // A ⌘ chord also answers the same press with Shift, Alt or Ctrl held
+  // as well, as the app's ⌘K and ⌘↩ always did, unless another binding
+  // takes that press as its own (⇧⌘N is Add project, not New window).
+  const exact = [...keymap.values()];
+  for (const [id, binding] of keymap) {
+    if (!binding.chord.mod) continue;
+    keymap.set(id, {
+      ...binding,
+      matches: (e) =>
+        binding.matches(e) ||
+        (within(binding.chord, e, mac) &&
+          !exact.some((other) => other.matches(e))),
+    });
+  }
   return keymap;
+}
+
+// Whether a press holds the chord's modifiers and key, and maybe more.
+function within(chord: Chord, e: KeyPress, mac: boolean): boolean {
+  const press = chordOfPress(e, mac);
+  if (press === null || press.key !== chord.key) return false;
+  const keys = pressed(chord, mac);
+  const held = pressed(press, mac);
+  return (
+    (!keys.meta || held.meta) &&
+    (!keys.ctrl || held.ctrl) &&
+    (!keys.alt || held.alt) &&
+    (!keys.shift || held.shift)
+  );
+}
+
+// The menu's chords as accelerators by default, for the shell's menu
+// before a window has sent its own.
+export function defaultMenuAccelerators(): Readonly<Record<string, string>> {
+  const accelerators: Record<string, string> = {};
+  for (const action of KEYMAP_ACTIONS) {
+    const chord = action.menu ? parseChord(action.chord) : null;
+    if (chord) accelerators[action.id] = chordAccelerator(chord);
+  }
+  return accelerators;
 }
 
 // The default bindings, for a scene: a Mac's, as the fixtures are.

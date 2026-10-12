@@ -1,6 +1,7 @@
 // The reword dialog's content (useCommitActions' RewordDialog puts it
 // in a ModalShell): the commit's summary and description, editable,
 // read off the commit before the form shows.
+import type { Binding } from "../../../lib/keymap.ts";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Button } from "../../../primitives/button.tsx";
 import { Input } from "../../../primitives/input.tsx";
@@ -32,6 +33,7 @@ export function RewordFormView({
   canSave,
   onSave,
   onCancel,
+  saveKeys,
 }: {
   summary: string;
   onSummaryChange: (summary: string) => void;
@@ -40,9 +42,11 @@ export function RewordFormView({
   canSave: boolean;
   onSave: () => void;
   onCancel: () => void;
+  // The keymap's save (⌘↩ unless rebound).
+  saveKeys: Binding;
 }) {
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (saveKeys.matches(e)) {
       e.preventDefault();
       onSave();
     }

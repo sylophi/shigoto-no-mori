@@ -1,6 +1,7 @@
 // A worktree's page over the fixtures: happy-hummingbird with its PR
 // open, in a window beside the sidebar, and the states its footer and
 // header go through.
+import { defaultBinding } from "../lib/keymap.ts";
 import type { ReactNode } from "react";
 import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
 import { StaticMenu } from "../primitives/dropdown-menu.tsx";
@@ -339,6 +340,7 @@ export function WorktreePagePartsScene() {
             onChange={noop}
             onSave={noop}
             onCancel={noop}
+            saveKeys={defaultBinding("save")}
           />
         </Part>
         <Part label="Renaming the folder">

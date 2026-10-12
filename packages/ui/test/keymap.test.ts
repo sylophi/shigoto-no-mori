@@ -11,6 +11,11 @@
 //      scope, and a page or a dialog of its own holds none.
 //   5. A binding back on its default is stored as nothing, and the
 //      section marks only the actions off theirs.
+//   6. A letter or digit is the one the key types, the physical key
+//      where the layout types no Latin one, every other key physical.
+//   7. A ⌘ chord answers extra Shift, Alt or Ctrl unless another binding
+//      takes that press, and the menu's defaults read before a window
+//      sends its own.
 import { expect, it } from "vitest";
 import {
   chordAccelerator,
@@ -18,6 +23,7 @@ import {
   chordOfPress,
   chordText,
   conflictOf,
+  defaultMenuAccelerators,
   KEYMAP_ACTIONS,
   keymapGroups,
   type Chord,
@@ -34,8 +40,17 @@ const chord = (text: string): Chord => {
   return read;
 };
 
+// A press on a US layout unless `key` says what the key typed.
+const usKey = (code: string): string =>
+  /^Key[A-Z]$/.test(code)
+    ? code.slice(3).toLowerCase()
+    : /^Digit\d$/.test(code)
+      ? code.slice(5)
+      : code;
+
 const press = (code: string, mods: Partial<KeyPress> = {}): KeyPress => ({
   code,
+  key: usKey(code),
   metaKey: false,
   ctrlKey: false,
   altKey: false,
@@ -137,4 +152,70 @@ it("stores only what differs from the defaults", () => {
     "palette",
   ]);
   expect(rows.find((row) => row.id === "palette")?.keys).toBe("⌘P");
+});
+
+it("reads a letter or digit as typed, the physical key where no Latin one is typed", () => {
+  const mac = resolveKeymap(undefined, { mac: true, desktop: true });
+  const palette = mac.get("palette");
+  // Dvorak: the key QWERTY calls V types k.
+  expect(palette?.matches(press("KeyV", { key: "k", metaKey: true }))).toBe(
+    true,
+  );
+  // ...and the key in K's place types t, which is not ⌘K.
+  expect(palette?.matches(press("KeyK", { key: "t", metaKey: true }))).toBe(
+    false,
+  );
+  // Cyrillic types л on K's key: no Latin letter, so the key itself.
+  expect(palette?.matches(press("KeyK", { key: "л", metaKey: true }))).toBe(
+    true,
+  );
+  // ⌥ composing a symbol on K's key: the key itself.
+  expect(
+    chordOfPress(press("KeyK", { key: "˚", altKey: true, metaKey: true }), true)
+      ?.key,
+  ).toBe("K");
+  // Dvorak's ' where QWERTY has Q names no letter.
+  expect(chordOfPress(press("KeyQ", { key: "'", metaKey: true }), true)).toBe(
+    null,
+  );
+  // ⇧1 types ! and is still the digit.
+  expect(
+    chordOfPress(press("Digit1", { key: "!", shiftKey: true }), true)?.key,
+  ).toBe("1");
+  // The terminal's Ctrl+` is the key left of 1, whatever it types.
+  expect(
+    mac
+      .get("terminal")
+      ?.matches(press("Backquote", { key: "^", ctrlKey: true })),
+  ).toBe(true);
+});
+
+it("answers a ⌘ chord with extra modifiers unless another binding takes the press", () => {
+  const mac = resolveKeymap(undefined, { mac: true, desktop: true });
+  const enterWith = (mods: Partial<KeyPress>) =>
+    press("Enter", { key: "Enter", metaKey: true, ...mods });
+  expect(mac.get("commit")?.matches(enterWith({ shiftKey: true }))).toBe(true);
+  expect(mac.get("commit")?.matches(enterWith({ altKey: true }))).toBe(true);
+  expect(
+    mac
+      .get("palette")
+      ?.matches(press("KeyK", { metaKey: true, ctrlKey: true })),
+  ).toBe(true);
+  // ⇧⌘N is Add project's own: New window does not take it too.
+  const shifted = press("KeyN", { key: "N", metaKey: true, shiftKey: true });
+  expect(mac.get("addProject")?.matches(shifted)).toBe(true);
+  expect(mac.get("newWindow")?.matches(shifted)).toBe(false);
+  // A missing modifier is no match.
+  expect(mac.get("addProject")?.matches(press("KeyN", { metaKey: true }))).toBe(
+    false,
+  );
+});
+
+it("gives the menu its default accelerators before a window sends its own", () => {
+  const defaults = defaultMenuAccelerators();
+  expect(defaults.settings).toBe("Cmd+,");
+  expect(defaults.newWindow).toBe("Cmd+N");
+  expect(defaults.addProject).toBe("Cmd+Shift+N");
+  expect(defaults.launchTool1).toBe("Cmd+1");
+  expect(defaults.palette).toBe(undefined);
 });
