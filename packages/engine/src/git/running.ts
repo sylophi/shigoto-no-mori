@@ -10,10 +10,10 @@ import {
   DEFAULT_MAX_OUTPUT,
   GitCommandError,
   GitOutputTooLargeError,
-  NETWORK_SUBCOMMANDS,
   PATHSPEC_CHUNK,
   type RunOptions,
   SPAWN_SLOTS,
+  UNSLOTTED_SUBCOMMANDS,
   encoder,
   identity,
   readAll,
@@ -78,7 +78,7 @@ export const makeRunning = Effect.gen(function* () {
         }
         return stdout;
       }),
-    ).pipe(NETWORK_SUBCOMMANDS.has(subcommand) ? identity : slots.withPermit);
+    ).pipe(UNSLOTTED_SUBCOMMANDS.has(subcommand) ? identity : slots.withPermit);
   });
 
   // Exit 0 or not, for the checks git answers with its exit code.

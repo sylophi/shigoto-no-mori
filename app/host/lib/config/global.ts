@@ -3,7 +3,7 @@
 // config and lives in main/electron/clientConfig.ts instead. Reads and
 // writes go through the engine's Config (host/lib/engineOps.ts), the
 // same the terminal's `sm config` uses.
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Semaphore from "effect/Semaphore";
 import { log } from "@shared/log";
 
@@ -35,7 +35,7 @@ export function globalConfigChanged(): void {
     try {
       listener();
     } catch (error) {
-      log.warn(`[config] change listener failed: ${errorMessageOf(error)}`);
+      log.warn(`[config] change listener failed: ${errorWordsOf(error)}`);
     }
   }
 }

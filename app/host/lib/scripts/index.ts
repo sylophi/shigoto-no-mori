@@ -13,10 +13,8 @@
 import type { BusyOperations } from "@shared/busy";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import {
-  errorMessageOf,
-  WorktreeSettingUpError,
-} from "@shigomori/contracts/errors";
+import { WorktreeSettingUpError } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { holdRootChecks } from "@host/mirror/registry";
 import {
   type Project,
@@ -722,7 +720,7 @@ export const startScript = Effect.fn("Scripts.start")(function* (
       Effect.tapError((error) =>
         error.reason === "failed"
           ? Effect.logWarning(
-              `[scripts] the PTY did not start: ${errorMessageOf(error.cause)}`,
+              `[scripts] the PTY did not start: ${errorWordsOf(error.cause)}`,
             )
           : Effect.void,
       ),
@@ -782,7 +780,7 @@ export const startScript = Effect.fn("Scripts.start")(function* (
 
   pty.onError((error) => {
     flushOutput();
-    stream.emit({ runId, kind: "error", data: errorMessageOf(error) });
+    stream.emit({ runId, kind: "error", data: errorWordsOf(error) });
   });
 
   // The exit comes after the run's last output (./pty.ts), so the

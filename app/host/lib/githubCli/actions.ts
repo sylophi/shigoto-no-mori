@@ -8,7 +8,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
-import { hasCommit } from "../git/refs";
+import * as Git from "@shigomori/engine/Git";
 import { isCommandError, stderrOf, stdoutOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
@@ -133,9 +133,14 @@ const getLocalPullRequestDiff = Effect.fnUntraced(function* (
   );
   const pr = yield* decodeGhPrCommits(raw);
   const oids = [pr.baseRefOid, pr.headRefOid];
-  const present = yield* Effect.forEach(oids, (oid) => hasCommit(cwd, oid), {
-    concurrency: "unbounded",
-  });
+  const git = yield* Git.Git;
+  const present = yield* Effect.forEach(
+    oids,
+    (oid) => git.hasCommit(cwd, oid),
+    {
+      concurrency: "unbounded",
+    },
+  );
   const missing = oids.filter((_, i) => !present[i]);
   if (missing.length > 0) {
     const remote = yield* remoteNameForUrl(cwd, pr.url);

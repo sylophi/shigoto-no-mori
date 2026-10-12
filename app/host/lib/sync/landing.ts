@@ -16,21 +16,14 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
 import * as Ops from "@host/lib/engineOps";
-import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
-import {
-  deleteRef,
-  hasCommit,
-  localBranchTips,
-  treeOf,
-  updateRef,
-} from "@host/lib/git/refs";
+import * as Git from "@shigomori/engine/Git";
 import {
   addProject,
   findProject,
@@ -94,7 +87,7 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
 ) {
   const [{ local }, existing] = yield* Effect.all(
     [
-      listBranches(project.path),
+      Effect.flatMap(Git.Git, (git) => git.listBranches(project.path)),
       Ops.listWorktreeIdentities({ projectId: project.id }),
     ],
     { concurrency: 2 },
@@ -227,7 +220,7 @@ export const landWorktree = (
                 (error) =>
                   new CloneUnregisteredError({
                     path: dest,
-                    reason: errorMessageOf(error),
+                    reason: errorWordsOf(error),
                   }),
               ),
             ),
@@ -264,7 +257,8 @@ export const landWorktree = (
 
     // 4. Fetch what's missing. Tip already here + clean worktree means
     // nothing crosses at all.
-    const tipIsLocal = yield* hasCommit(project.path, branchTip);
+    const git = yield* Git.Git;
+    const tipIsLocal = yield* git.hasCommit(project.path, branchTip);
     const wantRefs = [
       ...(tipIsLocal ? [] : [`refs/heads/${branch}`]),
       ...(captured ? [dirtyRefFor(sourceWorktreeId)] : []),
@@ -282,7 +276,7 @@ export const landWorktree = (
         // corruption.
         const haves = tipIsLocal
           ? [branchTip]
-          : yield* localBranchTips(project.path);
+          : yield* git.localBranchTips(project.path);
         // The fetch opens the transfer step itself with its (0, total)
         // frame, so only the nothing-to-fetch case needs a bare tick.
         yield* source
@@ -302,7 +296,11 @@ export const landWorktree = (
         progress({ step: "transfer" });
       }
       if (tipIsLocal) {
-        yield* updateRef(project.path, incomingRef, branchTip);
+        yield* git.updateRef({
+          repo: project.path,
+          ref: incomingRef,
+          commit: branchTip,
+        });
       }
 
       // 5 and 6. The create on the incoming ref, then the capture
@@ -325,7 +323,7 @@ export const landWorktree = (
       );
       const captureTree =
         captured && capture.commit !== undefined
-          ? yield* treeOf(project.path, capture.commit as string)
+          ? yield* git.treeOf(project.path, capture.commit as string)
           : undefined;
       return {
         worktree,
@@ -342,7 +340,7 @@ export const landWorktree = (
       };
     }).pipe(
       // Swept success or fail.
-      Effect.ensuring(Effect.ignore(deleteRef(project.path, incomingRef))),
+      Effect.ensuring(Effect.ignore(git.deleteRef(project.path, incomingRef))),
     );
   });
 
@@ -491,9 +489,14 @@ const landIncoming = (
     if (capture !== undefined) {
       const sourceDirtyRef = dirtyRefFor(capture.sourceWorktreeId);
       const localDirtyRef = dirtyRefFor(worktree.id);
-      yield* updateRef(project.path, localDirtyRef, capture.commit);
+      const git = yield* Git.Git;
+      yield* git.updateRef({
+        repo: project.path,
+        ref: localDirtyRef,
+        commit: capture.commit,
+      });
       if (localDirtyRef !== sourceDirtyRef) {
-        yield* deleteRef(project.path, sourceDirtyRef);
+        yield* git.deleteRef(project.path, sourceDirtyRef);
       }
       dirtyApplied = yield* Ops.dirtyApply(project, worktree.id).pipe(
         Effect.withSpan("Landing.apply"),
@@ -526,7 +529,11 @@ const rollBackLanded = (
       timeoutMs: ROLLBACK_CLEANUP_MS,
     });
     yield* Effect.ignore(
-      deleteAnyLocalBranch(project.path, worktree.branch, true),
+      (yield* Git.Git).deleteBranch({
+        repo: project.path,
+        name: worktree.branch,
+        force: true,
+      }),
     );
   }).pipe(
     Effect.catch((error) =>

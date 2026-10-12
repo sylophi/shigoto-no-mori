@@ -47,7 +47,7 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import {
   PeerReach,
   peerMirrorFor,
@@ -142,7 +142,7 @@ export const currentMirrorList = Effect.flatMap(engineOrNull, (daemon) => {
     Effect.catchCause((cause) =>
       Effect.sync(() => {
         log.warn(
-          `[mirror] the changed broadcast goes without its list: ${errorMessageOf(cause)}`,
+          `[mirror] the changed broadcast goes without its list: ${errorWordsOf(cause)}`,
         );
         return undefined;
       }),
@@ -418,7 +418,7 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
       // to remove.
       Effect.catch((error) =>
         Effect.map(copyIsGone(raw), (gone) =>
-          gone ? null : errorMessageOf(error),
+          gone ? null : errorWordsOf(error),
         ),
       ),
     );

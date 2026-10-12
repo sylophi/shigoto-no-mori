@@ -3,13 +3,13 @@
 // fails with git's own words, which the IPC layer relays verbatim into
 // the renderer's toast).
 import { SyncConflictsError } from "@shigomori/contracts/errors";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { resetHard } from "./changes";
 import { GitRefusal, run, runLenient } from "./core";
 import { mergeKeepingConflicts } from "./merge";
 import { conflictedPaths } from "./operation";
-import { ownCommitCounts, upstreamName } from "./refs";
-import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export const pushFastForward = (worktreePath: string) =>
   Effect.asVoid(run(worktreePath, ["push"]));
@@ -83,7 +83,7 @@ export const publishCurrentBranch = Effect.fnUntraced(function* (
   worktreePath: string,
   projectPath: string,
 ) {
-  const remotes = yield* listRemotes(projectPath);
+  const remotes = yield* (yield* Git.Git).listRemotes(projectPath);
   const first = remotes[0];
   if (!first) {
     return yield* new GitRefusal({ reason: "No git remote configured" });
@@ -97,14 +97,17 @@ export const publishCurrentBranch = Effect.fnUntraced(function* (
 // pushed copy).
 const rebaseIsSafe = (worktreePath: string, ref: string) =>
   Effect.map(
-    ownCommitCounts(worktreePath, ref),
+    Effect.flatMap(Git.Git, (git) => git.ownCommitCounts(worktreePath, ref)),
     ({ own, merges, unpushed }) => merges === 0 && unpushed === own,
   );
 
 // The upstream by its name ("origin/feature"), for a merge to say it
 // by in its message and its conflict markers rather than as "@{u}".
 const upstreamRef = (worktreePath: string) =>
-  Effect.map(upstreamName(worktreePath), (name) => name ?? "@{u}");
+  Effect.map(
+    Effect.flatMap(Git.Git, (git) => git.upstreamName(worktreePath)),
+    Option.getOrElse(() => "@{u}"),
+  );
 
 // A rebase for linear history where that is safe (rebaseIsSafe), and a
 // whole-tree merge otherwise or on a per-commit conflict. Each merge
@@ -166,7 +169,7 @@ export const syncWithPrimary = (
   primaryRef: string,
 ) =>
   Effect.andThen(
-    fetchAllRemotes(projectPath),
+    Effect.flatMap(Git.Git, (git) => git.fetchAll(projectPath)),
     rebaseOrMergeAgainst(worktreePath, primaryRef),
   );
 
@@ -190,6 +193,6 @@ export const mergePrimaryKeepingConflicts = (
   primaryRef: string,
 ) =>
   Effect.andThen(
-    fetchAllRemotes(projectPath),
+    Effect.flatMap(Git.Git, (git) => git.fetchAll(projectPath)),
     mergeKeepingConflicts(worktreePath, primaryRef),
   );

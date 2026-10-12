@@ -4,7 +4,7 @@
 // provides it (host/process/handlers.ts). The peers themselves are
 // reached through PeerReach (host/ipc/PeerReach.ts).
 import { ControlError } from "@shigomori/contracts/modules/control";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Context from "effect/Context";
@@ -55,5 +55,5 @@ export function listDevicesFailure(
         "signed-out",
         "This device's access to the account was removed. Sign in again from the app.",
       )
-    : new AccountUnreachableError({ reason: errorMessageOf(error) });
+    : new AccountUnreachableError({ reason: errorWordsOf(error) });
 }

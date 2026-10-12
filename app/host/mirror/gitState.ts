@@ -41,23 +41,15 @@ import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Deferred from "effect/Deferred";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Git from "@shigomori/engine/Git";
+import * as Option from "effect/Option";
 import { type GitError, run, runLenient } from "@host/lib/git/core";
 import { gitDirOf, operationInProgress } from "@host/lib/git/operation";
-import {
-  deleteRef,
-  hasCommit,
-  hasObject,
-  isAncestor,
-  refTip,
-  treeOf,
-  updateRef,
-  ZERO_SHA,
-} from "@host/lib/git/refs";
 import { listCheckouts, worktreeIdFromPath } from "@host/lib/git/worktrees";
 
 // A state that can't be read or applied, in the words the other device
@@ -142,7 +134,7 @@ const readHeadFacts = Effect.fnUntraced(function* (worktreePath: string) {
     Effect.mapError(
       (error) =>
         new GitStateError({
-          reason: `the worktree has no commits yet (${errorMessageOf(error)})`,
+          reason: `the worktree has no commits yet (${errorWordsOf(error)})`,
         }),
     ),
   );
@@ -291,7 +283,7 @@ const computeIndexTree = Effect.fnUntraced(function* (
   }
   const unsnapshotted = (error: unknown) =>
     new GitStateError({
-      reason: `the index cannot be snapshotted (unresolved conflicts?): ${errorMessageOf(error)}`,
+      reason: `the index cannot be snapshotted (unresolved conflicts?): ${errorWordsOf(error)}`,
     });
   const copy = yield* Effect.tryPromise({
     try: () => copyIndexToScratch(worktreePath, indexPath),
@@ -347,6 +339,7 @@ export const readGitState = Effect.fnUntraced(function* (
   worktreeId: string,
 ) {
   const peek = yield* peekGitState(worktreePath);
+  const git = yield* Git.Git;
   if (peek.operation !== null) {
     return yield* new GitStateError({
       reason: operationRefusal(peek.operation),
@@ -357,18 +350,18 @@ export const readGitState = Effect.fnUntraced(function* (
   const ref = indexRefFor(worktreeId);
   if (core.indexTree === headTree) {
     if (!carrierClean.has(worktreeId)) {
-      yield* Effect.ignore(deleteRef(projectPath, ref));
+      yield* Effect.ignore(git.deleteRef(projectPath, ref));
       carrierClean.add(worktreeId);
     }
     return { ...core, indexCommit: null } satisfies GitState;
   }
   carrierClean.delete(worktreeId);
-  const existing = yield* refTip(projectPath, ref);
+  const existing = yield* git.refTip(projectPath, ref);
   if (
-    existing !== null &&
-    (yield* treeOf(projectPath, existing)) === core.indexTree
+    Option.isSome(existing) &&
+    (yield* git.treeOf(projectPath, existing.value)) === core.indexTree
   ) {
-    return { ...core, indexCommit: existing } satisfies GitState;
+    return { ...core, indexCommit: existing.value } satisfies GitState;
   }
   const commit = (yield* run(
     projectPath,
@@ -382,7 +375,7 @@ export const readGitState = Effect.fnUntraced(function* (
     ],
     { env: CAPTURE_IDENT },
   )).trim();
-  yield* updateRef(projectPath, ref, commit);
+  yield* git.updateRef({ repo: projectPath, ref, commit });
   return { ...core, indexCommit: commit } satisfies GitState;
 });
 
@@ -419,7 +412,10 @@ export const applyGitState = (
     Effect.ensuring(
       Effect.forEach(
         (input.sweep ?? []).filter((ref) => ref.startsWith("refs/shigomori/")),
-        (ref) => Effect.ignore(deleteRef(project.path, ref)),
+        (ref) =>
+          Effect.ignore(
+            Effect.flatMap(Git.Git, (git) => git.deleteRef(project.path, ref)),
+          ),
         { concurrency: "unbounded", discard: true },
       ),
     ),
@@ -446,10 +442,11 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
     return refused("changed-locally");
   }
   const { state } = input;
+  const git = yield* Git.Git;
   const [tipHere, indexTreeHere] = yield* Effect.all(
     [
-      hasCommit(project.path, state.tip),
-      hasObject(project.path, `${state.indexTree}^{tree}`),
+      git.hasCommit(project.path, state.tip),
+      git.hasObject(project.path, `${state.indexTree}^{tree}`),
     ],
     { concurrency: 2 },
   );
@@ -462,7 +459,12 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
       current.head.kind === "branch" ? current.head.branch : null;
     if (target === currentBranch) {
       if (current.tip !== state.tip) {
-        yield* updateRef(project.path, targetRef, state.tip, current.tip);
+        yield* git.updateRef({
+          repo: project.path,
+          ref: targetRef,
+          commit: state.tip,
+          expected: current.tip,
+        });
       }
     } else {
       // A branch switch. The branch may exist here already: refuse if
@@ -479,23 +481,25 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
           `branch ${target} is checked out at ${elsewhere.path} on this device`,
         );
       }
-      const existingTip = yield* refTip(project.path, targetRef);
+      const existingTip = Option.getOrNull(
+        yield* git.refTip(project.path, targetRef),
+      );
       if (
         existingTip !== null &&
         existingTip !== state.tip &&
-        !(yield* isAncestor(project.path, existingTip, state.tip))
+        !(yield* git.isAncestor(project.path, existingTip, state.tip))
       ) {
         return refused(
           `branch ${target} on this device has commits the other device does not`,
         );
       }
       if (existingTip !== state.tip) {
-        yield* updateRef(
-          project.path,
-          targetRef,
-          state.tip,
-          existingTip ?? ZERO_SHA,
-        );
+        yield* git.updateRef({
+          repo: project.path,
+          ref: targetRef,
+          commit: state.tip,
+          expected: existingTip ?? Git.ZERO_SHA,
+        });
       }
       yield* run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
     }

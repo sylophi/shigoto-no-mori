@@ -6,9 +6,11 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { engineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
+import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
+  callFailureOf,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
@@ -91,6 +93,17 @@ export const asCall = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids = {},
 ) => effect.pipe(Effect.mapError((error) => engineFailure(error, ids)));
+
+// What a host call's failure crosses a wire as: a git the engine ran
+// in git's own words, as `sm` prints it, and anything else as
+// callFailureOf makes it.
+export const hostCallFailure = (error: unknown) =>
+  callFailureOf(
+    error instanceof Git.GitCommandError ||
+      error instanceof Git.GitOutputTooLargeError
+      ? engineFailure(error)
+      : error,
+  );
 
 // `asCall` for an operation that changes something, counted while it
 // runs.

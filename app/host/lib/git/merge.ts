@@ -11,6 +11,7 @@ import type {
   IntegrateMethod,
   MergePreview,
 } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import { onIndex } from "./changes";
 import { GitRefusal, run, runLenient, splitZ } from "./core";
@@ -20,7 +21,6 @@ import {
   readOperation,
   refuseMidOperation,
 } from "./operation";
-import { countCommits, ownCommitCounts, resolveCommit } from "./refs";
 
 // `countsOnly` leaves out the merge's conflicts and the incoming
 // subject, for a move that makes no merge (a hard reset): the trial
@@ -30,11 +30,12 @@ export const readMergePreview = Effect.fnUntraced(function* (
   ref: string,
   countsOnly = false,
 ) {
-  const target = yield* resolveCommit(worktreePath, ref);
+  const git = yield* Git.Git;
+  const target = yield* git.resolveCommit(worktreePath, ref);
   const [incoming, ownCounts, merged] = yield* Effect.all(
     [
-      countCommits(worktreePath, [`HEAD..${target}`]),
-      ownCommitCounts(worktreePath, target),
+      git.countCommits(worktreePath, [`HEAD..${target}`]),
+      git.ownCommitCounts(worktreePath, target),
       // The tree a merge would make, then the paths it left conflicted.
       // Exit 1 on a conflict, so read leniently. Unrelated histories fail
       // outright, and the merge itself says why.
@@ -122,7 +123,7 @@ export const mergeBranch = (
     worktreePath,
     Effect.gen(function* () {
       yield* refuseMidOperation(worktreePath);
-      yield* resolveCommit(worktreePath, ref);
+      yield* (yield* Git.Git).resolveCommit(worktreePath, ref);
       switch (method) {
         case "fastForward":
           yield* run(worktreePath, [

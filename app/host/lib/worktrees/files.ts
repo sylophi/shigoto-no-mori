@@ -4,7 +4,8 @@
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { errorCodeOf, errorMessageOf } from "@shigomori/contracts/errors";
+import { errorCodeOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
@@ -23,7 +24,7 @@ const BINARY_SNIFF_BYTES = 8000;
 export const readWorktreeFile = (worktreePath: string, relative: string) =>
   Effect.tryPromise({
     try: () => readFileAt(worktreePath, relative),
-    catch: (error) => new WorktreeFileError({ reason: errorMessageOf(error) }),
+    catch: (error) => new WorktreeFileError({ reason: errorWordsOf(error) }),
   });
 
 // A file that could not be read for a reason other than its being gone.

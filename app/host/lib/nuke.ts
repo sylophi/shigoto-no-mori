@@ -18,7 +18,7 @@ import type {
   NukeReport,
   Project,
 } from "@shigomori/contracts/schemas";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -71,7 +71,7 @@ export const leftIf = <R>(
 ): Effect.Effect<ReadonlyArray<Left>, never, R> =>
   Effect.map(Effect.exit(run), (exit) =>
     Exit.isFailure(exit)
-      ? [{ what, why: errorMessageOf(Cause.squash(exit.cause)) }]
+      ? [{ what, why: errorWordsOf(Cause.squash(exit.cause)) }]
       : [],
   );
 
@@ -118,7 +118,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
           Effect.sync(() => {
             left.push({
               what: `The worktrees of ${project.name}`,
-              why: errorMessageOf(error),
+              why: errorWordsOf(error),
             });
             return { project, targets: [] };
           }),
@@ -143,7 +143,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
               target.id,
             ).pipe(
               Effect.as(null),
-              Effect.catch((error) => Effect.succeed(errorMessageOf(error))),
+              Effect.catch((error) => Effect.succeed(errorWordsOf(error))),
             );
             // One inside the data dir goes with it at the next start.
             if (failed !== null && !isSameOrInside(target.path, dataDir())) {

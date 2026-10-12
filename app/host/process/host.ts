@@ -10,7 +10,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
 import { effectClient } from "@shared/ipc/effectClient";
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   try {
     await graph.context();
   } catch (error) {
-    Graph.failed(errorMessageOf(error));
+    Graph.failed(errorWordsOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
     const storeReport = await storeFailureReport(error, {
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
       version: facts.appVersion,
     });
     await Effect.runPromise(
-      shell.failed({ message: errorMessageOf(error), storeReport }),
+      shell.failed({ message: errorWordsOf(error), storeReport }),
     );
     process.exit(1);
   }

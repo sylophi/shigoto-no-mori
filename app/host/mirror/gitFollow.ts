@@ -27,7 +27,8 @@
 // changed (or that finds a waiting session's files caught up), and a
 // slow periodic sweep as the backstop. Reconciles are coalesced per
 // session: one in flight, one queued.
-import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
+import { isEntityGoneError } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
@@ -152,7 +153,7 @@ export const makeGitFollower = (deps: {
             Effect.catchCause((cause) =>
               Effect.sync(() => {
                 warn(
-                  `[mirror] git follow: agreed store unreadable: ${errorMessageOf(Cause.squash(cause))}`,
+                  `[mirror] git follow: agreed store unreadable: ${errorWordsOf(Cause.squash(cause))}`,
                 );
                 return {};
               }),
@@ -222,7 +223,7 @@ const reconcileOf = (
     if (Result.isFailure(found)) {
       setStatus(record, {
         status: "error",
-        detail: errorMessageOf(found.failure),
+        detail: errorWordsOf(found.failure),
       });
       return;
     }
@@ -268,7 +269,7 @@ const reconcileOf = (
                 if (helpers.descriptionFailed.has(session.session)) return;
                 helpers.descriptionFailed.add(session.session);
                 warn(
-                  `[mirror] following the title and description failed: ${errorMessageOf(error)}`,
+                  `[mirror] following the title and description failed: ${errorWordsOf(error)}`,
                 );
               }),
             ),
@@ -279,13 +280,13 @@ const reconcileOf = (
       const peerOperation =
         peerFailure === undefined
           ? null
-          : operationInRefusal(errorMessageOf(peerFailure));
+          : operationInRefusal(errorWordsOf(peerFailure));
       if (peerFailure !== undefined && isEntityGoneError(peerFailure)) {
         copyGone(session);
       }
       if (Exit.isFailure(localRead)) {
         const failure = Cause.squash(localRead.cause);
-        const operation = operationInRefusal(errorMessageOf(failure));
+        const operation = operationInRefusal(errorWordsOf(failure));
         if (operation === null) return yield* Effect.fail(failure);
         setStatus(record, {
           status: "blocked",
@@ -369,7 +370,7 @@ const reconcileOf = (
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {
-          const message = errorMessageOf(Cause.squash(cause));
+          const message = errorWordsOf(Cause.squash(cause));
           warn(`[mirror] git follow ${session.session}: ${message}`);
           setStatus(record, { status: "error", detail: message });
         }),
@@ -418,7 +419,7 @@ function makeFollower(
           Effect.catchCause((cause) =>
             Effect.sync(() =>
               warn(
-                `[mirror] git follow: agreed store unwritable: ${errorMessageOf(Cause.squash(cause))}`,
+                `[mirror] git follow: agreed store unwritable: ${errorWordsOf(Cause.squash(cause))}`,
               ),
             ),
           ),
@@ -443,7 +444,7 @@ function makeFollower(
       deps.onCopyGone(session);
     } catch (error) {
       warn(
-        `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorMessageOf(error)}`,
+        `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorWordsOf(error)}`,
       );
     }
   }

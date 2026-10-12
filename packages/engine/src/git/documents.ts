@@ -37,13 +37,27 @@ export class GitOutputTooLargeError extends Schema.TaggedError<GitOutputTooLarge
 export type GitError = GitCommandError | GitOutputTooLargeError;
 
 // git's safe delete refused: the branch has commits no other branch
-// has. The caller can offer the forced delete.
-export class BranchNotMergedError extends Schema.TaggedError<BranchNotMergedError>()(
-  "BranchNotMergedError",
-  { branch: Schema.String },
+// has. The contract's, so the app's caller offers the forced delete.
+export { BranchNotMergedError } from "@shigomori/contracts/errors";
+
+// A name that resolves to no commit here.
+export class UnknownRevisionError extends Schema.TaggedError<UnknownRevisionError>()(
+  "UnknownRevisionError",
+  { ref: Schema.String },
 ) {
   override get message(): string {
-    return `Branch '${this.branch}' has unmerged commits.`;
+    return `There is no branch or commit named ${this.ref}.`;
+  }
+}
+
+// HEAD moved on from where a caller pinned it: what a move made from a
+// loaded page asks, so it can't land on a branch that changed since.
+export class BranchMovedError extends Schema.TaggedError<BranchMovedError>()(
+  "BranchMovedError",
+  {},
+) {
+  override get message(): string {
+    return "The branch has moved on since this was loaded. Reload and try again.";
   }
 }
 
@@ -165,9 +179,23 @@ export const SPAWN_SLOTS = Math.max(
   globalThis.navigator?.hardwareConcurrency ?? 4,
 );
 
-// What waits on a remote, and could hold a slot for minutes while the
-// probes the cap is for queue behind it.
-export const NETWORK_SUBCOMMANDS = new Set(["clone", "fetch", "pull", "push"]);
+// What can hold a slot for minutes while the probes the cap is for
+// queue behind it: a wait on a remote, or the user's hooks a commit,
+// a merge, a rebase or a checkout runs.
+export const UNSLOTTED_SUBCOMMANDS = new Set([
+  "clone",
+  "fetch",
+  "pull",
+  "push",
+  "commit",
+  "merge",
+  "rebase",
+  "cherry-pick",
+  "revert",
+  "am",
+  "checkout",
+  "switch",
+]);
 
 // Covers any status, log or ref output by a wide margin.
 export const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
@@ -192,6 +220,9 @@ export const UNPUSHED_LIMIT = 1000;
 export const FIRST_PARENT_LIMIT = 2000;
 
 export const LOCAL_TIPS_LIMIT = 256;
+
+// A ref that must not exist yet, in update-ref's compare-and-set.
+export const ZERO_SHA = "0".repeat(40);
 
 export const DISCARD_SNAPSHOTS_KEPT = 40;
 

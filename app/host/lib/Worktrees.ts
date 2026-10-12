@@ -17,6 +17,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { EngineCallError } from "./engine";
+import type * as Git from "@shigomori/engine/Git";
 import type { GitError } from "./git/core";
 import type { WorktreeIdentity } from "./git/worktrees";
 import {
@@ -51,11 +52,14 @@ export class Worktrees extends Context.Service<
       worktreePath: string,
       relative: string,
       ruleIgnored: boolean,
-    ) => Effect.Effect<SyncWorktreeFolderEntry[], FolderReadError | GitError>;
+    ) => Effect.Effect<
+      SyncWorktreeFolderEntry[],
+      FolderReadError | GitError | Git.GitError
+    >;
     // The untracked paths git ignores in a checkout.
     readonly ignoredPaths: (
       worktreePath: string,
-    ) => Effect.Effect<string[], GitError>;
+    ) => Effect.Effect<string[], Git.GitError>;
     // How stale each of the project's worktrees is, and whether its
     // work already landed in the primary branch.
     readonly hygiene: (

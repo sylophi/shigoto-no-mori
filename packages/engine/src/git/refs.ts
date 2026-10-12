@@ -1,5 +1,7 @@
 // Git's refs and objects: resolving a name, reading an object.
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { BranchMovedError, UnknownRevisionError } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
 
 export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
@@ -62,7 +64,90 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       );
     });
 
-    return { verifyRev, refTip, hasObject, isAncestor };
+    // The commit `ref` names, or a refusal that says there is none.
+    const resolveCommit = Effect.fn("Git.resolveCommit")(function* (
+      cwd: string,
+      ref: string,
+    ) {
+      const tip = yield* refTip(cwd, `${ref}^{commit}`);
+      if (Option.isNone(tip)) return yield* new UnknownRevisionError({ ref });
+      return tip.value;
+    });
+
+    const headAt = Effect.fn("Git.headAt")(function* (
+      cwd: string,
+      expectHead: string | undefined,
+    ) {
+      const [head, expected] = yield* Effect.all(
+        [
+          verifyRev(cwd, "HEAD"),
+          expectHead ? verifyRev(cwd, expectHead) : Effect.succeed(undefined),
+        ],
+        { concurrency: 2 },
+      );
+      if (expected !== undefined && head !== expected) {
+        return yield* new BranchMovedError();
+      }
+      return head;
+    });
+
+    const upstreamName = Effect.fn("Git.upstreamName")(function* (cwd: string) {
+      return yield* run(cwd, [
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{u}",
+      ]).pipe(
+        Effect.map((out) => Option.liftPredicate(out.trim(), Boolean)),
+        Effect.orElseSucceed(() => Option.none<string>()),
+      );
+    });
+
+    const countCommits = Effect.fn("Git.countCommits")(function* (
+      cwd: string,
+      revs: readonly string[],
+      flags: readonly string[] = [],
+    ) {
+      return Number(
+        (yield* run(cwd, [
+          "rev-list",
+          "--count",
+          ...flags,
+          "--end-of-options",
+          ...revs,
+        ])).trim(),
+      );
+    });
+
+    // Leaves out what any remote has, as unpushedCount does.
+    const NOT_ON_A_REMOTE = ["--not", "--remotes", "--not"];
+
+    const ownCommitCounts = Effect.fn("Git.ownCommitCounts")(function* (
+      cwd: string,
+      ref: string,
+    ) {
+      const range = [`${ref}..HEAD`];
+      return yield* Effect.all(
+        {
+          own: countCommits(cwd, range),
+          merges: countCommits(cwd, range, ["--merges"]),
+          unpushed: countCommits(cwd, range, NOT_ON_A_REMOTE),
+        },
+        { concurrency: "unbounded" },
+      );
+    });
+
+    return {
+      verifyRev,
+      refTip,
+      hasObject,
+      isAncestor,
+      resolveCommit,
+      headAt,
+      upstreamName,
+      countCommits,
+      ownCommitCounts,
+    };
   });
 
 export type RefsArea = Effect.Success<ReturnType<typeof makeRefs>>;

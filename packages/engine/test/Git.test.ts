@@ -11,6 +11,7 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { it, vi } from "vitest";
 import {
+  BranchMovedError,
   BranchNotMergedError,
   CloneDestinationError,
   GitCommandError,
@@ -18,6 +19,7 @@ import {
   NoRemoteError,
   OverwriteRefusedError,
   stderrOf,
+  UnknownRevisionError,
 } from "../src/Git.ts";
 import { LOG_FORMAT, parseLog } from "../src/gitParse.ts";
 import {
@@ -325,6 +327,66 @@ it("reads, moves and compares refs", async () => {
     await withGit((g) => g.treeOf(repo, two)),
     rev(repo, `${two}^{tree}`),
   );
+});
+
+it("resolves a name to its commit or says there is none, and refuses a HEAD that moved", async () => {
+  const repo = seedRepo();
+  const head = rev(repo, "HEAD");
+  assert.equal(await withGit((g) => g.resolveCommit(repo, "main")), head);
+  const unknown = await failureAs(UnknownRevisionError, (g) =>
+    g.resolveCommit(repo, "nope"),
+  );
+  assert.equal(unknown.message, "There is no branch or commit named nope.");
+  assert.equal(await withGit((g) => g.headAt(repo, undefined)), head);
+  assert.equal(await withGit((g) => g.headAt(repo, head)), head);
+  write(repo, "n.txt", "n\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "n");
+  const moved = await failureAs(BranchMovedError, (g) => g.headAt(repo, head));
+  assert.equal(
+    moved.message,
+    "The branch has moved on since this was loaded. Reload and try again.",
+  );
+});
+
+it("names the upstream and counts HEAD's own commits past a ref", async () => {
+  const { clone } = withRemote();
+  assert.deepEqual(
+    await withGit((g) => g.upstreamName(clone)),
+    Option.some("origin/main"),
+  );
+  git(clone, "checkout", "-q", "-b", "loose");
+  assert.deepEqual(await withGit((g) => g.upstreamName(clone)), Option.none());
+  write(clone, "a.txt", "a\n");
+  git(clone, "add", ".");
+  git(clone, "commit", "-q", "-m", "a");
+  git(clone, "checkout", "-q", "-b", "side", "HEAD~1");
+  write(clone, "b.txt", "b\n");
+  git(clone, "add", ".");
+  git(clone, "commit", "-q", "-m", "b");
+  git(clone, "checkout", "-q", "loose");
+  git(clone, "merge", "-q", "--no-edit", "side");
+  git(clone, "push", "-q", "origin", "side");
+  assert.deepEqual(
+    await withGit((g) => g.ownCommitCounts(clone, "origin/main")),
+    { own: 3, merges: 1, unpushed: 2 },
+  );
+  assert.equal(
+    await withGit((g) =>
+      g.countCommits(clone, ["origin/main..HEAD"], ["--merges"]),
+    ),
+    1,
+  );
+});
+
+it("lists branches by git's short names, a tag's namesake qualified and no symbolic ref", async () => {
+  const { clone } = withRemote();
+  git(clone, "tag", "main");
+  git(clone, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
+  assert.deepEqual(await withGit((g) => g.listBranches(clone)), {
+    local: ["heads/main"],
+    remote: ["origin/main"],
+  });
 });
 
 it("a safe delete of an unmerged branch says so, and the forced one goes through", async () => {
