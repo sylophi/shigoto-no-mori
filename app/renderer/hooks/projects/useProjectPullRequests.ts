@@ -111,10 +111,12 @@ export function projectPullRequestsQueryOptions(
     queryFn:
       api === undefined || deviceId === ""
         ? skipToken
-        : async () =>
+        : async ({ signal }) =>
             ownBranchPullRequests(
               await forestRead(deviceId, () =>
-                api.githubCli.projectPullRequests({ projectId }),
+                api.run(api.githubCli.projectPullRequests({ projectId }), {
+                  signal,
+                }),
               ),
             ),
     staleTime: Infinity,

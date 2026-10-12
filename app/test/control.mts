@@ -72,7 +72,7 @@ import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import type * as Types from "effect/Types";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { buildClient } from "@shared/ipc/buildClient";
+import { effectClient } from "@shared/ipc/effectClient";
 import {
   ControlPeerWorktreeSchema,
   ControlTransferResultSchema,
@@ -155,7 +155,12 @@ import {
 import { secondEngine } from "./lib/smBinary.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
-import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
+import {
+  bootDirectWire,
+  DIALER,
+  LISTENER,
+  linkOver,
+} from "./lib/directBoot.mts";
 import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import {
   onHostPush,
@@ -967,12 +972,11 @@ it("list --remote names the peer's worktrees, and bring: points there when given
   );
   assert.deepEqual(shelved.source, { fate: "shelve", done: true });
   assert.deepEqual(shelved.caveats, []);
-  const peerList = await buildClient(
-    worktreesContract,
-    toListener.transport,
-  ).list({
-    projectId: sourceProjectId,
-  });
+  const peerList = await runHost(
+    effectClient(worktreesContract, linkOver(toListener.transport)).list({
+      projectId: sourceProjectId,
+    }),
+  );
   assert.equal(
     peerList.find((wt) => wt.name === "wt-managed")?.shelved,
     true,
@@ -1065,14 +1069,13 @@ it("unmirror of a mirror whose copy was already deleted on the peer ends the ses
   const gone = transferDoc(
     await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
   );
-  const removed = await buildClient(
-    worktreesContract,
-    toListener.transport,
-  ).delete({
-    projectId: gone.worktree.projectId,
-    worktreeId: gone.worktree.id,
-    force: true,
-  });
+  const removed = await runHost(
+    effectClient(worktreesContract, linkOver(toListener.transport)).delete({
+      projectId: gone.worktree.projectId,
+      worktreeId: gone.worktree.id,
+      force: true,
+    }),
+  );
   assert.ok(typeof gone.session === "string");
   assert.equal(removed.ok, true);
   assert.equal(existsSync(gone.worktree.path), false);

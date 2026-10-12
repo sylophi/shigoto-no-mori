@@ -57,8 +57,8 @@ export function AddToDeviceSubmenu({
   const { api, project } = source;
 
   const addTo = async (tab: DeviceTab) => {
-    const url = await api.projects
-      .cloneUrl({ projectId: project.id })
+    const url = await api
+      .run(api.projects.cloneUrl({ projectId: project.id }))
       .catch((err) => {
         notifyError(`Couldn't read ${name}'s remote`, err);
         return undefined;

@@ -1,3 +1,4 @@
+import { throughCancel } from "@/lib/queryClientOptions";
 import {
   useEffect,
   useRef,
@@ -126,7 +127,7 @@ export function AddExistingForm({
   const pickViaDialog = async () => {
     let picked: string | null;
     try {
-      picked = await page.dialog.pickFolder();
+      picked = await page.run(page.dialog.pickFolder());
     } catch (err) {
       // A cancelled dialog resolves to null, so this is a real failure.
       notifyError("Couldn't open the folder picker", err);
@@ -146,8 +147,8 @@ export function AddExistingForm({
     const run = scanRun.current;
     // No try here: React Compiler bails on the early return one would
     // need.
-    const results = await scope.api.fs
-      .scanForGitRepos({ path: browseDir })
+    const results = await scope.api
+      .run(scope.api.fs.scanForGitRepos({ path: browseDir }))
       .catch((err: unknown) => {
         if (scanRun.current === run) {
           notifyError("Couldn't scan for git repos", err);
@@ -226,9 +227,11 @@ export function AddExistingForm({
     // asks for itself then.
     const isRepo = targetSettled
       ? targetIsGitRepo
-      : await queryClient
-          .ensureQueryData(fsIsGitRepoQueryOptions(submitTarget, scope))
-          .catch(() => false);
+      : await throughCancel(() =>
+          queryClient.ensureQueryData(
+            fsIsGitRepoQueryOptions(submitTarget, scope),
+          ),
+        ).catch(() => false);
     if (isRepo) void submit(submitTarget);
     else void scanCurrentDir();
   };

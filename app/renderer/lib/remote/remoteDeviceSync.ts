@@ -37,8 +37,10 @@
 //     would render as "Connecting" (a lie, nothing is trying) and
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
+import { throughCancel } from "@/lib/queryClientOptions";
 import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { callOf } from "@shigomori/contracts/contract";
+import { accountContract } from "@shigomori/contracts/modules/account";
 import { hubContract, type HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
@@ -196,14 +198,16 @@ function refetchDeviceList(): void {
 // missing or invalidated (staleTime Infinity says so, and fetchQuery
 // honours an invalidation regardless of it).
 function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
-  return boundClient().fetchQuery({
-    ...accountDevicesQueryOptions(pageApi()),
-    staleTime: Infinity,
-  });
+  return throughCancel(() =>
+    boundClient().fetchQuery({
+      ...accountDevicesQueryOptions(pageApi()),
+      staleTime: Infinity,
+    }),
+  );
 }
 
 async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
-  const current = status ?? (await pageApi().hub.status());
+  const current = status ?? (await pageApi().run(pageApi().hub.status()));
   // A fetched snapshot seeds the status while none has landed, as the
   // boot's own fetch does: one that failed has these to fall back on.
   if (status === undefined) seedFetched?.(current);
@@ -493,9 +497,7 @@ export const hubStatusAtom = Atom.keepAlive(
         }),
       ),
     );
-    const boot = Stream.fromEffect(
-      Effect.tryPromise(() => pageApi().hub.status()),
-    ).pipe(
+    const boot = Stream.fromEffect(pageApi().hub.status()).pipe(
       Stream.catch(() => Stream.empty),
       Stream.filter(() => !pushed && !seeded),
       Stream.tap((status) =>
@@ -564,7 +566,7 @@ export function startRemoteDeviceSync(
   // departure whatever came before, and the seed never overwrites a
   // change that beat it (null is a known value here).
   let syncedAccountId: string | null | undefined;
-  api.account.onChanged(({ accountId }) => {
+  api.listen(api.pushes(accountContract, "changed"), ({ accountId }) => {
     const leaving =
       syncedAccountId === undefined
         ? accountId === null
@@ -573,7 +575,7 @@ export function startRemoteDeviceSync(
     if (leaving) leaveAccount(queryClient);
     refetchDeviceList();
   });
-  void api.account.status().then((status) => {
+  void api.run(api.account.status()).then((status) => {
     if (syncedAccountId === undefined) {
       syncedAccountId = status.signedIn ? status.accountId : null;
     }

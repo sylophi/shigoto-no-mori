@@ -18,14 +18,14 @@
 //   the page's api): the write lands on this machine's disk, so their
 //   reads and invalidations must stay pinned to this machine's key
 //   registry.
-import type { HostApi } from "@shared/ipc/client";
+import type { HostApi } from "@/lib/runtime/Api";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createContext, use, type ReactNode } from "react";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
-// The host-scoped api (shared/ipc/client.ts), the one a scope's hooks
+// The host-scoped api (lib/runtime/Api.ts), the one a scope's hooks
 // reach: scope.api.dialog fails to compile rather than rejecting on a
 // remote device.
 export type { HostApi };

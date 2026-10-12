@@ -28,11 +28,13 @@
 // to do its pulling: the app quits with its last one.) The window reads
 // the local copy as its view streams it
 // (hooks/sharedSettings/useSharedSettings.ts).
+import { throughCancel } from "@/lib/queryClientOptions";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   SharedSettingsDoc,
   SharedSettingValue,
 } from "@shigomori/contracts/schemas";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import {
   exchangeSharedSettings,
   sharedSettingKeys,
@@ -56,7 +58,8 @@ function offerToPeers(
   if (Object.keys(doc.entries).length === 0) return;
   for (const device of registry.get(remoteDevicesAtom)) {
     if (!deviceStatusView(device.status).reachable) continue;
-    device.api?.sharedSettings.merge({ doc }).catch(() => undefined);
+    const peer = device.api;
+    peer?.run(peer.sharedSettings.merge({ doc })).catch(() => undefined);
   }
 }
 
@@ -64,12 +67,12 @@ function offerToPeers(
 // the pick holds here whatever the network is doing, then an offer to
 // each peer with a session.
 export async function writeSharedSetting(
-  api: Pick<RendererApi, "sharedSettings">,
+  api: Pick<RendererApi, "sharedSettings" | "run">,
   registry: AtomRegistry.AtomRegistry,
   key: string,
   value: SharedSettingValue,
 ): Promise<SharedSettingsDoc> {
-  const doc = await api.sharedSettings.set({ key, value });
+  const doc = await api.run(api.sharedSettings.set({ key, value }));
   const entry = doc.entries[key];
   if (entry !== undefined) {
     offerToPeers(registry, { entries: { [key]: entry } });
@@ -80,12 +83,12 @@ export async function writeSharedSetting(
 // A peer's copy moved: fold it into the local copy. Unconditional on
 // purpose. The host settles an echo cheaply, and asking it every time
 // is what lets a local copy that was reset behind the window fill back
-// in. The peer's client decoded the copy (shared/ipc/buildClient.ts).
+// in. The peer's client decoded the copy (shared/ipc/effectClient.ts).
 function mergePeerSharedSettings(
-  api: Pick<RendererApi, "sharedSettings">,
+  api: Pick<RendererApi, "sharedSettings" | "run">,
   doc: SharedSettingsDoc,
 ): void {
-  api.sharedSettings.merge({ doc }).catch(() => undefined);
+  api.run(api.sharedSettings.merge({ doc })).catch(() => undefined);
 }
 
 // The create-device picks lived in client config before they were
@@ -100,7 +103,9 @@ async function migrateQuickCreateDevices(
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
 ): Promise<void> {
-  const config = await queryClient.fetchQuery(clientConfigQueryOptions(api));
+  const config = await throughCancel(() =>
+    queryClient.fetchQuery(clientConfigQueryOptions(api)),
+  );
   const legacy = config.quickCreateDevices;
   if (legacy === undefined) return;
   const entries: SharedSettingsDoc["entries"] = {};
@@ -111,7 +116,7 @@ async function migrateQuickCreateDevices(
       by: api.deviceId,
     };
   }
-  await api.sharedSettings.merge({ doc: { entries } });
+  await api.run(api.sharedSettings.merge({ doc: { entries } }));
   // Offered like any pick: a browser's copy reaches its peers no other
   // way, and the sessions may have landed while this was reading.
   offerToPeers(registry, { entries });
@@ -138,14 +143,22 @@ export function startSharedSettingsSync(
     followed.clear();
   });
   onSessionLanded((deviceId) => {
-    const peer = apiFor(deviceId).sharedSettings;
+    const peer = apiFor(deviceId);
     if (!followed.has(deviceId)) {
       followed.set(
         deviceId,
-        peer.onChanged((doc) => mergePeerSharedSettings(api, doc)),
+        peer.listen(peer.pushes(sharedSettingsContract, "changed"), (doc) =>
+          mergePeerSharedSettings(api, doc),
+        ),
       );
     }
-    exchangeSharedSettings(api.sharedSettings, peer).catch(() => undefined);
+    exchangeSharedSettings(
+      { merge: (input) => api.run(api.sharedSettings.merge(input)) },
+      {
+        read: () => peer.run(peer.sharedSettings.read()),
+        merge: (input) => peer.run(peer.sharedSettings.merge(input)),
+      },
+    ).catch(() => undefined);
   });
   migrateQuickCreateDevices(api, queryClient, registry).catch(
     (error: unknown) => {

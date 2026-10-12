@@ -52,6 +52,7 @@ import {
   migrationOwed,
   migrationShows,
 } from "@shigomori/contracts/schemas/migration";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import { useApi } from "@/lib/runtime/pageApi";
 
 export function AppShell() {
@@ -83,7 +84,7 @@ export function AppShell() {
   // the desktop's menu ever sends).
   useEffect(
     () =>
-      api.nav.onOpenSettings(() => {
+      api.listen(api.pushes(navContract, "openSettings"), () => {
         void navigate({ to: "/settings" });
       }),
     [navigate, api],

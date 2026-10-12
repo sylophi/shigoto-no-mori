@@ -14,7 +14,8 @@ import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 // the same cache entry under the same rule.
 export const clientConfigQueryOptions = (api: RendererApi) => ({
   queryKey: queryKeys.clientConfig(),
-  queryFn: (): Promise<ClientConfig> => api.clientConfig.read(),
+  queryFn: ({ signal }: { signal: AbortSignal }): Promise<ClientConfig> =>
+    api.run(api.clientConfig.read(), { signal }),
   // Every writer merges over this cached doc via mergeClientConfigWrite
   // and setQueryData's the result back, so the value can never change
   // behind this cache.

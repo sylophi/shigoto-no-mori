@@ -10,6 +10,7 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { notifyError } from "@/lib/toast";
 import { DangerZoneView } from "@shigomori/ui/views/settings/DangerZoneView.tsx";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { useApi } from "@/lib/runtime/pageApi";
 
 export function DangerZone() {
@@ -21,7 +22,10 @@ export function DangerZone() {
   const [progress, setProgress] = useState<NukeProgress | null>(null);
   const [left, setLeft] = useState<NukeReport["left"] | null>(null);
 
-  useEffect(() => api.runtime.onNukeProgress(setProgress), [api]);
+  useEffect(
+    () => api.listen(api.pushes(runtimeContract, "nukeProgress"), setProgress),
+    [api],
+  );
 
   const home = runtime?.homedir ?? null;
   const root = runtime?.dataDir ? tildify(runtime.dataDir, home) : "~/.sm";
@@ -34,8 +38,8 @@ export function DangerZone() {
         // The host's half, then the shell's (sign-out, the marker that
         // deletes the files at the next start). Either may leave
         // something it says why for.
-        const host = await api.runtime.nuke();
-        const shell = await api.window.nuke();
+        const host = await api.run(api.runtime.nuke());
+        const shell = await api.run(api.window.nuke());
         // Every cached query now describes what is going. A blanket
         // invalidateQueries() would refetch them all and raise a burst
         // of "Unknown project/worktree" toasts. Cancel in-flight fetches
@@ -45,7 +49,7 @@ export function DangerZone() {
         setOpenProject(null);
         const all = [...host.left, ...shell.left];
         if (all.length === 0) {
-          void api.window.relaunch();
+          void api.run(api.window.relaunch());
           return;
         }
         setLeft(all);
@@ -66,7 +70,7 @@ export function DangerZone() {
       left={left}
       armed={armed}
       onNuke={handleNuke}
-      onRelaunch={() => void api.window.relaunch()}
+      onRelaunch={() => void api.run(api.window.relaunch())}
     />
   );
 }

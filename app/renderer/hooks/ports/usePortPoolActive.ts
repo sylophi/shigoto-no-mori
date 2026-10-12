@@ -10,8 +10,11 @@ export function usePortPoolActive(
   const { api, keys } = useHostScope();
   return useQuery<boolean>({
     queryKey: keys.portPoolActive(projectId, worktreeId ?? ""),
-    queryFn: () =>
-      api.portPool.isActive({ projectId, worktreeId: worktreeId ?? "" }),
+    queryFn: ({ signal }) =>
+      api.run(
+        api.portPool.isActive({ projectId, worktreeId: worktreeId ?? "" }),
+        { signal },
+      ),
     enabled: worktreeId !== undefined,
     meta: { errorTitle: "Couldn't check port-pool config" },
   });

@@ -11,7 +11,10 @@ export function usePackageScripts(
     queryKey: keys.packageScripts(projectId, worktreeId),
     queryFn:
       projectId !== null && worktreeId !== null
-        ? () => api.packageScripts.list({ projectId, worktreeId })
+        ? ({ signal }) =>
+            api.run(api.packageScripts.list({ projectId, worktreeId }), {
+              signal,
+            })
         : skipToken,
     // Lock the sorted order for the route-mount's lifetime so a script
     // bumping its use count doesn't reshuffle the list mid-interaction;

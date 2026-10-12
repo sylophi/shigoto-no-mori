@@ -14,9 +14,9 @@ export function runtimeInfoQueryOptions(
   const { deviceId, api } = scope;
   return queryOptions<RuntimeInfo>({
     queryKey: queryKeysFor(deviceId).runtimeInfo(),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!api) throw new Error("no session to read runtime info over");
-      return api.runtime.info();
+      return api.run(api.runtime.info(), { signal });
     },
     staleTime: Number.POSITIVE_INFINITY,
     enabled: enabled && api !== undefined,

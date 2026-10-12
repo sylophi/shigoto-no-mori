@@ -19,7 +19,7 @@ async function boot() {
   const client = await startClient(Desktop.layer(bridge));
   disposeWithPage(client);
   // The device id is the host's, read from its store.
-  const { deviceId } = await client.api.window.hostAddress();
+  const { deviceId } = await client.api.run(client.api.window.hostAddress());
   const api: RendererApi = { ...facts, deviceId, ...client.api };
   if (facts.isDev || isLab) exposeToLab(api);
   const router = mountWindow(startApp({ api, links: client.links }), {
@@ -29,7 +29,7 @@ async function boot() {
   });
   // The page it shows, which a quit remembers it on.
   router.subscribe("onResolved", ({ toLocation }) => {
-    void api.window.showing({ route: toLocation.href });
+    void api.run(api.window.showing({ route: toLocation.href }));
   });
 }
 

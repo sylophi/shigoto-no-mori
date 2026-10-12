@@ -5,7 +5,7 @@
 // client modules (the account, the client config, the hub bridge, the
 // shell, the releases) and the browser's own copy of the shared
 // settings, registered (shared/ipc/served.ts) like every binding's, and
-// called through buildApi like every window's.
+// called through the runtime's Api like every window's.
 //
 // A host call nothing here serves is the renderer asking a local host
 // the browser does not have, which it still does in a few places. Those
@@ -109,8 +109,9 @@ export type LocalRegistrar = {
 };
 
 // Every invoke (of one scope, when given), keyed by channel, for the
-// stub fallback. Built from the same module list buildApi consumes so
-// the inventory cannot drift from the api surface. Exported for the
+// stub fallback. Built from the same module list the runtime's Api is
+// built from (renderer/lib/runtime/Api.ts), so the inventory cannot
+// drift from the api surface. Exported for the
 // fake host's fixture wire (lab/fake-host/bridge.ts), which stubs the
 // same way.
 export function invokeIndexFor(

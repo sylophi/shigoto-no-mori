@@ -35,7 +35,24 @@ import type { ChannelMux } from "@shared/remote/channels";
 import type { InvokeOptions } from "@shared/ipc/transport";
 import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
-import { NoDirectConnectionError } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
+import {
+  callFailureOf,
+  NoDirectConnectionError,
+} from "@shigomori/contracts/errors";
+
+// hub:invokePeer as a window's host and a web tab serve it: an effect,
+// so a call interrupted where it was made (a query superseded or
+// dropped) cancels it on the peer too, and the peer's work stops. A
+// failure crosses as the contract error, or RemoteCallError with its
+// message.
+export const servedInvokePeer =
+  (hub: () => HubHandlers) =>
+  ({ deviceId, channel, input }: Parameters<HubHandlers["invokePeer"]>[0]) =>
+    Effect.tryPromise({
+      try: (signal) => hub().invokeOnPeer(deviceId, channel, input, { signal }),
+      catch: callFailureOf,
+    });
 
 // A view not started yet stops nothing.
 const noop = (): void => {};

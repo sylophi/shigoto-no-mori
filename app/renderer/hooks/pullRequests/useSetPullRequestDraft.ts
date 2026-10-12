@@ -19,7 +19,7 @@ export function useSetPullRequestDraft() {
   return useMutation({
     mutationKey: pullRequestMutationKey(keys),
     mutationFn: ({ projectId, number, draft }: SetDraftVariables) =>
-      api.githubCli.setPullRequestDraft({ projectId, number, draft }),
+      api.run(api.githubCli.setPullRequestDraft({ projectId, number, draft })),
     ...optimisticPullRequestDetail<SetDraftVariables>(
       qc,
       keys,

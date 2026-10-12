@@ -25,7 +25,11 @@ function usePackageScriptSort(projectId: string | null) {
     queryFn:
       projectId !== null
         ? // This page shows the manual order, so it can be told it.
-          () => api.packageScripts.getSort({ projectId, knowsManual: true })
+          ({ signal }) =>
+            api.run(
+              api.packageScripts.getSort({ projectId, knowsManual: true }),
+              { signal },
+            )
         : skipToken,
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script sort preference" },
@@ -38,7 +42,7 @@ export function useSetPackageScriptSort(projectId: string | null) {
     keys.packageScriptSort(projectId),
     async (mode) => {
       if (!projectId) return;
-      await api.packageScripts.setSort({ projectId, mode });
+      await api.run(api.packageScripts.setSort({ projectId, mode }));
     },
     "Couldn't save script sort preference",
   );
@@ -57,7 +61,8 @@ function usePackageScriptOrder(
     queryKey: keys.packageScriptOrder(projectId),
     queryFn:
       projectId !== null && sortMode === "manual"
-        ? () => api.packageScripts.getOrder({ projectId })
+        ? ({ signal }) =>
+            api.run(api.packageScripts.getOrder({ projectId }), { signal })
         : skipToken,
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script order" },
@@ -89,7 +94,7 @@ export function useSetPackageScriptOrder(projectId: string | null) {
     keys.packageScriptOrder(projectId),
     async (arranged) => {
       if (!projectId) return;
-      await api.packageScripts.setOrder({ projectId, arranged });
+      await api.run(api.packageScripts.setOrder({ projectId, arranged }));
     },
     "Couldn't save script order",
   );
@@ -110,7 +115,9 @@ export function useSetLaunchRowScript(projectId: string | null) {
     mutationKey,
     mutationFn: async ({ scriptName, onRow }) => {
       if (!projectId) return;
-      await api.packageScripts.setLaunchRow({ projectId, scriptName, onRow });
+      await api.run(
+        api.packageScripts.setLaunchRow({ projectId, scriptName, onRow }),
+      );
     },
     onMutate: ({ scriptName, onRow }) => {
       void queryClient.cancelQueries({ queryKey });

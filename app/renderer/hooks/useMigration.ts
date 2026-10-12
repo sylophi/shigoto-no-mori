@@ -5,6 +5,7 @@
 // with no host of its own. Undefined while it is read.
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { migrationContract } from "@shigomori/contracts/modules/migration";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
@@ -16,13 +17,13 @@ export function useMigration(): MigrationProgress | null | undefined {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!hasLocalHost) return;
-    return api.migration.onChanged((progress) => {
+    return api.listen(api.pushes(migrationContract, "changed"), (progress) => {
       queryClient.setQueryData(queryKeys.migration(), progress);
     });
   }, [queryClient, api, hasLocalHost]);
   const { data } = useQuery({
     queryKey: queryKeys.migration(),
-    queryFn: () => api.migration.read(),
+    queryFn: ({ signal }) => api.run(api.migration.read(), { signal }),
     staleTime: Number.POSITIVE_INFINITY,
     enabled: hasLocalHost,
   });

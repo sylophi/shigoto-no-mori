@@ -44,7 +44,7 @@ export function useQuickCreateWorktree() {
     let from = base;
     if (from === undefined) {
       try {
-        from = await api.projects.defaultBranch({ projectId });
+        from = await api.run(api.projects.defaultBranch({ projectId }));
       } catch (err) {
         notifyError("Couldn't resolve default branch", err);
         return false;

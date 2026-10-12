@@ -33,7 +33,8 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, Handlers } from "@shigomori/contracts/types";
+import { servedInvokePeer } from "@shared/hub/bridgeHandlers";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import { fetchReleases } from "@shared/releases";
@@ -480,7 +481,12 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   tab.served.serve(accountContract, accountHandlers);
   tab.served.serve(clientConfigContract, clientConfigHandlers);
-  tab.served.serve(hubContract, hubHandlers);
+  const hubServed: EffectHandlers<typeof hubContract> = {
+    status: () =>
+      Effect.promise(async () => hubHandlers.status(undefined, undefined)),
+    invokePeer: servedInvokePeer(() => hubHandlers),
+  };
+  tab.served.serve(hubContract, hubServed);
   tab.view(hubContract, "watchPeer", (input, observer) =>
     hubHandlers.watchPeer(
       input as Parameters<typeof hubHandlers.watchPeer>[0],

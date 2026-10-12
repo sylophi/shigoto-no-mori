@@ -21,6 +21,7 @@
 import assert from "node:assert/strict";
 import { callOf, channelOf } from "@shigomori/contracts/contract";
 import type { ContractModule } from "@shigomori/contracts/contract";
+import { RemoteCallError } from "@shigomori/contracts/errors";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { type HubStatus, hubContract } from "@shigomori/contracts/modules/hub";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
@@ -32,7 +33,6 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
 import { it } from "vitest";
-import type { RendererContractApi } from "@shared/ipc/client";
 import type { Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import { gitFetchingAtom } from "@/hooks/git/useProjectGitFetching";
@@ -52,6 +52,7 @@ import {
   peerSessionAtom,
   queryClientAtom,
 } from "@/lib/runtime/atoms";
+import type { HostApi } from "@/lib/runtime/Api";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { scriptKey } from "@/store/scriptSlot";
 import { waitFor } from "./lib/checkKit.mts";
@@ -346,7 +347,15 @@ const status = (over: Partial<HubStatus> = {}): HubStatus => ({
 });
 
 // What a peer's entry is handed; nothing here calls it.
-const noPeerApi: RendererApi["peerApi"] = () => ({}) as RendererContractApi;
+const noPeerApi: RendererApi["peerApi"] = () => ({}) as HostApi;
+
+// The page api's runtime half: its calls run as they are, and no push
+// reaches the sync through it.
+const runtime: Pick<RendererApi, "run" | "listen" | "pushes"> = {
+  run: (effect) => Effect.runPromise(effect),
+  listen: () => () => {},
+  pushes: () => Stream.never,
+};
 
 const studio: DeviceInfo = {
   deviceId: PEER,
@@ -363,14 +372,10 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   let answerSeed: ((value: HubStatus) => void) | undefined;
   const { registry, queryClient, hubPush } = page();
   queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
-  const account: Pick<
-    RendererApi["account"],
-    "onChanged" | "status" | "listDevices"
-  > = {
-    onChanged: () => () => {},
+  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
     // Never settles: the account is not what this checks.
-    status: () => new Promise<never>(() => {}),
-    listDevices: async () => [studio],
+    status: () => Effect.never,
+    listDevices: () => Effect.succeed([studio]),
   };
   // The seed is the first ask; a pass the list's landing queues asks
   // again, and hears the status as it stands.
@@ -379,16 +384,20 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   const hubCalls: Pick<RendererApi["hub"], "status"> = {
     status: () =>
       (asked += 1) === 1
-        ? new Promise<HubStatus>((resolve) => {
-            answerSeed = resolve;
-          })
-        : Promise.resolve(latest),
+        ? Effect.promise(
+            () =>
+              new Promise<HubStatus>((resolve) => {
+                answerSeed = resolve;
+              }),
+          )
+        : Effect.succeed(latest),
   };
   const sendStatus = async (next: HubStatus) => {
     latest = next;
     await hubPush(next);
   };
   const api = {
+    ...runtime,
     deviceId: LOCAL,
     account,
     hub: hubCalls,
@@ -454,17 +463,19 @@ it("hub status: a failed boot fetch falls back on the next pass's", async () => 
   let asked = 0;
   // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api
   const api = {
+    ...runtime,
     deviceId: LOCAL,
     account: {
-      onChanged: () => () => {},
-      status: () => new Promise<never>(() => {}),
-      listDevices: async () => [studio],
+      status: () => Effect.never,
+      listDevices: () => Effect.succeed([studio]),
     },
     hub: {
       status: () =>
         (asked += 1) === 1
-          ? Promise.reject(new Error("the hub bridge is not up yet"))
-          : Promise.resolve(status()),
+          ? Effect.fail(
+              new RemoteCallError({ text: "the hub bridge is not up yet" }),
+            )
+          : Effect.succeed(status()),
     },
     peerApi: noPeerApi,
   } as unknown as RendererApi;

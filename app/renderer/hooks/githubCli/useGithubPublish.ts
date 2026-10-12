@@ -9,7 +9,7 @@ export function useGithubOwners(enabled: boolean) {
   const { api, keys } = useHostScope();
   return useQuery<readonly string[]>({
     queryKey: keys.githubOwners(),
-    queryFn: () => api.githubCli.owners(),
+    queryFn: ({ signal }) => api.run(api.githubCli.owners(), { signal }),
     enabled,
     staleTime: Infinity,
     meta: { silentError: true },
@@ -23,7 +23,7 @@ export function usePublishRepo() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<void, Error, PublishRepoPayload>({
-    mutationFn: (input) => api.githubCli.publish(input),
+    mutationFn: (input) => api.run(api.githubCli.publish(input)),
     onSuccess: (_data, { projectId }) =>
       Promise.all(
         [

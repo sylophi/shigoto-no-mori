@@ -43,8 +43,10 @@ export function FileViewer({
         revealRoot === null
           ? null
           : () => {
-              api.shell
-                .showItemInFolder({ path: `${revealRoot}/${path}` })
+              api
+                .run(
+                  api.shell.showItemInFolder({ path: `${revealRoot}/${path}` }),
+                )
                 .catch((err: unknown) =>
                   notifyError("Couldn't reveal the file", err),
                 );

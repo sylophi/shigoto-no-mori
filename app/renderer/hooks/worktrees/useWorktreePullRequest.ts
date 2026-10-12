@@ -61,9 +61,12 @@ export function useWorktreePullRequest(
   const settlingSince = useRef<number | null>(null);
   return useQuery<PullRequestDetail | null>({
     queryKey: keys.worktreePullRequest(projectId, branch),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const pr = ownBranchPullRequest(
-        await api.githubCli.worktreePullRequest({ projectId, branch }),
+        await api.run(
+          api.githubCli.worktreePullRequest({ projectId, branch }),
+          { signal },
+        ),
       );
       // Without this, the sidebar dot waits up to a full sweep tick to
       // catch a PR merging on GitHub even after the user opened the

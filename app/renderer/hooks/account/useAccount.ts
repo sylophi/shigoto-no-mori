@@ -10,7 +10,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { AccountStatus } from "@shigomori/contracts/modules/account";
+import {
+  accountContract,
+  type AccountStatus,
+} from "@shigomori/contracts/modules/account";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import {
   MACHINE_FALLBACK_ICON,
@@ -31,7 +34,7 @@ export function useAccountStatus() {
   const api = useApi();
   return useQuery<AccountStatus>({
     queryKey: queryKeys.accountStatus(),
-    queryFn: () => api.account.status(),
+    queryFn: ({ signal }) => api.run(api.account.status(), { signal }),
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't read account status" },
   });
@@ -75,7 +78,7 @@ export function useLocalDeviceIcon(): DeviceIcon {
 export const accountDevicesQueryOptions = (api: RendererApi) =>
   queryOptions<readonly DeviceInfo[]>({
     queryKey: queryKeys.accountDevices(),
-    queryFn: () => api.account.listDevices(),
+    queryFn: ({ signal }) => api.run(api.account.listDevices(), { signal }),
     // The registry renders the failure inline (DeviceRegistry), so no
     // toast on top.
     meta: { silentError: true },
@@ -97,7 +100,7 @@ export function useWatchAccountChanges(): void {
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      api.account.onChanged(() => {
+      api.listen(api.pushes(accountContract, "changed"), () => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.account() });
         // A departure drops the peer-keyed client config picks on
         // disk (main's fan-out, before this broadcast). The cached
@@ -131,7 +134,7 @@ export function useEnroll() {
     mutationFn: async (mintToken) => {
       const token = await mintToken();
       if (!token) throw new Error("Clerk returned no session token");
-      return api.account.enroll(token);
+      return api.run(api.account.enroll(token));
     },
     meta: { errorTitle: "Couldn't enroll this device" },
   });
@@ -144,7 +147,7 @@ export function useEnroll() {
 export function useAccountSignOut() {
   const api = useApi();
   return useMutation<void, Error, void>({
-    mutationFn: () => api.account.signOut(),
+    mutationFn: () => api.run(api.account.signOut()),
     meta: { errorTitle: "Couldn't sign out" },
   });
 }
@@ -159,7 +162,7 @@ export function useAccountSignOut() {
 export function useRevokeDevice() {
   const api = useApi();
   return useMutation<void, Error, string>({
-    mutationFn: (deviceId) => api.account.revokeDevice(deviceId),
+    mutationFn: (deviceId) => api.run(api.account.revokeDevice(deviceId)),
     meta: { errorTitle: "Couldn't remove this device" },
   });
 }
@@ -168,7 +171,7 @@ export function useRevokeDevice() {
 export function useSetDeviceName() {
   const api = useApi();
   return useMutation<AccountStatus, Error, { deviceId: string; name: string }>({
-    mutationFn: (target) => api.account.setDeviceName(target),
+    mutationFn: (target) => api.run(api.account.setDeviceName(target)),
     meta: { errorTitle: "Couldn't rename the device" },
   });
 }
@@ -182,7 +185,7 @@ export function useSetDeviceIcon() {
     Error,
     { deviceId: string; icon: DeviceIcon }
   >({
-    mutationFn: (target) => api.account.setDeviceIcon(target),
+    mutationFn: (target) => api.run(api.account.setDeviceIcon(target)),
     meta: { errorTitle: "Couldn't change the device's icon" },
   });
 }
@@ -195,7 +198,7 @@ export function useAcceptsCommands() {
   const api = useApi();
   return useQuery<boolean>({
     queryKey: queryKeys.accountCommandAccess(),
-    queryFn: () => api.account.acceptsCommands(),
+    queryFn: ({ signal }) => api.run(api.account.acceptsCommands(), { signal }),
     meta: { errorTitle: "Couldn't read command access" },
   });
 }
@@ -209,9 +212,12 @@ export function useWatchCommandAccessChanges(): void {
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      api.account.onCommandAccessChanged((accepts) => {
-        queryClient.setQueryData(queryKeys.accountCommandAccess(), accepts);
-      }),
+      api.listen(
+        api.pushes(accountContract, "commandAccessChanged"),
+        (accepts) => {
+          queryClient.setQueryData(queryKeys.accountCommandAccess(), accepts);
+        },
+      ),
     [queryClient, api],
   );
 }
@@ -221,7 +227,7 @@ export function useWatchCommandAccessChanges(): void {
 export function useSetAcceptsCommands() {
   const api = useApi();
   return useMutation<void, Error, boolean>({
-    mutationFn: (enabled) => api.account.setAcceptsCommands(enabled),
+    mutationFn: (enabled) => api.run(api.account.setAcceptsCommands(enabled)),
     meta: { errorTitle: "Couldn't change command access" },
   });
 }

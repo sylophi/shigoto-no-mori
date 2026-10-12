@@ -27,7 +27,7 @@ export function useSharing() {
 export function useSetSharing() {
   const api = useApi();
   return useMutation<void, Error, boolean>({
-    mutationFn: (on) => api.sharing.set(on),
+    mutationFn: (on) => api.run(api.sharing.set(on)),
     meta: { errorTitle: "Couldn't change sharing" },
   });
 }

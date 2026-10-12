@@ -23,6 +23,9 @@
 // them), a peer's shared settings (folded into this device's own copy,
 // lib/remote/sharedSettingsSync.ts), and the pushes that are atoms of
 // their own (the script runs, the worktree lifecycle, the git fetches).
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -35,7 +38,7 @@ import {
   queryKeysFor,
 } from "@/lib/queryKeys";
 
-export type WatchedHostApi = Pick<HostApi, "git" | "githubCli" | "updater">;
+export type WatchedHostApi = Pick<HostApi, "pushes" | "listen">;
 
 // Subscribes for as long as the device's api lives: this machine's for
 // the life of the window, a peer's until the account is left (the
@@ -46,17 +49,18 @@ export function watchHost(
   api: WatchedHostApi,
 ): () => void {
   const keys = queryKeysFor(deviceId);
+  const { listen, pushes } = api;
   const unsubscribes = [
     // State changed on the device (an app-driven mutation, or a store
     // write from the terminal's `sm`): see invalidateHostDevice
     // for the breadth and exemption rationale.
-    api.git.onExternalChange(() => {
+    listen(pushes(gitContract, "externalChange"), () => {
       invalidateHostDevice(queryClient, deviceId);
     }),
     // One project's git state moved (a commit or checkout by an agent or
     // a terminal, seen by the host's git-directory watcher): refetch
     // that project's rows only.
-    api.git.onProjectChanged(({ projectId }) => {
+    listen(pushes(gitContract, "projectChanged"), ({ projectId }) => {
       invalidateHostProject(queryClient, deviceId, projectId);
     }),
     // A background fetch landed one project's refs: everything derived
@@ -65,7 +69,7 @@ export function watchHost(
     // broadcasts per project, so an unscoped invalidation would cost one
     // `gh pr view` per other project every sweep, each cancelling the
     // last.
-    api.git.onRefsRefreshed(({ projectId }) => {
+    listen(pushes(gitContract, "refsRefreshed"), ({ projectId }) => {
       invalidateBranchState(queryClient, keys, projectId);
       invalidateWorktreePullRequests(queryClient, keys, projectId);
     }),
@@ -73,14 +77,17 @@ export function watchHost(
     // outside the git-state sweeps (a PR is not git state), so the
     // rows, inbox entries and any open page of its PRs refresh off this
     // alone.
-    api.githubCli.onProjectPullRequestsRefreshed(({ projectId }) => {
-      void syncProjectPullRequests(queryClient, keys, projectId);
-    }),
+    listen(
+      pushes(githubCliContract, "projectPullRequestsRefreshed"),
+      ({ projectId }) => {
+        void syncProjectPullRequests(queryClient, keys, projectId);
+      },
+    ),
     // Its updater moved. The state rides the push whole, so it is
     // written rather than re-asked, and always on, so the update flags
     // (the sidebar's Settings dot, Settings' device tabs) follow a
     // check that finishes with no Version section mounted.
-    api.updater.onState((state) => {
+    listen(pushes(updaterContract, "state"), (state) => {
       writeUpdaterState(queryClient, deviceId, state);
     }),
   ];

@@ -30,10 +30,7 @@ export type ClientTransport = {
     observer: ViewObserver<unknown>,
   ): () => void;
   // True when the far end is this machine's own serving side, the same
-  // build: the client hands its results through as they are. Any other
-  // transport may reach a peer on another build, so the client decodes
-  // every result and push with the call's schema (buildClient.ts), the
-  // check the serving side makes of its inputs.
+  // build.
   readonly local?: boolean;
 };
 

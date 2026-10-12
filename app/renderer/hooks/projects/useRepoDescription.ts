@@ -17,9 +17,9 @@ export function repoDescriptionQueryOptions(
     queryFn:
       api === undefined
         ? skipToken
-        : () =>
+        : ({ signal }) =>
             forestRead(deviceId, () =>
-              api.githubCli.repoDescription({ projectId }),
+              api.run(api.githubCli.repoDescription({ projectId }), { signal }),
             ),
     retry: false,
     staleTime: Infinity,

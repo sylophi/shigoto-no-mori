@@ -1,3 +1,4 @@
+import { throughCancel } from "@/lib/queryClientOptions";
 import type { QueryClient } from "@tanstack/react-query";
 import type { VillagerProfiles } from "@shigomori/contracts/schemas";
 import {
@@ -28,20 +29,26 @@ export async function villageProfiles(
 ): Promise<VillagerProfiles | null> {
   // No retries: a read that fails leaves the toast plain, now, rather
   // than seconds late.
-  const config = await queryClient.ensureQueryData({
-    ...clientConfigQueryOptions(api),
-    retry: false,
-  });
+  const config = await throughCancel(() =>
+    queryClient.ensureQueryData({
+      ...clientConfigQueryOptions(api),
+      retry: false,
+    }),
+  );
   if (!villageLifeEnabled(config)) return null;
-  const status = await queryClient.ensureQueryData({
-    ...villagerDataStatusQueryOptions(api),
-    retry: false,
-  });
+  const status = await throughCancel(() =>
+    queryClient.ensureQueryData({
+      ...villagerDataStatusQueryOptions(api),
+      retry: false,
+    }),
+  );
   if (!villageLifeShows(config, status)) return null;
-  return queryClient.ensureQueryData({
-    ...villagerProfilesQueryOptions(api),
-    retry: false,
-  });
+  return throughCancel(() =>
+    queryClient.ensureQueryData({
+      ...villagerProfilesQueryOptions(api),
+      retry: false,
+    }),
+  );
 }
 
 // The speaker for each worktree named after a character, by worktree
@@ -61,9 +68,11 @@ export async function speakersFor(
     worktrees.map(async ({ id, name }) => {
       const speaker = speakerFor(name, profiles);
       if (speaker === null) return;
-      const base64 = await queryClient
-        .ensureQueryData(villagerFaceQueryOptions(api, speaker.slug))
-        .catch(() => null);
+      const base64 = await throughCancel(() =>
+        queryClient.ensureQueryData(
+          villagerFaceQueryOptions(api, speaker.slug),
+        ),
+      ).catch(() => null);
       const face = base64 ? faceUrl(base64) : null;
       // Only a rare one wears their color, on their dialogue box's name
       // plate. A legendary one's letter takes its stationery's.

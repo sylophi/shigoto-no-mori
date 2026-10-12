@@ -17,7 +17,8 @@ export function useWorktreeIgnoredPaths(
   const { api, keys } = useHostScope();
   return useQuery<SyncIgnoredPathsResult>({
     queryKey: keys.worktreeIgnored(projectId, worktreeId),
-    queryFn: () => api.sync.ignoredPaths({ projectId, worktreeId }),
+    queryFn: ({ signal }) =>
+      api.run(api.sync.ignoredPaths({ projectId, worktreeId }), { signal }),
     enabled,
     staleTime: Infinity,
     // The dialog says so inline, so a toast would only repeat it.

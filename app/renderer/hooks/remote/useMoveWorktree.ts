@@ -181,10 +181,11 @@ export function useMoveWorktree(move: Move) {
   const api = useApi();
   return useMoveMutation(move, {
     pull: (payload): Promise<SyncPullWorktreeResult> =>
-      api.sync.pullWorktree(payload),
+      api.run(api.sync.pullWorktree(payload)),
     send: (payload): Promise<SyncPullWorktreeResult> =>
-      api.sync.sendWorktree(payload),
-    cancel: (sourceWorktreeId) => api.sync.cancelMove({ sourceWorktreeId }),
+      api.run(api.sync.sendWorktree(payload)),
+    cancel: (sourceWorktreeId) =>
+      api.run(api.sync.cancelMove({ sourceWorktreeId })),
   });
 }
 
@@ -203,20 +204,24 @@ export function useTeardownSource(move: Move) {
   return useMutation({
     mutationFn: () => {
       if (move.direction === "pull") {
-        return api.sync.teardownSource({
-          direction: "pull",
-          deviceId,
-          projectId: move.source.sourceProjectId,
-          worktreeId: move.source.worktree.id,
-        });
+        return api.run(
+          api.sync.teardownSource({
+            direction: "pull",
+            deviceId,
+            projectId: move.source.sourceProjectId,
+            worktreeId: move.source.worktree.id,
+          }),
+        );
       }
       if (move.targetDeviceId === undefined) throw new Error(UNPICKED);
-      return api.sync.teardownSource({
-        direction: "send",
-        deviceId: move.targetDeviceId,
-        projectId: move.worktree.projectId,
-        worktreeId: move.worktree.id,
-      });
+      return api.run(
+        api.sync.teardownSource({
+          direction: "send",
+          deviceId: move.targetDeviceId,
+          projectId: move.worktree.projectId,
+          worktreeId: move.worktree.id,
+        }),
+      );
     },
     onSuccess: () => {
       if (move.direction === "pull") {

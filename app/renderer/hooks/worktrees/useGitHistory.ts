@@ -78,11 +78,14 @@ export function useWorktreeStashes(worktree: Worktree | undefined) {
       worktree?.id ?? "",
     ),
     queryFn: worktree
-      ? () =>
-          api.worktrees.stashes({
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-          })
+      ? ({ signal }) =>
+          api.run(
+            api.worktrees.stashes({
+              projectId: worktree.projectId,
+              worktreeId: worktree.id,
+            }),
+            { signal },
+          )
       : skipToken,
     meta: { errorTitle: "Couldn't read the stashes" },
   });
@@ -137,7 +140,7 @@ export function useDropStash() {
   const { api } = useHostScope();
   const invalidateStashes = useInvalidateStashes();
   return useMutation<void, Error, Scope & { hash: string }>({
-    mutationFn: (input) => api.worktrees.dropStash(input),
+    mutationFn: (input) => api.run(api.worktrees.dropStash(input)),
     onSettled: (_data, _err, input) => invalidateStashes(input),
     meta: { errorTitle: "Couldn't drop the stash" },
   });
@@ -151,7 +154,7 @@ export function useRestoreStash() {
     Error,
     Scope & { hash: string; message: string; named: boolean }
   >({
-    mutationFn: (input) => api.worktrees.restoreStash(input),
+    mutationFn: (input) => api.run(api.worktrees.restoreStash(input)),
     onSettled: (_data, _err, input) => invalidateStashes(input),
     meta: { errorTitle: "Couldn't bring the stash back" },
   });
@@ -164,7 +167,8 @@ export function useWorktreeOperation(worktree: Worktree) {
   const { projectId, id: worktreeId } = worktree;
   return useQuery<GitOperationState>({
     queryKey: keys.worktreeOperation(projectId, worktreeId),
-    queryFn: () => api.worktrees.operation({ projectId, worktreeId }),
+    queryFn: ({ signal }) =>
+      api.run(api.worktrees.operation({ projectId, worktreeId }), { signal }),
     meta: { errorTitle: "Couldn't read the git state" },
   });
 }
@@ -215,13 +219,16 @@ export function useMergePreview(
       countsOnly,
     ),
     queryFn: ref
-      ? () =>
-          api.worktrees.mergePreview({
-            projectId,
-            worktreeId,
-            ref,
-            countsOnly,
-          })
+      ? ({ signal }) =>
+          api.run(
+            api.worktrees.mergePreview({
+              projectId,
+              worktreeId,
+              ref,
+              countsOnly,
+            }),
+            { signal },
+          )
       : skipToken,
     retry: false,
     meta: { silentError: true },
@@ -240,7 +247,7 @@ export function useMergeBranch() {
     Error,
     Scope & { ref: string; method: IntegrateMethod; message?: string }
   >({
-    mutationFn: (input) => api.worktrees.mergeBranch(input),
+    mutationFn: (input) => api.run(api.worktrees.mergeBranch(input)),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
     onError: (_err, vars) => invalidateTreeState(queryClient, keys, vars),
     meta: { silentError: true },
@@ -256,7 +263,7 @@ export function useResetHard() {
     Error,
     Scope & { ref: string; expectHead?: string }
   >({
-    mutationFn: (input) => api.worktrees.resetHard(input),
+    mutationFn: (input) => api.run(api.worktrees.resetHard(input)),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
     meta: { silentError: true },
   });

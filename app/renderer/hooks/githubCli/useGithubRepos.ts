@@ -7,7 +7,7 @@ export function useGithubRepos(enabled: boolean) {
   const { api, keys } = useHostScope();
   return useQuery<readonly string[]>({
     queryKey: keys.githubRepos(),
-    queryFn: () => api.githubCli.repos(),
+    queryFn: ({ signal }) => api.run(api.githubCli.repos(), { signal }),
     enabled,
     // Fetched again when the dialog opens after a while, so a repository
     // made since shows up, and not on every focus or change of mode.

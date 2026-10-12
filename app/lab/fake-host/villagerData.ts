@@ -13,7 +13,7 @@ import type {
   VillagerProfiles,
 } from "@shigomori/contracts/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
-import type { AllChannelHandlers } from "@shared/ipc/client";
+import type { FixtureHandlers } from "./bridge";
 import { DAY, FAKE_VISITS } from "@shigomori/ui/fixtures/villagerFixtures.ts";
 
 const faces = import.meta.glob<string>("./villager-data/ready/faces/*.png", {
@@ -65,7 +65,7 @@ function posedStatus(): VillagerDataStatus {
 }
 
 // One device's villager data channels, each device with its own status.
-export function villagerHandlersFor(): AllChannelHandlers {
+export function villagerHandlersFor(): FixtureHandlers {
   let status = posedStatus();
   let timer: ReturnType<typeof setInterval> | undefined;
   const stop = () => {

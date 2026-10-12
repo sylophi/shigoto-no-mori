@@ -13,8 +13,8 @@ export function GuideBand() {
     <GuideBandView
       harnessLabel={GUIDE_HARNESS_LABELS[guide.harness]}
       onStop={() =>
-        void api.guide
-          .stop()
+        void api
+          .run(api.guide.stop())
           .catch((error: unknown) =>
             notifyError("Couldn't stop the guide", error),
           )
