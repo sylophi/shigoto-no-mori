@@ -583,7 +583,13 @@ function IndexRow({
                   : undefined
               }
             >
+              {/* A native button: Base UI looks for a <span> checkbox's
+                  <label> through its input's `labels` on every render, a
+                  walk of the whole document, which a list of 2,000 rows
+                  paid two seconds for. A button needs no such search. */}
               <Checkbox
+                nativeButton
+                render={(props) => <button type="button" {...props} />}
                 checked={ticked === "all"}
                 indeterminate={ticked === "partial"}
                 disabled={busy}

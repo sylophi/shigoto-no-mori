@@ -1,8 +1,8 @@
 // The host's views (host/lib/Views.ts and each module's `*Views`): every
 // one answers its query's value first, then again after a write through
 // the engine (or the push the write makes), and says nothing while the
-// value stays the same. The store's tick and the views' polls run on a
-// TestClock.
+// value stays the same. The store's backstop and the views' polls run
+// on a TestClock.
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -78,7 +78,7 @@ type Services = Views.Services | HostServices;
 
 // A view watched: `next` is its next value, `push` makes a host push as
 // the broadcast seam would, `tick` moves the clock past the store's
-// tick, and `quiet` says nothing more came.
+// backstop look (or a view's poll), and `quiet` says nothing more came.
 const watch = <A,>(
   stream: Stream.Stream<A, unknown, Services>,
   body: (watching: {
@@ -99,7 +99,7 @@ const watch = <A,>(
       yield* body({
         first,
         next,
-        tick: (by = "500 millis") => TestClock.adjust(by),
+        tick: (by = "10 seconds") => TestClock.adjust(by),
         push: (channel) =>
           pushes.publish({ channel, payload: undefined, remote: true }),
         quiet: Effect.promise(
@@ -111,7 +111,8 @@ const watch = <A,>(
       });
     }).pipe(
       Effect.scoped,
-      // The store's tick runs on the TestClock the body moves.
+      // The store's backstop and the views' polls run on the TestClock
+      // the body moves.
       // The host's services beneath, the proof file's own.
       Effect.provide(
         Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer).pipe(
@@ -146,7 +147,7 @@ it("projects: a project registered through the engine joins the list", async () 
       yield* tick();
       const after = yield* next;
       assert.ok(after.some((listed) => listed.id === projectId));
-      // A tick with nothing written says nothing.
+      // A look with nothing written says nothing.
       yield* tick();
       yield* quiet;
     }),
@@ -248,7 +249,7 @@ it("sharing: set from the account page, then by a terminal's write, the switch m
         const { shareWithDevices: _, ...rest } = doc;
         return rest;
       });
-      yield* TestClock.adjust("500 millis");
+      yield* TestClock.adjust("10 seconds");
       assert.equal(yield* next, true);
       assert.equal(yield* sharing.current, true);
       assert.deepEqual(announced, [false, true]);

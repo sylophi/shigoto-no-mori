@@ -48,24 +48,23 @@ const run = <A>(
             }),
           ),
         ),
-        Layer.merge(TestClock.layer()),
+        Layer.provideMerge(TestClock.layer()),
       ),
     ),
     Effect.runPromise,
   );
 
-const tick = TestClock.adjust("500 millis");
+// The longest a commit waits for a look with no event: the backstop's.
+const backstop = TestClock.adjust("10 seconds");
 
-it("names the tables this process wrote, once a tick", () =>
+it("names the tables this process wrote, by the backstop's look at the latest", () =>
   run(
     Effect.gen(function* () {
       const changes = yield* (yield* StoreChanges.StoreChanges).subscribe;
       const usage = yield* Usage.Usage;
-      // A tick with nothing written says nothing.
-      yield* tick;
+      // One write, made before the log's watch may be up.
       yield* usage.record("script", "P", "dev");
-      yield* usage.record("script", "P", "test");
-      yield* tick;
+      yield* backstop;
       const [first] = yield* changes.pipe(Stream.take(1), Stream.runCollect);
       assert.deepEqual(first, new Set(["usage"]));
     }),
@@ -88,9 +87,16 @@ it("names the tables another process wrote", () =>
           join(dataDir, "store.db"),
         ]),
       );
-      yield* tick;
-      const [first] = yield* changes.pipe(Stream.take(1), Stream.runCollect);
-      assert.deepEqual(first, new Set(["device_config", "worktree_marks"]));
+      yield* backstop;
+      const seen = new Set<string>();
+      yield* changes.pipe(
+        Stream.takeUntil((tables) => {
+          for (const table of tables) seen.add(table);
+          return seen.size === 2;
+        }),
+        Stream.runDrain,
+      );
+      assert.deepEqual(seen, new Set(["device_config", "worktree_marks"]));
     }),
   ));
 
