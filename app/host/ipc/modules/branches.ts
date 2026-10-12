@@ -3,7 +3,7 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import { findProject } from "@host/lib/projects";
 
 export const branchesHandlers = {

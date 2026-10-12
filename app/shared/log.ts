@@ -9,7 +9,6 @@
 import * as Cause from "effect/Cause";
 import * as Logger from "effect/Logger";
 import type * as LogLevel from "effect/LogLevel";
-import { errorMessageOf } from "@shigomori/contracts/errors";
 
 function write(level: LogLevel.LogLevel, parts: ReadonlyArray<unknown>) {
   switch (level) {
@@ -41,16 +40,3 @@ export const log = {
   warn: (...message: ReadonlyArray<unknown>) => write("Warn", message),
   error: (...message: ReadonlyArray<unknown>) => write("Error", message),
 };
-
-// A step that must not take its caller with it: the failure degrades
-// to a log line under the given label, the caller carries on.
-export async function logFailure(
-  label: string,
-  run: () => unknown,
-): Promise<void> {
-  try {
-    await run();
-  } catch (error) {
-    log.warn(`${label}: ${errorMessageOf(error)}`);
-  }
-}

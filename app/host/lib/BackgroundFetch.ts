@@ -20,7 +20,7 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import {

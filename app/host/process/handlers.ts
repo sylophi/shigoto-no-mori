@@ -121,7 +121,7 @@ import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
-import * as MirrorDaemon from "@host/mirror/daemon";
+import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
 import { createMirrorGateway } from "@host/mirror/gateway";
@@ -148,7 +148,7 @@ import {
   hubHandlers,
   onPeerPush,
 } from "./wires";
-import { log, logFailure } from "@shared/log";
+import { log } from "@shared/log";
 import { layerLatch } from "@shared/layerLatch";
 import * as Graph from "./graph";
 
@@ -181,7 +181,7 @@ const peerReach = PeerReach.make({
 
 // Continuous worktree mirroring, this device's half: the loopback
 // gateway the daemon dials peers through and the daemon itself
-// (host/mirror/daemon.ts, gateway.ts), bound here to the peer sessions
+// (host/mirror/MirrorDaemon.ts, gateway.ts), bound here to the peer sessions
 // and to the renderer's changed signal exactly like the port-forward
 // engine. Started and stopped by the host's layer graph
 // (layer.ts). A boot without the engine binary (a dev run
@@ -458,9 +458,17 @@ function broadcastCommandAccessChanged(): void {
   broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());
 }
 
-// A step of the account fan-out that must not take the rest with it.
+// A step of the account fan-out that must not take the rest with it:
+// its failure is a warning in the host's log, and the fan-out goes on.
 function teardownStep(what: string, run: () => unknown): Promise<void> {
-  return logFailure(`[account] ${what} failed`, run);
+  return Graph.runIfUp(
+    Effect.tryPromise(async () => run()).pipe(
+      Effect.asVoid,
+      Effect.catchCause((cause) =>
+        Effect.logWarning(`[account] ${what} failed`, cause),
+      ),
+    ),
+  );
 }
 
 // The daemon's sessions with the git half of each (host/mirror/

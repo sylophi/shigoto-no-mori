@@ -2,8 +2,8 @@ import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
-import * as Sharing from "@host/lib/sharing";
-import * as Views from "@host/lib/views";
+import * as Sharing from "@host/lib/Sharing";
+import * as Views from "@host/lib/Views";
 
 const current = Effect.flatMap(Sharing.Sharing, (it) => it.current);
 

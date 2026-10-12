@@ -20,7 +20,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as Engine from "../engine";
+import type * as Engine from "../Engine";
 import * as Ops from "../engineOps";
 import { answersFor } from "../util/cacheTtl";
 

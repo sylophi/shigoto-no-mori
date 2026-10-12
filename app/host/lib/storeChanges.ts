@@ -1,6 +1,6 @@
 // What the terminal `sm`, an agent or the app itself writes to the
 // store, in the host: the engine's StoreChanges, which the views re-read
-// off (views.ts), and the pushes the renderer's requests (React Query)
+// off (Views.ts), and the pushes the renderer's requests (React Query)
 // invalidate on.
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import type { Table } from "@shigomori/engine/StoreChanges";

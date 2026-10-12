@@ -3,7 +3,7 @@
 // the sandbox's data dir is the one its terminal binary writes.
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Engine from "../../host/lib/engine.ts";
+import type * as Engine from "../../host/lib/Engine.ts";
 
 let current: Context.Context<Engine.Services> | undefined;
 

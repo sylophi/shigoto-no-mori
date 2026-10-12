@@ -24,17 +24,17 @@ import * as Layer from "effect/Layer";
 import * as Migration from "@shigomori/engine/Migration";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
-import * as Engine from "../../host/lib/engine.ts";
+import * as Engine from "../../host/lib/Engine.ts";
 import * as BackgroundFetch from "../../host/lib/BackgroundFetch.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
-import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
+import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
-import * as Terrier from "../../host/lib/terrier.ts";
-import * as Sharing from "../../host/lib/sharing.ts";
+import * as Terrier from "../../host/lib/Terrier.ts";
+import * as Sharing from "../../host/lib/Sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
 import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
-import * as Views from "../../host/lib/views.ts";
+import * as Views from "../../host/lib/Views.ts";
 import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/Ports.ts";
@@ -90,7 +90,7 @@ function builtMacfs(): string {
 }
 
 // The engine reads its data dir from the environment when the graph
-// is built (host/lib/engine.ts). Set here, so a proof never writes to
+// is built (host/lib/Engine.ts). Set here, so a proof never writes to
 // the dev app's, or to one the shell exported.
 process.env.SHIGOMORI_DATA_DIR = engineDataDir;
 const engine = Engine.layer({

@@ -1,7 +1,7 @@
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import {
   DEVICE_SETTINGS_DEFAULTS,
   type DeviceSettingsPatch,
@@ -10,9 +10,9 @@ import {
   globalConfigChanged,
   globalConfigWrites,
 } from "@host/lib/config/global";
-import * as Terrier from "@host/lib/terrier";
+import * as Terrier from "@host/lib/Terrier";
 import * as Effect from "effect/Effect";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import type { ClearingWrite } from "@host/lib/engineOps";
 

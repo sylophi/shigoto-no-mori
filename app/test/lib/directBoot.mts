@@ -22,8 +22,8 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as HostPushes from "@host/lib/HostPushes";
 import { pushesLayer } from "./hostStandIns.mts";
-import * as Views from "@host/lib/views";
-import * as Sharing from "@host/lib/sharing";
+import * as Views from "@host/lib/Views";
+import * as Sharing from "@host/lib/Sharing";
 import {
   createConnectTicketStore,
   type ConnectTicketStore,

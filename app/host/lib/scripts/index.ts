@@ -5,7 +5,7 @@
 // watchers, compilers the user's command spawns), not just the wrapping
 // shell.
 //
-// The PTY and its kill chain live in ./pty.ts, each run in a scope of
+// The PTY and its kill chain live in ./ScriptRuns.ts, each run in a scope of
 // its own: stopping a run is closing that scope.
 //
 // On app quit (host/process/layer.ts) we kill every running script the same way
@@ -37,7 +37,7 @@ import {
   ScriptRuns,
   type Stopping,
   UNKILLABLE_WAIT_MS,
-} from "./pty";
+} from "./ScriptRuns";
 import { Terminals } from "../terminals/Terminals";
 
 // A script that can't start here now, in words for the console.
@@ -240,7 +240,7 @@ interface Killable {
 
 interface RunRecord extends Killable {
   pty: PtyHandle;
-  // Closes the run's scope (./pty.ts): the kill chain, a hurried quit's
+  // Closes the run's scope (./ScriptRuns.ts): the kill chain, a hurried quit's
   // SIGTERM and no wait, or nothing for a run already over.
   close: (stopping: Stopping) => Effect.Effect<void>;
   projectId: string;
@@ -493,7 +493,7 @@ export function clearProjectDeleteInflight(projectId: string): void {
 export type { BusyOperations } from "@shared/busy";
 
 // Extra sources of in-flight lifecycle work that live outside this
-// module (lib/engine.ts registers the engine's changing calls).
+// module (lib/Engine.ts registers the engine's changing calls).
 // Aggregating here means every getBusyOperations caller sees the full
 // picture instead of each consumer patching the count locally.
 const inflightContributors: Array<() => number> = [];
@@ -783,7 +783,7 @@ export const startScript = Effect.fn("Scripts.start")(function* (
     stream.emit({ runId, kind: "error", data: errorWordsOf(error) });
   });
 
-  // The exit comes after the run's last output (./pty.ts), so the
+  // The exit comes after the run's last output (./ScriptRuns.ts), so the
   // renderer never unbinds the runId ahead of it.
   pty.onExit(({ exitCode, signal }) => {
     // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)

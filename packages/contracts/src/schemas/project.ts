@@ -110,7 +110,7 @@ export const CloneFolderNameSchema = Schema.Trim.check(
   ),
 );
 
-// `terrier` also registers the repo in terrier (host/lib/terrier.ts),
+// `terrier` also registers the repo in terrier (host/lib/Terrier.ts),
 // for a device with the integration on. The add, the clone and the
 // create all take it.
 export const AddProjectPayloadSchema = Schema.Struct({

@@ -27,7 +27,7 @@ import { storeFailureReport } from "@host/lib/storeFailure";
 import * as Observability from "@shared/observability";
 import { initDataDir } from "@shared/paths";
 import * as Graph from "./graph";
-import * as Loopback from "@host/socket/loopback";
+import * as Loopback from "@host/socket/Loopback";
 import { hostBinaryPath, hostFacts } from "./facts";
 import * as HostLayer from "./layer";
 import * as ShellLayer from "./shell";

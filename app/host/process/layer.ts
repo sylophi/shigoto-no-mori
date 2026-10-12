@@ -16,7 +16,7 @@ import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as Shell from "@host/lib/Shell";
-import * as Loopback from "@host/socket/loopback";
+import * as Loopback from "@host/socket/Loopback";
 import { refresh } from "@host/lib/projects";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import {
@@ -27,18 +27,18 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
-import * as Engine from "@host/lib/engine";
+import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import * as Ports from "@host/lib/Ports";
-import * as ScriptRuns from "@host/lib/scripts/pty";
+import * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
 import * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { terminalStart } from "@host/ipc/scriptRun";
-import * as Terrier from "@host/lib/terrier";
+import * as Terrier from "@host/lib/Terrier";
 import * as Villagers from "@host/lib/VillagerData";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
