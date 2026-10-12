@@ -10,6 +10,6 @@ export function buildFlavor(
 ): Exclude<Flavor, "dev"> {
   const value = env.SM_FLAVOR?.trim() ?? "";
   if (value === "" || value === "prod") return "prod";
-  if (value === "test") return "test";
-  throw new Error(`SM_FLAVOR is "${value}": a packaged build is prod or test.`);
+  if (value === "v3") return "v3";
+  throw new Error(`SM_FLAVOR is "${value}": a packaged build is prod or v3.`);
 }

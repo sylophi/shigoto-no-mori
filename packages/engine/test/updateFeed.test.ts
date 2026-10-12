@@ -96,11 +96,11 @@ describe("pickRelease", () => {
     );
   });
 
-  it("never offers a prod build a test prerelease", () => {
+  it("never offers a prod build a v3 prerelease", () => {
     assert.equal(
       pickRelease(
         semver("3.0.0-rc.1"),
-        withAlso(labRelease("v3.0.0-test.5"), labRelease("v3.1.0-test.1")),
+        withAlso(labRelease("v3.0.0-v3.5"), labRelease("v3.1.0-v3.1")),
         "arm64",
       ),
       undefined,
@@ -108,32 +108,29 @@ describe("pickRelease", () => {
     assert.equal(
       pickRelease(
         semver("2.34.1"),
-        withAlso(labRelease("v3.0.0-test.1")),
+        withAlso(labRelease("v3.0.0-v3.1")),
         "arm64",
       ),
       undefined,
     );
   });
 
-  it("offers a test build the newest test prerelease alone", () => {
-    const test = semver("3.0.0-test.1");
+  it("offers a v3 build the newest v3 prerelease alone", () => {
+    const v3 = semver("3.0.0-v3.1");
     const all = withAlso(
-      labRelease("v3.0.0-test.2"),
+      labRelease("v3.0.0-v3.2"),
       labRelease("v3.0.0-rc.1"),
       labRelease("v3.0.0"),
       labRelease("v3.1.0-beta.1"),
     );
+    assert.equal(pickRelease(v3, all, "arm64", "v3")?.version, "3.0.0-v3.2");
     assert.equal(
-      pickRelease(test, all, "arm64", "test")?.version,
-      "3.0.0-test.2",
-    );
-    assert.equal(
-      pickRelease(test, [...all, labRelease("v3.1.0-test.1")], "arm64", "test")
+      pickRelease(v3, [...all, labRelease("v3.1.0-v3.1")], "arm64", "v3")
         ?.version,
-      "3.1.0-test.1",
+      "3.1.0-v3.1",
     );
     assert.equal(
-      pickRelease(semver("3.0.0-test.2"), all, "arm64", "test"),
+      pickRelease(semver("3.0.0-v3.2"), all, "arm64", "v3"),
       undefined,
     );
   });

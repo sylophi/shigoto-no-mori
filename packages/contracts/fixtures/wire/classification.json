@@ -995,6 +995,11 @@
     "scope": "host",
     "remote": false
   },
+  "session:imageHosts": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
   "session:quit": {
     "kind": "invoke",
     "scope": "host",

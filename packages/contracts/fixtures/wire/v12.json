@@ -1916,6 +1916,9 @@
       "question": "\u0000"
     }
   },
+  "session:imageHosts": {
+    "success": ["e%", "\ud800"]
+  },
   "session:quit": {
     "payload": {
       "hurried": false

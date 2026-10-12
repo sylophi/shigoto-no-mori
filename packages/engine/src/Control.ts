@@ -46,7 +46,7 @@ import * as Registry from "./Registry.ts";
 // isn't the app.
 export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   "AppNotRunning",
-  { flavor: Schema.Literals(["prod", "test", "dev"]) },
+  { flavor: Schema.Literals(["prod", "v3", "dev"]) },
 ) {
   override get message(): string {
     const hint =

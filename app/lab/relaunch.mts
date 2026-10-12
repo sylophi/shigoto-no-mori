@@ -7,7 +7,7 @@
 // when the new instance never came or lost a child process.
 //
 // Run: node lab/relaunch.mts "<path to the .app>" [--port 9341]
-// A test build (SM_FLAVOR=test pnpm package) runs beside the installed
+// A v3 build (SM_FLAVOR=v3 pnpm package) runs beside the installed
 // app. It quits the app at the end.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
