@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import { changesState, treeMovedKey } from "@/lib/changesState";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
+  invalidateTreeState,
   useCommitChanges,
   useDiscardChanges,
   useDiscardHunks,
@@ -107,6 +111,18 @@ function WorktreeChanges({
     projectId,
     worktreeId,
   );
+  // An edit made while this window keeps the focus (the app's own
+  // terminal, an agent working in the tree) moves the row: the list
+  // and its diff are read again then, not only on the next focus.
+  const queryClient = useQueryClient();
+  const { keys } = useHostScope();
+  const treeMoved = treeMovedKey(worktree);
+  const seenTree = useRef(treeMoved);
+  useEffect(() => {
+    if (seenTree.current === treeMoved) return;
+    seenTree.current = treeMoved;
+    invalidateTreeState(queryClient, keys, { projectId, worktreeId });
+  }, [treeMoved, queryClient, keys, projectId, worktreeId]);
   const picks = useChangesPicks(projectId, worktreeId);
   const setPicks = (change: Parameters<typeof updatePicks>[2]) =>
     updatePicks(projectId, worktreeId, change);
@@ -230,13 +246,11 @@ function WorktreeChanges({
     );
   };
 
-  // The sidebar's count stands in until the page's own status arrives.
-  // A failed first read is not a read still coming: it says so (the
-  // query's toast has the details) instead of spinning on.
-  const failed = files === undefined && statusError !== null;
-  const loading = files === undefined && !failed;
-  const changedCount = files ? files.length : worktree.changedCount;
-  const list = files ?? [];
+  const { failed, loading, changedCount, list } = changesState(
+    files,
+    statusError,
+    worktree.changedCount,
+  );
   // The message box only has a job with something to commit, or a
   // commit to amend. A clean tree keeps the branch bar and the last
   // commit, which is where the next move (push, amend, undo) lives.
