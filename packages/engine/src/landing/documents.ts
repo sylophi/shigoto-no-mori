@@ -35,6 +35,9 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
       "stack-step",
       "no-primary",
       "not-merged",
+      "unpushed",
+      "head-unread",
+      "github-unasked",
       "not-on-branch",
       "vanished",
       "guard",
@@ -103,6 +106,18 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
         return `No local branches found in ${a}`;
       case "not-merged":
         return `Branch ${a} isn't merged into ${b} (no merge found, no merged PR). Merge it first, or pass --force to discard it.`;
+      case "unpushed": {
+        // `n0` commits on branch `a` that PR #`n1`'s head lacks, `b`
+        // naming them.
+        const commits = n0 === 1 ? "a commit" : `${n0} commits`;
+        return this.verb === "done"
+          ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which deleting it would lose: ${b}. Push them to a new PR, or pass --force to discard them.`
+          : `Branch ${a} has ${commits} PR #${n1} doesn't have, which landing would delete: ${b}. Push them to the PR first, or pass --force to discard them.`;
+      }
+      case "head-unread":
+        return `Couldn't read PR #${n0}'s head (${b}) to check that ${a} has no commits it lacks. Fetch it, or pass --force to discard what it lacks.`;
+      case "github-unasked":
+        return `Couldn't ask GitHub whether ${a} was merged: ${b}. Try again once gh can reach it, or pass --force to discard the branch.`;
       case "not-on-branch":
         return `${a} is on ${b}, not ${c}`;
       case "vanished":

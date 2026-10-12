@@ -192,12 +192,20 @@ export class GitHub extends Context.Service<
       branch: string,
       number: number,
     ) => Effect.Effect<boolean>;
-    // A merged PR from this repository (or the fork's one the branch was
-    // checked out from) has the branch as its head. False on any failure.
-    readonly hasMergedPullRequest: (
+    // The commits the branch's merged PRs ended on: from this
+    // repository, or the fork's one the branch was checked out from.
+    readonly mergedHeads: (
       repo: string,
       branch: string,
-    ) => Effect.Effect<boolean>;
+    ) => Effect.Effect<
+      ReadonlyArray<{ readonly number: number; readonly head: string }>,
+      GitHubCliError | GitHubOutputError
+    >;
+    // The commit a PR's branch is at on GitHub.
+    readonly headOf: (
+      repo: string,
+      number: number,
+    ) => Effect.Effect<string, GitHubCliError | GitHubOutputError>;
     // A failed read means every method and no auto-merge: missing data
     // doesn't block the merge, and --auto is only asked where GitHub is
     // known to accept it.
@@ -348,6 +356,7 @@ const Row = Schema.Struct({
   url: GoJson.text,
   baseRefName: GoJson.text,
   headRefName: GoJson.text,
+  headRefOid: GoJson.text,
   isCrossRepository: GoJson.flag,
   mergeStateStatus: GoJson.text,
   body: GoJson.text,
@@ -680,22 +689,42 @@ const make = Effect.gen(function* () {
     ]);
   });
 
-  const hasMergedPullRequest = Effect.fn("GitHub.hasMergedPullRequest")(
-    function* (repo: string, branch: string) {
-      // No deadline, as in Go: unlike the status card, done waits for it.
-      const rows = yield* run(
-        repo,
-        lookupArgs(branch, "merged", ["number,isCrossRepository"]),
-      ).pipe(
-        Effect.map(rowsOf),
-        Effect.orElseSucceed(() => Option.none<ReadonlyArray<Row>>()),
-      );
-      if (Option.isNone(rows)) return false;
-      return Option.isSome(
-        yield* ownOf(repo, branch, rows.value.map(summaryOf)),
-      );
-    },
-  );
+  const mergedHeads = Effect.fn("GitHub.mergedHeads")(function* (
+    repo: string,
+    branch: string,
+  ) {
+    const answer = yield* run(
+      repo,
+      lookupArgs(branch, "merged", ["number,isCrossRepository,headRefOid"]),
+    );
+    const rows = rowsOf(answer);
+    if (Option.isNone(rows)) {
+      return yield* new GitHubOutputError({ command: "pr list" });
+    }
+    const checkedOut = yield* Effect.cached(
+      checkedOutPullRequest(repo, branch),
+    );
+    const heads: Array<{ readonly number: number; readonly head: string }> = [];
+    for (const row of rows.value) {
+      if (!row.isCrossRepository || row.number === (yield* checkedOut)) {
+        heads.push({ number: row.number, head: row.headRefOid });
+      }
+    }
+    return heads;
+  });
+
+  const headOf = Effect.fn("GitHub.headOf")(function* (
+    repo: string,
+    number: number,
+  ) {
+    const row = decodeRow(
+      yield* run(repo, ["pr", "view", String(number), "--json", "headRefOid"]),
+    );
+    if (Option.isNone(row) || row.value.headRefOid === "") {
+      return yield* new GitHubOutputError({ command: "pr view" });
+    }
+    return row.value.headRefOid;
+  });
 
   // One GraphQL read, since `gh repo view --json` has the three method
   // flags but not autoMergeAllowed. gh fills {owner} and {repo} from the
@@ -864,7 +893,8 @@ const make = Effect.gen(function* () {
     findByNumber,
     list,
     checkedOutFrom,
-    hasMergedPullRequest,
+    mergedHeads,
+    headOf,
     mergeSettings,
     mergeProgress,
     mergeStateStatus,

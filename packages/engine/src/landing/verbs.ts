@@ -44,6 +44,8 @@ export const makeVerbs = ({
     } = pullRequests;
     const { lookupStack, stackChain, stackMergeSet, mergeStackSet } = stacks;
     const {
+      guardCommits,
+      commitsBeyond,
       execDone,
       describeAfterDone,
       landCleanup,
@@ -262,6 +264,21 @@ export const makeVerbs = ({
           [branch, pr.state.toLowerCase(), worktree.name],
         );
       }
+      // The branch goes with the land (unless kept): it may hold commits
+      // the PR never had, made after its last push, or under a name an
+      // older PR merged with.
+      const remote = Result.isSuccess(target) ? target.success.remote : "";
+      const guarded = !options.force && !options.keepBranch;
+      if (guarded) {
+        yield* guardCommits(
+          project.path,
+          branch,
+          pr.number,
+          yield* github.headOf(project.path, pr.number),
+          remote,
+          "land",
+        );
+      }
       if (options.stack) {
         const lookups = yield* lookupStack(
           Effect.fromResult(target),
@@ -281,7 +298,13 @@ export const makeVerbs = ({
             "land",
           );
         }
-        const plan = yield* planStackCleanup(located, chain, set, options);
+        const plan = yield* planStackCleanup(
+          located,
+          chain,
+          set,
+          options,
+          lookups.target.remote,
+        );
         if (method !== undefined) {
           const queued = yield* mergeStackSet(
             project,
@@ -342,9 +365,22 @@ export const makeVerbs = ({
         );
         yield* awaitMerge(project.path, pr, outcome, "land", reporter);
         // The wait can take as long as the checks do, time enough for new
-        // work in the worktree, so the guards run again.
-        if (outcome.outcome !== "merged" && !worktree.isPrimary) {
-          yield* worktrees.checkRemovable(located, options.force);
+        // work in the worktree, so the guards run again, on the head the
+        // PR merged with.
+        if (outcome.outcome !== "merged") {
+          if (!worktree.isPrimary) {
+            yield* worktrees.checkRemovable(located, options.force);
+          }
+          if (guarded) {
+            yield* guardCommits(
+              project.path,
+              branch,
+              pr.number,
+              yield* github.headOf(project.path, pr.number),
+              remote,
+              "land",
+            );
+          }
         }
         method = outcome.method;
       }
@@ -383,7 +419,13 @@ export const makeVerbs = ({
         false,
       );
       const chain = yield* stackChain(project, pr.number, lookups, "rm");
-      const plan = yield* planStackCleanup(located, chain, [], options);
+      const plan = yield* planStackCleanup(
+        located,
+        chain,
+        [],
+        options,
+        lookups.target.remote,
+      );
       return yield* execStackCleanup(
         located,
         pr,
@@ -405,22 +447,62 @@ export const makeVerbs = ({
       const branch = yield* branchOf(located, "done");
       const target = yield* primaryTargetOf(project, "done");
       // The delete is `branch -D`, so it needs proof the branch is merged:
-      // an ancestor of the primary ref, or the head of a merged PR (a
-      // squash merge leaves no ancestry).
+      // an ancestor of the primary ref, or held whole by the head of a
+      // merged PR (a squash merge leaves no ancestry, and the branch may
+      // have moved on since, or reuse an older PR's name).
       if (
         branch !== target.primaryBranch &&
         !options.force &&
         !(yield* git
           .isAncestor(project.path, branch, target.primaryRef)
-          .pipe(Effect.orElseSucceed(() => false))) &&
-        !(yield* github.hasMergedPullRequest(project.path, branch))
+          .pipe(Effect.orElseSucceed(() => false)))
       ) {
-        return yield* refuse(
-          "done",
-          "not-merged",
-          [],
-          [branch, target.primaryRef],
+        const heads = yield* github.mergedHeads(project.path, branch).pipe(
+          Effect.catchTags({
+            GitHubCliError: (error) =>
+              refuse(
+                "done",
+                "github-unasked",
+                [],
+                [branch, GitHub.commandMessageOf(error)],
+              ),
+            GitHubOutputError: (error) =>
+              refuse("done", "github-unasked", [], [branch, error.message]),
+          }),
         );
+        if (heads.length === 0) {
+          return yield* refuse(
+            "done",
+            "not-merged",
+            [],
+            [branch, target.primaryRef],
+          );
+        }
+        let held = false;
+        for (const { head } of heads) {
+          const beyond = yield* commitsBeyond(
+            project.path,
+            branch,
+            head,
+            target.remote,
+          );
+          if (Option.isSome(beyond) && beyond.value.length === 0) held = true;
+          if (held) break;
+        }
+        if (!held) {
+          // The newest merged PR's verdict says what is missing.
+          const [newest] = heads;
+          if (newest !== undefined) {
+            yield* guardCommits(
+              project.path,
+              branch,
+              newest.number,
+              newest.head,
+              target.remote,
+              "done",
+            );
+          }
+        }
       }
       const deleted = yield* execDone(project, target, worktree, true);
       const row = yield* describeAfterDone(

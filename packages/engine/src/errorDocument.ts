@@ -48,10 +48,10 @@ export const codeOf = (error: unknown): string | undefined => {
   // A tag, not the class: Landing imports this module.
   if (
     Predicate.isTagged(error, "LandingRefused") &&
-    Predicate.hasProperty(error, "reason") &&
-    error.reason === "fork"
+    Predicate.hasProperty(error, "reason")
   ) {
-    return "fork-pull-request";
+    if (error.reason === "fork") return "fork-pull-request";
+    if (error.reason === "unpushed") return "unpushed-commits";
   }
   // An error that names its own code for the document, which no Node or
   // platform error does.

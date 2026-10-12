@@ -101,6 +101,7 @@ case "$*" in
     fi;;
   "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
   "pr merge 5 --auto --squash"|"pr merge 5 --squash") ;;
+  "pr view 5 --json headRefOid") printf '{"headRefOid":"%s"}' "$(cat '${headFile()}')";;
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac`,
   );
@@ -116,8 +117,11 @@ esac`,
   };
 }
 
+// Where the fakes read the commit PR #5's head is at on GitHub.
+const headFile = () => join(box.home, "pr-5-head");
+
 // A project cloned from an upstream, with a worktree `fox` a commit
-// ahead on its own branch.
+// ahead on its own branch, pushed: PR #5's head is that commit.
 async function landFixture() {
   const upstream = box.repo("upstream", { "README.md": "hi\n" });
   const repo = join(box.home, "repo");
@@ -142,6 +146,7 @@ async function landFixture() {
   );
   const { worktree } = located as Worktrees.Located;
   box.git(worktree.path, "commit", "-q", "--allow-empty", "-m", "fox");
+  writeFileSync(headFile(), box.git(worktree.path, "rev-parse", "HEAD").trim());
   return located as Worktrees.Located;
 }
 
@@ -405,6 +410,7 @@ it("a stack land says when the primary checkout sits on a landed branch", async 
     `case "$*" in
   "pr list --state all --head fox "*) echo '[${mergedPr(5, "fox", "low")}]';;
   "pr list --state all --limit 200 "*) echo '[${mergedPr(4, "low", "main")},${mergedPr(5, "fox", "low")}]';;
+  "pr view 5 --json headRefOid") printf '{"headRefOid":"%s"}' "$(git -C '${repo}' rev-parse low)";;
   "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac`,
@@ -437,4 +443,75 @@ esac`,
   assert.deepEqual(notes, [
     "the primary checkout is on landed branch low. `smd done` lands it back on main",
   ]);
+});
+
+// The branch goes with the land, so commits the PR's head never had (made
+// after its last push, or under a name an older PR merged with) are
+// refused, named, before anything is merged or removed.
+describe("commits the pull request never had", () => {
+  it("land refuses to delete them, naming them, before anything merges", async () => {
+    const located = await landFixture();
+    const gh = fakeGh([poll("MERGED", "UNKNOWN", "", false)]);
+    box.git(
+      located.worktree.path,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "late",
+    );
+    const doc = await land(located);
+    assert.equal(doc["ok"], false);
+    assert.equal(doc["code"], "unpushed-commits");
+    assert.match(
+      String(doc["error"]),
+      /^Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\. /,
+    );
+    assert.deepEqual(gh.merges(), [], "nothing merged");
+    assert.equal(await foxSurvives(located), true);
+  });
+
+  const done = (located: Worktrees.Located) =>
+    box.engine(
+      Effect.flatMap(Effect.service(Landing.Landing), (landing) =>
+        landing.done(located, { force: false }),
+      ),
+    ) as Promise<Record<string, unknown>>;
+  const mergedGh = (said: string) =>
+    box.fakeBin(
+      "gh",
+      `case "$*" in
+  "pr list --state merged --head fox "*) ${said};;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+
+  it("done refuses a branch its merged PR doesn't hold whole, and says when GitHub couldn't be asked", async () => {
+    const located = await landFixture();
+    const head = readFileSync(headFile(), "utf8");
+    mergedGh(`echo '[{"number":5,"headRefOid":"${head}"}]'`);
+    box.git(
+      located.worktree.path,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "late",
+    );
+    const unpushed = await done(located);
+    assert.equal(unpushed["code"], "unpushed-commits");
+    assert.match(
+      String(unpushed["error"]),
+      /^Branch fox has a commit its merged PR #5 never had, which deleting it would lose: [0-9a-f]+ late\. /,
+    );
+
+    mergedGh(`echo 'error connecting to api.github.com' >&2; exit 1`);
+    const unasked = await done(located);
+    assert.equal(unasked["ok"], false);
+    assert.match(
+      String(unasked["error"]),
+      /^Couldn't ask GitHub whether fox was merged: .*error connecting to api\.github\.com/,
+    );
+    assert.equal(await foxSurvives(located), true);
+  });
 });

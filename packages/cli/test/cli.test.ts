@@ -1623,11 +1623,17 @@ esac`,
     );
 
   it("says the merge and the catch-up before the cleanup, which may fail", async () => {
-    project();
+    const { fox } = project();
     fakeGh([
       [
         '"pr list --state all --head fox "*',
         `[${pr(5, "fox", "main", "OPEN", { mergeStateStatus: "CLEAN" })}]`,
+      ],
+      [
+        '"pr view 5 --json headRefOid"',
+        JSON.stringify({
+          headRefOid: box.git(fox, "rev-parse", "HEAD").trim(),
+        }),
       ],
       ['"api graphql -F number=5 "*', progress("MERGED", false)],
       ['"api graphql "*', settings(false)],
