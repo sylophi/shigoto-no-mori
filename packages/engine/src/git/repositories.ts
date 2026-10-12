@@ -63,6 +63,8 @@ export const makeRepositories = ({
       // of all for a clone asked for from another device), so git's own
       // is off and an unauthenticated remote fails rather than waits.
       // `config` is written into the new checkout's config too.
+      // Interrupted (a caller's cancel), the runner ends git and waits
+      // for it, and git removes the folder it made on its way out.
       yield* run(
         input.parentDir,
         [

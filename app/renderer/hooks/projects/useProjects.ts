@@ -94,13 +94,26 @@ export function useAddProject() {
 }
 
 // Clones a remote onto the scoped device and registers the checkout.
-// The clone runs there, under that device's git credentials.
+// The clone runs there, under that device's git credentials. `signal`
+// cancels it: the call's interruption stops git on that device, which
+// leaves no folder behind, and the clone answers null, which is no
+// failure to report. One already over lands as it would.
 export function useCloneProject() {
   const { api } = useHostScope();
   const whenListed = useWhenListed();
-  return useMutation<Project, Error, CloneProjectPayload>({
+  return useMutation<
+    Project | null,
+    Error,
+    { input: CloneProjectPayload; signal: AbortSignal }
+  >({
     // Settles once listed, as useAddProject does.
-    mutationFn: (input) => api.run(api.projects.clone(input)).then(whenListed),
+    mutationFn: ({ input, signal }) =>
+      api
+        .run(api.projects.clone(input), { signal })
+        .then(whenListed, (error: unknown) => {
+          if (signal.aborted) return null;
+          throw error;
+        }),
     meta: { errorTitle: "Couldn't clone the repository" },
   });
 }
