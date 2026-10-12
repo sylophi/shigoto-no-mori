@@ -13,8 +13,10 @@ import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { SyncActionButtonView } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 import {
   HeldSyncView,
+  MergeUpstreamView,
   PickSideView,
 } from "@shigomori/ui/views/worktreeDetail/WorktreeSyncPillView.tsx";
+import type { ReactNode } from "react";
 
 interface WorktreeSyncPillProps {
   worktree: Worktree;
@@ -47,6 +49,14 @@ export function WorktreeSyncPill({
     return <HeldSyncView held={held} compact={compact} />;
   }
 
+  // Every move in this pill waits for the others, so a click here can't
+  // start one git command beside another.
+  const busy =
+    pushForce.isPending ||
+    overwrite.isPending ||
+    mergeUpstream.isPending ||
+    Object.values(mutations).some((m) => m.isPending);
+
   switch (state.kind) {
     case "detached":
     case "synced":
@@ -57,25 +67,53 @@ export function WorktreeSyncPill({
     case "pullAndPush": {
       if (!move) return null;
       const mutation = mutations[move.key];
-      return (
+      const button = (
         <SyncActionButtonView
           tone={move.tone}
           icon={move.arrowsInLabel ? undefined : move.Icon}
           label={compact ? move.compactLabel : move.label}
           tip={move.disabledReason ?? move.tip}
-          disabled={move.disabledReason !== undefined}
+          disabled={move.disabledReason !== undefined || busy}
           pending={mutation.isPending}
           onClick={() => mutation.mutate(input)}
+        />
+      );
+      // A split that merges cleanly can still pick a side instead.
+      if (state.kind !== "pullAndPush") return button;
+      return (
+        <PickSide
+          // A new split remounts it, so a confirm armed on the old one
+          // can't fire on this one.
+          key={`${state.kind}:${state.ahead}/${state.behind}`}
+          worktree={worktree}
+          lead={button}
+          busy={busy}
+          pushForce={pushForce}
+          overwrite={overwrite}
+          ahead={state.ahead}
+          behind={state.behind}
+          compact={compact}
         />
       );
     }
     case "diverged":
       return (
         <PickSide
+          // A new split remounts it, so a confirm armed on the old one
+          // can't fire on this one.
+          key={`${state.kind}:${state.ahead}/${state.behind}`}
           worktree={worktree}
+          lead={
+            <MergeUpstream
+              input={input}
+              mergeUpstream={mergeUpstream}
+              behind={state.behind}
+              busy={busy}
+            />
+          }
+          busy={busy}
           pushForce={pushForce}
           overwrite={overwrite}
-          mergeUpstream={mergeUpstream}
           ahead={state.ahead}
           behind={state.behind}
           compact={compact}
@@ -86,24 +124,54 @@ export function WorktreeSyncPill({
   }
 }
 
+// Its own component so only a diverged pill follows the router.
+function MergeUpstream({
+  input,
+  mergeUpstream,
+  behind,
+  busy,
+}: {
+  input: { projectId: string; worktreeId: string };
+  mergeUpstream: ReturnType<typeof useMergeUpstreamWorktree>;
+  behind: number;
+  busy: boolean;
+}) {
+  const nav = useWorktreeNav();
+  return (
+    <MergeUpstreamView
+      behind={behind}
+      busy={busy}
+      pending={mergeUpstream.isPending}
+      onClick={() =>
+        mergeUpstream.mutate(input, {
+          onSuccess: ({ stopped }) => {
+            if (stopped) nav.toDiff(input.projectId, input.worktreeId);
+          },
+        })
+      }
+    />
+  );
+}
+
 function PickSide({
   worktree,
+  lead,
+  busy,
   pushForce,
   overwrite,
-  mergeUpstream,
   ahead,
   behind,
   compact,
 }: {
   worktree: Worktree;
+  lead: ReactNode;
+  busy: boolean;
   pushForce: ReturnType<typeof usePushForceWorktree>;
   overwrite: ReturnType<typeof useOverwriteWorktree>;
-  mergeUpstream: ReturnType<typeof useMergeUpstreamWorktree>;
   ahead: number;
   behind: number;
   compact: boolean;
 }) {
-  const nav = useWorktreeNav();
   const input = { projectId: worktree.projectId, worktreeId: worktree.id };
   // Both actions throw away one side's commits, which is more
   // destructive than "Delete worktree" (that one keeps the branch). Same
@@ -116,18 +184,8 @@ function PickSide({
       ahead={ahead}
       behind={behind}
       compact={compact}
-      busy={
-        pushForce.isPending || overwrite.isPending || mergeUpstream.isPending
-      }
-      merge={{
-        pending: mergeUpstream.isPending,
-        onClick: () =>
-          mergeUpstream.mutate(input, {
-            onSuccess: ({ stopped }) => {
-              if (stopped) nav.toDiff(input.projectId, input.worktreeId);
-            },
-          }),
-      }}
+      busy={busy}
+      lead={lead}
       pushForce={{
         armed: confirmPushForce.armed,
         pending: pushForce.isPending,

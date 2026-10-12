@@ -64,6 +64,7 @@ import { ScriptsSectionView } from "../views/worktreeDetail/scripts/ScriptsSecti
 import { SyncActionButtonView } from "../views/worktreeDetail/SyncActionButtonView.tsx";
 import {
   HeldSyncView,
+  MergeUpstreamView,
   PickSideView,
 } from "../views/worktreeDetail/WorktreeSyncPillView.tsx";
 import { NO_REWRITE } from "../lib/commitRewrite.ts";
@@ -374,7 +375,14 @@ export function WorktreeSectionsPartsScene({
                             behind={1}
                             compact
                             busy={false}
-                            merge={{ pending: false, onClick: noop }}
+                            lead={
+                              <MergeUpstreamView
+                                behind={1}
+                                busy={false}
+                                pending={false}
+                                onClick={noop}
+                              />
+                            }
                             pushForce={{
                               armed: false,
                               pending: false,
@@ -448,6 +456,27 @@ export function WorktreeSectionsPartsScene({
             </StaticMenu>
           )}
         </Part>
+        <Part label="Sync, split cleanly">
+          <span className="flex">
+            <PickSideView
+              ahead={1}
+              behind={2}
+              compact={false}
+              busy={false}
+              lead={
+                <SyncActionButtonView
+                  tone="indigo"
+                  label="Pull and push ↑1↓2"
+                  pending={false}
+                  onClick={noop}
+                />
+              }
+              pushForce={{ armed: false, pending: false, onClick: noop }}
+              overwrite={{ armed: true, pending: false, onClick: noop }}
+              onDisarm={noop}
+            />
+          </span>
+        </Part>
       </div>
       <div className="flex flex-col gap-5">
         <Part label="Stashes">
@@ -497,7 +526,14 @@ export function WorktreeSectionsPartsScene({
               behind={1}
               compact={false}
               busy={false}
-              merge={{ pending: false, onClick: noop }}
+              lead={
+                <MergeUpstreamView
+                  behind={1}
+                  busy={false}
+                  pending={false}
+                  onClick={noop}
+                />
+              }
               pushForce={{ armed: true, pending: false, onClick: noop }}
               overwrite={{ armed: false, pending: false, onClick: noop }}
               onDisarm={noop}
