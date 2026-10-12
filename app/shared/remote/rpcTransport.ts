@@ -28,6 +28,7 @@ import * as Queue from "effect/Queue";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
@@ -215,7 +216,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           ) as Effect.Effect<unknown, unknown>
         ).pipe(
           Effect.catchDefect((defect) => {
-            const error = refused(defect);
+            const error = refused(defect) ?? dropped(defect);
             return error === undefined
               ? Effect.die(defect)
               : Effect.fail(error);
@@ -240,7 +241,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           ) as Stream.Stream<unknown, unknown>
         ).pipe(
           Stream.catchDefect((defect) => {
-            const error = refused(defect);
+            const error = refused(defect) ?? dropped(defect);
             return error === undefined
               ? Stream.die(defect)
               : Stream.fail(error);
@@ -314,6 +315,11 @@ export function linkTransport(
     },
   };
 }
+
+// A request the socket couldn't write: the link going under it, which
+// the transport raises as a defect.
+const dropped = (defect: unknown) =>
+  Socket.isSocketError(defect) ? new RemoteDisconnectedError() : undefined;
 
 // A call's failure as its caller sees it: the contract error it was
 // sent as (RemoteCallError for a plain one, carrying its message and
