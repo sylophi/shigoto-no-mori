@@ -190,15 +190,20 @@ const make = Effect.gen(function* () {
   // `gh auth token` exits non-zero when not signed in, and is not asked
   // when gh is missing. It reads gh's own store, where `gh auth status`
   // asks GitHub, so a machine offline (or a stale second account) read
-  // as signed out. Asked per host gh knows, since bare it answers for
-  // github.com alone and an Enterprise login would read as none. The
-  // token itself is dropped unread.
+  // as signed out. Asked bare first (gh's own default host, GH_HOST and
+  // the token variables among it), then per host gh's file knows, since
+  // bare it answers for one host alone and an Enterprise login would
+  // read as none. The token itself is dropped unread.
   const probe = yield* Effect.gen(function* () {
     const installed = (yield* Processes.resolveOnPath("gh")) !== null;
     if (!installed) return { installed, authed: false };
+    const asks = [
+      [] as string[],
+      ...[...(yield* knownHosts)].map((host) => ["--hostname", host]),
+    ];
     let authed = false;
-    for (const host of yield* knownHosts) {
-      authed = yield* gh(["auth", "token", "--hostname", host]).pipe(
+    for (const ask of asks) {
+      authed = yield* gh(["auth", "token", ...ask]).pipe(
         Effect.as(true),
         Effect.orElseSucceed(() => false),
       );

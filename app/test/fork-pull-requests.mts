@@ -77,7 +77,7 @@ const json = (rows: object[]) => `'${JSON.stringify(rows)}'`;
 
 const GH = `#!/bin/sh
 case "$*" in
-  "auth token "*) ;;
+  "auth token"*) ;;
   "api graphql "*) echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}';;
   "pr list --state all --head fox --limit 1 "*) echo ${json([fork9])};;
   "pr list --state all --head fox "*) echo ${json([fork9, own5])};;
