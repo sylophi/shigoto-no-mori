@@ -11,6 +11,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { once } from "node:events";
+import { createServer, type AddressInfo } from "node:net";
 import { basename, join } from "node:path";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
@@ -696,6 +698,38 @@ it("clone checks its destination, and keeps a URL's userinfo out of the error", 
     }),
   );
   assert.doesNotMatch(stderrOf(leaked), /s3cret/);
+});
+
+it("an interrupted clone leaves no folder behind", async () => {
+  const parent = tempDir("clone-into-");
+  const dest = join(parent, "c");
+  // A remote that takes the connection and never answers, so the clone
+  // is under way, its folder made, when it is interrupted.
+  const server = createServer((socket) => socket.unref());
+  const connected = once(server, "connection");
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const outcome = await withGit((g) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(
+          g.clone({
+            url: `http://127.0.0.1:${port}/owner/repo.git`,
+            parentDir: parent,
+            name: "c",
+          }),
+        );
+        yield* Effect.promise(() => connected);
+        assert.ok(existsSync(dest));
+        yield* Fiber.interrupt(fiber);
+        return yield* Effect.exit(Fiber.join(fiber));
+      }),
+    );
+    assert.ok(Exit.hasInterrupts(outcome));
+    assert.ok(!existsSync(dest));
+  } finally {
+    server.close();
+  }
 });
 
 it("a new repository lands on main with one empty commit, and never over a folder", async () => {

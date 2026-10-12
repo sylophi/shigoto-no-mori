@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { EmptyPanel } from "../primitives/empty-panel.tsx";
 import { SegmentedControl } from "../primitives/segmented-control.tsx";
+import { cn } from "../lib/utils.ts";
 
 export type AddProjectMode = "existing" | "clone" | "create";
 
@@ -11,18 +12,27 @@ const MODE_OPTIONS = [
 ] as const;
 
 // The add-project dialog's head: how to add it, and on which device.
+// Held still while a clone or a new repository is under way.
 export function AddProjectHeaderView({
   mode,
   onMode,
   tabs,
+  working = false,
 }: {
   mode: AddProjectMode;
   onMode: (mode: AddProjectMode) => void;
   // The device tab bar, when there is a pick.
   tabs: ReactNode;
+  working?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2 border-b border-border py-2">
+    <div
+      inert={working}
+      className={cn(
+        "flex flex-col gap-2 border-b border-border py-2",
+        working && "opacity-50",
+      )}
+    >
       <SegmentedControl
         value={mode}
         onChange={onMode}

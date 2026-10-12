@@ -46,6 +46,10 @@ interface ModalShellProps {
   // backs out a stage. Taken here rather than on a handler inside: this
   // one hears the key wherever focus sits, document.body included.
   onEscape?: () => void;
+  // Off while the dialog is busy with something it has to see through:
+  // neither the backdrop nor Escape closes it, nor does Escape reach a
+  // shell under it.
+  dismissable?: boolean;
   // Optional override for the popover's class list (sizing, layout).
   // Defaults to a max-w-xl column.
   popoverClassName?: string;
@@ -61,6 +65,7 @@ export function ModalShell({
   onClose,
   closeOnEscape = true,
   onEscape,
+  dismissable = true,
   popoverClassName,
   children,
 }: ModalShellProps) {
@@ -70,8 +75,8 @@ export function ModalShell({
   // Captured, so it lands before any handler inside the shell.
   const onEscapeRef = useRef(onEscape ?? onClose);
   onEscapeRef.current = onEscape ?? onClose;
-  const closeOnEscapeRef = useRef(closeOnEscape);
-  closeOnEscapeRef.current = closeOnEscape;
+  const closeOnEscapeRef = useRef(closeOnEscape && dismissable);
+  closeOnEscapeRef.current = closeOnEscape && dismissable;
   const root = useThemeRoot();
   // Base UI's portal mounts a render after the shell, so its backdrop
   // arrives as state.
@@ -166,7 +171,9 @@ export function ModalShell({
       onOpenChange={(open, details) => {
         // Escape is the listener's above; Base UI's own would close a
         // shell under a picker, or one that owns its Escape.
-        if (!open && details.reason === "outside-press") onClose();
+        if (!open && dismissable && details.reason === "outside-press") {
+          onClose();
+        }
       }}
     >
       <Dialog.Portal container={root}>
