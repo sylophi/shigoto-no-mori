@@ -389,7 +389,6 @@ const make = Effect.gen(function* () {
     harness: GuideHarness,
   ) {
     const previous = yield* byWindow(windowId);
-    if (previous !== undefined) yield* close(previous);
     const session: Session = {
       token: randomBytes(32).toString("base64url"),
       windowId,
@@ -398,9 +397,18 @@ const make = Effect.gen(function* () {
       page: undefined,
       point: null,
     };
-    yield* Ref.update(sessions, (all) =>
-      new Map(all).set(session.token, session),
-    );
+    // The new session in the old one's place at once, so a Stop while
+    // the old one lets go of the page ends the new one.
+    yield* Ref.update(sessions, (all) => {
+      const next = new Map(all);
+      if (previous !== undefined) next.delete(previous.token);
+      return next.set(session.token, session);
+    });
+    if (previous !== undefined) {
+      yield* Scope.close(previous.scope, Exit.void);
+    }
+    // Stopped meanwhile: nothing to show or open.
+    if (!(yield* Ref.get(sessions)).has(session.token)) return;
     yield* tell(session);
     yield* windows
       .launch({ session: session.token, harness })

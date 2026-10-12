@@ -99,8 +99,10 @@ function makeShell() {
   const told: { windowId: number; state: GuideState | null }[] = [];
   const launched: string[] = [];
   let launchFails = false;
-  // A launch held until released, as one waiting on the user is.
+  // A launch held until released, as one waiting on the user is, and a
+  // page's detach held the same way.
   let holding: Deferred.Deferred<void> | undefined;
+  let detaching: Deferred.Deferred<void> | undefined;
   const closing = new Set<(windowId: number) => void>();
   const layer = Guide.layer.pipe(
     Layer.provide(
@@ -120,7 +122,9 @@ function makeShell() {
               // Detaching takes a turn, as the DevTools protocol's does.
               () =>
                 Effect.andThen(
-                  Effect.yieldNow,
+                  detaching === undefined
+                    ? Effect.yieldNow
+                    : Deferred.await(detaching),
                   Effect.sync(() => {
                     held.window.detached = true;
                   }),
@@ -181,6 +185,9 @@ function makeShell() {
     },
     holdLaunches: (deferred: Deferred.Deferred<void>) => {
       holding = deferred;
+    },
+    holdDetaches: (deferred: Deferred.Deferred<void>) => {
+      detaching = deferred;
     },
     launched,
     // Whether anything heard it.
@@ -331,6 +338,30 @@ it("stops a guide whose launch hangs, and leaves it stopped once the launch open
       assert.ok(
         ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
       );
+    }),
+  );
+});
+
+it("keeps a Stop that lands while a new start lets go of the old session", async () => {
+  const shell = makeShell();
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const first = yield* shell.start(guide, 1, "claude");
+      yield* guide.drive(first, { _tag: "look" });
+      const release = yield* Deferred.make<void>();
+      shell.holdDetaches(release);
+      const launches = shell.launched.length;
+      const starting = yield* Effect.forkChild(guide.start(1, "codex"));
+      // The old session gone, its page still letting go.
+      while ((yield* guide.read(1))?.harness === "claude") {
+        yield* Effect.yieldNow;
+      }
+      yield* guide.end(1);
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(starting);
+      assert.equal(yield* guide.read(1), null);
+      assert.equal(shell.launched.length, launches);
+      assert.deepEqual(shell.told.at(-1), { windowId: 1, state: null });
     }),
   );
 });
