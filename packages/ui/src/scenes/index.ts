@@ -69,7 +69,11 @@ import {
   OnboardingSignInScene,
 } from "./steps.tsx";
 import { LivePageScene, LiveQuietScene } from "./live.tsx";
-import { PalettePickedScene, PaletteScene } from "./palette.tsx";
+import {
+  PaletteEmptyScene,
+  PalettePickedScene,
+  PaletteScene,
+} from "./palette.tsx";
 import { GuidePartsScene } from "./guide.tsx";
 import {
   CreatePullRequestScene,
@@ -154,7 +158,8 @@ export const scenes = {
   liveQuiet: { Scene: LiveQuietScene, ...DESKTOP },
   palette: { Scene: PaletteScene, ...DESKTOP },
   palettePicked: { Scene: PalettePickedScene, ...DESKTOP },
-  guideParts: { Scene: GuidePartsScene, size: [720, 760] },
+  paletteEmpty: { Scene: PaletteEmptyScene, ...DESKTOP },
+  guideParts: { Scene: GuidePartsScene, size: [960, 1050] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

@@ -9,7 +9,7 @@ import {
   type GuideState,
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
-import type { GuideHarnessOption } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type { GuideHarnessOption } from "@shigomori/ui/views/guide/GuideView.tsx";
 import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys, queryKeysFor } from "@/lib/queryKeys";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -34,11 +34,9 @@ export function useGuide(): GuideState | null {
 }
 
 // The agents a guide can open on this machine: those of the guide's
-// harnesses that are set up here, none as null. Read once a minute at
-// most: the palette mounts on every open.
-export function useGuideHarnesses():
-  | [GuideHarnessOption, ...GuideHarnessOption[]]
-  | null {
+// harnesses that are set up here, undefined until read. Read once a
+// minute at most: the dialog mounts on every ask.
+export function useGuideHarnesses(): GuideHarnessOption[] | undefined {
   const api = useApi();
   const hasLocalHost = useHasLocalHost();
   const { data } = useQuery({
@@ -47,10 +45,9 @@ export function useGuideHarnesses():
     staleTime: 60_000,
     enabled: hasLocalHost,
   });
-  const [first, ...rest] = (data ?? []).flatMap((harness) =>
+  return data?.flatMap((harness) =>
     harness.detected && isGuideHarness(harness.id)
       ? [{ id: harness.id, label: GUIDE_HARNESS_LABELS[harness.id] }]
       : [],
   );
-  return first === undefined ? null : [first, ...rest];
 }

@@ -4,7 +4,6 @@ import {
   FileDiff,
   Folder,
   GitPullRequest,
-  MessageCircleQuestion,
   Plus,
   SquarePen,
 } from "lucide-react";
@@ -27,7 +26,6 @@ import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";
-import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import { PaletteGroupView } from "@shigomori/ui/views/palette/PaletteItemView.tsx";
 import {
   iconOf,
@@ -58,8 +56,6 @@ export interface PaletteActions {
   // The new-worktree form, on the peer `deviceId` names, else here.
   openCreateForm: (projectId: string, deviceId?: string) => void;
   openPage: (page: PalettePage) => void;
-  // The guide on the question, in the agent named.
-  ask: (harness: GuideHarness, question: string) => void;
 }
 
 // The highlighted row's verbs: a preview beside the list, where a click
@@ -98,8 +94,6 @@ export function PaletteVerbs({
       return <PageVerbs page={row.page} query={query} actions={actions} />;
     case "create":
       return <CreateVerbs row={row} query={query} actions={actions} />;
-    case "ask":
-      return <AskVerbs row={row} query={query} actions={actions} />;
   }
 }
 
@@ -445,34 +439,6 @@ function CreateVerbs({
           run: () => actions.openCreateForm(first.id),
         },
       ]}
-    />
-  );
-}
-
-// Which agent shows the answer: the first one set up is ↩.
-function AskVerbs({
-  row,
-  query,
-  actions,
-}: {
-  row: Extract<PaletteRow, { kind: "ask" }>;
-  query: string;
-  actions: PaletteActions;
-}) {
-  const [first] = row.harnesses;
-  return (
-    <VerbGroupView
-      heading="Show me how"
-      query={query}
-      verbs={row.harnesses.map(
-        (harness): Verb => ({
-          key: `ask:${harness.id}`,
-          label: `Ask ${harness.label}`,
-          icon: iconOf(MessageCircleQuestion),
-          listKeys: harness === first ? "↩" : undefined,
-          run: () => actions.ask(harness.id, row.question),
-        }),
-      )}
     />
   );
 }
