@@ -603,7 +603,7 @@ export const bring = settled<"bring">((input, ctx) =>
 // One registry read serves the peer scan and the names.
 export const mirrors: Handler["mirrors"] = () =>
   Effect.gen(function* () {
-    const [{ daemon, sessions }, registry] = yield* Effect.all(
+    const [{ daemon, daemonFailure, sessions }, registry] = yield* Effect.all(
       [mirrorList(), registryOrEmpty],
       { concurrency: 2 },
     );
@@ -611,6 +611,7 @@ export const mirrors: Handler["mirrors"] = () =>
     const names = namesOf(registry);
     return {
       daemon,
+      daemonFailure: daemonFailure ?? "",
       mirrors: [
         ...sessions.map((session) => mirrorView(session, names)),
         ...afar.map((mirror) => peerMirrorView(mirror, names)),

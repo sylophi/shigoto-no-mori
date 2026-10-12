@@ -360,6 +360,7 @@ const MirrorDaemonStatusSchema = Schema.Literals([
   "starting",
   "running",
   "unavailable",
+  "failing",
 ]);
 export type MirrorDaemonStatus = typeof MirrorDaemonStatusSchema.Type;
 
@@ -370,10 +371,13 @@ export type MirrorDaemonStatus = typeof MirrorDaemonStatusSchema.Type;
 export function mirrorEngineBlocker(
   status: MirrorDaemonStatus,
   where = "this device",
+  failure?: string,
 ): string | undefined {
   switch (status) {
     case "running":
       return undefined;
+    case "failing":
+      return `The mirror engine on ${where} ${failure ?? "stopped"}. It restarts on its own.`;
     case "unavailable":
       return `Mirroring is unavailable on ${where}: the file-sync engine is missing.`;
     case "starting":
@@ -386,6 +390,8 @@ export function mirrorEngineBlocker(
 const MirrorListResultSchema = strict(
   Schema.Struct({
     daemon: MirrorDaemonStatusSchema,
+    // Why a "failing" daemon last stopped or couldn't start.
+    daemonFailure: Schema.optional(Schema.String),
     sessions: Schema.Array(MirrorSessionSchema),
     serving: Schema.Array(MirrorServingSchema),
   }),

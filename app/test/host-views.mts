@@ -308,6 +308,7 @@ it("mirrors: the daemon coming up, on mirror:changed", async () => {
   let status: Effect.Success<MirrorEngine["Service"]["status"]> = "starting";
   standInMirror({
     status: Effect.sync(() => status),
+    failure: Effect.succeed(undefined),
     sessions: Effect.succeed([]),
     create: refused,
     recreate: refused,

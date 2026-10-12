@@ -20,6 +20,7 @@ export function useMirrorView(
   const view = describeMirror(session, {
     runnerAway: link.runnerApi === undefined ? runner : undefined,
     engine: link.engine,
+    engineFailure: link.engineFailure,
   });
   const revealUnder =
     link.runnerDeviceId === localDeviceId

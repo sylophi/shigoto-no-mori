@@ -6,7 +6,9 @@
 //
 // Asserts: after the first pass, the checking states read as Live
 // with the watching detail, the states that move files read as
-// Syncing, and the first pass reads as Syncing throughout.
+// Syncing, the first pass reads as Syncing throughout, and an engine
+// that keeps stopping reads as failing, saying why, where one starting
+// reads as restarting.
 //
 // Run: pnpm test mirror-status.
 import assert from "node:assert/strict";
@@ -18,26 +20,33 @@ import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
 // One file at each end, as a session that has made its first pass.
 const endpoint = mirrorEndpoint({ directories: 1, files: 1, totalFileSize: 1 });
 
-const view = (status: MirrorStatus, successfulCycles: number) =>
-  describeMirror({
-    ...rawMirrorSession({
-      session: "s",
-      localRoot: "/a",
-      deviceId: "B",
-      projectId: "p",
-      worktreeId: "w",
-      remoteRoot: "/b",
-      local: endpoint,
-      remote: endpoint,
-      status,
-      successfulCycles,
-    }),
-    localProjectId: "p",
-    localWorktreeId: "w",
-    ignoreMode: "everything",
-    lastError: "",
-    git: { status: "synced", detail: "" },
-  });
+const view = (
+  status: MirrorStatus,
+  successfulCycles: number,
+  context: Parameters<typeof describeMirror>[1] = {},
+) =>
+  describeMirror(
+    {
+      ...rawMirrorSession({
+        session: "s",
+        localRoot: "/a",
+        deviceId: "B",
+        projectId: "p",
+        worktreeId: "w",
+        remoteRoot: "/b",
+        local: endpoint,
+        remote: endpoint,
+        status,
+        successfulCycles,
+      }),
+      localProjectId: "p",
+      localWorktreeId: "w",
+      ignoreMode: "everything",
+      lastError: "",
+      git: { status: "synced", detail: "" },
+    },
+    context,
+  );
 
 const CHECKING: MirrorStatus[] = [
   "scanning",
@@ -73,4 +82,21 @@ it("the first pass reads as Syncing", () => {
     assert.equal(view(status, 0).label, "Syncing", status);
   }
   assert.equal(view("scanning", 0).detail, "looking for changes");
+});
+
+it("an engine that stopped reads as failing with why, one starting as restarting", () => {
+  const failing = view("watching", 3, {
+    engine: "failing",
+    engineFailure: "stopped with code 2: panic: the session store is locked",
+  });
+  assert.deepEqual(
+    { tone: failing.tone, label: failing.label, detail: failing.detail },
+    {
+      tone: "rose",
+      label: "Engine failing",
+      detail:
+        "the mirror engine stopped with code 2: panic: the session store is locked, and restarts on its own",
+    },
+  );
+  assert.equal(view("watching", 3, { engine: "starting" }).label, "Restarting");
 });

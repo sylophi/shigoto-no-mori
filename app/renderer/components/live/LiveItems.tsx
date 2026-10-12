@@ -102,7 +102,7 @@ function SessionItem({
 }: {
   mirror: Extract<LiveMirror, { kind: "session" }>;
 }) {
-  const { session, runnerDeviceId, runnerApi, engine } = mirror;
+  const { session, runnerDeviceId, runnerApi, engine, engineFailure } = mirror;
   const [open, setOpen] = useState(false);
   // The runner going away takes the dialog with it.
   if (open && runnerApi === undefined) setOpen(false);
@@ -117,12 +117,14 @@ function SessionItem({
       },
       session,
       engine,
+      engineFailure,
     },
     session,
   );
   const view = describeMirror(session, {
     runnerAway: runnerApi === undefined ? managed.names.runner : undefined,
     engine,
+    engineFailure,
   });
   return (
     <MirrorSessionItemView
