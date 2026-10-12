@@ -4,7 +4,9 @@
 // text for a log line or a status (errorWordsOf). Against a real git
 // in a scratch repository. Asserted: a git that failed crosses as
 // RemoteCallError in git's own words, and reads in them, where the
-// engine's error says only how git exited; a refusal the contract
+// engine's error says only how git exited; a git that never ran (not
+// on the PATH) as "git is not installed.", the app's words for it; a
+// refusal the contract
 // knows (an unmerged branch's safe delete) crosses as its class; any
 // other failure reads and crosses as its message.
 //
@@ -86,4 +88,18 @@ it("any other failure reads and crosses as its message", () => {
   const crossed = hostCallFailure(error);
   assert.ok(isRemoteCallError(crossed));
   assert.equal(crossed.message, "something else");
+});
+
+it("a git that never ran reads and crosses as the app has always said it", async () => {
+  const error = await failureOf(
+    Effect.flatMap(Git.Git, (g) =>
+      g.run(repo, ["status"], { env: { PATH: "/nonexistent" } }),
+    ),
+  );
+  assert.ok(error instanceof Git.GitCommandError);
+  assert.equal(error.exitCode, null);
+  assert.equal(errorWordsOf(error), "git is not installed.");
+  const crossed = hostCallFailure(error);
+  assert.ok(isRemoteCallError(crossed));
+  assert.equal(crossed.message, "git is not installed.");
 });
