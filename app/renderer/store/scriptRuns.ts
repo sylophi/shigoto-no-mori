@@ -21,11 +21,10 @@ import {
   type ScriptEvent,
   scriptErrorLine,
 } from "@shigomori/contracts/schemas";
-import { localDeviceId } from "@/lib/queryKeys";
 import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
-import type { RendererApi } from "@/window";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { KeyedSubscribers } from "./keyedSubscribers";
@@ -596,39 +595,55 @@ function exitSentinel(code: number | null): string {
   return `\r\n\x1b[31m── exit ${code} ──\x1b[0m\r\n`;
 }
 
-// This machine's store. `start()` is called by the renderer entry point
-// so subscription lifecycle has a single owner. Importing this module
-// just constructs the singleton and attaches no IPC listener as a side
-// effect.
-export const scriptRuns = new ScriptRunsStore(window.api.scripts, true);
+// A page's stores: this machine's over the page's api, whose `start()`
+// the boot calls so subscription lifecycle has a single owner (making
+// one attaches no IPC listener), and a peer's built on first use over
+// that device's api (the same per-device api the remote registry hands
+// every scoped page) and kept for the page's lifetime, like the api
+// itself. A peer store starts draining the device's event channel at
+// once: the first use is a scoped page or a sidebar row that wants the
+// device's runs, so there is no earlier owner to hand the lifecycle
+// to. The channel is a hub-transport subscription that rides the
+// shared peerPush fan-out, so a store per device costs one registry
+// entry each and no IPC listener.
+type PageStores = {
+  readonly local: ScriptRunsStore;
+  readonly peers: Map<string, ScriptRunsStore>;
+};
 
-// The store for any device: this machine's, or a peer's built on first
-// use over that device's api (the same per-device api the remote
-// registry hands every scoped page) and kept for the window's
-// lifetime, like the api itself. A peer store starts draining the
-// device's event channel at once: the first use is a scoped page or a
-// sidebar row that wants the device's runs, so there is no earlier
-// owner to hand the lifecycle to. The channel is a hub-transport
-// subscription that rides the shared peerPush fan-out, so a store per
-// device costs one registry entry each and no IPC listener.
-const peerStores = new Map<string, ScriptRunsStore>();
+const pages = new WeakMap<RendererApi, PageStores>();
 
-// The peer stores go with the account: a run state and a scrollback
-// are the peer's, and a device of a later account with the same id
-// (this machine on two accounts) must not open on them. Registered at
-// module load, like the stores themselves, and never unregistered.
-onAccountLeft(() => {
-  for (const store of peerStores.values()) store.stop();
-  peerStores.clear();
-});
+function storesOf(api: RendererApi): PageStores {
+  const existing = pages.get(api);
+  if (existing !== undefined) return existing;
+  const stores: PageStores = {
+    local: new ScriptRunsStore(api.scripts, true),
+    peers: new Map(),
+  };
+  // The peer stores go with the account: a run state and a scrollback
+  // are the peer's, and a device of a later account with the same id
+  // (this machine on two accounts) must not open on them. Never
+  // unregistered, like the stores themselves.
+  onAccountLeft(() => {
+    for (const store of stores.peers.values()) store.stop();
+    stores.peers.clear();
+  });
+  pages.set(api, stores);
+  return stores;
+}
 
-export function scriptRunsFor(deviceId: string): ScriptRunsStore {
-  if (deviceId === localDeviceId) return scriptRuns;
-  let store = peerStores.get(deviceId);
+// The store for any device of the page: this machine's, or a peer's.
+export function scriptRunsFor(
+  api: RendererApi,
+  deviceId: string,
+): ScriptRunsStore {
+  const { local, peers } = storesOf(api);
+  if (deviceId === api.deviceId) return local;
+  let store = peers.get(deviceId);
   if (store === undefined) {
     store = new ScriptRunsStore(apiFor(deviceId).scripts, false);
     store.start();
-    peerStores.set(deviceId, store);
+    peers.set(deviceId, store);
   }
   return store;
 }

@@ -16,11 +16,7 @@ import type {
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { reorderProjects } from "@shared/reorder";
-import {
-  hostKeyDeviceId,
-  localDeviceId,
-  worktreeQueriesOn,
-} from "@/lib/queryKeys";
+import { hostKeyDeviceId, worktreeQueriesOn } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { noteProjects } from "@/lib/viewFeed";
 import { hostCallFn, hostViewAtom, optimisticView } from "@/lib/runtime/atoms";
@@ -35,7 +31,6 @@ import {
 export const projectsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(projectsContract, "watch"),
     input: undefined,
     onValue: (list) => noteProjects(deviceId, list),
@@ -204,7 +199,6 @@ const reorderProjectsAtom = Atom.family((deviceId: string) =>
       ),
     fn: hostCallFn({
       deviceId,
-      localDeviceId,
       call: (input: ReorderInput) => ({ channel: "projects:reorder", input }),
     }),
   }),

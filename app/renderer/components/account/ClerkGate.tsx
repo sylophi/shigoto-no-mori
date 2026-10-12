@@ -12,6 +12,7 @@ import type { ClerkProviderProps } from "@clerk/react";
 import { clerkAppearance } from "@/lib/clerkAppearance";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { ClerkAccountSync } from "./ClerkAccountSync";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export type ClerkProviderComponent = ComponentType<{
   publishableKey: string;
@@ -26,7 +27,8 @@ export function ClerkGate({
   Provider: ClerkProviderComponent;
   children: ReactNode;
 }) {
-  const publishableKey = window.api.clerkPublishableKey;
+  const api = useApi();
+  const publishableKey = api.clerkPublishableKey;
   const appearance = useThemedAppearance();
   if (!publishableKey) return children;
   return (

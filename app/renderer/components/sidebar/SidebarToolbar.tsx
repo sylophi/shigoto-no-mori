@@ -11,7 +11,7 @@ import {
   useSetWorktreeSort,
   useWorktreeSorts,
 } from "@/hooks/sharedSettings/useWorktreeSort";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { AddProjectButton } from "./AddProjectButton";
 import {
   ProjectSortMenuView,
@@ -46,6 +46,7 @@ export function SidebarToolbar({ onArrange, open }: SidebarToolbarProps) {
 }
 
 function ProjectSortMenu({ onArrange }: { onArrange: () => void }) {
+  const hasLocalHost = useHasLocalHost();
   const sortMode = useProjectSort();
   const setSortMode = useSetProjectSort();
   const groupByOwner = useGroupProjectsByOwner();

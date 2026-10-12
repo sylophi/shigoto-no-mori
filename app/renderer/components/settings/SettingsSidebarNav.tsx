@@ -8,7 +8,7 @@ import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   selectSettingsTab,
   useActiveSettingsTab,
@@ -53,6 +53,7 @@ export function useOnSettingsPages(): boolean {
 // neither page: its account page is its home, and it has no forest of
 // its own to tidy.
 function SettingsSidebarNav() {
+  const hasLocalHost = useHasLocalHost();
   const navigate = useNavigate();
   const pathname = useLocation({ select: (l) => l.pathname });
   const onPage = pathname !== SETTINGS_PATH;

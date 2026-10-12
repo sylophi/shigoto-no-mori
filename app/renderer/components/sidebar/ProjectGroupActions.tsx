@@ -33,7 +33,6 @@ import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
 import type { Project } from "@shigomori/contracts/schemas";
 import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
 import { WorktreeSortSubmenu } from "./SidebarToolbar";
@@ -47,6 +46,7 @@ import {
 import { QuickCreateButton } from "./QuickCreateButton";
 import { ProjectActionsView } from "@shigomori/ui/views/sidebar/ProjectActionsView.tsx";
 import type { RemoteProjectMember } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export interface GroupMember {
   deviceId: string;
@@ -71,6 +71,8 @@ export function useGroupMembers(
   peers: readonly RemoteProjectMember[],
   localProject: Project | undefined,
 ): GroupMember[] {
+  const page = useApi();
+  const localDeviceId = page.deviceId;
   const local = useLocalDevice();
   const commandableApi = useCommandableApi();
   const apis = peers.map((member) => commandableApi(member.deviceId));
@@ -83,7 +85,7 @@ export function useGroupMembers(
             deviceLabel: local.name,
             deviceIcon: local.icon,
             project: localProject,
-            api: window.api,
+            api: page,
             isThisDevice: true,
           },
         ]),

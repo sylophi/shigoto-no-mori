@@ -3,6 +3,7 @@ import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
 import { rowDeviceId } from "@/lib/routePaths";
 import { usePageOnScreen } from "../openProject";
 import type { SidebarViewModel } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The inbox leaves some worktrees out (a primary checkout, unless its
 // project opts in), so a worktree's page opened from outside the
@@ -30,6 +31,7 @@ export function useLeaveInboxForPage({
   leftOut: SidebarViewModel["leftOut"];
 }): void {
   const { mutate: setView } = useSetSidebarView();
+  const localDeviceId = useApi().deviceId;
   const { deviceId, projectId, worktreeId } = usePageOnScreen();
   const checkedRef = useRef<string | null>(null);
 
@@ -49,7 +51,7 @@ export function useLeaveInboxForPage({
       return;
     }
     if (shownDevice !== null && shownDevice !== deviceId) return;
-    if (leftOut?.(worktreeId, rowDeviceId(deviceId))) {
+    if (leftOut?.(worktreeId, rowDeviceId(localDeviceId, deviceId))) {
       checkedRef.current = page;
       setView("projects");
     }

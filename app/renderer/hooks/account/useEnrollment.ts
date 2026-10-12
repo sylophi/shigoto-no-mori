@@ -25,7 +25,7 @@ import {
   useAccountStatus,
   useEnroll,
 } from "@/hooks/account/useAccount";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { toast } from "@/lib/toast";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -79,7 +79,7 @@ function onlyProvider(clerk: Clerk): OAuthStrategy | null {
     : null;
 }
 
-function startSignIn(clerk: Clerk): void {
+function startSignIn(clerk: Clerk, hasLocalHost: boolean): void {
   const strategy = onlyProvider(clerk);
   const signIn = clerk.client?.signIn;
   if (strategy === null || signIn === undefined) {
@@ -109,6 +109,7 @@ function startSignIn(clerk: Clerk): void {
 // Finishes a web client's sign-in on its return from the provider, and
 // takes the marker off the address. Mounted once, by ClerkAccountSync.
 export function useFinishRedirectSignIn(): void {
+  const hasLocalHost = useHasLocalHost();
   const clerk = useClerk();
   const { isLoaded } = useAuth();
   useEffect(() => {
@@ -127,7 +128,7 @@ export function useFinishRedirectSignIn(): void {
           description: errorMessageOf(error),
         });
       });
-  }, [clerk, isLoaded]);
+  }, [clerk, isLoaded, hasLocalHost]);
 }
 
 export function useEnrollment(): {
@@ -140,6 +141,7 @@ export function useEnrollment(): {
   const { data: status } = useAccountStatus();
   const { isSignedIn, getToken } = useAuth();
   const clerk = useClerk();
+  const hasLocalHost = useHasLocalHost();
   const enroll = useEnroll();
   const enrolling = useIsMutating({ mutationKey: ENROLL_MUTATION_KEY }) > 0;
   const step: EnrollmentStep =
@@ -158,7 +160,7 @@ export function useEnrollment(): {
       if (step === "enroll") {
         enroll.mutate(() => getToken({ skipCache: true }));
       } else if (step === "sign-in") {
-        startSignIn(clerk);
+        startSignIn(clerk, hasLocalHost);
       }
     },
   };

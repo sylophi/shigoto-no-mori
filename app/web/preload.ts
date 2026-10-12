@@ -1,11 +1,9 @@
-// The browser's preload: the twin of main/preload.ts. Installs the web
-// bridge as window.api once, reading the real browser globals and Vite
-// build facts (the factory itself stays injectable for the headless
-// check), and wires the page-level events the bridge cannot see from
-// inside (other tabs, the network coming back). The window.api
-// assignment doubles as the compile-time proof that the web bridge
-// satisfies the RendererApi surface, since window.api is
-// declared with that exact type (renderer/window.d.ts).
+// The browser's preload: the twin of main/preload.ts. Makes the web
+// bridge once, reading the real browser globals and Vite build facts
+// (the factory itself stays injectable for the headless check), and
+// wires the page-level events the bridge cannot see from inside (other
+// tabs, the network coming back). Its api is the page's, which the
+// entry hands to the boot (main.tsx).
 import { viteEnv } from "./account/config";
 import { browserHintsOf } from "./account/deviceName";
 import { ACCOUNT_KEY } from "./account/store";
@@ -33,7 +31,6 @@ export function installWebBridge(): WebBridge {
     isDev: import.meta.env.DEV,
     appVersion: buildVersion(),
   });
-  window.api = bridge.api;
   installed = bridge;
   disposeWithPage({ dispose: bridge.stop });
   // Boot reconcile: connect the hub socket when a credential is

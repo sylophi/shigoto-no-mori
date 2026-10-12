@@ -23,7 +23,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
 import { isOverlayOpen } from "@/lib/dom";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { notifyError } from "@/lib/toast";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
@@ -52,6 +52,7 @@ import {
   PaletteDialogView,
   PickedChipView,
 } from "@shigomori/ui/views/palette/WorktreePaletteView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The palette (⌘K, the keymap's): every worktree on every machine, one
 // fuzzy list, and beside it
@@ -64,6 +65,8 @@ import {
 // away like a local one and drawn the same, its device a badge on the
 // row.
 export function WorktreePalette() {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const { paletteOpen: open, setPaletteOpen: setOpen } = useOverlays();
   // The worktree page on screen, if any, on this machine or a peer's:
   // any of its pages (detail, changes, a commit, a console) counts as
@@ -78,7 +81,7 @@ export function WorktreePalette() {
   const pageKey =
     worktreeId === undefined || deviceId === undefined
       ? undefined
-      : worktreeRowKey(rowDeviceId(deviceId), worktreeId);
+      : worktreeRowKey(rowDeviceId(api.deviceId, deviceId), worktreeId);
 
   useEffect(() => {
     if (pageKey !== undefined) recordWorktreeVisit(pageKey);
@@ -108,9 +111,7 @@ export function WorktreePalette() {
 
   // The Help menu's Ask, which is a question for the palette.
   useEffect(() =>
-    hasLocalHost
-      ? window.api.nav.onAskHow(() => void openPalette())
-      : undefined,
+    hasLocalHost ? api.nav.onAskHow(() => void openPalette()) : undefined,
   );
 
   useKeymapAction("palette", () => (open ? setOpen(false) : openPalette()), {
@@ -123,7 +124,8 @@ export function WorktreePalette() {
       pageKey={pageKey}
       // This device's project on screen, where a new worktree goes first.
       pageProjectId={
-        deviceId !== undefined && rowDeviceId(deviceId) === undefined
+        deviceId !== undefined &&
+        rowDeviceId(api.deviceId, deviceId) === undefined
           ? projectId
           : undefined
       }
@@ -154,6 +156,8 @@ function PaletteDialog({
   pageProjectId: string | undefined;
   onClose: () => void;
 }) {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const [query, setQuery] = useState("");
   const changesKeys = useBinding("paletteChanges");
   // The row whose verbs have the keys, and the list's query it was
@@ -364,7 +368,7 @@ function PaletteDialog({
     ask: (harness, question) => {
       if (asking !== null) return;
       setAsking(question);
-      void window.api.guide.ask({ harness, question }).then(
+      void api.guide.ask({ harness, question }).then(
         () => onClose(),
         (error: unknown) => {
           setAsking(null);

@@ -135,7 +135,7 @@ Rules that keep both themes cheap to maintain:
 
 Every component is one of two things. A **view** takes data and
 callbacks as props and only draws; it imports nothing that needs the
-running app (no queries, atoms, stores, router, `window.api`). A
+running app (no queries, atoms, stores, router, the page's api). A
 **container** binds data to a view and has no markup of its own: it
 writes no element, only views and the primitives they are built from
 (a menu's items, a modal's shell, a status dot), with the props those

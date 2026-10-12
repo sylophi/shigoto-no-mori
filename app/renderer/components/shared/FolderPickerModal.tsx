@@ -11,6 +11,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBinding } from "@/hooks/ui/useKeymap";
 import { notifyError } from "@/lib/toast";
 import { ensureTrailingSep } from "@shigomori/contracts/projectPaths";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function FolderPickerModal({
   initialPath,
@@ -21,6 +22,7 @@ export function FolderPickerModal({
   Omit<FolderPickerProps, "title" | "confirmLabel"> & {
     initialPath?: string;
   }) {
+  const api = useApi();
   const { hint, onPick, onClose } = props;
   const confirmKeys = useBinding("confirm");
   // Seed the input value with the caller's path; otherwise drop into ~/.
@@ -38,7 +40,7 @@ export function FolderPickerModal({
   const openFinder = async () => {
     let picked: string | null;
     try {
-      picked = await window.api.dialog.pickFolder({
+      picked = await api.dialog.pickFolder({
         title,
         buttonLabel: confirmLabel,
         message: hint,

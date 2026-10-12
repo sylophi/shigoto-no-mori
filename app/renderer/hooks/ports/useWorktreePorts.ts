@@ -11,7 +11,6 @@ import { portsContract } from "@shigomori/contracts/modules/ports";
 import type { WorktreePortsResult } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { type LiveViewState, useView } from "@/lib/runtime/viewHooks";
 
@@ -19,7 +18,6 @@ const worktreePortsAtom = Atom.family((key: string) => {
   const [deviceId = "", projectId = "", worktreeId = ""] = key.split("\n");
   return hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(portsContract, "watch"),
     input: { projectId, worktreeId },
   });

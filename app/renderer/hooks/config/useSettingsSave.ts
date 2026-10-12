@@ -14,10 +14,15 @@ import {
   DEFAULT_LIGHT_THEME,
 } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
+import {
+  queryKeys,
+  queryKeysFor,
+  type QueryKeyRegistry,
+} from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // A launcher row persists only once both halves are filled in.
 // Half-typed rows live purely in form state. Shared by the encoders so
@@ -145,7 +150,7 @@ interface SettingsSaveResult {
 
 // What a device-settings write stales, for whichever device's registry
 // it is handed: the local save below passes the LOCAL keys (it writes
-// through window.api, so the caches it staled are exactly this
+// through the page's api, so the caches it staled are exactly this
 // machine's), and useDeviceSettingsSave passes the scoped registry of
 // the peer it patched.
 // The config itself, the projects and the worktree lists are the host's
@@ -180,6 +185,7 @@ export function useSettingsSave({
   initialConfig: GlobalConfig;
   initialClientConfig: ClientConfig;
 }) {
+  const page = useApi();
   const queryClient = useQueryClient();
   const initialState = fromConfig(initialConfig, initialClientConfig);
   const initialDevicePatch = serialize(
@@ -200,7 +206,7 @@ export function useSettingsSave({
         // own api: the host applies it over the stored document under
         // its config write lock, so everything the form does not manage
         // rides through untouched.
-        await window.api.globalConfig.writeDeviceSettings({
+        await page.globalConfig.writeDeviceSettings({
           patch: devicePatch,
         });
       }
@@ -217,6 +223,7 @@ export function useSettingsSave({
       if (clientPersisted) {
         try {
           persistedClientConfig = await mergeClientConfigWrite(
+            page,
             queryClient,
             clientConfig,
           );
@@ -240,7 +247,10 @@ export function useSettingsSave({
         queryClient.setQueryData(queryKeys.clientConfig(), clientConfig);
       }
       if (devicePersisted) {
-        invalidateDeviceSettingsQueries(queryClient, queryKeys);
+        invalidateDeviceSettingsQueries(
+          queryClient,
+          queryKeysFor(page.deviceId),
+        );
       }
     },
     onError: (error) => {
@@ -248,7 +258,10 @@ export function useSettingsSave({
       // landed before the appearance write failed, so its caches are
       // stale exactly as on success.
       if (error instanceof SettingsSaveError && error.devicePersisted) {
-        invalidateDeviceSettingsQueries(queryClient, queryKeys);
+        invalidateDeviceSettingsQueries(
+          queryClient,
+          queryKeysFor(page.deviceId),
+        );
       }
     },
     meta: { errorTitle: "Couldn't save settings" },

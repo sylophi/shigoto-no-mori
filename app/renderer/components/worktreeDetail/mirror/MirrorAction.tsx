@@ -25,13 +25,13 @@ import {
   type WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { localDeviceId } from "@/lib/queryKeys";
 import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
 import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
 import { TONE_TEXT } from "@shigomori/ui/primitives/status-dot.tsx";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { MirrorManageDialog } from "./MirrorManageDialog";
 import { useMirrorView } from "./useMirrorView";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function MirrorAction({
   worktree,
@@ -144,6 +144,7 @@ export function RunnerScope({
   api: HostApi;
   children: ReactNode;
 }) {
+  const localDeviceId = useApi().deviceId;
   if (deviceId === localDeviceId) {
     return <LocalHostScope>{children}</LocalHostScope>;
   }

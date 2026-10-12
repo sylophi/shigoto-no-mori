@@ -4,7 +4,7 @@
 // mirror and transplant dialogs use.
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
-import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import { PortActions, PortList, usePortList } from "./PortList";
 import { PortsDialogView } from "@shigomori/ui/views/worktreeDetail/ports/PortsDialogView.tsx";
 
@@ -15,6 +15,7 @@ export function PortsDialog({
   worktree: Worktree;
   onClose: () => void;
 }) {
+  const canForwardPorts = useCanForwardPorts();
   const state = usePortList(worktree);
   const { remote, deviceLabel } = state;
 

@@ -50,8 +50,6 @@ export function applyPose(): void {
   // Posed over whatever the fake host session saved, so a reload keeps the
   // rest of the client config (folds, the sidebar view, quick-create
   // picks) the way the real store would.
-  // Parsed here rather than through a renderer helper: this runs
-  // before the bridge owns window.api, when no renderer module may load.
   let stored: Record<string, unknown> = {};
   try {
     stored = JSON.parse(

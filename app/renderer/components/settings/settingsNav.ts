@@ -13,7 +13,7 @@ import {
   VISITORS_TAB,
 } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   pickHostDevice,
   useDeviceRoster,
@@ -42,15 +42,11 @@ function useSelectedSettingsTab(): string {
   return useExternalStore(selectedTab);
 }
 
-// A section this window no longer offers (Visitors once Village life
-// is off) falls back to the General section. A hostless client (the
-// web shell) has no device of its own, so it falls back to Appearance.
-const FALLBACK_TAB = hasLocalHost ? GENERAL_TAB : APPEARANCE_TAB;
-
 // The selection, minus a section this window doesn't offer (Visitors
 // with Village life off), for the sidebar's highlight and the form's
 // panel alike.
 export function useActiveSettingsTab(): SettingsTab {
+  const hasLocalHost = useHasLocalHost();
   const selected = useSelectedSettingsTab();
   const villageLife = useVillageLife();
   if (
@@ -62,7 +58,10 @@ export function useActiveSettingsTab(): SettingsTab {
   }
   if (selected === VISITORS_TAB && villageLife) return selected;
   if (hasLocalHost && selected === LAUNCH_TAB) return selected;
-  return FALLBACK_TAB;
+  // A section this window no longer offers (Visitors once Village life
+  // is off) falls back to the General section. A hostless client (the
+  // web shell) has no device of its own, so it falls back to Appearance.
+  return hasLocalHost ? GENERAL_TAB : APPEARANCE_TAB;
 }
 
 // The panel a section's row or chip controls, for its aria-controls: a

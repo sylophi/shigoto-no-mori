@@ -6,20 +6,23 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function useMigration(): MigrationProgress | null | undefined {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!hasLocalHost) return;
-    return window.api.migration.onChanged((progress) => {
+    return api.migration.onChanged((progress) => {
       queryClient.setQueryData(queryKeys.migration(), progress);
     });
-  }, [queryClient]);
+  }, [queryClient, api, hasLocalHost]);
   const { data } = useQuery({
     queryKey: queryKeys.migration(),
-    queryFn: () => window.api.migration.read(),
+    queryFn: () => api.migration.read(),
     staleTime: Number.POSITIVE_INFINITY,
     enabled: hasLocalHost,
   });

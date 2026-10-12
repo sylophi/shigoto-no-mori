@@ -5,6 +5,7 @@
 // Clerk is absent (see ClerkGate).
 import { useAuth, useClerk, useUser } from "@clerk/react";
 import { useMutation } from "@tanstack/react-query";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The mutation key of useClerkSignOut, so a leaf can ask whether a
 // sign-out is in flight (useIsMutating) without owning the mutation.
@@ -27,6 +28,7 @@ export const CLERK_SIGN_OUT_KEY = ["clerkSignOut"] as const;
 // account then, so the account half runs on its own if Clerk skipped
 // it.
 export function useClerkSignOut() {
+  const api = useApi();
   const clerk = useClerk();
   return useMutation<void, Error, void>({
     mutationKey: CLERK_SIGN_OUT_KEY,
@@ -34,7 +36,7 @@ export function useClerkSignOut() {
       let accountSignedOut = false;
       const signOutAccount = async (): Promise<void> => {
         accountSignedOut = true;
-        await window.api.account.signOut();
+        await api.account.signOut();
       };
       await clerk.signOut(signOutAccount);
       if (!accountSignedOut) await signOutAccount();

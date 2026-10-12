@@ -15,6 +15,7 @@ import {
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { KeyboardSectionView } from "@shigomori/ui/views/settings/KeyboardSectionView.tsx";
 import { isMac, keymapOf, useKeymapRecording } from "@/hooks/ui/useKeymap";
+import { useHasLocalHost } from "@/lib/localHost";
 
 export function KeyboardSection({
   form,
@@ -28,7 +29,7 @@ export function KeyboardSection({
     id: string;
     message: string;
   } | null>(null);
-  const keymap = keymapOf(form.keybindings);
+  const keymap = keymapOf(form.keybindings, useHasLocalHost());
   useKeymapRecording(recording !== null);
 
   const bind = (id: string, chord: Chord | null) =>

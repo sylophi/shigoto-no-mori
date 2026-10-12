@@ -15,7 +15,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
 import {
-  canForwardPorts,
+  useCanForwardPorts,
   usePortForwardControl,
 } from "@/hooks/remote/usePortForwards";
 import {
@@ -24,8 +24,7 @@ import {
   useRemoteDevice,
 } from "@/hooks/remote/useRemoteDevices";
 import { useDeviceWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   deviceStatusView,
   THIS_DEVICE_VIEW,
@@ -48,6 +47,7 @@ import {
   PortsStripView,
 } from "@shigomori/ui/views/live/LiveCardView.tsx";
 import type { LiveCard as LiveCardModel } from "./liveModel";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // A device's heading over its cards: its mark in its connection tone,
 // its name, where it stands, and how much runs there.
@@ -77,6 +77,8 @@ export function DeviceHeading({
 // A peer out of reach keeps its card (its mirror and forwards are still
 // there), with nothing on it that would need the peer.
 export function LiveCard({ card }: { card: LiveCardModel }) {
+  const localDeviceId = useApi().deviceId;
+  const hasLocalHost = useHasLocalHost();
   const { api } = useDeviceApi(card.deviceId);
   const local = card.deviceId === localDeviceId;
   const reachable = local ? hasLocalHost : api !== undefined;
@@ -179,6 +181,8 @@ type CardWorktree =
 // Whether a device has a host to read: a peer while it has an api,
 // this machine only where it hosts projects (not the web client).
 function useHostReachable(deviceId: string): boolean {
+  const localDeviceId = useApi().deviceId;
+  const hasLocalHost = useHasLocalHost();
   const { api } = useDeviceApi(deviceId);
   return api !== undefined && (deviceId !== localDeviceId || hasLocalHost);
 }
@@ -305,6 +309,7 @@ function PortsStrip({
   // of their own above.
   forwarded: readonly number[];
 }) {
+  const canForwardPorts = useCanForwardPorts();
   const { remote } = useHostScope();
   // A forward rides the peer's grant, and a browser binds no port.
   const { canCommand } = useCommandAccess();

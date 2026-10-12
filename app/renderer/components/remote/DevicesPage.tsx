@@ -1,5 +1,5 @@
 import { PageShellView } from "@shigomori/ui/views/shared/PageShellView.tsx";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { AccountSection } from "./AccountSection";
 
 // "/account": the account and its machines, on their own page. The
@@ -14,13 +14,21 @@ import { AccountSection } from "./AccountSection";
 // keeps that list in the sidebar here). A hostless client has no
 // forest of its own and this page is its home, so there it is Devices,
 // and wears the devices watermark.
-const HEADER = hasLocalHost
-  ? { eyebrow: "Settings", title: "Account", watermark: "アカウント" }
-  : { eyebrow: "Shigoto no Mori", title: "Devices", watermark: "機器" };
+const DESKTOP_HEADER = {
+  eyebrow: "Settings",
+  title: "Account",
+  watermark: "アカウント",
+};
+const HOSTLESS_HEADER = {
+  eyebrow: "Shigoto no Mori",
+  title: "Devices",
+  watermark: "機器",
+};
 
 export function DevicesPage() {
+  const header = useHasLocalHost() ? DESKTOP_HEADER : HOSTLESS_HEADER;
   return (
-    <PageShellView page="devices" {...HEADER}>
+    <PageShellView page="devices" {...header}>
       <AccountSection />
     </PageShellView>
   );

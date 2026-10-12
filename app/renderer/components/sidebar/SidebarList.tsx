@@ -16,7 +16,9 @@ import {
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
 import { SidebarListView } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
+import { useHasLocalHost } from "@/lib/localHost";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { useApi } from "@/lib/runtime/pageApi";
 
 interface SidebarListProps {
   rows: SidebarRow[];
@@ -59,12 +61,17 @@ export function SidebarList({
   // Sidebar: a hover only ever repaints rows.
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const root = useWindowRoot();
+  const hasLocalHost = useHasLocalHost();
+  const localDeviceId = useApi().deviceId;
 
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollerRef.current,
     estimateSize: (index) =>
-      rowSizeHint(rows[index]?.kind ?? "worktree", isPhoneLayout(root)),
+      rowSizeHint(
+        rows[index]?.kind ?? "worktree",
+        isPhoneLayout(root, hasLocalHost),
+      ),
     overscan: 12,
     getItemKey: (index) => rows[index]?.key ?? index,
   });
@@ -135,7 +142,7 @@ export function SidebarList({
     const { projectId, worktreeId } = open;
     // The device spelled the way the rows spell it (none for this
     // machine's).
-    const deviceId = rowDeviceId(open.deviceId);
+    const deviceId = rowDeviceId(localDeviceId, open.deviceId);
     const revealed = `${deviceId ?? ""}:${worktreeId}`;
     if (lastRevealedRef.current === revealed) return;
     const key = revealKey(projectId, worktreeId, deviceId);

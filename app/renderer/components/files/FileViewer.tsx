@@ -11,6 +11,7 @@ import {
   CodeFileView,
   FileViewerView,
 } from "@shigomori/ui/views/files/FileViewerView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The files page's pane: one file, read whole and highlighted by the
 // same renderer the diffs use.
@@ -27,6 +28,7 @@ export function FileViewer({
   // on a peer's page, where Finder would be the wrong machine's.
   revealRoot: string | null;
 }) {
+  const api = useApi();
   const { data, isPending, isError } = useWorktreeFile(
     projectId,
     worktreeId,
@@ -41,7 +43,7 @@ export function FileViewer({
         revealRoot === null
           ? null
           : () => {
-              window.api.shell
+              api.shell
                 .showItemInFolder({ path: `${revealRoot}/${path}` })
                 .catch((err: unknown) =>
                   notifyError("Couldn't reveal the file", err),

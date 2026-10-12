@@ -1,15 +1,12 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { CarryOverCandidate } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import {
-  resolveForestScope,
-  type HostForestScope,
-} from "@/hooks/remote/hostForestScope";
+import { type HostForestScope } from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // One folder of a project, unioned across the primary and every
 // worktree on one device (host/lib/worktrees/carryOver.ts). Scope rule
-// as resolveForestScope's: a peer's listing caches under its own
+// as HostForestScope's: a peer's listing caches under its own
 // device id, and a device with no session never fetches. Shared by the
 // carry-over picker below and the leave-out preset's picker, which
 // fans it out to every device holding the repo (useRepoListing) and
@@ -18,10 +15,10 @@ import { queryKeysFor } from "@/lib/queryKeys";
 export function carryOverListingQueryOptions(
   projectId: string,
   relative: string,
-  scope: HostForestScope = {},
+  scope: HostForestScope,
   { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
 ) {
-  const { deviceId, api } = resolveForestScope(scope);
+  const { deviceId, api } = scope;
   return queryOptions<readonly CarryOverCandidate[]>({
     queryKey: queryKeysFor(deviceId).carryOverListing(
       projectId,

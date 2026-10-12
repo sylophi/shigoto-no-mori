@@ -1,6 +1,6 @@
 import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The device a read goes to, and its api, undefined for a peer with no
 // session. With no deviceId it rides the surrounding host scope (a
@@ -16,16 +16,18 @@ export function useDeviceApi(deviceId?: string): {
   api: HostScope["api"] | undefined;
 } {
   const scope = useHostScope();
+  const page = useApi();
+  const localDeviceId = page.deviceId;
   const targetId = deviceId ?? scope.deviceId;
   // The store never lists this machine, so naming it explicitly from
-  // inside a peer's scope must resolve to window.api, not to nothing.
+  // inside a peer's scope must resolve to the page's api, not to nothing.
   const known = targetId === scope.deviceId || targetId === localDeviceId;
   const peerApi = useRemoteDeviceApi(known ? undefined : targetId);
   const api =
     targetId === scope.deviceId
       ? scope.api
       : targetId === localDeviceId
-        ? window.api
+        ? page
         : peerApi;
   return { deviceId: targetId, api };
 }

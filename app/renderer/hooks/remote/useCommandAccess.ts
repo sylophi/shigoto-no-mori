@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { localDeviceId } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import {
@@ -8,6 +7,7 @@ import {
   type RemoteDeviceApi,
   remoteDeviceStore,
 } from "@/lib/remote/devices";
+import { useApi } from "@/lib/runtime/pageApi";
 
 const GRANTED: CommandAccess = {
   granted: true,
@@ -27,8 +27,9 @@ const REFUSED: CommandAccess = {
 
 // The verdict for one device, given its registry entry (undefined for
 // this device, which the registry does not list, and for a peer it no
-// longer knows). This device always commands itself.
+// longer knows). This device (`localDeviceId`) always commands itself.
 export function commandAccessOf(
+  localDeviceId: string,
   deviceId: string,
   device: Pick<RemoteDevice, "acceptsCommands"> | undefined,
 ): CommandAccess {
@@ -43,6 +44,7 @@ export function commandAccessOf(
 // A selector over the registry, so another peer's churn leaves the
 // value, and the render, alone.
 export function useCommandAccess(): CommandAccess {
+  const localDeviceId = useApi().deviceId;
   const { deviceId } = useHostScope();
   const select = () =>
     remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
@@ -52,25 +54,32 @@ export function useCommandAccess(): CommandAccess {
     select,
     select,
   );
-  return commandAccessOf(deviceId, { acceptsCommands: accepts });
+  return commandAccessOf(localDeviceId, deviceId, {
+    acceptsCommands: accepts,
+  });
 }
 
 // A device's api while this device may command it (a verdict not in
 // yet counts, as canCommand has it), else undefined.
 function commandableApiOf(
+  localDeviceId: string,
   deviceId: string,
   device: RemoteDevice | undefined,
 ): RemoteDeviceApi | undefined {
-  return commandAccessOf(deviceId, device).canCommand ? device?.api : undefined;
+  return commandAccessOf(localDeviceId, deviceId, device).canCommand
+    ? device?.api
+    : undefined;
 }
 
 // The api to command a peer through from here, by device id
 // (commandableApiOf). The lookup the group actions and the inbox's
 // create button share.
 export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
+  const localDeviceId = useApi().deviceId;
   const registry = useRemoteDevices();
   return (deviceId) =>
     commandableApiOf(
+      localDeviceId,
       deviceId,
       registry.find((entry) => entry.deviceId === deviceId),
     );
@@ -82,9 +91,11 @@ export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
 export function useCommandableDeviceApi(
   deviceId: string | undefined,
 ): RemoteDeviceApi | undefined {
+  const localDeviceId = useApi().deviceId;
   const select = () => {
     if (deviceId === undefined) return undefined;
     return commandableApiOf(
+      localDeviceId,
       deviceId,
       remoteDeviceStore
         .getSnapshot()

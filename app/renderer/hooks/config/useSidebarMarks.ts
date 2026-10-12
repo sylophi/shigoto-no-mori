@@ -1,7 +1,8 @@
 import type { SidebarMarks } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
 import { useQuery } from "@tanstack/react-query";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
+import { useApi } from "@/lib/runtime/pageApi";
 import { clientConfigQueryOptions } from "./useClientConfig";
 import { useLocalGlobalConfig } from "./useGlobalConfig";
 
@@ -12,7 +13,7 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 // config has loaded, so a mark switched off never flashes in.
 function useClientFlag(select: (config: ClientConfig) => boolean): boolean {
   const { data } = useQuery({
-    ...clientConfigQueryOptions,
+    ...clientConfigQueryOptions(useApi()),
     select,
     meta: { errorTitle: "Couldn't load appearance settings" },
   });
@@ -42,7 +43,10 @@ function useMarkTerrierProjects(): boolean {
 // (SidebarSection, which passes the staged value), and the paw must not
 // go on marking a peer's projects behind that. A hostless client has no
 // integration of its own and always can.
-export function terrierMarksHere(terrier: boolean): boolean {
+export function terrierMarksHere(
+  hasLocalHost: boolean,
+  terrier: boolean,
+): boolean {
   return !hasLocalHost || terrier;
 }
 
@@ -50,7 +54,7 @@ export function terrierMarksHere(terrier: boolean): boolean {
 // the open project's header.
 function useTerrierMarksHere(): boolean {
   const { data: config } = useLocalGlobalConfig();
-  return terrierMarksHere(config?.terrier === true);
+  return terrierMarksHere(useHasLocalHost(), config?.terrier === true);
 }
 
 // The device badges on the open project's header and worktree rows. On unless

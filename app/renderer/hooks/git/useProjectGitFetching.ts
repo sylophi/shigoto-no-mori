@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
 import { onAccountLeft, onSessionLanded } from "@/lib/remote/remoteDeviceSync";
 
 // Which projects are fetching refs right now, on which device: fed by
@@ -43,7 +42,7 @@ export function noteGitFetchActive(
 onSessionLanded((deviceId) => {
   forget((key) => key.startsWith(`${deviceId}\n`));
 });
-onAccountLeft(() => {
+onAccountLeft((localDeviceId) => {
   forget((key) => !key.startsWith(`${localDeviceId}\n`));
 });
 

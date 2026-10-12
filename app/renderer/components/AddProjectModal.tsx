@@ -9,7 +9,6 @@ import {
 import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
-import { localDeviceId } from "@/lib/queryKeys";
 import { AddExistingForm } from "./addProject/AddExistingForm";
 import { CloneForm } from "./addProject/CloneForm";
 import { CreateForm } from "./addProject/CreateForm";
@@ -18,16 +17,18 @@ import {
   AddProjectHeaderView,
   AddProjectNoDeviceView,
 } from "@shigomori/ui/views/AddProjectModalView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // Standalone host for the add-project flow (File → Add Project… and
 // the sidebar ＋ button). The menu item's keys are the keymap's, an
 // accelerator in main/electron/menu.ts that broadcasts over IPC.
 export function AddProjectModal() {
+  const api = useApi();
   const { addProjectOpen, addProjectRequest, openAddProject } = useOverlays();
 
   useEffect(
-    () => window.api.nav.onAddProject(() => openAddProject()),
-    [openAddProject],
+    () => api.nav.onAddProject(() => openAddProject()),
+    [openAddProject, api],
   );
 
   if (!addProjectOpen) return null;
@@ -40,6 +41,7 @@ export function AddProjectModal() {
 // a peer's disk browses like this one's. The device bar shows only
 // once there is a choice to make.
 function AddProjectDialog() {
+  const localDeviceId = useApi().deviceId;
   const { addProjectTarget, setAddProjectOpen } = useOverlays();
   const onClose = () => setAddProjectOpen(false);
   // A target's query is a path to browse or a URL to clone.

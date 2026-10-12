@@ -3,23 +3,20 @@
 // site's page, all of them on one bridge and one client. The frame's
 // element is the window's theme root, and the page sets its theme.
 import { createMemoryHistory } from "@tanstack/react-router";
+import { mountWindow, startApp } from "@/boot";
 import { ClerkProvider } from "./clerkStub";
 import { installFakeHostBridge } from "./bridge";
 
 let started: ReturnType<typeof start> | undefined;
 
-async function start() {
+function start() {
   // Every visit starts on the client settings the scenes draw (the
   // sidebar's inbox), as pose.ts seeds the fake host's.
   localStorage.setItem(
     "sm.fakeHost.clientConfig",
     JSON.stringify({ sidebarView: "inbox" }),
   );
-  // The bridge owns window.api before any app module loads, as in every
-  // entry (main.tsx), so the app comes in through a dynamic import.
-  const links = installFakeHostBridge({ dev: false });
-  const { mountWindow, startApp } = await import("@/boot");
-  return { mountWindow, client: startApp({ links }) };
+  return startApp(installFakeHostBridge({ dev: false }));
 }
 
 // Mounts a window on `route` into `element`, in place of what it held.
@@ -28,7 +25,7 @@ export async function mountFrame(
   route: string,
 ): Promise<void> {
   started ??= start();
-  const { mountWindow, client } = await started;
+  const client = started;
   element.replaceChildren();
   const router = mountWindow(client, {
     element,

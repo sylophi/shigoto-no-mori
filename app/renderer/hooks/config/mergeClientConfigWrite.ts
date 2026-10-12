@@ -14,14 +14,16 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 
 export async function mergeClientConfigWrite(
+  api: Pick<RendererApi, "clientConfig">,
   queryClient: QueryClient,
   patch: Partial<ClientConfig>,
 ): Promise<ClientConfig> {
   const current =
     queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig()) ?? {};
   const config: ClientConfig = { ...current, ...patch };
-  await window.api.clientConfig.write({ config });
+  await api.clientConfig.write({ config });
   return config;
 }

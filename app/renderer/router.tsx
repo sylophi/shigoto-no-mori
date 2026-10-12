@@ -28,7 +28,6 @@ import { DevicesPage } from "@/components/remote/DevicesPage";
 import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
-import { hasLocalHost } from "@/lib/localHost";
 import {
   DEVICE_TERMINALS_PATH,
   MIGRATION_PATH,
@@ -40,9 +39,11 @@ import {
 } from "@/lib/routePaths";
 
 // The window the router serves: its theme root, which the phone
-// layout is measured on.
+// layout is measured on, and whether a machine of its own stands
+// behind it.
 interface WindowContext {
   root: HTMLElement;
+  hasLocalHost: boolean;
 }
 
 const rootRoute = createRootRouteWithContext<WindowContext>()({
@@ -60,9 +61,11 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: ({ context }) => {
-    if (!hasLocalHost) {
+    if (!context.hasLocalHost) {
       throw redirect({
-        to: isPhoneLayout(context.root) ? "/forest/$view" : "/account",
+        to: isPhoneLayout(context.root, context.hasLocalHost)
+          ? "/forest/$view"
+          : "/account",
         params: { view: "inbox" },
         replace: true,
       });
@@ -135,17 +138,6 @@ const liveRoute = createRoute({
     () => import("@/components/live/LivePage"),
     "LivePage",
   ),
-});
-
-// App-wide like settings: the account and its device registry span
-// machines rather than describing this one, so they get their own page
-// beside it, sharing its list. A hostless client's account page is its
-// home rather than a section of Settings, so there it hangs off the
-// root and the sidebar keeps the peers' forest.
-const accountRoute = createRoute({
-  getParentRoute: () => (hasLocalHost ? settingsPagesRoute : rootRoute),
-  path: "/account",
-  component: DevicesPage,
 });
 
 // The account page's old path, still in links and bookmarks from
@@ -221,7 +213,7 @@ function validateDetailSearch(search: Record<string, unknown>): {
 
 // The device pages: every worktree and project page, for this machine
 // and every peer alike, under /devices/$deviceId. withDeviceScope
-// resolves the device (this machine's id to window.api, a peer's to its
+// resolves the device (this machine's id to the page's api, a peer's to its
 // session) and scopes the page to it, so the page itself never knows
 // which it is showing (v2: remote feels local). Local-only affordances
 // inside them gate on useHostScope().remote.
@@ -356,31 +348,61 @@ const projectRoutes = [
   ),
 ];
 
-const routeTree = rootRoute.addChildren([
-  indexRoute,
-  migrationRoute,
-  welcomeRoute,
-  forestRoute,
-  liveRoute,
-  // Where accountRoute hangs, as its getParentRoute says.
-  ...(hasLocalHost
-    ? [settingsPagesRoute.addChildren([settingsRoute, tidyRoute, accountRoute])]
-    : [
-        settingsPagesRoute.addChildren([settingsRoute, tidyRoute]),
-        accountRoute,
-      ]),
-  devicesRedirectRoute,
-  deviceTerminalsRoute,
-  worktreeRoute,
-  worktreeDiffRoute,
-  pullRequestDiffRoute,
-  branchDiffRoute,
-  stashesRoute,
-  stashDiffRoute,
-  commitDiffRoute,
-  worktreeFilesRoute,
-  ...projectRoutes,
-]);
+// App-wide like settings: the account and its device registry span
+// machines rather than describing this one, so they get their own page
+// beside it, sharing its list. A hostless client's account page is its
+// home rather than a section of Settings, so there it hangs off the
+// root and the sidebar keeps the peers' forest. The tree is built once
+// for the page's flavor, since the routes it hangs together are shared.
+function buildRouteTree(hasLocalHost: boolean) {
+  const accountRoute = createRoute({
+    getParentRoute: () => (hasLocalHost ? settingsPagesRoute : rootRoute),
+    path: "/account",
+    component: DevicesPage,
+  });
+  return rootRoute.addChildren([
+    indexRoute,
+    migrationRoute,
+    welcomeRoute,
+    forestRoute,
+    liveRoute,
+    // Where accountRoute hangs, as its getParentRoute says.
+    ...(hasLocalHost
+      ? [
+          settingsPagesRoute.addChildren([
+            settingsRoute,
+            tidyRoute,
+            accountRoute,
+          ]),
+        ]
+      : [
+          settingsPagesRoute.addChildren([settingsRoute, tidyRoute]),
+          accountRoute,
+        ]),
+    devicesRedirectRoute,
+    deviceTerminalsRoute,
+    worktreeRoute,
+    worktreeDiffRoute,
+    pullRequestDiffRoute,
+    branchDiffRoute,
+    stashesRoute,
+    stashDiffRoute,
+    commitDiffRoute,
+    worktreeFilesRoute,
+    ...projectRoutes,
+  ]);
+}
+
+const routeTrees = new Map<boolean, ReturnType<typeof buildRouteTree>>();
+
+function routeTreeFor(hasLocalHost: boolean) {
+  let tree = routeTrees.get(hasLocalHost);
+  if (tree === undefined) {
+    tree = buildRouteTree(hasLocalHost);
+    routeTrees.set(hasLocalHost, tree);
+  }
+  return tree;
+}
 
 function RouteErrorFallback({
   error,
@@ -404,11 +426,15 @@ function RouteErrorFallback({
 }
 
 // The shell's one choice: which history the tree rides.
-export function createAppRouter(history: RouterHistory, root: HTMLElement) {
+export function createAppRouter(
+  history: RouterHistory,
+  root: HTMLElement,
+  hasLocalHost: boolean,
+) {
   return createRouter({
-    routeTree,
+    routeTree: routeTreeFor(hasLocalHost),
     history,
-    context: { root },
+    context: { root, hasLocalHost },
     defaultPreload: false,
     defaultErrorComponent: RouteErrorFallback,
   });

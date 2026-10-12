@@ -33,6 +33,7 @@ import {
   APP_VERSION_FLAG,
   CLERK_PK_FLAG,
   DEV_BUILD_FLAG,
+  LAB_FLAG,
   ROUTE_FLAG,
 } from "../argFlags";
 import { noteWindowFocused } from "../hostProcess";
@@ -218,6 +219,7 @@ function create(
         // The page the window opens on.
         `${ROUTE_FLAG}${route}`,
         ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
+        ...(process.argv.includes(LAB_FLAG) ? [LAB_FLAG] : []),
       ],
     },
   });

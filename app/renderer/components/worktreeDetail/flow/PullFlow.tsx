@@ -13,7 +13,6 @@ import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
-import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLandingTarget } from "./cloneDestination";
 import { usePullChoice } from "./ignoreChoice";
@@ -29,6 +28,7 @@ import {
   type Landing,
   useClock,
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 type Landed = { worktree: { projectId: string; id: string } };
 
@@ -62,6 +62,7 @@ export function usePullFlow<Data extends Landed>({
   toPeer: DestinationPick | undefined;
   onClose: () => void;
 }) {
+  const localDeviceId = useApi().deviceId;
   // The leave-out rule and the setup switch. Under the source scope:
   // its ignored list walks the checkout over the device link.
   const pull = usePullChoice(project.id, worktree.id, sourceIdentity);

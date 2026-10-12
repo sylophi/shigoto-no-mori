@@ -16,11 +16,11 @@ import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { usePinnedProjects } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { localDeviceId } from "@/lib/queryKeys";
 import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { useDeviceBadges } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function useForestSources({
   arrangeMode = false,
@@ -32,6 +32,7 @@ export function useForestSources({
   // The inbox's extra facts about the peers' worktrees.
   inboxFacts?: boolean;
 } = {}) {
+  const localDeviceId = useApi().deviceId;
   const { data: projects = [], isLoading } = useProjects();
   const sortMode = useProjectSort();
   const groupByOwner = useGroupProjectsByOwner();

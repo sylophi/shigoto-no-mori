@@ -1,10 +1,11 @@
-// Durable proof for the web client's window.api bridge (web/ipc/).
+// Durable proof for the web client's bridge (web/ipc/), which builds the
+// tab's page api (renderer/lib/runtime/pageApi.tsx).
 // The factory takes every platform fact through injected deps, which is
 // what lets this run headlessly under node 22: an in-memory
 // localStorage shim, a recording fetch, and no DOM.
 //
-// Asserts: the bridge surface matches buildApi plus peerApi and the
-// preload's scalar facts (so renderer components mount unmodified), the
+// Asserts: the page api's surface matches buildApi plus peerApi and
+// the preload's scalar facts (so renderer components mount unmodified), the
 // localStorage-backed clientConfig store round-trips and heals corrupt
 // JSON, the per-browser deviceId is stable and matches DeviceIdSchema,
 // enroll exchanges the Clerk session token for a credential with
@@ -90,7 +91,7 @@ const STORED_ENVELOPE = JSON.stringify({
   deviceName: "Stored browser",
 });
 
-it("surface: the bridge exposes exactly buildApi's namespaces plus peerApi, deviceId, appVersion, clerkPublishableKey, isDev and isElectron", () => {
+it("surface: the bridge's page api has exactly buildApi's namespaces plus peerApi, deviceId, appVersion, clerkPublishableKey, isDev and isElectron", () => {
   const bridge = createWebBridge(makeDeps());
   const dummy = {
     invoke: () => Promise.resolve(undefined),

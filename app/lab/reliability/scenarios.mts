@@ -20,6 +20,7 @@ import {
   type Tab,
   type TraceLine,
 } from "./lab.mts";
+import { pageApi, withPageApi } from "./pageApi.mts";
 
 export type Scenario = {
   readonly name: string;
@@ -50,45 +51,47 @@ async function stateOf(lab: Lab, tab: Tab): Promise<PageState> {
   const inPage = await within(
     10_000,
     `${tab.name}'s state`,
-    tab.page.evaluate(
-      async ({ deviceId, projectId, label }) => {
-        const status = await window.api.hub.status();
-        const listed = await Promise.race([
-          window.api.hub
-            .invokePeer({
-              deviceId,
-              channel: "worktrees:list",
-              input: { projectId },
-            })
-            .then((rows) =>
-              (rows as Array<{ branch: string | null }>)
-                .map((row) => row.branch ?? "")
-                .toSorted(),
-            ),
-          new Promise<null>((done) => setTimeout(() => done(null), 3000)),
-        ]).catch(() => null);
-        const rows = [...document.querySelectorAll("aside button")].filter(
-          (button) =>
-            button.querySelector(`[aria-label="On ${CSS.escape(label)}"]`) !==
-              null && button.querySelector("span") !== null,
-        );
-        return {
-          socket: status.socket.phase,
-          session: deviceId in status.peerAppVersions,
-          listed,
-          shown:
-            rows.length === 0
-              ? null
-              : rows
-                  .map((row) => row.querySelector("span")?.textContent ?? "")
+    pageApi(tab.page).then((handle) =>
+      handle.evaluate(
+        async (api, { deviceId, projectId, label }) => {
+          const status = await api.hub.status();
+          const listed = await Promise.race([
+            api.hub
+              .invokePeer({
+                deviceId,
+                channel: "worktrees:list",
+                input: { projectId },
+              })
+              .then((rows) =>
+                (rows as Array<{ branch: string | null }>)
+                  .map((row) => row.branch ?? "")
                   .toSorted(),
-        };
-      },
-      {
-        deviceId: host.deviceId,
-        projectId: host.projectId,
-        label: host.label,
-      },
+              ),
+            new Promise<null>((done) => setTimeout(() => done(null), 3000)),
+          ]).catch(() => null);
+          const rows = [...document.querySelectorAll("aside button")].filter(
+            (button) =>
+              button.querySelector(`[aria-label="On ${CSS.escape(label)}"]`) !==
+                null && button.querySelector("span") !== null,
+          );
+          return {
+            socket: status.socket.phase,
+            session: deviceId in status.peerAppVersions,
+            listed,
+            shown:
+              rows.length === 0
+                ? null
+                : rows
+                    .map((row) => row.querySelector("span")?.textContent ?? "")
+                    .toSorted(),
+          };
+        },
+        {
+          deviceId: host.deviceId,
+          projectId: host.projectId,
+          label: host.label,
+        },
+      ),
     ),
   );
   return { ...inPage, indicator: await showsConnected(lab, tab) };
@@ -778,11 +781,11 @@ const tokenExpiry: Scenario = {
     );
     const restored = Date.now();
     await forEachPage(lab, async (tab) => {
-      const fresh = await tab.page.evaluate(async () => {
+      const fresh = await withPageApi(tab.page, async (api) => {
         const session = window.Clerk?.session;
         if (session == null) return false;
         const token = await session.getToken({ skipCache: true });
-        const devices = await window.api.account.listDevices();
+        const devices = await api.account.listDevices();
         return token !== null && token.length > 0 && devices.length > 0;
       });
       if (!fresh) throw new Error(`${tab.name} could not mint a fresh token`);
@@ -832,7 +835,7 @@ const signOutWithSibling: Scenario = {
         }
       });
     }
-    const deviceId = await first.page.evaluate(() => window.api.deviceId);
+    const deviceId = await withPageApi(first.page, (api) => api.deviceId);
     // The account layer's own sign-out, which is what the Sign out
     // button runs when the tab's Clerk holds no session, and what the
     // lab's cleanup runs: the browser's Clerk session stays, so the
@@ -840,7 +843,7 @@ const signOutWithSibling: Scenario = {
     lab.note(
       `signing ${first.name} out of the account, the Clerk session kept`,
     );
-    await first.page.evaluate(() => window.api.account.signOut());
+    await withPageApi(first.page, (api) => api.account.signOut());
     const pressed = Date.now();
     await waitUntil(
       "both tabs to read signed out",
@@ -856,7 +859,7 @@ const signOutWithSibling: Scenario = {
     if (enrolls.length > 0) {
       throw new Error(`enrolled again from ${enrolls.join(", ")}`);
     }
-    const listed = await lab.hostEval(() => window.api.account.listDevices());
+    const listed = await lab.hostEval((api) => api.account.listDevices());
     if (listed.some((device) => device.deviceId === deviceId)) {
       throw new Error("the host still lists the browser");
     }
@@ -868,7 +871,7 @@ const signOutWithSibling: Scenario = {
 };
 
 async function signedOut(tab: Tab): Promise<boolean> {
-  return !(await tab.page.evaluate(() => window.api.account.status())).signedIn;
+  return !(await withPageApi(tab.page, (api) => api.account.status())).signedIn;
 }
 
 async function waitUntil(

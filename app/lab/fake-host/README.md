@@ -1,6 +1,6 @@
 # The fake host
 
-The real UI in a browser over a fake `window.api`: four devices with
+The real UI in a browser over a fake page api: four devices with
 mixed presence, shared and remote-only projects (two of them
 terrier-sourced), pull requests in every CI state, villagers. So
 every multi-device screen can be posed and captured without a device
@@ -34,7 +34,7 @@ Some ways to use it:
 - **Mid-session changes.** `window.fakeHost` flips a peer's presence,
   poses the hub socket's status, or makes a worktree appear behind the
   app's back, to see how a screen already open reacts. The socket is a
-  pose: the web shell here runs on a fixture `window.api` and never
+  pose: the web shell here runs on a fixture page api and never
   dials (`web/hub/` does not run), so a redial or its trace is the
   real web client's (`../reliability/README.md`).
 

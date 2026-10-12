@@ -25,6 +25,12 @@ export const ROUTE_FLAG = "--sm-route=";
 // light them up in a shipped build.
 export const DEV_BUILD_FLAG = "--sm-dev-build";
 
+// A presence flag, passed on to each window when the app itself was
+// started with it (lab/relaunch.mts drives a packaged build so): the
+// window then hands the lab's tools its api (renderer/lib/runtime/
+// labHandle.ts), as a dev build's always does.
+export const LAB_FLAG = "--sm-lab";
+
 // Reads a required value flag off process.argv in the preload. The
 // app version must be present: a missing or empty value means main and
 // preload disagree on the flag, so fail loudly rather than run with an

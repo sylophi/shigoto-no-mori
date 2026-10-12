@@ -3,7 +3,7 @@ import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
@@ -57,6 +57,7 @@ export function DeviceRegistryRow({
   tunnel: TunnelState | undefined;
   access: CommandAccess;
 }) {
+  const canForwardPorts = useCanForwardPorts();
   // The shared two-step confirm carries the armed flag, so an untouched
   // banner disarms itself.
   const revoke = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);

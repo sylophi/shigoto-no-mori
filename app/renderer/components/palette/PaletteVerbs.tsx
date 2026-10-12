@@ -11,9 +11,8 @@ import {
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { openWorktreeInNewWindow } from "@/lib/newWindow";
-import { openExternalUrl } from "@/lib/openExternal";
 import { routeDeviceId } from "@/lib/routePaths";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
@@ -40,6 +39,8 @@ import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import { useApi } from "@/lib/runtime/pageApi";
+import { useOutside } from "@shigomori/ui/outside.tsx";
 
 export type GoTo = (
   entry: PaletteEntry,
@@ -119,6 +120,9 @@ function WorktreeVerbs({
   launchers: readonly LauncherEntry[] | undefined;
   settled: boolean;
 }) {
+  const hasLocalHost = useHasLocalHost();
+  const page = useApi();
+  const { openUrl } = useOutside();
   const { worktree, pr } = entry;
   const changesKeys = useBinding("paletteChanges");
   const deviceId = entry.device?.deviceId;
@@ -147,8 +151,8 @@ function WorktreeVerbs({
       icon: iconOf(AppWindow),
       run: () => {
         actions.close();
-        openWorktreeInNewWindow({
-          deviceId: routeDeviceId(deviceId),
+        openWorktreeInNewWindow(page, {
+          deviceId: routeDeviceId(page.deviceId, deviceId),
           projectId: worktree.projectId,
           worktreeId: worktree.id,
         });
@@ -163,7 +167,7 @@ function WorktreeVerbs({
       tip: pr.title,
       run: () => {
         actions.close();
-        openExternalUrl(pr.url, "Couldn't open pull request");
+        openUrl(pr.url, "Couldn't open pull request");
       },
     });
   }

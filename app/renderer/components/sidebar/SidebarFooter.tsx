@@ -12,7 +12,7 @@ import {
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { agentsNeedYou } from "@shigomori/ui/lib/agentNeeds.ts";
 import { useWaitingAgents } from "@/lib/agentWatch";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   SidebarFooterView,
   SidebarNavActionsView,
@@ -28,6 +28,7 @@ export function SidebarFooter({
   arrangeMode,
   onToggleArrange,
 }: SidebarFooterProps) {
+  const hasLocalHost = useHasLocalHost();
   const view = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
   const layoutKeys = useBinding("sidebarLayout");

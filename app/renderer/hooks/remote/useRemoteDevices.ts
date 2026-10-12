@@ -14,14 +14,14 @@ import {
   useLocalDeviceName,
 } from "@/hooks/account/useAccount";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
 import { hostsProjects } from "@shigomori/ui/lib/deviceTraits.ts";
 import {
   type RemoteDevice,
   type RemoteDeviceApi,
   remoteDeviceStore,
 } from "@/lib/remote/devices";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // Live list of every registered remote device. Re-renders on any status
 // or connection change. The snapshot reference is stable between changes
@@ -54,9 +54,12 @@ export function useEveryHost(): {
   deviceId: string;
   api: HostApi | undefined;
 }[] {
+  const page = useApi();
+  const localDeviceId = page.deviceId;
+  const hasLocalHost = useHasLocalHost();
   const devices = useHostDevices();
   return [
-    ...(hasLocalHost ? [{ deviceId: localDeviceId, api: window.api }] : []),
+    ...(hasLocalHost ? [{ deviceId: localDeviceId, api: page }] : []),
     ...devices.map((device) => ({
       deviceId: device.deviceId,
       api: device.api,
@@ -97,6 +100,7 @@ export function useRemoteDeviceApi(
 // flow is still on screen), so a glyph always draws. A selector like
 // useRemoteDeviceApi, so a peer's status churn leaves the string alone.
 export function useDeviceIcon(deviceId: string): DeviceIcon {
+  const localDeviceId = useApi().deviceId;
   const localIcon = useLocalDeviceIcon();
   const select = () =>
     remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
@@ -121,6 +125,7 @@ export function useRemoteDeviceLabel(deviceId: string): string {
 // it, a peer's label, and a neutral phrase for an id the registry no
 // longer knows.
 function useDeviceName(deviceId: string): string {
+  const localDeviceId = useApi().deviceId;
   const label = useRemoteDevice(deviceId)?.label;
   if (deviceId === localDeviceId) return "this device";
   return label ?? "another device";
@@ -130,6 +135,7 @@ function useDeviceName(deviceId: string): string {
 // that names a device outright ("Mirror with Studio Mac"), where "this
 // device" would read as the party across.
 export function useDeviceProperName(deviceId: string): string {
+  const localDeviceId = useApi().deviceId;
   const name = useDeviceName(deviceId);
   const localName = useLocalDeviceName();
   return deviceId === localDeviceId ? localName : name;

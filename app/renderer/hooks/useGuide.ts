@@ -9,20 +9,23 @@ import {
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
 import type { GuideHarnessOption } from "@shigomori/ui/views/palette/paletteEntries.ts";
-import { hasLocalHost } from "@/lib/localHost";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
+import { queryKeys, queryKeysFor } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function useGuide(): GuideState | null {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!hasLocalHost) return;
-    return window.api.guide.onChanged((state) => {
+    return api.guide.onChanged((state) => {
       queryClient.setQueryData(queryKeys.guide(), state);
     });
-  }, [queryClient]);
+  }, [queryClient, api, hasLocalHost]);
   const { data } = useQuery({
     queryKey: queryKeys.guide(),
-    queryFn: () => window.api.guide.read(),
+    queryFn: () => api.guide.read(),
     staleTime: Number.POSITIVE_INFINITY,
     enabled: hasLocalHost,
   });
@@ -35,9 +38,11 @@ export function useGuide(): GuideState | null {
 export function useGuideHarnesses():
   | [GuideHarnessOption, ...GuideHarnessOption[]]
   | null {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const { data } = useQuery({
-    queryKey: queryKeys.agents(),
-    queryFn: () => window.api.agents.status(),
+    queryKey: queryKeysFor(api.deviceId).agents(),
+    queryFn: () => api.agents.status(),
     staleTime: 60_000,
     enabled: hasLocalHost,
   });

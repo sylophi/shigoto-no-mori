@@ -33,6 +33,7 @@ import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { villageProfiles } from "./speakers";
 import type {
   VisitEntry,
@@ -112,12 +113,13 @@ function isCopy(held: VisitLog, deviceId: string, worktree: Worktree): boolean {
 // Adds one device's villager worktrees to the log, the ones it doesn't
 // hold yet. `quiet` names a copy this window's own move landed.
 export async function recordVisits(
+  api: RendererApi,
   queryClient: QueryClient,
   deviceId: string,
   worktrees: readonly Worktree[],
   quiet: (worktree: Worktree) => boolean,
 ): Promise<void> {
-  const profiles = await villageProfiles(queryClient).catch(() => null);
+  const profiles = await villageProfiles(api, queryClient).catch(() => null);
   if (profiles === null) return;
   const next: Record<string, VisitEntry> = { ...log.get() };
   let changed = false;
@@ -148,6 +150,7 @@ export async function recordVisits(
 // Every worktree list the window holds, for when the album opens: the
 // lists may not change again for a while.
 export async function recordCachedVisits(
+  api: RendererApi,
   queryClient: QueryClient,
   quiet: (worktree: Worktree) => boolean,
 ): Promise<void> {
@@ -155,7 +158,7 @@ export async function recordCachedVisits(
   // await, so they can run together.
   await Promise.all(
     heldWorktreeLists().map(({ deviceId, list }) =>
-      recordVisits(queryClient, deviceId, list, quiet),
+      recordVisits(api, queryClient, deviceId, list, quiet),
     ),
   );
 }

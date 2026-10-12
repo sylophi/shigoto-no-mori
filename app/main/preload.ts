@@ -1,7 +1,7 @@
 // Preload script. Runs in an isolated context with access to Node + Electron APIs.
 // Exposes the window's facts as `window.electronBridge`, and asks for
 // the port the window's calls to its shell ride, which the renderer
-// builds `window.api` over (renderer/lib/runtime/desktop.ts).
+// builds its page api over (renderer/lib/runtime/desktop.ts).
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
@@ -9,6 +9,7 @@ import {
   APP_VERSION_FLAG,
   CLERK_PK_FLAG,
   DEV_BUILD_FLAG,
+  LAB_FLAG,
   optionalArgFlag,
   requireArgFlag,
   ROUTE_FLAG,
@@ -16,7 +17,7 @@ import {
 import { requestShellPort } from "./preloadPort";
 
 // The narrow bridge @clerk/electron/react rides for token storage and
-// the system-browser OAuth transport, published beside window.api.
+// the system-browser OAuth transport, published beside the bridge.
 exposeClerkBridge();
 
 // This build's version, on argv (main passes it via
@@ -39,6 +40,9 @@ const bridge = {
   // affordances key off the build showing the window, never the host
   // (a packaged client on a dev host must not grow dev hotkeys).
   isDev: process.argv.includes(DEV_BUILD_FLAG),
+  // Started for the lab (argFlags.ts LAB_FLAG): the entry hands the
+  // lab's tools the page's api.
+  isLab: process.argv.includes(LAB_FLAG),
   // Client fact, constant per bridge: true here, false on the web
   // bridge. App-only UI (the port-forward controls, which need a real
   // local TCP listener) gates its mount on it, since the shared pages

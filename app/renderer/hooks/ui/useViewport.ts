@@ -10,7 +10,7 @@ import {
   createExternalStore,
   type ExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { useWindowRoot } from "@/lib/themeRoot";
 
 const PHONE_BELOW_PX = 768;
@@ -41,16 +41,20 @@ const subscribeToNothing = () => () => {};
 
 // The phone layout: a bottom tab bar, the forest as a page of its own,
 // and the worktree pages stacked over it. Only ever the browser tab's.
-export function isPhoneLayout(root: HTMLElement): boolean {
+export function isPhoneLayout(
+  root: HTMLElement,
+  hasLocalHost: boolean,
+): boolean {
   return !hasLocalHost && rootIsNarrow(root).get();
 }
 
 export function usePhoneLayout(): boolean {
+  const hasLocalHost = useHasLocalHost();
   const root = useWindowRoot();
   return useSyncExternalStore(
     hasLocalHost
       ? subscribeToNothing
       : (onChange) => rootIsNarrow(root).subscribe(onChange),
-    () => isPhoneLayout(root),
+    () => isPhoneLayout(root, hasLocalHost),
   );
 }

@@ -30,13 +30,15 @@ console and the trace.
 ## Layout
 
 One UI, two shells. The desktop window and the browser tab render the
-same `renderer/` tree over the same `window.api` surface. What differs
-is the binding underneath, and the two bindings are parallel:
+same `renderer/` tree over the same page api
+(`renderer/lib/runtime/pageApi.tsx`), which each entry builds and hands
+to the boot. What differs is the binding underneath, and the two
+bindings are parallel:
 
 | Concern | Desktop (Electron) | Web (browser) |
 | --- | --- | --- |
-| Composition root: handlers on the wires, the direct plane, `window.api` | `host/process/` (the host) + `main/ipc/register.ts` (the shell) + `main/preload.ts` + `renderer/lib/runtime/` | `web/ipc/register.ts` + `web/preload.ts` |
-| Transport under `window.api` | `shared/ipc/shell.ts` (the shell, over a port) + `shared/remote/hostLink.ts` (the host, over the loopback) | `web/ipc/localRegistrar.ts` (the tab's own modules) + the direct plane (every host, a peer) |
+| Composition root: handlers on the wires, the direct plane, the page api | `host/process/` (the host) + `main/ipc/register.ts` (the shell) + `main/preload.ts` + `renderer/lib/runtime/` | `web/ipc/register.ts` + `web/preload.ts` |
+| Transport under the page api | `shared/ipc/shell.ts` (the shell, over a port) + `shared/remote/hostLink.ts` (the host, over the loopback) | `web/ipc/localRegistrar.ts` (the tab's own modules) + the direct plane (every host, a peer) |
 | Account: credential store, enroll, device name | `main/core/account/` | `web/account/` |
 | Device hub socket | `host/hub/connection.ts` (node) | `web/hub/connection.ts` (browser) |
 | Page entry | `index.html` → `renderer/index.tsx` | `web/index.html` → `web/main.tsx` → `web/boot.tsx` |
