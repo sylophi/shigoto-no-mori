@@ -148,7 +148,7 @@ import {
   hubHandlers,
   onPeerPush,
 } from "./wires";
-import { log } from "@shared/log";
+import { log, warnOnFailure } from "@shared/log";
 import { layerLatch } from "@shared/layerLatch";
 import * as Graph from "./graph";
 
@@ -460,15 +460,10 @@ function broadcastCommandAccessChanged(): void {
 
 // A step of the account fan-out that must not take the rest with it:
 // its failure is a warning in the host's log, and the fan-out goes on.
+// It needs no graph, so it runs while one stops too (a sign-out under
+// way as the app quits).
 function teardownStep(what: string, run: () => unknown): Promise<void> {
-  return Graph.run(
-    Effect.tryPromise(async () => run()).pipe(
-      Effect.asVoid,
-      Effect.catchCause((cause) =>
-        Effect.logWarning(`[account] ${what} failed`, cause),
-      ),
-    ),
-  ).catch(() => undefined);
+  return warnOnFailure(`[account] ${what} failed`, run);
 }
 
 // The daemon's sessions with the git half of each (host/mirror/

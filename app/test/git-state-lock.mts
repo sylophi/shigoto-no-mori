@@ -7,7 +7,14 @@
 //
 // Run: pnpm test git-state-lock.
 import assert from "node:assert/strict";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { Project } from "@shigomori/contracts/schemas";
@@ -17,7 +24,12 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, it } from "vitest";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { applyGitState, readGitState } from "@host/mirror/gitState";
-import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
+import {
+  sandboxGit,
+  scrubProcessGitEnv,
+  tempDir,
+  waitFor,
+} from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // The apply runs git in this process.
@@ -62,15 +74,40 @@ async function staged() {
 
 const indexTree = (repo: string) => git(repo, "write-tree").trim();
 
+// The apply's git through a wrapper that notes each `read-tree` it
+// starts, for the length of the test, so the lock goes only once the
+// apply has met it.
+function countReadTrees(): () => number {
+  const dir = tempDir("sm-git-wrapper-", trackTest);
+  mkdirSync(dir, { recursive: true });
+  const notes = join(dir, "read-trees");
+  writeFileSync(notes, "");
+  const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+  const wrapper = join(dir, "git");
+  writeFileSync(
+    wrapper,
+    `#!/bin/sh\ncase " $* " in *" read-tree "*) echo x >> '${notes}';; esac\nexec '${realGit}' "$@"\n`,
+  );
+  chmodSync(wrapper, 0o755);
+  const path = process.env.PATH;
+  process.env.PATH = `${dir}:${path ?? ""}`;
+  trackTest(() => {
+    process.env.PATH = path;
+  });
+  return () => readFileSync(notes, "utf8").split("\n").filter(Boolean).length;
+}
+
 it("a held index.lock is waited out, and the apply lands once it goes", async () => {
   const { repo, wanted, apply } = await staged();
   const lock = join(repo, ".git", "index.lock");
   writeFileSync(lock, "");
-  // Gone within the backoff's first few pauses.
-  const released = setTimeout(() => rmSync(lock, { force: true }), 250);
-  trackTest(() => clearTimeout(released));
-  assert.deepEqual(await apply(), { applied: true });
-  assert.ok(!existsSync(lock));
+  trackTest(() => rmSync(lock, { force: true }));
+  const readTrees = countReadTrees();
+  const applied = apply();
+  // A second read-tree means the first one failed on the lock.
+  await waitFor(() => readTrees() >= 2, "a read-tree retried on the lock");
+  rmSync(lock);
+  assert.deepEqual(await applied, { applied: true });
   assert.equal(indexTree(repo), wanted.indexTree);
 });
 

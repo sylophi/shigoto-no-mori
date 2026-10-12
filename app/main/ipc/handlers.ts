@@ -16,8 +16,7 @@ import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { withoutPeerState } from "@shigomori/contracts/schemas/config";
-import * as Logger from "effect/Logger";
-import { logger } from "@shared/log";
+import { warnOnFailure } from "@shared/log";
 import { updateClientConfig } from "../electron/clientConfig";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import {
@@ -39,17 +38,6 @@ import {
   makeAccountHandlers,
 } from "./modules/account";
 import { broadcastAll, registerContract, registerViews } from "./register";
-
-// A step of the account change that must not take the rest with it:
-// its failure is a warning in the app's log, and the change goes on.
-const warnOnFailure = (label: string, step: () => Promise<unknown>) =>
-  Effect.runPromise(
-    Effect.tryPromise(step).pipe(
-      Effect.asVoid,
-      Effect.catchCause((cause) => Effect.logWarning(label, cause)),
-      Effect.provide(Logger.layer([logger])),
-    ),
-  );
 
 export function registerShellHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
