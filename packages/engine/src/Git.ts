@@ -211,9 +211,9 @@ export class Git extends Context.Service<
     readonly unpushedCount: (worktree: string) => Effect.Effect<number>;
     // A page of `git log HEAD`, newest first. Empty on any failure (an
     // unborn branch, a rebase in progress).
-    // `query` searches the messages (literal, case blind), `from` starts
-    // somewhere other than HEAD, and `firstParentStats` counts a merge's
-    // lines against its first parent, what it brought in.
+    // `query` searches the messages (literal, case blind) and `from`
+    // starts somewhere other than HEAD. A merge's lines are counted
+    // against its first parent, what it brought in.
     readonly listCommits: (
       worktree: string,
       page: {
@@ -221,7 +221,6 @@ export class Git extends Context.Service<
         readonly count: number;
         readonly query?: string | undefined;
         readonly from?: string | undefined;
-        readonly firstParentStats?: boolean | undefined;
       },
     ) => Effect.Effect<CommitSummary[]>;
     // The branch's own commits back to where it left `base`, and how it
