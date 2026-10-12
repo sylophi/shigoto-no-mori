@@ -40,7 +40,7 @@ export function SortMenu({
         <ArrowDownUp aria-hidden className="size-3" />
         <span>Sort</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+      <DropdownMenuContent align="end" sideOffset={4}>
         <DropdownMenuRadioGroup
           value={value}
           onValueChange={(v) => onChange(v as PackageScriptSortMode)}
