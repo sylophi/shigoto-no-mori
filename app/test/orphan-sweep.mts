@@ -10,7 +10,7 @@
 //
 // Run: pnpm test orphan-sweep.
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -38,6 +38,37 @@ function leader(seconds: string): ChildProcess & { pid: number } {
     if (processAlive(pid)) process.kill(pid, "SIGKILL");
   });
   return Object.assign(child, { pid });
+}
+
+// A group whose leader exited and left a process behind in it, as
+// `pnpm run` or a shell does with a nohup'd command when the host is
+// killed: the leader's pid, and the one left.
+async function headlessGroup(
+  seconds: string,
+): Promise<{ leader: number; stray: number }> {
+  const child = spawn(
+    "sh",
+    ["-c", `nohup sleep ${seconds} >/dev/null 2>&1 &`],
+    {
+      detached: true,
+      stdio: "ignore",
+    },
+  );
+  const leaderPid = child.pid;
+  assert.ok(leaderPid !== undefined, "sh did not start");
+  await new Promise((resolve) => child.once("exit", resolve));
+  const listed = execFileSync("ps", ["-A", "-o", "pid=,pgid="], {
+    encoding: "utf8",
+  });
+  const stray = listed
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/).map(Number))
+    .find(([pid, pgid]) => pgid === leaderPid && pid !== leaderPid)?.[0];
+  assert.ok(stray !== undefined, "nothing was left in the group");
+  track(() => {
+    if (processAlive(stray)) process.kill(stray, "SIGKILL");
+  });
+  return { leader: leaderPid, stray };
 }
 
 // The pid of a process that has exited, as a crashed app's is.
@@ -116,6 +147,41 @@ it("stops what a dead instance left running as it started, leaves a recycled pid
     (await recorded()).map((script) => script.runId),
     ["sibling"],
     "the dead instance's records were not claimed",
+  );
+});
+
+it("stops what a script whose leader died left in its group, as a package script or a nohup'd command leaves when the host is killed, and leaves a group older than the record alone", async () => {
+  const crashed = await deadPid();
+  const startedAt = Date.now();
+  const left = await headlessGroup("610");
+  const older = await headlessGroup("611");
+  await runHost(
+    Effect.gen(function* () {
+      const scripts = yield* RunningScripts.RunningScripts;
+      const script = { projectId: "p", worktreeId: "wt", ownerPid: crashed };
+      yield* scripts.add({
+        ...script,
+        runId: "left",
+        startedAt,
+        pid: left.leader,
+        command: "pnpm run dev",
+      });
+      // Recorded as started a minute after what is in the group did.
+      yield* scripts.add({
+        ...script,
+        runId: "older",
+        startedAt: Date.now() + 60_000,
+        pid: older.leader,
+        command: "pnpm run dev",
+      });
+    }),
+  );
+  const sweep = await startSweep();
+  assert.deepEqual(await Effect.runPromise(sweep.takeReport), { stopped: 1 });
+  await waitFor(() => !processAlive(left.stray), "the stray to stop");
+  assert.ok(
+    processAlive(older.stray),
+    "a group older than its record was signaled",
   );
 });
 
