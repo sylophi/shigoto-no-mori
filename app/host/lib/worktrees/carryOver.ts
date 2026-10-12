@@ -19,7 +19,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
-import { chunked, runLenient } from "../git/core";
+import * as Arr from "effect/Array";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
@@ -205,19 +205,21 @@ const listCarryOverCandidates = Effect.fnUntraced(function* (
 // the same way.
 const ruleIgnoredFolders = (worktreePath: string, folders: readonly string[]) =>
   Effect.map(
-    Effect.forEach(
-      chunked(folders),
-      (chunk) =>
-        runLenient(worktreePath, [
-          "-c",
-          "core.quotePath=false",
-          "check-ignore",
-          "--no-index",
-          "--",
-          // The slash tells a directory-only rule (build/) what it is.
-          ...chunk.map((folder) => `${folder}/`),
-        ]),
-      { concurrency: "unbounded" },
+    Effect.flatMap(Git.Git, (git) =>
+      Effect.forEach(
+        Arr.chunksOf(folders, Git.PATHSPEC_CHUNK),
+        (chunk) =>
+          git.runLenient(worktreePath, [
+            "-c",
+            "core.quotePath=false",
+            "check-ignore",
+            "--no-index",
+            "--",
+            // The slash tells a directory-only rule (build/) what it is.
+            ...chunk.map((folder) => `${folder}/`),
+          ]),
+        { concurrency: "unbounded" },
+      ),
     ),
     (found) =>
       new Set(

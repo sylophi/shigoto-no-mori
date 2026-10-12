@@ -16,7 +16,6 @@ import {
 import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Git from "@shigomori/engine/Git";
-import { run } from "../git/core";
 import { stderrOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
 import { GithubCli } from "./GithubCli";
@@ -35,7 +34,8 @@ class PullRequestCheckoutError extends Schema.TaggedError<PullRequestCheckoutErr
 const refused = (reason: string, cause?: unknown) =>
   new PullRequestCheckoutError({ reason, cause });
 
-const git = (cwd: string, args: string[]) => run(cwd, args);
+const git = (cwd: string, args: string[]) =>
+  Effect.flatMap(Git.Git, (service) => service.run(cwd, args));
 
 // Enough to fill a picker without paging. Deliberately below the
 // sidebar sweep's 200: that one indexes every branch in the project,
@@ -361,8 +361,8 @@ const readBranchMerge = (cwd: string, branch: string) =>
     Effect.orElseSucceed(() => null),
   );
 
-// A git failure's message is its stderr (git/core.ts), of which the last
-// line is the useful part.
+// A git failure's words are its stderr, of which the last line is the
+// useful part.
 function message(err: unknown): string {
   return trimGhError(errorWordsOf(err));
 }

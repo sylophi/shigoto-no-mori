@@ -25,7 +25,6 @@ import {
 } from "@shigomori/contracts/schemas";
 import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
 import { parseNumstat } from "@shigomori/engine/gitParse";
-import { GitRefusal, run, runLenient } from "../git/core";
 import * as Git from "@shigomori/engine/Git";
 import { GhActionError, ghStream, runGh } from "./actions";
 import { GithubCli } from "./GithubCli";
@@ -33,6 +32,12 @@ import {
   evictProjectPullRequests,
   listProjectPullRequests,
 } from "./pullRequests";
+
+// git as the engine runs it, strictly and leniently.
+const run = (cwd: string, args: readonly string[]) =>
+  Effect.flatMap(Git.Git, (git) => git.run(cwd, args));
+const runLenient = (cwd: string, args: readonly string[]) =>
+  Effect.flatMap(Git.Git, (git) => git.runLenient(cwd, args));
 
 // Every local branch and remote-tracking ref by its full name, or only
 // those whose tip `mergedInto` reaches.
@@ -241,7 +246,7 @@ export const comparePullRequest = Effect.fn("NewPullRequest.compare")(
     );
     const ref = trackedRef(base, refs, remotes);
     if (!ref) {
-      return yield* new GitRefusal({
+      return yield* new Git.GitRefusedError({
         reason: `There is no branch named ${base} to compare with.`,
       });
     }
@@ -252,7 +257,7 @@ export const comparePullRequest = Effect.fn("NewPullRequest.compare")(
       ref,
     ])).trim();
     if (!mergeBase) {
-      return yield* new GitRefusal({
+      return yield* new Git.GitRefusedError({
         reason: `This branch shares no history with ${base}.`,
       });
     }

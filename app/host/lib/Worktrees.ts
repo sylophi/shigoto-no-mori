@@ -18,7 +18,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { EngineCallError } from "./engine";
 import type * as Git from "@shigomori/engine/Git";
-import type { GitError } from "./git/core";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
   type CarryOverCheckout,
@@ -54,7 +53,7 @@ export class Worktrees extends Context.Service<
       ruleIgnored: boolean,
     ) => Effect.Effect<
       SyncWorktreeFolderEntry[],
-      FolderReadError | GitError | Git.GitError
+      FolderReadError | Git.GitError
     >;
     // The untracked paths git ignores in a checkout.
     readonly ignoredPaths: (
@@ -65,7 +64,7 @@ export class Worktrees extends Context.Service<
     readonly hygiene: (
       projectId: string,
       projectPath: string,
-    ) => Effect.Effect<WorktreeHygiene[], EngineError | GitError>;
+    ) => Effect.Effect<WorktreeHygiene[], EngineError | Git.GitError>;
     readonly worktreeForDisk: (
       projectId: string,
       worktreeId: string,
