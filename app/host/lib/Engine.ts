@@ -4,7 +4,7 @@
 // driver, and SQLite serializes the two processes' writes.
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import type { Flavor } from "@shigomori/engine/flavor";
-import { engineLayer } from "@shigomori/engine/layer";
+import { migratingEngineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
@@ -45,7 +45,7 @@ export const layer = (options: {
   // The terminal `sm` the agent hooks run, Resources/sm when packaged.
   readonly sm: string;
 }) =>
-  engineLayer({
+  migratingEngineLayer({
     ...options,
     store: Store.layer((filename) => SqliteClient.make({ filename })),
   }).pipe(

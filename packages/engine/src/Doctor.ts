@@ -32,11 +32,16 @@ import { makeChecklist } from "./doctor/checklist.ts";
 import { makeFileReads } from "./doctor/fileReads.ts";
 import { makeWithoutStore } from "./doctor/withoutStore.ts";
 import { makeFinishing } from "./doctor/finishing.ts";
+import * as Migration from "./Migration.ts";
+import * as Paths from "./Paths.ts";
+import * as WtFolder from "./WtFolder.ts";
 import {
   type DoctorDocument,
+  type Entry,
   type FileReads,
   type RunInput,
   type StoreServices,
+  check,
   isStoreImportError,
 } from "./doctor/documents.ts";
 export { MovedWorktreePending, WorktreesNotMoved } from "./doctor/documents.ts";
@@ -83,8 +88,20 @@ const make = Effect.gen(function* () {
   return {
     // Every check, given the store's services. With `files`, they read
     // the 2.x files the store refused.
-    run: (input: RunInput, files: Option.Option<FileReads>) =>
-      finish(input, checkAll(input, files)),
+    // `amend` adds lines of the caller's own.
+    run: (
+      input: RunInput,
+      files: Option.Option<FileReads>,
+      amend?: (
+        entries: ReadonlyArray<Entry<StoreServices>>,
+      ) => ReadonlyArray<Entry<StoreServices>>,
+    ) =>
+      finish(
+        input,
+        Effect.map(checkAll(input, files), (entries) =>
+          amend === undefined ? entries : amend(entries),
+        ),
+      ),
     readFiles,
     // The checks that need no state, `failed` when the store wouldn't
     // open.
@@ -111,32 +128,70 @@ export const layer = Layer.effect(
   }),
 );
 
+// The fix's part of the migration, the moves into `wt/` a start left
+// owed among it, in the repairs' words.
+const migrated = (imported: boolean) =>
+  Effect.gen(function* () {
+    yield* (yield* WtFolder.WtFolder).drain;
+    const { worktrees } = yield* (yield* Migration.Migration).current;
+    const n = worktrees?.moved ?? 0;
+    return [
+      ...(imported ? ["imported the projects and settings from v2"] : []),
+      ...(n === 0 ? [] : [`moved ${n} worktree${n === 1 ? "" : "s"} into wt/`]),
+    ];
+  });
+
 // The doctor for a data dir the store may not open, as `sm doctor`
 // needs it. `store` provides the store's services and is built inside
 // each run, and `files` the same services over the 2.x files
 // (`Store.fromFiles`). An import the store refused reads the files
 // instead, as Go did. Any other failure to open, or no data dir to
 // open one in (which building it would create), runs only the checks
-// that need no state.
+// that need no state. A 2.x data dir the app has yet to migrate
+// (`owed`) is read from its files too, and the fix migrates it first,
+// as the app's start does: the import, then the move into `wt/`.
 export const standalone = <R>(
   store: Layer.Layer<StoreServices, unknown, R>,
   files: Layer.Layer<StoreServices, unknown, R>,
+  unmigratedFiles: Layer.Layer<StoreServices, unknown, R>,
+  owed: Effect.Effect<boolean, unknown, R>,
 ) =>
   Layer.effect(
     Doctor,
     Effect.gen(function* () {
       const checks = yield* make;
-      const context = yield* Effect.context<R>();
+      const context = yield* Effect.context<R | Migration.Migration>();
+      const { binaryName } = yield* Paths.Paths;
+      // The line a data dir still to be migrated reads, after the data
+      // dir's own.
+      const unmigrated = (entries: ReadonlyArray<Entry<StoreServices>>) => {
+        const at = entries.findLastIndex(({ group }) => group === "Data dir");
+        const line = check("Data dir", "v2-data-dir", "v2 data").warn(
+          "Not moved to v3 yet: the projects, settings and worktrees are read as v2 left them",
+          `Open the app to move them, or run \`${binaryName} doctor --fix\`.`,
+        );
+        return entries.toSpliced(at + 1, 0, line);
+      };
       return Doctor.of({
         run: Effect.fn("Doctor.run")(function* (input: RunInput) {
           if (!(yield* checks.dataDirUsable)) {
             return yield* checks.withoutState(input, false);
           }
           return yield* Effect.gen(function* () {
-            const built = yield* Effect.exit(Layer.build(store));
+            const v2 = yield* owed.pipe(Effect.orElseSucceed(() => false));
+            const reading = v2 && input.fix === undefined;
+            const amend = reading ? unmigrated : undefined;
+            const built = yield* Effect.exit(
+              Layer.build(reading ? unmigratedFiles : store),
+            );
             if (Exit.isSuccess(built)) {
               return yield* Effect.provideContext(
-                checks.run(input, Option.none()),
+                Effect.gen(function* () {
+                  const moved =
+                    input.fix === undefined ? [] : yield* migrated(v2);
+                  const doc = yield* checks.run(input, Option.none(), amend);
+                  return { ...doc, repaired: [...moved, ...doc.repaired] };
+                }),
                 built.value,
               );
             }
@@ -158,6 +213,7 @@ export const standalone = <R>(
               checks.run(
                 input,
                 Option.some(yield* checks.readFiles(refused.value)),
+                amend,
               ),
               read.value,
             );

@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { refuseUnmigrated } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
@@ -155,7 +156,10 @@ export const create = Command.make(
       }
       if (code !== 0) return yield* new ExitCode({ code });
     }),
-).pipe(Command.withDescription("Make a new worktree and set it up"));
+).pipe(
+  Command.withDescription("Make a new worktree and set it up"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const adopt = Command.make(
   "adopt",
@@ -186,7 +190,10 @@ export const adopt = Command.make(
       }
       if (code !== 0) return yield* new ExitCode({ code });
     }),
-).pipe(Command.withDescription("Make an external worktree a managed one"));
+).pipe(
+  Command.withDescription("Make an external worktree a managed one"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const setup = Command.make(
   "setup",
@@ -227,7 +234,10 @@ export const setup = Command.make(
       }
       return yield* new SetupFailed({ name: located.worktree.name });
     }),
-).pipe(Command.withDescription("Run a worktree's setup again"));
+).pipe(
+  Command.withDescription("Run a worktree's setup again"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const rm = Command.make(
   "rm",
@@ -293,7 +303,10 @@ export const rm = Command.make(
         yield* cdNote("the removed worktree", hint);
       }
     }),
-).pipe(Command.withDescription("Remove a worktree, its teardown first"));
+).pipe(
+  Command.withDescription("Remove a worktree, its teardown first"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 type Moved = {
   readonly worktree: { readonly path: string };
@@ -382,7 +395,10 @@ export const move = Command.make(
         ),
       );
     }),
-).pipe(Command.withDescription("Move a worktree's folder"));
+).pipe(
+  Command.withDescription("Move a worktree's folder"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 export const rename = Command.make(
   "rename",
@@ -417,7 +433,10 @@ export const rename = Command.make(
         ),
       );
     }),
-).pipe(Command.withDescription("Rename a worktree's folder"));
+).pipe(
+  Command.withDescription("Rename a worktree's folder"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);
 
 // The app's plumbing for a folder about to move: what is kept under one
 // id carried to the id the new path will have.
@@ -459,4 +478,7 @@ export const rekey = Command.make(
       const { json } = yield* Effect.service(Output);
       yield* json ? emit({ ok: true, id }) : out(id);
     }),
-).pipe(Command.withDescription("Carry a worktree's data to its next path"));
+).pipe(
+  Command.withDescription("Carry a worktree's data to its next path"),
+  Command.provideEffectDiscard(refuseUnmigrated),
+);

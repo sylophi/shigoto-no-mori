@@ -66,7 +66,6 @@ const services = (options: EngineOptions) =>
         Dirty.layer,
         Bundle.layer,
         Open.layer,
-        WtFolder.drained,
       ),
     ),
     Layer.provideMerge(Hygiene.layer),
@@ -113,6 +112,12 @@ const services = (options: EngineOptions) =>
 export const engineLayer = (options: EngineOptions) =>
   services(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
 
+// The engine of the process that migrates a 2.x data dir, the app's:
+// its moves into `wt/` made before anything else runs. Every other
+// process leaves them to it (`Store.importOwed`).
+export const migratingEngineLayer = (options: EngineOptions) =>
+  WtFolder.drained.pipe(Layer.provideMerge(engineLayer(options)));
+
 // The store-backed services the doctor's checks read, over `store`.
 const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
   WtFolder.layer.pipe(
@@ -152,7 +157,9 @@ export const doctorLayer = (options: {
 }) =>
   Doctor.standalone(
     doctorStore(Store.layer(options.open)),
-    doctorStore(Store.fromFiles(options.open)),
+    doctorStore(Store.fromFiles(options.open, true)),
+    doctorStore(Store.fromFiles(options.open, false)),
+    Store.importOwed(options.open),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(Git.layer, Darwin.layer(options.macfs), Migration.layer),

@@ -7,7 +7,18 @@
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
-const CATEGORIES = ["busy", "full", "read-only", "damaged", "failed"] as const;
+// What a write to the 2.x files read into memory raises
+// (Store.fromFiles).
+export const UNMIGRATED = "sm-unmigrated";
+
+const CATEGORIES = [
+  "busy",
+  "full",
+  "read-only",
+  "damaged",
+  "unmigrated",
+  "failed",
+] as const;
 type Category = (typeof CATEGORIES)[number];
 
 export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", {
@@ -29,6 +40,8 @@ export const storeWords: Record<Category, string> = {
   "read-only":
     "The store is read-only here. Check the data folder's permissions (the doctor says which).",
   damaged: "The store looks damaged. The doctor says what it can repair.",
+  unmigrated:
+    "This data folder is still v2's, and is only read until it moves to v3. Open the app to move it, or run the doctor with --fix.",
   failed: "Couldn't read or write the store.",
 };
 
@@ -57,6 +70,7 @@ export const categoryOf = (error: unknown): Category => {
     return "busy";
   }
   const said = textOf(error);
+  if (said.includes(UNMIGRATED)) return "unmigrated";
   if (/SQLITE_BUSY|SQLITE_LOCKED|database is locked/i.test(said)) return "busy";
   if (/SQLITE_FULL|disk is full|ENOSPC/i.test(said)) return "full";
   if (/SQLITE_READONLY|readonly database|read-only/i.test(said)) {
@@ -70,6 +84,7 @@ export const categoryOf = (error: unknown): Category => {
 
 // A failure the store's SQL raised, in words; none for anything else.
 export const storeErrorOf = (error: unknown): StoreError | undefined => {
+  if (error instanceof StoreError) return error;
   if (Predicate.isTagged(error, "SqlError")) {
     return new StoreError({ category: categoryOf(error), cause: error });
   }

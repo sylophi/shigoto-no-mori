@@ -14,7 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
-import { UsageError } from "../errors.ts";
+import { unlessUnmigrated, UsageError } from "../errors.ts";
 import { cwd, given, resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import { alignRows, emit, note, out, Output, styles } from "../output.ts";
 
@@ -167,7 +167,10 @@ const event = Command.make(
       const raw = yield* fs
         .readFileString("/dev/stdin")
         .pipe(Effect.orElseSucceed(() => ""));
-      yield* (yield* Agents.Agents).event(harness.value, raw, yield* cwd);
+      // A hook's event, which a data dir still v2's doesn't take.
+      yield* unlessUnmigrated(
+        (yield* Agents.Agents).event(harness.value, raw, yield* cwd),
+      );
     }),
 ).pipe(Command.withDescription("Report a session's lifecycle event (stdin)"));
 

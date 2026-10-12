@@ -95,6 +95,26 @@ const start = (
   return { child, ended };
 };
 
+// The binary handed `input` on stdin, as a harness runs a hook: how it
+// ended and its stdout.
+const piped = (
+  cwd: string,
+  args: ReadonlyArray<string>,
+  env: NodeJS.ProcessEnv,
+  input: string,
+) =>
+  new Promise<{ code: number | null; stdout: string }>((resolve) => {
+    const child = spawn(built, args, {
+      cwd,
+      env: { ...box.env("cli"), ...env },
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let stdout = "";
+    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
+    child.on("close", (code) => resolve({ code, stdout }));
+    child.stdin.end(input);
+  });
+
 describe("a command line", () => {
   it("exits 2 on a command used wrongly, and 0 on help", async () => {
     const misuses = [
@@ -252,24 +272,6 @@ const lastDoc = (stdout: string) =>
 // printed them.
 describe("agents", () => {
   // A run with `input` on stdin, the way a hook hands an event over.
-  const piped = (
-    cwd: string,
-    args: ReadonlyArray<string>,
-    env: NodeJS.ProcessEnv,
-    input: string,
-  ) =>
-    new Promise<{ code: number | null; stdout: string }>((resolve) => {
-      const child = spawn(built, args, {
-        cwd,
-        env: { ...box.env("cli"), ...env },
-        stdio: ["pipe", "pipe", "ignore"],
-      });
-      let stdout = "";
-      child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
-      child.on("close", (code) => resolve({ code, stdout }));
-      child.stdin.end(input);
-    });
-
   it("installs the hooks, binds the shell's session and follows its events", async () => {
     const claude = join(box.home, "claude-config");
     mkdirSync(claude);
@@ -281,6 +283,7 @@ describe("agents", () => {
     box.write("registry.json", {
       projects: [{ id: "R", name: "repo", path: repo }],
     });
+    await box.migrate("cli");
 
     const status = await start(repo, ["--json", "agents", "status"], env).ended;
     assert.equal(status.code, 0);
@@ -392,6 +395,7 @@ describe("transfer", () => {
     box.write("registry.json", {
       projects: [{ id: "A", name: "alpha", path: alpha }],
     });
+    await box.migrate("cli");
     const refused = [
       ["send", "--to", " "],
       ["send", "--from", "Studio"],
@@ -595,7 +599,7 @@ describe("at a terminal", () => {
   const DOWN = "\u001b[B";
 
   // Two projects, beta with a worktree "fox".
-  const projects = () => {
+  const projects = async () => {
     const alpha = box.repo("alpha");
     const beta = box.repo("beta");
     box.git(beta, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
@@ -605,10 +609,11 @@ describe("at a terminal", () => {
         { id: "B", name: "beta", path: beta },
       ],
     });
+    await box.migrate("cli");
   };
 
   it("picks a project, then one of its worktrees", async () => {
-    projects();
+    await projects();
     const shown = await inTerminal(
       ["path"],
       [
@@ -623,7 +628,7 @@ describe("at a terminal", () => {
   });
 
   it("draws the menu with CI set in the environment", async () => {
-    projects();
+    await projects();
     const shown = await inTerminal(
       ["path"],
       [
@@ -656,7 +661,7 @@ describe("at a terminal", () => {
   });
 
   it("enters a worktree in the account's login shell when $SHELL is empty", async () => {
-    const { worktree } = scripted();
+    const { worktree } = await scripted();
     const entered = join(box.home, "entered");
     box.fakeBin("account-shell", `pwd > '${entered}'`);
     box.fakeBin("dscl", 'echo "UserShell: $(command -v account-shell)"');
@@ -666,6 +671,7 @@ describe("at a terminal", () => {
 
   it("edits the settings in $EDITOR and saves what it left", async () => {
     box.write("registry.json", { projects: [] });
+    await box.migrate("cli");
     box.fakeBin(
       "fake-editor",
       `grep -q '"launchScripts"' "$1" && exit 9; printf '{"launchScripts": false}' > "$1"`,
@@ -678,7 +684,7 @@ describe("at a terminal", () => {
   });
 
   it("leaves no process behind when a case fails with the menu up", async () => {
-    projects();
+    await projects();
     await assert.rejects(
       inTerminal(
         ["path"],
@@ -700,7 +706,7 @@ describe("at a terminal", () => {
   });
 
   it("filters by name, and esc cancels", async () => {
-    projects();
+    await projects();
     const shown = await inTerminal(
       ["path"],
       [
@@ -715,25 +721,105 @@ describe("at a terminal", () => {
 });
 
 describe("the v3 migration", () => {
-  it("says one line per step at the first run, and nothing after", async () => {
-    const repo = box.repo("repo", { "README.md": "hi\n" });
+  // A 2.x data dir: a project with worktrees a and b in its v2 folder.
+  const v2 = () => {
+    const repo = box.repo("repo", {
+      "package.json": JSON.stringify({ scripts: { dev: "dev" } }),
+    });
     box.write("registry.json", {
       projects: [{ id: "P1", name: "repo", path: repo }],
     });
-    const v2 = join(box.side("cli"), "worktrees", "repo");
+    const dataDir = box.side("cli");
+    const at = join(dataDir, "worktrees", "repo");
     for (const name of ["a", "b"]) {
-      box.git(repo, "worktree", "add", "-q", "-b", name, join(v2, name));
+      box.git(repo, "worktree", "add", "-q", "-b", name, join(at, name));
     }
-    box.git(repo, "worktree", "lock", join(v2, "b"));
-    const first = await runAt(box.home, "--json", "list");
-    assert.equal(first.code, 0, first.stderr);
-    const name = flavorNames("dev").binaryName;
-    assert.deepEqual(first.stderr.trimEnd().split("\n"), [
-      "Imported the projects and settings from v2.",
-      `Moved 1 of 2 worktrees into wt/; b (cannot move a locked working tree) stayed, for \`${name} doctor --fix\`.`,
+    return { repo, dataDir, a: join(at, "a"), b: join(at, "b") };
+  };
+
+  it("is left to the app by a hook, a script and a read, which read what v2 left", async () => {
+    const { repo, dataDir, a, b } = v2();
+    const hook = await piped(
+      a,
+      ["agents", "event", "--harness", "claude"],
+      {},
+      JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s1" }),
+    );
+    assert.deepEqual(hook, { code: 0, stdout: "" });
+    const scripts = await runAt(a, "--json", "run");
+    assert.equal(scripts.code, 0, scripts.stderr);
+    assert.deepEqual(
+      (scripts.doc as { scripts: ReadonlyArray<{ name: string }> }).scripts.map(
+        ({ name }) => name,
+      ),
+      ["dev"],
+    );
+    const listed = await runAt(repo, "--json", "list");
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.equal(listed.stderr, "");
+    assert.deepEqual(
+      (listed.doc as ReadonlyArray<{ path: string }>).map(({ path }) => path),
+      [repo, a, b],
+    );
+    const set = await runAt(
+      a,
+      "--json",
+      "config",
+      "set",
+      "autoShelveDays",
+      "9",
+    );
+    assert.equal(set.code, 1);
+    assert.equal((set.doc as { code: string }).code, "store-unmigrated");
+    // A change on disk is refused before it starts, not after.
+    const moved = await runAt(a, "--json", "move", join(box.home, "elsewhere"));
+    assert.equal((moved.doc as { code: string }).code, "store-unmigrated");
+    assert.ok(!existsSync(join(box.home, "elsewhere")));
+    const created = await runAt(repo, "--json", "create", "c", "--no-setup");
+    assert.equal((created.doc as { code: string }).code, "store-unmigrated");
+    assert.ok(existsSync(a) && existsSync(b));
+    assert.ok(!existsSync(join(dataDir, "wt")));
+    assert.ok(!existsSync(join(dataDir, "store.db")));
+  });
+
+  it("reads a 2.x data dir with settings and no projects as one", async () => {
+    box.write("config.json", { autoShelveDays: 5 });
+    const got = await runAt(box.home, "config", "get", "autoShelveDays");
+    assert.equal(got.stdout, "5\n");
+    assert.ok(!existsSync(join(box.side("cli"), "store.db")));
+  });
+
+  it("is made by doctor --fix, which leaves a worktree something runs in", async () => {
+    const { dataDir, a, b } = v2();
+    const doctor = async (...args: string[]) =>
+      (await runAt(box.home, "--json", "doctor", ...args)).doc as {
+        readonly repaired: ReadonlyArray<string>;
+        readonly checks: ReadonlyArray<{ id: string; detail: string }>;
+      };
+    const read = await doctor();
+    assert.ok(read.checks.some(({ id }) => id === "v2-data-dir"));
+    assert.ok(existsSync(a) && existsSync(b));
+    const held = spawn("sleep", ["30"], { cwd: b, stdio: "ignore" });
+    onTestFinished(() => {
+      held.kill();
+    });
+    // Run from inside a, as a person would: sm and the lsof it runs
+    // don't hold it back.
+    const fixed = (await runAt(a, "--json", "doctor", "--fix")).doc as {
+      readonly repaired: ReadonlyArray<string>;
+      readonly checks: ReadonlyArray<{ id: string; detail: string }>;
+    };
+    assert.deepEqual(fixed.repaired.slice(0, 2), [
+      "imported the projects and settings from v2",
+      "moved 1 worktree into wt/",
     ]);
-    const second = await runAt(box.home, "--json", "list");
-    assert.equal(second.stderr, "");
+    assert.ok(existsSync(join(dataDir, "wt", "repo", "a")));
+    assert.ok(existsSync(b));
+    assert.match(
+      fixed.checks.find(({ id }) => id === "project-wt-moves")?.detail ?? "",
+      new RegExp(`close sleep \\(${held.pid}\\), which runs in it`),
+    );
+    assert.ok(!fixed.checks.some(({ id }) => id === "v2-data-dir"));
   });
 });
 
@@ -852,7 +938,7 @@ case "$name" in
   sleep) : > "$READY"; exec sleep 30 ;;
 esac`;
 
-const scripted = () => {
+const scripted = async () => {
   const scripts = [
     "ok",
     "fail",
@@ -875,12 +961,13 @@ const scripted = () => {
     projects: [{ id: "R", name: "repo", path: repo }],
   });
   box.fakeBin("npm", npm);
+  await box.migrate("cli");
   return { repo, worktree };
 };
 
 describe("cd", () => {
   it("writes the worktree's path to the wrapper's directive file", async () => {
-    const { repo, worktree } = scripted();
+    const { repo, worktree } = await scripted();
     const cdFile = join(box.home, "cd");
     writeFileSync(cdFile, "");
     const ended = await start(repo, ["cd", "w"], {
@@ -895,7 +982,7 @@ describe("cd", () => {
   });
 
   it("switches within the project, by name or as `worktrees <name>`", async () => {
-    const { repo, worktree } = scripted();
+    const { repo, worktree } = await scripted();
     for (const args of [
       ["worktrees", "switch", "w"],
       ["wt", "w"],
@@ -917,7 +1004,7 @@ describe("cd", () => {
 
   // The wrapper as a shell evals it, around this build.
   it.each(["zsh", "bash"])("moves %s through the wrapper", async (shell) => {
-    const { repo, worktree } = scripted();
+    const { repo, worktree } = await scripted();
     const script = [
       `eval "$(smd shell init ${shell})"`,
       "smd cd w",
@@ -962,7 +1049,7 @@ const appeared = async (file: string): Promise<void> => {
 
 describe("run", () => {
   it("runs the script with the store's write lock held elsewhere", async () => {
-    const { worktree } = scripted();
+    const { worktree } = await scripted();
     // The store made, as the first run does.
     assert.equal((await start(worktree, ["run", "ok"]).ended)?.code, 0);
     const holder = new DatabaseSync(join(box.side("cli"), "store.db"));
@@ -977,7 +1064,7 @@ describe("run", () => {
   }, 30_000);
 
   it("ends as the script did", async () => {
-    const { worktree } = scripted();
+    const { worktree } = await scripted();
     const [ok, fail, term, kill] = await Promise.all(
       ["ok", "fail", "term", "kill"].map(
         (script) => start(worktree, ["run", script]).ended,
@@ -1000,7 +1087,7 @@ describe("run", () => {
   });
 
   it("passes what follows -- to the script as it is, from the worktree's root", async () => {
-    const { repo } = scripted();
+    const { repo } = await scripted();
     const ran = await start(
       `${repo}/sub`,
       [
@@ -1027,7 +1114,7 @@ describe("run", () => {
   });
 
   it("lists and runs a justfile's recipes and a Makefile's targets beside package.json's scripts", async () => {
-    const { repo } = scripted();
+    const { repo } = await scripted();
     writeFileSync(join(repo, "justfile"), "check:\n    echo check\n");
     writeFileSync(join(repo, "Makefile"), "build:\n\tgo build\n");
     box.fakeBin(
@@ -1073,6 +1160,7 @@ describe("run", () => {
     box.write("registry.json", {
       projects: [{ id: "B", name: "bare", path: repo }],
     });
+    await box.migrate("cli");
     const listed = await runAt(repo, "--json", "run");
     assert.equal(listed.code, 1);
     assert.deepEqual(listed.doc, {
@@ -1090,7 +1178,7 @@ describe("run", () => {
     ["SIGTERM", "sleep"],
     ["SIGINT", "sleep"],
   ] as const)("passes %s on to the %s script", async (signal, script) => {
-    const { worktree } = scripted();
+    const { worktree } = await scripted();
     const mark = join(box.home, "mark");
     const ready = join(box.home, "ready");
     const run = start(worktree, ["run", script], { MARK: mark, READY: ready });
@@ -1128,6 +1216,7 @@ describe("worktrees link", () => {
     box.write("registry.json", {
       projects: [{ id: "A", name: "alpha", path: alpha }],
     });
+    await box.migrate("cli");
     const printed = await runAt(alpha, "link");
     assert.equal(printed.code, 0, printed.stderr);
     assert.match(
@@ -1161,8 +1250,7 @@ describe("projects relocate", () => {
         { id: "B", name: "beta", path: beta },
       ],
     });
-    // The first run imports the 2.x files, and says so.
-    await runAt(box.home, "--json", "list");
+    await box.migrate("cli");
     const usage = await runAt(box.home, "projects", "relocate");
     assert.equal(usage.code, 2);
     assert.equal(
@@ -1221,8 +1309,7 @@ describe("worktrees rename", () => {
     for (const name of ["fox", "owl"]) {
       box.git(alpha, "worktree", "add", "-q", "-b", name, join(base, name));
     }
-    // The first run imports the 2.x files, and says so.
-    await runAt(box.home, "--json", "list");
+    await box.migrate("cli");
     const usage = await runAt(box.home, "worktrees", "rename");
     assert.equal(usage.code, 2);
     assert.equal(
@@ -1307,7 +1394,7 @@ describe("worktrees rename", () => {
 // The Go sm's parser (cli/args.go), ahead of effect/cli's.
 describe("the Go sm's command line", () => {
   // Projects alpha and beta, alpha with a managed worktree fox.
-  const fixture = () => {
+  const fixture = async () => {
     const alpha = box.repo("alpha");
     const beta = box.repo("beta");
     box.write("registry.json", {
@@ -1318,6 +1405,7 @@ describe("the Go sm's command line", () => {
     });
     const fox = join(box.side("cli"), "wt", "alpha", "fox");
     box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
+    await box.migrate("cli");
     return { alpha, beta, fox };
   };
   const described = async () =>
@@ -1327,8 +1415,8 @@ describe("the Go sm's command line", () => {
     };
 
   it("lists past a store another process is writing, and says the store is busy when it must write", async () => {
-    fixture();
-    // The store made and imported, as the first run does.
+    await fixture();
+    // The store made and imported, as the app made it.
     assert.equal((await described()).title, "");
     // The app mid-write: the store's write lock held.
     const holder = new DatabaseSync(join(box.side("cli"), "store.db"));
@@ -1360,7 +1448,7 @@ describe("the Go sm's command line", () => {
   }, 30_000);
 
   it("takes a long flag after a single dash", async () => {
-    fixture();
+    await fixture();
     const set = await runAt(
       box.home,
       "describe",
@@ -1375,7 +1463,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("gives a valued flag the next argument, a dash and all", async () => {
-    fixture();
+    await fixture();
     const set = await runAt(
       box.home,
       "describe",
@@ -1390,7 +1478,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("keeps the last of a repeated flag", async () => {
-    fixture();
+    await fixture();
     const listed = await runAt(
       box.home,
       "--json",
@@ -1407,7 +1495,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("refuses a value for a bare flag, and never takes the next one", async () => {
-    const { alpha } = fixture();
+    const { alpha } = await fixture();
     const valued = await runAt(box.home, "list", "--all=1");
     assert.equal(valued.code, 2);
     assert.equal(valued.stderr, 'smd: Option "--all=1" takes no value.\n');
@@ -1447,6 +1535,7 @@ describe("the Go sm's command line", () => {
     });
     // So a config verb's flag may come before the verb.
     box.write("registry.json", { projects: [] });
+    await box.migrate("cli");
     const written = await runAt(
       box.home,
       "config",
@@ -1460,7 +1549,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("hands `wt` a flag before the name, as switch's", async () => {
-    const { fox } = fixture();
+    const { fox } = await fixture();
     const cdFile = join(box.home, "cd");
     writeFileSync(cdFile, "");
     const ended = await start(box.home, ["wt", "-p", "alpha", "fox"], {
@@ -1471,7 +1560,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("lets be the positionals a verb doesn't read, where Go did", async () => {
-    const { alpha, fox } = fixture();
+    const { alpha, fox } = await fixture();
     const gamma = box.repo("gamma");
     const cdFile = join(box.home, "cd");
     for (const args of [
@@ -1504,7 +1593,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("tells a lifecycle script truecolor only under --json", async () => {
-    fixture();
+    await fixture();
     const configured = await runAt(
       box.home,
       "projects",
@@ -1524,7 +1613,7 @@ describe("the Go sm's command line", () => {
   });
 
   it("binds the calling session on every command that reads where it runs", async () => {
-    const { fox } = fixture();
+    const { fox } = await fixture();
     for (const verb of ["mirrors", "bundle"]) {
       const session = `session-${verb}`;
       // oxlint-disable-next-line no-await-in-loop -- one store, one run at a time
@@ -1668,7 +1757,7 @@ const progress = (state: string, armed: boolean) =>
 describe("landing", () => {
   // A project cloned from an upstream, with a managed worktree fox a
   // commit ahead on its own branch.
-  const project = () => {
+  const project = async () => {
     const upstream = box.repo("upstream", { "README.md": "hi\n" });
     const repo = join(box.home, "repo");
     box.git(box.home, "clone", "-q", upstream, repo);
@@ -1678,6 +1767,7 @@ describe("landing", () => {
     const fox = join(box.side("cli"), "wt", "repo", "fox");
     box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
     box.git(fox, "commit", "-q", "--allow-empty", "-m", "fox");
+    await box.migrate("cli");
     return { repo, fox };
   };
 
@@ -1693,7 +1783,7 @@ esac`,
     );
 
   it("says the merge and the catch-up before the cleanup, which may fail", async () => {
-    const { fox } = project();
+    const { fox } = await project();
     fakeGh([
       [
         '"pr list --state all --head fox "*',
@@ -1755,7 +1845,7 @@ esac`,
     ]);
 
   it("says where rm --stack leaves a primary checkout on a landed branch", async () => {
-    const { repo, fox } = project();
+    const { repo, fox } = await project();
     box.git(repo, "checkout", "-q", "-b", "bear");
     landedStack(fox);
     const removed = await runAt(box.home, "rm", "--stack", "-p", "repo", "fox");
@@ -1769,7 +1859,7 @@ esac`,
   });
 
   it("refuses an rm --stack whose branch has a commit its merged PR never had", async () => {
-    const { repo, fox } = project();
+    const { repo, fox } = await project();
     box.git(repo, "checkout", "-q", "-b", "bear");
     landedStack(fox);
     box.git(fox, "commit", "-q", "--allow-empty", "-m", "late");
@@ -1783,7 +1873,7 @@ esac`,
   });
 
   it("says when a merge queue takes a stack, under --json too", async () => {
-    project();
+    await project();
     fakeGh([
       [
         '"pr list --state all --head fox "*',
@@ -1818,16 +1908,15 @@ esac`,
       method: "squash",
       outcome: "queued",
     });
-    assert.ok(
-      merged.stderr.endsWith(
-        "\nthe stack is in the merge queue; it lands when the queue processes it\n",
-      ),
+    assert.equal(
+      merged.stderr.split("\n").at(-2),
+      "the stack is in the merge queue; it lands when the queue processes it",
       merged.stderr,
     );
   });
 
   it("checks a stack land's branch again after the merge, and keeps a commit made while it waited", async () => {
-    const { fox } = project();
+    const { fox } = await project();
     const head = box.git(fox, "rev-parse", "HEAD").trim();
     // gh merging the stack is when the commit lands: work made while
     // GitHub took its time.
@@ -1871,7 +1960,7 @@ esac`,
   });
 
   it("stops a stack land at a layer a merge queue only queued, with nothing above merged or removed", async () => {
-    const { fox } = project();
+    const { fox } = await project();
     const log = join(box.home, "gh.log");
     const queued = JSON.stringify({
       data: {
@@ -1930,7 +2019,7 @@ esac`,
   });
 
   it("waits out GitHub's lag after a layer's merge before deciding the rest of a stack land", async () => {
-    const { fox } = project();
+    const { fox } = await project();
     const log = join(box.home, "gh.log");
     const reads = join(box.home, "reads-4");
     box.fakeBin(
@@ -1975,7 +2064,7 @@ esac`,
   });
 
   it("finishes done on the primary checkout when its pull fails, and says so", async () => {
-    const { repo } = project();
+    const { repo } = await project();
     box.git(repo, "checkout", "-q", "-b", "bear");
     // The remote out of reach for the pull.
     box.git(repo, "remote", "set-url", "origin", join(box.home, "gone.git"));
@@ -1987,7 +2076,7 @@ esac`,
   });
 
   it("says an auto-merge by number was already armed", async () => {
-    project();
+    await project();
     fakeGh([
       [
         '"pr view 5 --json "*',
@@ -2014,7 +2103,7 @@ esac`,
   });
 
   it("says what a merge waits on, under --json too", async () => {
-    project();
+    await project();
     fakeGh([
       [
         '"pr list --state all --head fox "*',
@@ -2037,10 +2126,9 @@ esac`,
     await vi
       .waitFor(
         () =>
-          assert.ok(
-            said.endsWith(
-              "\nwaiting for GitHub to merge it: checks are running\n",
-            ),
+          assert.equal(
+            said.split("\n").at(-2),
+            "waiting for GitHub to merge it: checks are running",
             said,
           ),
         { timeout: 15_000, interval: 100 },
