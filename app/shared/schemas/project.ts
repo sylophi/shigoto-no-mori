@@ -128,6 +128,15 @@ export const CloneProjectPayloadSchema = z.object({
 
 export type CloneProjectPayload = z.infer<typeof CloneProjectPayloadSchema>;
 
+// A clone in flight, named by where it lands: the caller knows that
+// before the clone has anything else to go by.
+export const CancelClonePayloadSchema = z.object({
+  parentDir: z.string().min(1),
+  name: FolderNameSchema,
+});
+
+export type CancelClonePayload = z.infer<typeof CancelClonePayloadSchema>;
+
 // Start a new repository at `parentDir/name` and register it.
 export const CreateProjectPayloadSchema = z.object({
   parentDir: z.string().min(1),

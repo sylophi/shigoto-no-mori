@@ -28,6 +28,10 @@ interface ModalShellProps {
   // backs out a stage. Taken here rather than on a handler inside: this
   // one hears the key wherever focus sits, document.body included.
   onEscape?: () => void;
+  // Off while the dialog is busy with something it has to see through:
+  // neither the backdrop nor Escape closes it, nor does Escape reach a
+  // shell under it.
+  dismissable?: boolean;
   // Optional override for the popover's class list (sizing, layout).
   // Defaults to a max-w-xl column.
   popoverClassName?: string;
@@ -38,6 +42,7 @@ export function ModalShell({
   onClose,
   closeOnEscape = true,
   onEscape,
+  dismissable = true,
   popoverClassName,
   children,
 }: ModalShellProps) {
@@ -47,8 +52,8 @@ export function ModalShell({
   // it lands before any handler inside the shell.
   const onEscapeRef = useRef(onEscape ?? onClose);
   onEscapeRef.current = onEscape ?? onClose;
-  const closeOnEscapeRef = useRef(closeOnEscape);
-  closeOnEscapeRef.current = closeOnEscape;
+  const closeOnEscapeRef = useRef(closeOnEscape && dismissable);
+  closeOnEscapeRef.current = closeOnEscape && dismissable;
   useEffect(() => {
     const id = Symbol("modal-shell");
     openShells.push(id);
@@ -135,7 +140,7 @@ export function ModalShell({
       ref={backdropRef}
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissable && e.target === e.currentTarget) onClose();
       }}
       // The before: is the 10vh a short dialog hangs from, so it doesn't
       // jump as it grows. A taller dialog eats that gap first, then caps
