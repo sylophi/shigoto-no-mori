@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Flag from "effect/cli/Flag";
+import { unlessUnmigrated } from "./errors.ts";
 import { note, Output, styles } from "./output.ts";
 import { noteUnregistered, pickProject, pickWorktree } from "./pickers.ts";
 import { interactive } from "./prompt.ts";
@@ -59,7 +60,7 @@ export const bindCaller = Effect.gen(function* () {
   const agents = yield* Agents.Agents;
   if (Option.isNone(yield* agents.caller)) return;
   yield* agents.autoBind(yield* here);
-});
+}).pipe(unlessUnmigrated);
 
 // How a command names its project, beside or instead of a positional.
 export const projectFlags = {

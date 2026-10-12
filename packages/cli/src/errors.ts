@@ -4,6 +4,8 @@
 // on stderr.
 import { constants } from "node:os";
 import { errorDocument, isUsage } from "@shigomori/engine/errorDocument";
+import { storeErrorOf } from "@shigomori/engine/storeErrors";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as CliError from "effect/cli/CliError";
 import * as Schema from "effect/Schema";
@@ -46,6 +48,18 @@ export class Killed extends Schema.TaggedError<Killed>()("Killed", {
     return !CRASHES.has(this.signal);
   }
 }
+
+// `effect`, left undone where it would write to a 2.x data dir the app
+// has yet to migrate (engine.ts): what a hook or a command's
+// bookkeeping does on the side, which v2's files don't take.
+export const unlessUnmigrated = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.asVoid,
+    Effect.catchCauseIf(
+      (cause) => storeErrorOf(Cause.squash(cause))?.category === "unmigrated",
+      () => Effect.void,
+    ),
+  );
 
 // A person answered no.
 export class Cancelled extends Schema.TaggedError<Cancelled>()(

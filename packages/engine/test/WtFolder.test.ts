@@ -3,10 +3,12 @@
 // reported, and the doctor's fix moves it once it is unlocked (real git
 // on a sandbox data dir).
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
-import { afterEach, beforeEach, it } from "vitest";
+import { afterEach, beforeEach, it, onTestFinished } from "vitest";
 import * as Doctor from "../src/Doctor.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
@@ -125,6 +127,51 @@ it("reports a worktree the move couldn't take, and the fix moves it once it can"
   assert.ok(listed(repo).includes(join(wt, "c")));
   assert.ok(!existsSync(join(dataDir, "worktrees")));
   assert.deepEqual((await state()).unmoved, []);
+});
+
+it("keeps a worktree something runs in where it is, naming what to close", async () => {
+  const { repo, v2, wt } = v2Project();
+  box.git(repo, "worktree", "unlock", join(v2, "c"));
+  // A shell or a dev server: a process working in a folder of b's.
+  mkdirSync(join(v2, "b", "src"));
+  const held = spawn("sleep", ["30"], {
+    cwd: join(v2, "b", "src"),
+    stdio: "ignore",
+  });
+  onTestFinished(() => {
+    held.kill();
+  });
+  const { unmoved } = await state();
+  assert.ok(existsSync(join(wt, "c")));
+  assert.ok(existsSync(join(v2, "b")));
+  assert.deepEqual(
+    unmoved.map(({ fromPath, error }) => [fromPath, error]),
+    [[join(v2, "b"), `close sleep (${held.pid}), which runs in it`]],
+  );
+  held.kill();
+  await once(held, "exit");
+  const fixed = await box.doctor({
+    version: "dev",
+    executable: "",
+    terminal: false,
+    fix: { approve: () => Effect.succeed(true), failed: () => Effect.void },
+  });
+  assert.deepEqual(found(fixed), []);
+  assert.ok(existsSync(join(wt, "b")));
+});
+
+it("keeps every worktree where it is when lsof can't say what runs in them", async () => {
+  const { repo, v2 } = v2Project();
+  box.git(repo, "worktree", "unlock", join(v2, "c"));
+  box.fakeBin("lsof", "exit 1");
+  const { unmoved } = await state();
+  assert.deepEqual(
+    unmoved.map(({ error }) => error),
+    ["a", "b", "c"].map(
+      () => "couldn't tell what runs in it: lsof failed (exit code 1)",
+    ),
+  );
+  assert.ok(existsSync(join(v2, "a")));
 });
 
 it("carries the id of a worktree git moved before a crash", async () => {

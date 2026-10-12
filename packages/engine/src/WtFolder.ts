@@ -24,7 +24,12 @@ import * as Git from "./Git.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
-import { externalVolumeRoot, worktreeIdFromPath } from "./worktreeLayout.ts";
+import { working, type Working } from "./processes.ts";
+import {
+  externalVolumeRoot,
+  isSameOrInside,
+  worktreeIdFromPath,
+} from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 
 // A worktree still in its v2 folder, and why when a move failed.
@@ -78,6 +83,24 @@ const why = (error: { readonly message: string }) =>
     ? Git.stderrOf(error).trim() || error.message
     : error.message;
 
+// What to close before a worktree can move: each program running in
+// it, with its pids. None when nothing runs there.
+const closeFirst = (inside: ReadonlyArray<Working>) => {
+  if (inside.length === 0) return undefined;
+  const pids = new Map<string, number[]>();
+  for (const { command, pid } of inside) {
+    pids.set(command, [...(pids.get(command) ?? []), pid]);
+  }
+  const named = [...pids].map(
+    ([command, of]) => `${command} (${of.join(", ")})`,
+  );
+  const listed =
+    named.length === 1
+      ? named[0]
+      : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
+  return `close ${listed}, which ${inside.length === 1 ? "runs" : "run"} in it`;
+};
+
 // git's first line, without its "fatal:" and trailing punctuation.
 const oneLine = (error: string) =>
   (
@@ -101,8 +124,17 @@ const make = Effect.gen(function* () {
   const migration = yield* Migration.Migration;
 
   // One recorded move, made or failed, inside a transaction that holds
-  // the store's write lock, which another process waits on.
-  const moveOne = (project: Registry.RegisteredProject, fromPath: string) =>
+  // the store's write lock, which another process waits on. A worktree
+  // something runs in (a shell, a dev server, an agent) stays, since
+  // the move would take its folder from under it.
+  const moveOne = (
+    project: Registry.RegisteredProject,
+    fromPath: string,
+    running: Result.Result<
+      ReadonlyArray<Working>,
+      { readonly message: string }
+    >,
+  ) =>
     sql.withTransaction(
       Effect.gen(function* () {
         const [row] = yield* sql<Row>`
@@ -124,6 +156,21 @@ const make = Effect.gen(function* () {
               listed.success.find((id) => id.path === p || id.path === real),
           );
         const from = yield* at(row.from_path);
+        if (from !== undefined) {
+          // Not knowing what runs in it is no leave to move it.
+          const busy = Result.isFailure(running)
+            ? running.failure.message
+            : closeFirst(
+                running.success.filter(({ cwd }) =>
+                  isSameOrInside(cwd, row.from_path),
+                ),
+              );
+          if (busy !== undefined) {
+            yield* sql`UPDATE wt_moves SET error = ${busy}
+              WHERE from_path = ${fromPath}`;
+            return;
+          }
+        }
         // A move records itself as made (Worktrees.carryMoved).
         const made =
           from !== undefined
@@ -173,9 +220,10 @@ const make = Effect.gen(function* () {
         (row) => again || row.error === null,
       );
       if (project === undefined || rows.length === 0) return;
+      const running = yield* Effect.result(working(spawner));
       for (const row of rows) {
         yield* report?.(row.from_path, false) ?? Effect.void;
-        yield* moveOne(project, row.from_path);
+        yield* moveOne(project, row.from_path, running);
         yield* report?.(row.from_path, true) ?? Effect.void;
       }
       yield* git.run(project.path, ["worktree", "repair"]).pipe(Effect.ignore);

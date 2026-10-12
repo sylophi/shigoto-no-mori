@@ -45,6 +45,7 @@ export const capture = (
   options: {
     readonly from?: "stdout" | "all";
     readonly env?: Record<string, string> | undefined;
+    readonly cwd?: string;
   } = {},
 ) =>
   Effect.scoped(
@@ -55,6 +56,7 @@ export const capture = (
           // A command that ignores the scope's SIGTERM is killed after
           // this, so a deadline is one.
           forceKillAfter: "3 seconds",
+          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
           ...(options.env === undefined
             ? {}
             : { env: options.env, extendEnv: true }),
@@ -83,6 +85,7 @@ export const captureWithin = (
   options: {
     readonly from?: "stdout" | "all";
     readonly env?: Record<string, string> | undefined;
+    readonly cwd?: string;
   } = {},
 ) =>
   capture(spawner, command, args, options).pipe(
@@ -95,5 +98,54 @@ export const captureWithin = (
             seconds: Duration.toSeconds(Duration.fromInputUnsafe(timeout)),
           }),
         ),
+    }),
+  );
+
+// A process and the folder it works in.
+export type Working = {
+  readonly pid: number;
+  readonly command: string;
+  readonly cwd: string;
+};
+
+// lsof that said nothing and failed.
+class ProcessesUnlisted extends Schema.TaggedError<ProcessesUnlisted>()(
+  "ProcessesUnlisted",
+  { code: Schema.Int },
+) {
+  override get message(): string {
+    return `couldn't tell what runs in it: lsof failed (exit code ${this.code})`;
+  }
+}
+
+// Every process lsof can see (the user's own) with the folder it works
+// in, this one left out. lsof runs from the root, so it doesn't list
+// itself in a folder it was asked about.
+export const working = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+) =>
+  captureWithin(
+    spawner,
+    "lsof",
+    ["-n", "-w", "+c0", "-d", "cwd", "-Fpcn"],
+    "10 seconds",
+    { cwd: "/" },
+  ).pipe(
+    Effect.flatMap(({ output, code }) => {
+      // lsof exits 1 when it couldn't read some process, and still lists
+      // the rest.
+      if (output === "") return Effect.fail(new ProcessesUnlisted({ code }));
+      const found: Working[] = [];
+      let pid = 0;
+      let command = "";
+      for (const line of output.split("\n")) {
+        const value = line.slice(1);
+        if (line.startsWith("p")) pid = Number(value);
+        else if (line.startsWith("c")) command = value;
+        else if (line.startsWith("n") && pid !== process.pid) {
+          found.push({ pid, command, cwd: value });
+        }
+      }
+      return Effect.succeed(found as ReadonlyArray<Working>);
     }),
   );

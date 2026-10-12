@@ -9,11 +9,7 @@ import type * as Scope from "effect/Scope";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
-import {
-  importFiles,
-  importJson,
-  StoreImportError,
-} from "./migrations/importJson.ts";
+import { importFiles, StoreImportError } from "./migrations/importJson.ts";
 import { agentSessions } from "./migrations/agentSessions.ts";
 import { changes } from "./migrations/changes.ts";
 import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
@@ -26,7 +22,7 @@ import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
-import { storeErrorOf } from "./storeErrors.ts";
+import { storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   "StoreOpenError",
@@ -54,6 +50,27 @@ export type OpenDatabase = (
 
 const migrate = Migrator.make({});
 
+type Platform = Context.Context<
+  Paths.Paths | FileSystem.FileSystem | Path.Path
+>;
+
+// The schema's history, in order, its imports of a 2.x data dir's files
+// `lenient` or not (importJson.ts). A released migration is never
+// edited. A change is a new one.
+const history = (platform: Platform, lenient: boolean) => ({
+  "1_tables": tables,
+  "2_import_json": Effect.provideContext(importFiles(lenient), platform),
+  "3_agent_sessions": agentSessions,
+  "4_changes": changes,
+  "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
+  "6_terminals": terminals,
+  "7_wt_folder": wtFolder,
+  "8_running_scripts": runningScripts,
+  "9_mirror_agreements": Effect.provideContext(mirrorAgreements, platform),
+  "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
+  "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
+});
+
 // The newest migration a store applied, 0 for a new one.
 const latestApplied = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -65,14 +82,21 @@ const latestApplied = Effect.gen(function* () {
   return row?.latest ?? 0;
 });
 
-// Whether the store has yet to import a 2.x data dir's files: the
-// registry is there, and the import hasn't run (the migrations commit
+// The files a 2.x data dir keeps its state in, which the import takes.
+const V2_FILES = ["registry.json", "config.json", "state.json"];
+
+// Whether the store has yet to import a 2.x data dir's files: one of
+// them is there, and the import hasn't run (the migrations commit
 // together, so one cut short by a crash runs again).
-const owesImport = (registryFile: string) =>
+const owesImport = (dataDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const sql = yield* SqlClient.SqlClient;
-    if (!(yield* fs.exists(registryFile))) return false;
+    const files = yield* Effect.forEach(V2_FILES, (file) =>
+      fs.exists(path.join(dataDir, file)),
+    );
+    if (!files.some(Boolean)) return false;
     const [table] = yield* sql`SELECT name FROM sqlite_master
       WHERE type = 'table' AND name = 'effect_sql_migrations'`;
     if (table === undefined) return true;
@@ -96,7 +120,6 @@ export const layer = (
     Effect.gen(function* () {
       const { dataDir, store } = yield* Paths.Paths;
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
       const migration = yield* Migration.Migration;
       const platform = yield* Effect.context<
         Paths.Paths | FileSystem.FileSystem | Path.Path
@@ -121,9 +144,9 @@ export const layer = (
           yield* fs.chmod(file, 0o600).pipe(Effect.ignore);
         }
         const client = yield* open(store);
-        const owed = yield* owesImport(
-          path.join(dataDir, "registry.json"),
-        ).pipe(Effect.provideService(SqlClient.SqlClient, client));
+        const owed = yield* owesImport(dataDir).pipe(
+          Effect.provideService(SqlClient.SqlClient, client),
+        );
         if (owed) {
           yield* migration.update(() => ({
             planned: true,
@@ -131,26 +154,10 @@ export const layer = (
             worktrees: Migration.WAITING_MOVE,
           }));
         }
-        // The schema's history, applied in order. A released migration is
-        // never edited. A change is a new one. Run only when one is due,
-        // since the migrator takes the write lock: a start that only reads
-        // must not wait on the app's writes, or fail behind them.
-        const migrations = {
-          "1_tables": tables,
-          "2_import_json": Effect.provideContext(importJson, platform),
-          "3_agent_sessions": agentSessions,
-          "4_changes": changes,
-          "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
-          "6_terminals": terminals,
-          "7_wt_folder": wtFolder,
-          "8_running_scripts": runningScripts,
-          "9_mirror_agreements": Effect.provideContext(
-            mirrorAgreements,
-            platform,
-          ),
-          "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
-          "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
-        };
+        // The schema's history, applied in order. Run only when one is
+        // due, since the migrator takes the write lock: a start that only
+        // reads must not wait on the app's writes, or fail behind them.
+        const migrations = history(platform, false);
         const newest = Math.max(
           ...Object.keys(migrations).map((key) => Number.parseInt(key, 10)),
         );
@@ -187,14 +194,18 @@ export const layer = (
     }),
   ).pipe(Layer.provide(Reactivity.layer));
 
-// The data dir's 2.x files in a database in memory, imported leniently:
-// what the store would refuse is skipped, as the Go sm read around it.
-// The doctor reads them this way while the store can't import them.
+// The data dir's 2.x files in a database in memory, `lenient` or not
+// (importJson.ts): leniently, what the store would refuse is skipped, as
+// the Go sm read around it. Every write is refused (UNMIGRATED), since
+// it would go nowhere. The doctor reads them this way while the store
+// can't import them or the app has yet to, and the terminal while the
+// app has yet to migrate them (`unmigrated`).
 export const fromFiles = (
   open: OpenDatabase,
+  lenient: boolean,
 ): Layer.Layer<
   SqlClient.SqlClient,
-  StoreOpenError,
+  StoreOpenError | StoreImportError,
   Paths.Paths | FileSystem.FileSystem | Path.Path
 > =>
   Layer.effectContext(
@@ -204,21 +215,30 @@ export const fromFiles = (
       >();
       const client = yield* open(":memory:");
       yield* migrate({
-        loader: Migrator.fromRecord({
-          "1_tables": tables,
-          "2_import_json": Effect.provideContext(importFiles(true), platform),
-          "3_agent_sessions": agentSessions,
-          "4_changes": changes,
-          "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
-          "7_wt_folder": wtFolder,
-          "8_running_scripts": runningScripts,
-        }),
+        loader: Migrator.fromRecord(history(platform, lenient)),
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, client),
         Effect.mapError(
           (cause) => new StoreOpenError({ path: ":memory:", cause }),
         ),
+        Effect.catchDefect((defect) =>
+          defect instanceof Migrator.MigrationError &&
+          defect.cause instanceof StoreImportError
+            ? Effect.fail(defect.cause)
+            : Effect.die(defect),
+        ),
       );
+      const made = yield* client<{ name: string }>`SELECT name
+        FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`;
+      for (const { name } of made) {
+        for (const change of ["INSERT", "UPDATE", "DELETE"]) {
+          yield* client.unsafe(
+            `CREATE TRIGGER "${name}_${change.toLowerCase()}_unmigrated"
+              BEFORE ${change} ON "${name}"
+              BEGIN SELECT RAISE(ABORT, '${UNMIGRATED}'); END`,
+          );
+        }
+      }
       return Context.make(SqlClient.SqlClient, client);
     }).pipe(
       Effect.catchTags({
@@ -227,3 +247,39 @@ export const fromFiles = (
       }),
     ),
   ).pipe(Layer.provide(Reactivity.layer));
+
+// Whether the data dir is a 2.x one still to be migrated: its files are
+// there, and the store has yet to import them. Read without making or
+// migrating the store.
+export const importOwed = (
+  open: OpenDatabase,
+): Effect.Effect<
+  boolean,
+  StoreOpenError,
+  Paths.Paths | FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const { dataDir, store } = yield* Paths.Paths;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const exists = (file: string) =>
+      fs
+        .exists(file)
+        .pipe(
+          Effect.mapError((cause) => new StoreOpenError({ path: file, cause })),
+        );
+    const v2 = yield* Effect.forEach(V2_FILES, (file) =>
+      exists(path.join(dataDir, file)),
+    );
+    if (!v2.some(Boolean)) return false;
+    if (!(yield* exists(store))) return true;
+    return yield* Effect.flatMap(open(store), (client) =>
+      owesImport(dataDir).pipe(
+        Effect.provideService(SqlClient.SqlClient, client),
+      ),
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(Reactivity.layer),
+      Effect.mapError((cause) => new StoreOpenError({ path: store, cause })),
+    );
+  });
