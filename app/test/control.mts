@@ -471,6 +471,8 @@ let toListener: Awaited<ReturnType<typeof bootDirectWire>>["toListener"];
 let connected: string[];
 // What the hub's device list fails with, null while it answers.
 let registryFails: unknown = null;
+// What the hub's device list waits on before it answers.
+let registryWaits: Effect.Effect<void> = Effect.void;
 let peerOwns: string;
 let removalsOf: (
   worktreeId: string,
@@ -621,9 +623,13 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   };
   standInAccount({
     listDevices: Effect.suspend(() =>
-      registryFails === null
-        ? Effect.succeed(registry)
-        : Effect.fail(listDevicesFailure(registryFails)),
+      registryWaits.pipe(
+        Effect.andThen(
+          registryFails === null
+            ? Effect.succeed(registry)
+            : Effect.fail(listDevicesFailure(registryFails)),
+        ),
+      ),
     ),
     directPeers: Effect.sync(() =>
       Object.fromEntries(
@@ -1442,6 +1448,25 @@ it("the hub out of reach says so with its cause, and a revoked credential reads 
     registryFails = null;
   }
 });
+
+it("an app silent past one ping but short of the limit still answers the terminal", async () => {
+  // ---- (8c) An app that goes quiet for a while (its loop held by
+  // other work) is not a lost connection: it answers no ping for 12 s,
+  // past the second of the client's looks (every 5 s from its connect)
+  // and short of the limit, then the call.
+  registryWaits = Effect.sync(() => {
+    const until = Date.now() + 12_000;
+    while (Date.now() < until) {
+      // The loop held, so nothing on the socket is answered.
+    }
+  });
+  try {
+    const listed = await runCli(["--json", "devices"]);
+    assert.equal(listed.code, 0, listed.stderrTail);
+  } finally {
+    registryWaits = Effect.void;
+  }
+}, 60_000);
 
 it("a loopback.json removed under the running app is republished", async () => {
   // ---- (9) A data wipe takes loopback.json with the rest of the data
