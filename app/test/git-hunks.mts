@@ -1,4 +1,4 @@
-// Durable proof for the changes page's hunks (host/lib/git/hunks.ts)
+// Durable proof for the changes page's hunks (the engine's Git)
 // against a REAL repository: a file's changes read, a commit of some of
 // them taking HEAD plus exactly those (insertions, deletions and a
 // missing final newline among them), a pick still found after an edit
@@ -10,7 +10,14 @@
 //
 // Run: pnpm test git-hunks.
 import assert from "node:assert/strict";
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { LineChange } from "@shigomori/contracts/schemas";
 import {
@@ -20,7 +27,8 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { engineGit, promised } from "./lib/gitPromises.mts";
+import type { CommitRequest } from "@shigomori/engine/Git";
+import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -31,13 +39,18 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { discardHunks, readHunks } = promised(
-  await import("../host/lib/git/hunks.ts"),
-);
 // The engine's Git, in the shapes these cases call it by.
+const readHunks = (worktree: string, path: string) =>
+  engineGit.readHunks(worktree, path);
+const discardHunks = (
+  worktree: string,
+  path: string,
+  changes: readonly LineChange[],
+) => engineGit.discardHunks({ worktree, path, changes });
 const restoreDiscard = (worktree: string, snapshot: string) =>
   engineGit.restoreDiscard({ worktree, snapshot });
-const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
+const commitPicks = (worktree: string, message: CommitRequest) =>
+  engineGit.commitPicks(worktree, message);
 
 const git = sandboxGit(gitEnv);
 
@@ -232,4 +245,19 @@ it("a symlink or a file that isn't UTF-8 has no hunks and is never written by th
   git(repo, "commit", "-q", "-m", "latin");
   writeFileSync(join(repo, "l.txt"), Buffer.concat([latin, latin]));
   assert.deepEqual((await readHunks(repo, "l.txt")).changes, []);
+});
+
+it("a discard keeps an executable file's mode", async () => {
+  const repo = tempDir("sm-hunks-mode-", trackTest);
+  git(repo, "init", "-q", "-b", "main");
+  writeFileSync(join(repo, "f.txt"), lines(20));
+  chmodSync(join(repo, "f.txt"), 0o755);
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "init");
+  writeFileSync(join(repo, "f.txt"), EDITED);
+  const [edit] = (await readHunks(repo, "f.txt")).changes;
+  assert.ok(edit);
+  await discardHunks(repo, "f.txt", [edit]);
+  assert.equal(read(repo), EDITED.replace("line two\n", "line 2\n"));
+  assert.equal(statSync(join(repo, "f.txt")).mode & 0o777, 0o755);
 });

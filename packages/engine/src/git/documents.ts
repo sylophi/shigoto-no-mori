@@ -1,4 +1,5 @@
 // Git's errors, documents and the pure helpers its areas share (EFFECT.md, section 2). `Git.ts` re-exports what consumers use.
+import type { CommitPicks } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -166,6 +167,17 @@ export type RunOptions = {
   // The output cap, over DEFAULT_MAX_OUTPUT. Only the patch reads
   // raise it.
   readonly maxOutputBytes?: number | undefined;
+};
+
+// A commit from the changes page: the picks, and the message. Two `-m`
+// flags give git the summary and body as separate paragraphs. `amend`
+// folds the picks into HEAD under the new message instead of adding a
+// commit, with no summary keeps HEAD's message, and with nothing picked
+// rewrites only the message.
+export type CommitRequest = CommitPicks & {
+  readonly summary?: string | undefined;
+  readonly description?: string | undefined;
+  readonly amend?: boolean | undefined;
 };
 
 export type UpstreamSync = {

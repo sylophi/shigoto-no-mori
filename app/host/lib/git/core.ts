@@ -11,21 +11,12 @@ export interface RunOptions {
   // both point GIT_INDEX_FILE at a copy, so they never touch the
   // worktree's real one.
   env?: NodeJS.ProcessEnv;
-  // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
-  // reads raise it (see PATCH_MAX_BUFFER).
-  maxBuffer?: number;
 }
 
 // Every run is buffered, so a command that never stops printing can't
 // take the host process with it. This covers any status, log or ref
 // output the app asks for by a wide margin.
 const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
-
-// A patch is the one output whose size the user decides rather than the
-// app: one regenerated lockfile or checked-in bundle runs to tens of
-// megabytes on its own. Sized to swallow that, because the alternative
-// isn't a smaller patch but a wrong one (see `truncated`).
-export const PATCH_MAX_BUFFER = 64 * 1024 * 1024;
 
 // A git run that failed, in git's own words: the argv would repeat
 // whatever was passed (a commit message, a path list) and say nothing a
@@ -52,7 +43,7 @@ export const run = (cwd: string, args: string[], options: RunOptions = {}) =>
     // matches on stderr text, which gettext would otherwise translate,
     // and the errors the app relays read the same on every machine.
     env: { ...process.env, ...options.env, LC_ALL: "C" },
-    maxOutputBytes: options.maxBuffer ?? DEFAULT_MAX_BUFFER,
+    maxOutputBytes: DEFAULT_MAX_BUFFER,
   }).pipe(
     Effect.map(({ stdout }) => stdout),
     Effect.mapError(
