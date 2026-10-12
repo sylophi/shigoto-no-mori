@@ -30,9 +30,8 @@ export const CommitSummarySchema = Schema.Struct({
   author: Schema.String,
   date: Schema.String,
   // Net additions/deletions across all files in this commit, parsed
-  // from `git log --shortstat`. Zero for an empty commit, and for a
-  // merge in the engine's listing. The host's history reads count a
-  // merge against its first parent.
+  // from `git log --shortstat`. Zero for an empty commit; a merge's are
+  // counted against its first parent, what it brought in.
   additions: Schema.Natural,
   deletions: Schema.Natural,
 });

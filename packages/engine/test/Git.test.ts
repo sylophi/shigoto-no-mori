@@ -303,6 +303,25 @@ it("a crafted subject in a real repo stays one commit", async () => {
   );
 });
 
+it("a merge's counts are what it brought in, against its first parent", async () => {
+  const repo = seedRepo();
+  git(repo, "checkout", "-q", "-b", "side");
+  write(repo, "side.txt", "one\ntwo\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "side");
+  git(repo, "checkout", "-q", "main");
+  write(repo, "b.txt", "bee\nbuzz\n");
+  git(repo, "commit", "-q", "-am", "main");
+  git(repo, "merge", "-q", "--no-edit", "side");
+  const [merge] = await withGit((g) =>
+    g.listCommits(repo, { skip: 0, count: 1 }),
+  );
+  assert.deepEqual(
+    { additions: merge?.additions, deletions: merge?.deletions },
+    { additions: 2, deletions: 0 },
+  );
+});
+
 it("measures a branch against its upstream and the remotes", async () => {
   const { clone } = withRemote();
   assert.deepEqual(await withGit((g) => g.upstreamSync(clone)), {
