@@ -3,7 +3,7 @@
 // or dev; naming and data dir policy are the flavor table's
 // (packages/engine/src/flavor.ts).
 //   default        -> dist-cli/sm   targets ~/.sm  (bundled with the app)
-//   SM_FLAVOR=test -> dist-cli/smt  targets ~/.smt (bundled with a test build)
+//   SM_FLAVOR=v3   -> dist-cli/smv3 targets ~/.smv3 (bundled with a v3 build)
 //   --dev          -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
 // The binary finds the darwin helper beside itself, as the app's
 // Resources ship them, so the build gets a copy of the one in

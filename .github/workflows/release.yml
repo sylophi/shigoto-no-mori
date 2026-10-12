@@ -76,10 +76,10 @@ jobs:
         working-directory: .
         run: pnpm install --frozen-lockfile
 
-      # The flavor (packages/engine/src/flavor.ts): a v*-test.N tag builds
-      # the test app, which installs beside the prod one under its own
-      # name, folders and `smt`, and points at the dev hub (the SM_TEST_
-      # variables) until the cutover; anything else builds prod. The
+      # The flavor (packages/engine/src/flavor.ts): a v*-v3.N tag builds
+      # the v3 app, which installs beside the prod one under its own
+      # name, folders and `smv3`, and points at the dev hub (the SM_V3_
+      # variables) until v3 merges into main; anything else builds prod. The
       # later steps read SM_FLAVOR, the app's name and the account
       # config from the job's environment.
       - name: Pick the flavor
@@ -88,8 +88,8 @@ jobs:
           PROD_HUB: ${{ vars.SM_DEVICE_HUB_URL }}
           PROD_CLERK: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
           PROD_WEB: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
-          TEST_HUB: ${{ vars.SM_TEST_DEVICE_HUB_URL }}
-          TEST_CLERK: ${{ vars.SM_TEST_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+          V3_HUB: ${{ vars.SM_V3_DEVICE_HUB_URL }}
+          V3_CLERK: ${{ vars.SM_V3_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
         run: |
           FLAVOR="$(node --input-type=module -e '
             import { flavorOfVersion } from "@shigomori/engine/flavor";
@@ -102,9 +102,9 @@ jobs:
           {
             echo "SM_FLAVOR=$FLAVOR"
             echo "SM_APP_NAME=$APP_NAME"
-            if [[ "$FLAVOR" == test ]]; then
-              echo "SM_DEVICE_HUB_URL=$TEST_HUB"
-              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$TEST_CLERK"
+            if [[ "$FLAVOR" == v3 ]]; then
+              echo "SM_DEVICE_HUB_URL=$V3_HUB"
+              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$V3_CLERK"
             else
               echo "SM_DEVICE_HUB_URL=$PROD_HUB"
               echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$PROD_CLERK"
