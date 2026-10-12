@@ -42,6 +42,7 @@ import * as Option from "effect/Option";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorWordsOf } from "@host/lib/errorWords";
@@ -437,6 +438,13 @@ class BrokenLink extends Schema.TaggedError<BrokenLink>()("BrokenLink", {
   }
 }
 
+// An errno the words don't know, by its code alone: the message would
+// carry this device's paths to the other.
+const codeWords = (error: unknown) =>
+  Predicate.hasProperty(error, "code")
+    ? `error ${String(error.code)}`
+    : "an unexpected file error";
+
 // A step on this device's files, its failure (a full disk, a folder
 // it may not write) in words the other device can be answered with, or
 // the user told.
@@ -445,7 +453,7 @@ const onFiles = <A>(what: string, step: () => Promise<A>) =>
     try: step,
     catch: (error) =>
       new LinkError({
-        reason: `Couldn't ${what}: ${errnoWords(error, error instanceof Error ? error.message : String(error))}.`,
+        reason: `Couldn't ${what}: ${errnoWords(error, codeWords(error))}.`,
       }),
   });
 
@@ -507,11 +515,23 @@ const sendBundle = (
               offset += bytesRead;
             }
           }).pipe(
-            Effect.mapError(
-              (error) => new BrokenLink({ reason: errorWordsOf(error) }),
+            // The header is out: whatever ends the bytes early, a failure
+            // or a defect, breaks the link, since an answer now would be
+            // read as bundle bytes.
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.interrupt
+                : Effect.fail(
+                    new BrokenLink({
+                      reason: Option.match(Cause.findErrorOption(cause), {
+                        onNone: () => "the bundle stopped short",
+                        onSome: errorWordsOf,
+                      }),
+                    }),
+                  ),
             ),
           ),
-        (file) => Effect.promise(() => file.close()),
+        (file) => Effect.promise(() => file.close().catch(() => {})),
       );
     }),
   );
@@ -589,7 +609,19 @@ export const serveSource = (
             const error = Cause.squash(cause);
             if (error instanceof BrokenLink) return Effect.fail(error);
             if (opts.failure !== undefined) opts.failure.error ??= error;
-            return link.write({ error: errorWordsOf(error) });
+            // A defect's own words are this device's (its paths among
+            // them): the other device hears a fixed line, and the log
+            // here keeps the rest.
+            return Option.isSome(Cause.findErrorOption(cause))
+              ? link.write({ error: errorWordsOf(error) })
+              : Effect.logError("[sync] a source step failed", cause).pipe(
+                  Effect.andThen(
+                    link.write({
+                      error:
+                        "The other device hit an unexpected error answering this.",
+                    }),
+                  ),
+                );
           },
         ),
       );
