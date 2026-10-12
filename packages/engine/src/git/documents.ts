@@ -179,22 +179,30 @@ export const SPAWN_SLOTS = Math.max(
   globalThis.navigator?.hardwareConcurrency ?? 4,
 );
 
-// What can hold a slot for minutes while the probes the cap is for
-// queue behind it: a wait on a remote, or the user's hooks a commit,
-// a merge, a rebase or a checkout runs.
-export const UNSLOTTED_SUBCOMMANDS = new Set([
-  "clone",
-  "fetch",
-  "pull",
-  "push",
-  "commit",
-  "merge",
-  "rebase",
-  "cherry-pick",
-  "revert",
-  "am",
-  "checkout",
-  "switch",
+// What takes a slot: the read-only probes a row fans out over, which
+// run none of the user's hooks. Anything else goes outside the slots,
+// since it can hold one for minutes while the probes queue behind it:
+// a wait on a remote, or the hooks a write runs (a commit's, a
+// checkout's, and any ref update's reference-transaction).
+export const SLOTTED_SUBCOMMANDS = new Set([
+  "status",
+  "rev-parse",
+  "rev-list",
+  "log",
+  "show",
+  "diff",
+  "ls-files",
+  "ls-tree",
+  "cat-file",
+  "for-each-ref",
+  "show-ref",
+  "merge-base",
+  "merge-tree",
+  "write-tree",
+  "hash-object",
+  "check-ignore",
+  "config",
+  "remote",
 ]);
 
 // Covers any status, log or ref output by a wide margin.

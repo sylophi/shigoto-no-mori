@@ -12,8 +12,8 @@ import {
   GitOutputTooLargeError,
   PATHSPEC_CHUNK,
   type RunOptions,
+  SLOTTED_SUBCOMMANDS,
   SPAWN_SLOTS,
-  UNSLOTTED_SUBCOMMANDS,
   encoder,
   identity,
   readAll,
@@ -78,7 +78,7 @@ export const makeRunning = Effect.gen(function* () {
         }
         return stdout;
       }),
-    ).pipe(UNSLOTTED_SUBCOMMANDS.has(subcommand) ? identity : slots.withPermit);
+    ).pipe(SLOTTED_SUBCOMMANDS.has(subcommand) ? slots.withPermit : identity);
   });
 
   // Exit 0 or not, for the checks git answers with its exit code.

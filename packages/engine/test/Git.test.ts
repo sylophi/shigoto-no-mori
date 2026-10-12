@@ -2,7 +2,14 @@
 // history, refs, the default ref, the remote sync and its guards,
 // clone, and the diffs.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
@@ -21,6 +28,7 @@ import {
   stderrOf,
   UnknownRevisionError,
 } from "../src/Git.ts";
+import { SPAWN_SLOTS } from "../src/git/documents.ts";
 import { LOG_FORMAT, parseLog } from "../src/gitParse.ts";
 import {
   failureAs,
@@ -56,6 +64,44 @@ it("a failure carries git's own words, in English, and its exit code", async () 
   assert.equal(error.exitCode, 1);
   assert.match(stderrOf(error), /did not match any file\(s\) known to git/);
   assert.equal(error.message, "git checkout exited with 1.");
+});
+
+it("a write held by the user's hook leaves the probes their slots", async () => {
+  const repo = seedRepo();
+  const head = rev(repo, "HEAD");
+  // Every ref update leaves a mark and waits in its
+  // reference-transaction hook until the release file appears.
+  const marks = tempDir("held-");
+  const release = join(tempDir("release-"), "go");
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\ncat >/dev/null\ntouch '${marks}'/$$\nwhile [ ! -e '${release}' ]; do sleep 0.05; done\n`,
+  );
+  chmodSync(hook, 0o755);
+  const started = Date.now();
+  await withGit((g) =>
+    Effect.gen(function* () {
+      const writes = yield* Effect.forkChild(
+        Effect.forEach(
+          Array.from({ length: SPAWN_SLOTS + 1 }, (_, n) => n),
+          (n) =>
+            g.updateRef({ repo, ref: `refs/heads/held-${n}`, commit: head }),
+          { concurrency: "unbounded", discard: true },
+        ),
+      );
+      // As many writes as there are slots are waiting on the hook, and
+      // a probe still answers.
+      while (readdirSync(marks).length < SPAWN_SLOTS) {
+        yield* Effect.sleep("20 millis");
+      }
+      assert.equal(yield* g.verifyRev(repo, "HEAD"), head);
+      writeFileSync(release, "");
+      yield* Fiber.join(writes);
+    }),
+  );
+  assert.ok(Date.now() - started < 20_000);
+  assert.equal(rev(repo, `refs/heads/held-${SPAWN_SLOTS}`), head);
 });
 
 it("output past the cap is an error, not a prefix", async () => {
