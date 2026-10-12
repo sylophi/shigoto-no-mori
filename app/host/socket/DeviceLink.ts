@@ -247,6 +247,8 @@ const CLOSE_GOING_AWAY = 1001;
 const CLOSE_OVER_CAPACITY = 1013;
 const CLOSE_HELLO_FAILED = 4002;
 const CLOSE_AUTH_LOCKED_OUT = 4003;
+// The standard code for data a socket can't take.
+const CLOSE_UNREADABLE = 1007;
 
 function isLoopbackAddress(address: string): boolean {
   return (
@@ -361,17 +363,19 @@ const serve =
       }).pipe(Effect.provideContext(context));
     }).pipe(Effect.annotateSpans({ channel }));
 
-// A frame's messages. One malformed frame is dropped rather than taking
-// down a link carrying other calls.
+// A frame's messages, or null for one this end can't read. The parser
+// reads a stream, and one that failed can't find the next frame, so
+// every later one would fail too while the link stayed up answering
+// nothing: the connection goes instead, and the far end dials again.
 function decodeFrame(
   parser: RpcSerialization.Parser,
   frame: Uint8Array | string,
-): ReadonlyArray<RpcMessage.FromClientEncoded> {
+): ReadonlyArray<RpcMessage.FromClientEncoded> | null {
   try {
     return parser.decode(frame) as ReadonlyArray<RpcMessage.FromClientEncoded>;
   } catch {
-    log.warn("[link] dropping an unparseable frame");
-    return [];
+    log.warn("[link] an unparseable frame, closing the connection");
+    return null;
   }
 }
 
@@ -997,6 +1001,10 @@ export const make = (options: {
               for (const frame of frames) {
                 if (connection.dead) return;
                 const messages = decodeFrame(connection.parser, frame);
+                if (messages === null) {
+                  connection.kill(CLOSE_UNREADABLE, "an unreadable frame");
+                  return;
+                }
                 for (const message of messages) {
                   yield* writeRequest(clientId, message);
                 }

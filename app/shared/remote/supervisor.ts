@@ -85,6 +85,9 @@ type ConnectFn = (
 // away, which only an update ends.
 type BlockReason = Extract<SupervisorStatus, { phase: "blocked" }>["reason"];
 
+// How long a refused ticket waits before it is asked again.
+const REFUSED_RETRY = "2 minutes";
+
 // The one block a device acts on by leaving the account.
 export function credentialRevoked(status: SupervisorStatus): boolean {
   return status.phase === "blocked" && status.reason === "revoked";
@@ -198,10 +201,17 @@ export const supervise = (
       Effect.sync(() => options.onStatus?.(next));
 
     // Terminal until the owner's next refresh, which drops and recreates
-    // the supervisor: that is what unblocks.
+    // the supervisor: that is what unblocks. A refusal (any 401 or 403 on
+    // the ticket, which a misdeployed hub gives every device at once) is
+    // asked again on a slow schedule instead, so it ends with the hub's
+    // fix and not with each device's next sign-in.
     const block = (reason: BlockReason, message: string) =>
       setStatus({ phase: "blocked", reason, message }).pipe(
-        Effect.andThen(Effect.never),
+        Effect.andThen(
+          reason === "refused"
+            ? Effect.sleep(REFUSED_RETRY).pipe(Effect.as(0))
+            : Effect.never,
+        ),
       );
 
     // One connection's life: the connect, then the socket until it

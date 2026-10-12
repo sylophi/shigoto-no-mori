@@ -10,7 +10,8 @@
 // wire is. That server carries no views, and a wire's push of another
 // build never decodes at all, so the push and the view meet the
 // RpcClient's own refusal (its decode dying with a SchemaError) from a
-// client standing in for it.
+// client standing in for it, as does a request the socket couldn't
+// write, which is the link gone and not the call's failure.
 //
 // covers: app/shared/remote/rpcTransport.ts
 import assert from "node:assert/strict";
@@ -28,6 +29,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { afterEach, it } from "vitest";
 import { makePortServer } from "../main/ipc/ShellLink";
@@ -36,6 +38,7 @@ import { portLink } from "@shared/remote/portLink";
 import type { PortEnds } from "@shared/remote/portSocket";
 import {
   type FlatClient,
+  RemoteDisconnectedError,
   rpcLink,
   UnreadableAnswerError,
 } from "@shared/remote/rpcTransport";
@@ -206,4 +209,26 @@ it("a malformed view value ends the view naming it, after the values before it",
   const failure = failureOf(exit);
   assert.ok(failure instanceof UnreadableAnswerError);
   assert.equal(failure.channel, "probe:watch");
+});
+
+it("a request the socket couldn't write is the link gone, for a call and a view alike", async () => {
+  // How the RpcClient raises a write that failed under it: a defect.
+  const unwritten = new Socket.SocketError({
+    reason: new Socket.SocketWriteError({ cause: new Error("EPIPE") }),
+  });
+  const link = await linkOver((tag) =>
+    tag === "probe:watch"
+      ? Stream.die(unwritten)
+      : tag === "probe:count"
+        ? Effect.die(unwritten)
+        : Stream.never,
+  );
+  const viewed = await Effect.runPromiseExit(
+    Stream.runDrain(link.view("probe:watch", { from: 0 })),
+  );
+  assert.ok(failureOf(viewed) instanceof RemoteDisconnectedError);
+  const called = await Effect.runPromiseExit(
+    link.call("probe:count", undefined),
+  );
+  assert.ok(failureOf(called) instanceof RemoteDisconnectedError);
 });

@@ -297,7 +297,19 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
           if (stopped) return;
           stop = peer.transport.watch?.(channel, input, observer) ?? stop;
         },
-        (error: unknown) => observer.end(error),
+        // No way to the peer yet, whatever the dial said (a hub ask timed
+        // out, no listener offered): the redial's to mend, so the view
+        // asks again, where the peer's own view failing ends it.
+        (error: unknown) =>
+          observer.end(
+            error instanceof NoDirectConnectionError
+              ? error
+              : new NoDirectConnectionError({
+                  deviceId,
+                  reason:
+                    error instanceof Error ? error.message : String(error),
+                }),
+          ),
       );
       return () => {
         stopped = true;

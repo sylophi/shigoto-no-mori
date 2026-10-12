@@ -340,7 +340,10 @@ async function rawLink(
     if (sealed.readyState === 1) resolve();
     else sealed.addEventListener("open", () => resolve(), { once: true });
   });
-  return { call, watch, hello, closed };
+  // A frame as it is, past the RPC client: what a far end on another
+  // layout would send.
+  const send = (frame: Uint8Array<ArrayBuffer>) => sealed.send(frame);
+  return { call, watch, hello, closed, send };
 }
 
 const failureOf = (exit: Exit.Exit<unknown, unknown>) => {
@@ -460,6 +463,16 @@ it("version: a hello on another protocol version is refused with ProtocolVersion
   const exit = await raw.hello(PROTOCOL_VERSION + 1);
   assert.ok(failureOf(exit) instanceof ProtocolVersionMismatchError);
   await dialListener(track, listener);
+});
+
+it("a frame this end can't read closes the connection, rather than leaving a link that answers nothing", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const raw = await rawLink(track, listener);
+  assert.equal(Exit.isSuccess(await raw.hello()), true);
+  // Not a message of the link's layout: bytes msgpack never begins with.
+  raw.send(new Uint8Array([0, 0, 0, 4, 0xc1, 0xc1, 0xc1, 0xc1]));
+  assert.equal(await raw.closed, 1007);
 });
 
 it("before the hello: a call is refused, and a hello after the timeout cannot link", async () => {
