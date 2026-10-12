@@ -48,7 +48,7 @@ const run = <A>(
             }),
           ),
         ),
-        Layer.merge(TestClock.layer()),
+        Layer.provideMerge(TestClock.layer()),
       ),
     ),
     Effect.runPromise,

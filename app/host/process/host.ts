@@ -4,7 +4,7 @@
 // (packages/contracts/src/modules/shellCalls.ts). It serves its windows,
 // its shell and the terminal on the loopback, and its peers on the
 // device link, until the shell asks it to stop (session:quit) or goes.
-import { createWriteStream, openSync, renameSync, statSync } from "node:fs";
+import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -53,16 +53,13 @@ type ParentPort = {
 // Every span that ends, a JSON line in host-trace.log beside the
 // shell's trace.log, rotated to host-trace.old.log past 1 MB as the
 // shell's is: a host that runs for weeks writes a line every few
-// seconds while nothing happens.
+// seconds while nothing happens. Written as each span ends, so a
+// rotation has nothing still on its way to the file it moves.
 function traceFile(logsPath: string): (line: string) => void {
   const path = join(logsPath, "host-trace.log");
-  // Opened at once, so a rename moves the file this stream writes, and
-  // what it has yet to write lands in the old one.
   const open = (flags: "a" | "w") => {
     try {
-      const stream = createWriteStream("", { fd: openSync(path, flags) });
-      stream.on("error", () => {});
-      return stream;
+      return openSync(path, flags);
     } catch {
       // No logs folder: the spans go unwritten.
       return null;
@@ -74,10 +71,10 @@ function traceFile(logsPath: string): (line: string) => void {
   } catch {
     // No file yet.
   }
-  let stream = open("a");
+  let fd = open("a");
   return (line) => {
     if (size > 1_000_000) {
-      stream?.end();
+      if (fd !== null) closeSync(fd);
       let renamed = true;
       try {
         renameSync(path, join(logsPath, "host-trace.old.log"));
@@ -86,11 +83,17 @@ function traceFile(logsPath: string): (line: string) => void {
       }
       // A file that can't be moved aside starts over in place, so the
       // log stays bounded either way.
-      stream = open(renamed ? "a" : "w");
+      fd = open(renamed ? "a" : "w");
       size = 0;
     }
-    size += Buffer.byteLength(line) + 1;
-    stream?.write(`${line}\n`);
+    if (fd === null) return;
+    const bytes = `${line}\n`;
+    size += Buffer.byteLength(bytes);
+    try {
+      writeSync(fd, bytes);
+    } catch {
+      // A full disk: the span goes unwritten.
+    }
   };
 }
 
