@@ -7,7 +7,8 @@
 // heard from again, as in a crash:
 //   - while it hangs, the worktree's title is under its new id, and the
 //     partial copy sits beside the destination, not at it;
-//   - the next start's resume puts the title back under the worktree's
+//   - the next start's resume (the layer the host's graph runs at
+//     start) puts the title back under the worktree's
 //     own id, removes the partial copy and the journal, and the pointer
 //     was never written.
 // And for one whose copy landed whole but whose pointer was never
@@ -22,9 +23,10 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
-import { moveDataDir, resumeDataDirMove } from "../host/lib/dataDirMove.ts";
+import { moveDataDir, resumeLayer } from "../host/lib/dataDirMove.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -145,7 +147,7 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   assert.equal(existsSync(partial), true);
 
   // The next start, the pointer where it was.
-  await runHost(resumeDataDirMove(engineDataDir));
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
   assert.equal(
     await titleOf(identity.id),
     "Fox",
@@ -193,9 +195,38 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
     }).pipe(Effect.forkDetach),
   );
   await waitFor(() => existsSync(destination), "the copy renamed in");
-  await runHost(resumeDataDirMove(engineDataDir));
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
   assert.equal(await titleOf(identity.id), "Fox");
   assert.equal(existsSync(destination), false, "the copy removed");
   assert.equal(existsSync(pointerFile), false, "no pointer committed");
   await Effect.runPromise(Fiber.interrupt(crashed));
+});
+
+it("a journal naming this folder with a trailing slash finishes the move, never undoes it", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  // What a landed copy left: the old tree, and the journal at the new
+  // place, which the pointer names with a slash at its end.
+  const old = join(elsewhere, "old-data");
+  mkdirSync(old);
+  writeFileSync(
+    join(engineDataDir, "data-dir-move.json"),
+    JSON.stringify({
+      from: old,
+      to: `${engineDataDir}/`,
+      partial: `${engineDataDir}.partial-x`,
+      moved: [
+        { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
+      ],
+    }),
+  );
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(await titleOf(identity.id), "Fox", "nothing re-keyed back");
+  assert.equal(existsSync(old), false, "the old tree removed");
+  assert.equal(
+    readdirSync(engineDataDir).includes("data-dir-move.json"),
+    false,
+  );
 });

@@ -21,11 +21,12 @@
 // before its re-key to its end, and a copy to another volume goes into a
 // sibling of the destination, renamed in only once whole.
 import { cp, mkdir, rm, rmdir } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import * as Random from "effect/Random";
@@ -362,7 +363,7 @@ const writeWhole = (fs: FileSystem.FileSystem, file: string, text: string) =>
 const finishMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    if (journal.partial !== null) {
+    if (journal.partial !== null && resolve(journal.from) !== resolve(at)) {
       yield* fsStep(() =>
         rm(journal.from, { recursive: true, force: true }).catch(
           () => undefined,
@@ -415,7 +416,8 @@ const undoMove = (journal: Journal, at: string) =>
       if (
         Option.isSome(landed) &&
         landed.value.from === journal.from &&
-        landed.value.partial === journal.partial
+        landed.value.partial === journal.partial &&
+        resolve(journal.to) !== resolve(at)
       ) {
         yield* Effect.ignore(
           fs.remove(journal.to, { recursive: true, force: true }),
@@ -429,7 +431,7 @@ const undoMove = (journal: Journal, at: string) =>
 // its id: a journal in this session's data dir is a move a crash cut
 // short. At its destination it is finished; at its source, where the
 // pointer still leads, it is undone.
-export const resumeDataDirMove = (at: string) =>
+const resumeDataDirMove = (at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs
@@ -441,7 +443,8 @@ export const resumeDataDirMove = (at: string) =>
       yield* Effect.logWarning("[data] an unreadable move journal, removed");
       return yield* Effect.ignore(fs.remove(join(at, JOURNAL)));
     }
-    if (journal.value.to === at) {
+    // The pointer may name the folder with a trailing slash.
+    if (resolve(journal.value.to) === resolve(at)) {
       yield* Effect.logInfo(
         `[data] finishing the move from ${journal.value.from}`,
       );
@@ -473,3 +476,14 @@ const rekeyWorktrees = (moved: Journal["moved"], reverse: boolean) =>
           ),
     { discard: true },
   );
+
+// The resume as the host's graph runs it at start (process/layer.ts),
+// on this session's data dir. A failure is a log line: the move's
+// leftovers never keep the app from starting.
+export const resumeLayer = Layer.effectDiscard(
+  Effect.suspend(() => resumeDataDirMove(dataDir())).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("[data] the unfinished move failed", cause),
+    ),
+  ),
+);
