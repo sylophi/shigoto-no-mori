@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, FolderPlus } from "lucide-react";
 import {
   CreateProjectPayloadSchema,
@@ -62,6 +62,13 @@ export function CreateView({
   const [stage, setStage] = useState<"form" | "creating" | "publishing">(
     "form",
   );
+  // Held open while it works, as CloneView is.
+  const busy = stage !== "form";
+  useEffect(() => {
+    if (!busy) return;
+    setWorking(true);
+    return () => setWorking(false);
+  }, [busy, setWorking]);
   const trimmed = name.trim();
   const nameValid =
     CreateProjectPayloadSchema.shape.name.safeParse(trimmed).success;
@@ -87,7 +94,6 @@ export function CreateView({
   const createAndOpen = async () => {
     if (!nameValid) return;
     setStage("creating");
-    setWorking(true);
     // useCreateProject surfaces the error via toast.
     const project = await createProject
       .mutateAsync({
@@ -98,7 +104,6 @@ export function CreateView({
       .catch(() => null);
     if (project === null) {
       setStage("form");
-      setWorking(false);
       return;
     }
     if (publish) {
@@ -114,7 +119,7 @@ export function CreateView({
           ),
         );
     }
-    checkout.finish(project);
+    checkout.finish(project, "Created");
   };
 
   if (stage !== "form") {

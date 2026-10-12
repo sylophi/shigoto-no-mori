@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Command } from "cmdk";
 import { GitBranch } from "lucide-react";
 import {
@@ -57,6 +57,14 @@ export function CloneView({
   const cancelClone = useCancelClone();
   // Where the clone in flight lands, which is what names it to cancel.
   const [cloning, setCloning] = useState<CancelClonePayload | null>(null);
+  // Held open while it clones. Undone on unmount too, or a view gone
+  // midway would leave the dialog held.
+  const busy = cloning !== null;
+  useEffect(() => {
+    if (!busy) return;
+    setWorking(true);
+    return () => setWorking(false);
+  }, [busy, setWorking]);
   const { data: readiness } = useGithubCliReadiness();
   const { data: repos = [] } = useGithubRepos(readiness?.unavailable === null);
   // A URL names its repository whole, so the list steps aside for it.
@@ -89,7 +97,6 @@ export function CloneView({
     if (name === null) return;
     const dest = { parentDir: checkout.parent, name };
     setCloning(dest);
-    setWorking(true);
     // useCloneProject surfaces the error via toast, and answers a
     // cancel with null. No try here: React Compiler bails on the early
     // return one would need.
@@ -106,10 +113,9 @@ export function CloneView({
       // Back to the URL, still in the input, to fix it or the folder.
       setCloning(null);
       cancelClone.reset();
-      setWorking(false);
       return;
     }
-    checkout.finish(project);
+    checkout.finish(project, "Cloned");
   };
 
   if (cloning) {

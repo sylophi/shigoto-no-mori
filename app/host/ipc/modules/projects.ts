@@ -112,11 +112,13 @@ export const projectsHandlers: Handlers<
     clones.set(key, controller);
     let path: string;
     try {
+      // A caller gone (a reload, a dropped peer) cancels it too: no
+      // one is left to see it land, or to cancel it.
       path = await cloneRepo(
         url,
         expandHome(parentDir),
         folder,
-        controller.signal,
+        AbortSignal.any([ctx.signal, controller.signal]),
       );
     } finally {
       clones.delete(key);

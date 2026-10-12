@@ -1,4 +1,4 @@
-import { rm, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cloneUrlOf } from "@shared/cloneUrl";
 import { CLONE_CANCELLED } from "@shared/ipc/modules/projects";
@@ -33,8 +33,8 @@ export async function checkNewCheckoutDestination(
 // Clones `source` into `parentDir/name` and returns the new checkout's
 // path. The payload schema has already held the source to a real remote
 // or a GitHub `owner/repo` (cloned over https), and the name to one
-// segment. The signal cancels it: git is killed, and what it had
-// written goes with it, so a retry finds the name free.
+// segment. The signal cancels it: git is killed, and removes what it
+// had written on its way out, so a retry finds the name free.
 export async function cloneRepo(
   source: string,
   parentDir: string,
@@ -71,13 +71,8 @@ export async function cloneRepo(
   await run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
     env: { GIT_TERMINAL_PROMPT: "0" },
     signal,
-  }).catch(async (error: unknown) => {
-    if (signal?.aborted) {
-      // The destination was checked free above, so all of it is the
-      // clone's.
-      await rm(dest, { recursive: true, force: true });
-      throw new Error(CLONE_CANCELLED);
-    }
+  }).catch((error: unknown) => {
+    if (signal?.aborted) throw new Error(CLONE_CANCELLED);
     // Refusing to prompt, git names the URL it wanted a password for,
     // userinfo and all, and a pasted token sits there. The message goes
     // to a toast, so that part is dropped.

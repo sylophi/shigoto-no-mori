@@ -241,7 +241,10 @@ async function main() {
       // A remote that takes the connection and never answers, so the
       // clone is mid-flight, its folder made, when the cancel lands.
       const controller = new AbortController();
-      const server = createServer(() => controller.abort());
+      const server = createServer((socket) => {
+        socket.unref();
+        controller.abort();
+      });
       await new Promise<void>((resolve) =>
         server.listen(0, "127.0.0.1", resolve),
       );
@@ -260,7 +263,6 @@ async function main() {
         assert.ok(!existsSync(join(sandbox, "repo")));
       } finally {
         server.close();
-        server.unref();
       }
     },
   );

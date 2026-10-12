@@ -3,6 +3,7 @@
 // shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { onAbort } from "../util/abort";
 import { beginGitSelfWrite } from "../util/selfWrite";
 
 const execFileP = promisify(execFile);
@@ -106,8 +107,9 @@ export interface RunOptions {
   // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
   // reads raise it (see PATCH_MAX_BUFFER).
   maxBuffer?: number;
-  // Kills the child when it fires. Only a clone, which the user can
-  // cancel, passes one.
+  // Kills git when it fires, and the run fails once git has exited (so
+  // a killed clone has removed its folder by then). Only a clone, which
+  // the user can cancel, passes one.
   signal?: AbortSignal;
 }
 
@@ -142,15 +144,19 @@ async function exec(
   const endSelfWrite = mutatesRepo(args)
     ? beginGitSelfWrite(options.cwd)
     : null;
-  const { env: overlay, ...execOptions } = options;
+  // Not execFile's own signal: that one fails the run the moment it
+  // fires, with git still on its way out.
+  const { env: overlay, signal, ...execOptions } = options;
+  // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch
+  // matches on stderr text, which gettext would otherwise translate,
+  // and the errors the app relays read the same on every machine.
+  const pending = execFileP("git", args, {
+    env: { ...process.env, ...overlay, LC_ALL: "C" },
+    ...execOptions,
+  });
+  const offAbort = onAbort(signal, () => pending.child.kill());
   try {
-    // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch
-    // matches on stderr text, which gettext would otherwise translate,
-    // and the errors the app relays read the same on every machine.
-    const result = await execFileP("git", args, {
-      env: { ...process.env, ...overlay, LC_ALL: "C" },
-      ...execOptions,
-    });
+    const result = await pending;
     return { stdout: result.stdout };
   } catch (err) {
     // execFile's message is "Command failed: git <argv>\n<stderr>". The
@@ -166,6 +172,7 @@ async function exec(
     if (stderr) failure.message = stderr;
     throw failure;
   } finally {
+    offAbort();
     endSelfWrite?.();
   }
 }
