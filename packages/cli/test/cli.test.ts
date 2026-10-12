@@ -1547,6 +1547,19 @@ const pr = (
     ...more,
   });
 
+// A PR's merge progress in `state`, nothing armed or queued.
+const prState = (value: string) =>
+  JSON.stringify({
+    data: {
+      repository: {
+        pullRequest: {
+          state: value,
+          mergeStateStatus: value === "MERGED" ? "CLEAN" : "BLOCKED",
+        },
+      },
+    },
+  });
+
 const settings = (autoMerge: boolean) =>
   JSON.stringify({
     data: {
@@ -1743,7 +1756,11 @@ esac`,
       "fox",
     );
     assert.equal(merged.code, 0, merged.stderr);
-    assert.deepEqual(merged.doc, { ok: true, method: "squash" });
+    assert.deepEqual(merged.doc, {
+      ok: true,
+      method: "squash",
+      outcome: "queued",
+    });
     assert.ok(
       merged.stderr.endsWith(
         "\nthe stack is in the merge queue; it lands when the queue processes it\n",
@@ -1794,6 +1811,122 @@ esac`,
       /Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\./,
     );
     assert.ok(existsSync(fox), "the worktree stays");
+  });
+
+  it("stops a stack land at a layer a merge queue only queued, with nothing above merged or removed", async () => {
+    const { fox } = project();
+    const log = join(box.home, "gh.log");
+    const queued = JSON.stringify({
+      data: {
+        repository: {
+          pullRequest: {
+            state: "OPEN",
+            mergeStateStatus: "BLOCKED",
+            isInMergeQueue: true,
+          },
+        },
+      },
+    });
+    box.fakeBin(
+      "gh",
+      `echo "$*" >> '${log}'
+case "$*" in
+  "pr list --state all --head fox "*) cat <<'ANSWER'
+[${pr(5, "fox", "bear", "OPEN", { mergeStateStatus: "CLEAN" })}]
+ANSWER
+  ;;
+  "pr list --state all --limit 200 "*) cat <<'ANSWER'
+[${pr(4, "bear", "main", "OPEN")},${pr(5, "fox", "bear", "OPEN")}]
+ANSWER
+  ;;
+  "api repos/{owner}/{repo}/stacks?pull_request=5") echo "gh: Not Found (HTTP 404)" >&2; exit 1;;
+  "api graphql -F number=4 "*) cat <<'ANSWER'
+${queued}
+ANSWER
+  ;;
+  "api graphql "*) cat <<'ANSWER'
+${settings(false)}
+ANSWER
+  ;;
+  "pr view 5 --json headRefOid") echo '{"headRefOid":"${box.git(fox, "rev-parse", "HEAD").trim()}"}';;
+  "pr merge 4 --squash") ;;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+    const landed = await runAt(
+      box.home,
+      "land",
+      "--stack",
+      "-p",
+      "repo",
+      "fox",
+    );
+    assert.equal(landed.code, 0, landed.stderr);
+    assert.match(
+      landed.stderr,
+      /PR #4 is in the merge queue; land again once it merges, for the rest of the stack/,
+    );
+    const calls = readFileSync(log, "utf8");
+    assert.ok(!calls.includes("pr edit 5"), calls);
+    assert.ok(!calls.includes("pr merge 5"), calls);
+    assert.ok(existsSync(fox), "nothing removed");
+  });
+
+  it("waits out GitHub's lag after a layer's merge before deciding the rest of a stack land", async () => {
+    const { fox } = project();
+    const log = join(box.home, "gh.log");
+    const reads = join(box.home, "reads-4");
+    box.fakeBin(
+      "gh",
+      `echo "$*" >> '${log}'
+case "$*" in
+  "pr list --state all --head fox "*) cat <<'ANSWER'
+[${pr(5, "fox", "bear", "OPEN", { mergeStateStatus: "CLEAN" })}]
+ANSWER
+  ;;
+  "pr list --state all --limit 200 "*) cat <<'ANSWER'
+[${pr(4, "bear", "main", "OPEN")},${pr(5, "fox", "bear", "OPEN")}]
+ANSWER
+  ;;
+  "api repos/{owner}/{repo}/stacks?pull_request=5") echo "gh: Not Found (HTTP 404)" >&2; exit 1;;
+  "api graphql -F number=4 "*)
+    # Still open on the first read after the merge, merged after.
+    if [ -e '${reads}' ]; then cat <<'ANSWER'
+${prState("MERGED")}
+ANSWER
+    else touch '${reads}'; cat <<'ANSWER'
+${prState("OPEN")}
+ANSWER
+    fi;;
+  "api graphql -F number=5 "*) cat <<'ANSWER'
+${prState("MERGED")}
+ANSWER
+  ;;
+  "api graphql "*) cat <<'ANSWER'
+${settings(false)}
+ANSWER
+  ;;
+  "pr view 5 --json headRefOid") echo '{"headRefOid":"${box.git(fox, "rev-parse", "HEAD").trim()}"}';;
+  "pr merge 4 --squash"|"pr merge 5 --squash") ;;
+  "pr edit 5 --base main") ;;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+    await runAt(box.home, "land", "--stack", "-p", "repo", "fox");
+    const calls = readFileSync(log, "utf8");
+    assert.ok(calls.includes("pr merge 5 --squash"), calls);
+  });
+
+  it("finishes done on the primary checkout when its pull fails, and says so", async () => {
+    const { repo } = project();
+    box.git(repo, "checkout", "-q", "-b", "bear");
+    // The remote out of reach for the pull.
+    box.git(repo, "remote", "set-url", "origin", join(box.home, "gone.git"));
+    const done = await runAt(box.home, "done", "-p", "repo", "repo");
+    assert.equal(done.code, 0, done.stderr);
+    assert.match(done.stdout, /is now on main \(deleted branch bear\)/);
+    assert.match(done.stderr, /skipped catch-up: /);
+    assert.equal(box.git(repo, "branch", "--list", "bear").trim(), "");
   });
 
   it("says an auto-merge by number was already armed", async () => {

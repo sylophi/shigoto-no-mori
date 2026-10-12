@@ -351,6 +351,11 @@ export const done = Command.make(
         force: input.force,
       });
       yield* reportCleanup(doc, located);
+      const skipped = doc["catchUpSkipped"];
+      const { json, stderrColor } = yield* Effect.service(Output);
+      if (!json && typeof skipped === "string") {
+        yield* note(styles(stderrColor).dim(`skipped catch-up: ${skipped}`));
+      }
     }),
 ).pipe(Command.withDescription("Put a checkout back on the primary branch"));
 
