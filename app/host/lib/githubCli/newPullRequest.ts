@@ -27,7 +27,6 @@ import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
 import { parseNumstat } from "@shigomori/engine/gitParse";
 import { GitRefusal, run, runLenient } from "../git/core";
 import * as Git from "@shigomori/engine/Git";
-import { publishCurrentBranch } from "../git/sync";
 import { GhActionError, ghStream, runGh } from "./actions";
 import { GithubCli } from "./GithubCli";
 import {
@@ -753,7 +752,7 @@ const pushForPullRequest = Effect.fnUntraced(function* (
     yield* run(cwd, ["push", remote, `HEAD:${merge}`]);
     return;
   }
-  yield* publishCurrentBranch(cwd, projectPath);
+  yield* (yield* Git.Git).publish({ worktree: cwd, repo: projectPath });
 });
 
 // gh reads a list flag's value as CSV, so a label with a comma or a

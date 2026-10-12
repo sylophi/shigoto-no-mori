@@ -10,6 +10,7 @@
 // the renderer, local or peer, can invalidate.
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { gitContract } from "@shigomori/contracts/modules/git";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import * as Context from "effect/Context";
 import * as Git from "@shigomori/engine/Git";
@@ -65,8 +66,10 @@ export class BackgroundFetch extends Context.Service<
     // git:sweep. Answers with the lease so the peer knows how often to
     // renew.
     readonly sweepForPeer: Effect.Effect<{ leaseMs: number }>;
-    // A window here gained or lost focus. Gaining it asks for a pass at
-    // once: whoever returns sees refs as fresh as the sweep keeps them.
+    // A window here gained or lost focus. Gaining it reads every
+    // project's rows again and asks for a pass at once: whoever returns
+    // sees the working trees as they are and refs as fresh as the sweep
+    // keeps them.
     readonly setWindowFocused: (focused: boolean) => void;
   }
 >()("sm/host/BackgroundFetch") {}
@@ -284,6 +287,24 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
       ),
     );
 
+    // Every project's rows read again, for an edit the working trees'
+    // watch missed (GitWatcher.ts), as a window here gains focus. A
+    // peer's window asks with `worktrees:reread`. An unreadable registry
+    // has nothing to read again.
+    const rereadRows = () => {
+      let projects: ReturnType<typeof loadProjects> = [];
+      try {
+        projects = loadProjects();
+      } catch {
+        return;
+      }
+      for (const project of projects) {
+        broadcastAll(worktreesContract, "filesChanged", {
+          projectId: project.id,
+        });
+      }
+    };
+
     return BackgroundFetch.of({
       refreshProject: (projectId, projectPath) =>
         Effect.flatMap(maybeFetchProject(projectId, projectPath), (fetched) =>
@@ -297,7 +318,9 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
       }).pipe(Effect.provide(context)),
       setWindowFocused: (focused) => {
         windowFocused = focused;
-        if (focused) Queue.offerUnsafe(inbox, sweepProjects());
+        if (!focused) return;
+        rereadRows();
+        Queue.offerUnsafe(inbox, sweepProjects());
       },
     });
   });
