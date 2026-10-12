@@ -41,6 +41,9 @@ type ConnectInfoDeps = {
   // child is currently healthy, else null. When present it is
   // advertised as one more candidate with its own ticket.
   tunnelUrl(): string | null;
+  // Whether a tunnel that is starting comes up within `withinMs`
+  // (Tunnel's startingThenUp). Without it, nothing is held.
+  tunnelStartingThenUp?(withinMs: number): Promise<boolean>;
   // The command-access switch the link's CommandGate reads, reported to
   // the asker so its UI and CLI know up front. The gate stays the only
   // thing that enforces it.
@@ -59,15 +62,44 @@ function lanUrlOf(address: string, port: number): string {
   return `ws://${host}:${port}`;
 }
 
+// How long an ask with nothing to offer yet waits for a tunnel that is
+// starting (a host just restarted): under the asker's dial deadline
+// (HELLO_TIMEOUT_MS, 10 s), with time left to dial the tunnel. A
+// tunnel-only asker answered at once would wait out its dial ladder
+// instead, up to 16 s past the tunnel coming up.
+export const TUNNEL_HOLD_MS = 6_000;
+
 // The link's ServeConnectInfo: the caller is the deviceId the device
 // hub stamped on the ask, already checked against the live roster, and
 // the raw input is parsed here (a malformed one throws, which the link
-// answers as a refusal).
+// answers as a refusal). What the host serves is offered at once; an
+// ask that only the tunnel could answer waits for one that is starting.
 export function makeConnectInfo(
   deps: ConnectInfoDeps,
-): (callerDeviceId: string, rawInput: unknown) => DirectConnectInfo {
-  return (callerDeviceId, rawInput) => {
+): (callerDeviceId: string, rawInput: unknown) => Promise<DirectConnectInfo> {
+  const offer = offerFor(deps);
+  return async (callerDeviceId, rawInput) => {
     const input = decodeConnectInfoInput(rawInput);
+    const now = offer(callerDeviceId, input);
+    if (
+      now.available ||
+      !input.dialableKinds.includes("tunnel") ||
+      deps.tunnelStartingThenUp === undefined ||
+      deps.listenerPort() === null
+    ) {
+      return now;
+    }
+    return (await deps.tunnelStartingThenUp(TUNNEL_HOLD_MS))
+      ? offer(callerDeviceId, input)
+      : now;
+  };
+}
+
+function offerFor(deps: ConnectInfoDeps) {
+  return (
+    callerDeviceId: string,
+    input: typeof DirectConnectInfoInputSchema.Type,
+  ): DirectConnectInfo => {
     const port = deps.listenerPort();
     if (port === null) return { available: false };
     // Mint only what the caller declared it can dial: a web caller

@@ -5,6 +5,7 @@
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
@@ -42,6 +43,7 @@ import {
 } from "@shared/packaging/cloudflaredDist.mts";
 import * as TunnelService from "@host/direct/Tunnel";
 import { makeConnectInfo } from "@host/direct/connectInfo";
+import { reconcileOnLastPort } from "@host/direct/listenerPort";
 import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
@@ -258,6 +260,10 @@ const serveConnectInfo = makeConnectInfo({
       onTunnel((tunnel) => tunnel.tunnelUrl),
       () => null,
     ),
+  tunnelStartingThenUp: (withinMs) =>
+    Graph.run(
+      onTunnel((tunnel) => tunnel.startingThenUp(Duration.millis(withinMs))),
+    ).catch(() => false),
   acceptsCommands: acceptsPeerCommands,
   // Before the graph is up the link serves nobody, so it reads as off.
   sharesData: () =>
@@ -437,18 +443,23 @@ export function probeRemoteConnections(): void {
   up?.plane.probe();
 }
 
+const listenerPortPath = () => join(hostFacts().userDataPath, "direct-port");
+
 // Reconciles the listener with the account and the device's config: run
 // from refreshHubConnection's tail and on every global-config change,
 // so the directConnections opt-out applies without a restart. The
 // config read runs inside the binding's serialized lifecycle. Dual-stack
-// ("::") because connectInfo advertises IPv6 candidates too, on an
-// ephemeral port read back from status. accountId rides the opts as an
-// identity field, so an account switch restarts the listener and drops
-// every socket authed under the old account.
+// ("::") because connectInfo advertises IPv6 candidates too, on the
+// port it listened on last (listenerPort.ts), read back from status.
+// accountId rides the opts as an identity field, so an account switch
+// restarts the listener and drops every socket authed under the old
+// account.
 export async function refreshDirectHost(): Promise<void> {
   await Graph.run(
-    onLink((link) =>
-      link.reconcile(
+    Effect.flatMap(DeviceLink.DeviceLink, (link) =>
+      reconcileOnLastPort(
+        link,
+        listenerPortPath(),
         Effect.promise(async () => {
           const inputs = hubConnectInputs();
           if (inputs === null) return null;
@@ -457,7 +468,6 @@ export async function refreshDirectHost(): Promise<void> {
           const config = await Graph.run(Ops.readGlobalConfig());
           if (config.directConnections === false) return null;
           return {
-            port: 0,
             bindAddress: "::",
             deviceId: await Graph.run(DeviceId.current),
             appVersion: hostFacts().appVersion,

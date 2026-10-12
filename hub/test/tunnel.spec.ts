@@ -310,6 +310,35 @@ describe("tunnel teardown on revoke", () => {
     expect(stub.dnsRecords).toHaveLength(0);
   });
 
+  it("revoking one device never touches another device's tunnel, in the same account or another", async () => {
+    const stub = createCfStub();
+    const worker = makeTestWorker({ cfFetch: stub.cfFetch });
+    const a = await enroll("acct-tunnel-pair", "dev-tp-a");
+    const b = await enroll("acct-tunnel-pair", "dev-tp-b");
+    const c = await enroll("acct-tunnel-other", "dev-tp-c");
+    const provisioned = await Promise.all(
+      [a, b, c].map(({ credential }) =>
+        call(provisionRequest(credential, 4321), tunnelEnv(), worker),
+      ),
+    );
+    expect(provisioned.map((response) => response.status)).toEqual([
+      200, 200, 200,
+    ]);
+    expect(stub.liveTunnels()).toHaveLength(3);
+    const aName = `sm-${(await sha256Hex("acct-tunnel-pair:dev-tp-a")).slice(0, 32)}`;
+    const kept = stub
+      .liveTunnels()
+      .filter((tunnel) => tunnel.name !== aName)
+      .map((tunnel) => tunnel.id);
+    expect(kept).toHaveLength(2);
+    expect(
+      (await call(revokeRequest(a.credential, "dev-tp-a"), tunnelEnv(), worker))
+        .status,
+    ).toBe(204);
+    expect(stub.liveTunnels().map((tunnel) => tunnel.id)).toEqual(kept);
+    expect(stub.dnsRecords).toHaveLength(2);
+  });
+
   it("revoking leaves alone a tunnel under the older, shorter name, which could be another device's", async () => {
     const stub = createCfStub();
     const worker = makeTestWorker({ cfFetch: stub.cfFetch });

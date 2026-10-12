@@ -163,10 +163,11 @@ export class HubAskRefusedError extends Error {
   }
 }
 
-// The connectInfo server: answers one ask synchronously from the
-// authenticated caller (the DO stamps `from`, and the roster gate has
-// already bounded it to a present device) and the raw input, which it
-// parses itself. Throwing answers ok:false with the message. Supplied
+// The connectInfo server: answers one ask from the authenticated
+// caller (the DO stamps `from`, and the roster gate has already
+// bounded it to a present device) and the raw input, which it parses
+// itself, at once or when its promise settles. Throwing or rejecting
+// answers ok:false with the message. Supplied
 // by the composition so the link never imports a contract, and absent
 // where the device serves no direct listener (the web client).
 export type ServeConnectInfo = (
@@ -309,7 +310,10 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
 
   // ---- Answering ----
 
-  function answerFor(from: string, ask: AskPayload): AnswerPayload {
+  async function answerFor(
+    from: string,
+    ask: AskPayload,
+  ): Promise<AnswerPayload> {
     if (ask.ask !== CONNECT_INFO_ASK) {
       return refusal(`unknown ask "${ask.ask}"`);
     }
@@ -320,7 +324,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       );
     }
     try {
-      return { ok: true, result: deps.serveConnectInfo(from, ask.input) };
+      return { ok: true, result: await deps.serveConnectInfo(from, ask.input) };
     } catch (error) {
       // The message only: connectInfo fails with no contract error.
       return refusal(errorMessageOf(error));
@@ -375,20 +379,25 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       warnDrop(() => `dropping a repeated ask from ${truncateId(from)}`);
       return;
     }
-    let payload = utf8Encoder.encode(JSON.stringify(answerFor(from, ask)));
-    // An oversize result would be nacked and leave the asker waiting
-    // out its timeout, so it becomes a refusal the asker rejects on at
-    // once. A refusal is tiny and always fits.
-    if (!answerFits(from, frame.id, payload.length)) {
-      payload = utf8Encoder.encode(
-        JSON.stringify(refusal("answer too large for the device hub")),
+    // Answered once the server has (it may wait on the tunnel), unless
+    // the link went meanwhile.
+    void answerFor(from, ask).then((answer) => {
+      if (closed) return;
+      let payload = utf8Encoder.encode(JSON.stringify(answer));
+      // An oversize result would be nacked and leave the asker waiting
+      // out its timeout, so it becomes a refusal the asker rejects on at
+      // once. A refusal is tiny and always fits.
+      if (!answerFits(from, frame.id, payload.length)) {
+        payload = utf8Encoder.encode(
+          JSON.stringify(refusal("answer too large for the device hub")),
+        );
+      }
+      const sealed = toBase64Url(handshake.writeMessage(payload).message);
+      sendAnswerText(
+        from,
+        encodeFor(from, { kind: "answer", id: frame.id, sealed }).text,
       );
-    }
-    const sealed = toBase64Url(handshake.writeMessage(payload).message);
-    sendAnswerText(
-      from,
-      encodeFor(from, { kind: "answer", id: frame.id, sealed }).text,
-    );
+    });
   }
 
   // ---- Asking ----
