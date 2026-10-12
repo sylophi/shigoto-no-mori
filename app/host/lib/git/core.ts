@@ -1,7 +1,7 @@
 // Single chokepoint for every git invocation. Other modules in this
 // folder call `run` / `runLenient`; nothing else in the codebase should
 // shell out to git directly.
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { onAbort } from "../util/abort";
 import { beginGitSelfWrite } from "../util/selfWrite";
@@ -107,10 +107,6 @@ export interface RunOptions {
   // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
   // reads raise it (see PATCH_MAX_BUFFER).
   maxBuffer?: number;
-  // Kills git when it fires, and the run fails once git has exited (so
-  // a killed clone has removed its folder by then). Only a clone, which
-  // the user can cancel, passes one.
-  signal?: AbortSignal;
 }
 
 // Every run is buffered, so a command that never stops printing can't
@@ -144,19 +140,15 @@ async function exec(
   const endSelfWrite = mutatesRepo(args)
     ? beginGitSelfWrite(options.cwd)
     : null;
-  // Not execFile's own signal: that one fails the run the moment it
-  // fires, with git still on its way out.
-  const { env: overlay, signal, ...execOptions } = options;
-  // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch
-  // matches on stderr text, which gettext would otherwise translate,
-  // and the errors the app relays read the same on every machine.
-  const pending = execFileP("git", args, {
-    env: { ...process.env, ...overlay, LC_ALL: "C" },
-    ...execOptions,
-  });
-  const offAbort = onAbort(signal, () => pending.child.kill());
+  const { env: overlay, ...execOptions } = options;
   try {
-    const result = await pending;
+    // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch
+    // matches on stderr text, which gettext would otherwise translate,
+    // and the errors the app relays read the same on every machine.
+    const result = await execFileP("git", args, {
+      env: { ...process.env, ...overlay, LC_ALL: "C" },
+      ...execOptions,
+    });
     return { stdout: result.stdout };
   } catch (err) {
     // execFile's message is "Command failed: git <argv>\n<stderr>". The
@@ -172,7 +164,6 @@ async function exec(
     if (stderr) failure.message = stderr;
     throw failure;
   } finally {
-    offAbort();
     endSelfWrite?.();
   }
 }
@@ -235,4 +226,49 @@ export function isGitRepo(path: string): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+// A run the caller can cancel, for a clone. git gets a process group of
+// its own, and the signal kills the whole group: the helpers git starts
+// (a remote's transport) hold its output open, so one left running
+// would keep the run from ever ending. It fails once all of them are
+// gone, so a killed clone has removed its folder by then. Nothing reads
+// a clone's stdout, so it is not kept.
+export async function runCancellable(
+  cwd: string,
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv; signal?: AbortSignal },
+): Promise<void> {
+  const endSelfWrite = mutatesRepo(args) ? beginGitSelfWrite(cwd) : null;
+  const child = spawn("git", args, {
+    cwd,
+    // LC_ALL=C for the reason exec gives.
+    env: { ...process.env, ...options.env, LC_ALL: "C" },
+    detached: true,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const offAbort = onAbort(options.signal, () => {
+    try {
+      if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
+    } catch {
+      // Already gone.
+    }
+  });
+  try {
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    if (code !== 0) {
+      throw new Error(stderr.trim() || `git exited with code ${code}`);
+    }
+  } finally {
+    offAbort();
+    endSelfWrite?.();
+  }
 }

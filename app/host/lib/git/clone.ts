@@ -5,7 +5,7 @@ import { CLONE_CANCELLED } from "@shared/ipc/modules/projects";
 import { ghReady } from "@host/lib/githubCli/readiness";
 import { githubHostOf } from "@host/lib/githubCli/remote";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
-import { run } from "./core";
+import { runCancellable } from "./core";
 
 // Where a clone lands: `parentDir/name`, with the parent a folder and
 // the destination not yet there. Both checks are for the message: git
@@ -68,10 +68,14 @@ export async function cloneRepo(
   // packaged app has no terminal for ssh to ask on, so it fails there
   // too, and the clone has no timeout beyond that.
   // `--` ends the options: the URL and name come from the caller.
-  await run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
-    env: { GIT_TERMINAL_PROMPT: "0" },
-    signal,
-  }).catch((error: unknown) => {
+  await runCancellable(
+    parentDir,
+    ["clone", ...ghCredentials, "--", url, name],
+    {
+      env: { GIT_TERMINAL_PROMPT: "0" },
+      signal,
+    },
+  ).catch((error: unknown) => {
     if (signal?.aborted) throw new Error(CLONE_CANCELLED);
     // Refusing to prompt, git names the URL it wanted a password for,
     // userinfo and all, and a pasted token sits there. The message goes
