@@ -28,8 +28,8 @@ const NAMESPACES: Readonly<Record<string, string>> = {
   agent: "agents",
 };
 
-// The worktrees namespace's verbs. Any other word after it is a
-// worktree's name, which `switch` enters.
+// The worktrees namespace's verbs. Anything else after it, a flag
+// included, is `switch`'s.
 const WORKTREE_VERBS = new Set([
   "list",
   "path",
@@ -77,9 +77,9 @@ export function canonical(args: ReadonlyArray<string>) {
   if (verb === undefined) return [command];
   if (command === "worktrees") {
     const named = VERBS[verb] ?? verb;
-    return WORKTREE_VERBS.has(named) || named.startsWith("-")
+    return WORKTREE_VERBS.has(named)
       ? [command, named, ...after]
-      : [command, "switch", verb, ...after];
+      : [command, "switch", ...more];
   }
   if (command === "projects") return [command, projectVerb(verb), ...after];
   return [command, ...more];

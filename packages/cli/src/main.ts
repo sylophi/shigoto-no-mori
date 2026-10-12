@@ -30,6 +30,7 @@ import {
 import { done, land, merge, pr } from "./commands/landing.ts";
 import { dirty } from "./commands/dirty.ts";
 import { bundle } from "./commands/bundle.ts";
+import { diskUsage } from "./commands/diskUsage.ts";
 import { app, open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
 import {
@@ -55,6 +56,8 @@ import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
 import { doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
+import * as Here from "./here.ts";
+import { goArgs } from "./argv.ts";
 import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -81,7 +84,7 @@ const {
   rest,
 } = globalFlags(process.argv.slice(2));
 const plain =
-  json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
+  json || (process.env.NO_COLOR ?? "") !== "" || process.env.TERM === "dumb";
 const columns = Math.min(
   Math.max(process.stdout.columns || process.stderr.columns || 80, 60),
   110,
@@ -95,66 +98,78 @@ const help = helpPages({
 
 // Provided per command group, so help and usage errors open no store.
 const services = engine(flavor);
+// A command that reads where it runs, as Go loaded its context.
+const loaded = <Name extends string, Input, E, R>(
+  command: Command.Command<Name, Input, {}, E, R>,
+) =>
+  command.pipe(
+    Command.provideEffectDiscard(Here.bindCaller),
+    Command.provide(services),
+  );
 const sm = Command.make("sm").pipe(
   Command.withDescription("Shigoto no Mori"),
   Command.withSubcommands([
     configCommand.pipe(Command.provide(services)),
-    projectsCommand.pipe(Command.provide(services)),
-    launchersCommand.pipe(Command.provide(services)),
+    loaded(projectsCommand),
+    loaded(launchersCommand),
     shellCommand.pipe(
       Command.provide(
         ShellIntegration.layer.pipe(Layer.provideMerge(Paths.layer(flavor))),
       ),
     ),
-    cdCommand.pipe(Command.provide(services)),
-    switchCommand.pipe(Command.provide(services)),
-    runCommand.pipe(Command.provide(services)),
-    worktreesCommand.pipe(Command.provide(services)),
-    list.pipe(Command.provide(services)),
-    path.pipe(Command.provide(services)),
-    link.pipe(Command.provide(services)),
-    destination.pipe(Command.provide(services)),
-    status.pipe(Command.provide(services)),
-    describe.pipe(Command.provide(services)),
-    shelve.pipe(Command.provide(services)),
-    unshelve.pipe(Command.provide(services)),
-    autopull.pipe(Command.provide(services)),
+    loaded(cdCommand),
+    loaded(switchCommand),
+    loaded(runCommand),
+    loaded(worktreesCommand),
+    loaded(list),
+    loaded(path),
+    loaded(link),
+    loaded(destination),
+    loaded(status),
+    loaded(describe),
+    loaded(shelve),
+    loaded(unshelve),
+    loaded(autopull),
     agentsCommand.pipe(Command.provide(services)),
-    create.pipe(Command.provide(services)),
-    rm.pipe(Command.provide(services)),
-    move.pipe(Command.provide(services)),
-    rename.pipe(Command.provide(services)),
-    adopt.pipe(Command.provide(services)),
-    setup.pipe(Command.provide(services)),
-    rekey.pipe(Command.provide(services)),
-    pr.pipe(Command.provide(services)),
-    merge.pipe(Command.provide(services)),
-    land.pipe(Command.provide(services)),
-    done.pipe(Command.provide(services)),
-    dirty.pipe(Command.provide(services)),
-    bundle.pipe(Command.provide(services)),
-    open.pipe(Command.provide(services)),
+    loaded(create),
+    loaded(rm),
+    loaded(move),
+    loaded(rename),
+    loaded(adopt),
+    loaded(setup),
+    loaded(rekey),
+    loaded(pr),
+    loaded(merge),
+    loaded(land),
+    loaded(done),
+    loaded(dirty),
+    loaded(bundle),
+    diskUsage.pipe(Command.provide(services)),
+    loaded(open),
     app.pipe(Command.provide(services)),
-    send.pipe(Command.provide(services)),
-    bring.pipe(Command.provide(services)),
-    mirror.pipe(Command.provide(services)),
-    unmirror.pipe(Command.provide(services)),
-    mirrors.pipe(Command.provide(services)),
-    devices.pipe(Command.provide(services)),
+    loaded(send),
+    loaded(bring),
+    loaded(mirror),
+    loaded(unmirror),
+    loaded(mirrors),
+    loaded(devices),
     doctorCommand.pipe(Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
     guideCommand.pipe(Command.provide(services)),
   ]),
 );
 
-const program = Command.runWith(sm, { version, renderErrors: false })(
-  canonical(rest),
-).pipe(
+const program = goArgs(sm, canonical(rest)).pipe(
+  Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),
   // None of effect/cli's built-in flags: the help is the catalog's
   // (help.ts), answered before parsing, and a command line the parser
   // refuses reports as Go's did, without the parser's help page.
   Effect.provide(
-    Layer.merge(BunServices.layer, CliConfig.layer({ builtIns: [] })),
+    Layer.mergeAll(
+      BunServices.layer,
+      CliConfig.layer({ builtIns: [] }),
+      Here.layer,
+    ),
   ),
   Effect.provideService(Console.Console, { ...console, log: () => {} }),
   Effect.as({ code: 0, error: undefined as unknown }),

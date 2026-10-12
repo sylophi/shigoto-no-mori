@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
-import { resolveWorktree, worktreeFlags } from "../here.ts";
+import { resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
 const shelf = (name: "shelve" | "unshelve") =>
@@ -18,7 +18,7 @@ const shelf = (name: "shelve" | "unshelve") =>
       ...worktreeFlags,
       ref: Argument.String("worktree").pipe(Argument.optional),
       // The first is read and the rest let be, as the Go sm did.
-      rest: Argument.String("args").pipe(Argument.variadic()),
+      rest,
     },
     (input) =>
       Effect.gen(function* () {
@@ -57,9 +57,9 @@ export const autopull = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const [first, ...rest] = input.args;
+      const [first, ...after] = input.args;
       const mode = first === "on" || first === "off" ? first : undefined;
-      const names = mode === undefined ? input.args : rest;
+      const names = mode === undefined ? input.args : after;
       const { json, stdoutColor, binaryName } = yield* Effect.service(Output);
       if (names.length > 1) {
         return yield* new UsageError({

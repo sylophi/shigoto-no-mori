@@ -67,32 +67,17 @@ const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
   agents: "agents <bind|unbind|idle|resume|install|uninstall|status> [args]",
 };
 
-// What the parser found wrong, in the Go sm's words. `path` is the
-// command's names after the binary's, and `usageOf` its usage line.
-const usageProblem = (
-  problem: CliError.NonShowHelpErrors,
+// A word that names no command where one was due, in the Go sm's
+// words. `path` is the namespace's names after the binary's.
+export const unknownCommand = (
   path: ReadonlyArray<string>,
+  word: string,
   binaryName: string,
-  usageOf: (path: ReadonlyArray<string>) => string | undefined,
-): string => {
-  if (problem instanceof CliError.UnrecognizedOption) {
-    return `Unknown option "${problem.option}".`;
-  }
-  if (problem instanceof CliError.UnknownSubcommand) {
-    const parent = (problem.parent ?? []).slice(1).join(" ");
-    const usage = NAMESPACE_USAGE[parent];
-    return usage === undefined
-      ? `Unknown command "${problem.subcommand}". Run \`${binaryName} --help\`.`
-      : `Unknown subcommand "${problem.subcommand}". Usage: ${binaryName} ${usage}`;
-  }
-  if (
-    problem instanceof CliError.InvalidValue &&
-    problem.kind === "flag" &&
-    problem.value === ""
-  ) {
-    return `Option "--${problem.option}" requires a value.`;
-  }
-  return usageOf(path) ?? problem.message;
+) => {
+  const usage = NAMESPACE_USAGE[path.join(" ")];
+  return usage === undefined
+    ? `Unknown command "${word}". Run \`${binaryName} --help\`.`
+    : `Unknown subcommand "${word}". Usage: ${binaryName} ${usage}`;
 };
 
 // Reports the failure and answers the exit code. `usageOf` is a
@@ -114,7 +99,7 @@ export const report = (
     const [problem] = problems;
     const document =
       problem !== undefined
-        ? { error: usageProblem(problem, path, binaryName, usageOf) }
+        ? { error: usageOf(path) ?? problem.message }
         : errorDocument(error);
     if (json) {
       yield* emit({ ok: false, ...document });

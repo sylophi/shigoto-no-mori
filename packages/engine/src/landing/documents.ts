@@ -177,8 +177,20 @@ export const MERGE_READ_ATTEMPTS = 5;
 // cover.
 export const MERGE_STALL_POLLS = 30;
 
-// Where a land's steps go: the merged layers of a stack, the scripts of
-// a removal.
+// How a land caught the base branch's checkout up after the merge, or
+// why it didn't.
+export type CatchUp = {
+  readonly caughtUp?: {
+    readonly ref: string;
+    readonly name: string;
+    readonly path: string;
+    readonly isPrimary: boolean;
+  };
+  readonly catchUpSkipped?: string;
+};
+
+// Where a land's steps go as they happen: the merged layers of a stack,
+// the cleanup's, the scripts of a removal.
 export type Reporter = Worktrees.Reporter & {
   // A layer of a stack merged: its document, and the PR, whose title a
   // person's line names.
@@ -186,11 +198,15 @@ export type Reporter = Worktrees.Reporter & {
     event: Document,
     pr: PullRequestSummary,
   ) => Effect.Effect<void>;
-  // The PR a merge by number is about to merge, whose title the
-  // document leaves out and a person's line names.
-  readonly target?: (pr: PullRequestSummary) => Effect.Effect<void>;
+  // How a merge by number ended, and its PR, whose title the document
+  // leaves out and a person's line names.
+  readonly outcome?: (
+    pr: PullRequestSummary,
+    outcome: MergeOutcome,
+  ) => Effect.Effect<void>;
   // A PR that didn't merge on the spot, which the command now waits on
-  // until GitHub merges it, and each change in what it waits on.
+  // until GitHub merges it, and each change in what it waits on, or a
+  // stack a merge queue took.
   readonly pending?: (
     pr: PullRequestSummary,
     outcome: MergeOutcome,
@@ -199,6 +215,15 @@ export type Reporter = Worktrees.Reporter & {
   // A word for a person beside the document: a stack land that leaves
   // the primary checkout on a landed branch says how it gets back.
   readonly note?: (line: string) => Effect.Effect<void>;
+  // The PR a land cleans up after, merged by it (with `method`) or
+  // before, then the cleanup's steps: the base branch's checkout caught
+  // up, and each other worktree a stack land removes.
+  readonly landing?: (
+    pr: PullRequestSummary,
+    method: MergeMethod | undefined,
+  ) => Effect.Effect<void>;
+  readonly caughtUp?: (catchUp: CatchUp) => Effect.Effect<void>;
+  readonly removedOther?: (removed: Worktrees.Removed) => Effect.Effect<void>;
 };
 
 // What each verb can fail with. A stack land is the cleanup of

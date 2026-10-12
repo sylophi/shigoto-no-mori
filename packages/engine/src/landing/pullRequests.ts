@@ -89,6 +89,7 @@ export const makePullRequests = Effect.gen(function* () {
     method: MergeMethod,
     failure: GitHub.GitHubCliError,
     verb: LandingRefused["verb"],
+    reporter: Reporter,
   ) =>
     Effect.gen(function* () {
       if (!GitHub.stderrOf(failure).includes("part of a stack")) {
@@ -102,9 +103,26 @@ export const makePullRequests = Effect.gen(function* () {
       if (lowest === undefined || lowest.number !== number) {
         return yield* refuse(verb, "stack-above", [number]);
       }
-      return (
-        (yield* github.mergeStackAsync(repo, number, method)) === "enqueued"
-      );
+      return yield* mergeStackAsync(repo, number, method, reporter);
+    });
+
+  // GitHub's own stack merge. Answers whether a merge queue took the
+  // stack instead of landing it, which is said as it happens.
+  const mergeStackAsync = (
+    repo: string,
+    number: number,
+    method: MergeMethod,
+    reporter: Reporter,
+  ) =>
+    Effect.gen(function* () {
+      const outcome = yield* github.mergeStackAsync(repo, number, method);
+      if (outcome !== "enqueued") return false;
+      if (reporter.waiting !== undefined) {
+        yield* reporter.waiting(
+          "the stack is in the merge queue; it lands when the queue processes it",
+        );
+      }
+      return true;
     });
 
   // A merge gh accepted doesn't always end the way it was asked to:
@@ -213,12 +231,13 @@ export const makePullRequests = Effect.gen(function* () {
     number: number,
     method: MergeMethod,
     verb: LandingRefused["verb"],
+    reporter: Reporter,
   ) =>
     github.run(repo, ["pr", "merge", String(number), `--${method}`]).pipe(
       Effect.andThen(readBack(repo, number, { method, outcome: "merged" })),
       Effect.catchTags({
         GitHubCliError: (failure) =>
-          mergeStackedAlone(repo, number, method, failure, verb).pipe(
+          mergeStackedAlone(repo, number, method, failure, verb, reporter).pipe(
             Effect.map(
               (queued): MergeOutcome => ({
                 method,
@@ -237,6 +256,7 @@ export const makePullRequests = Effect.gen(function* () {
     flag: MergeMethod | undefined,
     settings: MergeSettings,
     verb: LandingRefused["verb"],
+    reporter: Reporter,
   ) =>
     Effect.gen(function* () {
       const method = yield* resolveMethod(
@@ -271,7 +291,13 @@ export const makePullRequests = Effect.gen(function* () {
           });
         }
       } else {
-        outcome = yield* mergeNow(project.path, pr.number, method, verb);
+        outcome = yield* mergeNow(
+          project.path,
+          pr.number,
+          method,
+          verb,
+          reporter,
+        );
       }
       yield* persistMethod(project, method);
       return outcome;
@@ -292,6 +318,7 @@ export const makePullRequests = Effect.gen(function* () {
     persistMethod,
     awaitMerge,
     execMerge,
+    mergeStackAsync,
     mergeTarget,
   };
 });

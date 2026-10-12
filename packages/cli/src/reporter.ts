@@ -96,6 +96,7 @@ export const reporter = (
           : event.event === "cloned"
             ? cloned(event.cloned)
             : emit(event),
-      color: !output.json && output.stderrColor,
+      // Truecolor under --json, where the app's console shows it.
+      color: output.json,
     } satisfies Worktrees.Reporter;
   });

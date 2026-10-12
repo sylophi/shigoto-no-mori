@@ -7,8 +7,11 @@ import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { isSameOrInside } from "@shigomori/engine/worktreeLayout";
 import * as Worktrees from "@shigomori/engine/Worktrees";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Argument from "effect/cli/Argument";
 import * as Flag from "effect/cli/Flag";
 import { note, Output, styles } from "./output.ts";
 import { noteUnregistered, pickProject, pickWorktree } from "./pickers.ts";
@@ -34,20 +37,39 @@ const where = Effect.gen(function* () {
   return yield* (yield* Worktrees.Worktrees).here(yield* cwd);
 });
 
-// Where the command runs. An agent session's shell running sm inside a
-// managed worktree binds the session there first (Agents.autoBind),
-// except for the `agents` verbs, which change bindings themselves.
-export const here = Effect.tap(where, (at) =>
-  Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
-    agents.autoBind(at),
-  ),
+// Where this run of sm is, read once however many ask (layer).
+export class Here extends Context.Service<
+  Here,
+  { readonly at: typeof where }
+>()("sm/cli/Here") {}
+
+export const layer = Layer.effect(
+  Here,
+  Effect.map(Effect.cached(where), (at) => Here.of({ at })),
 );
+
+// Where the command runs.
+export const here = Effect.flatMap(Effect.service(Here), ({ at }) => at);
+
+// An agent session's shell running sm inside a managed worktree binds
+// the session there (Agents.autoBind), before any command that reads
+// where it runs, as Go did: all but `agents`, which change bindings
+// themselves, and the ones that need no projects (main.ts).
+export const bindCaller = Effect.gen(function* () {
+  const agents = yield* Agents.Agents;
+  if (Option.isNone(yield* agents.caller)) return;
+  yield* agents.autoBind(yield* here);
+});
 
 // How a command names its project, beside or instead of a positional.
 export const projectFlags = {
   project: Flag.String("project").pipe(Flag.withAlias("p"), Flag.optional),
   projectId: Flag.String("project-id").pipe(Flag.optional),
 };
+
+// The positionals past the ones a command reads, let be as the Go sm
+// did.
+export const rest = Argument.String("args").pipe(Argument.variadic());
 
 // A flag given a value. An empty one is no flag, as in Go.
 export const given = (flag: Option.Option<string>) =>
@@ -111,10 +133,9 @@ export const resolveWorktree = (
     readonly worktreeId: Option.Option<string>;
   },
   primaryOk = true,
-  autoBind = true,
 ) =>
   Effect.gen(function* () {
-    const at = yield* autoBind ? here : where;
+    const at = yield* here;
     const worktrees = yield* Worktrees.Worktrees;
     const target = {
       ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),

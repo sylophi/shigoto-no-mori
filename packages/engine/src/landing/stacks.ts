@@ -149,12 +149,13 @@ export const makeStacks = ({
         const report = (pr: PullRequestSummary) =>
           reporter.merged?.(mergedEvent(pr, method), pr) ?? Effect.void;
         if (Option.isSome(lookups.stack)) {
-          const outcome = yield* github.mergeStackAsync(
+          const queued = yield* pullRequests.mergeStackAsync(
             project.path,
             number,
             method,
+            reporter,
           );
-          if (outcome === "enqueued") return true;
+          if (queued) return true;
           for (const pr of set) yield* report(pr);
           return false;
         }

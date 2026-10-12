@@ -15,7 +15,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import { cwd, given, resolveWorktree, worktreeFlags } from "../here.ts";
+import { cwd, given, resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import { alignRows, emit, note, out, Output, styles } from "../output.ts";
 
 // No session to act on: neither flags nor a harness's shell name one.
@@ -60,6 +60,7 @@ const sessionOf = (
 const worktreeArgs = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
+  rest,
 };
 
 const bind = Command.make(
@@ -68,7 +69,7 @@ const bind = Command.make(
   (input) =>
     Effect.gen(function* () {
       // The worktree first, as Go did: outside one, that is the error.
-      const { located } = yield* resolveWorktree(input, true, false);
+      const { located } = yield* resolveWorktree(input);
       const ref = yield* sessionOf(input, "bind");
       yield* (yield* Agents.Agents).bind(located.worktree, ref);
       const { json, stdoutColor } = yield* Effect.service(Output);
@@ -86,7 +87,7 @@ const bind = Command.make(
     }),
 ).pipe(Command.withDescription("Bind an agent session to a worktree"));
 
-const unbind = Command.make("unbind", sessionFlags, (input) =>
+const unbind = Command.make("unbind", { ...sessionFlags, rest }, (input) =>
   Effect.gen(function* () {
     const ref = yield* sessionOf(input, "unbind");
     const unbound = yield* (yield* Agents.Agents).unbind(ref);
@@ -104,7 +105,7 @@ const unbind = Command.make("unbind", sessionFlags, (input) =>
 
 const idle = Command.make("idle", worktreeArgs, (input) =>
   Effect.gen(function* () {
-    const { located } = yield* resolveWorktree(input, true, false);
+    const { located } = yield* resolveWorktree(input);
     yield* (yield* Agents.Agents).idle(located.worktree);
     const { json, stdoutColor } = yield* Effect.service(Output);
     if (json) {
@@ -126,7 +127,7 @@ const resume = Command.make(
   { ...worktreeArgs, ...sessionFlags },
   (input) =>
     Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input, true, false);
+      const { located } = yield* resolveWorktree(input);
       const harness = given(input.harness);
       const session = given(input.session);
       if (Option.isNone(harness) || Option.isNone(session)) {
@@ -152,7 +153,7 @@ const resume = Command.make(
 // blocks the action), and a missed state change must never be one.
 const event = Command.make(
   "event",
-  { harness: Flag.String("harness").pipe(Flag.optional) },
+  { harness: Flag.String("harness").pipe(Flag.optional), rest },
   (input) =>
     Effect.gen(function* () {
       const harness = given(input.harness);
@@ -207,7 +208,7 @@ const setHooks = (name: "install" | "uninstall") =>
     ),
   );
 
-const status = Command.make("status", {}, () =>
+const status = Command.make("status", { rest }, () =>
   Effect.gen(function* () {
     const statuses = yield* (yield* Agents.Agents).statuses;
     const { json, stdoutColor } = yield* Effect.service(Output);
