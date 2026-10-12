@@ -195,6 +195,15 @@ function compare(
   );
 }
 
+// The repo's own script, no dependency's, run where one exists (a base
+// from before it has none, and draws no icons on either side's terms).
+const copyIconsInto = (checkout: string) => {
+  const script = join(checkout, "app", "scripts", "copy-material-icons.mts");
+  if (existsSync(script)) {
+    execFileSync(process.execPath, [script], { stdio: "ignore" });
+  }
+};
+
 try {
   const baseCommit = git("rev-parse", "--short", base);
   const headCommit = git("rev-parse", "--short", "HEAD");
@@ -206,20 +215,14 @@ try {
     ["install", "--frozen-lockfile", "--ignore-scripts", "--prefer-offline"],
     { cwd: baseCheckout, stdio: "ignore" },
   );
-  // The install runs no scripts, the app's own postinstall among them,
-  // which copies the file icons into public/ (scripts/
-  // copy-material-icons.mts): without it the base's scenes drew no file
-  // icons and every comparison carried those pairs as changes. The
-  // repo's own script, run here, is no dependency's.
-  const copyIcons = join(
-    baseCheckout,
-    "app",
-    "scripts",
-    "copy-material-icons.mts",
-  );
-  if (existsSync(copyIcons)) {
-    execFileSync(process.execPath, [copyIcons], { stdio: "ignore" });
-  }
+  // Both sides' file icons, from each checkout's own copy script
+  // (scripts/copy-material-icons.mts, the app's postinstall): an
+  // install that runs no scripts, the base's above or this machine's
+  // with scripts off, leaves public/ without them, and every comparison
+  // carried those pairs as changes. Idempotent, so a side that has them
+  // costs nothing.
+  copyIconsInto(baseCheckout);
+  copyIconsInto(repo);
 
   const [baseOrigin, headOrigin] = await Promise.all([
     serve(baseCheckout),
