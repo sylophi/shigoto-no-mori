@@ -247,6 +247,11 @@ export class GitHub extends Context.Service<
 // can't hold a card or an agent's describe hostage.
 const PROBE_TIMEOUT = Duration.seconds(6);
 
+// A gh asked with no deadline of its own: a proxy's auth prompt or an
+// SSO page it can't show leaves one waiting for good, and a merge
+// button behind it with it.
+const DEFAULT_TIMEOUT = Duration.minutes(2);
+
 // On one line so the call logs as one.
 const REPO_MERGE_QUERY =
   "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
@@ -488,7 +493,7 @@ const make = Effect.gen(function* () {
     );
     const done = yield* Effect.timeoutOption(
       answer,
-      options.timeout ?? Duration.infinity,
+      options.timeout ?? DEFAULT_TIMEOUT,
     );
     if (Option.isNone(done)) {
       return yield* new GitHubCliError({ reason: "timeout" });

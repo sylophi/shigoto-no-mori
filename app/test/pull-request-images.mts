@@ -102,7 +102,7 @@ it("an attached image takes its signed URL, and keeps it", async () => {
     join(bin, "gh"),
     `#!/bin/sh
 case "$*" in
-"auth status") ;;
+"auth token"*) ;;
 "api graphql "*) cat '${answer}';;
 "pr list --state all --head pics "*) cat '${list}';;
 *) echo "unexpected gh $*" >&2; exit 1;;

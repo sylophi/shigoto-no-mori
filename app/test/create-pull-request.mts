@@ -118,7 +118,7 @@ const OPTIONS = {
 const gh = (dir: string) => `#!/bin/sh
 dir='${dir}'
 case "$*" in
-  "auth status") ;;
+  "auth token"*) ;;
   "pr list --state all --limit "*) cat "$dir/pr-list.json";;
   "api graphql "*assignableUsers*) echo call >> "$dir/options-calls"
     cat "$dir/options.json";;

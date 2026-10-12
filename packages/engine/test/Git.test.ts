@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import * as TestClock from "effect/testing/TestClock";
 import { it, vi } from "vitest";
 import {
   BranchMovedError,
@@ -607,6 +608,34 @@ it("concurrent fetches of one repository all answer", async () => {
     ),
   );
   assert.equal(fetches.length, 5);
+});
+
+it("a fetch whose remote stops answering ends at its deadline", async () => {
+  const repo = seedRepo();
+  // A remote that is reached and then says nothing, as a connection
+  // left half open does.
+  const reached = join(repo, ".git", "remote-reached");
+  git(repo, "config", "protocol.ext.allow", "always");
+  git(
+    repo,
+    "remote",
+    "add",
+    "origin",
+    `ext::sh -c touch% ${reached};% exec% sleep% 600`,
+  );
+  const exit = await withGit((g) =>
+    Effect.gen(function* () {
+      const fetching = yield* Effect.forkChild(g.fetchAll(repo));
+      while (!existsSync(reached)) {
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      yield* TestClock.adjust("5 minutes");
+      return yield* Fiber.await(fetching);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  assert.ok(Exit.isFailure(exit), "the fetch still waits");
 });
 
 it("publish needs a remote, and pushes the branch with tracking", async () => {
