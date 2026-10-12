@@ -446,7 +446,7 @@ export function probeRemoteConnections(): void {
 // identity field, so an account switch restarts the listener and drops
 // every socket authed under the old account.
 export async function refreshDirectHost(): Promise<void> {
-  await Graph.runIfUp(
+  await Graph.run(
     onLink((link) =>
       link.reconcile(
         Effect.promise(async () => {
@@ -473,14 +473,14 @@ export async function refreshDirectHost(): Promise<void> {
         Effect.logWarning("[direct] listener refresh failed", cause),
       ),
     ),
-  );
+  ).catch(() => undefined);
   // The tunnel follows the listener: a running listener wants a tunnel
   // fronting its current port, and every condition that stopped the
   // listener stops the child through the same reconcile. A tunnel
   // problem must not fail the change that triggered the refresh.
   // Nothing to reconcile once the app is quitting: the layer's close
-  // has stopped the child, and the graph is no longer up.
-  await Graph.runIfUp(
+  // has stopped the child, and a graph that is down refuses the run.
+  await Graph.run(
     Effect.suspend(() => {
       const listener = linkStatus();
       const wanted =
@@ -494,5 +494,5 @@ export async function refreshDirectHost(): Promise<void> {
         Effect.logWarning("[tunnel] reconcile failed", cause),
       ),
     ),
-  );
+  ).catch(() => undefined);
 }

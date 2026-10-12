@@ -461,14 +461,14 @@ function broadcastCommandAccessChanged(): void {
 // A step of the account fan-out that must not take the rest with it:
 // its failure is a warning in the host's log, and the fan-out goes on.
 function teardownStep(what: string, run: () => unknown): Promise<void> {
-  return Graph.runIfUp(
+  return Graph.run(
     Effect.tryPromise(async () => run()).pipe(
       Effect.asVoid,
       Effect.catchCause((cause) =>
         Effect.logWarning(`[account] ${what} failed`, cause),
       ),
     ),
-  );
+  ).catch(() => undefined);
 }
 
 // The daemon's sessions with the git half of each (host/mirror/
