@@ -357,7 +357,10 @@ const make = Effect.gen(function* () {
       });
     }
     yield* launch(entry, located, entries);
-    yield* usage.record("launcher", "", entry.id);
+    // The launchers' order, best effort: the launch went through.
+    yield* usage
+      .record("launcher", "", entry.id)
+      .pipe(Effect.catchCause(() => Effect.void));
     return entry;
   });
 

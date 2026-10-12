@@ -9,7 +9,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { type Flavor, flavorNames } from "../flavor.ts";
 import { parseJson } from "../json.ts";
 import * as Paths from "../Paths.ts";
-import { capture } from "../processes.ts";
+import { captureWithin } from "../processes.ts";
 import { type AppStatus, appStatusOf } from "../updateFeed.ts";
 import { NotInBundle, type Ran } from "./documents.ts";
 
@@ -35,7 +35,9 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
       args: ReadonlyArray<string>,
       from: "stdout" | "all" = "all",
     ) =>
-      capture(spawner, command, args, { from }).pipe(
+      // A stuck codesign, ditto or open would leave a headless install
+      // waiting for good, with the app closed.
+      captureWithin(spawner, command, args, "5 minutes", { from }).pipe(
         Effect.map(
           ({ output, code }): Ran => ({
             ok: code === 0,

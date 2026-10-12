@@ -5,6 +5,11 @@ import * as Predicate from "effect/Predicate";
 export const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
 
+// A program that isn't installed: the spawn found no binary, where a
+// missing folder to run it in fails the spawn's check of its cwd.
+export const isMissingProgram = (error: PlatformError.PlatformError) =>
+  isNotFound(error) && error.reason.module === "ChildProcess";
+
 // Not there: missing, or a parent on the way is a file.
 export const isAbsent = (error: PlatformError.PlatformError) =>
   isNotFound(error) ||

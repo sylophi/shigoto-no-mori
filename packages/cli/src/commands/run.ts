@@ -98,7 +98,11 @@ export const runCommand = Command.make(
         project,
         worktree,
       });
-      yield* scripts.recordRun(project.id, command.script);
+      // The order the menus list scripts in, best effort: a store busy
+      // or out of room must not keep the script from running.
+      yield* scripts
+        .recordRun(project.id, command.script)
+        .pipe(Effect.catchCause(() => Effect.void));
       // From the worktree's root, not the cwd: a nested package.json must
       // not retarget the run.
       yield* handOver("exec", command.program, command.args, {

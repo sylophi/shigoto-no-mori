@@ -1109,8 +1109,11 @@ it("deadline: a peer that never answers the ask cannot hang the bridge cache, wh
 });
 
 it("ticket single-use and expiry: a replayed ticket and an expired ticket are refused", async () => {
+  // The tickets' own clock, which moves only when the case moves it: a
+  // dial on a busy machine can take longer than a ticket lives.
+  let clock = 0;
   const listener = await startDirectListener(trackTest, {
-    ticketOpts: { ttlMs: 80 },
+    ticketOpts: { ttlMs: 80, now: () => clock },
   });
   const ticket = mintTicket(listener.tickets, DIALER);
   const first = await dial(listener, { ticket });
@@ -1123,7 +1126,7 @@ it("ticket single-use and expiry: a replayed ticket and an expired ticket are re
   );
   // Expiry: a fresh ticket past its TTL is refused too.
   const stale = mintTicket(listener.tickets, DIALER);
-  await delay(150);
+  clock += 150;
   await assert.rejects(
     () => dial(listener, { ticket: stale }),
     refusedTicket,

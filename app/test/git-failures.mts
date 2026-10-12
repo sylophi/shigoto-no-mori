@@ -103,3 +103,12 @@ it("a git that never ran reads and crosses as the app has always said it", async
   assert.ok(isRemoteCallError(crossed));
   assert.equal(crossed.message, "git is not installed.");
 });
+
+it("a git run in a folder deleted under the app says the folder is gone, not that git is missing", async () => {
+  const gone = join(repo, "..", "deleted-worktree");
+  const error = await failureOf(
+    Effect.flatMap(Git.Git, (g) => g.run(gone, ["status"])),
+  );
+  assert.ok(error instanceof Git.GitCommandError);
+  assert.equal(errorWordsOf(error), `${gone} is not there anymore.`);
+});

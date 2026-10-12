@@ -26,13 +26,17 @@ import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
+import { storeErrorOf } from "./storeErrors.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   "StoreOpenError",
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Could not open the store at ${this.path}.`;
+    const store = storeErrorOf(this.cause);
+    return store === undefined || store.category === "failed"
+      ? `Could not open the store at ${this.path}.`
+      : `Could not open the store at ${this.path}. ${store.message}`;
   }
 }
 
@@ -49,6 +53,17 @@ export type OpenDatabase = (
 >;
 
 const migrate = Migrator.make({});
+
+// The newest migration a store applied, 0 for a new one.
+const latestApplied = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const [table] = yield* sql`SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name = 'effect_sql_migrations'`;
+  if (table === undefined) return 0;
+  const [row] = yield* sql<{ latest: number | null }>`
+    SELECT MAX(migration_id) AS latest FROM effect_sql_migrations`;
+  return row?.latest ?? 0;
+});
 
 // Whether the store has yet to import a 2.x data dir's files: the
 // registry is there, and the import hasn't run (the migrations commit
@@ -117,25 +132,38 @@ export const layer = (
           }));
         }
         // The schema's history, applied in order. A released migration is
-        // never edited. A change is a new one.
-        yield* migrate({
-          loader: Migrator.fromRecord({
-            "1_tables": tables,
-            "2_import_json": Effect.provideContext(importJson, platform),
-            "3_agent_sessions": agentSessions,
-            "4_changes": changes,
-            "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
-            "6_terminals": terminals,
-            "7_wt_folder": wtFolder,
-            "8_running_scripts": runningScripts,
-            "9_mirror_agreements": Effect.provideContext(
-              mirrorAgreements,
-              platform,
-            ),
-            "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
-            "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
-          }),
-        }).pipe(Effect.provideService(SqlClient.SqlClient, client));
+        // never edited. A change is a new one. Run only when one is due,
+        // since the migrator takes the write lock: a start that only reads
+        // must not wait on the app's writes, or fail behind them.
+        const migrations = {
+          "1_tables": tables,
+          "2_import_json": Effect.provideContext(importJson, platform),
+          "3_agent_sessions": agentSessions,
+          "4_changes": changes,
+          "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
+          "6_terminals": terminals,
+          "7_wt_folder": wtFolder,
+          "8_running_scripts": runningScripts,
+          "9_mirror_agreements": Effect.provideContext(
+            mirrorAgreements,
+            platform,
+          ),
+          "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
+          "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
+        };
+        const newest = Math.max(
+          ...Object.keys(migrations).map((key) => Number.parseInt(key, 10)),
+        );
+        const due =
+          owed ||
+          (yield* latestApplied.pipe(
+            Effect.provideService(SqlClient.SqlClient, client),
+          )) < newest;
+        if (due) {
+          yield* migrate({ loader: Migrator.fromRecord(migrations) }).pipe(
+            Effect.provideService(SqlClient.SqlClient, client),
+          );
+        }
         yield* importing("done");
         return client;
       }).pipe(

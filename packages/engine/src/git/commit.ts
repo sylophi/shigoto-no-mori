@@ -5,6 +5,7 @@
 // commits that. Whatever was staged before (an agent's `git mv`, a
 // terminal's `git add`) goes in only if it is ticked.
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { splitZ } from "../gitParse.ts";
@@ -77,9 +78,11 @@ export const makeCommit = ({
       });
 
     // Hooks run as they would in a terminal, and their output rides
-    // along in the failure. A commit git refuses (a hook, no identity)
-    // puts the index back the way it was, so what a terminal or an agent
-    // had staged survives it. Answers with the new commit, short.
+    // along in the failure. A commit git refuses (a hook, no identity),
+    // or one cut short (the app quitting during a long hook, a caller
+    // gone) before it made its commit, puts the index back the way it
+    // was, so what a terminal or an agent had staged survives it.
+    // Answers with the new commit, short.
     const commitPicks = Effect.fn("Git.commitPicks")(function* (
       worktree: string,
       message: CommitRequest,
@@ -95,11 +98,48 @@ export const makeCommit = ({
           ])).trim();
           // A repository nothing was ever added to has no index yet.
           const saved = yield* fs.readFile(indexFile).pipe(Effect.option);
+          const headOf = run(worktree, [
+            "rev-parse",
+            "-q",
+            "--verify",
+            "HEAD",
+          ]).pipe(
+            Effect.map((out) => out.trim()),
+            Effect.orElseSucceed(() => ""),
+          );
+          const before = yield* headOf;
+          // Put back under git's own lock, so no other git (a terminal's
+          // commit) writes the index meanwhile, and only while HEAD is
+          // where it was: an index no commit was made from. A lock some
+          // git holds leaves the index to it.
+          const restore = Effect.gen(function* () {
+            const lock = `${indexFile}.lock`;
+            // Taken empty, so a lock this made is never one a failed write
+            // half filled and left; one another git holds is left to it.
+            const held = yield* fs
+              .writeFile(lock, new Uint8Array(), { flag: "wx" })
+              .pipe(
+                Effect.as(true),
+                Effect.orElseSucceed(() => false),
+              );
+            if (!held) return;
+            yield* Effect.gen(function* () {
+              if ((yield* headOf) !== before) return yield* fs.remove(lock);
+              if (Option.isNone(saved)) {
+                yield* fs.remove(indexFile, { force: true });
+                return yield* fs.remove(lock);
+              }
+              yield* fs.writeFile(lock, saved.value);
+              yield* fs.rename(lock, indexFile);
+            }).pipe(
+              Effect.onError(() =>
+                Effect.ignore(fs.remove(lock, { force: true })),
+              ),
+            );
+          }).pipe(Effect.ignore);
           yield* commitWith(worktree, message).pipe(
-            Effect.tapError(() =>
-              Option.isSome(saved)
-                ? fs.writeFile(indexFile, saved.value)
-                : fs.remove(indexFile, { force: true }),
+            Effect.onExit((exit) =>
+              Exit.isSuccess(exit) ? Effect.void : restore,
             ),
           );
           return (yield* run(worktree, [

@@ -220,7 +220,12 @@ const make = Effect.gen(function* () {
 
   // The folders under the v2 roots, recorded once. A folder git doesn't
   // list is dropped when its move is tried.
-  const scan = sql.withTransaction(
+  // Read before the write transaction, which takes the lock: almost
+  // every start has nothing owed.
+  const scanOwed = sql`SELECT id FROM wt_move_scan LIMIT 1`.pipe(
+    Effect.map((rows) => rows.length > 0),
+  );
+  const scanNow = sql.withTransaction(
     Effect.gen(function* () {
       const owed = yield* sql`DELETE FROM wt_move_scan RETURNING id`;
       if (owed.length === 0) return;
@@ -244,6 +249,9 @@ const make = Effect.gen(function* () {
         }
       }
     }),
+  );
+  const scan = Effect.flatMap(scanOwed, (owed) =>
+    owed ? scanNow : Effect.void,
   );
 
   // A row's outcome as the step counts it: moved, stuck with git's
