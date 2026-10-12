@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { Skeleton } from "../../primitives/skeleton.tsx";
+import { usersAlone } from "../../lib/usersAlone.ts";
 
 export function LaunchSectionView({
   tools,
@@ -22,7 +23,7 @@ export function LaunchSectionView({
       <SectionHeading>Launch</SectionHeading>
       {/* The two rows are one wrapping group of pills, so they sit a
           pill-gap apart, not the section's heading-to-content gap. */}
-      <div className="space-y-2">
+      <div className="space-y-2" {...usersAlone("run")}>
         {tools}
         {scriptsLoading ? (
           <div className="flex items-center gap-2" aria-label="Loading scripts">

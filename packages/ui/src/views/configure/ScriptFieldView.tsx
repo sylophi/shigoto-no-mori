@@ -1,4 +1,5 @@
 import { Textarea } from "../../primitives/textarea.tsx";
+import { usersAlone } from "../../lib/usersAlone.ts";
 
 interface ScriptFieldProps {
   id: string;
@@ -14,7 +15,7 @@ export function ScriptFieldView({
   onChange,
 }: ScriptFieldProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" {...usersAlone("run")}>
       <label htmlFor={id} className="block text-sm font-medium">
         {label}
       </label>

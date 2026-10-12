@@ -9,8 +9,8 @@
 // Some controls are the user's alone, as the page declares them
 // (`data-users-alone`, packages/ui's lib/usersAlone.ts) on the control or
 // around it: one that deletes, removes or signs out, one that lets the
-// account's other devices into this machine, and the app's terminals. A
-// click or a key on one is refused, and a terminal takes no text either.
+// account's other devices into this machine, what runs code, and the
+// app's terminals. A click, a key or text on one is refused.
 // A name that says it deletes is refused too, should a control go
 // undeclared. The agent's server ends its session as it stops.
 import { randomBytes } from "node:crypto";
@@ -61,7 +61,7 @@ export class GuideRefused extends Schema.TaggedError<GuideRefused>()(
   override get message(): string {
     switch (this.reason) {
       case "destructive":
-        return "That control is the user's to use: it deletes, removes or signs out. Point at it and let them decide.";
+        return "That control is the user's to use: it deletes, removes, signs out or runs code. Point at it and let them decide.";
       case "access":
         return "That control lets the user's other devices into this machine, which is theirs to decide. Point at it and let them.";
       case "terminal":
@@ -484,9 +484,9 @@ const make = Effect.gen(function* () {
       fill: ({ ref, text }) =>
         Effect.gen(function* () {
           const spot = yield* spotOf(page, ref);
-          if (aloneFor(spot) === "terminal") {
-            return yield* new GuideRefused({ reason: "terminal" });
-          }
+          const alone = aloneFor(spot);
+          if (alone !== undefined)
+            return yield* new GuideRefused({ reason: alone });
           yield* page.send("DOM.focus", { backendNodeId: ref });
           yield* call(page, spot.objectId, SELECT);
           yield* text === ""

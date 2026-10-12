@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Input } from "../../primitives/input.tsx";
 import type { LauncherCommand } from "@shigomori/contracts/schemas";
 import { IconButton } from "../../primitives/icon-button.tsx";
+import { usersAlone } from "../../lib/usersAlone.ts";
 
 interface CustomLauncherInputProps {
   launcher: LauncherCommand;
@@ -30,6 +31,7 @@ export function CustomLauncherInputView({
         onChange={(e) => onChange({ command: e.target.value })}
         placeholder="Command"
         aria-label="Launcher command"
+        {...usersAlone("run")}
         className="min-w-0 px-2.5 py-1.5 font-mono text-xs"
       />
       <IconButton
