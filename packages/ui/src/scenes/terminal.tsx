@@ -77,7 +77,7 @@ export function TerminalPartsScene() {
           />
         </SidebarTerminalsView>
       </div>
-      <div className="flex flex-col justify-end">
+      <div className="relative flex flex-col justify-end">
         <TerminalDrawerView height={260} onHeight={() => {}}>
           <TerminalTabsView
             tabs={[

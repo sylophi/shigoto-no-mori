@@ -49,7 +49,11 @@ export function useForestSources({
   const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   // Peers' forests, merged in beside the local rows.
-  const { items: remoteItems, loading: remoteLoading } = useRemoteForests({
+  const {
+    items: remoteItems,
+    loading: remoteLoading,
+    devicesFailed,
+  } = useRemoteForests({
     inboxFacts,
   });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
@@ -94,6 +98,7 @@ export function useForestSources({
     projects,
     orderedProjects,
     loading: isLoading || remoteLoading,
+    devicesFailed,
     sortMode,
     groupByOwner,
     worktreeQueries,
