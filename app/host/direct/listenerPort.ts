@@ -6,6 +6,7 @@
 // on the first (V3.md, step 7, the reliability pass).
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import type * as DeviceLink from "@host/socket/DeviceLink";
 
 // The port remembered at `path`, or 0 (any) when there is none.
 export const rememberedPort = (path: string) =>
@@ -17,7 +18,31 @@ export const rememberedPort = (path: string) =>
     Effect.orElseSucceed(() => 0),
   );
 
+// Written whole or not at all, so a host killed mid-write leaves the
+// port before.
 export const rememberPort = (path: string, port: number) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.writeFileString(path, `${port}\n`),
+    fs
+      .writeFileString(`${path}.next`, `${port}\n`)
+      .pipe(Effect.andThen(fs.rename(`${path}.next`, path))),
   ).pipe(Effect.ignore);
+
+// The listener reconciled on the port remembered at `path`, and the port
+// it listens on remembered when that moved (the first start, or one the
+// remembered port was taken from).
+export const reconcileOnLastPort = Effect.fnUntraced(function* (
+  link: Pick<DeviceLink.DeviceLink["Service"], "reconcile" | "status">,
+  path: string,
+  wanted: Effect.Effect<Omit<DeviceLink.WsServerStartOpts, "port"> | null>,
+) {
+  const last = yield* rememberedPort(path);
+  yield* link.reconcile(
+    Effect.map(wanted, (opts) =>
+      opts === null ? null : { ...opts, port: last },
+    ),
+  );
+  const now = yield* link.status;
+  if (now.listening && now.port !== null && now.port !== last) {
+    yield* rememberPort(path, now.port);
+  }
+});

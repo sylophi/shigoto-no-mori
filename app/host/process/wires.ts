@@ -43,7 +43,7 @@ import {
 } from "@shared/packaging/cloudflaredDist.mts";
 import * as TunnelService from "@host/direct/Tunnel";
 import { makeConnectInfo } from "@host/direct/connectInfo";
-import { rememberedPort, rememberPort } from "@host/direct/listenerPort";
+import { reconcileOnLastPort } from "@host/direct/listenerPort";
 import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
@@ -456,8 +456,10 @@ const listenerPortPath = () => join(hostFacts().userDataPath, "direct-port");
 // account.
 export async function refreshDirectHost(): Promise<void> {
   await Graph.run(
-    onLink((link) =>
-      link.reconcile(
+    Effect.flatMap(DeviceLink.DeviceLink, (link) =>
+      reconcileOnLastPort(
+        link,
+        listenerPortPath(),
         Effect.promise(async () => {
           const inputs = hubConnectInputs();
           if (inputs === null) return null;
@@ -466,7 +468,6 @@ export async function refreshDirectHost(): Promise<void> {
           const config = await Graph.run(Ops.readGlobalConfig());
           if (config.directConnections === false) return null;
           return {
-            port: await Graph.run(rememberedPort(listenerPortPath())),
             bindAddress: "::",
             deviceId: await Graph.run(DeviceId.current),
             appVersion: hostFacts().appVersion,
@@ -478,14 +479,6 @@ export async function refreshDirectHost(): Promise<void> {
         }),
       ),
     ).pipe(
-      Effect.andThen(
-        Effect.suspend(() => {
-          const listener = linkStatus();
-          return listener.listening && listener.port !== null
-            ? rememberPort(listenerPortPath(), listener.port)
-            : Effect.void;
-        }),
-      ),
       Effect.catchCause((cause) =>
         Effect.logWarning("[direct] listener refresh failed", cause),
       ),

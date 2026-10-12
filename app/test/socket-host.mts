@@ -47,7 +47,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rememberedPort, rememberPort } from "@host/direct/listenerPort";
+import { reconcileOnLastPort, rememberedPort } from "@host/direct/listenerPort";
 import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
 import * as Effect from "effect/Effect";
@@ -1413,24 +1413,52 @@ it("stop: the listener stopping closes every link, and nothing answers after", a
   assert.equal(after.blocked, false);
 });
 
-it("port: a host that restarts asks for the port it listened on last and listens on it again, so its LAN address and its tunnel's ingress stay right, and a port another process holds falls back to any", async () => {
+it("port: a host that restarts listens on the port it listened on last, so its LAN address and its tunnel's ingress stay right, and one another process holds falls back to any", async () => {
   const track = trackTest;
-  const { listener: first } = await listen(track);
-  const port = first.port;
-  await first.binding.reconcile(null);
-  const { listener: again } = await listen(track, { start: { port } });
-  assert.equal(again.port, port);
-  const { listener: taken } = await listen(track, { start: { port } });
-  assert.notEqual(taken.port, port);
-  assert.ok(taken.port > 0);
-  // The port remembered across the restart: none at first, then the
-  // last one, and anything unreadable is none.
   const dir = mkdtempSync(join(tmpdir(), "sm-port-"));
   track(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, "direct-port");
-  assert.equal(await runHost(rememberedPort(path)), 0);
-  await runHost(rememberPort(path, port));
+  const opts = {
+    bindAddress: "127.0.0.1",
+    deviceId: LISTENER,
+    appVersion: "2.0.0",
+    helloTimeoutMs: 1000,
+  };
+  // The host's refresh (host/process/wires.ts) on a listener of its own.
+  const refresh = async (listener: DirectListener) =>
+    runHost(
+      reconcileOnLastPort(
+        {
+          reconcile: (wanted) =>
+            Effect.flatMap(wanted, (next) =>
+              Effect.promise(() => listener.binding.reconcile(next)),
+            ),
+          status: Effect.sync(() => {
+            const now = listener.binding.status();
+            return { ...now, bindAddress: null, error: null };
+          }),
+        },
+        path,
+        Effect.succeed(opts),
+      ),
+    );
+  // The first start: any port, remembered.
+  const { listener } = await listen(track);
+  await refresh(listener);
+  const port = listener.port;
   assert.equal(await runHost(rememberedPort(path)), port);
+  // A restart: stopped, then refreshed again on the remembered port.
+  await listener.binding.reconcile(null);
+  await refresh(listener);
+  assert.equal(listener.binding.status().port, port);
+  // That port held by another listener: any other, remembered in its
+  // place.
+  const { listener: other } = await listen(track);
+  await refresh(other);
+  const moved = other.binding.status().port;
+  assert.ok(moved !== null && moved !== port);
+  assert.equal(await runHost(rememberedPort(path)), moved);
+  // An unreadable file is no port.
   writeFileSync(path, "not a port\n");
   assert.equal(await runHost(rememberedPort(path)), 0);
 });
