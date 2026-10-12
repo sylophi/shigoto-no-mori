@@ -150,11 +150,12 @@ it("stops what a dead instance left running as it started, leaves a recycled pid
   );
 });
 
-it("stops what a script whose leader died left in its group, as a package script or a nohup'd command leaves when the host is killed, and leaves a group older than the record alone", async () => {
+it("stops what a script whose leader died left in its group, as a package script or a nohup'd command leaves when the host is killed, and leaves alone a group older than its record and one recorded before this app run", async () => {
   const crashed = await deadPid();
   const startedAt = Date.now();
   const left = await headlessGroup("610");
   const older = await headlessGroup("611");
+  const relaunched = await headlessGroup("612");
   await runHost(
     Effect.gen(function* () {
       const scripts = yield* RunningScripts.RunningScripts;
@@ -176,12 +177,32 @@ it("stops what a script whose leader died left in its group, as a package script
       });
     }),
   );
+  // Recorded before the app this host runs under started: a relaunch's
+  // or a reboot's sweep, which can be days after the script's group
+  // emptied and its id went to a stranger's.
+  await runHost(
+    Effect.flatMap(RunningScripts.RunningScripts, (scripts) =>
+      scripts.add({
+        projectId: "p",
+        worktreeId: "wt",
+        ownerPid: crashed,
+        runId: "relaunched",
+        startedAt: startedAt - 30 * 24 * 60 * 60 * 1000,
+        pid: relaunched.leader,
+        command: "pnpm run dev",
+      }),
+    ),
+  );
   const sweep = await startSweep();
   assert.deepEqual(await Effect.runPromise(sweep.takeReport), { stopped: 1 });
   await waitFor(() => !processAlive(left.stray), "the stray to stop");
   assert.ok(
     processAlive(older.stray),
     "a group older than its record was signaled",
+  );
+  assert.ok(
+    processAlive(relaunched.stray),
+    "a group recorded before this app run was signaled",
   );
 });
 

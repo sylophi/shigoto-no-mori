@@ -112,26 +112,19 @@ const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
   return table;
 });
 
-// What is left in each of these process groups, by group: a script
-// whose leader died (pnpm, or the shell) can leave processes behind in
-// its group, a nohup'd command or a server its runner did not take
-// down with it.
-const readGroups = Effect.fnUntraced(function* (pgids: number[]) {
-  const groups = new Map<number, LiveProcess[]>();
-  if (pgids.length === 0) return groups;
-  const wanted = new Set(pgids);
+// Every process, for the groups a script's dead leader left: null when
+// `ps` could not be run, which signals nothing.
+const readAllProcesses = Effect.fnUntraced(function* () {
   const listed = yield* Processes.exec(
     "ps",
     ["-A", ...PS_COLUMNS],
     PS_ENV,
   ).pipe(Effect.option);
-  if (Option.isNone(listed)) return groups;
-  for (const row of parseProcessTable(listed.value.stdout)) {
-    if (!wanted.has(row.pgid)) continue;
-    groups.set(row.pgid, [...(groups.get(row.pgid) ?? []), row]);
-  }
-  return groups;
+  return Option.isNone(listed) ? null : parseProcessTable(listed.value.stdout);
 });
+
+const membersOf = (all: readonly LiveProcess[], pgid: number) =>
+  all.filter((row) => row.pgid === pgid);
 
 // The recorded command is what we handed the login shell, but a shell
 // running a single simple command execs into it, so the live command
@@ -167,16 +160,22 @@ function isSameProcess(
   return commandMatches(record.command, live.command);
 }
 
-// The proof for a group whose leader is gone. The system does not hand
-// out a pid while a process group of that id is alive, so a group still
-// going under the recorded pid is the one the script started, as long as
-// everything in it started after the script did.
+// The proof for a group whose leader is gone, which only holds for a
+// script this app run started: the host died and its shell forked the
+// one sweeping now, seconds later. The system hands out no pid while a
+// group of that id lives, so the group under the recorded pid is the
+// script's, unless the script's group emptied and a stranger's took its
+// id since, which takes far longer than a respawn (a relaunch or a reboot
+// can be days later, so those records' groups are left alone). Every
+// member must have started after the script did.
 function isSameGroup(
   record: RecordedScript,
-  members: readonly LiveProcess[] | undefined,
+  members: readonly LiveProcess[],
+  shell: LiveProcess | undefined,
 ): boolean {
   return (
-    members !== undefined &&
+    shell !== undefined &&
+    shell.startedAt <= record.startedAt &&
     members.length > 0 &&
     members.every(
       (member) => member.startedAt >= record.startedAt - START_TOLERANCE_MS,
@@ -212,8 +211,10 @@ const killStrays = Effect.fnUntraced(function* (record: RecordedScript) {
   if (yield* waitUntilGone(() => isGroupAlive(pgid), ORPHAN_GRACE_MS)) {
     return true;
   }
-  const groups = yield* readGroups([pgid]);
-  if (!isSameGroup(record, groups.get(pgid))) return true;
+  const all = yield* readAllProcesses();
+  if (all === null) return true;
+  const shell = all.find((row) => row.pid === process.ppid);
+  if (!isSameGroup(record, membersOf(all, pgid), shell)) return true;
   yield* signalTree(pgid, "SIGKILL");
   const died = yield* waitUntilGone(() => isGroupAlive(pgid), ORPHAN_GRACE_MS);
   if (!died) {
@@ -253,12 +254,16 @@ const reapOrphans = Effect.fnUntraced(function* (
 ) {
   const none: OrphanScriptReport = { stopped: 0 };
   if (records.length === 0) return none;
-  const table = yield* readProcessTable(records.map((r) => r.pid));
+  const all = yield* readAllProcesses();
+  if (all === null) return none;
+  const table = new Map(all.map((row) => [row.pid, row]));
   const ours = records.filter((r) => isSameProcess(r, table.get(r.pid)));
-  // A leader gone with its group still going.
-  const headless = records.filter((r) => !table.has(r.pid));
-  const groups = yield* readGroups(headless.map((r) => r.pid));
-  const strays = headless.filter((r) => isSameGroup(r, groups.get(r.pid)));
+  // A leader gone with its group still going. The shell is what forked
+  // this host.
+  const shell = table.get(process.ppid);
+  const strays = records.filter(
+    (r) => !table.has(r.pid) && isSameGroup(r, membersOf(all, r.pid), shell),
+  );
   const found = ours.length + strays.length;
   if (found === 0) return none;
   const outcomes = yield* Effect.all(
