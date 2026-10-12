@@ -70,7 +70,7 @@ export function WorktreeDetailView({
   drawer?: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <header
         className={cn(
           "flex flex-col gap-2 border-b border-border",
