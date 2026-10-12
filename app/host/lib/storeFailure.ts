@@ -38,6 +38,12 @@ export async function storeFailureReport(
         terminal: false,
       });
     }).pipe(
+      // The boot error waits on it: a report it can't have in time is
+      // left out.
+      Effect.timeoutOrElse({
+        duration: "20 seconds",
+        orElse: () => Effect.succeed(null),
+      }),
       Effect.provide(
         doctorLayer({
           flavor: options.flavor,

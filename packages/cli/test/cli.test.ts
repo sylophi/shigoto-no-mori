@@ -18,6 +18,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   afterAll,
@@ -952,6 +953,21 @@ const appeared = async (file: string): Promise<void> => {
 };
 
 describe("run", () => {
+  it("runs the script with the store's write lock held elsewhere", async () => {
+    const { worktree } = scripted();
+    // The store made, as the first run does.
+    assert.equal((await start(worktree, ["run", "ok"]).ended)?.code, 0);
+    const holder = new DatabaseSync(join(box.side("cli"), "store.db"));
+    holder.exec("BEGIN IMMEDIATE");
+    try {
+      const ran = await start(worktree, ["run", "ok"]).ended;
+      assert.equal(ran?.code, 0, ran?.stderr);
+    } finally {
+      holder.exec("ROLLBACK");
+      holder.close();
+    }
+  }, 30_000);
+
   it("ends as the script did", async () => {
     const { worktree } = scripted();
     const [ok, fail, term, kill] = await Promise.all(
@@ -1301,6 +1317,39 @@ describe("the Go sm's command line", () => {
       readonly title: string;
       readonly description: string;
     };
+
+  it("lists past a store another process is writing, and says the store is busy when it must write", async () => {
+    fixture();
+    // The store made and imported, as the first run does.
+    assert.equal((await described()).title, "");
+    // The app mid-write: the store's write lock held.
+    const holder = new DatabaseSync(join(box.side("cli"), "store.db"));
+    holder.exec("BEGIN IMMEDIATE");
+    try {
+      const listed = await runAt(box.home, "--json", "list", "-p", "alpha");
+      assert.equal(listed.code, 0, listed.stderr);
+      const set = await runAt(
+        box.home,
+        "--json",
+        "describe",
+        "-p",
+        "alpha",
+        "fox",
+        "-t",
+        "Fox",
+      );
+      assert.equal(set.code, 1, set.stderr);
+      assert.deepEqual(set.doc, {
+        ok: false,
+        error:
+          "The store is busy: the app or another command is writing to it. Try again in a moment.",
+        code: "store-busy",
+      });
+    } finally {
+      holder.exec("ROLLBACK");
+      holder.close();
+    }
+  }, 30_000);
 
   it("takes a long flag after a single dash", async () => {
     fixture();

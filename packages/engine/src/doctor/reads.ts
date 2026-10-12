@@ -6,7 +6,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as Darwin from "../Darwin.ts";
 import { isNotFound } from "../platformErrors.ts";
-import { capture as runCapture } from "../processes.ts";
+import { captureWithin } from "../processes.ts";
 
 export const makeReads = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -18,7 +18,9 @@ export const makeReads = Effect.gen(function* () {
     args: ReadonlyArray<string>,
     env?: Record<string, string>,
   ) =>
-    runCapture(spawner, command, args, { env }).pipe(
+    // A check waits on nothing longer: gh asks GitHub, and a network
+    // that drops packets would hold the doctor for good.
+    captureWithin(spawner, command, args, "15 seconds", { env }).pipe(
       Effect.map(({ output, code }) => ({ stdout: output, code })),
     );
 

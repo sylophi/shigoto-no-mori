@@ -22,7 +22,7 @@ import {
   type MergeProgress,
   parseMergeProgress,
 } from "./mergeProgress.ts";
-import { isNotFound } from "./platformErrors.ts";
+import { isMissingProgram } from "./platformErrors.ts";
 
 // A gh that couldn't answer, sorted where it failed: not installed, not
 // signed in, no remote on a GitHub host it knows, any other failure (gh's
@@ -460,7 +460,7 @@ const make = Effect.gen(function* () {
           .spawn(ChildProcess.make("gh", [...args], { cwd, stdin: "ignore" }))
           .pipe(
             Effect.mapError((error) =>
-              isNotFound(error)
+              isMissingProgram(error)
                 ? new GitHubCliError({ reason: "missing" })
                 : failed(error),
             ),

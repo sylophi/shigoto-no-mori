@@ -261,7 +261,7 @@ describe("the data dir", () => {
     writeFileSync(pidfile, "nope");
     assert.match(
       only(await run(), "staging-lock", "warn").detail,
-      /^left behind by a crashed update, so/,
+      /^left behind by an update that stopped; the next update takes it over$/,
     );
     writeFileSync(pidfile, "99999");
     const fixed = await run({ fix: true });

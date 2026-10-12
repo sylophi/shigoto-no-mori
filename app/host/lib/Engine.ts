@@ -8,6 +8,7 @@ import { engineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
+import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
   callFailureOf,
@@ -99,12 +100,16 @@ export const asCall = <A, E, R>(
 // What a host call's failure crosses a wire as: a git the engine ran
 // in the words errorWordsOf gives it, and anything else as
 // callFailureOf makes it.
-export const hostCallFailure = (error: unknown) =>
-  callFailureOf(
+export const hostCallFailure = (error: unknown) => {
+  const store = storeErrorOf(error);
+  return callFailureOf(
     error instanceof Git.GitCommandError
       ? new RemoteCallError({ text: errorWordsOf(error) })
-      : error,
+      : store !== undefined
+        ? new RemoteCallError({ text: store.message })
+        : error,
   );
+};
 
 // `asCall` for an operation that changes something, counted while it
 // runs.

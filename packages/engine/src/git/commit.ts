@@ -5,6 +5,7 @@
 // commits that. Whatever was staged before (an agent's `git mv`, a
 // terminal's `git add`) goes in only if it is ticked.
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { splitZ } from "../gitParse.ts";
@@ -77,9 +78,11 @@ export const makeCommit = ({
       });
 
     // Hooks run as they would in a terminal, and their output rides
-    // along in the failure. A commit git refuses (a hook, no identity)
-    // puts the index back the way it was, so what a terminal or an agent
-    // had staged survives it. Answers with the new commit, short.
+    // along in the failure. A commit git refuses (a hook, no identity),
+    // or one cut short (the app quitting during a long hook, a caller
+    // gone) before it made its commit, puts the index back the way it
+    // was, so what a terminal or an agent had staged survives it.
+    // Answers with the new commit, short.
     const commitPicks = Effect.fn("Git.commitPicks")(function* (
       worktree: string,
       message: CommitRequest,
@@ -95,11 +98,30 @@ export const makeCommit = ({
           ])).trim();
           // A repository nothing was ever added to has no index yet.
           const saved = yield* fs.readFile(indexFile).pipe(Effect.option);
+          const headOf = run(worktree, [
+            "rev-parse",
+            "-q",
+            "--verify",
+            "HEAD",
+          ]).pipe(
+            Effect.map((out) => out.trim()),
+            Effect.orElseSucceed(() => ""),
+          );
+          const before = yield* headOf;
+          const restore = Option.isSome(saved)
+            ? fs.writeFile(indexFile, saved.value)
+            : fs.remove(indexFile, { force: true });
           yield* commitWith(worktree, message).pipe(
-            Effect.tapError(() =>
-              Option.isSome(saved)
-                ? fs.writeFile(indexFile, saved.value)
-                : fs.remove(indexFile, { force: true }),
+            Effect.onExit((exit) =>
+              Exit.isSuccess(exit)
+                ? Effect.void
+                : Exit.hasInterrupts(exit)
+                  ? // Cut short, maybe after git committed: put back only
+                    // an index no commit was made from.
+                    Effect.flatMap(headOf, (after) =>
+                      after === before ? restore : Effect.void,
+                    ).pipe(Effect.ignore)
+                  : restore.pipe(Effect.ignore),
             ),
           );
           return (yield* run(worktree, [
