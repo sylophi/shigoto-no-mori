@@ -16,6 +16,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -170,7 +171,7 @@ it("removes every worktree the app made, and a second run finishes an interrupte
   assert.deepEqual((await nuke([])).left, []);
 });
 
-it("a teardown script that never ends holds no nuke up", async () => {
+it("a teardown script that never ends, deaf to SIGTERM, holds no nuke up", async () => {
   const project = await repo("slow");
   await fixture.projectIdOf(project);
   await fixture.sm(
@@ -179,7 +180,8 @@ it("a teardown script that never ends holds no nuke up", async () => {
     "-p",
     "slow",
     "--teardown",
-    "sleep 600",
+    // A sleep no other process runs, to look for after.
+    "trap '' TERM; sleep 6017",
   );
   const kite = join(dataDir, "wt", "slow", "kite");
   await git(project, ["worktree", "add", "-q", "-b", "kite", kite]);
@@ -187,6 +189,9 @@ it("a teardown script that never ends holds no nuke up", async () => {
   await nuke([], undefined, 1000);
   assert.ok(Date.now() - started < 30_000, "the nuke waited on the teardown");
   assert.ok(!existsSync(kite), "the worktree went all the same");
+  // The script's shell is killed; what it started in the background
+  // outlives it by design (Lifecycle.ts), so the proof ends its own.
+  spawnSync("pkill", ["-f", "sleep 6017"]);
 });
 
 it("reports what it couldn't uninstall, with why", async () => {

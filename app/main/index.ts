@@ -42,6 +42,7 @@ import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import * as ClientConfig from "./electron/clientConfig";
 import { confirmBusyAction } from "./electron/busyPrompt";
+import { isQuittingAfterFailedMove } from "./electron/moveFailed";
 import { isRelaunching, relaunchApp } from "./electron/relaunch";
 import { LAB_FLAG } from "./argFlags";
 import {
@@ -219,7 +220,7 @@ let graph: Promise<unknown> = Promise.resolve();
 // work nor waits for it (host/process/layer.ts has why), counted from
 // the moment it is asked for, before its quit arrives.
 function isHurriedQuit(): boolean {
-  return isInstallingUpdate() || isRelaunching();
+  return isInstallingUpdate() || isRelaunching() || isQuittingAfterFailedMove();
 }
 
 // True while the app is on any teardown or restart path, so the crash

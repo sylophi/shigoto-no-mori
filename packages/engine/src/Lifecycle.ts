@@ -185,6 +185,10 @@ const make = Effect.gen(function* () {
               // reaches the whole tree, and what the script leaves running
               // in the background (a dev database) outlives it.
               detached: false,
+              // A script that ignores the scope's SIGTERM (a teardown
+              // the caller's deadline stopped) is killed after this, so
+              // the deadline holds.
+              forceKillAfter: "3 seconds",
               extendEnv: true,
               env: {
                 ...scriptEnv(context, scriptName(slot)),
