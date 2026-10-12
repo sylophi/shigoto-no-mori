@@ -17,7 +17,11 @@ import {
   NoDirectConnectionError,
   NotSharingError,
   RemoteCallError,
+  isNoDirectConnectionError,
 } from "@shigomori/contracts/errors";
+import { peerViewFailure } from "@shared/hub/peerViewFailure";
+import { RemoteConnectError } from "@shared/remote/deviceLink";
+import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type { ContractModule } from "@shigomori/contracts/contract";
@@ -188,4 +192,18 @@ it("a view the host answers with its own failure ends, and shows it, rather than
   } finally {
     unmount();
   }
+});
+
+// A peer's view as this host serves it to a window: its link going is
+// the redial's (no session, asked again), the peer's own answer ends it.
+it("a peer's link dropping under its view is no session, and the peer's refusal stays itself", () => {
+  const dropped = peerViewFailure(PEER, new RemoteDisconnectedError());
+  assert.ok(isNoDirectConnectionError(dropped));
+  const undialed = peerViewFailure(
+    PEER,
+    new RemoteConnectError("the peer refused the connect ticket", null, true),
+  );
+  assert.ok(isNoDirectConnectionError(undialed));
+  const refused = new NotSharingError();
+  assert.equal(peerViewFailure(PEER, refused), refused);
 });

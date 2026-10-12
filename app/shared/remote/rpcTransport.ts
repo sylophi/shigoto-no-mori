@@ -43,7 +43,7 @@ export type FlatClient = (
 
 // The link dropped while calls were in flight, or a call came after it
 // did: a disconnect, distinct from the handler's own failure.
-class RemoteDisconnectedError extends Error {
+export class RemoteDisconnectedError extends Error {
   constructor() {
     super("remote device disconnected");
     this.name = "RemoteDisconnectedError";

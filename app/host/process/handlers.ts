@@ -30,6 +30,7 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
+import { peerViewFailure } from "@shared/hub/peerViewFailure";
 import { callFailureOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
@@ -747,7 +748,10 @@ export function registerHostHandlers(): void {
               end: (failure) =>
                 failure === undefined
                   ? Queue.endUnsafe(queue)
-                  : Queue.failCauseUnsafe(queue, Cause.fail(failure)),
+                  : Queue.failCauseUnsafe(
+                      queue,
+                      Cause.fail(peerViewFailure(input.deviceId, failure)),
+                    ),
             }),
           ),
           (stop) => Effect.sync(stop),
