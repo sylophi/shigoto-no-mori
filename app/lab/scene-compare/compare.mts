@@ -3,6 +3,7 @@
 // pairs that differ written to a report (README.md beside this file).
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -205,6 +206,20 @@ try {
     ["install", "--frozen-lockfile", "--ignore-scripts", "--prefer-offline"],
     { cwd: baseCheckout, stdio: "ignore" },
   );
+  // The install runs no scripts, the app's own postinstall among them,
+  // which copies the file icons into public/ (scripts/
+  // copy-material-icons.mts): without it the base's scenes drew no file
+  // icons and every comparison carried those pairs as changes. The
+  // repo's own script, run here, is no dependency's.
+  const copyIcons = join(
+    baseCheckout,
+    "app",
+    "scripts",
+    "copy-material-icons.mts",
+  );
+  if (existsSync(copyIcons)) {
+    execFileSync(process.execPath, [copyIcons], { stdio: "ignore" });
+  }
 
   const [baseOrigin, headOrigin] = await Promise.all([
     serve(baseCheckout),
