@@ -554,15 +554,7 @@ export const worktreesHandlers = {
 
   listCommits: ({ skip, count, query, from, ...input }) =>
     atPath(input, (path) =>
-      withGit((git) =>
-        git.listCommits(path, {
-          skip,
-          count,
-          query,
-          from,
-          firstParentStats: true,
-        }),
-      ),
+      withGit((git) => git.listCommits(path, { skip, count, query, from })),
     ),
 
   branchHistory: (input) =>

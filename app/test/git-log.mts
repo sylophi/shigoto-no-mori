@@ -18,10 +18,6 @@ import { join } from "node:path";
 import { LOG_FORMAT, parseLog } from "@shigomori/engine/gitParse";
 import { engineGit } from "./lib/gitPromises.mts";
 
-const listCommits = (
-  worktree: string,
-  page: { skip: number; count: number; query?: string },
-) => engineGit.listCommits(worktree, { ...page, firstParentStats: true });
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import { afterAll, beforeAll, it } from "vitest";
 import { appRoot, scrubProcessGitEnv } from "./lib/checkKit.mts";
@@ -66,7 +62,7 @@ it("a crafted subject in a real repo stays one commit", async () => {
   git("commit", "-q", "--allow-empty", "-m", "first");
   const crafted = "evil\x01NOTAHASH\tx\ty\tinjected";
   git("commit", "-q", "--allow-empty", "-m", crafted);
-  const commits = await listCommits(repo, { skip: 0, count: 10 });
+  const commits = await engineGit.listCommits(repo, { skip: 0, count: 10 });
   assert.deepEqual(
     commits.map((c) => c.subject),
     [crafted, "first"],
@@ -85,7 +81,7 @@ it("a search keeps the commits whose message holds it, literally and case blind"
     "Unrelated\n\nTouches the sidebar too.",
   );
   const subjects = async (query: string) =>
-    (await listCommits(repo, { skip: 0, count: 10, query })).map(
+    (await engineGit.listCommits(repo, { skip: 0, count: 10, query })).map(
       (c) => c.subject,
     );
   assert.deepEqual(await subjects("SIDEBAR"), [

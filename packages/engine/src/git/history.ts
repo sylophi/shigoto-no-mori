@@ -89,7 +89,6 @@ export const makeHistory = ({
         readonly count: number;
         readonly query?: string | undefined;
         readonly from?: string | undefined;
-        readonly firstParentStats?: boolean | undefined;
       },
     ) {
       return yield* run(worktree, [
@@ -102,7 +101,8 @@ export const makeHistory = ({
           : []),
         `--pretty=format:${LOG_FORMAT}`,
         "--shortstat",
-        ...(page.firstParentStats ? ["--diff-merges=first-parent"] : []),
+        // A merge's counts are what it brought in.
+        "--diff-merges=first-parent",
         // History from a commit other than HEAD.
         ...(page.from ? ["--end-of-options", page.from, "--"] : []),
       ]).pipe(

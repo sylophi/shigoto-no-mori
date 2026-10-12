@@ -190,6 +190,9 @@ function sealedSocket(
     },
     send(data) {
       if (transport === null) throw new NoiseError("the handshake is not done");
+      // A socket closing (its far end's close on its way, or this end's)
+      // takes no more: the write fails, as the link is going.
+      if (ws.readyState !== 1) throw new Error("the socket is closing");
       const plaintext = typeof data === "string" ? utf8.encode(data) : data;
       ws.send(onWire(transport.send.encryptWithAd(EMPTY, plaintext)));
     },
