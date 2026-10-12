@@ -18,11 +18,11 @@ import {
   useWorktreeNav,
 } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeTitle } from "@/hooks/worktrees/useWorktreeTitle";
-import { scriptKey, type ScriptSlot } from "@/store/scriptRuns";
+import { scriptKey, type ScriptSlot } from "@/store/scriptSlot";
 import {
   CREATE_PHASE_LABEL,
   useWorktreeCreatePhase,
-} from "@/store/worktreeLifecycle";
+} from "@/hooks/worktrees/useWorktreeLifecycle";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { BirthdayPartyView } from "@shigomori/ui/views/villagers/BirthdayPartyView.tsx";
 import { ResidentFaceView } from "@shigomori/ui/views/villagers/ResidentFaceView.tsx";

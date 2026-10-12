@@ -1,5 +1,6 @@
-// A script run's state, as the store keeps it (the app's
-// store/scriptRuns.ts) and the status badges and the console draw it.
+// A script run's state, as a device's runs keep it (the app's
+// hooks/scripts/scriptRuns.ts) and the status badges and the console
+// draw it.
 type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
 
 export interface ScriptRunState {

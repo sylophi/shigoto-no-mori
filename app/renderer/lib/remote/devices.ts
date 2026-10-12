@@ -1,15 +1,16 @@
 // Renderer registry of remote devices: the account's devices,
 // deviceId-keyed. There is no per-device supervisor in the renderer.
 // The one hub socket lives in the host and a device's status DERIVES from
-// the bridge (remoteDeviceSync.ts rebuilds the list wholesale on boot, on
-// account changes and on every hub status change). The registry is
-// the external store a React binding reads through useSyncExternalStore,
-// so device status renders live without prop threading.
+// the bridge: remoteDeviceSync.ts rebuilds the list wholesale from the
+// account's device list (a query) and the hub's status (an atom), on
+// boot, on account changes and on every hub status change, into an
+// atom on the page's registry, so device status renders live without
+// prop threading.
 //
 // This file is renderer-only. It is NOT the transport machinery (that
-// is the hub bridge in main); it is the renderer's wiring around it, so
-// it stays out of the headless proof.
-import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
+// is the hub bridge in main); it is the renderer's wiring around it.
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { RendererContractApi } from "@shared/ipc/client";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
@@ -54,9 +55,11 @@ export type RemoteDevice = {
   api?: RemoteDeviceApi;
 };
 
-// The snapshot store: a stable reference between changes, a NEW
-// reference on every change, as useSyncExternalStore requires.
-const store = createExternalStore<readonly RemoteDevice[]>([]);
+// The list: a stable reference between changes, a new one on every
+// change, which is what a reader's selector compares.
+export const remoteDevicesAtom = Atom.keepAlive(
+  Atom.make<readonly RemoteDevice[]>([]),
+);
 
 // Field equality for the status union, so a rebuild that lands on the
 // same phase (and the same per-phase detail) is recognized as no
@@ -89,7 +92,7 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
   );
 }
 
-// Replace the store wholesale. Called by remoteDeviceSync.ts on boot,
+// Replace the list wholesale. Called by remoteDeviceSync.ts on boot,
 // on account changes and on hub status changes. The rebuild arrives
 // on every hub transition, most of which change nothing for most
 // devices, so unchanged entries keep their previous object identity
@@ -98,8 +101,11 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
 // array index, so a roster reorder or an add/remove does not churn
 // every row behind the shifted one. A pure reorder still notifies
 // (positions changed) while keeping each row's identity.
-export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
-  const snapshot = store.get();
+export function setRemoteDevices(
+  registry: AtomRegistry.AtomRegistry,
+  devices: readonly RemoteDevice[],
+): void {
+  const snapshot = registry.get(remoteDevicesAtom);
   const previous = new Map(snapshot.map((device) => [device.deviceId, device]));
   let changed = devices.length !== snapshot.length;
   const next = devices.map((device, index) => {
@@ -108,16 +114,15 @@ export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
     if (kept !== snapshot[index]) changed = true;
     return kept;
   });
-  if (changed) store.publish(next);
+  if (changed) registry.set(remoteDevicesAtom, next);
 }
 
-// A device by id as the store has it now, for a caller outside React.
-export function remoteDeviceById(deviceId: string): RemoteDevice | undefined {
-  return store.get().find((device) => device.deviceId === deviceId);
+// A device by id as the list has it now, for a caller outside React.
+export function remoteDeviceById(
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+): RemoteDevice | undefined {
+  return registry
+    .get(remoteDevicesAtom)
+    .find((device) => device.deviceId === deviceId);
 }
-
-// External store surface for useSyncExternalStore.
-export const remoteDeviceStore = {
-  subscribe: store.subscribe,
-  getSnapshot: store.get,
-};

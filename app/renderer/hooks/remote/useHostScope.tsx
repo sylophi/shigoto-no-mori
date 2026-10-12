@@ -19,6 +19,7 @@
 //   reads and invalidations must stay pinned to this machine's key
 //   registry.
 import type { HostApi } from "@shared/ipc/client";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createContext, use, type ReactNode } from "react";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
@@ -95,10 +96,11 @@ function hostScopeFor(
 // it has an api. Undefined for a peer without one.
 export function hostScopeOf(
   page: RendererApi,
+  registry: AtomRegistry.AtomRegistry,
   deviceId: string,
 ): HostScope | undefined {
   if (deviceId === page.deviceId) return localHostScope(page);
-  const api = remoteDeviceById(deviceId)?.api;
+  const api = remoteDeviceById(registry, deviceId)?.api;
   return api === undefined ? undefined : hostScopeFor(page, deviceId, api);
 }
 

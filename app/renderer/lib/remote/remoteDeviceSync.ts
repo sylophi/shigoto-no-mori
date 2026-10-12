@@ -1,9 +1,9 @@
 // Producer for the remote device registry.
-// Rebuilds the store from the account's device registry plus the hub
-// bridge's live status, on boot, on every hub statusChanged broadcast,
-// and whenever the shared device-list query moves in the cache (which
-// is where account changes, this window's own and everyone else's,
-// land). There is no per-device
+// Rebuilds the list (remoteDevicesAtom) from the account's device
+// registry plus the hub bridge's live status (hubStatusAtom), on boot,
+// on every hub statusChanged push, and whenever the shared device-list
+// query moves in the cache (which is where account changes, this
+// window's own and everyone else's, land). There is no per-device
 // supervisor here: the one hub socket lives in the host, so a hub
 // device's status DERIVES from the bridge instead of being driven.
 //
@@ -38,12 +38,19 @@
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
 import { hashKey, type QueryClient } from "@tanstack/react-query";
-import type { HubStatus } from "@shigomori/contracts/modules/hub";
+import { callOf } from "@shigomori/contracts/contract";
+import { hubContract, type HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
+import * as Effect from "effect/Effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
+import { clientAtoms, clientPushes, heard } from "@/lib/runtime/atoms";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { directPresenceRule } from "@shared/hub/directPresence";
-import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
 import {
   hostKeyDeviceId,
   invalidateDeviceSession,
@@ -113,8 +120,16 @@ function boundClient(): QueryClient {
 
 // The page's api the boot started the sync with: the hub and account
 // it follows, and the hop each peer's api rides. Bound with the query
-// client.
+// client, as is the page's registry, which the list is written to.
 let boundPageApi: RendererApi | null = null;
+let boundRegistry: AtomRegistry.AtomRegistry | null = null;
+
+function registry(): AtomRegistry.AtomRegistry {
+  if (boundRegistry === null) {
+    throw new Error("remote device sync used before startRemoteDeviceSync");
+  }
+  return boundRegistry;
+}
 
 function pageApi(): RendererApi {
   if (boundPageApi === null) {
@@ -146,10 +161,16 @@ let lastSharing: Readonly<Record<string, boolean>> = {};
 // reruns once with the newest status when work piles up.
 let inFlight = false;
 let dirty = false;
-let queuedStatus: HubStatus | undefined;
+let queued: Pass = { hubDriven: false };
 
-// Exported for the per-device stores that outlive any one page (the
-// script run stores), which need a device's api without a scope.
+// A pass of the reconcile: the snapshot a push brought (hubDriven) or
+// the seed fetched as the page boots, or none, for a pass the list's
+// landing queues, which asks the hub for one.
+type Pass = { readonly status?: HubStatus; readonly hubDriven: boolean };
+
+// Exported for the boot's followers of a peer (the shared settings
+// exchange, the sweep requests), which need a device's api without a
+// scope.
 export function apiFor(deviceId: string): RemoteDeviceApi {
   const existing = apis.get(deviceId);
   if (existing !== undefined) return existing.api;
@@ -181,14 +202,11 @@ function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
   });
 }
 
-async function reconcileNow(status?: HubStatus): Promise<void> {
+async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const current = status ?? (await pageApi().hub.status());
-  // A fetched snapshot seeds the shared store (a broadcast that raced
-  // it is newer and wins), so this module stays the store's single
-  // writer and the hooks never race a fetch of their own.
-  // A fetched snapshot that lost the race to a broadcast is stale, and
-  // must not roll the session diff back either.
-  if (status === undefined && seedHubStatus(current)) noteSessions(current);
+  // A fetched snapshot seeds the status while none has landed, as the
+  // boot's own fetch does: one that failed has these to fall back on.
+  if (status === undefined) seedFetched?.(current);
   const phase = current.socket.phase;
   const localDeviceId = pageApi().deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -200,7 +218,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // empty, since a refetch that fails falls back to the cached list
   // below, which would put the old account's device tabs back.
   if (directPresenceRule(current.socket) === "gone") {
-    setRemoteDevices([]);
+    setRemoteDevices(registry(), []);
     lastRoster = new Set();
     return;
   }
@@ -240,13 +258,13 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   const hasUnknownOnline = [...online].some(
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
-  if ((hasUnknownOnline || someoneLeft) && status !== undefined) {
+  if ((hasUnknownOnline || someoneLeft) && hubDriven) {
     refetchDeviceList();
   }
   // This machine is not a remote device to itself, so it is skipped.
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));
-  setRemoteDevices(devices);
+  setRemoteDevices(registry(), devices);
 }
 
 // Resync on every session LANDING. A device in phase "online" already
@@ -326,12 +344,11 @@ export function onSessionLanded(listener: (deviceId: string) => void): void {
 }
 
 // Followers with per-device state of their own to drop when the
-// account is left (the script run stores). Boot-scoped like the
-// session-landed listeners. Each hears this machine's id, for state it
-// keeps for this machine beside the peers'.
-const accountLeftListeners = new Set<(localDeviceId: string) => void>();
+// account is left (the boot's count of it, which the atoms that keep a
+// peer's state read). Boot-scoped like the session-landed listeners.
+const accountLeftListeners = new Set<() => void>();
 
-export function onAccountLeft(listener: (localDeviceId: string) => void): void {
+export function onAccountLeft(listener: () => void): void {
   accountLeftListeners.add(listener);
 }
 
@@ -340,7 +357,7 @@ export function onAccountLeft(listener: (localDeviceId: string) => void): void {
 // cache keyed by a peer's id. The local host's caches stay, they are
 // this machine's whatever the account.
 function leaveAccount(queryClient: QueryClient): void {
-  setRemoteDevices([]);
+  setRemoteDevices(registry(), []);
   for (const { unwatch } of apis.values()) unwatch();
   apis.clear();
   liveSessions = new Set();
@@ -356,7 +373,7 @@ function leaveAccount(queryClient: QueryClient): void {
       return deviceId !== undefined && deviceId !== pageApi().deviceId;
     },
   });
-  for (const listener of accountLeftListeners) listener(pageApi().deviceId);
+  for (const listener of accountLeftListeners) listener();
 }
 
 // Pure and synchronous: the peer's appVersion and command access ride
@@ -422,8 +439,8 @@ function buildEntry(
   };
 }
 
-function reconcile(status?: HubStatus): void {
-  queuedStatus = status;
+function reconcile(pass: Pass): void {
+  queued = pass;
   if (inFlight) {
     dirty = true;
     return;
@@ -436,32 +453,104 @@ async function drainReconciles(): Promise<void> {
   try {
     do {
       dirty = false;
-      const status = queuedStatus;
+      const pass = queued;
       // oxlint-disable-next-line no-await-in-loop -- reconciles are serial by design
-      await reconcileNow(status).catch(() => undefined);
+      await reconcileNow(pass).catch(() => undefined);
     } while (dirty);
   } finally {
     inFlight = false;
   }
 }
 
-// Boot wiring: reconcile once now, then follow the account, the
-// shared device-list cache and the hub for the life of the window.
-// None of the three subscriptions is ever unsubscribed, on purpose,
-// exactly like the other boot-scope subscriptions in boot.tsx. The
-// hub subscription is also the ONE writer of the useHubStatus store:
-// every snapshot it sees is published there, so no hook needs a
-// subscription or an initial fetch of its own. The boot's query client
+// The hub bridge's live status: its statusChanged pushes, seeded by a
+// fetch as the page boots (a push that raced the fetch is newer and
+// wins, and the stale seed must not roll the session diff back
+// either). Every snapshot reaches the sync here, in order, as it comes:
+// session landings are diffed on each one, ahead of the coalesced
+// reconcile that may skip intermediate snapshots (see liveSessions),
+// and a reader may only see the latest. Mounted by the sync for the
+// life of the page, so every reader (the tunnel marker on the devices
+// section, the web devices page's own-row status, the account sync's
+// sign-out trigger) reads the same value. Initial until the first
+// snapshot lands.
+// What a reconcile pass fetched, offered to the status while it has
+// none (hubStatusAtom), for as long as the atom runs.
+let seedFetched: ((status: HubStatus) => void) | null = null;
+
+export const hubStatusAtom = Atom.keepAlive(
+  clientAtoms.atom(() => {
+    let pushed = false;
+    let seeded = false;
+    const pushes = clientPushes(
+      hubContract,
+      callOf(hubContract, "statusChanged"),
+    ).pipe(
+      Stream.tap((status) =>
+        heard("hub status", () => {
+          pushed = true;
+          noteSessions(status);
+          reconcile({ status, hubDriven: true });
+        }),
+      ),
+    );
+    const boot = Stream.fromEffect(
+      Effect.tryPromise(() => pageApi().hub.status()),
+    ).pipe(
+      Stream.catch(() => Stream.empty),
+      Stream.filter(() => !pushed && !seeded),
+      Stream.tap((status) =>
+        heard("hub status", () => {
+          seeded = true;
+          noteSessions(status);
+          reconcile({ status, hubDriven: false });
+        }),
+      ),
+    );
+    // A pass's fetch seeds it too, once, when the boot's failed.
+    const fetched = Stream.callback<HubStatus>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          seedFetched = (status) => {
+            if (pushed || seeded) return;
+            seeded = true;
+            noteSessions(status);
+            Queue.offerUnsafe(queue, status);
+          };
+        }),
+        () =>
+          Effect.sync(() => {
+            seedFetched = null;
+          }),
+      ),
+    );
+    return Stream.mergeAll([pushes, boot, fetched], {
+      concurrency: "unbounded",
+    });
+  }),
+);
+
+// The hub's status as the sync last saw it, or null before the first.
+export const hubStatusOf = (
+  result: AsyncResult.AsyncResult<HubStatus, unknown>,
+): HubStatus | null => (AsyncResult.isSuccess(result) ? result.value : null);
+
+// Boot wiring: follow the hub (hubStatusAtom, mounted here), the
+// account and the shared device-list cache for the life of the window.
+// The account and cache subscriptions are never unsubscribed, on
+// purpose, exactly like the other boot-scope subscriptions in boot.tsx;
+// the hub's ends with the page's registry. The boot's query client
 // comes in rather than being reached for, because both boots
 // (renderer/boot.tsx, one for both shells) build their own, and so
 // does the push wiring each peer's api gets.
 export function startRemoteDeviceSync(
   api: RendererApi,
   queryClient: QueryClient,
+  atoms: AtomRegistry.AtomRegistry,
   watch: WatchPeer,
 ): void {
   boundPageApi = api;
   boundQueryClient = queryClient;
+  boundRegistry = atoms;
   watchPeer = watch;
   // This process's own enroll, sign-out, rename or revoke. A change of
   // ACCOUNT (a sign-out, a sign-in under another account) also drops
@@ -498,15 +587,7 @@ export function startRemoteDeviceSync(
   queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.action.type !== "success") return;
     if (event.query.queryHash !== deviceListHash) return;
-    reconcile();
+    reconcile({ hubDriven: false });
   });
-  api.hub.onStatusChanged((status) => {
-    publishHubStatus(status);
-    // Session landings are diffed here, on EVERY snapshot in order,
-    // ahead of the coalesced reconcile that may skip intermediate
-    // snapshots (see liveSessions).
-    noteSessions(status);
-    reconcile(status);
-  });
-  reconcile();
+  atoms.mount(hubStatusAtom);
 }

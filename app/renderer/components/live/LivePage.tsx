@@ -20,7 +20,8 @@ import { useWaitingAgents } from "@/lib/agentWatch";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { scriptRunsFor } from "@/store/scriptRuns";
+import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { notifyError, toast } from "@/lib/toast";
@@ -103,6 +104,7 @@ export function LivePage() {
 // left behind. Armed by a first click, like the app's other removals.
 function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
   const page = useApi();
+  const atoms = useRegistry();
   const registry = useRemoteDevices();
   const { armed, trigger } = useConfirmTwice();
   const runs = hosts.flatMap(({ deviceId, api, runs: hostRuns }) =>
@@ -119,7 +121,7 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
     mutationFn: () =>
       Promise.allSettled(
         runs.map(({ deviceId, run }) =>
-          scriptRunsFor(page, deviceId).stopRun(run),
+          scriptRunsOf(atoms, deviceId).stopRun(run),
         ),
       ),
     // The rows go as each script ends, so the outcome is said once,

@@ -6,7 +6,7 @@ import {
 import { inboxShowing } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
+import { useWorktreeCreatePhase } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CleanupError, Worktree } from "@shigomori/contracts/schemas";

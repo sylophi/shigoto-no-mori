@@ -18,6 +18,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { writeSharedSetting } from "@/lib/remote/sharedSettingsSync";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 
 const sharedSettingsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
@@ -84,9 +85,10 @@ export function useSetSharedSetting(
   errorTitle: string,
 ) {
   const api = useApi();
+  const registry = useRegistry();
   const mutation = useMutation({
     mutationFn: (write: { key: string; value: SharedSettingValue }) =>
-      writeSharedSetting(api, write.key, write.value),
+      writeSharedSetting(api, registry, write.key, write.value),
     meta: { errorTitle },
   });
   return (value: SharedSettingValue) => {
