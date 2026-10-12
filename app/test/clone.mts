@@ -9,6 +9,7 @@
 // imports resolve. Run: pnpm test clone.
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mts";
 import { scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
@@ -20,6 +21,8 @@ const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
 const { cloneRepo } = await import("../host/lib/git/clone.ts");
+const { isCloneCancelledError } =
+  await import("../shared/ipc/modules/projects.ts");
 const { githubHostOf } = await import("../host/lib/githubCli/remote.ts");
 const {
   cloneFolderName,
@@ -228,6 +231,39 @@ async function main() {
         `the token is in the message: ${failure.message}`,
       );
       assert.ok(!existsSync(join(sandbox, "repo")));
+    },
+  );
+
+  await check(
+    "a cancelled clone stops and leaves nothing behind",
+    async (track) => {
+      const sandbox = tempDir("sm-clone-", track);
+      // A remote that takes the connection and never answers, so the
+      // clone is mid-flight, its folder made, when the cancel lands.
+      const controller = new AbortController();
+      const server = createServer((socket) => {
+        socket.unref();
+        controller.abort();
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      try {
+        const { port } = server.address() as { port: number };
+        const failure = await cloneRepo(
+          `http://127.0.0.1:${port}/owner/repo.git`,
+          sandbox,
+          "repo",
+          controller.signal,
+        ).then(
+          () => null,
+          (error) => error,
+        );
+        assert.ok(isCloneCancelledError(failure), `not a cancel: ${failure}`);
+        assert.ok(!existsSync(join(sandbox, "repo")));
+      } finally {
+        server.close();
+      }
     },
   );
 

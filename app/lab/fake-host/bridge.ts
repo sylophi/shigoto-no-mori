@@ -21,6 +21,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
+import { CLONE_CANCELLED } from "@shared/ipc/modules/projects";
 import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
   createSharedSettingsCopy,
@@ -315,6 +316,8 @@ function hostHandlersFor(
       .filter((worktree) => !worktree.isPrimary && !worktree.detached)
       .map((worktree) => worktree.branch),
   ];
+  // The clones under way, by destination, each with its cancel.
+  const clones = new Map<string, () => void>();
   // Stands in for the restart into the staged build: the device
   // reports up to date.
   const restartIntoUpdate = () => {
@@ -332,7 +335,16 @@ function hostHandlersFor(
       registerProject(disk, forest, resolveOnDisk(disk, path)),
     // Takes a moment, as a clone does, so the cloning stage is seen.
     "projects:clone": async ({ url, parentDir, name }) => {
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      const key = `${parentDir}/${name ?? ""}`;
+      const cancelled = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), 2200);
+        clones.set(key, () => {
+          clearTimeout(timer);
+          resolve(true);
+        });
+      });
+      clones.delete(key);
+      if (cancelled) throw new Error(CLONE_CANCELLED);
       const parent = resolveOnDisk(disk, parentDir);
       const entries = disk.dirs[parent];
       if (entries === undefined) throw new Error(`${parent} is not a folder`);
@@ -346,6 +358,9 @@ function hostHandlersFor(
           ([, known]) => normalizeRemoteUrl(known) === normalizeRemoteUrl(url),
         )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
       return registerProject(disk, forest, `${parent}/${folder}`, identity);
+    },
+    "projects:cancelClone": ({ parentDir, name }) => {
+      clones.get(`${parentDir}/${name}`)?.();
     },
     // Quick, as a new repository is, but long enough to see the stage.
     "projects:create": async ({ parentDir, name }) => {

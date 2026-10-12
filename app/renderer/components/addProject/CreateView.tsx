@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, FolderPlus } from "lucide-react";
 import {
   CreateProjectPayloadSchema,
@@ -46,6 +46,7 @@ export function CreateView({
   setName,
   addToTerrier,
   setAddToTerrier,
+  setWorking,
   onClose,
 }: {
   // Owned by the dialog, so it outlives a change of mode or device.
@@ -53,6 +54,7 @@ export function CreateView({
   setName: (value: string) => void;
   addToTerrier: boolean;
   setAddToTerrier: (value: boolean) => void;
+  setWorking: (working: boolean) => void;
   onClose: () => void;
 }) {
   const createProject = useCreateProject();
@@ -60,6 +62,13 @@ export function CreateView({
   const [stage, setStage] = useState<"form" | "creating" | "publishing">(
     "form",
   );
+  // Held open while it works, as CloneView is.
+  const busy = stage !== "form";
+  useEffect(() => {
+    if (!busy) return;
+    setWorking(true);
+    return () => setWorking(false);
+  }, [busy, setWorking]);
   const trimmed = name.trim();
   const nameValid =
     CreateProjectPayloadSchema.shape.name.safeParse(trimmed).success;
