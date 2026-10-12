@@ -80,7 +80,7 @@ function devProfile(): string | null {
 
 // Each flavor has its own userData and name (main/flavor.ts), so its
 // own single-instance lock, Clerk tokens, hub credential, log folder
-// and "<name> Safe Storage" keychain item: a test build runs beside the
+// and "<name> Safe Storage" keychain item: a v3 build runs beside the
 // installed prod one and a dev run beside both, none locking out or
 // signing out another.
 {

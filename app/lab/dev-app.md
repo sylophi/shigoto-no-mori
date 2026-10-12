@@ -6,8 +6,9 @@ profiles make several devices of one machine. The reference behind
 
 ## Builds and data folders
 
-The app has three builds, its flavors: prod is what ships, test is a
-`v*-test.N` prerelease the owner runs beside prod, and dev is `pnpm dev`.
+The app has three builds, its flavors: prod is what ships, v3 is a
+`v*-v3.N` prerelease the owner runs beside prod until v3 merges into
+main, and dev is `pnpm dev`.
 Each keeps its own state and never reads another's, so all three run on
 one machine at once as three devices. Every name below comes from one
 table, `packages/engine/src/flavor.ts`. A packaged build's flavor is
@@ -15,28 +16,29 @@ baked in when it is built (`SM_FLAVOR`, which the release workflow
 sets from the tag) and main reads it in one place (`main/flavor.ts`),
 which hands it to the host.
 
-|                       | Prod                                            | Test                                                   | Dev (`pnpm dev`)                                      |
+|                       | Prod                                            | v3                                                     | Dev (`pnpm dev`)                                      |
 | --------------------- | ----------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
-| App and dock name     | Shigoto no Mori                                 | Shigoto no Mori (Test)                                 | Shigoto no Mori (Dev)                                 |
-| Bundle id             | `com.sylophi.shigomori`                         | `com.sylophi.shigomori.test`                           | `com.sylophi.shigomori.dev.<worktree>`                |
-| Renderer scheme       | `shigomori://app`                               | `shigomori-test://app`                                 | `shigomori-dev://app`                                 |
-| Data dir              | `~/.sm`                                         | `~/.smt`                                               | `~/.smd`                                              |
-| On a project's drive  | `/Volumes/<drive>/.sm/wt`                       | `/Volumes/<drive>/.smt/wt`                             | `/Volumes/<drive>/.smd/wt`                            |
-| Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-test/data-dir`                    | `~/.config/shigomori-dev/data-dir`                    |
-| userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (Test)` | `~/Library/Application Support/Shigoto no Mori (dev)` |
-| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Test)/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
-| Keychain item         | `Shigoto no Mori Safe Storage`                  | `Shigoto no Mori (Test) Safe Storage`                  | none on macOS (mock keychain)                         |
+| App and dock name     | Shigoto no Mori                                 | Shigoto no Mori (v3)                                 | Shigoto no Mori (Dev)                                 |
+| Bundle id             | `com.sylophi.shigomori`                         | `com.sylophi.shigomori.v3`                           | `com.sylophi.shigomori.dev.<worktree>`                |
+| Renderer scheme       | `shigomori://app`                               | `shigomori-v3://app`                                 | `shigomori-dev://app`                                 |
+| Data dir              | `~/.sm`                                         | `~/.smv3`                                              | `~/.smd`                                              |
+| On a project's drive  | `/Volumes/<drive>/.sm/wt`                       | `/Volumes/<drive>/.smv3/wt`                            | `/Volumes/<drive>/.smd/wt`                            |
+| Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-v3/data-dir`                      | `~/.config/shigomori-dev/data-dir`                    |
+| userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (v3)` | `~/Library/Application Support/Shigoto no Mori (dev)` |
+| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (v3)/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
+| Keychain item         | `Shigoto no Mori Safe Storage`                  | `Shigoto no Mori (v3) Safe Storage`                  | none on macOS (mock keychain)                         |
 | file-sync state       | `<data dir>/file-sync`                          | `<data dir>/file-sync`                                 | `<data dir>/file-sync`                                |
 | Single-instance lock  | in its userData                                 | in its userData                                        | in its userData                                       |
-| CLI                   | `sm`, `shigomori` (bundled)                     | `smt`, `shigomori-test` (bundled)                      | `smd`, `shigomori-dev` (`dist-cli/smd`)               |
-| Updates               | full releases, and its own rc line              | the test prereleases alone                             | none                                                  |
-| Hub and Clerk config  | Baked in at build time                          | Baked in at build time (the dev hub until the cutover) | `.env.local` (`hub-dev.shigomori.com`)                |
+| CLI                   | `sm`, `shigomori` (bundled)                     | `smv3`, `shigomori-v3` (bundled)                       | `smd`, `shigomori-dev` (`dist-cli/smd`)               |
+| Updates               | full releases, and its own rc line              | the v3 prereleases alone                               | none                                                  |
+| Hub and Clerk config  | Baked in at build time                          | Baked in at build time (the dev hub, `SM_V3_` variables)  | `.env.local` (`hub-dev.shigomori.com`)                |
 
-A test build's terminal command, shell hook and agent hooks are its
-own (`smt`, markers and entries named for `shigomori-test`), beside
+A v3 build's terminal command, shell hook and agent hooks are its
+own (`smv3`, markers and entries named for `shigomori-v3`), beside
 prod's, so dogfooding v3 leaves the installed `sm` alone. It starts on
-an empty `~/.smt`: the v3 migration imports what v2 left in a data
-dir, and a test build has none.
+an empty `~/.smv3`: the v3 migration imports what v2 left in a data
+dir, and a v3 build has none. The v3 flavor, its repo variables and
+its Clerk origin go when v3 merges into main.
 
 Settings' Danger zone (Nuke everything) returns a build to a fresh
 install: its worktrees, its `sm` links and hooks, its device on the
@@ -311,7 +313,7 @@ removed one the next time they read the registry. A relaunch after
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
   `hub/.dev.vars`, see `hub/README.md`, "Develop and test".
-- **Packaged build** (`pnpm make`, `SM_FLAVOR=test` for a test one).
+- **Packaged build** (`pnpm make`, `SM_FLAVOR=v3` for a v3 one).
   The only way to test a packaged scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
   environment the bundle is unsigned and, like dev, runs on
   Chromium's mock keychain: the real keychain is exercised only by a

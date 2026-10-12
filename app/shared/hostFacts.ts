@@ -19,7 +19,7 @@ export const HostFactsSchema = Schema.Struct({
   rendererOrigin: Schema.String,
   // The build's flavor (main/flavor.ts), which names the data dir and
   // the binaries.
-  flavor: Schema.Literals(["prod", "test", "dev"]),
+  flavor: Schema.Literals(["prod", "v3", "dev"]),
 });
 
 // The command-line flag the facts ride, as JSON, into the host's

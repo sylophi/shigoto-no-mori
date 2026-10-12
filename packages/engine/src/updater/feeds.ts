@@ -287,9 +287,9 @@ export const makeFeeds = ({
         release,
         confirmed: !isPrerelease(current),
       }));
-      // The update server knows no test line: a test build asks GitHub
+      // The update server knows no v3 line: a v3 build asks GitHub
       // alone.
-      if (offered === "test") return yield* fromList;
+      if (offered === "v3") return yield* fromList;
       if (releaseListUrl(input) === "") return yield* fromServer;
       if (updateServerUrl(input) === "") return yield* fromList;
       return yield* fromList.pipe(

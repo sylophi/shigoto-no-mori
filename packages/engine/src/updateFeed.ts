@@ -85,15 +85,15 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
     return name.endsWith(".zip") && name.includes(marker);
   })?.browser_download_url ?? "";
 
-// A `-test.N` prerelease, which only a test build moves to.
-const isTestRelease = (version: Semver) =>
-  isPrerelease(version) && version.pre[0] === "test";
+// A `-v3.N` prerelease, which only a v3 build moves to.
+const isV3Release = (version: Semver) =>
+  isPrerelease(version) && version.pre[0] === "v3";
 
 // The release a build moves to, or undefined when none is ahead. A prod
 // build (`releases`) takes the highest of the full releases and of the
 // prereleases in its own channel, so a full 2.0.0 beats every
-// 2.0.0-beta.N, which ends the beta, and never a test prerelease. A
-// test build (`test`) takes the highest test prerelease alone: a full
+// 2.0.0-beta.N, which ends the beta, and never a v3 prerelease. A
+// v3 build (`v3`) takes the highest v3 prerelease alone: a full
 // release is another flavor's bundle. Either way a release flagged
 // prerelease under a full release's tag stays hidden, as the update
 // server hides it, and one without its zip for this arch yet (the
@@ -103,7 +103,7 @@ export const pickRelease = (
   current: Semver,
   releases: ReadonlyArray<GitHubRelease>,
   arch: string,
-  line: "releases" | "test" = "releases",
+  line: "releases" | "v3" = "releases",
 ): ReleaseInfo | undefined => {
   const channel = releaseChannel(current);
   const marker = `-darwin-${arch}-`;
@@ -115,9 +115,9 @@ export const pickRelease = (
       continue;
     }
     if (best !== null && compareSemver(version, best.version) <= 0) continue;
-    if (line === "test") {
-      if (!isTestRelease(version)) continue;
-    } else if (isTestRelease(version)) {
+    if (line === "v3") {
+      if (!isV3Release(version)) continue;
+    } else if (isV3Release(version)) {
       continue;
     } else if (isPrerelease(version)) {
       if (releaseChannel(version) !== channel) continue;

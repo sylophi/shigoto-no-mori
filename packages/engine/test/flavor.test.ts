@@ -24,9 +24,9 @@ it("gives every flavor its own names", () => {
 });
 
 it("builds a test tag as test and anything else as prod", () => {
-  assert.equal(flavorOfVersion("v3.0.0-test.1"), "test");
-  assert.equal(flavorOfVersion("3.0.0-test"), "test");
+  assert.equal(flavorOfVersion("v3.0.0-v3.1"), "v3");
+  assert.equal(flavorOfVersion("3.0.0-v3"), "v3");
   assert.equal(flavorOfVersion("v3.0.0-rc.1"), "prod");
   assert.equal(flavorOfVersion("v3.0.0"), "prod");
-  assert.equal(flavorOfVersion("v3.0.0-testing.1"), "prod");
+  assert.equal(flavorOfVersion("v3.0.0-v3x.1"), "prod");
 });
