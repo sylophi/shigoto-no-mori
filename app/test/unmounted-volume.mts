@@ -36,6 +36,10 @@ it("a path on a volume not mounted names it, through links too; one on a mounted
   const relative = join(home, "relative-link");
   symlinkSync("nested-drive/../.sm", relative);
   assert.equal(unmountedVolume(relative), GONE);
+  // A `..` past the missing mount point doesn't step back out of it.
+  const pastIt = join(home, "past-link");
+  symlinkSync(`${GONE}/../../tmp/.sm`, pastIt);
+  assert.equal(unmountedVolume(pastIt), GONE);
   // Links that go round end without an answer rather than for good.
   symlinkSync("loop-b", join(home, "loop-a"));
   symlinkSync("loop-a", join(home, "loop-b"));

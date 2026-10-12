@@ -41,6 +41,11 @@ export function unmountedVolume(path: string): string | null {
     const target = linkAt(next);
     if (target === undefined) {
       at = next;
+      // A mount point that isn't there ends the lookup, as it does the
+      // system's: a `..` after it can't step back out.
+      if (dirname(at) === volumes && !existsSync(at)) {
+        return join(VOLUMES, part);
+      }
       continue;
     }
     links += 1;
@@ -48,7 +53,5 @@ export function unmountedVolume(path: string): string | null {
     if (target.startsWith("/")) at = "/";
     parts.unshift(...target.split("/"));
   }
-  if (!at.startsWith(`${volumes}/`)) return null;
-  const name = at.slice(volumes.length + 1).split("/")[0] ?? "";
-  return existsSync(join(volumes, name)) ? null : join(VOLUMES, name);
+  return null;
 }
