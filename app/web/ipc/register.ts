@@ -137,7 +137,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     baseUrl: config.hubUrl,
     fetchImpl: deps.fetchImpl,
   });
-  const tab = createLocalRegistrar();
+  const tab = createLocalRegistrar({ validateOutputs: deps.isDev });
   // A sign-out whose revoke never reached the hub is delivered at the
   // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
   void retryParkedRevoke({ config, service, store, deviceId });

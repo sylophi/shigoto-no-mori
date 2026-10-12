@@ -65,17 +65,17 @@ export function classificationGap(call: ContractCall): string | null {
 
 // One invoke as the server runs it: the handler's answer, an effect, a
 // promise or a value, as an effect whose failure crosses as the
-// contract error it is, or as RemoteCallError.
-export type Invoke<Ctx, Services> = (
+// contract error it is, or as RemoteCallError (the side's `failure`).
+export type Invoke<Ctx, Services, E = CallFailure> = (
   input: unknown,
   ctx: Ctx,
-) => Effect.Effect<unknown, CallFailure, Services>;
+) => Effect.Effect<unknown, E, Services>;
 
 export type View<Services> = (
   input: unknown,
 ) => Stream.Stream<unknown, unknown, Services>;
 
-export type Served<Ctx, Services = never> = {
+export type Served<Ctx, Services = never, E = CallFailure> = {
   readonly serve: <M extends ContractModule>(
     module: M,
     handlers: Handlers<M, Ctx> | EffectHandlers<M, Ctx, Services>,
@@ -94,12 +94,17 @@ export type Served<Ctx, Services = never> = {
   ) => void;
   // What answers one of the group's calls, or undefined when nothing
   // here serves it.
-  readonly invokeOf: (call: ContractCall) => Invoke<Ctx, Services> | undefined;
+  readonly invokeOf: (
+    call: ContractCall,
+  ) => Invoke<Ctx, Services, E> | undefined;
   readonly viewOf: (call: ContractCall) => View<Services> | undefined;
 };
 
-export function createServed<Ctx, Services = never>(
+export function createServed<Ctx, Services = never, E = CallFailure>(
   options: {
+    // What a handler's failure crosses as: callFailureOf on a wire, the
+    // failure as it is in the page, which has none.
+    readonly failure?: (error: unknown) => E;
     // Which of a module's calls this side serves: the device link
     // serves only the remote ones, so a call that is not is never
     // there for a peer to ask.
@@ -109,9 +114,11 @@ export function createServed<Ctx, Services = never>(
     // call: registration throws otherwise.
     readonly onUsageTracked?: (input: unknown) => void;
   } = {},
-): Served<Ctx, Services> {
+): Served<Ctx, Services, E> {
   const serves = options.serves ?? (() => true);
-  const invokes = new Map<string, Invoke<Ctx, Services>>();
+  const failure =
+    options.failure ?? ((error: unknown) => callFailureOf(error) as E);
+  const invokes = new Map<string, Invoke<Ctx, Services, E>>();
   const views = new Map<string, View<Services>>();
   const once = (call: ContractCall) => {
     const channel = channelOf(call);
@@ -147,17 +154,17 @@ export function createServed<Ctx, Services = never>(
     invokes.set(once(call), (input, ctx) =>
       Effect.try({
         try: () => handler(input, ctx),
-        catch: callFailureOf,
+        catch: failure,
       }).pipe(
         Effect.flatMap((answer) =>
           Effect.isEffect(answer)
             ? (answer as Effect.Effect<unknown, unknown, Services>)
             : Effect.tryPromise({
                 try: async () => answer,
-                catch: callFailureOf,
+                catch: failure,
               }),
         ),
-        Effect.mapError(callFailureOf),
+        Effect.mapError(failure),
         Effect.tap(() => Effect.sync(() => tracked?.(input))),
       ),
     );

@@ -97,7 +97,7 @@ type LocalView = (
 ) => () => void;
 
 export type LocalRegistrar = {
-  served: Served<HandlerContext>;
+  served: Served<HandlerContext, never, unknown>;
   link: Link;
   view: (module: ContractModule, key: string, view: LocalView) => void;
   // A push to the page, as a host's reaches its windows.
@@ -126,8 +126,16 @@ export function invokeIndexFor(
   return index;
 }
 
-export function createLocalRegistrar(): LocalRegistrar {
-  const served = createServed<HandlerContext>();
+export function createLocalRegistrar(options: {
+  // Each answer checked against its output schema, as a dev build does:
+  // the page has no RPC server to encode it.
+  readonly validateOutputs: boolean;
+}): LocalRegistrar {
+  // What a handler rejects with (a contract error, any Error) is the
+  // call's failure as it is, and a synchronous throw is too.
+  const served = createServed<HandlerContext, never, unknown>({
+    failure: (error) => error,
+  });
   const fanOut = pushFanOut();
   const views = new Map<string, LocalView>();
   const invokeIndex = invokeIndexFor();
@@ -189,7 +197,15 @@ export function createLocalRegistrar(): LocalRegistrar {
             try: () => decode(inputOf(call), input),
             catch: callFailureOf,
           }),
-          (decoded) => handler(decoded, context),
+          (decoded) =>
+            options.validateOutputs
+              ? Effect.tap(handler(decoded, context), (answer) =>
+                  Effect.try({
+                    try: () => Schema.encodeUnknownSync(outputOf(call))(answer),
+                    catch: callFailureOf,
+                  }),
+                )
+              : handler(decoded, context),
         );
       }
       let verdict = verdictCache.get(channel);
