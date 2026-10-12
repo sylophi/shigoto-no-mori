@@ -23,6 +23,7 @@ import {
   projectFlags,
   resolveProject,
   resolveWorktree,
+  rest,
   worktreeFlags,
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
@@ -52,9 +53,6 @@ const force = (description: string) =>
     Flag.withDescription(description),
     Flag.withDefault(false),
   );
-
-// The positionals it needs are read and the rest let be, as the Go sm did.
-const rest = Argument.String("args").pipe(Argument.variadic());
 
 // Where to go when the shell stands in a folder that is gone: "the
 // removed worktree" or "the old location".

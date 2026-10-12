@@ -278,8 +278,8 @@ const catalog = (names: Names) => {
       ],
       [
         "config edit",
-        "Open config.json in your editor",
-        "$VISUAL/$EDITOR in a terminal, the OS opener otherwise.",
+        "Open the settings in your editor",
+        "$VISUAL or $EDITOR, at a terminal. Saved when the editor quits.",
       ],
     ],
 

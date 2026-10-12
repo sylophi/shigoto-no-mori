@@ -8,6 +8,7 @@ import * as Paths from "../Paths.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {
+  type CatchUp,
   LandingRefused,
   type RemoveOptions,
   type Reporter,
@@ -166,19 +167,23 @@ export const makeCleanup = ({
           const caught =
             base !== "" && base !== target.success.primaryBranch
               ? yield* catchUpBase(target.success, base, Effect.succeed(listed))
-              : {};
+              : undefined;
+          if (caught !== undefined && reporter.caughtUp !== undefined) {
+            yield* reporter.caughtUp(caught);
+          }
           return doneDocument(row, worktree.branch, deleted, {
             ...extra,
             ...caught,
           });
         }
-        const caught = Result.isFailure(target)
+        const caught: CatchUp = Result.isFailure(target)
           ? { catchUpSkipped: target.failure.message }
           : yield* catchUpBase(
               target.success,
               base,
               worktrees.identities(project),
             );
+        if (reporter.caughtUp !== undefined) yield* reporter.caughtUp(caught);
         const removed = yield* worktrees
           .remove(located, { ...options, preflighted: true }, reporter)
           .pipe(Effect.result);
@@ -303,6 +308,9 @@ export const makeCleanup = ({
             return cleanupFailed(outcome.failure, withStack);
           }
           removed.push(outcome.success);
+          if (reporter.removedOther !== undefined) {
+            yield* reporter.removedOther(outcome.success);
+          }
         }
         return yield* landCleanup(
           located,

@@ -16,6 +16,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
+import { rest } from "../here.ts";
 import { interactive } from "../prompt.ts";
 import { launcherVerb } from "./configLists.ts";
 import { emit, out, Output, renderTable, styles } from "../output.ts";
@@ -88,7 +89,7 @@ const reportUnset = (settings: Settings, key: string) =>
 
 // The verbs over the settings `resolve` names.
 export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
-  const list = Command.make("list", {}, () =>
+  const list = Command.make("list", { rest }, () =>
     Effect.gen(function* () {
       const settings = yield* resolve;
       const config = yield* Config.Config;
@@ -123,7 +124,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
     }),
   ).pipe(Command.withDescription("Print one setting's effective value"));
 
-  const read = Command.make("read", {}, () =>
+  const read = Command.make("read", { rest }, () =>
     Effect.gen(function* () {
       const settings = yield* resolve;
       const { json, binaryName } = yield* Effect.service(Output);
@@ -176,7 +177,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
 
   const write = Command.make(
     "write",
-    { data: Flag.String("data").pipe(Flag.optional) },
+    { data: Flag.String("data").pipe(Flag.optional), rest },
     ({ data }) =>
       Effect.gen(function* () {
         const settings = yield* resolve;
@@ -201,7 +202,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
   // The whole document in $VISUAL or $EDITOR, written back as one save
   // once the editor quits. The store holds the settings, so the editor
   // gets a copy in a file of its own.
-  const edit = Command.make("edit", {}, () =>
+  const edit = Command.make("edit", { rest }, () =>
     Effect.gen(function* () {
       const settings = yield* resolve;
       const { json, binaryName } = yield* Effect.service(Output);

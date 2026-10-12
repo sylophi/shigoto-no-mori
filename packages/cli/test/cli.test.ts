@@ -623,6 +623,23 @@ describe("at a terminal", () => {
     );
   });
 
+  it("colors a terminal's lines with NO_COLOR set but empty, as Go did", async () => {
+    const shown = await inTerminal(["path", "nosuch"], [], { NO_COLOR: "" });
+    assert.ok(
+      shown.endsWith('\u001b[31msmd:\u001b[0m No worktree named "nosuch".\r\n'),
+      JSON.stringify(shown),
+    );
+  });
+
+  it("enters a worktree in the account's login shell when $SHELL is empty", async () => {
+    const { worktree } = scripted();
+    const entered = join(box.home, "entered");
+    box.fakeBin("account-shell", `pwd > '${entered}'`);
+    box.fakeBin("dscl", 'echo "UserShell: $(command -v account-shell)"');
+    await inTerminal(["cd", "-p", "repo", "w"], [], { SHELL: "" });
+    assert.equal(readFileSync(entered, "utf8"), `${worktree}\n`);
+  });
+
   it("edits the settings in $EDITOR and saves what it left", async () => {
     box.write("registry.json", { projects: [] });
     box.fakeBin(
@@ -1245,5 +1262,468 @@ describe("worktrees rename", () => {
       ).code,
       2,
     );
+  });
+});
+
+// The Go sm's parser (cli/args.go), ahead of effect/cli's.
+describe("the Go sm's command line", () => {
+  // Projects alpha and beta, alpha with a managed worktree fox.
+  const fixture = () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    const fox = join(box.side("cli"), "wt", "alpha", "fox");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
+    return { alpha, beta, fox };
+  };
+  const described = async () =>
+    (await runAt(box.home, "--json", "describe", "-p", "alpha", "fox")).doc as {
+      readonly title: string;
+      readonly description: string;
+    };
+
+  it("takes a long flag after a single dash", async () => {
+    fixture();
+    const set = await runAt(
+      box.home,
+      "describe",
+      "-project",
+      "alpha",
+      "fox",
+      "-title",
+      "Fox",
+    );
+    assert.equal(set.code, 0, set.stderr);
+    assert.equal((await described()).title, "Fox");
+  });
+
+  it("gives a valued flag the next argument, a dash and all", async () => {
+    fixture();
+    const set = await runAt(
+      box.home,
+      "describe",
+      "-p",
+      "alpha",
+      "fox",
+      "-d",
+      "- item one",
+    );
+    assert.equal(set.code, 0, set.stderr);
+    assert.equal((await described()).description, "- item one");
+  });
+
+  it("keeps the last of a repeated flag", async () => {
+    fixture();
+    const listed = await runAt(
+      box.home,
+      "--json",
+      "projects",
+      "config",
+      "list",
+      "-p",
+      "beta",
+      "-p",
+      "alpha",
+    );
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.equal((listed.doc as { project: string }).project, "alpha");
+  });
+
+  it("refuses a value for a bare flag, and never takes the next one", async () => {
+    const { alpha } = fixture();
+    const valued = await runAt(box.home, "list", "--all=1");
+    assert.equal(valued.code, 2);
+    assert.equal(valued.stderr, 'smd: Option "--all=1" takes no value.\n');
+    // `false` is a positional, which list lets be, so --all stands.
+    const all = await runAt(alpha, "--json", "list", "--all", "false");
+    assert.equal(all.code, 0, all.stderr);
+    assert.equal((all.doc as ReadonlyArray<unknown>).length, 3);
+  });
+
+  it("hands `wt` a flag before the name, as switch's", async () => {
+    const { fox } = fixture();
+    const cdFile = join(box.home, "cd");
+    writeFileSync(cdFile, "");
+    const ended = await start(box.home, ["wt", "-p", "alpha", "fox"], {
+      SHIGOMORI_CD_FILE: cdFile,
+    }).ended;
+    assert.equal(ended.code, 0, ended.stderr);
+    assert.equal(readFileSync(cdFile, "utf8"), `${fox}\n`);
+  });
+
+  it("lets be the positionals a verb doesn't read, where Go did", async () => {
+    const { alpha, fox } = fixture();
+    const gamma = box.repo("gamma");
+    const cdFile = join(box.home, "cd");
+    for (const args of [
+      ["cd", "fox", "extra"],
+      ["wt", "fox", "extra"],
+    ]) {
+      writeFileSync(cdFile, "");
+      // oxlint-disable-next-line no-await-in-loop -- one directive file, one run at a time
+      const ended = await start(alpha, args, {
+        SHIGOMORI_CD_FILE: cdFile,
+      }).ended;
+      assert.equal(ended.code, 0, `${args.join(" ")}: ${ended.stderr}`);
+      assert.equal(readFileSync(cdFile, "utf8"), `${fox}\n`);
+    }
+    for (const args of [
+      ["launchers", "list", "extra"],
+      ["projects", "list", "foo"],
+      ["config", "list", "extra"],
+      ["projects", "icon", "alpha", "extra"],
+      ["projects", "add", gamma, "extra"],
+      ["projects", "remove", "beta", "extra", "--yes"],
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- each changes what the next reads
+      const run = await runAt(alpha, ...args);
+      assert.equal(run.code, 0, `${args.join(" ")}: ${run.stderr}`);
+    }
+    // Go refused these.
+    assert.equal((await runAt(alpha, "config", "get", "a", "b")).code, 2);
+    assert.equal((await runAt(alpha, "mirrors", "extra")).code, 2);
+  });
+
+  it("tells a lifecycle script truecolor only under --json", async () => {
+    fixture();
+    const configured = await runAt(
+      box.home,
+      "projects",
+      "config",
+      "-p",
+      "alpha",
+      "--setup",
+      'echo "colorterm=$COLORTERM"',
+    );
+    assert.equal(configured.code, 0, configured.stderr);
+    const json = await runAt(box.home, "--json", "setup", "-p", "alpha", "fox");
+    assert.equal(json.code, 0, json.stderr);
+    assert.match(json.stdout, /colorterm=truecolor/);
+    const person = await runAt(box.home, "setup", "-p", "alpha", "fox");
+    assert.equal(person.code, 0, person.stderr);
+    assert.match(person.stderr, /colorterm=\n/);
+  });
+
+  it("binds the calling session on every command that reads where it runs", async () => {
+    const { fox } = fixture();
+    for (const verb of ["mirrors", "bundle"]) {
+      const session = `session-${verb}`;
+      // oxlint-disable-next-line no-await-in-loop -- one store, one run at a time
+      await start(fox, [verb], { CLAUDE_CODE_SESSION_ID: session }).ended;
+      // oxlint-disable-next-line no-await-in-loop -- one store, one run at a time
+      const unbound = await start(fox, [
+        "--json",
+        "agents",
+        "unbind",
+        "--harness",
+        "claude",
+        "--session",
+        session,
+      ]).ended;
+      assert.deepEqual(lastDoc(unbound.stdout), { ok: true, unbound: true });
+    }
+  });
+});
+
+describe("disk-usage", () => {
+  it("measures a folder, stepping over what --exclude names", async () => {
+    const dir = join(box.home, "measured");
+    mkdirSync(join(dir, "nested"), { recursive: true });
+    writeFileSync(join(dir, "a.txt"), "x".repeat(100_000));
+    writeFileSync(join(dir, "nested", "b.txt"), "y".repeat(100_000));
+    const whole = await runAt(box.home, "--json", "disk-usage", dir);
+    assert.equal(whole.code, 0, whole.stderr);
+    const doc = whole.doc as Record<string, unknown>;
+    assert.deepEqual(Object.keys(doc), [
+      "bytes",
+      "reclaimableBytes",
+      "lastActivityAt",
+      "partial",
+    ]);
+    assert.equal(doc["partial"], false);
+    assert.equal(typeof doc["lastActivityAt"], "number");
+    const part = await runAt(
+      box.home,
+      "--json",
+      "disk-usage",
+      "measured",
+      "--exclude",
+      "measured/nested",
+    );
+    assert.ok(
+      (part.doc as { bytes: number }).bytes < (doc["bytes"] as number),
+      part.stdout,
+    );
+    const person = await runAt(box.home, "disk-usage", dir);
+    assert.match(person.stdout, /^\d+ bytes on disk, \d+ reclaimable\n$/);
+    const usage = await runAt(box.home, "disk-usage");
+    assert.equal(usage.code, 2);
+    assert.equal(
+      usage.stderr,
+      "smd: Usage: smd disk-usage <path> [--exclude <path>...]\n",
+    );
+  });
+});
+
+// A PR as gh lists it.
+const pr = (
+  number: number,
+  head: string,
+  base: string,
+  state: string,
+  more: Record<string, unknown> = {},
+) =>
+  JSON.stringify({
+    number,
+    title: head === "fox" ? "Fox" : "Bear",
+    state,
+    isDraft: false,
+    url: `u${number}`,
+    baseRefName: base,
+    headRefName: head,
+    isCrossRepository: false,
+    ...more,
+  });
+
+const settings = (autoMerge: boolean) =>
+  JSON.stringify({
+    data: {
+      repository: {
+        mergeCommitAllowed: false,
+        squashMergeAllowed: true,
+        rebaseMergeAllowed: false,
+        autoMergeAllowed: autoMerge,
+      },
+    },
+  });
+
+// PR #5's progress, as each read finds it.
+const progress = (state: string, armed: boolean) =>
+  JSON.stringify({
+    data: {
+      repository: {
+        pullRequest: {
+          state,
+          mergeStateStatus: state === "MERGED" ? "CLEAN" : "BLOCKED",
+          ...(armed ? { autoMergeRequest: { mergeMethod: "SQUASH" } } : {}),
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  statusCheckRollup: {
+                    contexts: {
+                      nodes: [
+                        {
+                          name: "ci",
+                          status: "IN_PROGRESS",
+                          conclusion: "",
+                          isRequired: true,
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+// merge, land and rm --stack as a person reads them, against a scripted
+// gh: what is said, and when.
+describe("landing", () => {
+  // A project cloned from an upstream, with a managed worktree fox a
+  // commit ahead on its own branch.
+  const project = () => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    box.git(box.home, "clone", "-q", upstream, repo);
+    box.write("registry.json", {
+      projects: [{ id: "R", name: "repo", path: repo }],
+    });
+    const fox = join(box.side("cli"), "wt", "repo", "fox");
+    box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
+    box.git(fox, "commit", "-q", "--allow-empty", "-m", "fox");
+    return { repo, fox };
+  };
+
+  // gh answering each call whose arguments match a pattern with its
+  // answer, and any other call refused.
+  const fakeGh = (answers: ReadonlyArray<readonly [string, string]>) =>
+    box.fakeBin(
+      "gh",
+      `case "$*" in
+${answers.map(([pattern, answer]) => `  ${pattern}) cat <<'ANSWER'\n${answer}\nANSWER\n  ;;`).join("\n")}
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+
+  it("says the merge and the catch-up before the cleanup, which may fail", async () => {
+    project();
+    fakeGh([
+      [
+        '"pr list --state all --head fox "*',
+        `[${pr(5, "fox", "main", "OPEN", { mergeStateStatus: "CLEAN" })}]`,
+      ],
+      ['"api graphql -F number=5 "*', progress("MERGED", false)],
+      ['"api graphql "*', settings(false)],
+      ['"pr merge 5 --squash"', ""],
+    ]);
+    const configured = await runAt(
+      box.home,
+      "projects",
+      "config",
+      "-p",
+      "repo",
+      "--teardown",
+      "exit 1",
+    );
+    assert.equal(configured.code, 0, configured.stderr);
+    const landed = await runAt(box.home, "land", "-p", "repo", "fox");
+    assert.equal(landed.code, 1, landed.stderr);
+    assert.equal(landed.stdout, "merged PR #5 (squash): Fox\n");
+    const caught = landed.stderr.indexOf(
+      "primary checkout caught up (origin/main)",
+    );
+    assert.ok(caught !== -1, landed.stderr);
+    assert.ok(
+      landed.stderr.endsWith(
+        "smd: teardown exited with code 1; worktree not removed\n",
+      ),
+      landed.stderr,
+    );
+  });
+
+  it("says where rm --stack leaves a primary checkout on a landed branch", async () => {
+    const { repo } = project();
+    box.git(repo, "checkout", "-q", "-b", "bear");
+    fakeGh([
+      [
+        '"pr list --state all --head fox "*',
+        `[${pr(5, "fox", "bear", "MERGED")}]`,
+      ],
+      [
+        '"pr list --state all --limit 200 "*',
+        `[${pr(4, "bear", "main", "MERGED")},${pr(5, "fox", "bear", "MERGED")}]`,
+      ],
+    ]);
+    const removed = await runAt(box.home, "rm", "--stack", "-p", "repo", "fox");
+    assert.equal(removed.code, 0, removed.stderr);
+    assert.ok(
+      removed.stderr.includes(
+        "the primary checkout is on landed branch bear. `smd done` lands it back on main\n",
+      ),
+      removed.stderr,
+    );
+  });
+
+  it("says when a merge queue takes a stack, under --json too", async () => {
+    project();
+    fakeGh([
+      [
+        '"pr list --state all --head fox "*',
+        `[${pr(5, "fox", "bear", "OPEN", { mergeStateStatus: "CLEAN" })}]`,
+      ],
+      [
+        '"pr list --state all --limit 200 "*',
+        `[${pr(4, "bear", "main", "OPEN")},${pr(5, "fox", "bear", "OPEN")}]`,
+      ],
+      [
+        '"api repos/{owner}/{repo}/stacks?pull_request=5"',
+        '[{"pull_requests":[{"number":4,"state":"open"},{"number":5,"state":"open"}]}]',
+      ],
+      ['"api graphql "*', settings(false)],
+      [
+        '"api -X PUT repos/{owner}/{repo}/pulls/5/merge-async "*',
+        '{"status":"enqueued","details":{"message":"","uuid":"t"}}',
+      ],
+    ]);
+    const merged = await runAt(
+      box.home,
+      "--json",
+      "merge",
+      "--stack",
+      "-p",
+      "repo",
+      "fox",
+    );
+    assert.equal(merged.code, 0, merged.stderr);
+    assert.deepEqual(merged.doc, { ok: true, method: "squash" });
+    assert.ok(
+      merged.stderr.endsWith(
+        "\nthe stack is in the merge queue; it lands when the queue processes it\n",
+      ),
+      merged.stderr,
+    );
+  });
+
+  it("says an auto-merge by number was already armed", async () => {
+    project();
+    fakeGh([
+      [
+        '"pr view 5 --json "*',
+        pr(5, "fox", "main", "OPEN", {
+          mergeStateStatus: "BLOCKED",
+          autoMergeRequest: { mergeMethod: "SQUASH" },
+        }),
+      ],
+      ['"api graphql "*', settings(true)],
+    ]);
+    const merged = await runAt(
+      box.home,
+      "merge",
+      "--number",
+      "5",
+      "-p",
+      "repo",
+    );
+    assert.equal(merged.code, 0, merged.stderr);
+    assert.equal(
+      merged.stdout,
+      "auto-merge already enabled for PR #5 (squash): Fox\n",
+    );
+  });
+
+  it("says what a merge waits on, under --json too", async () => {
+    project();
+    fakeGh([
+      [
+        '"pr list --state all --head fox "*',
+        `[${pr(5, "fox", "main", "OPEN", { mergeStateStatus: "BLOCKED" })}]`,
+      ],
+      ['"api graphql -F number=5 "*', progress("OPEN", true)],
+      ['"api graphql "*', settings(true)],
+      ['"pr merge 5 --auto --squash"', ""],
+    ]);
+    const { child, ended } = start(box.home, [
+      "--json",
+      "merge",
+      "-p",
+      "repo",
+      "fox",
+    ]);
+    // The wait goes on until GitHub merges it, so it ends here.
+    let said = "";
+    child.stderr.on("data", (chunk: Buffer) => (said += chunk));
+    await vi
+      .waitFor(
+        () =>
+          assert.ok(
+            said.endsWith(
+              "\nwaiting for GitHub to merge it: checks are running\n",
+            ),
+            said,
+          ),
+        { timeout: 15_000, interval: 100 },
+      )
+      .finally(() => child.kill());
+    await ended;
   });
 });

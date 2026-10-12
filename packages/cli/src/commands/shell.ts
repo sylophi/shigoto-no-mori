@@ -3,6 +3,7 @@
 // shellHook says how). And sm cd, which enters a worktree through the
 // wrapper's directive file, or in a subshell without one.
 import { envVar } from "@shigomori/engine/environment";
+import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as Paths from "@shigomori/engine/Paths";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import {
@@ -20,7 +21,7 @@ import * as Result from "effect/Result";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { ExitCode, UsageError } from "../errors.ts";
-import { given, here, projectAt, projectFlags } from "../here.ts";
+import { given, here, projectAt, projectFlags, rest } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
 import { handOver } from "../handOver.ts";
@@ -167,8 +168,8 @@ export const shellCommand = Command.make("shell").pipe(
 // --- sm cd ---
 
 // Moves the user's shell into a worktree: through the wrapper's
-// directive file when it gave one, else by starting $SHELL there, whose
-// exit sm passes on.
+// directive file when it gave one, else by starting the login shell
+// there, whose exit sm passes on.
 export const enter = (name: string, target: string, cdFile: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -182,7 +183,7 @@ export const enter = (name: string, target: string, cdFile: string) =>
       if (written) return yield* note(`Entering ${where}.`);
       // The subshell still gets them there.
     }
-    const shell = (yield* envVar("SHELL")) || "/bin/sh";
+    const { shell } = yield* (yield* Lifecycle.Lifecycle).loginShell;
     yield* note(`Entering ${where}. Exit the shell to return.`);
     yield* handOver("shell", shell, [], {
       cwd: target,
@@ -216,6 +217,7 @@ const enterCommand = (
     {
       project: projectFlags.project,
       name: Argument.String("worktree").pipe(Argument.optional),
+      rest,
     },
     (input) =>
       Effect.gen(function* () {

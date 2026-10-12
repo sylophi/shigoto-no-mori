@@ -67,30 +67,21 @@ const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
   agents: "agents <bind|unbind|idle|resume|install|uninstall|status> [args]",
 };
 
-// What the parser found wrong, in the Go sm's words. `path` is the
-// command's names after the binary's, and `usageOf` its usage line.
+// What the parser found wrong, in the Go sm's words, the flags having
+// been read before it (argv.ts). `path` is the command's names after
+// the binary's, and `usageOf` its usage line.
 const usageProblem = (
   problem: CliError.NonShowHelpErrors,
   path: ReadonlyArray<string>,
   binaryName: string,
   usageOf: (path: ReadonlyArray<string>) => string | undefined,
 ): string => {
-  if (problem instanceof CliError.UnrecognizedOption) {
-    return `Unknown option "${problem.option}".`;
-  }
   if (problem instanceof CliError.UnknownSubcommand) {
     const parent = (problem.parent ?? []).slice(1).join(" ");
     const usage = NAMESPACE_USAGE[parent];
     return usage === undefined
       ? `Unknown command "${problem.subcommand}". Run \`${binaryName} --help\`.`
       : `Unknown subcommand "${problem.subcommand}". Usage: ${binaryName} ${usage}`;
-  }
-  if (
-    problem instanceof CliError.InvalidValue &&
-    problem.kind === "flag" &&
-    problem.value === ""
-  ) {
-    return `Option "--${problem.option}" requires a value.`;
   }
   return usageOf(path) ?? problem.message;
 };

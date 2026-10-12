@@ -24,6 +24,7 @@ import {
   here,
   projectFlags,
   resolveProject,
+  rest,
   warnTerrier,
 } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
@@ -41,7 +42,7 @@ const refreshIconsFlag = Flag.Boolean("refresh-icons").pipe(
 
 const list = Command.make(
   "list",
-  { refreshIcons: refreshIconsFlag },
+  { refreshIcons: refreshIconsFlag, rest },
   ({ refreshIcons }) =>
     Effect.gen(function* () {
       yield* warnTerrier;
@@ -73,6 +74,7 @@ const icon = Command.make(
   {
     ...projectFlags,
     name: Argument.String("project").pipe(Argument.optional),
+    rest,
     refreshIcons: refreshIconsFlag,
   },
   ({ project, projectId, name, refreshIcons }) =>
@@ -242,6 +244,7 @@ const add = Command.make(
   "add",
   {
     path: Argument.String("path").pipe(Argument.withDefault(".")),
+    rest,
     all: Flag.Boolean("all").pipe(
       Flag.withAlias("a"),
       Flag.withDescription("Every repo under the folder"),
@@ -264,6 +267,7 @@ const remove = Command.make(
   "remove",
   {
     name: Argument.String("project").pipe(Argument.optional),
+    rest,
     projectId: projectFlags.projectId,
     yes: yesFlag,
   },

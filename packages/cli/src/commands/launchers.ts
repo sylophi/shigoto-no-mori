@@ -7,7 +7,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import { projectFlags, resolveProject } from "../here.ts";
+import { projectFlags, resolveProject, rest } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
 // Every app the catalog knows, installed or not. Project-free.
@@ -34,6 +34,7 @@ export const launchersCommand = Command.make(
   {
     ...projectFlags,
     verb: Argument.String("list").pipe(Argument.optional),
+    rest,
     catalog: Flag.Boolean("catalog").pipe(
       Flag.withDescription("Every app the catalog knows, installed or not"),
       Flag.withDefault(false),
