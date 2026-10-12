@@ -45,6 +45,7 @@ import * as Effect from "effect/Effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { clientAtoms, clientPushes, heard } from "@/lib/runtime/atoms";
@@ -203,6 +204,9 @@ function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
 
 async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const current = status ?? (await pageApi().hub.status());
+  // A fetched snapshot seeds the status while none has landed, as the
+  // boot's own fetch does: one that failed has these to fall back on.
+  if (status === undefined) seedFetched?.(current);
   const phase = current.socket.phase;
   const localDeviceId = pageApi().deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -469,9 +473,14 @@ async function drainReconciles(): Promise<void> {
 // section, the web devices page's own-row status, the account sync's
 // sign-out trigger) reads the same value. Initial until the first
 // snapshot lands.
+// What a reconcile pass fetched, offered to the status while it has
+// none (hubStatusAtom), for as long as the atom runs.
+let seedFetched: ((status: HubStatus) => void) | null = null;
+
 export const hubStatusAtom = Atom.keepAlive(
   clientAtoms.atom(() => {
     let pushed = false;
+    let seeded = false;
     const pushes = clientPushes(
       hubContract,
       callOf(hubContract, "statusChanged"),
@@ -484,19 +493,39 @@ export const hubStatusAtom = Atom.keepAlive(
         }),
       ),
     );
-    const seed = Stream.fromEffect(
+    const boot = Stream.fromEffect(
       Effect.tryPromise(() => pageApi().hub.status()),
     ).pipe(
       Stream.catch(() => Stream.empty),
-      Stream.filter(() => !pushed),
+      Stream.filter(() => !pushed && !seeded),
       Stream.tap((status) =>
         heard("hub status", () => {
+          seeded = true;
           noteSessions(status);
           reconcile({ status, hubDriven: false });
         }),
       ),
     );
-    return Stream.merge(pushes, seed);
+    // A pass's fetch seeds it too, once, when the boot's failed.
+    const fetched = Stream.callback<HubStatus>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          seedFetched = (status) => {
+            if (pushed || seeded) return;
+            seeded = true;
+            noteSessions(status);
+            Queue.offerUnsafe(queue, status);
+          };
+        }),
+        () =>
+          Effect.sync(() => {
+            seedFetched = null;
+          }),
+      ),
+    );
+    return Stream.mergeAll([pushes, boot, fetched], {
+      concurrency: "unbounded",
+    });
   }),
 );
 

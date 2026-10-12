@@ -434,3 +434,34 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   );
   registry.dispose();
 });
+
+it("hub status: a failed boot fetch falls back on the next pass's", async () => {
+  const { registry, queryClient } = page();
+  let asked = 0;
+  // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api
+  const api = {
+    deviceId: LOCAL,
+    account: {
+      onChanged: () => () => {},
+      status: () => new Promise<never>(() => {}),
+      listDevices: async () => [studio],
+    },
+    hub: {
+      status: () =>
+        (asked += 1) === 1
+          ? Promise.reject(new Error("the hub bridge is not up yet"))
+          : Promise.resolve(status()),
+    },
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  const hub = () => registry.get(hubStatusAtom);
+  await waitFor(() => asked >= 1, "the boot's fetch");
+  assert.ok(AsyncResult.isInitial(hub()), "nothing while the fetch failed");
+  // The device list landing runs a pass, which asks again.
+  await queryClient.fetchQuery({
+    queryKey: queryKeys.accountDevices(),
+    queryFn: async () => [studio],
+  });
+  await waitFor(() => AsyncResult.isSuccess(hub()), "the pass's status");
+});
