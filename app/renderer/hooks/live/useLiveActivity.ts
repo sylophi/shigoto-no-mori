@@ -85,6 +85,7 @@ export type LiveMirror =
       runnerDeviceId: string;
       runnerApi: HostApi | undefined;
       engine: MirrorDaemonStatus;
+      engineFailure: string | undefined;
       session: MirrorSession;
     }
   | { kind: "served"; copyDeviceId: string; stream: MirrorServing };
@@ -104,6 +105,7 @@ function liveMirrorsOf(
         runnerDeviceId: deviceId,
         runnerApi: api,
         engine: data?.daemon ?? "running",
+        engineFailure: data?.daemonFailure,
         session,
       });
     }

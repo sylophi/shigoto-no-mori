@@ -119,7 +119,7 @@ const runtime = ManagedRuntime.make(
           BackgroundFetch.BackgroundFetch,
           BackgroundFetch.BackgroundFetch.of({
             refreshProject: () => Effect.void,
-            sweepForPeer: Effect.succeed({ leaseMs: 0 }),
+            sweepForPeer: () => Effect.succeed({ leaseMs: 0 }),
             setWindowFocused: () => {},
           }),
         ),

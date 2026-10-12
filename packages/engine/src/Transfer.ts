@@ -217,10 +217,16 @@ const MirrorStopSchema = reading<MirrorStop>()(
 
 type MirrorList = {
   readonly daemon: string;
+  // Empty unless the engine is failing.
+  readonly daemonFailure: string;
   readonly mirrors: ReadonlyArray<ControlMirror>;
 };
 const MirrorsSchema = reading<MirrorList>()(
-  Schema.Struct({ daemon: text, mirrors: list(MirrorSchema) }),
+  Schema.Struct({
+    daemon: text,
+    daemonFailure: text,
+    mirrors: list(MirrorSchema),
+  }),
 );
 
 type DeviceList = {

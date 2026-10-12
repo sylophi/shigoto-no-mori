@@ -295,6 +295,7 @@
   "control:mirrors": {
     "success": {
       "daemon": "\ud800",
+      "daemonFailure": "",
       "mirrors": []
     }
   },
@@ -453,6 +454,9 @@
     }
   },
   "git:sweep": {
+    "payload": {
+      "renewal": true
+    },
     "success": {
       "leaseMs": -5e-323
     }
@@ -3840,7 +3844,6 @@
       "autoPull": true
     }
   },
-  "worktrees:reread": {},
   "worktrees:resetHard": {
     "payload": {
       "projectId": "0Z",

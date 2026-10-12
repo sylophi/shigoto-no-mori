@@ -64,8 +64,11 @@ export class BackgroundFetch extends Context.Service<
       projectPath: string,
     ) => Effect.Effect<void>;
     // git:sweep. Answers with the lease so the peer knows how often to
-    // renew.
-    readonly sweepForPeer: Effect.Effect<{ leaseMs: number }>;
+    // renew. An ask that is no renewal reads every project's rows again
+    // too, as a window here gaining focus does.
+    readonly sweepForPeer: (
+      renewal: boolean,
+    ) => Effect.Effect<{ leaseMs: number }>;
     // A window here gained or lost focus. Each window gaining it reads
     // every project's rows again, and the app coming back asks for a
     // pass at once: whoever returns sees the working trees as they are
@@ -288,9 +291,9 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     );
 
     // Every project's rows read again, for an edit the working trees'
-    // watch missed (GitWatcher.ts), as a window here gains focus. A
-    // peer's window asks with `worktrees:reread`. An unreadable registry
-    // has nothing to read again.
+    // watch missed (GitWatcher.ts), as a window here gains focus, or a
+    // peer's window asks a sweep that is no renewal. An unreadable
+    // registry has nothing to read again.
     const rereadRows = () => {
       let projects: ReturnType<typeof loadProjects> = [];
       try {
@@ -310,12 +313,14 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         Effect.flatMap(maybeFetchProject(projectId, projectPath), (fetched) =>
           fetched ? Effect.void : autoPullProject(projectId, projectPath),
         ).pipe(Effect.provide(context)),
-      sweepForPeer: Effect.suspend(() => {
-        attendedUntil = Date.now() + ATTENTION_LEASE_MS;
-        return Effect.as(sweepProjects(SWEEP_INTERVAL_MS), {
-          leaseMs: ATTENTION_LEASE_MS,
-        });
-      }).pipe(Effect.provide(context)),
+      sweepForPeer: (renewal) =>
+        Effect.suspend(() => {
+          if (!renewal) rereadRows();
+          attendedUntil = Date.now() + ATTENTION_LEASE_MS;
+          return Effect.as(sweepProjects(SWEEP_INTERVAL_MS), {
+            leaseMs: ATTENTION_LEASE_MS,
+          });
+        }).pipe(Effect.provide(context)),
       setWindowFocused: (focused) => {
         const wasFocused = windowFocused;
         windowFocused = focused;

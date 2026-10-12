@@ -578,7 +578,7 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       success(
         request,
         request["channel"] === "control:mirrors"
-          ? { daemon: "stopped", mirrors: [] }
+          ? { daemon: "stopped", daemonFailure: "", mirrors: [] }
           : {
               thisDevice: { deviceId: "d0", name: "Laptop" },
               devices: [
@@ -594,6 +594,7 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
     ]);
     assert.deepEqual(await outcome((transfer) => transfer.mirrors), {
       daemon: "stopped",
+      daemonFailure: "",
       mirrors: [],
       ok: true,
     });

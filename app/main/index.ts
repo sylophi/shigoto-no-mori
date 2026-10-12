@@ -15,7 +15,7 @@ import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
-import { unmountedVolume } from "./core/files/unmountedVolume";
+import { unmountedVolume } from "@shared/unmountedVolume";
 import { finishPendingNuke } from "./core/nuke/finish";
 import { asksForRemoteDebugging } from "./electron/debugSwitches";
 import { enableDevCdpPort } from "./electron/devCdp";

@@ -24,7 +24,6 @@ import {
   findWorktreeIdentity,
   findWorktreePath,
   listWorktrees,
-  loadProjects,
 } from "@host/lib/projects";
 import {
   assertWorktreeMutable,
@@ -75,7 +74,7 @@ const gitMoved = (projectId: string) =>
   );
 
 // A file edited in one of the project's working trees, or a window
-// asking for the rows again (`reread`).
+// looking again (a focus here, a peer's sweep that is no renewal).
 const filesChanged = (projectId: string) =>
   Views.pushed(worktreesContract, "filesChanged", (changed) => {
     return changed.projectId === projectId;
@@ -201,22 +200,6 @@ export const worktreesHandlers = {
   // The rows are the engine's (`sm worktrees list`), which also answers
   // an unknown project id with the entity-gone error.
   list: ({ projectId }) => listWorktrees(projectId),
-
-  reread: () =>
-    // An unreadable registry has nothing to read again.
-    Effect.try(loadProjects).pipe(
-      Effect.orElseSucceed(() => []),
-      Effect.flatMap((projects) =>
-        Effect.forEach(
-          projects,
-          (project) =>
-            HostPushes.push(worktreesContract, "filesChanged", {
-              projectId: project.id,
-            }),
-          { discard: true },
-        ),
-      ),
-    ),
 
   // Lifecycle mutations run the engine a terminal runs.
   create: (

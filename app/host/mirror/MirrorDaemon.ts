@@ -122,6 +122,9 @@ export class MirrorDaemon extends Context.Service<
   MirrorDaemon,
   {
     readonly status: Effect.Effect<MirrorDaemonStatus>;
+    // Why the daemon last stopped or couldn't start, while it is
+    // "failing".
+    readonly failure: Effect.Effect<string | undefined>;
     readonly sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
     readonly create: (
       input: MirrorCreateInput,
@@ -160,6 +163,9 @@ const make = (options: Options) =>
   Effect.gen(function* () {
     const fileSync = yield* FileSync.FileSync;
     const status = yield* Ref.make<MirrorDaemonStatus>("stopped");
+    const failure = yield* Ref.make<string | undefined>(undefined);
+    // The daemon's last word on stderr, which says why it stopped.
+    const lastSaid = yield* Ref.make<string | undefined>(undefined);
     const sessions = yield* Ref.make<readonly MirrorSessionRaw[]>([]);
     // The running child's stdin, for the requests.
     const stdin = yield* Ref.make(Option.none<Queue.Queue<Uint8Array>>());
@@ -190,6 +196,24 @@ const make = (options: Options) =>
           previous === next ? Effect.void : changed,
         ),
       );
+    // A daemon that stopped or couldn't start reads as failing, with
+    // why, until it is ready again: its restarts in between are the
+    // ladder's, not a fresh start.
+    // A new reason while already failing is a change too, which the
+    // status alone wouldn't announce.
+    const failed = (why: string) =>
+      Effect.gen(function* () {
+        const previous = yield* Ref.getAndSet(failure, why);
+        if ((yield* Ref.get(status)) !== "failing") {
+          return yield* setStatus("failing");
+        }
+        if (previous !== why) yield* changed;
+      });
+    const starting = Ref.get(status).pipe(
+      Effect.flatMap((current) =>
+        current === "failing" ? Effect.void : setStatus("starting"),
+      ),
+    );
 
     const failAllPending = (reason: "exited" | "stopped") =>
       Effect.forEach(
@@ -220,7 +244,9 @@ const make = (options: Options) =>
     const handleEvent = (event: DaemonEvent) => {
       switch (event.event) {
         case "ready":
-          return setStatus("running");
+          return Ref.set(failure, undefined).pipe(
+            Effect.andThen(setStatus("running")),
+          );
         case "state":
           return Ref.set(sessions, event.sessions).pipe(
             Effect.andThen(changed),
@@ -309,10 +335,11 @@ const make = (options: Options) =>
         yield* Effect.logWarning(
           "[mirror] daemon waiting for the gateway: mirror gateway is not listening",
         );
-        yield* setStatus("starting");
+        yield* starting;
         return;
       }
       const input = yield* Queue.unbounded<Uint8Array>();
+      yield* Ref.set(lastSaid, undefined);
       const spawned = yield* Effect.try(() => ({
         args: [
           "daemon",
@@ -329,28 +356,33 @@ const make = (options: Options) =>
             stdin: Stream.fromQueue(input),
           }),
         ),
-        Effect.tapError((error) =>
-          FileSync.isFileSyncUnavailable(error)
-            ? Effect.void
-            : Effect.logWarning(
-                `[mirror] daemon spawn failed: ${errorWordsOf(error)}`,
-              ),
-        ),
-        Effect.option,
+        Effect.result,
       );
-      if (Option.isNone(spawned)) {
-        yield* setStatus("unavailable");
+      if (Result.isFailure(spawned)) {
+        // Only a missing engine is unavailable: one that is there and
+        // won't start is failing, and says why.
+        if (FileSync.isFileSyncUnavailable(spawned.failure)) {
+          yield* setStatus("unavailable");
+          return;
+        }
+        const why = errorWordsOf(spawned.failure);
+        yield* Effect.logWarning(`[mirror] daemon spawn failed: ${why}`);
+        yield* failed(`couldn't start: ${why}`);
         return;
       }
-      const child = spawned.value;
+      const child = spawned.success;
       yield* Ref.set(stdin, Option.some(input));
-      yield* setStatus("starting");
+      yield* starting;
       yield* child.stderr.pipe(
         Stream.decodeText(),
         Stream.splitLines,
         Stream.filter((line) => line.trim() !== ""),
         Stream.runForEach((line) =>
-          Effect.logWarning(`[mirror] daemon: ${line.trim()}`),
+          Ref.set(lastSaid, line.trim()).pipe(
+            Effect.andThen(
+              Effect.logWarning(`[mirror] daemon: ${line.trim()}`),
+            ),
+          ),
         ),
         Effect.ignore,
         Effect.forkScoped,
@@ -371,7 +403,10 @@ const make = (options: Options) =>
       yield* Effect.logWarning(
         `[mirror] daemon exited unexpectedly (code ${code}), restarting`,
       );
-      yield* setStatus("starting");
+      const said = yield* Ref.get(lastSaid);
+      yield* failed(
+        `stopped${code === null ? "" : ` with code ${code}`}${said === undefined ? "" : `: ${said}`}`,
+      );
       yield* changed;
     }).pipe(
       Effect.scoped,
@@ -380,7 +415,7 @@ const make = (options: Options) =>
       Effect.catchDefect((defect) =>
         Effect.logWarning(
           `[mirror] daemon run failed, restarting: ${errorWordsOf(defect)}`,
-        ),
+        ).pipe(Effect.andThen(failed(`failed: ${errorWordsOf(defect)}`))),
       ),
       Effect.timed,
       Effect.map(([duration]) => Duration.toMillis(duration)),
@@ -416,7 +451,11 @@ const make = (options: Options) =>
           return yield* new MirrorDaemonError({
             op,
             reason: "not-running",
-            detail: mirrorEngineBlocker(current),
+            detail: mirrorEngineBlocker(
+              current,
+              undefined,
+              yield* Ref.get(failure),
+            ),
           });
         }
         yield* Queue.offer(
@@ -443,6 +482,11 @@ const make = (options: Options) =>
 
     return MirrorDaemon.of({
       status: Ref.get(status),
+      failure: Ref.get(status).pipe(
+        Effect.flatMap((current) =>
+          current === "failing" ? Ref.get(failure) : Effect.succeed(undefined),
+        ),
+      ),
       sessions: Ref.get(sessions),
       create: Effect.fn("MirrorDaemon.create")((input: MirrorCreateInput) =>
         request("create", { ...input }),

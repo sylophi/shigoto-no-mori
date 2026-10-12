@@ -82,7 +82,9 @@ export function useLocalMirrorBlocker(): string | undefined {
   const localDeviceId = useApi().deviceId;
   const hasLocalHost = useHasLocalHost();
   const list = useDeviceMirrors(localDeviceId, hasLocalHost);
-  return list === undefined ? undefined : mirrorEngineBlocker(list.daemon);
+  return list === undefined
+    ? undefined
+    : mirrorEngineBlocker(list.daemon, undefined, list.daemonFailure);
 }
 
 // The same for "Mirror here" on a peer's page, whose session runs on
@@ -94,7 +96,7 @@ export function useMirrorHereBlocker(peerLabel: string): string | undefined {
   const list = useDeviceMirrors(deviceId, hasHost);
   return list === undefined
     ? undefined
-    : mirrorEngineBlocker(list.daemon, peerLabel);
+    : mirrorEngineBlocker(list.daemon, peerLabel, list.daemonFailure);
 }
 
 function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
@@ -253,6 +255,8 @@ export type WorktreeMirrorLink = {
   // The runner's engine, as its list last said (a restarting engine
   // lists its last sessions).
   engine: MirrorDaemonStatus;
+  // Why a failing engine last stopped.
+  engineFailure?: string;
 };
 
 // The mirrors a worktree is part of, seen from its page on whichever
@@ -269,7 +273,7 @@ export function useWorktreeMirrorLinks(
   worktree: Worktree,
 ): WorktreeMirrorLink[] {
   const scope = useHostScope();
-  const { daemon } = useMirrors();
+  const { daemon, daemonFailure } = useMirrors();
   const { session: own, serving } = useWorktreeMirror(worktree);
   // A peer's page read off its cache while it is away: its own session
   // is its last word too.
@@ -280,7 +284,9 @@ export function useWorktreeMirrorLinks(
     const session = list.sessions.find(
       (s) => s.deviceId === scope.deviceId && s.worktreeId === worktree.id,
     );
-    return session === undefined ? undefined : { session, engine: list.daemon };
+    return session === undefined
+      ? undefined
+      : { session, engine: list.daemon, engineFailure: list.daemonFailure };
   });
   const links: WorktreeMirrorLink[] = [];
   if (own !== undefined) {
@@ -291,6 +297,7 @@ export function useWorktreeMirrorLinks(
       otherCopy: { projectId: own.projectId, worktreeId: own.worktreeId },
       session: own,
       engine: daemon,
+      engineFailure: daemonFailure,
     });
   }
   for (const { deviceId, api, data } of others) {
@@ -308,6 +315,7 @@ export function useWorktreeMirrorLinks(
               },
         session: data.session,
         engine: data.engine,
+        engineFailure: data.engineFailure,
       });
     }
   }

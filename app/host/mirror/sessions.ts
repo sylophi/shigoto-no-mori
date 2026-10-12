@@ -128,6 +128,7 @@ export const mirrorList = (given?: Daemon) =>
     }
     return {
       daemon: status,
+      daemonFailure: yield* daemon.failure,
       sessions,
       serving: listMirrorServing(),
     } satisfies MirrorListResult;
