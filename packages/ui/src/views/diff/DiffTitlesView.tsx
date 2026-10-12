@@ -5,19 +5,22 @@ import { pluralize } from "../../lib/pluralize.ts";
 // What the diff pages say under (or as) their titles, each page's
 // container handing over its counts and names.
 
-// The changes page: how much is changed, and where.
+// The changes page: how much is changed, and where. Null when the
+// changes couldn't be read, which is no count at all.
 export function WorktreeDiffSubtitleView({
   changedCount,
   worktreeName,
 }: {
-  changedCount: number;
+  changedCount: number | null;
   worktreeName: string;
 }) {
   return (
     <>
-      {changedCount > 0
-        ? `${pluralize(changedCount, "file")} changed`
-        : "No changes"}{" "}
+      {changedCount === null
+        ? "Changes"
+        : changedCount > 0
+          ? `${pluralize(changedCount, "file")} changed`
+          : "No changes"}{" "}
       in <span className="font-mono">{worktreeName}</span>
     </>
   );
