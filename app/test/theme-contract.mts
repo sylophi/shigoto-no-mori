@@ -95,10 +95,15 @@ for (const { name, attr, value } of attrRefs) {
   // valueless selector is also satisfied by a bare boolean attribute.
   const dynamic = `${attr}={`;
   const bare = !value && new RegExp(`${attr}\\s`).test(rendererSource);
+  // Or set by a script on the DOM (footerFit.ts collapsing a label).
+  const scripted =
+    !value &&
+    new RegExp(`(?:set|toggle)Attribute\\(\\s*"${attr}"`).test(rendererSource);
   if (
     !rendererSource.includes(literal) &&
     !rendererSource.includes(dynamic) &&
-    !bare
+    !bare &&
+    !scripted
   ) {
     failures.push(
       `${name} selects [${attr}${value ? `="${value}"` : ""}] but no renderer component sets it`,

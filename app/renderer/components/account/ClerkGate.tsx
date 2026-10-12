@@ -17,6 +17,7 @@ import { useApi } from "@/lib/runtime/pageApi";
 export type ClerkProviderComponent = ComponentType<{
   publishableKey: string;
   appearance: ClerkProviderProps["appearance"];
+  telemetry: ClerkProviderProps["telemetry"];
   children: ReactNode;
 }>;
 
@@ -32,7 +33,13 @@ export function ClerkGate({
   const appearance = useThemedAppearance();
   if (!publishableKey) return children;
   return (
-    <Provider publishableKey={publishableKey} appearance={appearance}>
+    // No telemetry: the app sends nothing Clerk does not need to sign in,
+    // and the window's CSP refuses its host.
+    <Provider
+      publishableKey={publishableKey}
+      appearance={appearance}
+      telemetry={false}
+    >
       <ClerkAccountSync />
       {children}
     </Provider>
