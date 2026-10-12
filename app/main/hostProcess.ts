@@ -237,9 +237,16 @@ export function host(): ReturnType<typeof session> {
 
 // What the host is busy with, as a quit or an update asks: idle when
 // it cannot say within a few seconds, since a host that does not
-// answer has nothing to lose to them.
+// answer has nothing to lose to them. One that did not answer is not
+// waited on to close either.
+let unanswered = false;
 export const hostBusy = () =>
   busyWithin(session().busy(), BUSY_DEADLINE).pipe(
+    Effect.tap((busy) =>
+      Effect.sync(() => {
+        unanswered = Option.isNone(busy);
+      }),
+    ),
     Effect.map(Option.getOrElse(() => IDLE)),
   );
 
@@ -290,6 +297,10 @@ const stop = (hurried: boolean) =>
     const exited = new Promise<void>((resolve) =>
       running.once("exit", () => resolve()),
     );
+    if (unanswered) {
+      running.kill();
+      return Effect.promise(() => exited);
+    }
     return session()
       .quit({ hurried })
       .pipe(
