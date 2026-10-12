@@ -9,6 +9,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
+import { useThisDeviceStatus } from "@/lib/runtime/hostAnswering";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { useDeviceProjects } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -61,7 +62,10 @@ export function DeviceHeading({
   const icon = useDeviceIcon(deviceId);
   const name = useDeviceProperName(deviceId);
   const device = useRemoteDevice(deviceId);
-  const status = device ? deviceStatusView(device.status) : THIS_DEVICE_VIEW;
+  const thisDeviceStatus = useThisDeviceStatus();
+  const status = device
+    ? deviceStatusView(device.status)
+    : (thisDeviceStatus ?? THIS_DEVICE_VIEW);
   return (
     <DeviceHeadingView
       icon={icon}
