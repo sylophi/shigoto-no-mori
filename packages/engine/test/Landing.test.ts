@@ -9,6 +9,7 @@ import { join } from "node:path";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, describe, it } from "vitest";
+import * as Config from "../src/Config.ts";
 import * as Landing from "../src/Landing.ts";
 import {
   mergeProblem,
@@ -471,6 +472,30 @@ describe("commits the pull request never had", () => {
     assert.equal(await foxSurvives(located), true);
   });
 
+  it("land leaves them be when the removal keeps the branch", async () => {
+    const located = await landFixture();
+    fakeGh([poll("MERGED", "UNKNOWN", "", false)]);
+    await box.engine(
+      Effect.flatMap(Effect.service(Config.Config), (config) =>
+        config.set({ kind: "device" }, "deleteBranchOnRemove", "false"),
+      ),
+    );
+    box.git(
+      located.worktree.path,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "late",
+    );
+    const doc = await land(located);
+    assert.equal(doc["ok"], true, JSON.stringify(doc));
+    assert.match(
+      box.git(located.project.path, "log", "-1", "--format=%s", "fox"),
+      /^late/,
+    );
+  });
+
   const done = (located: Worktrees.Located) =>
     box.engine(
       Effect.flatMap(Effect.service(Landing.Landing), (landing) =>
@@ -510,7 +535,7 @@ esac`,
     assert.equal(unasked["ok"], false);
     assert.match(
       String(unasked["error"]),
-      /^Couldn't ask GitHub whether fox was merged: .*error connecting to api\.github\.com/,
+      /^Couldn't ask GitHub whether fox was merged\. .* gh said: .*error connecting to api\.github\.com/,
     );
     assert.equal(await foxSurvives(located), true);
   });

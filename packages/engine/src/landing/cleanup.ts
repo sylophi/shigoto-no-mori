@@ -6,6 +6,7 @@ import { errorDocument } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { PullRequestSummary } from "../GitHub.ts";
+import * as Config from "../Config.ts";
 import * as Paths from "../Paths.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
@@ -65,6 +66,24 @@ export const makeCleanup = ({
           `${head}..refs/heads/${branch}`,
         ]);
         return Option.some(logged.split("\n").filter((line) => line !== ""));
+      });
+
+    const config = yield* Config.Config;
+    // Whether removing `worktree` under `options` deletes its branch, as
+    // the removal decides (the primary land's done deletes unless kept):
+    // what the commits guard is for.
+    const deletesBranch = (
+      worktree: Worktrees.WorktreeIdentity,
+      options: RemoveOptions,
+    ) =>
+      Effect.gen(function* () {
+        if (options.force || options.keepBranch) return false;
+        if (worktree.isPrimary) return true;
+        if (worktree.isExternal) return false;
+        const policy = yield* config
+          .get({ kind: "device" }, "deleteBranchOnRemove")
+          .pipe(Effect.orDie);
+        return policy.value !== false;
       });
 
     // Refuses the delete of `branch` when PR #`number`'s head, `head`,
@@ -319,7 +338,7 @@ export const makeCleanup = ({
             );
           }
           const layer = chain.find((pr) => pr.headRefName === other.branch);
-          if (layer !== undefined && !options.force && !options.keepBranch) {
+          if (layer !== undefined && (yield* deletesBranch(other, options))) {
             yield* guardCommits(
               located.project.path,
               other.branch,
@@ -404,6 +423,7 @@ export const makeCleanup = ({
       });
 
     return {
+      deletesBranch,
       guardCommits,
       commitsBeyond,
       execDone,

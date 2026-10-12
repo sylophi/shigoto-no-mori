@@ -31,6 +31,14 @@ export const messageOf = (error: unknown): string => {
     return `post-checkout hook: ${messageOf(error.cause)}`;
   }
   if (error instanceof CheckoutUnfinished) return messageOf(error.cause);
+  // A tag, not the class: Landing imports this module.
+  if (
+    Predicate.isTagged(error, "MergeUnverified") &&
+    Predicate.hasProperty(error, "cause") &&
+    error instanceof Error
+  ) {
+    return `${error.message} gh said: ${messageOf(error.cause)}`;
+  }
   return error instanceof Error ? error.message : String(error);
 };
 

@@ -1664,9 +1664,9 @@ esac`,
     );
   });
 
-  it("says where rm --stack leaves a primary checkout on a landed branch", async () => {
-    const { repo } = project();
-    box.git(repo, "checkout", "-q", "-b", "bear");
+  // A stack whose top layer, fox, merged at PR #5's head (the commit
+  // fox is on now) onto bear, itself merged.
+  const landedStack = (fox: string) =>
     fakeGh([
       [
         '"pr list --state all --head fox "*',
@@ -1676,7 +1676,18 @@ esac`,
         '"pr list --state all --limit 200 "*',
         `[${pr(4, "bear", "main", "MERGED")},${pr(5, "fox", "bear", "MERGED")}]`,
       ],
+      [
+        '"pr view 5 --json headRefOid"',
+        JSON.stringify({
+          headRefOid: box.git(fox, "rev-parse", "HEAD").trim(),
+        }),
+      ],
     ]);
+
+  it("says where rm --stack leaves a primary checkout on a landed branch", async () => {
+    const { repo, fox } = project();
+    box.git(repo, "checkout", "-q", "-b", "bear");
+    landedStack(fox);
     const removed = await runAt(box.home, "rm", "--stack", "-p", "repo", "fox");
     assert.equal(removed.code, 0, removed.stderr);
     assert.ok(
@@ -1685,6 +1696,20 @@ esac`,
       ),
       removed.stderr,
     );
+  });
+
+  it("refuses an rm --stack whose branch has a commit its merged PR never had", async () => {
+    const { repo, fox } = project();
+    box.git(repo, "checkout", "-q", "-b", "bear");
+    landedStack(fox);
+    box.git(fox, "commit", "-q", "--allow-empty", "-m", "late");
+    const removed = await runAt(box.home, "rm", "--stack", "-p", "repo", "fox");
+    assert.equal(removed.code, 1, removed.stderr);
+    assert.match(
+      removed.stderr,
+      /Branch fox has a commit its merged PR #5 never had, which removing it would delete: [0-9a-f]+ late\./,
+    );
+    assert.ok(existsSync(fox), "the worktree stays");
   });
 
   it("says when a merge queue takes a stack, under --json too", async () => {

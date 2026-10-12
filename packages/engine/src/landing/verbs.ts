@@ -10,6 +10,7 @@ import * as Worktrees from "../Worktrees.ts";
 import {
   LandingRefused,
   MERGE_FIELDS,
+  MergeUnverified,
   type RemoveOptions,
   type Reporter,
   doneDocument,
@@ -44,6 +45,7 @@ export const makeVerbs = ({
     } = pullRequests;
     const { lookupStack, stackChain, stackMergeSet, mergeStackSet } = stacks;
     const {
+      deletesBranch,
       guardCommits,
       commitsBeyond,
       execDone,
@@ -268,7 +270,7 @@ export const makeVerbs = ({
       // the PR never had, made after its last push, or under a name an
       // older PR merged with.
       const remote = Result.isSuccess(target) ? target.success.remote : "";
-      const guarded = !options.force && !options.keepBranch;
+      const guarded = yield* deletesBranch(worktree, options);
       if (guarded) {
         yield* guardCommits(
           project.path,
@@ -419,6 +421,16 @@ export const makeVerbs = ({
         false,
       );
       const chain = yield* stackChain(project, pr.number, lookups, "rm");
+      if (yield* deletesBranch(located.worktree, options)) {
+        yield* guardCommits(
+          project.path,
+          branch,
+          pr.number,
+          yield* github.headOf(project.path, pr.number),
+          lookups.target.remote,
+          "rm",
+        );
+      }
       const plan = yield* planStackCleanup(
         located,
         chain,
@@ -457,19 +469,11 @@ export const makeVerbs = ({
           .isAncestor(project.path, branch, target.primaryRef)
           .pipe(Effect.orElseSucceed(() => false)))
       ) {
-        const heads = yield* github.mergedHeads(project.path, branch).pipe(
-          Effect.catchTags({
-            GitHubCliError: (error) =>
-              refuse(
-                "done",
-                "github-unasked",
-                [],
-                [branch, GitHub.commandMessageOf(error)],
-              ),
-            GitHubOutputError: (error) =>
-              refuse("done", "github-unasked", [], [branch, error.message]),
-          }),
-        );
+        const heads = yield* github
+          .mergedHeads(project.path, branch)
+          .pipe(
+            Effect.mapError((cause) => new MergeUnverified({ branch, cause })),
+          );
         if (heads.length === 0) {
           return yield* refuse(
             "done",
