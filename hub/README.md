@@ -332,17 +332,25 @@ the instance's `allowed_origins` once per instance (prod and dev's, and
 the v3 build's on the instance it points at, until v3 merges into
 main):
 
+The PATCH replaces the whole list, so read it first and send it back
+with the origin added. The dashboard's Native applications page does
+not show the list; `GET /v1/instance` does:
+
 ```sh
+curl -s https://api.clerk.com/v1/instance \
+  -H "Authorization: Bearer <CLERK_SECRET_KEY>" | jq '.allowed_origins'
+
 curl -X PATCH https://api.clerk.com/v1/instance \
   -H "Authorization: Bearer <CLERK_SECRET_KEY>" \
   -H "Content-type: application/json" \
   -d '{"allowed_origins": ["shigomori://app", "shigomori-dev://app", "shigomori-v3://app"]}'
 ```
 
-Without it, desktop sign-in fails on every Frontend API call after the
-first (the web client is unaffected: a browser origin authenticates
-the browser way). The dashboard's Native applications page does not
-show this list; read it back with `GET /v1/instance`.
+The second call's list is the first call's answer plus the new origin;
+the one above is the dev instance's with the v3 build's added. Read it
+back the same way afterwards. Without it, desktop sign-in fails on
+every Frontend API call after the first (the web client is unaffected:
+a browser origin authenticates the browser way).
 
 A PRODUCTION instance additionally enforces an allowlist of OAuth
 redirect URLs (development instances do not, so dev never trips it).
