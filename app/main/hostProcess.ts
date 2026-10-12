@@ -32,6 +32,7 @@ import { connectHost } from "@shared/remote/hostLink";
 import { HOST_FACTS_FLAG, type HostFacts } from "@shared/hostFacts";
 import { appPlace } from "./electron/appPlace";
 import { noteMigration } from "./ipc/modules/migration";
+import { showMoveFailed } from "./electron/moveFailed";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
@@ -184,6 +185,7 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   failed: (failure) => onFailed(failure),
   migration: (progress) => noteMigration(progress),
   relaunch: () => relaunchAppUnattended(),
+  moveFailed: ({ reason }) => showMoveFailed(reason),
   updaterCheck: () => updaterCalls.check(),
   updaterInstall: ({ unattended }) => updaterCalls.install(unattended),
   updaterUpdate: ({ unattended }) => updaterCalls.update(unattended),

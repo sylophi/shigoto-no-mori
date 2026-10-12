@@ -2069,6 +2069,11 @@
       }
     }
   },
+  "shellCalls:moveFailed": {
+    "payload": {
+      "reason": "ob"
+    }
+  },
   "shellCalls:ready": {
     "payload": {
       "port": 3369,

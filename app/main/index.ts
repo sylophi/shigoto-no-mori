@@ -42,6 +42,7 @@ import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import * as ClientConfig from "./electron/clientConfig";
 import { confirmBusyAction } from "./electron/busyPrompt";
+import { isQuittingAfterFailedMove } from "./electron/moveFailed";
 import { isRelaunching, relaunchApp } from "./electron/relaunch";
 import { LAB_FLAG } from "./argFlags";
 import {
@@ -219,7 +220,7 @@ let graph: Promise<unknown> = Promise.resolve();
 // work nor waits for it (host/process/layer.ts has why), counted from
 // the moment it is asked for, before its quit arrives.
 function isHurriedQuit(): boolean {
-  return isInstallingUpdate() || isRelaunching();
+  return isInstallingUpdate() || isRelaunching() || isQuittingAfterFailedMove();
 }
 
 // True while the app is on any teardown or restart path, so the crash
@@ -396,14 +397,15 @@ let quitting = false;
 app.on("before-quit", (event) => {
   if (quitting) return;
   event.preventDefault();
-  if (askingToQuit) return;
   // An update install was already confirmed by the renderer's
   // installUpdate dialog, and a relaunch's cancelled quit would leave a
-  // live app on a data dir that has moved.
+  // live app on a data dir that has moved. Ahead of a busy prompt
+  // already open, whose cancel must not keep such an app running.
   if (isHurriedQuit()) {
     quit();
     return;
   }
+  if (askingToQuit) return;
   askingToQuit = true;
   void Effect.runPromise(hostBusyForQuit())
     .then((busy) => confirmBusyAction("quit", busy))
@@ -414,6 +416,8 @@ app.on("before-quit", (event) => {
     })
     .then((proceed) => {
       askingToQuit = false;
+      // A hurried quit taken while this prompt was open is underway.
+      if (quitting) return;
       if (proceed) {
         quit();
         return;
