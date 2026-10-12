@@ -9,9 +9,9 @@ import * as Semaphore from "effect/Semaphore";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import * as Git from "@shigomori/engine/Git";
+import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
+import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
-import { cloneRepo } from "@host/lib/git/clone";
-import { createRepo } from "@host/lib/git/init";
 import {
   addProject,
   findProject,
@@ -151,6 +151,23 @@ export const projectsViews: ViewHandlers<
     ),
 };
 
+// Over https to a GitHub host, with the device's gh signed in, gh is
+// git's credential helper for a clone, so a private repository clones
+// without `gh auth setup-git` having been run. Written into the clone's
+// config too, scoped to that host the way setup-git scopes it, so the
+// app's later fetches and pushes sign in the same way.
+const ghCredentials = Effect.fnUntraced(function* (url: string) {
+  if (!/^https:\/\//i.test(url)) return [];
+  const cli = yield* GithubCli;
+  const host = yield* cli.hostOf(url);
+  if (host === null || (yield* cli.unavailableReason) !== null) return [];
+  const key = `credential.https://${host}.helper`;
+  return [
+    [key, ""],
+    [key, "!gh auth git-credential"],
+  ] as const;
+});
+
 export const projectsHandlers = {
   list: () => listProjectsWithStatus,
 
@@ -169,13 +186,22 @@ export const projectsHandlers = {
       // The payload schema has held the URL to a clone source already.
       // Not echoed: it may carry a token.
       if (folder === null) return yield* new NotGitRemoteError();
-      const path = yield* cloneRepo(url, expandHome(parentDir), folder);
+      const source = cloneUrlOf(url);
+      const path = yield* (yield* Git.Git).clone({
+        url: source,
+        parentDir: expandHome(parentDir),
+        name: folder,
+        config: yield* ghCredentials(source),
+      });
       return yield* registerNewCheckout(path, terrier, "Cloned into");
     }),
 
   create: ({ parentDir, name, terrier }) =>
     Effect.gen(function* () {
-      const path = yield* createRepo(expandHome(parentDir), name);
+      const path = yield* (yield* Git.Git).createRepository(
+        expandHome(parentDir),
+        name,
+      );
       return yield* registerNewCheckout(path, terrier, "Created");
     }),
 

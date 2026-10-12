@@ -25,7 +25,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
-import { pruneStaleWorktrees } from "./git/worktrees";
+import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { clearDeleteInflight, markDeleteInflight } from "./scripts";
 import { dataDir } from "@shared/paths";
@@ -157,7 +157,9 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
             });
           }
           // A failed one's admin entry, whose folder may be gone.
-          yield* Effect.ignore(pruneStaleWorktrees(project.path));
+          yield* Effect.ignore(
+            Effect.flatMap(Git.Git, (git) => git.pruneWorktrees(project.path)),
+          );
         }),
       { concurrency: "unbounded", discard: true },
     );

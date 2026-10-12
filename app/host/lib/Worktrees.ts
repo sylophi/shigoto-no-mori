@@ -19,7 +19,7 @@ import * as Layer from "effect/Layer";
 import type { EngineCallError } from "./engine";
 import type * as Git from "@shigomori/engine/Git";
 import type { GitError } from "./git/core";
-import type { WorktreeIdentity } from "./git/worktrees";
+import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
   type CarryOverCheckout,
   type FolderReadError,

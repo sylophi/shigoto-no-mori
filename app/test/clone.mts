@@ -1,9 +1,10 @@
 // Durable proof for cloning a project onto a device (projects:clone):
 // the payload schema's accept/reject table, which is what keeps a
 // caller on another machine to real remotes and one folder segment, and
-// cloneRepo against a REAL git repository for what the schema can't
-// say: the checkout lands where asked, and neither an existing folder
-// nor a missing parent is written over or conjured.
+// the projects:clone handler against a REAL git repository for what
+// the schema can't say: the checkout lands where asked, neither an
+// existing folder nor a missing parent is written over or conjured, and
+// git's words for a failure never carry the URL's credentials.
 //
 // Run: pnpm test clone.
 import * as Option from "effect/Option";
@@ -16,18 +17,22 @@ import { sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mts";
 import { scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
-// cloneRepo runs git under this process's environment. The pre-commit
+// The clone runs git under this process's environment. The pre-commit
 // hook's GIT_* variables would point that git at the commit in
 // progress, so they go before anything is imported.
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
-const { cloneRepo: cloneEffect } = await import("../host/lib/git/clone.ts");
+const { projectsHandlers } = await import("../host/ipc/modules/projects.ts");
 const { GithubCli } = await import("../host/lib/githubCli/GithubCli.ts");
+const { errorWordsOf } = await import("../host/lib/errorWords.ts");
 const { runHost } = await import("./lib/hostRuntime.mts");
 const { flatMap } = await import("effect/Effect");
-const cloneRepo = (source: string, parentDir: string, name: string) =>
-  runHost(cloneEffect(source, parentDir, name));
+// The checkout's path, as the project it was registered as.
+const cloneRepo = (url: string, parentDir: string, name: string) =>
+  runHost(projectsHandlers.clone({ url, parentDir, name })).then(
+    (project) => project.path,
+  );
 const githubHostOf = (url: string) =>
   runHost(flatMap(GithubCli, (cli) => cli.hostOf(url)));
 const { cloneUrlOf } =
@@ -169,7 +174,7 @@ it("the URL handed to another device: origin first, remotes only, never a creden
   );
 });
 
-it("cloneRepo lands a real checkout where asked", async () => {
+it("a clone lands a real checkout where asked", async () => {
   const sandbox = tempDir("sm-clone-", trackTest);
   const source = join(sandbox, "source");
   mkdirSync(source);
@@ -215,9 +220,12 @@ it("a failed clone's message never carries the URL's credentials", async () => {
     (error) => error,
   );
   assert.ok(failure instanceof Error, "the clone did not fail");
+  // Git's own words, as the host relays them, name where it went.
+  const words = errorWordsOf(failure);
+  assert.match(words, /127\.0\.0\.1/);
   assert.ok(
-    !failure.message.includes("s3cret-t0ken"),
-    `the token is in the message: ${failure.message}`,
+    !words.includes("s3cret-t0ken"),
+    `the token is in the message: ${words}`,
   );
   assert.ok(!existsSync(join(sandbox, "repo")));
 });

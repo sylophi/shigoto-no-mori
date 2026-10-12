@@ -10,7 +10,7 @@ import {
   writeScriptOrder,
   writeScriptSort,
 } from "@host/lib/scripts/packageScriptStats";
-import { findWorktreeIdentity } from "@host/lib/git/worktrees";
+import { findWorktreeIdentity } from "@host/lib/projects";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type {
   PackageScriptsDoc,

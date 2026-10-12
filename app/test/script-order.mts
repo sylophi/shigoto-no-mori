@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { mergeArrangedOrder } from "@shigomori/engine/Scripts";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import * as Ops from "@host/lib/engineOps";
-import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Stats from "@host/lib/scripts/packageScriptStats";
 import {
   pinnedEntries,

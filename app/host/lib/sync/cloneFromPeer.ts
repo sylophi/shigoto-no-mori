@@ -19,7 +19,6 @@ import {
   SyncBundleRefSchema,
   type SyncCloneInto,
 } from "@shigomori/contracts/modules/sync";
-import { checkNewCheckoutDestination } from "@host/lib/git/clone";
 import { GitRefusal, run } from "@host/lib/git/core";
 import * as Git from "@shigomori/engine/Git";
 import { expandHome } from "@shared/paths";
@@ -54,7 +53,10 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
     mkdir(parent, { recursive: true }).catch(() => {}),
   );
   const [dest, { branch, remoteUrl }] = yield* Effect.all(
-    [checkNewCheckoutDestination(parent, name), source.cloneFacts],
+    [
+      Effect.flatMap(Git.Git, (git) => git.checkDestination(parent, name)),
+      source.cloneFacts,
+    ],
     { concurrency: 2 },
   );
   if (

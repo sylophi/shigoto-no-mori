@@ -15,9 +15,11 @@
 // the upstream now tracks, refuse on. A worktree with a script the
 // app started in it is left alone too: the tree moving under a running
 // dev server is the one way a pull the user never clicked could bite.
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { fastForwardToUpstream, hasUncommittedOrUntracked } from "../git/sync";
-import { getUpstreamCounts, type WorktreeIdentity } from "../git/worktrees";
+import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 
 type AutoPullSkipReason =
   | "detached"
@@ -46,8 +48,9 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
   options: { busy: boolean },
 ) {
   if (worktree.detached) return skipped("detached");
-  const counts = yield* getUpstreamCounts(worktree.path);
-  if (counts === null) return skipped("no-upstream");
+  const upstream = yield* (yield* Git.Git).aheadBehind(worktree.path, "@{u}");
+  if (Option.isNone(upstream)) return skipped("no-upstream");
+  const counts = upstream.value;
   if (counts.behind === 0) return skipped("synced");
   if (counts.ahead > 0) return skipped("ahead");
   if (options.busy) return skipped("busy");

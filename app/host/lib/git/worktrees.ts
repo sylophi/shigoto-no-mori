@@ -1,76 +1,15 @@
-// The worktree reads the host makes. The rows and identities come from
-// the engine, which owns the data model (Worktrees.list, see
-// host/lib/engineOps.ts). What stays here is plain git the engine
-// has no service for: the paged commit history, the upstream counts the
-// auto-pull sweep decides on right before it pulls, and the prune
-// after a data dir wipe.
-import { createHash } from "node:crypto";
-import { UnknownWorktreeError } from "@shigomori/contracts/errors";
+// A worktree's history as its page reads it: the paged log, and the
+// branch's own commits against its upstream and its base. The engine's
+// Git takes these with the rest of the history (V3.md, item 15).
 import {
   type BranchHistory,
   type CommitSummary,
   isCommitHash,
-  type WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Semaphore from "effect/Semaphore";
-import * as Ops from "@host/lib/engineOps";
 import { run, runLenient } from "./core";
-
-export type { WorktreeIdentity };
-
-// The sidebar asks for every project's rows at once on a refresh, and
-// each list runs up to six rows' probes at a time in the engine (five git
-// processes a row), so a couple of lists at a time keeps a refresh from
-// forking hundreds of gits at once.
-const rowLists = Semaphore.makeUnsafe(2);
-
-// A project's rows, primary first.
-export const listWorktrees = (projectId: string) =>
-  Ops.listWorktrees(projectId).pipe(rowLists.withPermits(1));
-
-// The checkout `worktreeId` names, or the entity-gone error.
-export const findWorktreeIdentity = Effect.fnUntraced(function* (
-  projectId: string,
-  worktreeId: string,
-  opts: { primaryRef?: boolean } = {},
-) {
-  const [identity] = yield* Ops.listWorktreeIdentities(
-    { projectId, worktreeId },
-    opts,
-  );
-  if (!identity) return yield* new UnknownWorktreeError({ worktreeId });
-  return identity;
-});
-
-// The engine's id rule (worktreeIdFromPath in worktreeLayout.ts), for the few
-// places that key something by a checkout path rather than by a listed
-// identity (the mirror's scratch index dir). sha256 of the absolute
-// path, 12 hex chars: the same path produces the same id anywhere.
-export function worktreeIdFromPath(path: string): string {
-  return createHash("sha256").update(path).digest("hex").slice(0, 12);
-}
-
-// Commits HEAD has that the upstream lacks, and vice versa. Null when
-// there is no upstream to measure against: the branch was never
-// pushed, its remote branch is gone, or HEAD is detached. The auto-pull
-// sweep asks right before it pulls, never trusting a row that can be a
-// focus old.
-export const getUpstreamCounts = (worktreePath: string) =>
-  run(worktreePath, [
-    "rev-list",
-    "--left-right",
-    "--count",
-    "HEAD...@{u}",
-  ]).pipe(
-    Effect.map((stdout): { ahead: number; behind: number } | null => {
-      const [a, b] = stdout.trim().split(/\s+/);
-      return { ahead: Number(a) || 0, behind: Number(b) || 0 };
-    }),
-    Effect.orElseSucceed(() => null),
-  );
 
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
 // on its own line after each commit's formatted output. A SOH (\x01)
@@ -263,31 +202,3 @@ export const readBranchHistory = Effect.fnUntraced(function* (
     }),
   } satisfies BranchHistory;
 });
-
-// Every checkout of the repo and the branch it has out (null when
-// detached), as git lists them.
-export const listCheckouts = (repoPath: string) =>
-  Effect.map(
-    run(repoPath, ["worktree", "list", "--porcelain", "-z"]),
-    (stdout) => {
-      const checkouts: { path: string; branch: string | null }[] = [];
-      for (const field of stdout.split("\0")) {
-        if (field.startsWith("worktree ")) {
-          checkouts.push({
-            path: field.slice("worktree ".length),
-            branch: null,
-          });
-        } else if (field.startsWith("branch refs/heads/")) {
-          const open = checkouts.at(-1);
-          if (open) open.branch = field.slice("branch refs/heads/".length);
-        }
-      }
-      return checkouts;
-    },
-  );
-
-// Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
-// gone. Used after the nuke-everything root wipe to keep `git worktree
-// list` honest.
-export const pruneStaleWorktrees = (projectPath: string) =>
-  Effect.asVoid(run(projectPath, ["worktree", "prune"]));

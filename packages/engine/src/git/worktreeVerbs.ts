@@ -17,7 +17,7 @@ export const makeWorktreeVerbs = ({
       repo: string,
     ) {
       return parseWorktreeList(
-        yield* run(repo, ["worktree", "list", "--porcelain"]),
+        yield* run(repo, ["worktree", "list", "--porcelain", "-z"]),
       );
     });
 

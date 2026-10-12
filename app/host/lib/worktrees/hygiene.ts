@@ -15,7 +15,7 @@ import {
 import { run, runLenient } from "../git/core";
 import * as Git from "@shigomori/engine/Git";
 import { splitRemoteRef } from "@shigomori/engine/gitParse";
-import type { WorktreeIdentity } from "../git/worktrees";
+import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

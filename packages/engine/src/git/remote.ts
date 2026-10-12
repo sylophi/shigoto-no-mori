@@ -1,19 +1,8 @@
 // Git's remote: fetching, pulling and pushing.
 import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { splitZ } from "../gitParse.ts";
-import {
-  CloneDestinationError,
-  GitCommandError,
-  NoRemoteError,
-  OverwriteRefusedError,
-  SHOWN,
-  redactUserinfo,
-  stderrOf,
-} from "./documents.ts";
+import { NoRemoteError, OverwriteRefusedError, SHOWN } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
 import type { WorktreeVerbsArea } from "./worktreeVerbs.ts";
 import type { WorkingTreeArea } from "./workingTree.ts";
@@ -28,8 +17,6 @@ export const makeRemote = ({
   readonly workingTree: WorkingTreeArea;
 }) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const { run, runChunked } = running;
     const { listRemotes } = worktreeVerbs;
     const { status } = workingTree;
@@ -127,47 +114,7 @@ export const makeRemote = ({
       yield* run(input.worktree, ["push", "-u", first, "HEAD"]);
     });
 
-    const clone = Effect.fn("Git.clone")(function* (input: {
-      readonly url: string;
-      readonly parentDir: string;
-      readonly name: string;
-    }) {
-      // Both checks are for the message: git would refuse either, in
-      // words about its own argv.
-      const parent = yield* fs.stat(input.parentDir).pipe(Effect.option);
-      if (Option.isNone(parent) || parent.value.type !== "Directory") {
-        return yield* new CloneDestinationError({
-          path: input.parentDir,
-          reason: "not-a-folder",
-        });
-      }
-      const dest = path.join(input.parentDir, input.name);
-      if (yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false))) {
-        return yield* new CloneDestinationError({
-          path: dest,
-          reason: "exists",
-        });
-      }
-      // Nobody may be at a terminal to answer a credential prompt (least
-      // of all for a clone asked for from another device), so git's own
-      // is off and an unauthenticated remote fails rather than waits.
-      yield* run(input.parentDir, ["clone", "--", input.url, input.name], {
-        env: { GIT_TERMINAL_PROMPT: "0" },
-      }).pipe(
-        Effect.mapError((error) =>
-          error instanceof GitCommandError
-            ? new GitCommandError({
-                subcommand: error.subcommand,
-                exitCode: error.exitCode,
-                cause: new Error(redactUserinfo(stderrOf(error))),
-              })
-            : error,
-        ),
-      );
-      return dest;
-    });
-
-    return { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish, clone };
+    return { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish };
   });
 
 export type RemoteArea = Effect.Success<ReturnType<typeof makeRemote>>;

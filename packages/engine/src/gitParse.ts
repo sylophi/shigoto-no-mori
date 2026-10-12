@@ -38,7 +38,9 @@ export const splitLines = (stdout: string): string[] =>
 
 // --- worktree list --------------------------------------------------
 
-// One checkout as `git worktree list --porcelain` lists it. `branch` is
+// One checkout as `git worktree list --porcelain -z` lists it: a field
+// per NUL, a checkout ended by an empty one, so a path keeps any
+// newline it has. `branch` is
 // fully qualified (refs/heads/x), empty when detached or unknown.
 export type WorktreeEntry = {
   readonly path: string;
@@ -67,14 +69,14 @@ export function parseWorktreeList(stdout: string): WorktreeEntry[] {
     if (current.path !== "") entries.push(current);
     current = blankEntry();
   };
-  for (const line of stdout.split("\n")) {
-    if (line === "") {
+  for (const field of stdout.split("\0")) {
+    if (field === "") {
       flush();
       continue;
     }
-    const space = line.indexOf(" ");
-    const key = space < 0 ? line : line.slice(0, space);
-    const value = space < 0 ? "" : line.slice(space + 1);
+    const space = field.indexOf(" ");
+    const key = space < 0 ? field : field.slice(0, space);
+    const value = space < 0 ? "" : field.slice(space + 1);
     if (key === "worktree") current.path = value;
     else if (key === "HEAD") current.head = value;
     else if (key === "branch") current.branch = value;
