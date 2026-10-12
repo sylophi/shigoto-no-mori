@@ -1,47 +1,50 @@
-// In-memory store for in-flight + most-recent script runs, keyed by
-// (projectId, worktreeId, slot). One store per device: each drains the
-// ScriptEvent channel of the device its api names (this machine's over
-// the loopback link, a peer's over its device link), and events
-// route to the right record via a runId→key index built when a run
-// starts. Worktree ids are path hashes that can collide across the
-// owner's machines, so a run's key is only unambiguous inside its
-// device's store.
+// A device's script runs, in-flight and most recent, keyed by
+// (projectId, worktreeId, slot), as an atom on the client's runtime
+// (scriptRunsAtom): one per device, each draining the scripts:event
+// pushes of its device (this machine's over its own link, a peer's out
+// of the hub hop), and events route to the right record via a
+// runId→key index built when a run starts. Worktree ids are path hashes
+// that can collide across the owner's machines, so a run's key is only
+// unambiguous inside its device's runs.
 //
-// React reads via the hooks in hooks/scripts/useScriptRuns.ts, which
-// resolve the store from the host scope. A store survives navigation
-// but not a renderer reload, matching the user-confirmed "in-memory
-// only" scope.
+// React reads them through hooks/scripts/useScriptRuns.ts, which
+// resolves the device from the host scope, and the state a row draws
+// is the controller's `state` atom. They survive navigation but not a
+// renderer reload, matching the user-confirmed "in-memory only" scope.
 //
-// Snapshots are immutable: every transition replaces the record with
-// a new object. `useSyncExternalStore` relies on Object.is to detect
-// changes, so mutating in place would silently skip re-renders.
+// The state is immutable: every transition replaces the record with a
+// new object, and the maps holding them, since a reader picks its
+// record out by identity.
 import {
   type RemovedWorktreeScripts,
   type RunningScript,
   type ScriptEvent,
   scriptErrorLine,
 } from "@shigomori/contracts/schemas";
-import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
-import { toast } from "@/lib/toast";
-import { assertNever } from "@shigomori/ui/lib/utils.ts";
-import type { RendererApi } from "@/lib/runtime/pageApi";
-import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
+import { callOf } from "@shigomori/contracts/contract";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { KeyedSubscribers } from "./keyedSubscribers";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type {
   ScriptActivityKind,
   ScriptRunState,
 } from "@shigomori/ui/lib/scriptRun.ts";
-
-// Re-export the slot codec so existing importers from "@/store/scriptRuns"
-// keep working without churning every consumer.
-export {
-  scriptKey,
-  slotLabel,
-  slotToParam,
-  type ScriptKey,
-  type ScriptSlot,
-} from "./scriptSlot";
+import { assertNever } from "@shigomori/ui/lib/utils.ts";
+import * as Effect from "effect/Effect";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import * as Stream from "effect/Stream";
+import {
+  accountsLeftAtom,
+  clientAtoms,
+  heard,
+  hostCalls,
+  hostPushes,
+  localDeviceIdAtom,
+  valueNow,
+} from "@/lib/runtime/atoms";
+import { toast } from "@/lib/toast";
+import { KeyedSubscribers } from "@/store/keyedSubscribers";
+import { scriptKey, type ScriptKey, type ScriptSlot } from "@/store/scriptSlot";
 
 // Output kept per run for replay when a console mounts, in bytes: more
 // than the terminal's own scrollback can show, small enough that the
@@ -105,23 +108,55 @@ interface StartInput {
   runner: () => Promise<{ runId: string }>;
 }
 
-type ScriptsApi = Pick<
-  RendererApi["scripts"],
-  | "attach"
-  | "cancel"
-  | "write"
-  | "resize"
-  | "onEvent"
-  | "onStoppedForRemovedWorktree"
->;
+// What a reader draws: each slot's record, which worktree and kind of
+// slot it is, and when each worktree's page was last left (a failure
+// since then is news, activityOf).
+type RunsState = {
+  readonly states: ReadonlyMap<ScriptKey, ScriptRunState>;
+  readonly meta: ReadonlyMap<ScriptKey, RunMeta>;
+  readonly seenAt: ReadonlyMap<string, number>;
+};
 
-export class ScriptRunsStore {
-  private states = new Map<ScriptKey, ScriptRunState>();
-  // Per-run output log, keyed like states, mutated in place. Consoles
-  // catch up from it on mount and follow it through outputSubs.
+const NO_RUNS: RunsState = {
+  states: new Map(),
+  meta: new Map(),
+  seenAt: new Map(),
+};
+
+const withEntry = <K, V>(map: ReadonlyMap<K, V>, key: K, value: V) =>
+  new Map(map).set(key, value);
+
+const withoutEntry = <K, V>(map: ReadonlyMap<K, V>, key: K) => {
+  const next = new Map(map);
+  next.delete(key);
+  return next;
+};
+
+// The host calls a device's runs make, over its link.
+type ScriptCalls = {
+  readonly attach: (input: {
+    runId: string;
+  }) => Promise<{ streaming: boolean; output: string } | null>;
+  readonly cancel: (input: {
+    runId: string;
+  }) => Promise<{ cancelled: boolean }>;
+  readonly write: (input: { runId: string; data: string }) => Promise<void>;
+  readonly resize: (input: {
+    runId: string;
+    cols: number;
+    rows: number;
+  }) => Promise<void>;
+};
+
+export class ScriptRuns {
+  // What the rows, consoles and the sidebar draw, mounted with the
+  // atom that made this (scriptRunsAtom).
+  readonly state = Atom.make(NO_RUNS);
+  // Per-run output log, keyed like the states, mutated in place: a
+  // render per PTY read would be the hot path. Consoles catch up from it
+  // on mount and follow it through outputSubs.
   private buffers = new Map<ScriptKey, OutputLog>();
   private outputSubs = new KeyedSubscribers<ScriptKey, string>();
-  private meta = new Map<ScriptKey, RunMeta>();
   private runIdToKey = new Map<string, ScriptKey>();
   // Events that arrived before the `scripts.run` invoke resolved and let
   // us bind the runId to a key. A spawned child can emit its first bytes
@@ -129,46 +164,37 @@ export class ScriptRunsStore {
   // in start() once we know the runId. "started" events are dispatched
   // directly by handleEvent, so they never reach this buffer.
   private pendingByRunId = new Map<string, PostStartEvent[]>();
-  private perKeySubs = new KeyedSubscribers<ScriptKey>();
-  private worktreeSubs = new KeyedSubscribers<string>();
-  // When each worktree's page was last left. A failure since then is
-  // news (getActivityKind); one from before it has been seen.
-  private seenAt = new Map<string, number>();
   // Runs an attach is in flight for, so a slot asked again while the
   // first answer is on its way does not attach twice.
   private attaching = new Set<string>();
   // Runs attached to and then let go (attach), whose events the host
   // still sends until they exit.
   private ignored = new Set<string>();
-  private unsubscribers: Array<() => void> = [];
-  private api: ScriptsApi;
+  private registry: AtomRegistry.AtomRegistry;
+  private api: ScriptCalls;
   // Whether a removed-worktree notice is worth a toast even for a
-  // worktree this store never saw a run in. True for this machine's
-  // store (a renderer reload forgets runs the host still reaps), false
-  // for a peer's, where the notice reaches every viewer and only the
-  // ones that ran something there have anything to hear.
+  // worktree these runs never saw a run in. True for this machine's (a
+  // renderer reload forgets runs the host still reaps), false for a
+  // peer's, where the notice reaches every viewer and only the ones
+  // that ran something there have anything to hear.
   private warnOnUnseenRemoval: boolean;
 
-  constructor(api: ScriptsApi, warnOnUnseenRemoval: boolean) {
+  constructor(
+    registry: AtomRegistry.AtomRegistry,
+    api: ScriptCalls,
+    warnOnUnseenRemoval: boolean,
+  ) {
+    this.registry = registry;
     this.api = api;
     this.warnOnUnseenRemoval = warnOnUnseenRemoval;
   }
 
-  start(): void {
-    if (this.unsubscribers.length > 0) return;
-    this.unsubscribers.push(
-      this.api.onEvent((event) => this.handleEvent(event)),
-      this.api.onStoppedForRemovedWorktree((info) =>
-        this.handleRemovedWorktree(info),
-      ),
-    );
+  private get current(): RunsState {
+    return this.registry.get(this.state);
   }
 
-  // Ends the event drain. A peer store is stopped when the account it
-  // belonged to is left (below). The local store never is.
-  stop(): void {
-    for (const unsubscribe of this.unsubscribers) unsubscribe();
-    this.unsubscribers = [];
+  private publish(next: RunsState): void {
+    this.registry.set(this.state, next);
   }
 
   async run(input: StartInput): Promise<void> {
@@ -214,7 +240,7 @@ export class ScriptRunsStore {
   // the device away), for the caller to ask again.
   async attach(run: RunningScript): Promise<boolean> {
     const key = scriptKey(run.projectId, run.worktreeId, run.slot);
-    const held = this.states.get(key);
+    const held = this.current.states.get(key);
     if (held?.runId === run.runId || this.attaching.has(run.runId)) {
       return true;
     }
@@ -227,7 +253,7 @@ export class ScriptRunsStore {
       // attached, or this one started it before a reload), so what it
       // buffered is in the backlog too.
       if (joined.streaming) this.pendingByRunId.delete(run.runId);
-      const now = this.states.get(key);
+      const now = this.current.states.get(key);
       if (now?.status === "starting" || now?.status === "running") {
         // The slot was taken by a run started here meanwhile. The host
         // keeps sending this one, which nothing here will show.
@@ -254,19 +280,21 @@ export class ScriptRunsStore {
     }
   }
 
-  // Stops a run the host lists, whether this store holds it (its
+  // Stops a run the host lists, whether these runs hold it (its
   // console then reads "Stopping…" until the exit) or not (one another
   // window or device started, stopped by its id).
   // Resolves whether the host stopped it.
   async stopRun(run: RunningScript): Promise<boolean> {
     const key = scriptKey(run.projectId, run.worktreeId, run.slot);
-    if (this.states.get(key)?.runId === run.runId) return this.cancel(key);
+    if (this.current.states.get(key)?.runId === run.runId) {
+      return this.cancel(key);
+    }
     return (await this.api.cancel({ runId: run.runId })).cancelled;
   }
 
   // Resolves whether the host stopped the run.
   async cancel(key: ScriptKey): Promise<boolean> {
-    const state = this.states.get(key);
+    const state = this.current.states.get(key);
     if (!state || !state.runId) return false;
     if (state.status !== "running" && state.status !== "starting") {
       return false;
@@ -309,13 +337,13 @@ export class ScriptRunsStore {
   }
 
   private liveInteractiveRunId(key: ScriptKey): string | null {
-    const state = this.states.get(key);
+    const state = this.current.states.get(key);
     if (!state?.runId || !state.interactive) return null;
     return state.status === "running" ? state.runId : null;
   }
 
   clear(key: ScriptKey): void {
-    const state = this.states.get(key);
+    const state = this.current.states.get(key);
     if (!state) return;
     if (state.status === "running" || state.status === "starting") return;
     this.forget(key);
@@ -335,28 +363,36 @@ export class ScriptRunsStore {
 
   // Called when a worktree is removed (delete / relocate / convert);
   // otherwise per-worktree state and runId mappings would leak across
-  // worktrees that no longer exist on disk. Returns whether this store
+  // worktrees that no longer exist on disk. Returns whether these runs
   // held any run there.
   clearForWorktree(worktreeId: string): boolean {
-    this.seenAt.delete(worktreeId);
+    const { seenAt } = this.current;
+    if (seenAt.has(worktreeId)) {
+      this.publish({
+        ...this.current,
+        seenAt: withoutEntry(seenAt, worktreeId),
+      });
+    }
     let touched = false;
-    for (const [key, m] of this.meta) {
+    for (const [key, m] of this.current.meta) {
       if (m.worktreeId !== worktreeId) continue;
       this.forget(key);
       touched = true;
     }
-    if (touched) this.worktreeSubs.notify(worktreeId);
     return touched;
   }
 
   // Drops everything held for the slot, its run's id binding included.
   private forget(key: ScriptKey): void {
-    const state = this.states.get(key);
+    const { states, meta } = this.current;
+    const state = states.get(key);
     if (state?.runId) this.runIdToKey.delete(state.runId);
-    this.states.delete(key);
     this.buffers.delete(key);
-    this.meta.delete(key);
-    this.perKeySubs.notify(key);
+    this.publish({
+      ...this.current,
+      states: withoutEntry(states, key),
+      meta: withoutEntry(meta, key),
+    });
   }
 
   // Main reaped this worktree's scripts because it was removed outside
@@ -365,7 +401,7 @@ export class ScriptRunsStore {
   // and the visible consequence is a dev server going down somewhere
   // else. The run's own console can't carry the notice, since the row
   // it lives on disappears with the worktree.
-  private handleRemovedWorktree(info: RemovedWorktreeScripts): void {
+  handleRemovedWorktree(info: RemovedWorktreeScripts): void {
     const seen = this.clearForWorktree(info.worktreeId);
     if (!seen && !this.warnOnUnseenRemoval) return;
     toast.warning(`${info.worktreeName} was removed outside the app`, {
@@ -376,74 +412,23 @@ export class ScriptRunsStore {
     });
   }
 
-  snapshot(key: ScriptKey): ScriptRunState {
-    return this.states.get(key) ?? EMPTY_STATE;
-  }
-
-  subscribe(key: ScriptKey, cb: () => void): () => void {
-    return this.perKeySubs.subscribe(key, cb);
-  }
-
-  subscribeWorktree(worktreeId: string, cb: () => void): () => void {
-    return this.worktreeSubs.subscribe(worktreeId, cb);
-  }
-
   // The worktree's page was left (or is being left): every failure so
   // far has had its chance to be seen.
   markSeen(worktreeId: string): void {
-    this.seenAt.set(worktreeId, Date.now());
-    this.worktreeSubs.notify(worktreeId);
+    this.publish({
+      ...this.current,
+      seenAt: withEntry(this.current.seenAt, worktreeId, Date.now()),
+    });
   }
-
-  // Highest-priority active slot for the worktree, or null if nothing is
-  // running. Teardown trumps setup trumps package because it's the most
-  // consequential state to surface in the sidebar. With nothing running,
-  // an unseen failure (a nonzero exit since markSeen, so not a stop).
-  getActivityKind(worktreeId: string): ScriptActivityKind | null {
-    let hasSetup = false;
-    let hasPackage = false;
-    let hasUnseenFailure = false;
-    const seenAt = this.seenAt.get(worktreeId) ?? 0;
-    for (const [key, m] of this.meta) {
-      if (m.worktreeId !== worktreeId) continue;
-      const s = this.states.get(key);
-      if (!s) continue;
-      if (s.status !== "starting" && s.status !== "running") {
-        if (s.exitCode && (s.endedAt ?? 0) > seenAt) hasUnseenFailure = true;
-        continue;
-      }
-      // Release is conceptually like teardown, the highest priority tier.
-      if (m.slotKind === "teardown" || m.slotKind === "portPoolRelease") {
-        return "teardown";
-      }
-      if (m.slotKind === "setup" || m.slotKind === "portPoolProvision") {
-        hasSetup = true;
-        continue;
-      }
-      if (m.slotKind === "package") {
-        hasPackage = true;
-      }
-    }
-    if (hasSetup) return "setup";
-    if (hasPackage) return "package";
-    if (hasUnseenFailure) return "failed";
-    return null;
-  }
-
   private setStateWithActivity(
     key: ScriptKey,
     update: (prev: ScriptRunState) => ScriptRunState,
   ): void {
-    const prev = this.states.get(key) ?? EMPTY_STATE;
+    const { states } = this.current;
+    const prev = states.get(key) ?? EMPTY_STATE;
     const next = update(prev);
     if (next === prev) return;
-    this.states.set(key, next);
-    this.perKeySubs.notify(key);
-    // Sidebar activity only depends on status; log appends don't change it.
-    if (prev.status !== next.status) {
-      const m = this.meta.get(key);
-      if (m) this.worktreeSubs.notify(m.worktreeId);
-    }
+    this.publish({ ...this.current, states: withEntry(states, key, next) });
   }
 
   // Log one chunk and hand it to any mounted console. The snapshot only
@@ -480,10 +465,10 @@ export class ScriptRunsStore {
         this.setStateWithActivity(key, (s) => ({ ...s, status: "errored" }));
         return;
       case "exit": {
-        const m = this.meta.get(key);
+        const m = this.current.meta.get(key);
         // A run the user stopped exits unclean by definition, and the
         // console they stopped it from already says so.
-        const stopped = this.states.get(key)?.cancelling === true;
+        const stopped = this.current.states.get(key)?.cancelling === true;
         this.runIdToKey.delete(event.runId);
         this.appendChunk(key, exitSentinel(event.code));
         this.setStateWithActivity(key, (s) => ({
@@ -535,9 +520,16 @@ export class ScriptRunsStore {
     slot: ScriptSlot,
     init: Pick<ScriptRunState, "runId" | "status" | "interactive">,
   ): void {
-    const prev = this.states.get(key);
+    const { states, meta } = this.current;
+    const prev = states.get(key);
     if (prev?.runId) this.runIdToKey.delete(prev.runId);
-    this.meta.set(key, { worktreeId, slotKind: deriveSlotKind(slot) });
+    this.publish({
+      ...this.current,
+      meta: withEntry(meta, key, {
+        worktreeId,
+        slotKind: deriveSlotKind(slot),
+      }),
+    });
     this.buffers.delete(key);
     this.setStateWithActivity(key, () => ({
       ...EMPTY_STATE,
@@ -566,7 +558,7 @@ export class ScriptRunsStore {
     this.bindRunIdAndDrain(key, event.runId);
   }
 
-  private handleEvent(event: ScriptEvent): void {
+  handleEvent(event: ScriptEvent): void {
     if (event.kind === "started") {
       this.bindStarted(event);
       return;
@@ -595,55 +587,90 @@ function exitSentinel(code: number | null): string {
   return `\r\n\x1b[31m── exit ${code} ──\x1b[0m\r\n`;
 }
 
-// A page's stores: this machine's over the page's api, whose `start()`
-// the boot calls so subscription lifecycle has a single owner (making
-// one attaches no IPC listener), and a peer's built on first use over
-// that device's api (the same per-device api the remote registry hands
-// every scoped page) and kept for the page's lifetime, like the api
-// itself. A peer store starts draining the device's event channel at
-// once: the first use is a scoped page or a sidebar row that wants the
-// device's runs, so there is no earlier owner to hand the lifecycle
-// to. The channel is a hub-transport subscription that rides the
-// shared peerPush fan-out, so a store per device costs one registry
-// entry each and no IPC listener.
-type PageStores = {
-  readonly local: ScriptRunsStore;
-  readonly peers: Map<string, ScriptRunsStore>;
-};
-
-const pages = new WeakMap<RendererApi, PageStores>();
-
-function storesOf(api: RendererApi): PageStores {
-  const existing = pages.get(api);
-  if (existing !== undefined) return existing;
-  const stores: PageStores = {
-    local: new ScriptRunsStore(api.scripts, true),
-    peers: new Map(),
-  };
-  // The peer stores go with the account: a run state and a scrollback
-  // are the peer's, and a device of a later account with the same id
-  // (this machine on two accounts) must not open on them. Never
-  // unregistered, like the stores themselves.
-  onAccountLeft(() => {
-    for (const store of stores.peers.values()) store.stop();
-    stores.peers.clear();
-  });
-  pages.set(api, stores);
-  return stores;
+// Highest-priority active slot for the worktree, or null if nothing is
+// running. Teardown trumps setup trumps package because it's the most
+// consequential state to surface in the sidebar. With nothing running,
+// an unseen failure (a nonzero exit since markSeen, so not a stop).
+export function activityOf(
+  { states, meta, seenAt }: RunsState,
+  worktreeId: string,
+): ScriptActivityKind | null {
+  let hasSetup = false;
+  let hasPackage = false;
+  let hasUnseenFailure = false;
+  const seen = seenAt.get(worktreeId) ?? 0;
+  for (const [key, m] of meta) {
+    if (m.worktreeId !== worktreeId) continue;
+    const s = states.get(key);
+    if (!s) continue;
+    if (s.status !== "starting" && s.status !== "running") {
+      if (s.exitCode && (s.endedAt ?? 0) > seen) hasUnseenFailure = true;
+      continue;
+    }
+    // Release is conceptually like teardown, the highest priority tier.
+    if (m.slotKind === "teardown" || m.slotKind === "portPoolRelease") {
+      return "teardown";
+    }
+    if (m.slotKind === "setup" || m.slotKind === "portPoolProvision") {
+      hasSetup = true;
+      continue;
+    }
+    if (m.slotKind === "package") {
+      hasPackage = true;
+    }
+  }
+  if (hasSetup) return "setup";
+  if (hasPackage) return "package";
+  if (hasUnseenFailure) return "failed";
+  return null;
 }
 
-// The store for any device of the page: this machine's, or a peer's.
-export function scriptRunsFor(
-  api: RendererApi,
+// A device's runs. This machine's the boot mounts where it has a host,
+// so a setup failure or a removed worktree's notice is heard with no
+// page open. A peer's start on first use (a scoped page, or a sidebar
+// row that wants the device's runs) and are kept for the page's
+// lifetime, until the account they belonged to is left
+// (accountsLeftAtom): a run state and a scrollback are the peer's.
+export const scriptRunsAtom = Atom.family((deviceId: string) =>
+  Atom.keepAlive(
+    clientAtoms.atom((get) =>
+      Effect.gen(function* () {
+        const localDeviceId = get(localDeviceIdAtom);
+        const local = deviceId === localDeviceId;
+        if (!local) get(accountsLeftAtom);
+        const call = yield* hostCalls(deviceId, localDeviceId);
+        const runs = new ScriptRuns(
+          get.registry,
+          {
+            attach: (input) => call(callOf(scriptsContract, "attach"), input),
+            cancel: (input) => call(callOf(scriptsContract, "cancel"), input),
+            write: (input) => call(callOf(scriptsContract, "write"), input),
+            resize: (input) => call(callOf(scriptsContract, "resize"), input),
+          },
+          local,
+        );
+        get.mount(runs.state);
+        const pushes = <K extends "event" | "stoppedForRemovedWorktree">(
+          key: K,
+        ) => hostPushes(deviceId, localDeviceId, callOf(scriptsContract, key));
+        yield* Stream.runForEach(pushes("event"), (event) =>
+          heard("script event", () => runs.handleEvent(event)),
+        ).pipe(Effect.forkScoped({ startImmediately: true }));
+        yield* Stream.runForEach(pushes("stoppedForRemovedWorktree"), (info) =>
+          heard("removed worktree's scripts", () =>
+            runs.handleRemovedWorktree(info),
+          ),
+        ).pipe(Effect.forkScoped({ startImmediately: true }));
+        return runs;
+      }),
+    ),
+  ),
+);
+
+// A device's runs, for a caller outside React (the boot, a mutation).
+export function scriptRunsOf(
+  registry: AtomRegistry.AtomRegistry,
   deviceId: string,
-): ScriptRunsStore {
-  const { local, peers } = storesOf(api);
-  if (deviceId === api.deviceId) return local;
-  let store = peers.get(deviceId);
-  if (store === undefined) {
-    store = new ScriptRunsStore(apiFor(deviceId).scripts, false);
-    store.start();
-    peers.set(deviceId, store);
-  }
-  return store;
+): ScriptRuns {
+  return valueNow(registry, scriptRunsAtom(deviceId));
 }

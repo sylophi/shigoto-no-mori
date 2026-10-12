@@ -1,46 +1,48 @@
-// React bindings over the per-device script run stores. The hooks
-// resolve the store from the host scope (this machine's with no
+// React bindings over the per-device script runs (scriptRuns.ts). The
+// hooks resolve the device from the host scope (this machine's with no
 // provider mounted, a peer's under one), so the same row, console and
 // detail-page code shows and drives runs on whichever device the
 // surrounding subtree names.
+import { useAtomValue } from "@effect/atom-react";
 import type {
   ScriptActivityKind,
   ScriptRunState,
 } from "@shigomori/ui/lib/scriptRun.ts";
-import { useSyncExternalStore } from "react";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Cause from "effect/Cause";
 import type { RunningScript } from "@shigomori/contracts/schemas";
 import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useHasLocalHost } from "@/lib/localHost";
-import {
-  EMPTY_STATE,
-  type ScriptKey,
-  type ScriptRunsStore,
-  scriptRunsFor,
-} from "@/store/scriptRuns";
+import type { ScriptKey } from "@/store/scriptSlot";
 import { useApi } from "@/lib/runtime/pageApi";
+import {
+  activityOf,
+  EMPTY_STATE,
+  type ScriptRuns,
+  scriptRunsAtom,
+} from "./scriptRuns";
 
-// The scoped device's store.
-export function useScriptRuns(): ScriptRunsStore {
-  return scriptRunsFor(useApi(), useHostScope().deviceId);
+// A device's runs, kept current if they start over (the account left).
+function useDeviceScriptRuns(deviceId: string): ScriptRuns {
+  const result = useAtomValue(scriptRunsAtom(deviceId));
+  if (AsyncResult.isSuccess(result)) return result.value;
+  throw AsyncResult.isFailure(result)
+    ? Cause.squash(result.cause)
+    : new Error("a device's script runs answer when read");
+}
+
+// The scoped device's runs.
+export function useScriptRuns(): ScriptRuns {
+  return useDeviceScriptRuns(useHostScope().deviceId);
 }
 
 export function useScriptRunState(key: ScriptKey): ScriptRunState {
-  return useDeviceScriptRunState(useHostScope().deviceId, key);
-}
-
-// The same for a named device, for a list that spans devices outside
-// any scope (the Live page).
-function useDeviceScriptRunState(
-  deviceId: string,
-  key: ScriptKey,
-): ScriptRunState {
-  const store = scriptRunsFor(useApi(), deviceId);
-  return useSyncExternalStore(
-    (cb) => store.subscribe(key, cb),
-    () => store.snapshot(key),
-    () => EMPTY_STATE,
+  const runs = useScriptRuns();
+  return useAtomValue(
+    runs.state,
+    (state) => state.states.get(key) ?? EMPTY_STATE,
   );
 }
 
@@ -57,11 +59,9 @@ export function useWorktreeScriptActivity(
   const localDeviceId = api.deviceId;
   const deviceId = device ?? localDeviceId;
   const hasLocalHost = useHasLocalHost();
-  const store = scriptRunsFor(api, deviceId);
-  const held = useSyncExternalStore(
-    (cb) => store.subscribeWorktree(worktreeId, cb),
-    () => store.getActivityKind(worktreeId),
-    () => null,
+  const runs = useDeviceScriptRuns(deviceId);
+  const held = useAtomValue(runs.state, (state) =>
+    activityOf(state, worktreeId),
   );
   const local = deviceId === localDeviceId;
   const peerApi = useRemoteDeviceApi(local ? undefined : deviceId);
@@ -73,8 +73,8 @@ export function useWorktreeScriptActivity(
   return listedActivity(listed ?? [], worktreeId) ?? held;
 }
 
-// The busiest of a worktree's listed runs, ranked as the store ranks
-// its own: a teardown, then a setup, then a package script.
+// The busiest of a worktree's listed runs, ranked as the runs rank
+// their own: a teardown, then a setup, then a package script.
 function listedActivity(
   runs: readonly RunningScript[],
   worktreeId: string,

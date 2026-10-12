@@ -446,7 +446,6 @@ export function useMirrorControls() {
       const removed = error === null && result?.removedCopy !== false;
       if (removed && session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
-          page,
           queryClient,
           registry,
           localDeviceId,

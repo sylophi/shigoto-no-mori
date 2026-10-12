@@ -21,6 +21,7 @@
 // mirror) quiets its moves (quietVillagerMoves), so one action is one
 // piece of news.
 import type { QueryClient } from "@tanstack/react-query";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
@@ -63,14 +64,21 @@ const showing = new Map<
 const quiet = new Map<string, number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 // The page's api and query client, from the boot.
-let started: { api: RendererApi; queryClient: QueryClient } | undefined;
+let started:
+  | {
+      api: RendererApi;
+      queryClient: QueryClient;
+      registry: AtomRegistry.AtomRegistry;
+    }
+  | undefined;
 
 // Boot wiring, once per window, like the other boot subscriptions.
 export function startVillagerMoves(
   api: RendererApi,
   queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
 ): void {
-  started = { api, queryClient };
+  started = { api, queryClient, registry };
   onWorktreeLists(({ key, deviceId, list }) => {
     if (list === null) {
       lastSeen.delete(key);
@@ -149,9 +157,11 @@ function forget(key: string, id: string): () => void {
 async function tell({
   api,
   queryClient,
+  registry,
 }: {
   api: RendererApi;
   queryClient: QueryClient;
+  registry: AtomRegistry.AtomRegistry;
 }): Promise<void> {
   const batch = [...pending];
   pending.clear();
@@ -164,7 +174,7 @@ async function tell({
   await Promise.all(
     batch.map(async ([deviceId, moves]) => {
       const { movedIn, movedOut } = settled(moves);
-      const scope = hostScopeOf(api, deviceId);
+      const scope = hostScopeOf(api, registry, deviceId);
       if (scope === undefined) return;
       const speakers = await speakersFor(
         api,
@@ -173,7 +183,7 @@ async function tell({
         { withColor: true },
       );
       const device = scope.remote
-        ? remoteDeviceById(deviceId)?.label
+        ? remoteDeviceById(registry, deviceId)?.label
         : undefined;
       const told: [MoveKind, Worktree[]][] = [
         ["in", movedIn],

@@ -1,60 +1,62 @@
-import { useSyncExternalStore } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { callOf } from "@shigomori/contracts/contract";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
+import * as Stream from "effect/Stream";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { onAccountLeft, onSessionLanded } from "@/lib/remote/remoteDeviceSync";
+import {
+  accountsLeftAtom,
+  clientAtoms,
+  hostPushes,
+  localDeviceIdAtom,
+  peerSessionAtom,
+} from "@/lib/runtime/atoms";
 
-// Which projects are fetching refs right now, on which device: fed by
-// every device's git:fetchActive broadcast (lib/hostWatch.ts), read by
-// the worktree page under that device's scope. Project ids are path
-// hashes that can collide across the owner's machines, so an entry is
-// keyed by device and project. Events broadcast before any reader
-// mounts are still safe to miss: the absence of a fetchActive=true
-// reads as "not fetching."
-const active = new Set<string>();
-const listeners = new Set<() => void>();
+const NONE: ReadonlySet<string> = new Set();
 
-const keyOf = (deviceId: string, projectId: string) =>
-  `${deviceId}\n${projectId}`;
-
-function forget(match: (key: string) => boolean): void {
-  let changed = false;
-  for (const key of active) {
-    if (!match(key)) continue;
-    active.delete(key);
-    changed = true;
-  }
-  if (changed) for (const l of listeners) l();
-}
-
-export function noteGitFetchActive(
-  deviceId: string,
-  projectId: string,
-  isActive: boolean,
-): void {
-  const key = keyOf(deviceId, projectId);
-  if (isActive === active.has(key)) return;
-  if (isActive) active.add(key);
-  else active.delete(key);
-  for (const l of listeners) l();
-}
-
-// A peer's fetch that ended while its session was down never says so,
-// and neither does one on a device of an account that is gone.
-onSessionLanded((deviceId) => {
-  forget((key) => key.startsWith(`${deviceId}\n`));
-});
-onAccountLeft((localDeviceId) => {
-  forget((key) => !key.startsWith(`${localDeviceId}\n`));
-});
+// Which of a device's projects are fetching refs right now, off its
+// git:fetchActive pushes, read by the worktree page under that device's
+// scope. The boot mounts this machine's where it has a host, and a
+// peer's from the moment its session lands (boot.tsx), so a fetch that
+// starts while no page shows reads as fetching when one opens. A peer's
+// starts over on each new session to it, since a fetch that ended while
+// its session was down never says so, and with the account.
+export const gitFetchingAtom = Atom.family((deviceId: string) =>
+  Atom.keepAlive(
+    clientAtoms.atom(
+      (get) => {
+        const localDeviceId = get(localDeviceIdAtom);
+        if (deviceId !== localDeviceId) {
+          get(peerSessionAtom(deviceId));
+          get(accountsLeftAtom);
+        }
+        return hostPushes(
+          deviceId,
+          localDeviceId,
+          callOf(gitContract, "fetchActive"),
+        ).pipe(
+          Stream.scan(
+            (): ReadonlySet<string> => NONE,
+            (active, { projectId, active: fetching }) => {
+              if (fetching === active.has(projectId)) return active;
+              const next = new Set(active);
+              if (fetching) next.add(projectId);
+              else next.delete(projectId);
+              return next;
+            },
+          ),
+        );
+      },
+      { initialValue: NONE },
+    ),
+  ),
+);
 
 export function useProjectGitFetching(projectId: string): boolean {
   const { deviceId } = useHostScope();
-  const key = keyOf(deviceId, projectId);
-  return useSyncExternalStore(
-    (notify) => {
-      listeners.add(notify);
-      return () => listeners.delete(notify);
-    },
-    () => active.has(key),
-    () => false,
+  return useAtomValue(
+    gitFetchingAtom(deviceId),
+    (result) => AsyncResult.isSuccess(result) && result.value.has(projectId),
   );
 }
