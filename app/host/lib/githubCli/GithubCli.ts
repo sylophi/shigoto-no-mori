@@ -168,13 +168,15 @@ const make = Effect.gen(function* () {
     spawner,
   );
 
-  // `gh auth status` exits non-zero when not signed in, and is not
-  // asked when gh is missing.
+  // `gh auth token` exits non-zero when not signed in, and is not asked
+  // when gh is missing. It reads gh's own store, where `gh auth status`
+  // asks GitHub, so a machine offline (or a stale second account) read
+  // as signed out. The token itself is dropped unread.
   const probe = yield* Effect.gen(function* () {
     const installed = (yield* Processes.resolveOnPath("gh")) !== null;
     const authed =
       installed &&
-      (yield* gh(["auth", "status"]).pipe(
+      (yield* gh(["auth", "token"]).pipe(
         Effect.as(true),
         Effect.orElseSucceed(() => false),
       ));

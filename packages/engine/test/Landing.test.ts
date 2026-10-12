@@ -4,12 +4,15 @@
 // scripted gh.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import { afterEach, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import * as GitHub from "../src/GitHub.ts";
 import * as Landing from "../src/Landing.ts";
 import {
   mergeProblem,
@@ -539,4 +542,30 @@ esac`,
     );
     assert.equal(await foxSurvives(located), true);
   });
+});
+
+// A gh that never answers (a proxy's auth prompt, an SSO page it can't
+// show) is given up on, where a merge button behind it spun for good.
+it("a gh asked with no deadline of its own is given one", async () => {
+  const located = await landFixture();
+  const asked = join(box.home, "gh-asked");
+  box.fakeBin("gh", `touch '${asked}'; exec sleep 600`);
+  const failed = await box.engine(
+    Effect.gen(function* () {
+      const landing = yield* Landing.Landing;
+      // `sm pr`'s lookup, which sets no deadline of its own.
+      const waiting = yield* Effect.forkChild(
+        Effect.flip(landing.pullRequest(located)),
+      );
+      while (!existsSync(asked)) {
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      yield* TestClock.adjust("2 minutes");
+      return yield* Fiber.join(waiting);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  assert.ok(failed instanceof GitHub.GitHubCliError);
+  assert.equal(failed.reason, "timeout");
 });
