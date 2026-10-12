@@ -57,6 +57,10 @@ export const hostLink = Effect.fnUntraced(function* (options: {
   // drops, as a reconnect is asked for, or as its dial fails.
   yield* Effect.gen(function* () {
     const { port, token, deviceId } = yield* options.address;
+    // A reconnect asked while no link was up is moot: this dial is to
+    // the address answered now. Kept, it would close the link this dial
+    // makes (a shell's, as its restarted host says it is up).
+    yield* Queue.clear(reconnects);
     const dialed = yield* dialDevice({
       url: `ws://127.0.0.1:${port}`,
       ticket: token,

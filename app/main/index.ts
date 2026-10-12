@@ -21,7 +21,7 @@ import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { type HostFailure, host } from "./hostProcess";
+import { type HostFailure, host, hostBusy } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import { dataDir, dataDirPointerRead, initDataDir } from "@shared/paths";
 import { applyUserShellEnv } from "@shared/shellEnv";
@@ -371,7 +371,7 @@ app.on("before-quit", (event) => {
     return;
   }
   askingToQuit = true;
-  void Effect.runPromise(host().busy())
+  void Effect.runPromise(hostBusy())
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
       // A host that cannot answer has nothing to lose to the quit.
@@ -397,13 +397,29 @@ app.on("before-quit", (event) => {
 // While the busy prompt is up, a second quit waits for its answer.
 let askingToQuit = false;
 
+// Past the host's own quit deadline (15 s), so a host that is slow to
+// close is still killed by its hold first.
+const QUIT_CLOSE_DEADLINE = "20 seconds";
+
 function quit(): void {
   quitting = true;
   const hurried = isHurriedQuit();
   rememberWindows();
   if (hurried) rememberVisibilityForRestart();
-  void runtime
-    .dispose()
+  // The host is given its own deadline to close (hostProcess.ts); the
+  // rest of the graph closes beside it, and a finalizer that hangs past
+  // both does not keep the app, or a logout, waiting.
+  void Effect.runPromise(
+    runtime.disposeEffect.pipe(
+      Effect.timeoutOrElse({
+        duration: QUIT_CLOSE_DEADLINE,
+        orElse: () =>
+          Effect.sync(() =>
+            log.error("[quit] the graph did not close in time, exiting"),
+          ),
+      }),
+    ),
+  )
     .catch((error: unknown) => {
       log.error("[quit] a finalizer failed:", error);
     })

@@ -17,6 +17,7 @@ import {
 } from "electron";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { WebSocket as WsWebSocket } from "ws";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { sessionContract } from "@shigomori/contracts/modules/session";
@@ -39,6 +40,7 @@ import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
 import { makePortServer } from "./ipc/ShellLink";
 import { createShellRegistrar } from "./ipc/shellRegistrar";
 import { deviceIdWithin } from "./core/host/deviceId";
+import { busyWithin, watchHost } from "./core/host/watchdog";
 
 type Address = {
   readonly port: number;
@@ -88,6 +90,13 @@ const CRASH_WINDOW_MS = 60_000;
 const CRASHES_ALLOWED = 3;
 // How long a quit waits for the host to close its graph and exit.
 const QUIT_DEADLINE_MS = 15_000;
+// A host that is up is asked something cheap this often, and one that
+// stays silent this long is killed and forked again.
+const WATCH_EVERY = "10 seconds";
+const SILENT_LIMIT = "30 seconds";
+// How long a quit or an update waits to hear whether the host is busy.
+const BUSY_DEADLINE = "3 seconds";
+const IDLE = { runningScripts: 0, inflightDeletes: 0 } as const;
 
 let child: UtilityProcess | null = null;
 let quitting = false;
@@ -154,6 +163,21 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     tell(session().account(accountFactsForHost()));
     tell(session().windowFocused(windowFocused));
     tell(session().updaterState(currentUpdaterState()));
+    const watched = child;
+    if (watched !== null) {
+      Effect.runFork(
+        watchHost({
+          probe: session().busy(),
+          every: WATCH_EVERY,
+          limit: SILENT_LIMIT,
+          watching: () => child === watched && !quitting,
+          silent: () => {
+            log.warn("[host] silent for 30 s, starting it again");
+            watched.kill();
+          },
+        }),
+      );
+    }
   },
   failed: (failure) => onFailed(failure),
   migration: (progress) => noteMigration(progress),
@@ -210,6 +234,14 @@ function fork(): void {
 export function host(): ReturnType<typeof session> {
   return session();
 }
+
+// What the host is busy with, as a quit or an update asks: idle when
+// it cannot say within a few seconds, since a host that does not
+// answer has nothing to lose to them.
+export const hostBusy = () =>
+  busyWithin(session().busy(), BUSY_DEADLINE).pipe(
+    Effect.map(Option.getOrElse(() => IDLE)),
+  );
 
 export function hostAddress(): Promise<Address> {
   return address.promise.then(({ port, token, deviceId }) => ({
