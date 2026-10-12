@@ -2,6 +2,7 @@
 // long one is cut down and whether the pencil fits at the end of a
 // one-line one. While no open PR holds it (`editable`), it is edited
 // as its markdown in place (DescriptionEditorView).
+import { useBinding } from "@/hooks/ui/useKeymap";
 import { type RefObject, useLayoutEffect, useState } from "react";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { useIsTruncated } from "@shigomori/ui/hooks/useIsTruncated.ts";
@@ -27,6 +28,7 @@ export function DescriptionSection({
 }) {
   // The edit in progress, or null while idle.
   const [draft, setDraft] = useState<string | null>(null);
+  const saveKeys = useBinding("save");
   const describe = useDescribeWorktree("Couldn't save the description");
   const { canCommand } = useCommandAccess();
   const imageHosts = useProjectImageHosts(worktree.projectId);
@@ -54,6 +56,7 @@ export function DescriptionSection({
         onChange={setDraft}
         onSave={() => save(draft)}
         onCancel={cancel}
+        saveKeys={saveKeys}
       />
     );
   }

@@ -4,6 +4,8 @@
 // Accelerators here fire regardless of which element has focus, and
 // Electron dispatches them through the menu before the renderer sees
 // them.
+import { menuAccelerators } from "@shigomori/ui/lib/keymap.ts";
+import { readClientConfigSync } from "./clientConfig";
 import {
   app,
   Menu,
@@ -44,10 +46,16 @@ function shownLaunchTools(): LaunchTools {
 type Chords = Readonly<Record<string, string>>;
 const chordsByWindow = new Map<number, Chords>();
 
+// The focused window's, or the device's stored bindings over the
+// defaults until a window has focus and has sent its own, so the menu
+// shows its keys from launch.
 function shownChords(): Chords {
-  return focusedWindowId === null
-    ? {}
-    : (chordsByWindow.get(focusedWindowId) ?? {});
+  return (
+    (focusedWindowId === null
+      ? undefined
+      : chordsByWindow.get(focusedWindowId)) ??
+    menuAccelerators(readClientConfigSync().keybindings)
+  );
 }
 
 function sameChords(a: Chords, b: Chords): boolean {

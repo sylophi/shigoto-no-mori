@@ -8,13 +8,27 @@
 // what is still an experiment: the dev builds' theme keys and the
 // palettes' hidden variants (usePaletteVariantHotkey).
 //
-// A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere, and
-// the key is the physical one, named as on a US keyboard
-// (`KeyboardEvent.code`), so a chord holds on any layout and with ⌥ held.
+// A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere. A
+// letter or a digit is the one the key types, whichever key types it, as
+// the app's shortcuts always were: ⌘K on Dvorak or Colemak is the key
+// that types K, ⌘M on AZERTY the key that types M. With Alt held (⌥
+// composing a symbol, AltGr typing a layout's third character), or
+// where the layout types no Latin letter or digit (Cyrillic, Greek),
+// it is the physical key, named as on a US keyboard
+// (`KeyboardEvent.code`), as macOS's own ⌘ shortcuts fall back. Every
+// other key is the physical one: the terminal's Ctrl+` names the key
+// left of 1, which many layouts type no backtick on. A ⌘ chord also
+// answers extra modifiers (bindingOf).
 
 // Where an action acts. The window is every page; a page or a dialog
 // is only itself, so two of them can share a chord.
-type KeymapScope = "window" | "worktree" | "changes" | "palette" | "folders";
+type KeymapScope =
+  | "window"
+  | "worktree"
+  | "changes"
+  | "palette"
+  | "folders"
+  | "editing";
 
 const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   window: "Anywhere",
@@ -22,6 +36,7 @@ const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   changes: "Changes",
   palette: "The palette",
   folders: "Adding a project, picking a folder",
+  editing: "Editing a description or a commit's message",
 };
 
 export interface KeymapAction {
@@ -105,6 +120,12 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     chord: "Mod+Enter",
     scope: "folders",
   },
+  {
+    id: "save",
+    label: "Save what is being edited",
+    chord: "Mod+Enter",
+    scope: "editing",
+  },
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(launchTool),
 ];
 
@@ -166,6 +187,23 @@ function keyOfCode(code: string): string | null {
   if (digit) return digit[1] ?? null;
   if (/^F([1-9]|1[0-2])$/.test(code)) return code;
   return NAMED_CODES[code] ?? null;
+}
+
+// The key a press names: a letter or digit as typed, where the layout
+// types one, the physical key otherwise (the header says why).
+function keyOfPress(e: KeyPress): string | null {
+  const physical = keyOfCode(e.code);
+  const typed = e.key.length === 1 ? e.key.toUpperCase() : "";
+  // ⌥ composes a symbol on a Mac, and AltGr types a layout's third
+  // character elsewhere: with Alt held the key is the physical one.
+  if (/^[A-Z0-9]$/.test(typed) && !e.altKey) return typed;
+  if (!/^(Key[A-Z]|Digit\d)$/.test(e.code)) return physical;
+  // Shift on a digit types its symbol (⇧1 is !), and with Alt held, or
+  // a layout typing another script there, the key is itself.
+  if (e.altKey || typed === "" || e.code.startsWith("Digit")) return physical;
+  // A letter key typing ASCII punctuation (Dvorak's ' where QWERTY has
+  // Q) names no letter; one typing another script is the key itself.
+  return typed.charCodeAt(0) < 128 ? null : physical;
 }
 
 const KEYS = new Set([
@@ -238,6 +276,7 @@ const samePressed = (a: Pressed, b: Pressed): boolean =>
 // The fields of a key event a chord is read from.
 export interface KeyPress {
   readonly code: string;
+  readonly key: string;
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
   readonly altKey: boolean;
@@ -247,7 +286,7 @@ export interface KeyPress {
 // The chord a key press makes, or null for one that makes none: a
 // modifier alone, or the Windows key off macOS.
 export function chordOfPress(e: KeyPress, mac: boolean): Chord | null {
-  const key = keyOfCode(e.code);
+  const key = keyOfPress(e);
   if (key === null || (!mac && e.metaKey)) return null;
   return {
     mod: mac ? e.metaKey : e.ctrlKey,
@@ -350,7 +389,13 @@ export interface Binding {
   readonly matches: (e: KeyPress) => boolean;
 }
 
-export function bindingOf(chord: Chord, mac: boolean): Binding {
+export function bindingOf(
+  chord: Chord,
+  mac: boolean,
+  // The presses other bindings in reach of this one take as their own,
+  // which this one gives up when it answers extra modifiers.
+  taken: readonly Pressed[] = [],
+): Binding {
   const keys = pressed(chord, mac);
   return {
     chord,
@@ -358,7 +403,24 @@ export function bindingOf(chord: Chord, mac: boolean): Binding {
     aria: chordAria(chord, mac),
     matches: (e) => {
       const press = chordOfPress(e, mac);
-      return press !== null && samePressed(pressed(press, mac), keys);
+      if (press === null) return false;
+      const held = pressed(press, mac);
+      if (samePressed(held, keys)) return true;
+      // A ⌘ chord also answers the same press with Shift, Alt or Ctrl
+      // held as well, as the app's ⌘K and ⌘↩ always did, unless another
+      // binding in reach takes that press (⇧⌘N is Add project, not New
+      // window). Ctrl and Alt together off a Mac are AltGr typing a
+      // character, never a chord's extra.
+      return (
+        chord.mod &&
+        held.key === keys.key &&
+        (!keys.meta || held.meta) &&
+        (!keys.ctrl || held.ctrl) &&
+        (!keys.alt || held.alt) &&
+        (!keys.shift || held.shift) &&
+        (mac || !(held.ctrl && held.alt) || (keys.ctrl && keys.alt)) &&
+        !taken.some((other) => samePressed(other, held))
+      );
     },
   };
 }
@@ -370,15 +432,39 @@ export function resolveKeymap(
   stored: Readonly<Record<string, string>> | undefined,
   { mac, desktop }: { mac: boolean; desktop: boolean },
 ): ReadonlyMap<string, Binding> {
-  const keymap = new Map<string, Binding>();
+  const chords = new Map<KeymapAction, Chord>();
   for (const action of KEYMAP_ACTIONS) {
     if (action.menu && !desktop) continue;
     const own = stored?.[action.id];
     const chord =
       (own === undefined ? null : parseChord(own)) ?? parseChord(action.chord);
-    if (chord) keymap.set(action.id, bindingOf(chord, mac));
+    if (chord) chords.set(action, chord);
+  }
+  const keymap = new Map<string, Binding>();
+  for (const [action, chord] of chords) {
+    const taken = [...chords]
+      .filter(
+        ([other]) =>
+          other !== action && scopesOverlap(action.scope, other.scope),
+      )
+      .map(([, held]) => pressed(held, mac));
+    keymap.set(action.id, bindingOf(chord, mac, taken));
   }
   return keymap;
+}
+
+// The menu's chords as accelerators, for the shell's menu before a
+// window has sent its own: the device's bindings over the defaults.
+export function menuAccelerators(
+  stored: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> {
+  const accelerators: Record<string, string> = {};
+  const keymap = resolveKeymap(stored, { mac: true, desktop: true });
+  for (const action of KEYMAP_ACTIONS) {
+    const binding = action.menu ? keymap.get(action.id) : undefined;
+    if (binding) accelerators[action.id] = chordAccelerator(binding.chord);
+  }
+  return accelerators;
 }
 
 // The default bindings, for a scene: a Mac's, as the fixtures are.

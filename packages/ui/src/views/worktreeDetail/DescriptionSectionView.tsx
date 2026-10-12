@@ -1,3 +1,4 @@
+import type { Binding } from "../../lib/keymap.ts";
 import type { Ref } from "react";
 import { ChevronDown, Pencil } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
@@ -109,12 +110,15 @@ export function DescriptionEditorView({
   onChange,
   onSave,
   onCancel,
+  saveKeys,
 }: {
   draft: string;
   saving: boolean;
   onChange: (draft: string) => void;
   onSave: () => void;
   onCancel: () => void;
+  // The keymap's save (⌘↩ unless rebound).
+  saveKeys: Binding;
 }) {
   return (
     <section className="max-w-3xl space-y-2">
@@ -127,7 +131,7 @@ export function DescriptionEditorView({
         disabled={saving}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          if (saveKeys.matches(e)) {
             e.preventDefault();
             onSave();
           } else if (e.key === "Escape") {
