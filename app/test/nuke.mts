@@ -191,7 +191,10 @@ it("a teardown script that never ends, deaf to SIGTERM, holds no nuke up", async
   assert.ok(!existsSync(kite), "the worktree went all the same");
   // The script's shell is killed; what it started in the background
   // outlives it by design (Lifecycle.ts), so the proof ends its own.
-  spawnSync("pkill", ["-f", "sleep 6017"]);
+  const orphans = spawnSync("pgrep", ["-f", "sleep 6017"]).stdout.toString();
+  for (const pid of orphans.split("\n").filter(Boolean)) {
+    process.kill(Number(pid), "SIGKILL");
+  }
 });
 
 it("reports what it couldn't uninstall, with why", async () => {
