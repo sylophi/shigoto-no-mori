@@ -29,6 +29,7 @@ function AskHowDialog({ onClose }: { onClose: () => void }) {
   const api = useApi();
   const harnesses = useGuideHarnesses();
   const [question, setQuestion] = useState("");
+  const [picked, setPicked] = useState<GuideHarness | null>(null);
   const [asking, setAsking] = useState<GuideHarness | null>(null);
   const ask = (harness: GuideHarness) => {
     setAsking(harness);
@@ -51,6 +52,8 @@ function AskHowDialog({ onClose }: { onClose: () => void }) {
         question={question}
         onQuestionChange={setQuestion}
         harnesses={harnesses}
+        harness={picked}
+        onHarnessChange={setPicked}
         asking={asking}
         onAsk={ask}
         onCancel={onClose}

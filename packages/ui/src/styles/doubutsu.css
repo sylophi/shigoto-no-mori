@@ -447,7 +447,9 @@
 /* The guide's ring around what it points at is the other: a pointer,
    like focus, not an edge. */
 .doubutsu [data-slot="guide-ring"] {
-  box-shadow: 0 0 0 3px var(--color-sky-500) !important;
+  box-shadow:
+    0 0 0 3px var(--color-sky-500),
+    0 0 0 8px color-mix(in oklab, var(--color-sky-500) 22%, transparent) !important;
 }
 
 /* Keyboard focus keeps its ring, the one outline doubutsu draws. A

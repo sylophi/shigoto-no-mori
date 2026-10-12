@@ -36,6 +36,8 @@ export function GuidePartsScene() {
               question={QUESTION}
               onQuestionChange={noop}
               harnesses={HARNESSES}
+              harness={null}
+              onHarnessChange={noop}
               asking={null}
               onAsk={noop}
               onCancel={noop}
@@ -46,6 +48,8 @@ export function GuidePartsScene() {
               question={QUESTION}
               onQuestionChange={noop}
               harnesses={HARNESSES}
+              harness={null}
+              onHarnessChange={noop}
               asking="claude"
               onAsk={noop}
               onCancel={noop}
@@ -59,6 +63,8 @@ export function GuidePartsScene() {
             question=""
             onQuestionChange={noop}
             harnesses={[]}
+            harness={null}
+            onHarnessChange={noop}
             asking={null}
             onAsk={noop}
             onCancel={noop}
@@ -83,6 +89,7 @@ export function GuidePartsScene() {
           </div>
           <GuideCalloutView
             place={{
+              radius: "var(--radius-lg)",
               ring: { x: 115, y: 24, width: 57, height: 28 },
               left: 115,
               top: 64,
@@ -98,6 +105,7 @@ export function GuidePartsScene() {
           </div>
           <GuideCalloutView
             place={{
+              radius: "var(--radius-lg)",
               ring: { x: 24, y: 124, width: 50, height: 28 },
               left: 24,
               bottom: 64,

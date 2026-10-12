@@ -234,7 +234,7 @@ async function ask(
   const asked = Date.now();
   await (
     await pageApi(page)
-  ).evaluate((api, input) => api.guide.ask(input), {
+  ).evaluate((api, input) => api.run(api.guide.ask(input)), {
     harness,
     question,
   } as const);

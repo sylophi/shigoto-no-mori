@@ -15,7 +15,7 @@ const TARGET = "[data-guide-target]";
 const BOX_WIDTH = 288;
 const EDGE = 8;
 const BOX_ROOM = 96;
-const GAP = 12;
+const GAP = 16;
 
 function placeOf(target: Element, root: HTMLElement): GuideCalloutPlace {
   const frame = root.getBoundingClientRect();
@@ -26,11 +26,12 @@ function placeOf(target: Element, root: HTMLElement): GuideCalloutPlace {
     width: rect.width,
     height: rect.height,
   };
+  const radius = getComputedStyle(target).borderTopLeftRadius;
   const left = Math.max(EDGE, Math.min(ring.x, frame.width - BOX_WIDTH - EDGE));
   const below = ring.y + ring.height + GAP;
   return below + BOX_ROOM <= frame.height
-    ? { ring, left, top: below }
-    : { ring, left, bottom: frame.height - ring.y + GAP };
+    ? { ring, radius, left, top: below }
+    : { ring, radius, left, bottom: frame.height - ring.y + GAP };
 }
 
 const samePlace = (a: GuideCalloutPlace | null, b: GuideCalloutPlace | null) =>
@@ -41,6 +42,7 @@ const samePlace = (a: GuideCalloutPlace | null, b: GuideCalloutPlace | null) =>
     a.ring.y === b.ring.y &&
     a.ring.width === b.ring.width &&
     a.ring.height === b.ring.height &&
+    a.radius === b.radius &&
     a.left === b.left &&
     a.top === b.top &&
     a.bottom === b.bottom);
