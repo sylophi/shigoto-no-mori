@@ -26,6 +26,9 @@ export const RegistryFileSchema = Schema.Struct({
   shelfSnapshots: Schema.Record(Schema.String, Schema.Unknown),
   // When each worktree last came off the shelf, epoch ms.
   unshelvedAt: Schema.Record(Schema.String, Schema.Int),
+  // The agent sessions bound to each worktree, by worktree id, in the
+  // order they were bound. Each entry decoded on its own.
+  agentSessions: Schema.Record(Schema.String, Schema.Array(Schema.Unknown)),
   deviceId: Schema.String,
   // Each entry kept as it is, readable or not.
   sharedSettings: Schema.Struct({
