@@ -29,7 +29,9 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { engineGit, promised } from "./lib/gitPromises.mts";
+import type { CommitRequest } from "@shigomori/engine/Git";
+import { errorWordsOf } from "@host/lib/errorWords";
+import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // changes.ts runs git under this process's environment. The pre-commit
@@ -64,7 +66,8 @@ const resetSoft = (
 ) => engineGit.resetSoft({ worktree, target, expectHead });
 const restoreDiscard = (worktree: string, snapshot: string) =>
   engineGit.restoreDiscard({ worktree, snapshot });
-const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
+const commitPicks = (worktree: string, message: CommitRequest) =>
+  engineGit.commitPicks(worktree, message);
 
 // A commit of whole files, the way the page sends one with nothing
 // ticked by hunk.
@@ -275,9 +278,10 @@ it("a commit git refuses puts the index back the way it was", async () => {
   write(repo, ".git/hooks/pre-commit", "#!/bin/sh\necho no >&2\nexit 1\n");
   execFileSync("chmod", ["+x", join(repo, ".git/hooks/pre-commit")]);
   const before = git(repo, "diff", "--cached", "--name-status", "-M");
+  // The hook's own words, as the host relays the failure.
   await assert.rejects(
     commitPaths(repo, { summary: "Refused" }, ["a.txt"]),
-    /no/,
+    (error) => errorWordsOf(error) === "no",
   );
   assert.equal(git(repo, "diff", "--cached", "--name-status", "-M"), before);
 });
