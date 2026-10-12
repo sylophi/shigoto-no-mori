@@ -606,6 +606,77 @@ describe("the version floor", () => {
     });
   });
 
+  it("refuses an old build with a stale credential as old, on every device route", async () => {
+    // A build below the floor whose credential the hub no longer takes:
+    // it must hear update required, which it can act on, and not sign
+    // in again, which would not help it.
+    for (const [method, path] of [
+      ["GET", "/devices"],
+      ["POST", "/tickets"],
+      ["POST", "/tunnel"],
+    ] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- three routes, order does not matter
+      const response = await call(
+        new Request(`${BASE}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer smdc_${"a".repeat(43)}`,
+            [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR - 1),
+          },
+        }),
+      );
+      expect(response.status, path).toBe(403);
+      // oxlint-disable-next-line no-await-in-loop -- as above
+      expect(await response.json(), path).toMatchObject({
+        _tag: "HubUpdateRequiredError",
+      });
+    }
+  });
+
+  it("refuses an old build whose device was revoked as old", async () => {
+    const { credential } = await enroll("acct-floor-rev", "dev-floor-rev");
+    const revoked = await call(
+      new Request(`${BASE}/devices/dev-floor-rev`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${credential}` },
+      }),
+    );
+    expect(revoked.status).toBe(204);
+    const response = await call(
+      new Request(`${BASE}/devices`, {
+        headers: {
+          Authorization: `Bearer ${credential}`,
+          [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR - 1),
+        },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      _tag: "HubUpdateRequiredError",
+    });
+  });
+
+  it("an old build with no credential at all hears the floor; a current one, the credential", async () => {
+    const old = await call(
+      new Request(`${BASE}/devices`, {
+        headers: { [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR - 1) },
+      }),
+    );
+    expect(old.status).toBe(403);
+    expect(await old.json()).toMatchObject({
+      _tag: "HubUpdateRequiredError",
+    });
+    const current = await call(
+      new Request(`${BASE}/devices`, {
+        headers: { [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR) },
+      }),
+    );
+    expect(current.status).toBe(401);
+    expect(await current.json()).toMatchObject({
+      _tag: "HubCredentialRejectedError",
+    });
+  });
+
   it("serves a build at or above the floor", async () => {
     const { credential } = await enroll("acct-floor-ok", "dev-floor-ok");
     const response = await call(
