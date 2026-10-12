@@ -1,10 +1,9 @@
-// React binding over the remote device registry.
-// useSyncExternalStore subscribes a component to the registry's live
-// snapshot, so device status (connecting, connected, backoff, blocked)
-// renders without any polling or prop threading. Read side only: no
-// settings UI and no scoped data live here, just the live snapshot the
-// scoped surfaces resolve their device from.
-import { useSyncExternalStore } from "react";
+// React binding over the remote device registry (remoteDevicesAtom),
+// so device status (connecting, connected, backoff, blocked) renders
+// without any polling or prop threading. Read side only: no settings
+// UI and no scoped data live here, just the live list the scoped
+// surfaces resolve their device from.
+import { useAtomValue } from "@effect/atom-react";
 import {
   MACHINE_FALLBACK_ICON,
   type DeviceIcon,
@@ -19,21 +18,19 @@ import { hostsProjects } from "@shigomori/ui/lib/deviceTraits.ts";
 import {
   type RemoteDevice,
   type RemoteDeviceApi,
-  remoteDeviceStore,
+  remoteDevicesAtom,
 } from "@/lib/remote/devices";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // Live list of every registered remote device. Re-renders on any status
-// or connection change. The snapshot reference is stable between changes
-// (the registry rebuilds it only on a real change), so this is safe as a
-// useSyncExternalStore value.
+// or connection change: the list's reference is stable between changes
+// (the sync rebuilds it only on a real change).
 export function useRemoteDevices(): readonly RemoteDevice[] {
-  return useSyncExternalStore(
-    remoteDeviceStore.subscribe,
-    remoteDeviceStore.getSnapshot,
-    remoteDeviceStore.getSnapshot,
-  );
+  return useAtomValue(remoteDevicesAtom);
 }
+
+const entryOf = (devices: readonly RemoteDevice[], deviceId: string) =>
+  devices.find((entry) => entry.deviceId === deviceId);
 
 // The account's machines: every registered device that hosts projects.
 // A browser client is a device on the account too, but there is no
@@ -77,7 +74,7 @@ export function useRemoteDevice(deviceId: string): RemoteDevice | undefined {
 // One device's api, or undefined when it has no session (or the id
 // names the local device, a revoked peer, or nothing at all). A
 // selector, not a filter over useRemoteDevices: the api reference is
-// stable per device (the store compares it by identity), so a status
+// stable per device (the sync compares it by identity), so a status
 // transition on any peer leaves this value unchanged and React skips
 // the render. Shared leaf hooks that draw at list scale (a project icon
 // per row) read through this rather than subscribing to the whole
@@ -85,13 +82,9 @@ export function useRemoteDevice(deviceId: string): RemoteDevice | undefined {
 export function useRemoteDeviceApi(
   deviceId: string | undefined,
 ): RemoteDeviceApi | undefined {
-  const select = () =>
-    deviceId === undefined
-      ? undefined
-      : remoteDeviceStore
-          .getSnapshot()
-          .find((entry) => entry.deviceId === deviceId)?.api;
-  return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
+  return useAtomValue(remoteDevicesAtom, (devices) =>
+    deviceId === undefined ? undefined : entryOf(devices, deviceId)?.api,
+  );
 }
 
 // What a device looks like, by id, this device included: the account's
@@ -102,13 +95,9 @@ export function useRemoteDeviceApi(
 export function useDeviceIcon(deviceId: string): DeviceIcon {
   const localDeviceId = useApi().deviceId;
   const localIcon = useLocalDeviceIcon();
-  const select = () =>
-    remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
-      ?.icon ?? MACHINE_FALLBACK_ICON;
-  const remoteIcon = useSyncExternalStore(
-    remoteDeviceStore.subscribe,
-    select,
-    select,
+  const remoteIcon = useAtomValue(
+    remoteDevicesAtom,
+    (devices) => entryOf(devices, deviceId)?.icon ?? MACHINE_FALLBACK_ICON,
   );
   return deviceId === localDeviceId ? localIcon : remoteIcon;
 }

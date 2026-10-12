@@ -1,13 +1,17 @@
-// The atoms a container reads a host view through (app/DESIGN.md,
-// "Views and containers"): each on the client's runtime, over the links
-// the page's api rides, which the boot seeds into the page's registry
-// (clientLinksAtom) with this device's id (localDeviceIdAtom). A request
-// stays a React Query query.
+// The atoms a container reads a host view or a push stream through
+// (app/DESIGN.md, "Views and containers"): each on the client's runtime,
+// over the links the page's api rides, which the boot seeds into the
+// page's registry (clientLinksAtom) with this device's id
+// (localDeviceIdAtom) and the page's query client (queryClientAtom). A
+// request stays a React Query query.
 import type { Decoded, Encoded } from "@shigomori/contracts/codec";
 import {
   type ContractCall,
+  type ContractModule,
   channelOf,
   type InputOf,
+  type OutputOf,
+  outputOf,
   type PayloadOf,
   payloadOf,
 } from "@shigomori/contracts/contract";
@@ -22,13 +26,16 @@ import { projectsContract } from "@shigomori/contracts/modules/projects";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import type { QueryClient } from "@tanstack/react-query";
 import type { Link } from "@shared/ipc/transport";
 import { ClientLinks } from "./ClientLinks";
 import { peerLink } from "./peerLink";
@@ -42,7 +49,14 @@ export const clientLinksAtom = Atom.keepAlive(
 // a view of it rides the local link, any other device's the hub hop.
 export const localDeviceIdAtom = Atom.keepAlive(Atom.make(""));
 
-const clientAtoms = Atom.runtime((get) => {
+// The page's query client, put in the registry by the boot beside the
+// links, for an atom whose pushes move a request's cache (a worktree's
+// removal, a carry-over rewriting project.json).
+export const queryClientAtom = Atom.keepAlive(
+  Atom.make<QueryClient | null>(null),
+);
+
+export const clientAtoms = Atom.runtime((get) => {
   const links = get(clientLinksAtom);
   return links === null
     ? Layer.effect(
@@ -59,6 +73,12 @@ const clientAtoms = Atom.runtime((get) => {
 export const peerSessionAtom = Atom.family((_deviceId: string) =>
   Atom.keepAlive(Atom.make(0)),
 );
+
+// How many accounts this window has left, which the boot counts
+// (onAccountLeft). What an atom keeps of a peer (its script runs, a
+// removal under way) is the peer's, and a device of a later account
+// with the same id (this machine on two accounts) starts over.
+export const accountsLeftAtom = Atom.keepAlive(Atom.make(0));
 
 // A device's refusal is a switch that may flip back (its command access
 // off, its sharing off), so the view is asked again. The device's other
@@ -103,6 +123,110 @@ const hostLinkOf = (deviceId: string, localDeviceId: string) =>
       ? linkOf(projectsContract)
       : peerLink(linkOf(hubContract), deviceId);
   });
+
+// A push's payloads on a link, decoded where they may come from another
+// build (a peer's). One this build does not read is dropped, there
+// being no caller to fail.
+function pushesOn<R extends ContractCall>(
+  link: Link,
+  push: R,
+): Stream.Stream<Decoded<PayloadOf<R>>> {
+  type A = Decoded<PayloadOf<R>>;
+  const values = link.pushes(channelOf(push));
+  if (link.local === true) return values as Stream.Stream<A>;
+  const decode = Schema.decodeUnknownEffect(payloadOf(push));
+  return values.pipe(
+    Stream.mapEffect((value) =>
+      decode(value).pipe(
+        Effect.tapError(() =>
+          Effect.logWarning(
+            `dropped a ${channelOf(push)} push this build does not read`,
+          ),
+        ),
+        Effect.option,
+      ),
+    ),
+    Stream.filter(Option.isSome),
+    Stream.map((some) => some.value),
+  );
+}
+
+// One device's pushes on its host (contracts' callOf), as they come, for
+// as long as the stream runs: this machine's over its own link, a peer's
+// out of the hub hop.
+export const hostPushes = <R extends ContractCall>(
+  deviceId: string,
+  localDeviceId: string,
+  push: R,
+) =>
+  Stream.unwrap(
+    Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
+      pushesOn(link, push),
+    ),
+  );
+
+// The same for a module of the client's own (the hub's status).
+export const clientPushes = <R extends ContractCall>(
+  module: ContractModule,
+  push: R,
+) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const { linkOf } = yield* ClientLinks;
+      return pushesOn(linkOf(module), push);
+    }),
+  );
+
+// One device's host calls as Promises, for an atom whose methods a
+// caller outside an effect uses (the script runs): each runs on the
+// atom's scope, so one still in flight ends with it, and its answer is
+// decoded where it may come from another build.
+export const hostCalls = (deviceId: string, localDeviceId: string) =>
+  Effect.gen(function* () {
+    const link = yield* hostLinkOf(deviceId, localDeviceId);
+    const run = yield* FiberSet.makeRuntimePromise<never>();
+    return <R extends ContractCall>(
+      call: R,
+      input: Encoded<InputOf<R>>,
+    ): Promise<Decoded<OutputOf<R>>> =>
+      run(
+        link
+          .call(channelOf(call), input)
+          .pipe(
+            Effect.flatMap((output) =>
+              link.local === true
+                ? Effect.succeed(output as Decoded<OutputOf<R>>)
+                : Effect.orDie(
+                    Schema.decodeUnknownEffect(outputOf(call))(output),
+                  ),
+            ),
+          ),
+      );
+  });
+
+// What a push stream does as each value comes besides keeping it (a
+// toast, a cache write), run so that one that throws is logged and the
+// next push still lands, as a subscriber's was.
+export const heard = (what: string, follow: () => void) =>
+  Effect.sync(follow).pipe(
+    Effect.catchDefect((defect) =>
+      Effect.logWarning(`a ${what} follower threw`, defect),
+    ),
+  );
+
+// An AsyncResult atom whose effect answers at once (it only forks its
+// streams, on a runtime built from what the boot seeded), read for its
+// value.
+export function valueNow<A>(
+  registry: AtomRegistry.AtomRegistry,
+  atom: Atom.Atom<AsyncResult.AsyncResult<A, unknown>>,
+): A {
+  const result = registry.get(atom);
+  if (AsyncResult.isSuccess(result)) return result.value;
+  throw AsyncResult.isFailure(result)
+    ? Cause.squash(result.cause)
+    : new Error("the atom answers when read");
+}
 
 // A host view's values, decoded where they may come from another build
 // (a peer's), as an atom. The device's own failure (an unknown project,

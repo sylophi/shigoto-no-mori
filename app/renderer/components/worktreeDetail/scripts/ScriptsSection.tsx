@@ -3,7 +3,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
-import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
+import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { PackageScripts } from "./PackageScripts";
 import { ScriptRow } from "./ScriptRow";

@@ -5,10 +5,13 @@
 // this window stays focused. Boot-scoped like the device sync.
 import { focusManager } from "@tanstack/react-query";
 import { documentFocused } from "@/lib/focus";
-import { remoteDeviceStore } from "./devices";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { remoteDevicesAtom } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
 
-export function startRemoteSweepRequests(): void {
+export function startRemoteSweepRequests(
+  registry: AtomRegistry.AtomRegistry,
+): void {
   const renewals = new Map<string, ReturnType<typeof setTimeout>>();
   let focused = documentFocused();
 
@@ -41,7 +44,7 @@ export function startRemoteSweepRequests(): void {
       stopRenewing();
       return;
     }
-    for (const device of remoteDeviceStore.getSnapshot()) {
+    for (const device of registry.get(remoteDevicesAtom)) {
       if (device.status.phase === "connected") request(device.deviceId);
     }
   });

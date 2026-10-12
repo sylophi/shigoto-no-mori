@@ -5,12 +5,8 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
-import {
-  EMPTY_STATE,
-  scriptKey,
-  type ScriptKey,
-  type ScriptSlot,
-} from "@/store/scriptRuns";
+import { scriptKey, type ScriptKey, type ScriptSlot } from "@/store/scriptSlot";
+import { EMPTY_STATE } from "./scriptRuns";
 import {
   lifecycleScriptName,
   type Worktree,

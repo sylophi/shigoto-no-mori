@@ -2,7 +2,7 @@
 // host, its output a click away.
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import type { ScriptSlot } from "@/store/scriptRuns";
+import type { ScriptSlot } from "@/store/scriptSlot";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptRowView } from "@shigomori/ui/views/worktreeDetail/scripts/ScriptRowView.tsx";
 

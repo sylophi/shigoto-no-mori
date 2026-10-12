@@ -26,9 +26,11 @@ import { RegistryContext } from "@effect/atom-react";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { App } from "./App";
 import {
+  accountsLeftAtom,
   clientLinksAtom,
   localDeviceIdAtom,
   peerSessionAtom,
+  queryClientAtom,
 } from "./lib/runtime/atoms";
 import { ApiProvider, type RendererApi } from "./lib/runtime/pageApi";
 import type { ClientLinks } from "./lib/runtime/ClientLinks";
@@ -45,6 +47,7 @@ import { watchPortForwards } from "./hooks/remote/usePortForwards";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { watchHost } from "./lib/hostWatch";
 import {
+  onAccountLeft,
   onSessionLanded,
   startRemoteDeviceSync,
 } from "./lib/remote/remoteDeviceSync";
@@ -54,18 +57,11 @@ import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { openExternalUrl, revealInFolder } from "./lib/openExternal";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
-import { queryKeysFor, worktreeQueriesOn } from "./lib/queryKeys";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
-import { scriptRunsFor } from "./store/scriptRuns";
-import {
-  onWorktreeRemoval,
-  worktreeLifecycleFor,
-} from "./store/worktreeLifecycle";
-import {
-  forgetDeletedWorktree,
-  isOwnDeletePending,
-} from "./hooks/worktrees/useWorktreeMutations";
+import { gitFetchingAtom } from "./hooks/git/useProjectGitFetching";
+import { scriptRunsAtom, scriptRunsOf } from "./hooks/scripts/scriptRuns";
+import { worktreeLifecycleAtom } from "./hooks/worktrees/useWorktreeLifecycle";
 import "./app.css";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
@@ -90,60 +86,48 @@ export function startApp({
   // views ride.
   links: ClientLinks["Service"];
 }): AppClient {
+  // The shared config (defaults, global error toasts, the meta
+  // opt-outs) lives in lib/queryClientOptions.ts.
+  const queryClient = createAppQueryClient();
   // The page's atoms, over its client's links, for as long as the
   // page lives.
   const registry = AtomRegistry.make({
     initialValues: [
       [clientLinksAtom, links],
       [localDeviceIdAtom, api.deviceId],
+      [queryClientAtom, queryClient],
     ],
   });
   window.addEventListener("pagehide", (event) => {
     if (!event.persisted) registry.dispose();
   });
-  onSessionLanded((deviceId) =>
-    registry.update(peerSessionAtom(deviceId), (count) => count + 1),
-  );
-  // The shared config (defaults, global error toasts, the meta
-  // opt-outs) lives in lib/queryClientOptions.ts.
-  const queryClient = createAppQueryClient();
 
-  // A removal announced by any device (this machine or a peer) gets
-  // the treatment this window's own delete gives its worktree: its
-  // in-flight fetches cancelled as the delete starts (settled, they
-  // would answer "Unknown worktree" and toast), and its row and
-  // queries dropped the moment it is gone, for every viewer at once.
-  // This window's own delete is left to its mutation, which forgets
-  // the row and routes off it together once the invoke replies. Both
-  // shells: the web shell views peers' removals too.
-  onWorktreeRemoval((deviceId, removal) => {
-    if (isOwnDeletePending(queryClient, deviceId, removal.worktreeId)) return;
-    if (removal.state === "removing") {
-      void queryClient.cancelQueries({
-        predicate: worktreeQueriesOn(deviceId, removal.worktreeId),
-      });
-    } else if (removal.state === "removed") {
-      forgetDeletedWorktree(
-        api,
-        queryClient,
-        registry,
+  // A peer's views start again on each new session to it, and its
+  // worktree lifecycle is heard from the moment its session lands until
+  // the account goes (worktreeLifecycleAtom says why), in both shells:
+  // the web shell views peers' removals too. What the atoms keep of a
+  // peer goes with the account.
+  const peerLifecycles = new Map<string, () => void>();
+  onSessionLanded((deviceId) => {
+    registry.update(peerSessionAtom(deviceId), (count) => count + 1);
+    if (!peerLifecycles.has(deviceId)) {
+      peerLifecycles.set(
         deviceId,
-        removal.projectId,
-        removal.worktreeId,
+        registry.mount(worktreeLifecycleAtom(deviceId)),
       );
     }
   });
+  onAccountLeft(() => {
+    for (const unmount of peerLifecycles.values()) unmount();
+    peerLifecycles.clear();
+    registry.update(accountsLeftAtom, (count) => count + 1);
+  });
 
-  // This machine's stores, made now so they follow the account and the
-  // peers' sessions from the start, and started where there is a local
-  // host.
-  scriptRunsFor(api, api.deviceId);
-  worktreeLifecycleFor(api, api.deviceId);
-  if (api.isElectron) startLocalHost(api, queryClient);
+  if (api.isElectron) startLocalHost(api, queryClient, registry);
 
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
-  startSharedSettingsSync(api, queryClient);
+  startSharedSettingsSync(api, queryClient, registry);
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
@@ -151,17 +135,17 @@ export function startApp({
   // through the same watchHost this machine's do (startLocalHost),
   // from the moment the peer is first seen. On a hostless client that
   // is the ONLY thing keeping the forest live between focus refetches.
-  startRemoteDeviceSync(api, queryClient, (deviceId, peer) =>
+  startRemoteDeviceSync(api, queryClient, registry, (deviceId, peer) =>
     watchHost(queryClient, deviceId, peer),
   );
 
   // The other direction: a host sweeps while someone is looking, and
   // this window says so to the hosts it is looking at.
-  startRemoteSweepRequests();
+  startRemoteSweepRequests(registry);
 
   // Villagers moving in and out of any device's worktrees, told in
   // their voice whoever moved them (Village life).
-  startVillagerMoves(api, queryClient);
+  startVillagerMoves(api, queryClient, registry);
 
   // Agent sessions on any device: the waiting ones for the Live page,
   // and on the desktop the notifications.
@@ -191,7 +175,7 @@ export function mountWindow(
   const router = createAppRouter(history, element, api.isElectron);
 
   // Leaving a worktree's pages (the ones with a $worktreeId param) tells
-  // its run store, so a failure the sidebar marked while nobody was
+  // its device's script runs, so a failure the sidebar marked while nobody was
   // there stops being news once they have been.
   const worktreeShown = () => {
     const params = router.state.matches.at(-1)?.params as
@@ -205,7 +189,7 @@ export function mountWindow(
   router.subscribe("onResolved", () => {
     const next = worktreeShown();
     if (shown && shown.worktreeId !== next?.worktreeId) {
-      scriptRunsFor(api, shown.deviceId).markSeen(shown.worktreeId);
+      scriptRunsOf(registry, shown.deviceId).markSeen(shown.worktreeId);
     }
     shown = next;
   });
@@ -261,15 +245,22 @@ function networkChanged(api: RendererApi): void {
   void api.window.networkChanged().catch(() => undefined);
 }
 
-// The boot-scope subscriptions about THIS machine's projects. Single
-// global subscriptions: events arrive whether or not any component is
-// mounted (e.g. the carry-over failure toast must fire even if the user
-// navigated away from the new worktree's detail page).
-function startLocalHost(api: RendererApi, queryClient: QueryClient): void {
+// The boot-scope subscriptions about THIS machine's projects. Events
+// arrive whether or not any component is mounted (e.g. the carry-over
+// failure toast must fire even if the user navigated away from the new
+// worktree's detail page), so the atoms that hear them are mounted for
+// the page's life.
+function startLocalHost(
+  api: RendererApi,
+  queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
+): void {
   // This machine's broadcasts, into its cache, exactly as a peer's
   // land in theirs.
   watchHost(queryClient, api.deviceId, api);
-  scriptRunsFor(api, api.deviceId).start();
+  registry.mount(scriptRunsAtom(api.deviceId));
+  registry.mount(worktreeLifecycleAtom(api.deviceId));
+  registry.mount(gitFetchingAtom(api.deviceId));
   watchPortForwards(api, queryClient);
 
   // Scripts that survived a crash or a force quit are stopped by the
@@ -317,20 +308,5 @@ function startLocalHost(api: RendererApi, queryClient: QueryClient): void {
       unsubFocus();
       unsubBlur();
     };
-  });
-
-  // The host rewrote project.json (carry-over entries removed in favor
-  // of .worktreeinclude); drop the caches that mirror it so open views
-  // refresh.
-  const keys = queryKeysFor(api.deviceId);
-  worktreeLifecycleFor(api, api.deviceId).start({
-    onCarryOverReconciled: (projectId) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.shigomoriConfig(projectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeIncludeStatus(projectId),
-      });
-    },
   });
 }

@@ -7,7 +7,8 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
 
 - `index.tsx`, `boot.tsx`: a desktop window's entry and the boot both
   shells share. `startApp` runs once a page (the query client, the
-  atoms' registry, the device registry sync, each peer's push watch);
+  atoms' registry and what it keeps mounted, the device registry sync,
+  each peer's push watch);
   `mountWindow` draws a window into it (`App.tsx`, the provider tree,
   and `router.tsx`, the one route tree).
 - `components/<area>/`: the containers, by area, each binding its data
@@ -16,7 +17,9 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
 - `hooks/<area>/`: where a container's data comes from, unless one
   container alone reads it, which may ask in place. A host view (a
   stream the host serves) is an atom (`lib/runtime/atoms.ts`, read
-  through `lib/runtime/viewHooks.ts`); a request is a React Query query
+  through `lib/runtime/viewHooks.ts`), and so is what is kept from a
+  push stream (a device's script runs, its worktree lifecycle and git
+  fetches, the hub's status); a request is a React Query query
   whose key comes from `lib/queryKeys.ts`. A hook under
   `hooks/remote/` scopes its calls to a device (`useHostScope`). A hook
   of the page's own logic (which device is picked, where a click goes,
@@ -34,11 +37,11 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
   parameter. Nothing reads it off a global.
 - `lib/`: the rest of the window's own logic (deep links, focus, the
   theme root, toasts, the remote device registry and its sync).
-- `store/`: the stores that keep a stream or a feed rather than a view
-  (the script runs, the worktree lifecycle, the terminal drawer).
+- `store/`: the page's own state kept outside React (the terminal
+  drawer, this window's unsent pull request drafts), and two helpers
+  the script runs use (the slot codec, keyed subscribers).
 
 A new screen is a view in `@shigomori/ui` with a scene
 (`packages/ui/README.md`), a container here that binds it, a route in
 `router.tsx` when it is a page, and its data from a hook. What is still
-migrating here (the page api's Promise surface, the stores that become atoms)
-is listed in V3.md, step 7, Leftover mechanisms.
+migrating here (the page api's Promise surface) is listed in V3.md, step 7, Leftover mechanisms.

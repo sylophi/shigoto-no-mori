@@ -21,12 +21,10 @@
 // mirrors, running scripts, ports, terminals, the config, sharing and
 // the shared settings are atoms that stream, and nothing invalidates
 // them), a peer's shared settings (folded into this device's own copy,
-// lib/remote/sharedSettingsSync.ts), and
-// the per-device stores that keep a stream (store/scriptRuns.ts,
-// store/worktreeLifecycle.ts).
+// lib/remote/sharedSettingsSync.ts), and the pushes that are atoms of
+// their own (the script runs, the worktree lifecycle, the git fetches).
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
-import { noteGitFetchActive } from "@/hooks/git/useProjectGitFetching";
 import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { writeUpdaterState } from "@/hooks/system/useUpdater";
@@ -70,9 +68,6 @@ export function watchHost(
     api.git.onRefsRefreshed(({ projectId }) => {
       invalidateBranchState(queryClient, keys, projectId);
       invalidateWorktreePullRequests(queryClient, keys, projectId);
-    }),
-    api.git.onFetchActive(({ projectId, active }) => {
-      noteGitFetchActive(deviceId, projectId, active);
     }),
     // Its PR sweep moved one project's map. The githubCli domain sits
     // outside the git-state sweeps (a PR is not git state), so the

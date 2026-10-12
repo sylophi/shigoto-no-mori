@@ -170,7 +170,8 @@ that reaches for the runtime fails the commit.
   the host serves (the `watch` views, `terminals:list`), is an atom
   (`@effect/atom-react`) on the client's runtime
   (`renderer/lib/runtime/atoms.ts`): it is live, so nothing
-  invalidates it. A **request**, a value the host computes when asked
+  invalidates it. So is the state kept from a push stream (a device's
+  script runs, its worktree lifecycle, the hub's status). A **request**, a value the host computes when asked
   (branches, history, changes, diffs, files, pull requests, the
   account, launchers, villagers, the updater), is a React Query query.
   A family becomes an atom only once the host serves a view of it, and

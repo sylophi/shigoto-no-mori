@@ -1,11 +1,11 @@
-import { useSyncExternalStore } from "react";
+import { useAtomValue } from "@effect/atom-react";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import {
   type RemoteDevice,
   type RemoteDeviceApi,
-  remoteDeviceStore,
+  remoteDevicesAtom,
 } from "@/lib/remote/devices";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -46,13 +46,10 @@ export function commandAccessOf(
 export function useCommandAccess(): CommandAccess {
   const localDeviceId = useApi().deviceId;
   const { deviceId } = useHostScope();
-  const select = () =>
-    remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
-      ?.acceptsCommands;
-  const accepts = useSyncExternalStore(
-    remoteDeviceStore.subscribe,
-    select,
-    select,
+  const accepts = useAtomValue(
+    remoteDevicesAtom,
+    (devices) =>
+      devices.find((entry) => entry.deviceId === deviceId)?.acceptsCommands,
   );
   return commandAccessOf(localDeviceId, deviceId, {
     acceptsCommands: accepts,
@@ -92,15 +89,13 @@ export function useCommandableDeviceApi(
   deviceId: string | undefined,
 ): RemoteDeviceApi | undefined {
   const localDeviceId = useApi().deviceId;
-  const select = () => {
-    if (deviceId === undefined) return undefined;
-    return commandableApiOf(
-      localDeviceId,
-      deviceId,
-      remoteDeviceStore
-        .getSnapshot()
-        .find((entry) => entry.deviceId === deviceId),
-    );
-  };
-  return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
+  return useAtomValue(remoteDevicesAtom, (devices) =>
+    deviceId === undefined
+      ? undefined
+      : commandableApiOf(
+          localDeviceId,
+          deviceId,
+          devices.find((entry) => entry.deviceId === deviceId),
+        ),
+  );
 }
