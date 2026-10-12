@@ -5,7 +5,8 @@ import { callFailureOf } from "@shigomori/contracts/errors";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { isGitRepo } from "@host/lib/git/core";
+import * as Git from "@shigomori/engine/Git";
+import type * as Engine from "@host/lib/engine";
 import { toAbsolute } from "@shared/paths";
 
 // Directories that virtually never contain git repos but are huge and slow to
@@ -97,12 +98,13 @@ export const fsHandlers = {
 
   // `git rev-parse --git-dir` validates a real working repo: catches
   // missing/corrupted .git, bare repos, and linked worktrees alike.
-  isGitRepo: ({ path }) => isGitRepo(toAbsolute(path)),
+  isGitRepo: ({ path }) =>
+    Effect.flatMap(Git.Git, (git) => git.isRepo(toAbsolute(path))),
 
   scanForGitRepos: ({ path }) =>
     onDisk(() => scanForGitRepos(toAbsolute(path))),
 } satisfies EffectHandlers<
   typeof fsContract,
   unknown,
-  ChildProcessSpawner.ChildProcessSpawner
+  Engine.Services | ChildProcessSpawner.ChildProcessSpawner
 >;

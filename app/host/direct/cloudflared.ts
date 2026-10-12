@@ -31,7 +31,7 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
 import {
@@ -530,13 +530,13 @@ const make = (options: Options) =>
               // is exactly when the inputs can have changed.
               yield* remember({ denied: true });
               yield* Effect.logWarning(
-                `[tunnel] provisioning denied (${errorMessageOf(error)}), ` +
+                `[tunnel] provisioning denied (${errorWordsOf(error)}), ` +
                   "waiting for the next account or config change",
               );
               return yield* park;
             }
             return yield* failAttempt(
-              `tunnel start failed: ${errorMessageOf(error)}`,
+              `tunnel start failed: ${errorWordsOf(error)}`,
             );
           }
           provision = {
@@ -629,7 +629,7 @@ const make = (options: Options) =>
         // Anything else this attempt did not expect goes onto the
         // retry rails like a provision failure.
         Effect.catchDefect((defect) =>
-          failAttempt(`tunnel start failed: ${errorMessageOf(defect)}`),
+          failAttempt(`tunnel start failed: ${errorWordsOf(defect)}`),
         ),
       );
 

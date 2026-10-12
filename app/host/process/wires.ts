@@ -48,6 +48,7 @@ import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
 import { LayerDownError, layerLatch } from "@shared/layerLatch";
 import * as DeviceId from "@host/lib/config/DeviceId";
+import * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
@@ -98,6 +99,7 @@ const onUsageTracked = (input: unknown) => {
 };
 
 const linkRegistrar: DeviceLink.LinkRegistrar = createServed({
+  failure: Engine.hostCallFailure,
   serves: (call) => annotation(call, Remote) === true,
   onUsageTracked,
 });
@@ -190,6 +192,7 @@ export const tunnelLayer = () =>
 // The device link again, on loopback, for the processes on this
 // machine: the windows, the shell, and the terminal's control ops.
 const loopbackRegistrar: DeviceLink.LinkRegistrar = createServed({
+  failure: Engine.hostCallFailure,
   onUsageTracked,
 });
 export const loopbackLayer = () =>

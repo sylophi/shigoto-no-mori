@@ -14,10 +14,9 @@ import {
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
 import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { createLocalBranch } from "../git/branches";
+import { errorWordsOf } from "@host/lib/errorWords";
+import * as Git from "@shigomori/engine/Git";
 import { run } from "../git/core";
-import { localBranchExists } from "../git/remotes";
 import { stderrOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
 import { GithubCli } from "./GithubCli";
@@ -228,7 +227,8 @@ const resolveSameRepoHead = Effect.fnUntraced(function* (
   // Both fetch forms below opportunistically refresh
   // refs/remotes/<remote>/<branch> as a side effect, so neither path
   // needs a second round trip to leave the tracking ref current.
-  if (yield* localBranchExists(cwd, branch)) {
+  const repo = yield* Git.Git;
+  if (yield* repo.localBranchExists(cwd, branch)) {
     // The <src>:<dst> refspec is fast-forward-only, so a local branch
     // that has drifted from the PR head errors out instead of quietly
     // checking out stale code. (git also refuses when the branch is
@@ -247,7 +247,11 @@ const resolveSameRepoHead = Effect.fnUntraced(function* (
     // Explicit rather than leaning on `git worktree add`'s DWIM, which
     // only fires when exactly one remote has the branch. createLocalBranch
     // sets --track for a remote-tracking base, which is what this is.
-    yield* createLocalBranch(cwd, branch, `${remote}/${branch}`);
+    yield* repo.createBranch({
+      repo: cwd,
+      name: branch,
+      base: `${remote}/${branch}`,
+    });
   }
   return { branch } satisfies PullRequestCheckoutRef;
 });
@@ -309,7 +313,7 @@ const pickForkBranchName = Effect.fnUntraced(function* (
   );
   // The first usable name wins, so the rest aren't probed up front.
   for (const name of candidates) {
-    if (!(yield* localBranchExists(cwd, name))) return name;
+    if (!(yield* (yield* Git.Git).localBranchExists(cwd, name))) return name;
     if ((yield* readBranchMerge(cwd, name)) === pullRef) return name;
   }
   return yield* refused(
@@ -360,5 +364,5 @@ const readBranchMerge = (cwd: string, branch: string) =>
 // A git failure's message is its stderr (git/core.ts), of which the last
 // line is the useful part.
 function message(err: unknown): string {
-  return trimGhError(errorMessageOf(err));
+  return trimGhError(errorWordsOf(err));
 }

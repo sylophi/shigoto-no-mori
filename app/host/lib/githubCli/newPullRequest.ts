@@ -26,8 +26,7 @@ import {
 import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
 import { parseNumstat } from "../git/changes";
 import { GitRefusal, run, runLenient } from "../git/core";
-import { countCommits } from "../git/refs";
-import { listRemotes } from "../git/remotes";
+import * as Git from "@shigomori/engine/Git";
 import { publishCurrentBranch } from "../git/sync";
 import { GhActionError, ghStream, runGh } from "./actions";
 import { GithubCli } from "./GithubCli";
@@ -69,7 +68,10 @@ function trackedRef(
 }
 
 const orderedRemotes = (cwd: string) =>
-  Effect.map(listRemotes(cwd), orderRemotesByPrecedence);
+  Effect.map(
+    Effect.flatMap(Git.Git, (git) => git.listRemotes(cwd)),
+    orderRemotesByPrecedence,
+  );
 
 // The worktree a draft is read for: its checkout, its project's, the
 // branch it has out and the project's primary ref.
@@ -128,7 +130,8 @@ const stackBase = Effect.fnUntraced(function* (opts: DraftSource) {
   });
   const distances = yield* Effect.forEach(
     candidates,
-    ({ ref }) => countCommits(cwd, [`${ref}..HEAD`]),
+    ({ ref }) =>
+      Effect.flatMap(Git.Git, (git) => git.countCommits(cwd, [`${ref}..HEAD`])),
     { concurrency: "unbounded" },
   );
   let nearest: { branch: string; ref: string } | null = null;
@@ -256,7 +259,9 @@ export const comparePullRequest = Effect.fn("NewPullRequest.compare")(
     }
     const [commits, counts] = yield* Effect.all(
       [
-        countCommits(cwd, [`${mergeBase}..HEAD`]),
+        Effect.flatMap(Git.Git, (git) =>
+          git.countCommits(cwd, [`${mergeBase}..HEAD`]),
+        ),
         Effect.map(
           run(cwd, ["diff", "--numstat", "-z", mergeBase, "HEAD", "--"]),
           parseNumstat,

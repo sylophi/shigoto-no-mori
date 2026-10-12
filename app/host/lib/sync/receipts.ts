@@ -7,7 +7,7 @@ import {
   type SyncReceipt,
   type SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
 import { type PeerReach, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { findProject } from "@host/lib/projects";
@@ -200,7 +200,7 @@ const tearDown = <R>(
     Effect.catch((error) =>
       Effect.succeed({
         sourceRemoved: false,
-        sourceError: errorMessageOf(error),
+        sourceError: errorWordsOf(error),
       }),
     ),
   );

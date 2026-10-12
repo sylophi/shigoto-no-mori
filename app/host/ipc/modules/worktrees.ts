@@ -15,7 +15,7 @@ import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
-import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
+import * as Git from "@shigomori/engine/Git";
 import { GitRefusal } from "@host/lib/git/core";
 import {
   discardChanges,
@@ -491,10 +491,18 @@ export const worktreesHandlers = {
     ),
 
   renameBranch: (input) =>
-    mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),
+    mutateAndDescribe(input, (wt) =>
+      Effect.flatMap(Git.Git, (git) =>
+        git.renameCurrentBranch(wt.path, input.newBranch),
+      ),
+    ),
 
   checkoutBranch: (input) =>
-    mutateAndDescribe(input, (wt) => checkoutBranch(wt.path, input.branch)),
+    mutateAndDescribe(input, (wt) =>
+      Effect.flatMap(Git.Git, (git) =>
+        git.checkoutBranch(wt.path, input.branch),
+      ),
+    ),
 
   fileDiff: (input) =>
     atPath(input, (path) => getFileDiff(path, input.paths, input.untracked)),

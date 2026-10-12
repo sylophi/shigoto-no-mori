@@ -8,20 +8,20 @@ import {
   remoteHost,
 } from "@shigomori/contracts/predicates/imageHosts";
 import * as Effect from "effect/Effect";
-import { listRemoteEntries } from "../git/remotes";
+import * as Git from "@shigomori/engine/Git";
 import { freshProjects } from "./index";
 
 export const projectImageHosts = Effect.gen(function* () {
   const projects = yield* freshProjects;
+  const git = yield* Git.Git;
   const hosts = yield* Effect.forEach(
     projects,
     (project) =>
-      listRemoteEntries(project.path).pipe(
+      git.listRemoteEntries(project.path).pipe(
         Effect.map((remotes) => {
           const url = pickCloneUrl(remotes);
           return url === null ? null : remoteHost(url);
         }),
-        Effect.orElseSucceed(() => null),
       ),
     { concurrency: 8 },
   );

@@ -26,6 +26,7 @@ import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
 import type { KeyValueStorage } from "../../web/lib/kvStorage.ts";
+import { isOutsideGitVariable } from "../../../gitIsolation.ts";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
@@ -225,17 +226,15 @@ const GIT_CONFIG_CUT = {
 };
 
 // process.env with every GIT_* variable removed, for a check that runs
-// git against a sandbox repository. The pre-commit hook exports
-// GIT_DIR, GIT_INDEX_FILE and GIT_PREFIX for the REAL repository.
-// Inherited, they point every sandbox command at the commit in
-// progress (the sandbox commit then lands as the user's own, under the
-// sandbox's message, which has happened). The global and system git
-// config are also cut off so the host's identity and hooks never leak
-// into the sandbox.
+// git against a sandbox repository. The runner already keeps the
+// pre-commit hook's GIT_DIR and GIT_INDEX_FILE out of every proof
+// (../../../gitIsolation.ts); this also cuts off the global and system
+// git config, so the host's identity and hooks never leak into the
+// sandbox.
 export function scrubbedGitEnv(): NodeJS.ProcessEnv {
   return {
     ...Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+      Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
     ),
     ...GIT_CONFIG_CUT,
     LC_ALL: "C",
@@ -249,7 +248,7 @@ export function scrubbedGitEnv(): NodeJS.ProcessEnv {
 // leaves the locale alone unless `extra` pins it.
 export function scrubProcessGitEnv(extra: NodeJS.ProcessEnv = {}): void {
   for (const key of Object.keys(process.env)) {
-    if (key.startsWith("GIT_")) delete process.env[key];
+    if (isOutsideGitVariable(key)) delete process.env[key];
   }
   Object.assign(process.env, GIT_CONFIG_CUT, extra);
 }

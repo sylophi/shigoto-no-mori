@@ -20,7 +20,7 @@
 import * as Effect from "effect/Effect";
 import { createServer, type Server, type Socket } from "node:net";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { PeerCalls } from "@host/ipc/PeerReach";
 import { WorktreeIdSchema } from "@shigomori/contracts/schemas";
@@ -178,7 +178,7 @@ export function createMirrorGateway(deps: {
         try {
           preface = parsePreface(line);
         } catch (error) {
-          socket.end(`error ${errorMessageOf(error)}\n`);
+          socket.end(`error ${errorWordsOf(error)}\n`);
           return;
         }
         if (!secretsMatch(preface.token, token ?? "")) {
@@ -209,11 +209,9 @@ export function createMirrorGateway(deps: {
           },
           onOpenFailed: (error) => {
             warn(
-              `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorMessageOf(error)}`,
+              `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
             );
-            socket.write(
-              `error ${errorMessageOf(error).replace(/\n/g, " ")}\n`,
-            );
+            socket.write(`error ${errorWordsOf(error).replace(/\n/g, " ")}\n`);
           },
           onClosed: () => {
             streams.delete(conn);
@@ -222,7 +220,7 @@ export function createMirrorGateway(deps: {
         streams.add(conn);
       },
       (error: unknown) => {
-        warn(`[mirror] gateway: ${errorMessageOf(error)}`);
+        warn(`[mirror] gateway: ${errorWordsOf(error)}`);
         socket.destroy();
       },
     );

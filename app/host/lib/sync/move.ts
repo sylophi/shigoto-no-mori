@@ -14,7 +14,8 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { errorMessageOf, isContractError } from "@shigomori/contracts/errors";
+import { isContractError } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import {
   pullLandingBranch,
   pullWorktreeName,
@@ -219,7 +220,7 @@ const fromPeer = <A, E, R>(answer: Effect.Effect<A, E, R>) =>
     Effect.mapError((error) =>
       isContractError(error)
         ? error
-        : new PeerRefusedError({ reason: errorMessageOf(error) }),
+        : new PeerRefusedError({ reason: errorWordsOf(error) }),
     ),
   );
 

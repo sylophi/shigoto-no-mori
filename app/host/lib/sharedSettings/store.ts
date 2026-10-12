@@ -7,7 +7,7 @@
 // The rule a copy keeps (store and announce only what changed) is
 // contracts' sharedSettings.ts's createSharedSettingsCopy. This file is its
 // storage.
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -97,7 +97,7 @@ export const sharedSettingsCopy = createSharedSettingsCopy(
           listener(doc);
         } catch (error) {
           log.warn(
-            `[sharedSettings] change listener failed: ${errorMessageOf(error)}`,
+            `[sharedSettings] change listener failed: ${errorWordsOf(error)}`,
           );
         }
       }

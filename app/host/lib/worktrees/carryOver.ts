@@ -18,9 +18,9 @@ import type {
   CarryOverStat,
 } from "@shigomori/contracts/schemas";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
-import { listIgnoredPaths } from "../git/branches";
+import * as Git from "@shigomori/engine/Git";
 import { chunked, runLenient } from "../git/core";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -28,7 +28,6 @@ import * as Schema from "effect/Schema";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "../engine";
 import * as Ops from "../engineOps";
-import type { GitError } from "../git/core";
 import type { WorktreeIdentity } from "../git/worktrees";
 import { answersFor } from "../util/cacheTtl";
 
@@ -59,7 +58,9 @@ function primaryFirst(
 const IGNORED_PATHS_TTL = Duration.seconds(10);
 
 // A checkout's ignored walk, cached (makeCarryOver below).
-type IgnoredPaths = (checkoutPath: string) => Effect.Effect<string[], GitError>;
+type IgnoredPaths = (
+  checkoutPath: string,
+) => Effect.Effect<string[], Git.GitError>;
 
 // An entry of `relative` as a root-relative path.
 function pathOf(relative: string, name: string): string {
@@ -90,8 +91,7 @@ const readFolderVerdicts = Effect.fnUntraced(function* (
       Effect.tryPromise({
         try: () =>
           readdir(join(checkoutPath, relative), { withFileTypes: true }),
-        catch: (error) =>
-          new FolderReadError({ reason: errorMessageOf(error) }),
+        catch: (error) => new FolderReadError({ reason: errorWordsOf(error) }),
       }),
       ignoredPaths(checkoutPath),
     ],
@@ -316,7 +316,8 @@ export const makeCarryOver = Effect.gen(function* () {
 
   // The same walk serves the sync handler's ignored-paths read, so a
   // dialog listing a worktree and its picker browsing it share one.
-  const ignored = yield* Cache.makeWith(listIgnoredPaths, {
+  const git = yield* Git.Git;
+  const ignored = yield* Cache.makeWith(git.listIgnoredPaths, {
     capacity: Infinity,
     timeToLive: answersFor(IGNORED_PATHS_TTL),
   });

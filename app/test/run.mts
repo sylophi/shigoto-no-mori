@@ -14,13 +14,20 @@ import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { appRoot, repoRoot } from "./lib/checkKit.mts";
+import { isolateGit } from "../../gitIsolation.ts";
 import { coveringFiles } from "./lib/covers.mts";
 
 const VITEST = join(appRoot, "node_modules", ".bin", "vitest");
 
+// What a proof or a bench script runs under: no way into this
+// repository (../../gitIsolation.ts), whichever config it loads.
+const env = { ...process.env };
+isolateGit(env);
+
 function run(command: string, args: string[]): number {
   const { status } = spawnSync(command, args, {
     cwd: appRoot,
+    env,
     stdio: "inherit",
   });
   return status ?? 1;

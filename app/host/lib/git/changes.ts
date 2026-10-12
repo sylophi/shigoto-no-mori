@@ -11,6 +11,7 @@ import type {
   StagedState,
 } from "@shigomori/contracts/schemas";
 import { isUntracked } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -23,7 +24,6 @@ import {
   type RunOptions,
 } from "./core";
 import { refuseMidOperation } from "./operation";
-import { headAt, resolveCommit, verifyRev } from "./refs";
 import { log } from "@shared/log";
 
 // Discard snapshots kept per repository. Pruned by count rather than
@@ -337,7 +337,8 @@ export const resetSoft = (
     worktreePath,
     Effect.gen(function* () {
       yield* refuseMidOperation(worktreePath);
-      const head = yield* headAt(worktreePath, expectHead);
+      const git = yield* Git.Git;
+      const head = yield* git.headAt(worktreePath, expectHead);
       const backwards = yield* isAncestor(worktreePath, target, head);
       const forwards =
         !backwards && expectHead !== undefined
@@ -351,13 +352,13 @@ export const resetSoft = (
       const [older, newer] = backwards ? [target, head] : [head, target];
       // One merge, stepped over to its first parent and back: the merge
       // comes off (or goes back on) whole.
-      const firstParent = yield* verifyRev(worktreePath, `${newer}^1`).pipe(
-        Effect.orElseSucceed(() => undefined),
-      );
+      const firstParent = yield* git
+        .verifyRev(worktreePath, `${newer}^1`)
+        .pipe(Effect.orElseSucceed(() => undefined));
       const wholeMerge =
         firstParent !== undefined &&
-        (yield* verifyRev(worktreePath, older)) === firstParent &&
-        (yield* verifyRev(worktreePath, `${newer}^2`).pipe(
+        (yield* git.verifyRev(worktreePath, older)) === firstParent &&
+        (yield* git.verifyRev(worktreePath, `${newer}^2`).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         ));
@@ -423,8 +424,12 @@ export const resetHard = (
       const [, previousHead, target, changed] = yield* Effect.all(
         [
           refuseMidOperation(worktreePath),
-          headAt(worktreePath, expectHead),
-          resolveCommit(worktreePath, ref),
+          Effect.flatMap(Git.Git, (git) =>
+            git.headAt(worktreePath, expectHead),
+          ),
+          Effect.flatMap(Git.Git, (git) =>
+            git.resolveCommit(worktreePath, ref),
+          ),
           listChangedFiles(worktreePath),
         ],
         { concurrency: "unbounded" },

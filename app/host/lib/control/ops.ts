@@ -30,7 +30,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
   type IgnoreSelection,
@@ -110,7 +110,7 @@ const planned = <A>(decide: () => A) =>
     catch: (error) =>
       error instanceof ControlError
         ? error
-        : new ControlError("device-blocked", errorMessageOf(error)),
+        : new ControlError("device-blocked", errorWordsOf(error)),
   });
 
 // The one device a send goes to, among the candidates (plan.ts
@@ -210,7 +210,7 @@ const settleSource = (
       );
   return outcome.pipe(
     Effect.catch((error) =>
-      Effect.succeed({ fate, done: false, error: errorMessageOf(error) }),
+      Effect.succeed({ fate, done: false, error: errorWordsOf(error) }),
     ),
   );
 };
@@ -251,11 +251,11 @@ const stopMirror = <A, E, R>(
       (error): Effect.Effect<string | undefined, E | ControlError> => {
         if (isMirrorStopUnconfirmed(error)) {
           return Effect.fail(
-            new ControlError("stop-unconfirmed", errorMessageOf(error)),
+            new ControlError("stop-unconfirmed", errorWordsOf(error)),
           );
         }
         if (!isMirrorCopyStayed(error)) return Effect.fail(error);
-        return Effect.succeed(errorMessageOf(error));
+        return Effect.succeed(errorWordsOf(error));
       },
     ),
   );

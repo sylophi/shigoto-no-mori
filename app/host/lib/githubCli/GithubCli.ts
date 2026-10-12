@@ -18,8 +18,8 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EngineConfig from "@shigomori/engine/Config";
+import * as Git from "@shigomori/engine/Git";
 import * as Ops from "../engineOps";
-import { listRemoteEntries } from "../git/remotes";
 import { answersFor } from "../util/cacheTtl";
 import * as Processes from "../util/processes";
 import { gh } from "./exec";
@@ -162,6 +162,7 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   // The device settings, for the integration's switch.
   const engineConfig = yield* EngineConfig.Config;
+  const git = yield* Git.Git;
   const withSpawner = Effect.provideService(
     ChildProcessSpawner.ChildProcessSpawner,
     spawner,
@@ -203,7 +204,7 @@ const make = Effect.gen(function* () {
     (cwd: string) =>
       Effect.gen(function* () {
         const [remotes, hosts] = yield* Effect.all(
-          [listRemoteEntries(cwd).pipe(withSpawner), knownHosts],
+          [git.listRemoteEntries(cwd), knownHosts],
           { concurrency: 2 },
         );
         for (const { url } of remotes) {

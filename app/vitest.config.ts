@@ -3,7 +3,12 @@
 // ports, so they run one file at a time, each in a process of its own.
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
+import { isolateGit } from "../gitIsolation";
 import { dedupe } from "./vite.dedupe";
+
+// Before any proof's process forks, so none inherits a way into this
+// repository (../gitIsolation.ts).
+isolateGit();
 
 const dir = (name: string) => join(import.meta.dirname, name);
 

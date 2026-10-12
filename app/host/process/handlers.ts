@@ -30,11 +30,8 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
-import {
-  callFailureOf,
-  errorMessageOf,
-  isEntityGoneError,
-} from "@shigomori/contracts/errors";
+import { callFailureOf, isEntityGoneError } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import { portForwardContract } from "@shigomori/contracts/modules/portForward";
 import { portPoolContract } from "@shigomori/contracts/modules/portPool";
@@ -214,7 +211,7 @@ const pushMirrorChanged = () =>
         broadcastAll(mirrorContract, "changed", list);
       } catch (error) {
         log.warn(
-          `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
+          `[mirror] the changed broadcast goes without its list: ${errorWordsOf(error)}`,
         );
         broadcastAll(mirrorContract, "changed", undefined);
       }
@@ -552,10 +549,7 @@ async function ensureMirrorGateway(): Promise<void> {
   try {
     await mirrorGateway.start();
   } catch (error) {
-    log.warn(
-      "[mirror] gateway failed to bind, retrying:",
-      errorMessageOf(error),
-    );
+    log.warn("[mirror] gateway failed to bind, retrying:", errorWordsOf(error));
     const timer = setTimeout(
       () => void ensureMirrorGateway(),
       GATEWAY_RETRY_MS,

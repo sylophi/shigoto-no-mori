@@ -45,13 +45,13 @@ import {
   CommandRefusedError,
   type CallFailure,
   callFailureOf,
-  errorMessageOf,
   LinkRefusedError,
   LinkUnauthenticatedError,
   NotSharingError,
   ProtocolVersionMismatchError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sessionContract } from "@shigomori/contracts/modules/session";
@@ -1075,7 +1075,7 @@ export const make = (options: {
             return;
           }
           ws.on("error", (error) => {
-            log.warn(`[link] connection error: ${errorMessageOf(error)}`);
+            log.warn(`[link] connection error: ${errorWordsOf(error)}`);
           });
           preAuth += 1;
           const clientId = nextClientId++;
@@ -1183,8 +1183,8 @@ export const make = (options: {
           wss.once("listening", () => resume(Effect.void));
         });
         wss.on("error", (error) => {
-          status = { ...status, error: errorMessageOf(error) };
-          log.warn(`[link] listener error: ${errorMessageOf(error)}`);
+          status = { ...status, error: errorWordsOf(error) };
+          log.warn(`[link] listener error: ${errorWordsOf(error)}`);
         });
 
         // A peer silent past the timeout is cut, as if the roster had
@@ -1254,7 +1254,7 @@ export const make = (options: {
         const started = yield* Effect.exit(listen(opts, scope));
         if (Exit.isFailure(started)) {
           yield* Scope.close(scope, Exit.void);
-          const error = errorMessageOf(
+          const error = errorWordsOf(
             Option.getOrElse(Exit.findErrorOption(started), () => "failed"),
           );
           status = {

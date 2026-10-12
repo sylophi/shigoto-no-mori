@@ -21,7 +21,7 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { checkNewCheckoutDestination } from "@host/lib/git/clone";
 import { GitRefusal, run } from "@host/lib/git/core";
-import { deleteRef, updateRef } from "@host/lib/git/refs";
+import * as Git from "@shigomori/engine/Git";
 import { expandHome } from "@shared/paths";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 
@@ -88,8 +88,9 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
         reason: `${branch} did not arrive whole from the other device.`,
       });
     }
-    yield* updateRef(dest, branchRef, tip);
-    yield* deleteRef(dest, incomingRef);
+    const git = yield* Git.Git;
+    yield* git.updateRef({ repo: dest, ref: branchRef, commit: tip });
+    yield* git.deleteRef(dest, incomingRef);
     yield* run(dest, ["reset", "--quiet", "--hard"]);
     // The remote as `git clone` would leave it: origin, its HEAD on the
     // branch, the branch tracking it. The source answered the URL with
@@ -97,7 +98,11 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
     // here before it reaches argv.
     if (remoteUrl !== null && isCloneableRemote(remoteUrl)) {
       yield* run(dest, ["remote", "add", "origin", remoteUrl]);
-      yield* updateRef(dest, `refs/remotes/origin/${branch}`, tip);
+      yield* git.updateRef({
+        repo: dest,
+        ref: `refs/remotes/origin/${branch}`,
+        commit: tip,
+      });
       yield* run(dest, [
         "symbolic-ref",
         "refs/remotes/origin/HEAD",

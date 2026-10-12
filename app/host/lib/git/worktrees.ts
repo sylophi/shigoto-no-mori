@@ -12,11 +12,12 @@ import {
   isCommitHash,
   type WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 import * as Ops from "@host/lib/engineOps";
 import { run, runLenient } from "./core";
-import { upstreamName } from "./refs";
 
 export type { WorktreeIdentity };
 
@@ -201,7 +202,9 @@ export const readBranchHistory = Effect.fnUntraced(function* (
   const [upstream, mergeBase, unpushedOut, incoming, forkOut] =
     yield* Effect.all(
       [
-        upstreamName(worktreePath),
+        Effect.flatMap(Git.Git, (git) => git.upstreamName(worktreePath)).pipe(
+          Effect.map(Option.getOrNull),
+        ),
         opts.base
           ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
           : Effect.succeed(""),

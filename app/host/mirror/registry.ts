@@ -18,7 +18,7 @@ import {
   type MirrorSessionRaw,
   mirrorEngineBlocker,
 } from "@shigomori/contracts/modules/mirror";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
 import { peerMirrorFor } from "@host/ipc/PeerReach";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
@@ -231,7 +231,7 @@ const endSessionsOnWorktree = (
           Effect.catch((error) =>
             Effect.sync(() =>
               log.warn(
-                `[mirror] could not stop the mirror of a worktree being deleted: ${errorMessageOf(error)}`,
+                `[mirror] could not stop the mirror of a worktree being deleted: ${errorWordsOf(error)}`,
               ),
             ),
           ),
@@ -422,7 +422,7 @@ const endOnce = <E, R>(session: string, end: Effect.Effect<unknown, E, R>) =>
         Effect.catch((error) =>
           Effect.sync(() => {
             log.warn(
-              `[mirror] could not end a session: ${errorMessageOf(error)}`,
+              `[mirror] could not end a session: ${errorWordsOf(error)}`,
             );
             return false;
           }),
@@ -493,7 +493,7 @@ export const moveMirrorsOfWorktree = (
                 daemon.noteEvent(
                   moved.id,
                   "stopped",
-                  `This worktree moved and the mirror could not re-open (${errorMessageOf(error)}). The copy on the other device stays as a worktree.`,
+                  `This worktree moved and the mirror could not re-open (${errorWordsOf(error)}). The copy on the other device stays as a worktree.`,
                 );
               }),
             ),
@@ -627,9 +627,7 @@ const endSessions = (
         ),
         Effect.catch((error) =>
           Effect.sync(() =>
-            log.warn(
-              `[mirror] could not end ${what}: ${errorMessageOf(error)}`,
-            ),
+            log.warn(`[mirror] could not end ${what}: ${errorWordsOf(error)}`),
           ),
         ),
       ),

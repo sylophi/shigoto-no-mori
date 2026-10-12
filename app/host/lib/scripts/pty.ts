@@ -21,7 +21,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import { type IPty, spawn as spawnPty } from "node-pty";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { envSetting } from "../../../shared/config.ts";
 import { signalTree, signalTreeBestEffort } from "./process";
 
@@ -224,7 +224,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
       on("error", (error) => {
         const code = error.code ?? "";
         if (code.includes("EAGAIN") || code.includes("EIO")) return;
-        listener(new Error(errorMessageOf(error)));
+        listener(new Error(errorWordsOf(error)));
       }),
     onExit: (listener) => void child.onExit(listener),
     exit,

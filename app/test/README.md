@@ -52,6 +52,17 @@ that lives in a package (a contracts predicate, an engine service) is
 tested in that package's suite; a proof here tests what the app does
 with it.
 
+No proof's git can reach this repository. The runner and the vitest
+config isolate every proof's process (`../../gitIsolation.ts`, which
+the engine's and the terminal's test configs apply too): every `GIT_*`
+variable is removed, so the pre-commit hook's `GIT_DIR` and
+`GIT_INDEX_FILE` never get through, and `GIT_CEILING_DIRECTORIES` stops
+a git started in a folder inside the repository from finding it.
+`git-isolation` fails if either gets through. A proof still builds its
+repositories under the temp dir and runs git there, through
+`sandboxGit` or `scrubProcessGitEnv` (`lib/checkKit.mts`), which also
+cut off the global and system git config.
+
 A case that waits on real git, processes or sockets runs slower on a
 loaded machine. One that fails under load and passes alone is waiting
 on a deadline too short for that: give it one that fits, or wait on

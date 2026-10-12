@@ -16,8 +16,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import {
-  branchListOf,
   type BranchRefs,
+  parseBranchList,
   parseRemoteEntries,
   splitLines,
   type WorktreeEntry,
@@ -32,6 +32,7 @@ import { makeRemote } from "./git/remote.ts";
 import { makeGitIndex } from "./git/gitIndex.ts";
 import { makeDiffs } from "./git/diffs.ts";
 import {
+  type BranchMovedError,
   BranchNotMergedError,
   CloneDestinationError,
   type GitError,
@@ -43,9 +44,11 @@ import {
   type PrimaryRelation,
   type RunOptions,
   UndoRefusedError,
+  type UnknownRevisionError,
   type UpstreamSync,
 } from "./git/documents.ts";
 export {
+  BranchMovedError,
   BranchNotMergedError,
   CloneDestinationError,
   DISCARD_REF_PREFIX,
@@ -55,6 +58,8 @@ export {
   NoRemoteError,
   OverwriteRefusedError,
   UndoRefusedError,
+  UnknownRevisionError,
+  ZERO_SHA,
   stderrOf,
 } from "./git/documents.ts";
 export type {
@@ -215,6 +220,35 @@ export class Git extends Context.Service<
       ancestor: string,
       descendant: string,
     ) => Effect.Effect<boolean, GitError>;
+    // The commit `ref` names, refused when there is none.
+    readonly resolveCommit: (
+      cwd: string,
+      ref: string,
+    ) => Effect.Effect<string, GitError | UnknownRevisionError>;
+    // HEAD, refused where it has moved on from `expectHead`.
+    readonly headAt: (
+      cwd: string,
+      expectHead: string | undefined,
+    ) => Effect.Effect<string, GitError | BranchMovedError>;
+    // The upstream by its name ("origin/feature"), none without one.
+    readonly upstreamName: (
+      cwd: string,
+    ) => Effect.Effect<Option.Option<string>>;
+    // How many commits `revs` name, rev-list's own `flags` applied.
+    readonly countCommits: (
+      cwd: string,
+      revs: readonly string[],
+      flags?: readonly string[],
+    ) => Effect.Effect<number, GitError>;
+    // HEAD's own commits past `ref`: how many, how many of them are
+    // merges, and how many no remote has.
+    readonly ownCommitCounts: (
+      cwd: string,
+      ref: string,
+    ) => Effect.Effect<
+      { own: number; merges: number; unpushed: number },
+      GitError
+    >;
     // With `expected`, a compare-and-set: the ref moves only while it
     // still points there (forty zeros: only while it does not exist).
     readonly updateRef: (input: {
@@ -456,7 +490,17 @@ const make = Effect.gen(function* () {
     primaryRelation,
     readCommitMessage,
   } = history;
-  const { verifyRev, refTip, hasObject, isAncestor } = refs;
+  const {
+    verifyRev,
+    refTip,
+    hasObject,
+    isAncestor,
+    resolveCommit,
+    headAt,
+    upstreamName,
+    countCommits,
+    ownCommitCounts,
+  } = refs;
   const {
     branchRefs,
     appendExcludes,
@@ -540,6 +584,11 @@ const make = Effect.gen(function* () {
       return yield* hasObject(cwd, `${commit}^{commit}`);
     }),
     isAncestor,
+    resolveCommit,
+    headAt,
+    upstreamName,
+    countCommits,
+    ownCommitCounts,
     updateRef: Effect.fn("Git.updateRef")(function* (input) {
       yield* run(input.repo, [
         "update-ref",
@@ -578,7 +627,14 @@ const make = Effect.gen(function* () {
     }),
     branchRefs,
     listBranches: Effect.fn("Git.listBranches")(function* (repo) {
-      return branchListOf(yield* branchRefs(repo));
+      return parseBranchList(
+        yield* run(repo, [
+          "for-each-ref",
+          "--format=%(refname)\t%(refname:short)\t%(symref)",
+          "refs/heads/",
+          "refs/remotes/",
+        ]),
+      );
     }),
     localBranchExists,
     remoteRefExists,

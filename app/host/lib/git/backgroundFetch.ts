@@ -8,10 +8,11 @@
 // landing) asks for a pass at that moment. Broadcasts refsRefreshed
 // and projectPullRequestsRefreshed when a pass changed something so
 // the renderer, local or peer, can invalidate.
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import * as Context from "effect/Context";
+import * as Git from "@shigomori/engine/Git";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -21,7 +22,6 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
-import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
 import {
   pullRequestMapsEqual,
   readCachedProjectPullRequests,
@@ -135,7 +135,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
       }).pipe(
         Effect.catch((error) =>
           Effect.sync(() =>
-            log.warn(`[auto-pull] ${projectPath}: ${errorMessageOf(error)}`),
+            log.warn(`[auto-pull] ${projectPath}: ${messageOf(error)}`),
           ),
         ),
       );
@@ -152,11 +152,12 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         ),
         () =>
           Effect.gen(function* () {
-            const before = yield* snapshotRemoteRefs(projectPath);
-            yield* fetchAllRemotes(projectPath);
+            const git = yield* Git.Git;
+            const before = yield* git.snapshotRemoteRefs(projectPath);
+            yield* git.fetchAll(projectPath);
             lastFetchedAt.set(projectId, Date.now());
             failingProjects.delete(projectId);
-            const after = yield* snapshotRemoteRefs(projectPath);
+            const after = yield* git.snapshotRemoteRefs(projectPath);
             if (before !== after) {
               broadcastAll(gitContract, "refsRefreshed", { projectId });
             }
@@ -171,7 +172,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
               Effect.sync(() => {
                 if (!failingProjects.has(projectId)) {
                   failingProjects.add(projectId);
-                  log.warn(`[fetch] ${projectPath}: ${errorMessageOf(error)}`);
+                  log.warn(`[fetch] ${projectPath}: ${messageOf(error)}`);
                 }
                 return false;
               }),

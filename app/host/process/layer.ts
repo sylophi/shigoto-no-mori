@@ -5,7 +5,7 @@
 // subsystem, and the scope closing stops it.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorWordsOf } from "@host/lib/errorWords";
 import { log } from "@shared/log";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -152,7 +152,7 @@ function onExternalStateChange() {
     })
     .catch((error: unknown) => {
       log.warn(
-        `[scripts] reap after external change failed: ${errorMessageOf(error)}`,
+        `[scripts] reap after external change failed: ${errorWordsOf(error)}`,
       );
     });
 }
