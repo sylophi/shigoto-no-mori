@@ -12,7 +12,7 @@
 //
 // Run: pnpm test git-failures.
 //
-// covers: app/host/lib/engine.ts
+// covers: app/host/lib/Engine.ts
 // covers: app/host/lib/errorWords.ts
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -28,7 +28,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, it } from "vitest";
-import { hostCallFailure } from "@host/lib/engine";
+import { hostCallFailure } from "@host/lib/Engine";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { sandboxGit, scrubProcessGitEnv } from "./lib/checkKit.mts";
 

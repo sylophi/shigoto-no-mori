@@ -66,7 +66,7 @@ match the call's contract schema.
 ## From a terminal
 
 The same verbs are on the CLI, which asks the running app for them
-(over the loopback, `host/socket/loopback.ts`). Point `smd` at the profile whose app
+(over the loopback, `host/socket/Loopback.ts`). Point `smd` at the profile whose app
 should act, from a checkout of the repo:
 
 ```sh

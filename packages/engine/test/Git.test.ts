@@ -108,6 +108,28 @@ it("a write held by the user's hook leaves the probes their slots", async () => 
   assert.equal(rev(repo, `refs/heads/held-${SPAWN_SLOTS}`), head);
 });
 
+it("a lenient read answers with what git printed whatever its exit, empty for a git that never ran, and still fails past the cap", async () => {
+  const repo = seedRepo();
+  // A diff --no-index of two different files exits 1 with the diff
+  // printed.
+  write(repo, "x.txt", "x\n");
+  write(repo, "y.txt", "y\n");
+  const diff = await withGit((g) =>
+    g.runLenient(repo, ["diff", "--no-index", "--", "x.txt", "y.txt"]),
+  );
+  assert.match(diff, /^-x$/m);
+  assert.match(diff, /^\+y$/m);
+  assert.equal(
+    await withGit((g) =>
+      g.runLenient(repo, ["status"], { env: { PATH: "/nonexistent" } }),
+    ),
+    "",
+  );
+  await failureAs(GitOutputTooLargeError, (g) =>
+    g.runLenient(repo, ["log"], { maxOutputBytes: 10 }),
+  );
+});
+
 it("output past the cap is an error, not a prefix", async () => {
   const repo = seedRepo();
   await failureAs(GitOutputTooLargeError, (g) =>

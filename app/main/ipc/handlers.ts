@@ -16,7 +16,7 @@ import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { withoutPeerState } from "@shigomori/contracts/schemas/config";
-import { logFailure } from "@shared/log";
+import { warnOnFailure } from "@shared/log";
 import { updateClientConfig } from "../electron/clientConfig";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import {
@@ -59,7 +59,7 @@ export function registerShellHandlers(): void {
       // Before the windows are told, since they re-read their config
       // off the push.
       if (leaving) {
-        await logFailure(
+        await warnOnFailure(
           "[account] dropping the peer-keyed client config failed",
           () => updateClientConfig(withoutPeerState),
         );
@@ -75,7 +75,7 @@ export function registerShellHandlers(): void {
         "commandAccessChanged",
         acceptsPeerCommands(),
       );
-      await logFailure(
+      await warnOnFailure(
         "[account] the host's account change failed",
         () => applied,
       );

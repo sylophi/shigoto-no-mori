@@ -3,7 +3,7 @@
 What a machine serves: its projects, worktrees, scripts, mirrors, port
 forwards and device link, run as the app's utility process (V3.md,
 decisions 6 and 9). Its data model is the engine's
-(`packages/engine`), which it runs in-process (`lib/engine.ts`,
+(`packages/engine`), which it runs in-process (`lib/Engine.ts`,
 `lib/engineOps.ts`).
 
 - `process/`: the composition root. `layer.ts` is the host's layer
@@ -15,7 +15,7 @@ decisions 6 and 9). Its data model is the engine's
   `process/` uses.
 - `ipc/modules/<module>.ts`: one handler table per host-scoped contract
   module, an effect per call over the services, and its views
-  (`Views.view`, `lib/views.ts`).
+  (`Views.view`, `lib/Views.ts`).
 - `lib/`: the services and what they use. A service module is named
   for its service (`VillagerData.ts`, `GitWatcher.ts`), so the lint
   rules for services read it (`lint/README.md`); lowercase modules are

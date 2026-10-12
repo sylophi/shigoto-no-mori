@@ -125,7 +125,7 @@ export async function wireHostCli(
 // that reaches the darwin helper.
 export async function hostEngine(dataDir: string, macfs = "macfs") {
   const { initDataDirAt } = await import("@shared/paths");
-  const Engine = await import("@host/lib/engine");
+  const Engine = await import("@host/lib/Engine");
   initDataDirAt(dataDir);
   process.env["SHIGOMORI_DATA_DIR"] = dataDir;
   const runtime = ManagedRuntime.make(
@@ -159,7 +159,7 @@ export async function addProject(
 // plays both sides in one process: an effect given its context runs
 // there.
 export async function secondEngine(dataDir: string) {
-  const Engine = await import("@host/lib/engine");
+  const Engine = await import("@host/lib/Engine");
   const runtime = ManagedRuntime.make(
     Engine.layer({ flavor: "prod", macfs: builtMacfs(), sm: "sm" }).pipe(
       Layer.provideMerge(Migration.layer),

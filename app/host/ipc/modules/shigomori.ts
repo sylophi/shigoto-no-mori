@@ -1,6 +1,6 @@
 import type { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 
 export const shigomoriHandlers = {

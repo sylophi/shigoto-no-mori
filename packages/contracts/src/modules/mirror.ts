@@ -25,7 +25,7 @@ import { strict } from "../schemas/strict.ts";
 // remote work"): a worktree kept identical on two devices, every file,
 // both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
 // Mutagen). The app supervises this device's daemon
-// (host/mirror/daemon.ts), bridges its streams to peers as byte
+// (host/mirror/MirrorDaemon.ts), bridges its streams to peers as byte
 // channels on the device link (openStream below, the link's channels in
 // modules/link.ts), and serves `file-sync serve` for peers mirroring
 // FROM here.

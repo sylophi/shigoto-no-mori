@@ -1,7 +1,7 @@
 // The wires the host serves on, and the registrar that mounts its
 // handlers there: the device link's listener (host/socket/DeviceLink.ts)
 // for peers, fronted by the tunnel; the same link on loopback
-// (host/socket/loopback.ts) for this machine's windows, its shell and
+// (host/socket/Loopback.ts) for this machine's windows, its shell and
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
@@ -36,25 +36,24 @@ import { createServed, resolvePush } from "@shared/ipc/served";
 import type { HandlerContext } from "@shared/ipc/transport";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
-import { logFailure } from "@shared/log";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
-import * as TunnelService from "@host/direct/cloudflared";
+import * as TunnelService from "@host/direct/Tunnel";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import * as HubConnectionNode from "@host/hub/connection";
 import { LayerDownError, layerLatch } from "@shared/layerLatch";
 import * as DeviceId from "@host/lib/config/DeviceId";
-import * as Engine from "@host/lib/engine";
+import * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
-import * as Sharing from "@host/lib/sharing";
+import * as Sharing from "@host/lib/Sharing";
 import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
-import * as Loopback from "@host/socket/loopback";
+import * as Loopback from "@host/socket/Loopback";
 import * as DeviceLink from "@host/socket/DeviceLink";
 import {
   acceptsPeerCommands,
@@ -447,46 +446,53 @@ export function probeRemoteConnections(): void {
 // identity field, so an account switch restarts the listener and drops
 // every socket authed under the old account.
 export async function refreshDirectHost(): Promise<void> {
-  await logFailure("[direct] listener refresh failed", () =>
-    Graph.run(
-      onLink((link) =>
-        link.reconcile(
-          Effect.promise(async () => {
-            const inputs = hubConnectInputs();
-            if (inputs === null) return null;
-            // The device-scoped opt-out: absent means enrolled, explicit
-            // false stops the listener.
-            const config = await Graph.run(Ops.readGlobalConfig());
-            if (config.directConnections === false) return null;
-            return {
-              port: 0,
-              bindAddress: "::",
-              deviceId: await Graph.run(DeviceId.current),
-              appVersion: hostFacts().appVersion,
-              accountId: inputs.accountId,
-              // The web client's origin, so a browser can dial the wss tunnel
-              // candidate.
-              allowedOrigin: allowedWebOrigin(),
-            };
-          }),
-        ),
+  await Graph.run(
+    onLink((link) =>
+      link.reconcile(
+        Effect.promise(async () => {
+          const inputs = hubConnectInputs();
+          if (inputs === null) return null;
+          // The device-scoped opt-out: absent means enrolled, explicit
+          // false stops the listener.
+          const config = await Graph.run(Ops.readGlobalConfig());
+          if (config.directConnections === false) return null;
+          return {
+            port: 0,
+            bindAddress: "::",
+            deviceId: await Graph.run(DeviceId.current),
+            appVersion: hostFacts().appVersion,
+            accountId: inputs.accountId,
+            // The web client's origin, so a browser can dial the wss tunnel
+            // candidate.
+            allowedOrigin: allowedWebOrigin(),
+          };
+        }),
+      ),
+    ).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("[direct] listener refresh failed", cause),
       ),
     ),
-  );
+  ).catch(() => undefined);
   // The tunnel follows the listener: a running listener wants a tunnel
   // fronting its current port, and every condition that stopped the
   // listener stops the child through the same reconcile. A tunnel
   // problem must not fail the change that triggered the refresh.
-  await logFailure("[tunnel] reconcile failed", () => {
-    const listener = linkStatus();
-    const wanted =
-      listener.listening && listener.port !== null
-        ? { port: devFrontPort(listener.port, hostFacts().packaged) }
-        : null;
-    // Nothing to reconcile once the app is quitting: the layer's close
-    // has stopped the child.
-    return Graph.run(onTunnel((tunnel) => tunnel.reconcile(wanted))).catch(
-      () => undefined,
-    );
-  });
+  // Nothing to reconcile once the app is quitting: the layer's close
+  // has stopped the child, and a graph that is down refuses the run.
+  await Graph.run(
+    Effect.suspend(() => {
+      const listener = linkStatus();
+      const wanted =
+        listener.listening && listener.port !== null
+          ? { port: devFrontPort(listener.port, hostFacts().packaged) }
+          : null;
+      // A reconcile that fails is the tunnel's to report, as before.
+      return onTunnel((tunnel) => tunnel.reconcile(wanted)).pipe(Effect.ignore);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("[tunnel] reconcile failed", cause),
+      ),
+    ),
+  ).catch(() => undefined);
 }

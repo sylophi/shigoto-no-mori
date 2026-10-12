@@ -106,7 +106,7 @@ import {
 } from "@shared/remote/link";
 import * as HostPushes from "@host/lib/HostPushes";
 import { secretsMatch } from "@host/lib/util/secretCompare";
-import * as Sharing from "@host/lib/sharing";
+import * as Sharing from "@host/lib/Sharing";
 import type { HostServices } from "@host/process/services";
 import { type HostChannels, makeHostChannels } from "./channels";
 
@@ -430,7 +430,7 @@ export class DeviceLink extends Context.Service<
 >()("sm/host/DeviceLink") {}
 
 // A link listener. The device link's serves LinkGroup to the peers
-// the hub vouched for. `local` is the loopback's (loopback.ts): the
+// the hub vouched for. `local` is the loopback's (Loopback.ts): the
 // processes on this machine the app's own credential admits, each its
 // own caller with no device of its own, hearing every host push.
 export const make = (options: {

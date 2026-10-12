@@ -83,7 +83,7 @@ export function reopenInput(
 
 // The daemon's document with the two label-borne ids lifted to fields.
 // The daemon validates each line on arrival (host/mirror/
-// daemon.ts). This checks the annotated whole against the contract, a
+// MirrorDaemon.ts). This checks the annotated whole against the contract, a
 // backstop for what the host attaches and for an impl that is not the
 // daemon (the proofs' fakes).
 export function annotateMirrorSession(

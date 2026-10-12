@@ -38,7 +38,7 @@ import * as Queue from "effect/Queue";
 import type * as Context from "effect/Context";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import {
   isHaltedStatus,
   MIRROR_LABEL_REPLACES,

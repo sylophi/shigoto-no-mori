@@ -13,10 +13,10 @@ import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type * as Tunnel from "@host/direct/cloudflared";
+import type * as Tunnel from "@host/direct/Tunnel";
 import type * as HostAccount from "@host/lib/HostAccount";
-import type * as MirrorDaemon from "@host/mirror/daemon";
-import type * as Loopback from "@host/socket/loopback";
+import type * as MirrorDaemon from "@host/mirror/MirrorDaemon";
+import type * as Loopback from "@host/socket/Loopback";
 import type * as DeviceLink from "@host/socket/DeviceLink";
 import type { HostServices } from "./services";
 

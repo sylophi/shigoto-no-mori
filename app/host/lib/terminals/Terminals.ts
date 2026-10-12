@@ -1,5 +1,5 @@
 // The host's interactive shells. Each terminal is a login shell under a
-// PTY (../scripts/pty.ts), a resource in a scope of its own under the
+// PTY (../scripts/ScriptRuns.ts), a resource in a scope of its own under the
 // layer's: closing it is closing that scope, whose release is the kill
 // chain. A terminal belongs to a worktree, which it starts in with the
 // environment the worktree's scripts get and closes with, or to the
@@ -42,7 +42,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "../util/processes";
-import { type PtyHandle, PtySpawnError, spawn } from "../scripts/pty";
+import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
 
 type Size = { readonly cols: number; readonly rows: number };
@@ -377,6 +377,7 @@ const make = <R>(options: {
             ChildProcessSpawner.ChildProcessSpawner,
             spawner,
           ),
+          Effect.provideService(FileSystem.FileSystem, fs),
         );
         const session: Session = {
           terminal,

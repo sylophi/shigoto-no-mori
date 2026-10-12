@@ -1,5 +1,5 @@
 // Durable proof for the scripts' PTY runs (host/lib/scripts/index.ts
-// over the node-pty wrapper in pty.ts): real login shells, real process
+// over the node-pty wrapper in ScriptRuns.ts): real login shells, real process
 // groups.
 //
 // Asserts:

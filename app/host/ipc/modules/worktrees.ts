@@ -11,7 +11,7 @@ import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
@@ -49,7 +49,7 @@ import {
 } from "@host/mirror/registry";
 import { scriptEventNotifier } from "../scriptRun";
 import * as Ops from "@host/lib/engineOps";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 
 // Exported for the sync module's pull orchestration, whose createWorktree
 // call streams the same lifecycle events.

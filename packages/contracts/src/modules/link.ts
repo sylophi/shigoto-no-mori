@@ -17,7 +17,7 @@ import { strict } from "../schemas/strict.ts";
 // and supersedes the device's older links, so a dialer opens every
 // candidate at once and says hello on one at a time. On the loopback,
 // which never leaves the machine, the hello carries the host's token
-// instead (app/host/socket/loopback.ts).
+// instead (app/host/socket/Loopback.ts).
 //
 // The hello carries the protocol version (protocol.ts). A host on
 // another version refuses it with ProtocolVersionMismatchError.
