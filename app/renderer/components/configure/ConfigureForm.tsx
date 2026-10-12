@@ -173,8 +173,8 @@ export function ConfigureForm({
       remote={remote}
       deviceLabel={deviceLabel}
       onReveal={() => {
-        api.shell
-          .showItemInFolder({ path: projectPath })
+        api
+          .run(api.shell.showItemInFolder({ path: projectPath }))
           .catch((err) => notifyError("Couldn't reveal folder", err));
       }}
       onOpenLaunchTools={() => {

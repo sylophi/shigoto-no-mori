@@ -21,7 +21,10 @@ export function useBranchHistory(
   return useQuery<BranchHistory>({
     queryKey: keys.branchHistory(projectId, worktreeId ?? "", headHash),
     queryFn: worktreeId
-      ? () => api.worktrees.branchHistory({ projectId, worktreeId })
+      ? ({ signal }) =>
+          api.run(api.worktrees.branchHistory({ projectId, worktreeId }), {
+            signal,
+          })
       : skipToken,
     meta: { errorTitle: "Couldn't read the branch's commits" },
   });
@@ -48,15 +51,18 @@ export function useBranchCommits(
   >({
     queryKey: keys.branchCommits(projectId, worktreeId, headHash, opts),
     initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
-      api.worktrees.listCommits({
-        projectId,
-        worktreeId,
-        skip: pageParam,
-        count: BRANCH_COMMITS_PAGE_SIZE,
-        query: opts.query,
-        from: opts.from,
-      }),
+    queryFn: ({ pageParam, signal }) =>
+      api.run(
+        api.worktrees.listCommits({
+          projectId,
+          worktreeId,
+          skip: pageParam,
+          count: BRANCH_COMMITS_PAGE_SIZE,
+          query: opts.query,
+          from: opts.from,
+        }),
+        { signal },
+      ),
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < BRANCH_COMMITS_PAGE_SIZE) return undefined;
       return allPages.reduce((sum, page) => sum + page.length, 0);

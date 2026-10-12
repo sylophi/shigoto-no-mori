@@ -17,7 +17,8 @@ import {
 import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import type { AllChannelHandlers } from "@shared/ipc/client";
+import type { ChannelHandlers } from "@shigomori/contracts/types";
+import type { AllContractModule } from "@shigomori/contracts/allModules";
 import { stackCleanupForWorktree } from "@shigomori/contracts/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
@@ -140,7 +141,9 @@ function worktreeIdOf(seed: string): string {
 // A fixture table: a handler for each channel it answers, typed by the
 // contract. A channel the table leaves out falls back to a
 // schema-derived stub.
-type FixtureHandlers = AllChannelHandlers;
+// A table answering any channel of any contract module, typed by the
+// contracts: the fixtures' handlers.
+export type FixtureHandlers = Partial<ChannelHandlers<AllContractModule>>;
 
 // The posing controls on window.fakeHost.
 interface FakeHostControls {

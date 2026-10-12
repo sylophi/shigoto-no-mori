@@ -17,9 +17,10 @@ import {
   isChannelRefusedError,
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
-import type {
-  PortForwardSummary,
-  PortForwardWorktree,
+import {
+  portForwardContract,
+  type PortForwardSummary,
+  type PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
@@ -51,7 +52,7 @@ export function watchPortForwards(
   api: RendererApi,
   queryClient: QueryClient,
 ): void {
-  api.portForward.onChanged(() => {
+  api.listen(api.pushes(portForwardContract, "changed"), () => {
     void queryClient.invalidateQueries({
       queryKey: queryKeys.portForwards(),
     });
@@ -69,7 +70,7 @@ function usePortForwardList<T = PortForwardList>(
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.portForwards(),
-    queryFn: () => api.portForward.list(),
+    queryFn: ({ signal }) => api.run(api.portForward.list(), { signal }),
     select,
     // The sidebar reads it on every peer row, and the web client's
     // loopback refuses the channel: nothing to ask there.
@@ -106,7 +107,8 @@ export function describeForwardError(
 export function usePortForwardStop() {
   const api = useApi();
   return useMutation({
-    mutationFn: (forwardId: string) => api.portForward.stop({ forwardId }),
+    mutationFn: (forwardId: string) =>
+      api.run(api.portForward.stop({ forwardId })),
     meta: { errorTitle: "Couldn't stop forwarding" },
   });
 }
@@ -116,7 +118,7 @@ export function usePortForwards(deviceId: string) {
   const { data } = usePortForwardList();
   const start = useMutation({
     mutationFn: (input: { remotePort: number; localPort?: number }) =>
-      api.portForward.start({ deviceId, ...input }),
+      api.run(api.portForward.start({ deviceId, ...input })),
     // The engine's start probe surfaces the coded errors here
     // (too-many-conns). Refusals surface centrally.
     onError: (err, input) => {
@@ -197,14 +199,16 @@ export function usePortForwardControl(
       target: { on: false } | { on: true; localPort: number },
     ) => {
       if (target.on) {
-        await api.portForward.start({
-          deviceId,
-          remotePort,
-          localPort: target.localPort,
-          worktree,
-        });
+        await api.run(
+          api.portForward.start({
+            deviceId,
+            remotePort,
+            localPort: target.localPort,
+            worktree,
+          }),
+        );
       } else if (forward !== undefined) {
-        await api.portForward.stop({ forwardId: forward.forwardId });
+        await api.run(api.portForward.stop({ forwardId: forward.forwardId }));
       }
     },
     meta: { silentError: true },

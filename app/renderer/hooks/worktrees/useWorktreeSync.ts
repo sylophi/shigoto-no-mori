@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import type { MergeBranchResult, Worktree } from "@shigomori/contracts/schemas";
+import type * as Effect from "effect/Effect";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
@@ -15,7 +16,10 @@ interface SyncWorktreeInput {
 // overwrite, publish, pull-and-push). Every one resolves to the
 // refreshed Worktree and only differs in the API method + error title.
 function useSyncMutation(
-  apiMethod: (api: HostApi, input: SyncWorktreeInput) => Promise<Worktree>,
+  apiMethod: (
+    api: HostApi,
+    input: SyncWorktreeInput,
+  ) => Effect.Effect<Worktree, unknown>,
   errorTitle: string,
   // Reports failures itself rather than by the shared toast. Here, on
   // the hook, so a failure is said even once the caller has unmounted.
@@ -24,7 +28,7 @@ function useSyncMutation(
   const { api } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<Worktree, Error, SyncWorktreeInput>({
-    mutationFn: (input) => apiMethod(api, input),
+    mutationFn: (input) => api.run(apiMethod(api, input)),
     // Pull, overwrite and sync rewrite the working tree, so an open
     // changes page has to re-read its patch and its checkbox states. PR
     // queries refresh via the refs-changed broadcast that the push
@@ -74,13 +78,16 @@ export const useSyncWithPrimaryWorktree = () =>
 // A sync that conflicts, from the upstream or the primary branch,
 // merged anyway and stopped on its conflicts.
 function useMergeKeepingConflicts(
-  call: (api: HostApi, input: SyncWorktreeInput) => Promise<MergeBranchResult>,
+  call: (
+    api: HostApi,
+    input: SyncWorktreeInput,
+  ) => Effect.Effect<MergeBranchResult, unknown>,
   errorTitle: string,
 ) {
   const { api } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<MergeBranchResult, Error, SyncWorktreeInput>({
-    mutationFn: (input) => call(api, input),
+    mutationFn: (input) => api.run(call(api, input)),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
     meta: { errorTitle },
   });

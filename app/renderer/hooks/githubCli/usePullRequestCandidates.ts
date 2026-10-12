@@ -13,7 +13,8 @@ export function usePullRequestCandidates(projectId: string, enabled: boolean) {
   const { api, keys } = useHostScope();
   return useQuery<PullRequestCandidateList>({
     queryKey: keys.pullRequestCandidates(projectId),
-    queryFn: () => api.githubCli.pullRequestCandidates({ projectId }),
+    queryFn: ({ signal }) =>
+      api.run(api.githubCli.pullRequestCandidates({ projectId }), { signal }),
     enabled,
     staleTime: 60_000,
     meta: { errorTitle: "Couldn't load pull requests" },

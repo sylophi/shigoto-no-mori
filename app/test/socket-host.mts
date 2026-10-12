@@ -656,16 +656,20 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
 it("in-flight cap: one call past the per-peer cap is refused rather than run", async () => {
   const track = trackTest;
   const { listener, seen } = await listen(track);
-  const connection = await dialListener(track, listener);
+  // The raw link: the dialer's own lets fewer out at once
+  // (rpcTransport.ts, LINK_CALLS_IN_FLIGHT), and this is the host's
+  // cap.
+  const raw = await rawLink(track, listener);
+  assert.ok(Exit.isSuccess(await raw.hello()));
   const calls = Array.from({ length: MAX_IN_FLIGHT_PER_PEER }, () =>
-    invoke(connection, "worktrees:list", { projectId: "p" }),
+    Effect.runPromise(raw.call("worktrees:list", { projectId: "p" })),
   );
   await waitFor(
     () => seen.hanging.length === MAX_IN_FLIGHT_PER_PEER,
     "every call under the cap to run",
   );
-  const over = await rejection(
-    invoke(connection, "worktrees:list", { projectId: "p" }),
+  const over = await Effect.runPromiseExit(
+    raw.call("worktrees:list", { projectId: "p" }),
   );
   assert.match(String(over), /too many in-flight requests/);
   for (const call of seen.hanging) call.resolve([]);

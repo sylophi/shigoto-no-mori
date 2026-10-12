@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   GUIDE_HARNESS_LABELS,
+  guideContract,
   type GuideState,
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
@@ -19,13 +20,13 @@ export function useGuide(): GuideState | null {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!hasLocalHost) return;
-    return api.guide.onChanged((state) => {
+    return api.listen(api.pushes(guideContract, "changed"), (state) => {
       queryClient.setQueryData(queryKeys.guide(), state);
     });
   }, [queryClient, api, hasLocalHost]);
   const { data } = useQuery({
     queryKey: queryKeys.guide(),
-    queryFn: () => api.guide.read(),
+    queryFn: ({ signal }) => api.run(api.guide.read(), { signal }),
     staleTime: Number.POSITIVE_INFINITY,
     enabled: hasLocalHost,
   });
@@ -42,7 +43,7 @@ export function useGuideHarnesses():
   const hasLocalHost = useHasLocalHost();
   const { data } = useQuery({
     queryKey: queryKeysFor(api.deviceId).agents(),
-    queryFn: () => api.agents.status(),
+    queryFn: ({ signal }) => api.run(api.agents.status(), { signal }),
     staleTime: 60_000,
     enabled: hasLocalHost,
   });

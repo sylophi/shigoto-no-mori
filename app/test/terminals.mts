@@ -44,6 +44,9 @@ import { makeHistory, withoutQueries } from "../host/lib/terminals/history.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
 import { busyDetail } from "../shared/busy.ts";
 import { attachTerminal } from "../renderer/lib/terminalFeed.ts";
+import type { HostApi } from "../renderer/lib/runtime/Api.ts";
+import type { terminalsContract } from "@shigomori/contracts/modules/terminals";
+import type { ViewInput } from "@shigomori/contracts/types";
 import {
   appRoot,
   makeTracker,
@@ -533,33 +536,29 @@ describe("the service", () => {
       // the attach under way the way a closed socket does.
       let drop = noop;
       let attaches = 0;
-      const api = {
-        terminals: {
-          attach: (
-            input: { terminalId: string; after?: number },
-            observer: {
-              value: (event: TerminalEvent) => void;
-              end: (failure?: unknown) => void;
-            },
-          ) => {
-            attaches += 1;
-            const fiber = app.runFork(
-              Effect.flatMap(Terminals.Terminals, (terminals) =>
-                terminals
-                  .attach(input.terminalId, input.after)
-                  .pipe(
-                    Stream.runForEach((event) =>
-                      Effect.sync(() => observer.value(event)),
-                    ),
-                  ),
-              ),
-            );
-            drop = () => {
-              app.runFork(Fiber.interrupt(fiber));
-              observer.end(new Error("the link dropped"));
-            };
-            return () => void app.runFork(Fiber.interrupt(fiber));
-          },
+      const host = await app.runPromise(Terminals.Terminals);
+      // The terminals' attach, the one view the feed reads.
+      const attachView = <A,>(input: unknown) => {
+        const asked = input as ViewInput<typeof terminalsContract, "attach">;
+        return host.attach(asked.terminalId, asked.after) as Stream.Stream<
+          A,
+          unknown
+        >;
+      };
+      const api: Pick<HostApi, "view" | "listen"> = {
+        view: (_module, _key, input) => attachView(input),
+        listen: (stream, onValue, onEnd) => {
+          attaches += 1;
+          const fiber = app.runFork(
+            Stream.runForEach(stream, (event) =>
+              Effect.sync(() => onValue(event)),
+            ),
+          );
+          drop = () => {
+            app.runFork(Fiber.interrupt(fiber));
+            onEnd?.(new Error("the link dropped"));
+          };
+          return () => void app.runFork(Fiber.interrupt(fiber));
         },
       };
       let screen = "";

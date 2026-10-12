@@ -30,7 +30,7 @@ export function useVillagerDataStatus({ enabled = true } = {}) {
 export function villagerDataStatusQueryOptions(api: RendererApi) {
   return queryOptions<VillagerDataStatus>({
     queryKey: queryKeysFor(api.deviceId).villagerData(),
-    queryFn: () => api.villagers.status(),
+    queryFn: ({ signal }) => api.run(api.villagers.status(), { signal }),
     meta: { silentError: true },
   });
 }
@@ -45,17 +45,17 @@ export function useVillagerData() {
     queryClient.setQueryData(queryKeysFor(api.deviceId).villagerData(), next);
 
   const download = useMutation({
-    mutationFn: () => api.villagers.download(),
+    mutationFn: () => api.run(api.villagers.download()),
     onSuccess: apply,
     meta: { errorTitle: "Couldn't start the download" },
   });
   const cancel = useMutation({
-    mutationFn: () => api.villagers.cancel(),
+    mutationFn: () => api.run(api.villagers.cancel()),
     onSuccess: apply,
     meta: { errorTitle: "Couldn't cancel the download" },
   });
   const remove = useMutation({
-    mutationFn: () => api.villagers.remove(),
+    mutationFn: () => api.run(api.villagers.remove()),
     onSuccess: apply,
     meta: { errorTitle: "Couldn't remove the villager data" },
   });

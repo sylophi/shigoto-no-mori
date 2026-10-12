@@ -6,7 +6,7 @@ export function useGithubCliReadiness() {
   const { api, keys } = useHostScope();
   return useQuery<GithubCliReadiness>({
     queryKey: keys.githubCliReadiness(),
-    queryFn: () => api.githubCli.readiness(),
+    queryFn: ({ signal }) => api.run(api.githubCli.readiness(), { signal }),
     meta: { errorTitle: "Couldn't check GitHub CLI status" },
   });
 }

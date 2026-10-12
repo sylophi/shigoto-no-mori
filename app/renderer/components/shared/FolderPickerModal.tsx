@@ -40,13 +40,15 @@ export function FolderPickerModal({
   const openFinder = async () => {
     let picked: string | null;
     try {
-      picked = await api.dialog.pickFolder({
-        title,
-        buttonLabel: confirmLabel,
-        message: hint,
-        // Open Finder where the picker is, not at ~.
-        defaultPath: browse.listing?.path,
-      });
+      picked = await api.run(
+        api.dialog.pickFolder({
+          title,
+          buttonLabel: confirmLabel,
+          message: hint,
+          // Open Finder where the picker is, not at ~.
+          defaultPath: browse.listing?.path,
+        }),
+      );
     } catch (err) {
       // Cancelling resolves to null, so a rejection is a real
       // dialog/IPC failure.

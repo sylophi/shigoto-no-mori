@@ -1,3 +1,4 @@
+import { throughCancel } from "@/lib/queryClientOptions";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
@@ -32,12 +33,14 @@ export function useUndoCommits(worktree: Worktree) {
 
   // A failed read has the query's own toast.
   const restoreMessage = (hash: string) =>
-    void queryClient
-      .fetchQuery(commitMessageQueryOptions(scope, projectId, worktreeId, hash))
-      .then(
-        (message) => fillEmptyCommitDraft(projectId, worktreeId, message),
-        () => {},
-      );
+    void throughCancel(() =>
+      queryClient.fetchQuery(
+        commitMessageQueryOptions(scope, projectId, worktreeId, hash),
+      ),
+    ).then(
+      (message) => fillEmptyCommitDraft(projectId, worktreeId, message),
+      () => {},
+    );
 
   const undoTo = ({
     target,

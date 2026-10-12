@@ -16,6 +16,7 @@ import type {
   ResetSoftResult,
   Worktree,
 } from "@shigomori/contracts/schemas";
+import type * as Effect from "effect/Effect";
 import {
   useHostScope,
   type HostApi,
@@ -41,7 +42,10 @@ export function useWorktreeChanges(
   return useQuery<readonly ChangedFile[]>({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
     queryFn: worktreeId
-      ? () => api.worktrees.changeStatus({ projectId, worktreeId })
+      ? ({ signal }) =>
+          api.run(api.worktrees.changeStatus({ projectId, worktreeId }), {
+            signal,
+          })
       : skipToken,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     // Same reasoning as the diff: the index is shared with every terminal
@@ -63,7 +67,10 @@ export function useFileHunks(
   return useQuery<FileHunks>({
     queryKey: keys.worktreeFileHunks(projectId, worktreeId, path ?? ""),
     queryFn: path
-      ? () => api.worktrees.fileHunks({ projectId, worktreeId, path })
+      ? ({ signal }) =>
+          api.run(api.worktrees.fileHunks({ projectId, worktreeId, path }), {
+            signal,
+          })
       : skipToken,
     staleTime: 0,
     meta: { errorTitle: "Couldn't read the file's hunks" },
@@ -123,14 +130,14 @@ export function useWorkingTreeMutation<
   Input extends { projectId: string; worktreeId: string },
   Result,
 >(
-  call: (api: HostApi, input: Input) => Promise<Result>,
+  call: (api: HostApi, input: Input) => Effect.Effect<Result, unknown>,
   worktreeOf: (result: Result) => Worktree,
   errorTitle: string,
 ) {
   const { api } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<Result, Error, Input>({
-    mutationFn: (input) => call(api, input),
+    mutationFn: (input) => api.run(call(api, input)),
     onSuccess: (data, vars) => writeBack(vars, worktreeOf(data)),
     meta: { errorTitle },
   });
@@ -150,7 +157,7 @@ export function useCommitChanges() {
   const { api, keys } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<CommitChangesResult, Error, CommitInput>({
-    mutationFn: (input) => api.worktrees.commit(input),
+    mutationFn: (input) => api.run(api.worktrees.commit(input)),
     onSuccess: (data, vars) => {
       // The page empties its own draft state. This covers the stored
       // copy when the page was left before the commit landed. A commit
@@ -213,7 +220,10 @@ export function commitMessageQueryOptions(
 ) {
   return queryOptions<CommitMessage>({
     queryKey: keys.commitMessage(projectId, worktreeId, hash),
-    queryFn: () => api.worktrees.commitMessage({ projectId, worktreeId, hash }),
+    queryFn: ({ signal }) =>
+      api.run(api.worktrees.commitMessage({ projectId, worktreeId, hash }), {
+        signal,
+      }),
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't read the last commit's message" },
   });

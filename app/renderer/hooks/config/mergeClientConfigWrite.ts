@@ -17,13 +17,13 @@ import { queryKeys } from "@/lib/queryKeys";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 
 export async function mergeClientConfigWrite(
-  api: Pick<RendererApi, "clientConfig">,
+  api: Pick<RendererApi, "clientConfig" | "run">,
   queryClient: QueryClient,
   patch: Partial<ClientConfig>,
 ): Promise<ClientConfig> {
   const current =
     queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig()) ?? {};
   const config: ClientConfig = { ...current, ...patch };
-  await api.clientConfig.write({ config });
+  await api.run(api.clientConfig.write({ config }));
   return config;
 }

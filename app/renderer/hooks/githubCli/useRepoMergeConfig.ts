@@ -10,7 +10,8 @@ export function useRepoMergeConfig(projectId: string) {
   const { api, keys } = useHostScope();
   return useQuery<RepoMergeConfig | null>({
     queryKey: keys.repoMergeConfig(projectId),
-    queryFn: () => api.githubCli.repoMergeConfig({ projectId }),
+    queryFn: ({ signal }) =>
+      api.run(api.githubCli.repoMergeConfig({ projectId }), { signal }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,

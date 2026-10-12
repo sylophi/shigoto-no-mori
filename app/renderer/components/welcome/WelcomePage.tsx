@@ -111,10 +111,10 @@ function useCliStep(): {
   const queryClient = useQueryClient();
   const { data: status } = useQuery<CliStatus>({
     queryKey: keys.cli(),
-    queryFn: () => api.cli.status(),
+    queryFn: ({ signal }) => api.run(api.cli.status(), { signal }),
   });
   const install = useMutation({
-    mutationFn: (force: boolean) => api.cli.install({ force }),
+    mutationFn: (force: boolean) => api.run(api.cli.install({ force })),
     onSuccess: (next) => queryClient.setQueryData(keys.cli(), next),
     meta: { errorTitle: "Couldn't install the CLI" },
   });
@@ -156,7 +156,7 @@ function useTerrierPick(
   const readable = readiness?.readable === true;
   const { data: listed = [] } = useQuery({
     queryKey: [...keys.terrierReadiness(), "repos"],
-    queryFn: () => api.terrier.repos(),
+    queryFn: ({ signal }) => api.run(api.terrier.repos(), { signal }),
     enabled: readable,
   });
   const { data: runtime } = useRuntimeInfo();
@@ -164,7 +164,9 @@ function useTerrierPick(
   const [picked, setPicked] = useState<string | null>(null);
   const turnOn = useMutation({
     mutationFn: () =>
-      api.globalConfig.writeDeviceSettings({ patch: { terrier: true } }),
+      api.run(
+        api.globalConfig.writeDeviceSettings({ patch: { terrier: true } }),
+      ),
     onError: () => setPicked(null),
     meta: { errorTitle: "Couldn't turn terrier on" },
   });

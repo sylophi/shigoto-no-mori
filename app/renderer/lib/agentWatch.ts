@@ -1,9 +1,10 @@
 // The agent sessions in every device's worktree lists, the same lists
 // the sidebar shows, as their hosts stream them (lib/viewFeed.ts), like
 // the villagers' moves (lib/villagers/moves.ts). From them, the
-// worktrees whose agent waits on you (useWaitingAgents, for the Live
-// page and its mark), and on the desktop a system notification when a
-// session starts waiting on you or ends its turn.
+// worktrees whose agent waits on you (waitingAgentsAtom, read through
+// useWaitingAgents, for the Live page and its mark), and on the desktop
+// a system notification when a session starts waiting on you or ends
+// its turn.
 //
 // A notification goes out only while the window is in the background,
 // where the sidebar's mark can't be seen, and a list seen for the first
@@ -22,10 +23,9 @@ import { documentFocused } from "@/lib/focus";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { onWorktreeLists } from "@/lib/viewFeed";
 import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
-import {
-  createExternalStore,
-  useExternalStore,
-} from "@shigomori/ui/lib/externalStore.ts";
+import { useAtomValue } from "@effect/atom-react";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
 // An agent session waiting on you, in a worktree on any device.
 export type WaitingAgent = {
@@ -35,38 +35,40 @@ export type WaitingAgent = {
   session: AgentSession;
 };
 
-// Each list as last seen, by its key: the list itself (the view sends
-// only what differs), its sessions
-// by worktree and session, and its worktrees waiting on you.
-const lastSeen = new Map<
-  string,
-  {
-    list: readonly Worktree[];
-    sessions: Map<string, AgentSession>;
-    waiting: WaitingAgent[];
-  }
->();
+// Every list's sessions waiting on you, longest wait first, which the
+// watch below writes on the page's registry.
+const waitingAgentsAtom = Atom.keepAlive(
+  Atom.make<readonly WaitingAgent[]>([]),
+);
 
-// Every list's sessions waiting on you, longest wait first.
-const waitingStore = createExternalStore<WaitingAgent[]>([]);
-
-export function useWaitingAgents(): WaitingAgent[] {
-  return useExternalStore(waitingStore);
-}
-
-function publishWaiting(): void {
-  waitingStore.publish(
-    [...lastSeen.values()]
-      .flatMap((seen) => seen.waiting)
-      .toSorted((a, b) => a.session.at - b.session.at),
-  );
+export function useWaitingAgents(): readonly WaitingAgent[] {
+  return useAtomValue(waitingAgentsAtom);
 }
 
 // Boot wiring, once per window, like the other boot subscriptions.
 export function startAgentWatch(
   api: RendererApi,
   queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
 ): void {
+  // Each list as last seen, by its key: the list itself (the view sends
+  // only what differs), its sessions by worktree and session, and its
+  // worktrees waiting on you.
+  const lastSeen = new Map<
+    string,
+    {
+      list: readonly Worktree[];
+      sessions: Map<string, AgentSession>;
+      waiting: WaitingAgent[];
+    }
+  >();
+  const publishWaiting = () =>
+    registry.set(
+      waitingAgentsAtom,
+      [...lastSeen.values()]
+        .flatMap((seen) => seen.waiting)
+        .toSorted((a, b) => a.session.at - b.session.at),
+    );
   onWorktreeLists(({ key: listKey, deviceId, list }) => {
     if (list === null) {
       if (lastSeen.delete(listKey)) publishWaiting();
@@ -114,18 +116,20 @@ type Notice = {
 };
 
 function notify(
-  api: Pick<RendererApi, "window">,
+  api: Pick<RendererApi, "window" | "run">,
   { title, body, worktree, deviceId }: Notice,
 ): void {
-  void api.window.notify({
-    title,
-    body: [worktree.title ?? worktree.name, body].filter(Boolean).join("\n"),
-    route: fillRoutePath(WORKTREE_ROUTE_PATHS.detail, {
-      deviceId,
-      projectId: worktree.projectId,
-      worktreeId: worktree.id,
+  void api.run(
+    api.window.notify({
+      title,
+      body: [worktree.title ?? worktree.name, body].filter(Boolean).join("\n"),
+      route: fillRoutePath(WORKTREE_ROUTE_PATHS.detail, {
+        deviceId,
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+      }),
     }),
-  });
+  );
 }
 
 // What a session's change is news of, if anything: it started waiting

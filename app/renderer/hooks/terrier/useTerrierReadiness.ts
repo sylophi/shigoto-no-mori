@@ -6,7 +6,7 @@ export function useTerrierReadiness({ enabled = true } = {}) {
   const { api, keys } = useHostScope();
   return useQuery<TerrierReadiness>({
     queryKey: keys.terrierReadiness(),
-    queryFn: () => api.terrier.readiness(),
+    queryFn: ({ signal }) => api.run(api.terrier.readiness(), { signal }),
     enabled,
     meta: { errorTitle: "Couldn't check the terrier integration" },
   });

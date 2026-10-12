@@ -16,6 +16,7 @@
 import { createAccountService } from "@shared/account/service";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -33,7 +34,7 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, Handlers } from "@shigomori/contracts/types";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import { fetchReleases } from "@shared/releases";
@@ -480,7 +481,23 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   tab.served.serve(accountContract, accountHandlers);
   tab.served.serve(clientConfigContract, clientConfigHandlers);
-  tab.served.serve(hubContract, hubHandlers);
+  // As effects, so a call interrupted in the page (a query superseded
+  // or dropped) cancels it on the peer too. A failure reaches the page
+  // as it does a window's: the contract error, or RemoteCallError with
+  // its message.
+  const hubServed: EffectHandlers<typeof hubContract> = {
+    status: () =>
+      Effect.promise(async () => hubHandlers.status(undefined, undefined)),
+    invokePeer: (hop) =>
+      Effect.tryPromise({
+        try: (signal) =>
+          hubHandlers.invokeOnPeer(hop.deviceId, hop.channel, hop.input, {
+            signal,
+          }),
+        catch: callFailureOf,
+      }),
+  };
+  tab.served.serve(hubContract, hubServed);
   tab.view(hubContract, "watchPeer", (input, observer) =>
     hubHandlers.watchPeer(
       input as Parameters<typeof hubHandlers.watchPeer>[0],

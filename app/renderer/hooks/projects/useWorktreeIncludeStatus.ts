@@ -8,7 +8,10 @@ export function useWorktreeIncludeStatus(projectId: string | null) {
     queryKey: keys.worktreeIncludeStatus(projectId),
     queryFn:
       projectId !== null
-        ? () => api.projects.worktreeIncludeStatus({ projectId })
+        ? ({ signal }) =>
+            api.run(api.projects.worktreeIncludeStatus({ projectId }), {
+              signal,
+            })
         : skipToken,
     // Each fetch spawns two `git ls-files` enumerations on the host. Dampen
     // the global refetch-on-focus/mount so Cmd-Tabbing around while

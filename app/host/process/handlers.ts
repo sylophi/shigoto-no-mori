@@ -122,7 +122,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
-import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
+import type { ClientTransport } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/daemon";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
@@ -740,12 +740,16 @@ export function registerHostHandlers(): void {
         try: async () => hubHandlers().status(undefined, undefined),
         catch: callFailureOf,
       }),
-    invokePeer: (
-      input: Parameters<HubHandlers["invokePeer"]>[0],
-      ctx: HandlerContext,
-    ) =>
+    // A window's call interrupted (a query superseded or dropped)
+    // cancels the call on the peer too, so the peer's work stops.
+    invokePeer: ({
+      deviceId,
+      channel,
+      input,
+    }: Parameters<HubHandlers["invokePeer"]>[0]) =>
       Effect.tryPromise({
-        try: async () => hubHandlers().invokePeer(input, ctx),
+        try: (signal) =>
+          hubHandlers().invokeOnPeer(deviceId, channel, input, { signal }),
         catch: callFailureOf,
       }),
   });

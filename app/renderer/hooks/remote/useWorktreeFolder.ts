@@ -17,8 +17,16 @@ export function useWorktreeFolder(
   const { api, keys } = useHostScope();
   return useQuery<readonly SyncWorktreeFolderEntry[]>({
     queryKey: keys.worktreeFolder(projectId, worktreeId, relative, ruleIgnored),
-    queryFn: () =>
-      api.sync.worktreeFolder({ projectId, worktreeId, relative, ruleIgnored }),
+    queryFn: ({ signal }) =>
+      api.run(
+        api.sync.worktreeFolder({
+          projectId,
+          worktreeId,
+          relative,
+          ruleIgnored,
+        }),
+        { signal },
+      ),
     staleTime: 15_000,
     meta: { errorTitle: "Couldn't read folder" },
   });

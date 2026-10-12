@@ -17,9 +17,11 @@ export function shigomoriConfigQueryOptions(
   const { deviceId, api } = scope;
   return queryOptions<ShigomoriConfig | null>({
     queryKey: queryKeysFor(deviceId).shigomoriConfig(projectId),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!projectId || !api) return null;
-      return forestRead(deviceId, () => api.shigomori.read({ projectId }));
+      return forestRead(deviceId, () =>
+        api.run(api.shigomori.read({ projectId }), { signal }),
+      );
     },
     enabled: projectId !== null && api !== undefined && deviceId !== "",
     meta: { errorTitle: "Couldn't load project config" },

@@ -103,17 +103,21 @@ export function useScriptRunner(
         slot,
         runner: () => {
           if (slot.kind === "package") {
-            return api.packageScripts.run({
+            return api.run(
+              api.packageScripts.run({
+                projectId: worktree.projectId,
+                worktreeId: worktree.id,
+                scriptName: slot.name,
+              }),
+            );
+          }
+          return api.run(
+            api.scripts.run({
               projectId: worktree.projectId,
               worktreeId: worktree.id,
-              scriptName: slot.name,
-            });
-          }
-          return api.scripts.run({
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-            script: lifecycleScriptName(slot),
-          });
+              script: lifecycleScriptName(slot),
+            }),
+          );
         },
       })
       .catch(() => {

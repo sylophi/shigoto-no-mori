@@ -6,6 +6,7 @@ import {
   skipToken,
 } from "@tanstack/react-query";
 import type { BranchList } from "@shigomori/contracts/schemas";
+import type * as Effect from "effect/Effect";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 
@@ -15,7 +16,8 @@ export function useBranches(projectId: string | null) {
     queryKey: keys.branches(projectId),
     queryFn:
       projectId !== null
-        ? () => api.projects.listBranches({ projectId })
+        ? ({ signal }) =>
+            api.run(api.projects.listBranches({ projectId }), { signal })
         : skipToken,
     meta: { errorTitle: "Couldn't list branches" },
   });
@@ -47,14 +49,14 @@ export function useBranchMutation<
   Input extends { projectId: string },
   Result = void,
 >(
-  mutationFn: (api: HostApi, input: Input) => Promise<Result>,
+  mutationFn: (api: HostApi, input: Input) => Effect.Effect<Result, unknown>,
   meta: MutationMeta,
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
   return useMutation<Result, Error, Input>({
-    mutationFn: (input) => mutationFn(api, input),
+    mutationFn: (input) => api.run(mutationFn(api, input)),
     onSuccess: (_data, vars) =>
       invalidateBranchState(queryClient, keys, vars.projectId),
     meta,

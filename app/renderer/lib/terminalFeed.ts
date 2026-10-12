@@ -6,6 +6,7 @@
 // of it.
 import { isUnknownTerminalError } from "@shigomori/contracts/errors";
 import type { TerminalScreen } from "@shigomori/ui/views/terminal/TerminalView.tsx";
+import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 
 // A view not started yet stops nothing.
@@ -15,7 +16,7 @@ const noop = (): void => {};
 const RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 5_000] as const;
 
 export function attachTerminal(
-  api: { readonly terminals: Pick<HostApi["terminals"], "attach"> },
+  api: Pick<HostApi, "view" | "listen">,
   terminalId: string,
   screen: TerminalScreen,
   // The shell exited (its code, null for a signal or a close), or the
@@ -33,43 +34,45 @@ export function attachTerminal(
   const watch = () => {
     current += 1;
     const mine = current;
-    stop = api.terminals.attach(
-      after === undefined ? { terminalId } : { terminalId, after },
-      {
-        value: (event) => {
-          if (mine !== current || stopped) return;
-          attempt = 0;
-          switch (event.kind) {
-            case "history":
-              screen.replay(event.data, event.reset);
-              after = event.seq;
-              return;
-            case "output":
-              if (after !== undefined && event.seq <= after) return;
-              screen.write(event.data);
-              after = event.seq;
-              return;
-            case "size":
-              screen.resize(event.cols, event.rows);
-              return;
-            case "exit":
-              stopped = true;
-              onEnd(event.code);
-              return;
-          }
-        },
-        end: (failure) => {
-          if (mine !== current || stopped) return;
-          if (failure === undefined || isUnknownTerminalError(failure)) {
-            stopped = true;
-            onEnd(null);
+    stop = api.listen(
+      api.view(
+        terminalsContract,
+        "attach",
+        after === undefined ? { terminalId } : { terminalId, after },
+      ),
+      (event) => {
+        if (mine !== current || stopped) return;
+        attempt = 0;
+        switch (event.kind) {
+          case "history":
+            screen.replay(event.data, event.reset);
+            after = event.seq;
             return;
-          }
-          const wait =
-            RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
-          attempt += 1;
-          timer = setTimeout(watch, wait);
-        },
+          case "output":
+            if (after !== undefined && event.seq <= after) return;
+            screen.write(event.data);
+            after = event.seq;
+            return;
+          case "size":
+            screen.resize(event.cols, event.rows);
+            return;
+          case "exit":
+            stopped = true;
+            onEnd(event.code);
+            return;
+        }
+      },
+      (failure) => {
+        if (mine !== current || stopped) return;
+        if (failure === undefined || isUnknownTerminalError(failure)) {
+          stopped = true;
+          onEnd(null);
+          return;
+        }
+        const wait =
+          RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+        attempt += 1;
+        timer = setTimeout(watch, wait);
       },
     );
   };

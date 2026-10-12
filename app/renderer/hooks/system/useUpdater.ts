@@ -27,7 +27,7 @@ import { useApi } from "@/lib/runtime/pageApi";
 function updaterStateQueryOptions(deviceId: string, api: HostApi) {
   return queryOptions<UpdaterState>({
     queryKey: queryKeysFor(deviceId).updaterState(),
-    queryFn: () => api.updater.get(),
+    queryFn: ({ signal }) => api.run(api.updater.get(), { signal }),
     // Never stale: every device's updater:state broadcast is mirrored
     // into its key by its push watch (lib/hostWatch.ts), and a peer's
     // is re-read whenever its session lands, which covers a restart
@@ -68,12 +68,12 @@ export function useUpdater() {
 
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
   const check = useMutation({
-    mutationFn: () => api.updater.check(),
+    mutationFn: () => api.run(api.updater.check()),
     meta: { errorTitle: "Couldn't check for updates" },
   });
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
   const install = useMutation({
-    mutationFn: () => api.updater.install(),
+    mutationFn: () => api.run(api.updater.install()),
     meta: { errorTitle: "Couldn't install the update" },
   });
 
@@ -270,10 +270,10 @@ async function updateDevice(
   device: OutdatedDevice,
 ): Promise<UpdateOutcome> {
   if (device.staged) {
-    await target.api.updater.install();
+    await target.api.run(target.api.updater.install());
     return "installed";
   }
-  await target.api.updater.update();
+  await target.api.run(target.api.updater.update());
   return "armed";
 }
 

@@ -50,7 +50,7 @@ export function WorktreeDetail() {
     // refuse it, and push invalidation plus the sweep requests already
     // keep a peer fresh).
     if (remote) return;
-    void api.git.refreshProject({ projectId });
+    void api.run(api.git.refreshProject({ projectId }));
   }, [projectId, worktreeId, remote, api]);
 
   if (!worktree || !project) {

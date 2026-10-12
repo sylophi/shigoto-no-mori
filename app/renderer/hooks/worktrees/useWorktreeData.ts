@@ -1,3 +1,4 @@
+import { throughCancel } from "@/lib/queryClientOptions";
 import {
   queryOptions,
   useMutation,
@@ -18,7 +19,8 @@ function worktreeDataQueryOptions(
 ) {
   return queryOptions<ShigomoriWorktreeData | null>({
     queryKey: keys.worktreeData(projectId, worktreeId),
-    queryFn: () => api.worktreeData.read({ projectId, worktreeId }),
+    queryFn: ({ signal }) =>
+      api.run(api.worktreeData.read({ projectId, worktreeId }), { signal }),
     meta: { errorTitle: "Couldn't load worktree state" },
   });
 }
@@ -64,15 +66,19 @@ export function useWorktreeDataWrite() {
       // write until its invalidation refetch returns, and a merge over
       // that base would resurrect what the write removed.
       const current =
-        (await queryClient.fetchQuery({
-          ...worktreeDataQueryOptions(api, keys, projectId, worktreeId),
-          staleTime: 0,
-        })) ?? {};
-      await api.worktreeData.write({
-        projectId,
-        worktreeId,
-        data: typeof patch === "function" ? patch(current) : patch,
-      });
+        (await throughCancel(() =>
+          queryClient.fetchQuery({
+            ...worktreeDataQueryOptions(api, keys, projectId, worktreeId),
+            staleTime: 0,
+          }),
+        )) ?? {};
+      await api.run(
+        api.worktreeData.write({
+          projectId,
+          worktreeId,
+          data: typeof patch === "function" ? patch(current) : patch,
+        }),
+      );
       return { projectId, worktreeId };
     },
     onSuccess: ({ projectId, worktreeId }) => {

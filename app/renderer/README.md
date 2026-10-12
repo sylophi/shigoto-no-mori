@@ -34,7 +34,11 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
   (`pageApi.tsx`): the shell's facts, the device id and that api,
   which the entry builds and hands to the boot. React reads it with
   `useApi()`; what the boot starts outside React takes it as a
-  parameter. Nothing reads it off a global.
+  parameter. Nothing reads it off a global. A call on it, or on a
+  device's api (`useHostScope().api`, a peer's), is an effect, run
+  with that api's `run` (a query hands it React Query's `signal`, so
+  a fetch it drops cancels the call); a push or a view is a stream,
+  read with its `listen` or an atom.
 - `lib/`: the rest of the window's own logic (deep links, focus, the
   theme root, toasts, the remote device registry and its sync).
 - `store/`: the page's own state kept outside React (the terminal
@@ -43,5 +47,4 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
 
 A new screen is a view in `@shigomori/ui` with a scene
 (`packages/ui/README.md`), a container here that binds it, a route in
-`router.tsx` when it is a page, and its data from a hook. What is still
-migrating here (the page api's Promise surface) is listed in V3.md, step 7, Leftover mechanisms.
+`router.tsx` when it is a page, and its data from a hook.

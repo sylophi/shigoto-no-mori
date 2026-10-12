@@ -18,7 +18,7 @@ export function useReleases() {
   const api = useApi();
   return useQuery<readonly Release[]>({
     queryKey: queryKeys.releases(),
-    queryFn: () => api.releases.list(),
+    queryFn: ({ signal }) => api.run(api.releases.list(), { signal }),
     staleTime: HALF_HOUR_MS,
     gcTime: HALF_HOUR_MS,
     retry: (failures, error) =>

@@ -23,6 +23,7 @@ import {
 } from "@tanstack/react-query";
 import type { RouterHistory } from "@tanstack/react-router";
 import { RegistryContext } from "@effect/atom-react";
+import { windowContract } from "@shigomori/contracts/modules/window";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { App } from "./App";
 import {
@@ -152,7 +153,7 @@ export function startApp({
 
   // Agent sessions on any device: the waiting ones for the Live page,
   // and on the desktop the notifications.
-  startAgentWatch(api, queryClient);
+  startAgentWatch(api, queryClient, registry);
 
   return { api, registry, queryClient };
 }
@@ -245,7 +246,7 @@ export function mountWindow(
 // dead link reads as reconnecting within the probe's window rather than
 // as connected until the heartbeat gives up.
 function networkChanged(api: RendererApi): void {
-  void api.window.networkChanged().catch(() => undefined);
+  void api.run(api.window.networkChanged()).catch(() => undefined);
 }
 
 // The boot-scope subscriptions about THIS machine's projects. Events
@@ -270,8 +271,8 @@ function startLocalHost(
   // host at boot. Their consoles died with the session that started
   // them, so this toast is the only place the user can find out that a
   // dev server they left running is gone (and its port free again).
-  void api.scripts
-    .orphanReport()
+  void api
+    .run(api.scripts.orphanReport())
     .then(({ stopped }) => {
       if (stopped === 0) return;
       toast.warning(
@@ -302,8 +303,11 @@ function startLocalHost(
     window.addEventListener("focus", onFocus);
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
-    const unsubFocus = api.window.onFocused(onFocus);
-    const unsubBlur = api.window.onBlurred(onBlur);
+    const unsubFocus = api.listen(
+      api.pushes(windowContract, "focused"),
+      onFocus,
+    );
+    const unsubBlur = api.listen(api.pushes(windowContract, "blurred"), onBlur);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("blur", onBlur);

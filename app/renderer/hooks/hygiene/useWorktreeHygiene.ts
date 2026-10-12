@@ -43,7 +43,8 @@ export function useAllProjectHygiene(
   return useQueries({
     queries: projects.map((project) => ({
       queryKey: keys.worktreeHygiene(project.id),
-      queryFn: () => api.hygiene.list({ projectId: project.id }),
+      queryFn: ({ signal }) =>
+        api.run(api.hygiene.list({ projectId: project.id }), { signal }),
       // The sweep costs several git calls per worktree per project, and
       // the app's defaults refetch on every mount and window focus. A
       // window matching the disk cache keeps an alt-tab from re-probing
@@ -84,7 +85,10 @@ export function useWorktreeDiskUsage(
   return useQueries({
     queries: worktrees.map(({ projectId, id }) => ({
       queryKey: keys.worktreeDiskUsage(projectId, id),
-      queryFn: () => api.hygiene.diskUsage({ projectId, worktreeId: id }),
+      queryFn: ({ signal }) =>
+        api.run(api.hygiene.diskUsage({ projectId, worktreeId: id }), {
+          signal,
+        }),
       // Matches the host-side cache TTL, so a remount inside the window
       // reuses the walk instead of paying for it twice.
       staleTime: 60_000,

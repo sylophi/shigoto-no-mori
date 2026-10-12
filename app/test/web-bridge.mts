@@ -4,8 +4,9 @@
 // what lets this run headlessly under node 22: an in-memory
 // localStorage shim, a recording fetch, and no DOM.
 //
-// Asserts: the page api's surface matches buildApi plus peerApi and
-// the preload's scalar facts (so renderer components mount unmodified), the
+// Asserts: the page api's surface is every contract module by name, the
+// runtime's own peerApi, run, listen, pushes and view, and the preload's
+// scalar facts (so renderer components mount unmodified), the
 // localStorage-backed clientConfig store round-trips and heals corrupt
 // JSON, the per-browser deviceId is stable and matches DeviceIdSchema,
 // enroll exchanges the Clerk session token for a credential with
@@ -28,7 +29,9 @@
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { it } from "vitest";
-import { buildApi } from "@shared/ipc/client";
+import { allContractModules } from "@shigomori/contracts/allModules";
+import { nameOf } from "@shigomori/contracts/contract";
+import { gitContract } from "@shigomori/contracts/modules/git";
 import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { createWebBridge, type WebBridgeDeps } from "../web/ipc/register.ts";
 import * as Effect from "effect/Effect";
@@ -91,18 +94,17 @@ const STORED_ENVELOPE = JSON.stringify({
   deviceName: "Stored browser",
 });
 
-it("surface: the bridge's page api has exactly buildApi's namespaces plus peerApi, deviceId, appVersion, clerkPublishableKey, isDev and isElectron", () => {
+it("surface: the bridge's page api has exactly every contract module by name plus peerApi, run, listen, pushes, view, deviceId, appVersion, clerkPublishableKey, isDev and isElectron", () => {
   const bridge = createWebBridge(makeDeps());
-  const dummy = {
-    invoke: () => Promise.resolve(undefined),
-    subscribe: () => () => {},
-  };
-  const golden = buildApi({ host: dummy, client: dummy });
   assert.deepEqual(
     Object.keys(bridge.api).toSorted(),
     [
-      ...Object.keys(golden),
+      ...allContractModules.map(nameOf),
       "peerApi",
+      "run",
+      "listen",
+      "pushes",
+      "view",
       "deviceId",
       "appVersion",
       "clerkPublishableKey",
@@ -145,11 +147,13 @@ it("deviceId: stable across bridges over the same storage, schema-valid, and dis
 it("clientConfig: reads default to {}, writes round-trip through localStorage, and corrupt JSON heals to defaults", async () => {
   const localStorage = memoryStorage();
   const bridge = createWebBridge(makeDeps({ localStorage }));
-  assert.deepEqual(await bridge.api.clientConfig.read(), {});
-  await bridge.api.clientConfig.write({
-    config: { theme: "dark", doubutsu: false },
-  });
-  assert.deepEqual(await bridge.api.clientConfig.read(), {
+  assert.deepEqual(await bridge.api.run(bridge.api.clientConfig.read()), {});
+  await bridge.api.run(
+    bridge.api.clientConfig.write({
+      config: { theme: "dark", doubutsu: false },
+    }),
+  );
+  assert.deepEqual(await bridge.api.run(bridge.api.clientConfig.read()), {
     theme: "dark",
     doubutsu: false,
   });
@@ -159,25 +163,34 @@ it("clientConfig: reads default to {}, writes round-trip through localStorage, a
     "the persisted document drifted from the written config",
   );
   localStorage.setItem("sm.web.clientConfig", "{corrupt");
-  assert.deepEqual(await bridge.api.clientConfig.read(), {});
+  assert.deepEqual(await bridge.api.run(bridge.api.clientConfig.read()), {});
 });
 
 it("stubs: read-classified channels answer structural defaults, the previewTheme allowlist entry resolves, and stub subscriptions unsubscribe cleanly", async () => {
   const bridge = createWebBridge(makeDeps());
   // mutating:false reads stub to structural emptiness.
-  assert.deepEqual(await bridge.api.projects.list(), []);
-  assert.deepEqual(await bridge.api.worktrees.list({ projectId: "p1" }), []);
+  assert.deepEqual(await bridge.api.run(bridge.api.projects.list()), []);
+  assert.deepEqual(
+    await bridge.api.run(bridge.api.worktrees.list({ projectId: "p1" })),
+    [],
+  );
   // Real handler, not a stub, but the same closed answer.
-  assert.equal(await bridge.api.account.acceptsCommands(), false);
+  assert.equal(
+    await bridge.api.run(bridge.api.account.acceptsCommands()),
+    false,
+  );
   // The one allowlisted channel: ThemeProvider fires it per theme
   // change and a browser has no native chrome to sync.
   assert.equal(
-    await bridge.api.window.previewTheme({ theme: "dark" }),
+    await bridge.api.run(bridge.api.window.previewTheme({ theme: "dark" })),
     undefined,
   );
-  const unsubscribe = bridge.api.git.onRefsRefreshed(() => {});
-  assert.equal(typeof unsubscribe, "function");
-  unsubscribe();
+  const stop = bridge.api.listen(
+    bridge.api.pushes(gitContract, "refsRefreshed"),
+    () => {},
+  );
+  assert.equal(typeof stop, "function");
+  stop();
   // The walker itself: optional fields are left out, required ones
   // built, and an arm or a bounded string is only fabricated when
   // allowed.
@@ -230,91 +243,118 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
   // success-shaped stub ({ok:true}, a blank Worktree, undefined, a
   // blank project, a blank runId).
   await assert.rejects(
-    bridge.api.worktrees.delete({ projectId: "p", worktreeId: "w" }),
+    bridge.api.run(
+      bridge.api.worktrees.delete({ projectId: "p", worktreeId: "w" }),
+    ),
     refused,
   );
   await assert.rejects(
-    bridge.api.worktrees.push({ projectId: "p", worktreeId: "w" }),
+    bridge.api.run(
+      bridge.api.worktrees.push({ projectId: "p", worktreeId: "w" }),
+    ),
     refused,
   );
-  await assert.rejects(bridge.api.runtime.nuke(), refused);
-  await assert.rejects(bridge.api.projects.add({ path: "/tmp/x" }), refused);
+  await assert.rejects(bridge.api.run(bridge.api.runtime.nuke()), refused);
   await assert.rejects(
-    bridge.api.scripts.run({
-      projectId: "p",
-      worktreeId: "w",
-      script: "setup",
-    }),
+    bridge.api.run(bridge.api.projects.add({ path: "/tmp/x" })),
+    refused,
+  );
+  await assert.rejects(
+    bridge.api.run(
+      bridge.api.scripts.run({
+        projectId: "p",
+        worktreeId: "w",
+        script: "setup",
+      }),
+    ),
     refused,
   );
   // A read gated on the command-access switch is classified mutating, so
   // it rejects too, which also covers the affirmative-biased enum
   // its output would otherwise stub to (cli.status's first arm is
   // "installed").
-  await assert.rejects(bridge.api.cli.status(), refused);
+  await assert.rejects(bridge.api.run(bridge.api.cli.status()), refused);
   // updater:get IS a classified read (a peer's Settings tab shows
   // that device's update state), but its output is a discriminated
   // union, so the structural stubber refuses it rather than
   // fabricate an "idle" that would claim the browser is up to date.
   // The commands refuse like every other mutation.
   await assert.rejects(
-    bridge.api.updater.get(),
+    bridge.api.run(bridge.api.updater.get()),
     /has no safe empty answer in the browser/,
   );
-  await assert.rejects(bridge.api.updater.check(), refused);
-  await assert.rejects(bridge.api.updater.install(), refused);
-  await assert.rejects(bridge.api.updater.update(), refused);
+  await assert.rejects(bridge.api.run(bridge.api.updater.check()), refused);
+  await assert.rejects(bridge.api.run(bridge.api.updater.install()), refused);
+  await assert.rejects(bridge.api.run(bridge.api.updater.update()), refused);
   // The villager data is local only (the desktop's own device), so
   // a tab refuses every call: it has no device to hold it.
   await Promise.all(
     [
-      bridge.api.villagers.status(),
-      bridge.api.villagers.download(),
-      bridge.api.villagers.cancel(),
-      bridge.api.villagers.remove(),
-      bridge.api.villagers.face({ slug: "ace" }),
-      bridge.api.villagers.profiles(),
+      bridge.api.run(bridge.api.villagers.status()),
+      bridge.api.run(bridge.api.villagers.download()),
+      bridge.api.run(bridge.api.villagers.cancel()),
+      bridge.api.run(bridge.api.villagers.remove()),
+      bridge.api.run(bridge.api.villagers.face({ slug: "ace" })),
+      bridge.api.run(bridge.api.villagers.profiles()),
     ].map((call) => assert.rejects(call, /is not available in the browser/)),
   );
   // The port-forward engine binds real TCP listeners, so its whole
   // client-scoped surface must refuse on the web (the UI never
   // mounts there, gated on isElectron, but the wire is the wall).
-  await assert.rejects(bridge.api.portForward.list(), refused);
+  await assert.rejects(bridge.api.run(bridge.api.portForward.list()), refused);
   await assert.rejects(
-    bridge.api.portForward.start({ deviceId: "d1", remotePort: 3000 }),
+    bridge.api.run(
+      bridge.api.portForward.start({ deviceId: "d1", remotePort: 3000 }),
+    ),
     refused,
   );
   // These are mutating-rejects (remote:true, mutating:true), and
   // the tab's registrar must refuse them: the fs reads because they
   // are gated on the command-access switch, the preference/registry
   // writes and the device-settings write because they are commands.
-  await assert.rejects(bridge.api.fs.listDirectory({ path: "/tmp" }), refused);
   await assert.rejects(
-    bridge.api.fs.scanForGitRepos({ path: "/tmp" }),
-    refused,
-  );
-  await assert.rejects(bridge.api.fs.isGitRepo({ path: "/tmp" }), refused);
-  await assert.rejects(bridge.api.projects.remove({ id: "p1" }), refused);
-  await assert.rejects(
-    bridge.api.packageScripts.setSort({
-      projectId: "p1",
-      mode: "alphabetical",
-    }),
+    bridge.api.run(bridge.api.fs.listDirectory({ path: "/tmp" })),
     refused,
   );
   await assert.rejects(
-    bridge.api.globalConfig.writeDeviceSettings({
-      patch: { githubCli: false },
-    }),
+    bridge.api.run(bridge.api.fs.scanForGitRepos({ path: "/tmp" })),
+    refused,
+  );
+  await assert.rejects(
+    bridge.api.run(bridge.api.fs.isGitRepo({ path: "/tmp" })),
+    refused,
+  );
+  await assert.rejects(
+    bridge.api.run(bridge.api.projects.remove({ id: "p1" })),
+    refused,
+  );
+  await assert.rejects(
+    bridge.api.run(
+      bridge.api.packageScripts.setSort({
+        projectId: "p1",
+        mode: "alphabetical",
+      }),
+    ),
+    refused,
+  );
+  await assert.rejects(
+    bridge.api.run(
+      bridge.api.globalConfig.writeDeviceSettings({
+        patch: { githubCli: false },
+      }),
+    ),
     refused,
   );
   // Peers' command access is reported only from what their dials
   // answered, so with no session there is none to report. A web
   // registrar must never manufacture a verdict.
-  assert.deepEqual((await bridge.api.hub.status()).peerAcceptsCommands, {});
+  assert.deepEqual(
+    (await bridge.api.run(bridge.api.hub.status())).peerAcceptsCommands,
+    {},
+  );
   // The real refuse-all handler names its refusal precisely.
   await assert.rejects(
-    bridge.api.account.setAcceptsCommands(true),
+    bridge.api.run(bridge.api.account.setAcceptsCommands(true)),
     /cannot change command access/,
   );
 });
@@ -325,10 +365,14 @@ it("shell: openExternal reaches the injected opener and showItemInFolder is a ha
     makeDeps({ openExternal: (url) => opened.push(url) }),
   );
   trackTest(() => bridge.stop());
-  await bridge.api.shell.openExternal({ url: "https://example.com/page" });
+  await bridge.api.run(
+    bridge.api.shell.openExternal({ url: "https://example.com/page" }),
+  );
   assert.deepEqual(opened, ["https://example.com/page"]);
   assert.equal(
-    await bridge.api.shell.showItemInFolder({ path: "/somewhere" }),
+    await bridge.api.run(
+      bridge.api.shell.showItemInFolder({ path: "/somewhere" }),
+    ),
     undefined,
   );
 });
@@ -344,7 +388,9 @@ it("shell: what the opener throws reaches the caller as it is", async () => {
   );
   trackTest(() => bridge.stop());
   await assert.rejects(
-    bridge.api.shell.openExternal({ url: "https://example.com/page" }),
+    bridge.api.run(
+      bridge.api.shell.openExternal({ url: "https://example.com/page" }),
+    ),
     (error: unknown) => error === failure,
   );
 });
@@ -409,7 +455,9 @@ it('enroll: exchanges the Clerk session token for a credential with platform "we
   trackTest(() => bridge.stop());
   const deviceId = bridge.api.deviceId;
 
-  const status = await bridge.api.account.enroll(fakeSessionJwt("acct_1"));
+  const status = await bridge.api.run(
+    bridge.api.account.enroll(fakeSessionJwt("acct_1")),
+  );
   assert.equal(status.signedIn, true);
   assert.equal(status.accountId, "acct_1");
 
@@ -427,7 +475,7 @@ it('enroll: exchanges the Clerk session token for a credential with platform "we
   // Auth state survives a "reload": a fresh bridge over the same
   // storage reads the same signed-in status.
   const reloaded = createWebBridge(makeDeps({ localStorage, fetchImpl }));
-  const after = await reloaded.api.account.status();
+  const after = await reloaded.api.run(reloaded.api.account.status());
   assert.equal(after.signedIn, true);
   assert.equal(after.accountId, "acct_1");
 });
@@ -449,7 +497,7 @@ it("sign-out: revokes THIS device on the device hub, clears the envelope, and st
   };
   const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
   trackTest(() => bridge.stop());
-  await bridge.api.account.signOut();
+  await bridge.api.run(bridge.api.account.signOut());
   assert.equal(deletes.length, 1);
   assert.equal(
     deletes[0]?.url,
@@ -462,7 +510,10 @@ it("sign-out: revokes THIS device on the device hub, clears the envelope, and st
     signedOut: true,
     deviceName: "Stored browser",
   });
-  assert.equal((await bridge.api.account.status()).signedIn, false);
+  assert.equal(
+    (await bridge.api.run(bridge.api.account.status())).signedIn,
+    false,
+  );
 
   // The failure path: revoke rejects, local sign-out still lands.
   const second = memoryStorage();
@@ -474,8 +525,11 @@ it("sign-out: revokes THIS device on the device hub, clears the envelope, and st
     }),
   );
   trackTest(() => failing.stop());
-  await failing.api.account.signOut();
-  assert.equal((await failing.api.account.status()).signedIn, false);
+  await failing.api.run(failing.api.account.signOut());
+  assert.equal(
+    (await failing.api.run(failing.api.account.status())).signedIn,
+    false,
+  );
   // The undelivered revoke is parked with its credential, for the
   // next boot's retry (a bridge over the same storage), which
   // delivers it and clears the parking.
@@ -547,11 +601,11 @@ it("enroll and sign-out: a caller arriving while one runs rides it, a failed run
   };
   const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
   trackTest(() => bridge.stop());
-  const { account } = bridge.api;
+  const { account, run } = bridge.api;
 
   // Two at once are one enroll, under the first caller's token.
-  const first = account.enroll(fakeSessionJwt("acct_1"));
-  const second = account.enroll(fakeSessionJwt("acct_2"));
+  const first = run(account.enroll(fakeSessionJwt("acct_1")));
+  const second = run(account.enroll(fakeSessionJwt("acct_2")));
   await waitFor(
     () => enrolls.length === 1,
     "the first enroll to reach the hub",
@@ -565,8 +619,8 @@ it("enroll and sign-out: a caller arriving while one runs rides it, a failed run
   // A refused run fails everyone riding it, and is not kept.
   refuse = true;
   const refused = [
-    account.enroll(fakeSessionJwt("acct_1")),
-    account.enroll(fakeSessionJwt("acct_1")),
+    run(account.enroll(fakeSessionJwt("acct_1"))),
+    run(account.enroll(fakeSessionJwt("acct_1"))),
   ];
   await waitFor(
     () => enrolls.length === 2,
@@ -580,32 +634,32 @@ it("enroll and sign-out: a caller arriving while one runs rides it, a failed run
   );
   assert.equal(enrolls.length, 2, "the refused run was shared");
   refuse = false;
-  const afresh = account.enroll(fakeSessionJwt("acct_1"));
+  const afresh = run(account.enroll(fakeSessionJwt("acct_1")));
   await waitFor(() => enrolls.length === 3, "a fresh enroll after the refusal");
   release?.();
   assert.equal((await afresh).signedIn, true);
 
   // Two sign-outs at once are one revoke.
-  const signOuts = [account.signOut(), account.signOut()];
+  const signOuts = [run(account.signOut()), run(account.signOut())];
   await waitFor(() => revokes === 1, "the sign-out's revoke to reach the hub");
   release?.();
   await Promise.all(signOuts);
   assert.equal(revokes, 1);
-  assert.equal((await account.status()).signedIn, false);
+  assert.equal((await run(account.status())).signedIn, false);
 });
 
 it("unconfigured: status reports configured false, enroll rejects, and the hub refresh leaves the socket stopped", async () => {
   const bridge = createWebBridge(makeDeps({ env: {} }));
   trackTest(() => bridge.stop());
-  const status = await bridge.api.account.status();
+  const status = await bridge.api.run(bridge.api.account.status());
   assert.equal(status.configured, false);
   assert.equal(bridge.api.clerkPublishableKey, "");
   await assert.rejects(
-    bridge.api.account.enroll(fakeSessionJwt("acct_1")),
+    bridge.api.run(bridge.api.account.enroll(fakeSessionJwt("acct_1"))),
     /not configured/,
   );
   await bridge.refreshHub();
-  const hub = await bridge.api.hub.status();
+  const hub = await bridge.api.run(bridge.api.hub.status());
   assert.notEqual(hub.socket.phase, "connecting");
   assert.notEqual(hub.socket.phase, "backoff");
   assert.deepEqual(hub.onlineDeviceIds, []);
@@ -626,7 +680,8 @@ it("refused: a hub 401 on the ticket mint (a credential it no longer honors) blo
   const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
   trackTest(() => bridge.stop());
   await bridge.refreshHub();
-  const socket = async () => (await bridge.api.hub.status()).socket;
+  const socket = async () =>
+    (await bridge.api.run(bridge.api.hub.status())).socket;
   await waitFor(
     async () => (await socket()).phase === "blocked",
     "the blocked socket phase",
@@ -656,7 +711,8 @@ it("revoked: the hub's typed revoked refusal on the mint blocks as REVOKED, the 
   const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
   trackTest(() => bridge.stop());
   await bridge.refreshHub();
-  const socket = async () => (await bridge.api.hub.status()).socket;
+  const socket = async () =>
+    (await bridge.api.run(bridge.api.hub.status())).socket;
   await waitFor(
     async () => (await socket()).phase === "blocked",
     "the blocked socket phase",
@@ -683,7 +739,8 @@ it("update required: the hub's version floor on the mint blocks as update-requir
   const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
   trackTest(() => bridge.stop());
   await bridge.refreshHub();
-  const socket = async () => (await bridge.api.hub.status()).socket;
+  const socket = async () =>
+    (await bridge.api.run(bridge.api.hub.status())).socket;
   await waitFor(
     async () => (await socket()).phase === "blocked",
     "the blocked socket phase",

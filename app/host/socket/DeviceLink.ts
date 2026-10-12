@@ -187,9 +187,11 @@ const SWITCHES = new Set([
   COMMAND_ACCESS_CHANGED,
 ]);
 
-// A channel's numbered calls, which hold no place under the in-flight
-// cap: the channel bounds them.
-const CHANNEL_CALLS = new Set(["link:read", "link:write"]);
+// Calls that hold no place under the in-flight cap: a channel's
+// numbered calls, which the channel bounds, and the link's ping, which
+// answers at once and must, or a link with a full cap would read as
+// dropped (a wake's probe, shared/remote/deviceLink.ts).
+const UNCOUNTED_CALLS = new Set(["link:read", "link:write", "link:ping"]);
 
 export type WsServerStartOpts = {
   port: number;
@@ -798,11 +800,12 @@ export const make = (options: {
               return Effect.fail(new LinkUnauthenticatedError());
             }
             // A stream (a push, a view) lives as long as its reader
-            // wants it, and a channel's bytes are bounded per channel
-            // (CHANNEL_CALLS_IN_FLIGHT), so neither holds a place.
+            // wants it, a channel's bytes are bounded per channel
+            // (CHANNEL_CALLS_IN_FLIGHT), and a ping answers at once,
+            // so none holds a place.
             const call = rpc as ContractCall;
             const streaming =
-              !isInvoke(call) || CHANNEL_CALLS.has(channelOf(call));
+              !isInvoke(call) || UNCOUNTED_CALLS.has(channelOf(call));
             if (!streaming && connection.inFlight >= MAX_IN_FLIGHT_PER_PEER) {
               return Effect.fail(
                 new RemoteCallError({ text: "too many in-flight requests" }),

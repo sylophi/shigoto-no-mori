@@ -36,7 +36,7 @@ export function useClerkSignOut() {
       let accountSignedOut = false;
       const signOutAccount = async (): Promise<void> => {
         accountSignedOut = true;
-        await api.account.signOut();
+        await api.run(api.account.signOut());
       };
       await clerk.signOut(signOutAccount);
       if (!accountSignedOut) await signOutAccount();

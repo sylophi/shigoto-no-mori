@@ -6,14 +6,18 @@ import { notifyError } from "@/lib/toast";
 // it lives (main/electron/windows.ts). Desktop only: a browser tab is
 // already one of as many as the user opens.
 export function openWorktreeInNewWindow(
-  api: Pick<RendererApi, "window">,
+  api: Pick<RendererApi, "window" | "run">,
   target: {
     readonly deviceId: string;
     readonly projectId: string;
     readonly worktreeId: string;
   },
 ): void {
-  api.window
-    .open({ route: fillRoutePath(WORKTREE_ROUTE_PATHS.detail, target) })
+  api
+    .run(
+      api.window.open({
+        route: fillRoutePath(WORKTREE_ROUTE_PATHS.detail, target),
+      }),
+    )
     .catch((err: unknown) => notifyError("Couldn't open a new window", err));
 }

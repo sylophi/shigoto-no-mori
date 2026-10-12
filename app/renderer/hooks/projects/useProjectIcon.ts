@@ -23,7 +23,10 @@ export function projectIconQueryOptions(
     queryFn:
       api === undefined
         ? skipToken
-        : () => forestRead(deviceId, () => api.projects.icon({ projectId })),
+        : ({ signal }) =>
+            forestRead(deviceId, () =>
+              api.run(api.projects.icon({ projectId }), { signal }),
+            ),
     retry: false,
     staleTime: Infinity,
     gcTime: Infinity,

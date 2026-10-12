@@ -24,8 +24,8 @@ export function WorktreeActivityIndicator({
     // re-asks for the PR alone. A failed fetch leaves the lists
     // as they were, which the next sweep catches up.
     if (!remote) {
-      api.git
-        .refreshProject({ projectId: worktree.projectId })
+      api
+        .run(api.git.refreshProject({ projectId: worktree.projectId }))
         .catch(() => undefined);
     }
     if (!worktree.detached) {

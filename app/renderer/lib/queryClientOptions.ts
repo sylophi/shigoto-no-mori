@@ -3,7 +3,12 @@
 // branch that must run ahead of the silentError opt-out are platform
 // independent, and hand-copying them is exactly how the web boot once
 // dropped the refusal branch, so both boots build their client here.
-import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
+import {
+  isCancelledError,
+  MutationCache,
+  QueryCache,
+  QueryClient,
+} from "@tanstack/react-query";
 import {
   isCommandRefusedError,
   isEntityGoneError,
@@ -21,6 +26,16 @@ declare module "@tanstack/react-query" {
     queryMeta: { silentError?: boolean; errorTitle?: string };
     mutationMeta: { silentError?: boolean; errorTitle?: string };
   }
+}
+
+// A read outside React (fetchQuery, ensureQueryData) of a query a page
+// may be fetching too. Each query hands its call React Query's signal,
+// so when the last page reading it goes, the fetch is cancelled and its
+// call with it; a caller that joined that fetch asks again.
+export function throughCancel<A>(read: () => Promise<A>): Promise<A> {
+  return read().catch((error: unknown) =>
+    isCancelledError(error) ? throughCancel(read) : Promise.reject(error),
+  );
 }
 
 // The meta for a host read a peer serves only behind its command

@@ -16,6 +16,7 @@
 // Run: pnpm test web-tabs.
 import assert from "node:assert/strict";
 import { it } from "vitest";
+import { hubContract } from "@shigomori/contracts/modules/hub";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
 import { LISTENER, startDirectListener } from "./lib/directBoot.mts";
@@ -115,16 +116,19 @@ async function boot() {
 
 // The tab's call to the host, over its own link.
 const echo = (tab: WebBridge, value: string) =>
-  tab.api.hub.invokePeer({
-    deviceId: LISTENER,
-    channel: ECHO,
-    input: { projectId: value },
-  });
+  tab.api.run(
+    tab.api.hub.invokePeer({
+      deviceId: LISTENER,
+      channel: ECHO,
+      input: { projectId: value },
+    }),
+  );
 
 const linked = (tab: WebBridge) =>
   waitFor(
     async () =>
-      (await tab.api.hub.status()).peerAppVersions[LISTENER] !== undefined,
+      (await tab.api.run(tab.api.hub.status())).peerAppVersions[LISTENER] !==
+      undefined,
     "the tab to link to the host",
   );
 
@@ -137,16 +141,19 @@ it("two tabs of one profile each link to the host, call it and hear its pushes",
   assert.equal(first.api.deviceId, second.api.deviceId);
   // Neither tab's hub socket ended the other's.
   for (const each of [first, second]) {
-    // oxlint-disable-next-line no-await-in-loop -- two tabs, order does not matter
-    assert.equal((await each.api.hub.status()).socket.phase, "connected");
+    assert.equal(
+      // oxlint-disable-next-line no-await-in-loop -- two tabs, order does not matter
+      (await each.api.run(each.api.hub.status())).socket.phase,
+      "connected",
+    );
   }
   assert.equal(await echo(first, "first"), "first");
   assert.equal(await echo(second, "second"), "second");
   const heard = { first: 0, second: 0 };
-  first.api.hub.onPeerPush((push) => {
+  first.api.listen(first.api.pushes(hubContract, "peerPush"), (push) => {
     if (push.channel === PUSH) heard.first += 1;
   });
-  second.api.hub.onPeerPush((push) => {
+  second.api.listen(second.api.pushes(hubContract, "peerPush"), (push) => {
     if (push.channel === PUSH) heard.second += 1;
   });
   await waitFor(() => {
@@ -155,7 +162,10 @@ it("two tabs of one profile each link to the host, call it and hear its pushes",
   }, "both tabs to hear the host's push");
   // The first tab's link outlived the second's arrival.
   assert.equal(await echo(first, "still"), "still");
-  assert.equal((await first.api.hub.status()).socket.phase, "connected");
+  assert.equal(
+    (await first.api.run(first.api.hub.status())).socket.phase,
+    "connected",
+  );
 });
 
 it("a tab reloading leaves its sibling linked", async () => {

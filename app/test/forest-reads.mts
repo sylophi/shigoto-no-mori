@@ -10,6 +10,7 @@
 //
 // Run: pnpm test forest-reads.
 import assert from "node:assert/strict";
+import * as Effect from "effect/Effect";
 import { it } from "vitest";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import type { HostApi } from "@/hooks/remote/useHostScope";
@@ -22,16 +23,18 @@ import { repoDescriptionQueryOptions } from "@/hooks/projects/useRepoDescription
 // are out at once.
 function countingApi(fail: (projectId: string) => boolean = () => false) {
   const counts = { now: 0, peak: 0, calls: 0 };
-  const answer = async <A,>(projectId: string, value: A) => {
-    counts.now += 1;
-    counts.calls += 1;
-    counts.peak = Math.max(counts.peak, counts.now);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    counts.now -= 1;
-    if (fail(projectId)) throw new Error(`no ${projectId}`);
-    return value;
-  };
+  const answer = <A,>(projectId: string, value: A): Effect.Effect<A, unknown> =>
+    Effect.promise(async () => {
+      counts.now += 1;
+      counts.calls += 1;
+      counts.peak = Math.max(counts.peak, counts.now);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      counts.now -= 1;
+      if (fail(projectId)) throw new Error(`no ${projectId}`);
+      return value;
+    });
   const api = {
+    run: (effect) => Effect.runPromise(effect),
     githubCli: {
       projectPullRequests: ({ projectId }: { projectId: string }) =>
         answer(projectId, {}),
@@ -60,8 +63,10 @@ const readAll = (api: HostApi, deviceId: string, projects: number) =>
           projectIconQueryOptions(projectId, { deviceId, api }),
           repoDescriptionQueryOptions(projectId, { deviceId, api }),
         ].map((options) => {
-          const read = options.queryFn as () => Promise<unknown>;
-          return read();
+          const read = options.queryFn as (context: {
+            signal: AbortSignal;
+          }) => Promise<unknown>;
+          return read({ signal: new AbortController().signal });
         }),
     ),
   );

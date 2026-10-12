@@ -53,7 +53,8 @@ import {
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { CommandRefusedError } from "@shigomori/contracts/errors";
-import { buildClient } from "@shared/ipc/buildClient";
+import { effectClient } from "@shared/ipc/effectClient";
+import type { EffectClient } from "@shigomori/contracts/types";
 import {
   type SyncCloneInto,
   syncContract,
@@ -109,6 +110,7 @@ import {
   DIALER,
   type DirectWire,
   LISTENER,
+  linkOver,
 } from "./lib/directBoot.mts";
 import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { addProject, secondEngine } from "./lib/smBinary.mts";
@@ -265,8 +267,8 @@ let sourceProjectId: string;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
-let sync: ReturnType<typeof buildClient<typeof syncContract>>;
-let worktreesOverWire: ReturnType<typeof buildClient<typeof worktreesContract>>;
+let sync: EffectClient<typeof syncContract>;
+let worktreesOverWire: EffectClient<typeof worktreesContract>;
 let dirtyRef: string;
 let observed: ReturnType<typeof observedChannels>;
 let worktreeRef: { projectId: string; worktreeId: string };
@@ -369,8 +371,11 @@ beforeAll(async () => {
       [worktreesContract, worktreesHandlers],
     ],
   }));
-  sync = buildClient(syncContract, toListener.transport);
-  worktreesOverWire = buildClient(worktreesContract, toListener.transport);
+  sync = effectClient(syncContract, linkOver(toListener.transport));
+  worktreesOverWire = effectClient(
+    worktreesContract,
+    linkOver(toListener.transport),
+  );
   dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
 
   // The peer as the orchestrations reach it: the sync surface plus
@@ -436,7 +441,10 @@ it("ungranted peer: openSource, receiveBundle, receiveWorktree and worktrees:del
   // The transplant teardown rides the same gate: worktrees:delete over
   // the wire is refused typed for an ungranted peer too.
   await assert.rejects(
-    () => worktreesOverWire.delete({ projectId: sourceProjectId, worktreeId }),
+    () =>
+      runHost(
+        worktreesOverWire.delete({ projectId: sourceProjectId, worktreeId }),
+      ),
     (error) => error instanceof CommandRefusedError,
   );
 });
@@ -470,10 +478,12 @@ it("a capture over the link snapshots the worktree to its capture ref with its t
   );
   assert.ok(captured.includes("dirty.txt"), "the dirt is captured");
   assert.ok(!captured.includes("secret.env"), "the ignored file is not");
-  const ignored = await sync.ignoredPaths({
-    projectId: sourceProjectId,
-    worktreeId,
-  });
+  const ignored = await runHost(
+    sync.ignoredPaths({
+      projectId: sourceProjectId,
+      worktreeId,
+    }),
+  );
   assert.deepEqual(ignored, {
     paths: ["secret.env"],
     patterns: ["secret.env"],
@@ -584,12 +594,13 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
   const mux = await toListener.channels();
   const manualLink = async (channelId = mintHexId()) => {
     const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
-    await sync.openSource({ ...worktreeRef, channelId });
+    await runHost(sync.openSource({ ...worktreeRef, channelId }));
     return { channelId, link };
   };
   const first = await manualLink();
   await assert.rejects(
-    () => sync.openSource({ ...worktreeRef, channelId: first.channelId }),
+    () =>
+      runHost(sync.openSource({ ...worktreeRef, channelId: first.channelId })),
     /channel-taken/,
   );
   first.link.end();
