@@ -18,6 +18,7 @@ import {
   given,
   resolveProject,
   resolveWorktree,
+  rest,
   worktreeFlags,
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
@@ -93,7 +94,7 @@ const removeFlags = {
 const target = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
-  rest: Argument.String("args").pipe(Argument.variadic()),
+  rest,
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");

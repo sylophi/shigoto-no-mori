@@ -56,7 +56,7 @@ import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
 import { doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
-import { bindCaller } from "./here.ts";
+import * as Here from "./here.ts";
 import { goArgs } from "./argv.ts";
 import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
@@ -103,7 +103,7 @@ const loaded = <Name extends string, Input, E, R>(
   command: Command.Command<Name, Input, {}, E, R>,
 ) =>
   command.pipe(
-    Command.provideEffectDiscard(bindCaller),
+    Command.provideEffectDiscard(Here.bindCaller),
     Command.provide(services),
   );
 const sm = Command.make("sm").pipe(
@@ -165,7 +165,11 @@ const program = goArgs(sm, canonical(rest)).pipe(
   // (help.ts), answered before parsing, and a command line the parser
   // refuses reports as Go's did, without the parser's help page.
   Effect.provide(
-    Layer.merge(BunServices.layer, CliConfig.layer({ builtIns: [] })),
+    Layer.mergeAll(
+      BunServices.layer,
+      CliConfig.layer({ builtIns: [] }),
+      Here.layer,
+    ),
   ),
   Effect.provideService(Console.Console, { ...console, log: () => {} }),
   Effect.as({ code: 0, error: undefined as unknown }),

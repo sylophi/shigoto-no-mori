@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
-import { resolveWorktree, worktreeFlags } from "../here.ts";
+import { resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import {
   alignRows,
   collapseHome,
@@ -179,7 +179,7 @@ export const status = Command.make(
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
     // The first is read and the rest let be, as the Go sm did.
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
     noPr: Flag.Boolean("no-pr").pipe(
       Flag.withDescription("Skip the pull request lookup"),
       Flag.withDefault(false),

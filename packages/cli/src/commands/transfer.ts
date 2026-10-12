@@ -31,7 +31,7 @@ const transferFlags = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
   // The first positional is read and the rest let be, as the Go sm did.
-  rest: Argument.String("args").pipe(Argument.variadic()),
+  rest,
   to: Flag.String("to").pipe(
     Flag.withDescription("The device it goes to"),
     Flag.optional,
@@ -162,7 +162,7 @@ export const unmirror = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
-    rest: Argument.String("args").pipe(Argument.variadic()),
+    rest,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
       Flag.withDescription("Stop it even if the two sides aren't in step"),

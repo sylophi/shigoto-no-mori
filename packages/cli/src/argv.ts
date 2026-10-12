@@ -11,7 +11,8 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import type * as Command from "effect/cli/Command";
 import * as Param from "effect/cli/Param";
-import { UsageError } from "./errors.ts";
+import { unknownCommand, UsageError } from "./errors.ts";
+import { Output } from "./output.ts";
 
 type Flag = {
   readonly name: string;
@@ -54,21 +55,53 @@ const declared = (
   throw new Error(`effect/cli no longer exposes ${command.name}'s flags`);
 };
 
+type Flags = ReadonlyMap<string, Flag>;
+
+const index = (params: ReadonlyArray<Param.Any>, into: Map<string, Flag>) => {
+  for (const flag of params.map((param) => flagOf(param))) {
+    for (const name of [flag.name, ...flag.aliases]) into.set(name, flag);
+  }
+  return into;
+};
+
 // Every flag the command at the end of `chain` reads, by name and alias:
 // its own and the ones its ancestors share.
-const flagsOf = (chain: ReadonlyArray<Command.Command.Any>) => {
-  const index = new Map<string, Flag>();
-  for (const [i, command] of chain.entries()) {
-    const params = [
-      ...(i === chain.length - 1 ? declared(command, "config") : []),
-      ...declared(command, "contextConfig"),
-    ];
-    for (const flag of params.map((param) => flagOf(param))) {
-      for (const name of [flag.name, ...flag.aliases]) index.set(name, flag);
+const flagsOf = (chain: ReadonlyArray<Command.Command.Any>): Flags =>
+  chain.reduce(
+    (into, command, i) =>
+      index(
+        [
+          ...(i === chain.length - 1 ? declared(command, "config") : []),
+          ...declared(command, "contextConfig"),
+        ],
+        into,
+      ),
+    new Map<string, Flag>(),
+  );
+
+// Every flag a namespace and the commands under it read: the one spec
+// Go's dispatcher parsed them all with.
+const namespaceFlags = (chain: ReadonlyArray<Command.Command.Any>): Flags => {
+  const into = new Map(flagsOf(chain));
+  const under = (command: Command.Command.Any): void => {
+    for (const { commands } of command.subcommands) {
+      for (const each of commands) {
+        index(
+          [...declared(each, "config"), ...declared(each, "contextConfig")],
+          into,
+        );
+        under(each);
+      }
     }
-  }
-  return index;
+  };
+  under(chain[chain.length - 1] as Command.Command.Any);
+  return into;
 };
+
+// The namespaces whose Go dispatcher parsed the flags first and took its
+// verb from the first positional (cmdConfigGlobal, cmdConfig). Every
+// other took it from the first argument, a flag included.
+const FLAGS_FIRST = new Set(["config", "projects config"]);
 
 const subcommand = (command: Command.Command.Any, word: string) =>
   command.subcommands
@@ -86,61 +119,31 @@ const split = (arg: string) => {
     : { name: name.slice(0, eq), inline: name.slice(eq + 1) };
 };
 
-// The command line under `root` (its words after the binary's) as
-// effect/cli is to read it, or the Go sm's refusal.
-export const goArgs = (
-  root: Command.Command.Any,
-  args: ReadonlyArray<string>,
-): Effect.Effect<ReadonlyArray<string>, UsageError> =>
+const refuse = (problem: string) => Effect.fail(new UsageError({ problem }));
+
+// Go's parseCmdArgs: the flags `tokens` give, by name, and the
+// positionals between them.
+const parse = (tokens: ReadonlyArray<string>, flags: Flags) =>
   Effect.suspend(() => {
-    const end = args.indexOf("--");
-    const tokens = end === -1 ? [...args] : args.slice(0, end);
-    const after = end === -1 ? [] : args.slice(end + 1);
-
-    // The command: each level's first positional, while it names one of
-    // that level's subcommands.
-    const chain = [root];
-    const path: string[] = [];
-    for (;;) {
-      const level = chain[chain.length - 1] as Command.Command.Any;
-      if (level.subcommands.length === 0) break;
-      const flags = flagsOf(chain);
-      let i = 0;
-      while (i < tokens.length && isFlag(tokens[i] as string)) {
-        const { name, inline } = split(tokens[i] as string);
-        i += flags.get(name)?.valued === true && inline === undefined ? 2 : 1;
-      }
-      const word = tokens[i];
-      const next = word === undefined ? undefined : subcommand(level, word);
-      if (next === undefined) break;
-      chain.push(next);
-      path.push(next.name);
-      tokens.splice(i, 1);
-    }
-
-    const flags = flagsOf(chain);
     const values = new Map<string, string[] | true>();
     const positionals: string[] = [];
+    // Where the first positional is, -1 without one.
+    let first = -1;
     for (let i = 0; i < tokens.length; i++) {
       const arg = tokens[i] as string;
       if (!isFlag(arg)) {
+        if (first === -1) first = i;
         positionals.push(arg);
         continue;
       }
       const { name, inline } = split(arg);
       const flag = flags.get(name);
       if (flag === undefined) {
-        return Effect.fail(
-          new UsageError({ problem: `Unknown option ${JSON.stringify(arg)}.` }),
-        );
+        return refuse(`Unknown option ${JSON.stringify(arg)}.`);
       }
       if (!flag.valued) {
         if (inline !== undefined) {
-          return Effect.fail(
-            new UsageError({
-              problem: `Option ${JSON.stringify(arg)} takes no value.`,
-            }),
-          );
+          return refuse(`Option ${JSON.stringify(arg)} takes no value.`);
         }
         values.set(flag.name, true);
         continue;
@@ -149,11 +152,7 @@ export const goArgs = (
       if (value === undefined) {
         i++;
         if (i >= tokens.length) {
-          return Effect.fail(
-            new UsageError({
-              problem: `Option ${JSON.stringify(arg)} requires a value.`,
-            }),
-          );
+          return refuse(`Option ${JSON.stringify(arg)} requires a value.`);
         }
         value = tokens[i] as string;
       }
@@ -163,19 +162,61 @@ export const goArgs = (
         flag.list && Array.isArray(held) ? [...held, value] : [value],
       );
     }
-    positionals.push(...after);
+    return Effect.succeed({ values, positionals, first });
+  });
 
-    const flagArgs = [...values].flatMap(([name, value]) =>
-      value === true
-        ? [`--${name}=true`]
-        : value.map((each) => `--${name}=${each}`),
-    );
+// The command line under `root` (its words after the binary's) as
+// effect/cli is to read it, or the Go sm's refusal.
+export const goArgs = (
+  root: Command.Command.Any,
+  args: ReadonlyArray<string>,
+) =>
+  Effect.gen(function* () {
+    const { binaryName } = yield* Effect.service(Output);
+    const end = args.indexOf("--");
+    const tokens = end === -1 ? [...args] : args.slice(0, end);
+    const after = end === -1 ? [] : args.slice(end + 1);
+
+    // The command, a level at a time. A flags-first namespace's flags
+    // stay valid down to its verb, which reads those it knows.
+    const chain = [root];
+    const path: string[] = [];
+    let spec: Flags | undefined;
+    for (;;) {
+      const level = chain[chain.length - 1] as Command.Command.Any;
+      if (level.subcommands.length === 0) break;
+      let at = 0;
+      if (FLAGS_FIRST.has(path.join(" "))) {
+        spec = namespaceFlags(chain);
+        at = (yield* parse(tokens, spec)).first;
+        if (at === -1) break;
+      }
+      const word = tokens[at];
+      if (word === undefined) break;
+      const next = subcommand(level, word);
+      if (next === undefined) {
+        return yield* refuse(unknownCommand(path, word, binaryName));
+      }
+      chain.push(next);
+      path.push(next.name);
+      tokens.splice(at, 1);
+    }
+
+    const own = flagsOf(chain);
+    const { values, positionals } = yield* parse(tokens, spec ?? own);
+    positionals.push(...after);
+    const flagArgs = [...values]
+      .filter(([name]) => own.has(name))
+      .flatMap(([name, value]) =>
+        value === true
+          ? [`--${name}=true`]
+          : value.map((each) => `--${name}=${each}`),
+      );
     // Past `--`, effect/cli reads a positional as it is, as only a flag
-    // could be read otherwise. Before it, a word may still be a level's
-    // unknown subcommand.
-    return Effect.succeed([
+    // could be read otherwise.
+    return [
       ...path,
       ...flagArgs,
       ...(positionals.some(isFlag) ? ["--", ...positionals] : positionals),
-    ]);
+    ];
   });

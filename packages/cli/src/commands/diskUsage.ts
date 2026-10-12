@@ -26,7 +26,7 @@ export const diskUsage = Command.make(
         Effect.map(absolute(each), normalize),
       );
       const usage = yield* (yield* Hygiene.Hygiene).measure(
-        yield* absolute(path),
+        normalize(yield* absolute(path)),
         exclude,
       );
       if (json) return yield* emit(usage);

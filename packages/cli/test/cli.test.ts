@@ -1345,6 +1345,48 @@ describe("the Go sm's command line", () => {
     assert.equal((all.doc as ReadonlyArray<unknown>).length, 3);
   });
 
+  it("names a mistyped verb as Go's dispatchers did, flags or not", async () => {
+    const projects =
+      "Usage: smd projects <list|add|remove|relocate|reorder|config|icon> [args]";
+    const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
+      [["projects", "ad", "--all"], `Unknown subcommand "ad". ${projects}`],
+      [
+        ["projects", "bogus", "--", "-x"],
+        `Unknown subcommand "bogus". ${projects}`,
+      ],
+      [
+        ["agents", "--harness", "claude", "status"],
+        'Unknown subcommand "--harness". Usage: smd agents <bind|unbind|idle|resume|install|uninstall|status> [args]',
+      ],
+      [
+        ["config", "lst", "--data", "x"],
+        'Unknown subcommand "lst". Usage: smd config <list|get|set|unset|edit|launcher> [args]',
+      ],
+      // The config namespaces parsed every flag first.
+      [["config", "lst", "--bogus"], 'Unknown option "--bogus".'],
+    ];
+    const runs = await Promise.all(
+      refusals.map(([args]) => start(box.home, args).ended),
+    );
+    runs.forEach((run, i) => {
+      const [args, said] = refusals[i] as (typeof refusals)[number];
+      assert.equal(run.code, 2, args.join(" "));
+      assert.equal(run.stderr, `smd: ${said}\n`, args.join(" "));
+    });
+    // So a config verb's flag may come before the verb.
+    box.write("registry.json", { projects: [] });
+    const written = await runAt(
+      box.home,
+      "config",
+      "--data",
+      '{"launchScripts": false}',
+      "write",
+    );
+    assert.equal(written.code, 0, written.stderr);
+    const got = await runAt(box.home, "config", "get", "launchScripts");
+    assert.equal(got.stdout, "false\n");
+  });
+
   it("hands `wt` a flag before the name, as switch's", async () => {
     const { fox } = fixture();
     const cdFile = join(box.home, "cd");
