@@ -1,14 +1,13 @@
 // The page's api, reached from outside the page (the harness, the
-// guide eval, a script on a debugging port): what a dev build, the fake
-// host or an app started with --sm-lab hands over as window.__smLab
+// guide eval): what a dev build, the fake host or an app started with
+// --sm-lab hands over as window.__smLab
 // (renderer/lib/runtime/labHandle.ts).
 import type { JSHandle, Page } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 
 // Runs in the page, so it is self-contained: Playwright sends its
-// source, and `${findPageApi}` is the same source for a raw
-// Runtime.evaluate. Throws until the window has handed it over.
-export function findPageApi(): RendererApi {
+// source. Throws until the window has handed it over.
+function findPageApi(): RendererApi {
   const api = window.__smLab?.api;
   if (api === undefined) throw new Error("no page api in this window yet");
   return api;
