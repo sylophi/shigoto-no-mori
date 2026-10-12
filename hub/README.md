@@ -329,13 +329,14 @@ Frontend API with an `Authorization` header, which Clerk rejects from
 an origin it does not know (`origin_authorization_headers_conflict`,
 the same rule browser extensions hit). Add the renderer origins to
 the instance's `allowed_origins` once per instance (prod and dev's, and
-the test build's on the instance it points at):
+the v3 build's on the instance it points at, until v3 merges into
+main):
 
 ```sh
 curl -X PATCH https://api.clerk.com/v1/instance \
   -H "Authorization: Bearer <CLERK_SECRET_KEY>" \
   -H "Content-type: application/json" \
-  -d '{"allowed_origins": ["shigomori://app", "shigomori-dev://app", "shigomori-test://app"]}'
+  -d '{"allowed_origins": ["shigomori://app", "shigomori-dev://app", "shigomori-v3://app"]}'
 ```
 
 Without it, desktop sign-in fails on every Frontend API call after the

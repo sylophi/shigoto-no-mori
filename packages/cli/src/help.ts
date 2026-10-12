@@ -541,7 +541,7 @@ function section(
 export type HelpLook = {
   readonly names: Names;
   // The build that isn't prod (test, dev), which the title names.
-  readonly unshipped: "test" | "dev" | null;
+  readonly unshipped: "v3" | "dev" | null;
   readonly color: boolean;
   // The terminal's width, clamped.
   readonly columns: number;
