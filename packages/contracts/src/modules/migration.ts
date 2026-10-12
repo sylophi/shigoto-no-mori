@@ -14,5 +14,8 @@ export const migrationContract = defineContract(
   "client",
   invoke("read", VoidSchema, Schema.NullOr(MigrationSchema)),
   invoke("continue", VoidSchema, VoidSchema),
+  // The stuck moves tried again, once what held them is closed. The
+  // move's step reports it as it goes.
+  invoke("retry", VoidSchema, VoidSchema),
   push("changed", Schema.NullOr(MigrationSchema)),
 );

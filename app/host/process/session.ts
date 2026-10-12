@@ -22,6 +22,7 @@ import {
   registerHostHandlers,
 } from "./handlers";
 import * as Shell from "@host/lib/Shell";
+import * as WtFolder from "@shigomori/engine/WtFolder";
 import {
   broadcastAll,
   probeRemoteConnections,
@@ -88,6 +89,12 @@ export function startHost(options: {
         }).pipe(
           Effect.mapError(callFailureOf),
           Effect.catchDefect((defect) => Effect.fail(callFailureOf(defect))),
+        ),
+      ),
+    migrationRetry: () =>
+      onRoot(() =>
+        Graph.run(
+          Effect.flatMap(WtFolder.WtFolder, (folder) => folder.retryStuck),
         ),
       ),
     imageHosts: () => onRoot(() => Graph.run(projectImageHosts)),

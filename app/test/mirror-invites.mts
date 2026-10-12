@@ -106,6 +106,7 @@ function standInStore(seed: readonly MirrorInvite[] = [], broken = false) {
   const unmoved = WtFolder.WtFolder.of({
     drain: Effect.void,
     unmoved: Effect.succeed([]),
+    retryStuck: Effect.void,
     retry: () => Effect.succeed([]),
     movedTo: () => Effect.succeed(Option.none()),
     movedIds: Effect.succeed(new Map()),

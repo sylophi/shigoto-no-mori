@@ -46,6 +46,10 @@ export class WtFolder extends Context.Service<
     // Every recorded move not made yet.
     readonly drain: Effect.Effect<void>;
     readonly unmoved: Effect.Effect<ReadonlyArray<Unmoved>>;
+    // The migration's stuck moves tried again, reported as the first
+    // start's were: one moved comes off the stuck list, one that still
+    // can't move goes back on it with why.
+    readonly retryStuck: Effect.Effect<void>;
     // Tries the moves of one project again. Answers the ones still
     // unmade.
     readonly retry: (
@@ -397,6 +401,27 @@ const make = Effect.gen(function* () {
     }));
   }).pipe(Effect.withSpan("WtFolder.drain"));
 
+  const retryStuck = Effect.gen(function* () {
+    const stuck = (yield* migrationRows.pipe(Effect.orDie)).filter(
+      (row) => row.moved === 0 && row.error !== null,
+    );
+    if (stuck.length === 0) return;
+    yield* moving((step) => ({
+      ...step,
+      state: "running",
+      current: null,
+      stuck: [],
+    }));
+    for (const projectId of new Set(stuck.map((row) => row.project_id))) {
+      yield* moveProject(projectId, true, report);
+    }
+    yield* moving((step) => ({
+      ...step,
+      state: step.stuck.length > 0 ? "stuck" : "done",
+      current: null,
+    }));
+  }).pipe(Effect.withSpan("WtFolder.retryStuck"));
+
   const retry = Effect.fn("WtFolder.retry")(function* (projectId: string) {
     yield* moveProject(projectId, true);
     return (yield* unmoved).filter((row) => row.projectId === projectId);
@@ -440,7 +465,14 @@ const make = Effect.gen(function* () {
     return ids as ReadonlyMap<string, string>;
   }).pipe(Effect.withSpan("WtFolder.movedIds"));
 
-  return WtFolder.of({ drain, unmoved, retry, movedTo, movedIds });
+  return WtFolder.of({
+    drain,
+    unmoved,
+    retryStuck,
+    retry,
+    movedTo,
+    movedIds,
+  });
 });
 
 export const layer = Layer.effect(WtFolder, make);

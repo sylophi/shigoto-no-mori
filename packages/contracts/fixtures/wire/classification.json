@@ -554,6 +554,10 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "migration:retry": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "mirror:applyGitState": {
     "kind": "invoke",
     "scope": "host",
@@ -1004,6 +1008,11 @@
     "remote": false
   },
   "session:imageHosts": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
+  "session:migrationRetry": {
     "kind": "invoke",
     "scope": "host",
     "remote": false

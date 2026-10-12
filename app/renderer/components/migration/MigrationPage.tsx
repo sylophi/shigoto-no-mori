@@ -23,6 +23,17 @@ export function MigrationPage() {
   if (step.needsDeviceKey && !keyDue) setKeyDue(true);
   const signIn = keyDue ? step.signIn : null;
   const navigate = useNavigate();
+  // The stuck moves tried again: pending while the host tries them, and
+  // remembered after, so a move still stuck says so.
+  const [retrying, setRetrying] = useState(false);
+  const [retried, setRetried] = useState(false);
+  const retry = () => {
+    setRetrying(true);
+    void api.run(api.migration.retry()).finally(() => {
+      setRetrying(false);
+      setRetried(true);
+    });
+  };
   // Not before the account says whether the device key is due.
   const { data: account } = useAccountStatus();
   const { open } =
@@ -58,6 +69,9 @@ export function MigrationPage() {
       signIn={signIn}
       onSignIn={step.run}
       onContinue={goOn}
+      onRetry={retry}
+      retrying={retrying}
+      retried={retried}
     />
   );
 }
