@@ -14,6 +14,10 @@ import {
 } from "electron";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import { navContract } from "@shigomori/contracts/modules/nav";
+import {
+  GUIDE_HARNESS_LABELS,
+  type GuideHarness,
+} from "@shigomori/contracts/modules/guide";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
@@ -58,6 +62,18 @@ function shownChords(): Chords {
   );
 }
 
+// The Help menu's guides: the harnesses each window's device has, the
+// focused window's shown.
+const guideHarnessesByWindow = new Map<number, readonly GuideHarness[]>();
+
+function shownGuideHarnesses(): readonly GuideHarness[] {
+  return (
+    (focusedWindowId === null
+      ? undefined
+      : guideHarnessesByWindow.get(focusedWindowId)) ?? []
+  );
+}
+
 function sameChords(a: Chords, b: Chords): boolean {
   const keys = Object.keys(a);
   return (
@@ -84,10 +100,12 @@ function sameLaunchTools(a: LaunchTools, b: LaunchTools): boolean {
 function showing(change: () => void): void {
   const tools = shownLaunchTools();
   const chords = shownChords();
+  const guides = shownGuideHarnesses();
   change();
   if (
     !sameLaunchTools(tools, shownLaunchTools()) ||
-    !sameChords(chords, shownChords())
+    !sameChords(chords, shownChords()) ||
+    guides.join() !== shownGuideHarnesses().join()
   ) {
     buildAppMenu();
   }
@@ -116,8 +134,15 @@ function setChords(windowId: number, chords: Chords): void {
   showing(() => chordsByWindow.set(windowId, chords));
 }
 
+function setGuideHarnesses(
+  windowId: number,
+  harnesses: readonly GuideHarness[],
+): void {
+  showing(() => guideHarnessesByWindow.set(windowId, harnesses));
+}
+
 export function installMenuImpl(): void {
-  setMenuImpl({ setLaunchToolsEnabled, setChords });
+  setMenuImpl({ setLaunchToolsEnabled, setChords, setGuideHarnesses });
 }
 
 // The menu follows the focused window's tools.
@@ -131,6 +156,7 @@ export function forgetWindowMenu(windowId: number): void {
   showing(() => {
     launchToolsByWindow.delete(windowId);
     chordsByWindow.delete(windowId);
+    guideHarnessesByWindow.delete(windowId);
     if (focusedWindowId === windowId) focusedWindowId = null;
   });
 }
@@ -245,12 +271,13 @@ export function buildAppMenu(): void {
     },
     {
       role: "help",
-      submenu: [
-        {
-          label: "Ask How…",
-          click: clickBroadcast(navContract, "askHow", undefined),
-        },
-      ],
+      // The guide, one item for each harness installed here.
+      submenu: shownGuideHarnesses().map(
+        (harness): MenuItemConstructorOptions => ({
+          label: `Show me around with ${GUIDE_HARNESS_LABELS[harness]}`,
+          click: clickBroadcast(navContract, "showAround", harness),
+        }),
+      ),
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

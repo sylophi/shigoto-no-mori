@@ -159,7 +159,7 @@ export const scenes = {
   palette: { Scene: PaletteScene, ...DESKTOP },
   palettePicked: { Scene: PalettePickedScene, ...DESKTOP },
   paletteEmpty: { Scene: PaletteEmptyScene, ...DESKTOP },
-  guideParts: { Scene: GuidePartsScene, size: [960, 1050] },
+  guideParts: { Scene: GuidePartsScene, size: [720, 620] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

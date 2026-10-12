@@ -24,7 +24,11 @@ const DATA_DIR_ENV = "SHIGOMORI_DATA_DIR";
 // A TOML basic string, which a JSON string is.
 const toml = (text: string) => JSON.stringify(text);
 
-// The harness on `question`, its tools `sm guide mcp` on `session`,
+// What the app opens the harness on: the user asks in the harness, and
+// the guide's instructions have it say what it can do and ask first.
+export const GUIDE_OPENING = "Show me around Shigoto no Mori.";
+
+// The harness on `prompt`, its tools `sm guide mcp` on `session`,
 // allowed without asking each time: the app turns away what the user
 // must do themselves. The server is told the app's data dir, where it
 // finds the app, whatever the terminal's environment says.
@@ -33,9 +37,9 @@ export const guideCommand = (input: {
   readonly sm: string;
   readonly dataDir: string;
   readonly session: string;
-  readonly question: string;
+  readonly prompt: string;
 }) => {
-  const { harness, sm, dataDir, session, question } = input;
+  const { harness, sm, dataDir, session, prompt } = input;
   const args = ["guide", "mcp", "--session", session];
   switch (harness) {
     case "claude": {
@@ -44,7 +48,7 @@ export const guideCommand = (input: {
           [SERVER]: { command: sm, args, env: { [DATA_DIR_ENV]: dataDir } },
         },
       });
-      return `claude --mcp-config ${shellQuote(config)} --allowedTools mcp__${SERVER} -- ${shellQuote(question)}`;
+      return `claude --mcp-config ${shellQuote(config)} --allowedTools mcp__${SERVER} -- ${shellQuote(prompt)}`;
     }
     case "codex":
       return [
@@ -62,7 +66,7 @@ export const guideCommand = (input: {
           `mcp_servers.${SERVER}.default_tools_approval_mode="approve"`,
         ),
         "--",
-        shellQuote(question),
+        shellQuote(prompt),
       ].join(" ");
   }
 };
@@ -80,10 +84,18 @@ export const guideInstructions = (
 
 This folder is Shigoto no Mori's own guide folder, which the app writes.
 
-The user asked how to do something in Shigoto no Mori, a desktop app
-for working on many git worktrees at once. Their question is your first
-message. The app's window is open beside this terminal, and the
-\`${SERVER}\` tools drive it. Show them the answer in the app.
+The user opened you from Shigoto no Mori's Help menu, to be shown
+around the app: a desktop app for working on many git worktrees at
+once. The app's window is open beside this terminal, and the
+\`${SERVER}\` tools drive it.
+
+## Before you touch the window
+
+Say in a line or two what you can do: point at things in the app and
+walk them through it, step by step, in the window itself. Then ask
+what they want to do or know, and wait for their answer. If their
+message already asks something in full ("how do I rename a
+worktree?"), answer that instead of asking.
 
 ## The tools
 
@@ -99,7 +111,7 @@ message. The app's window is open beside this terminal, and the
 
 ## How to guide
 
-1. Learn how the app does it before you act. \`source/\` is the
+1. Learn how the app does it before you act on the window. \`source/\` is the
    app's source at the version the user runs (\`README.md\`,
    \`PRODUCT.md\`, the views in \`packages/ui/src/views\`, the routes in
    \`app/renderer/router.tsx\`). If \`source/\` is missing, read it at

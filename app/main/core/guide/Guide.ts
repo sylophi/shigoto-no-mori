@@ -134,7 +134,6 @@ export class GuideWindows extends Context.Service<
     readonly launch: (input: {
       readonly session: string;
       readonly harness: GuideHarness;
-      readonly question: string;
     }) => Effect.Effect<void, CallFailure>;
     // Each window as it closes.
     readonly closed: Stream.Stream<number>;
@@ -153,12 +152,11 @@ type Session = {
 export class Guide extends Context.Service<
   Guide,
   {
-    // Opens the harness on the question, on a new session for the window
-    // in place of the one it had. A launch that fails leaves none.
-    readonly ask: (
+    // Opens the harness on a new session for the window, in place of the
+    // one it had. A launch that fails leaves none.
+    readonly start: (
       windowId: number,
       harness: GuideHarness,
-      question: string,
     ) => Effect.Effect<void, CallFailure>;
     // Ends the window's session, if it has one.
     readonly end: (windowId: number) => Effect.Effect<void>;
@@ -371,10 +369,9 @@ const make = Effect.gen(function* () {
     if (session !== undefined) yield* endSession(session);
   });
 
-  const ask = Effect.fn("Guide.ask")(function* (
+  const start = Effect.fn("Guide.start")(function* (
     windowId: number,
     harness: GuideHarness,
-    question: string,
   ) {
     const previous = yield* byWindow(windowId);
     if (previous !== undefined) yield* close(previous);
@@ -391,7 +388,7 @@ const make = Effect.gen(function* () {
     );
     yield* tell(session);
     yield* windows
-      .launch({ session: session.token, harness, question })
+      .launch({ session: session.token, harness })
       .pipe(Effect.onError(() => endSession(session)));
   });
 
@@ -555,7 +552,7 @@ const make = Effect.gen(function* () {
     ),
   );
 
-  return Guide.of({ ask, end, read, drive });
+  return Guide.of({ start, end, read, drive });
 });
 
 export const layer = Layer.effect(Guide, make);
