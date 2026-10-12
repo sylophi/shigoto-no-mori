@@ -13,7 +13,7 @@ import type * as Sharing from "@host/lib/sharing";
 import type * as Moves from "@host/lib/sync/Moves";
 import type * as Terminals from "@host/lib/terminals/Terminals";
 import type * as Terrier from "@host/lib/terrier";
-import type * as BackgroundFetch from "@host/lib/git/backgroundFetch";
+import type * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import type * as Engine from "@host/lib/engine";
 import type * as Views from "@host/lib/views";
 import type * as Villagers from "@host/lib/VillagerData";

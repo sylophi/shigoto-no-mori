@@ -37,7 +37,7 @@ import {
   stageAttachment,
   stageAttachmentFromUrl,
 } from "@host/lib/githubCli/newPullRequest";
-import { findWorktreeIdentity } from "@host/lib/git/worktrees";
+import { findWorktreeIdentity } from "@host/lib/projects";
 
 const projectPath = (projectId: string) =>
   Effect.map(findProject(projectId), (project) => project.path);

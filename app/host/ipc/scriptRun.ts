@@ -18,7 +18,7 @@ import type {
   TerminalOwner,
 } from "@shigomori/contracts/schemas";
 import * as Ops from "@host/lib/engineOps";
-import type { WorktreeIdentity } from "@host/lib/git/worktrees";
+import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import { findProject } from "@host/lib/projects";
 import {
   type NotifyScriptEvent,

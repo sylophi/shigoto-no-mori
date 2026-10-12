@@ -53,7 +53,7 @@ import { gitContract } from "@shigomori/contracts/modules/git";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Views from "@host/lib/views";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";
 import * as Loopback from "@host/socket/loopback";

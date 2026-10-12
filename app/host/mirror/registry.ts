@@ -27,7 +27,7 @@ import {
   forgetMirrorInvitesOf,
 } from "@host/mirror/invites";
 import { log } from "@shared/log";
-import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Ops from "@host/lib/engineOps";
 
 // The label keys the start orchestration writes on a session, lifted

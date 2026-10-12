@@ -41,7 +41,7 @@ import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/VillagerData";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
-import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
+import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";

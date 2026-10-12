@@ -93,7 +93,7 @@ export async function syncProjectPullRequests(
 }
 
 // Branch -> PR for a project, feeding the sidebar dots. The background
-// sweep in the host's backgroundFetch.ts refreshes it and broadcasts
+// sweep in the host's BackgroundFetch.ts refreshes it and broadcasts
 // githubCli:projectPullRequestsRefreshed only when the data actually
 // changed; syncProjectPullRequests above refetches it off that
 // broadcast. The open worktree page reads its PR through

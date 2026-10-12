@@ -123,7 +123,7 @@ import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import { listMirrorInvites } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";

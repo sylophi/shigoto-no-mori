@@ -1,10 +1,13 @@
 // Durable proof for starting a new project (projects:create): the
-// payload schema's folder-name rule, and createRepo against REAL git
+// payload schema's folder-name rule, and the engine's
+// Git.createRepository against REAL git
 // for what the schema can't say: the repository lands where asked with
 // a first commit on its default branch, a folder already there is never
 // written over, and a start that fails leaves nothing behind.
 //
 // Run: pnpm test create-project.
+import * as Git from "@shigomori/engine/Git";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
@@ -20,7 +23,7 @@ import {
 } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
-// createRepo runs git under this process's environment: the hook's
+// createRepository runs git under this process's environment: the hook's
 // GIT_* variables go (clone.mts says why), and an identity stands in
 // for the user's config, which the scrub cuts off.
 const IDENTITY = {
@@ -32,13 +35,16 @@ const IDENTITY = {
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv(IDENTITY);
 
-const { createRepo } = promised(await import("../host/lib/git/init.ts"));
+const { createRepo } = promised({
+  createRepo: (parentDir: string, name: string) =>
+    Effect.flatMap(Git.Git, (git) => git.createRepository(parentDir, name)),
+});
 const { CreateProjectPayloadSchema } =
   await import("@shigomori/contracts/schemas/project");
 
 const git = sandboxGit(gitEnv);
 
-// One config entry for the git createRepo runs, as the user's own
+// One config entry for the git createRepository runs, as the user's own
 // config would set it, for the length of `fn`.
 async function withGitConfig(
   key: string,
