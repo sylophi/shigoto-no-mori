@@ -27,7 +27,7 @@ import {
   type PoolPort,
 } from "@shared/ports/mergeWorktreePorts";
 import { parseWorktreeKey, worktreeKey } from "./config/project";
-import type * as Engine from "./engine";
+import type * as Engine from "./Engine";
 import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreePath } from "./projects";

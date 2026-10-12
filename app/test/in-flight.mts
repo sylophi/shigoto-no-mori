@@ -1,7 +1,7 @@
 // Durable proof for the calls a link has in flight: the client's gate
 // (rpcLink's fifoGate, shared/remote/rpcTransport.ts) and the host's
 // cap (MAX_IN_FLIGHT_PER_PEER, host/socket/DeviceLink.ts), over the
-// REAL loopback (host/socket/loopback.ts) a window's link dials. The
+// REAL loopback (host/socket/Loopback.ts) a window's link dials. The
 // client is the window's own pieces on one socket: an RpcClient on
 // LoopbackGroup said hello on with the loopback's token, the REAL
 // rpcLink over it (what dialDevice hands hostLink), and the renderer's
@@ -54,9 +54,9 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";
-import * as Loopback from "@host/socket/loopback";
+import * as Loopback from "@host/socket/Loopback";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { effectClient } from "@shared/ipc/effectClient";
 import { createServed } from "@shared/ipc/served";

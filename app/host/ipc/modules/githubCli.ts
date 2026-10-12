@@ -20,7 +20,7 @@ import {
   listPullRequestCandidates,
   resolvePullRequestCheckout,
 } from "@host/lib/githubCli/pullRequestCheckout";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import {

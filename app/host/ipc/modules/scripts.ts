@@ -6,7 +6,7 @@ import {
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import { findProject } from "@host/lib/projects";
 import {
   attachScript,

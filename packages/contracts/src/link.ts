@@ -180,7 +180,7 @@ export const LinkGroup = handshakeOf(remoteCalls).merge(
 // host-scope module, remote or not, with its pushes and views, the
 // control contract's ops, the guide's drive and the shell's session,
 // which only a hello with the shell's own token opens
-// (host/socket/loopback.ts).
+// (host/socket/Loopback.ts).
 const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules

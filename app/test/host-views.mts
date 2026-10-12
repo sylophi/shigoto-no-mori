@@ -1,4 +1,4 @@
-// The host's views (host/lib/views.ts and each module's `*Views`): every
+// The host's views (host/lib/Views.ts and each module's `*Views`): every
 // one answers its query's value first, then again after a write through
 // the engine (or the push the write makes), and says nothing while the
 // value stays the same. The store's tick and the views' polls run on a
@@ -31,8 +31,8 @@ import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
 import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
-import * as Views from "../host/lib/views.ts";
-import * as Sharing from "../host/lib/sharing.ts";
+import * as Views from "../host/lib/Views.ts";
+import * as Sharing from "../host/lib/Sharing.ts";
 import { listWorktrees } from "../host/lib/projects/index.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";

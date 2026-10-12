@@ -16,7 +16,7 @@ import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync"
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { EngineCallError } from "./engine";
+import type { EngineCallError } from "./Engine";
 import type * as Git from "@shigomori/engine/Git";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {

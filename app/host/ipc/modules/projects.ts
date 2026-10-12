@@ -6,7 +6,7 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import * as Git from "@shigomori/engine/Git";
 import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
@@ -29,10 +29,10 @@ import {
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
 import type { HostServices } from "@host/process/services";
-import * as Terrier from "@host/lib/terrier";
+import * as Terrier from "@host/lib/Terrier";
 import * as Worktrees from "@host/lib/Worktrees";
 import { expandHome } from "@shared/paths";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 
 // Moves run one at a time: each writes the whole order, so a second

@@ -202,8 +202,8 @@ import {
   TUNNEL_PROBE_DELAYS_REUSED_MS,
   TUNNEL_STABLE_MS,
   type TunnelProvision,
-} from "@host/direct/cloudflared";
-import * as Tunnels from "@host/direct/cloudflared";
+} from "@host/direct/Tunnel";
+import * as Tunnels from "@host/direct/Tunnel";
 import {
   type ConnectTicketStore,
   createConnectTicketStore,

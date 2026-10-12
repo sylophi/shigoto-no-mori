@@ -252,7 +252,7 @@ function createFixtureWire(
             (error: unknown) => resume(Effect.fail(error)),
           );
         }),
-      // A host view (host/lib/views.ts) re-reads the query beside it on
+      // A host view (host/lib/Views.ts) re-reads the query beside it on
       // what moved: here, the module's list (or its settings' read) on
       // any push or call on the wire, sent on when it changed.
       view: (channel, input) => {

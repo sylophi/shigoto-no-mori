@@ -6,7 +6,7 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "@shigomori/engine/Git";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import { toAbsolute } from "@shared/paths";
 
 // Directories that virtually never contain git repos but are huge and slow to

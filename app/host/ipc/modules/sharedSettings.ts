@@ -3,7 +3,7 @@ import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import * as Effect from "effect/Effect";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import {
   sharedSettingsCopy,
   sharedSettingsLoaded,

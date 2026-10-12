@@ -97,7 +97,7 @@ import {
   locate,
   projectById,
   type Services,
-} from "./engine";
+} from "./Engine";
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from
 // the engine's lifecycle events.

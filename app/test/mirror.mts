@@ -118,7 +118,7 @@ import {
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
-import * as MirrorDaemon from "../host/mirror/daemon.ts";
+import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
 import { createMirrorGateway } from "../host/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";

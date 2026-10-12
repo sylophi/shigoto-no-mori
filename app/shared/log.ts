@@ -7,9 +7,9 @@
 // console is the devtools'. The adapter goes once the last caller is an
 // effect that logs through the graph's logger.
 import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import type * as LogLevel from "effect/LogLevel";
-import { errorMessageOf } from "@shigomori/contracts/errors";
 
 function write(level: LogLevel.LogLevel, parts: ReadonlyArray<unknown>) {
   switch (level) {
@@ -42,15 +42,18 @@ export const log = {
   error: (...message: ReadonlyArray<unknown>) => write("Error", message),
 };
 
-// A step that must not take its caller with it: the failure degrades
-// to a log line under the given label, the caller carries on.
-export async function logFailure(
+// A step that must not take its caller with it, run as an effect: its
+// failure is a warning through the app's logger, and the caller carries
+// on. For a step that needs no layer graph, so it runs whatever state
+// the graph is in.
+export const warnOnFailure = (
   label: string,
-  run: () => unknown,
-): Promise<void> {
-  try {
-    await run();
-  } catch (error) {
-    log.warn(`${label}: ${errorMessageOf(error)}`);
-  }
-}
+  step: () => unknown,
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.tryPromise(async () => step()).pipe(
+      Effect.asVoid,
+      Effect.catchCause((cause) => Effect.logWarning(label, cause)),
+      Effect.provide(Logger.layer([logger])),
+    ),
+  );

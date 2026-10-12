@@ -60,7 +60,7 @@ import {
   type Project,
 } from "@shigomori/contracts/schemas";
 import { strict } from "@shigomori/contracts/schemas/strict";
-import type * as Engine from "@host/lib/engine";
+import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";

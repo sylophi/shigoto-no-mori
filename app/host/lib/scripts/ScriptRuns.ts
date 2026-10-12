@@ -13,16 +13,15 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { existsSync } from "node:fs";
-import { userInfo } from "node:os";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { envSetting } from "../../../shared/config.ts";
+import { resolveShell } from "./loginShell";
 import { signalTree, signalTreeBestEffort } from "./process";
 
 // No process could be started: a missing login shell, or a PTY that
@@ -89,19 +88,6 @@ export interface PtyHandle {
   readonly exit: Effect.Effect<unknown>;
 }
 
-// $SHELL is reliable when launched from a terminal, but can be empty in
-// GUI launches depending on launchd state. os.userInfo().shell reads the
-// passwd entry directly. We use a *login* shell (no `-i`) so the user's
-// `.zprofile` / `.bash_profile` runs without zsh's interactive-init code
-// (job control, prompt setup, zle) getting in the way of the command.
-// Given no command (a terminal's), the shell is interactive anyway,
-// since its input is a terminal.
-function resolveShell(): { command: string; args: string[] } {
-  const userShell = envSetting("SHELL") || userInfo().shell;
-  if (userShell) return { command: userShell, args: ["-l"] };
-  return { command: "/bin/sh", args: [] };
-}
-
 // Inherited terminal state that would mislead a program in the new
 // PTY: the app may itself have been launched from a tmux pane or a
 // shell exporting its own size. node-pty strips the same set, but only
@@ -124,7 +110,10 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   const { command: shell, args: shellArgs } = resolveShell();
   // node-pty's helper execs the shell in the child and exits 1 without
   // a word if that fails, which would show as a bare "exit 1".
-  if (!existsSync(shell)) {
+  const there = yield* (yield* FileSystem.FileSystem)
+    .exists(shell)
+    .pipe(Effect.orElseSucceed(() => false));
+  if (!there) {
     return yield* new PtySpawnError({
       shell,
       reason: "shell-missing",
@@ -250,6 +239,7 @@ export class ScriptRuns extends Context.Service<
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fs = yield* FileSystem.FileSystem;
   const scope = yield* Effect.scope;
   const open = Effect.fn("ScriptRuns.open")(function* (opts: SpawnOptions) {
     const run = yield* Scope.fork(scope);
@@ -259,6 +249,7 @@ const make = Effect.gen(function* () {
     const handle = yield* spawn(opts, () => stopping).pipe(
       Scope.provide(run),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provideService(FileSystem.FileSystem, fs),
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
     // The stopping is taken when close is called, not when its effect

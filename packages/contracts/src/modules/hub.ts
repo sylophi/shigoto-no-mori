@@ -42,7 +42,7 @@ const HubSocketStatusSchema = Schema.Union([
 ]);
 
 // THIS device's tunnel endpoint state vocabulary. The wire schema is the single owner: the cloudflared runner
-// (host/direct/cloudflared.ts) types its state off this so the two
+// (host/direct/Tunnel.ts) types its state off this so the two
 // sides cannot drift.
 const TunnelStateSchema = Schema.Literals([
   "off",
@@ -92,7 +92,7 @@ const HubStatusSchema = Schema.Struct({
   tunnel: Schema.optional(TunnelStateSchema),
 });
 // How long a freshly provisioned tunnel is probed before the host
-// gives up and re-provisions (host/direct/cloudflared.ts): its DNS
+// gives up and re-provisions (host/direct/Tunnel.ts): its DNS
 // record is new and may take this long to route. Shared so the
 // registry's "tunnel starting" note quotes the same figure.
 export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;

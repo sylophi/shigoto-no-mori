@@ -1,4 +1,4 @@
-// POSIX process-group signaling for the scripts (./pty.ts) and the
+// POSIX process-group signaling for the scripts (./ScriptRuns.ts) and the
 // lifecycle scripts the engine runs.
 //
 // Kill strategy:

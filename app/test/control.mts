@@ -1,7 +1,7 @@
 // Durable proof for the CLI's cross-device verbs (`sm devices`, `sm
 // worktrees send|bring|mirror|unmirror|mirrors`) end to end: the REAL sm
 // binary (built from packages/cli by this check) finds the REAL loopback
-// (host/socket/loopback.ts) through loopback.json in a sandboxed data
+// (host/socket/Loopback.ts) through loopback.json in a sandboxed data
 // dir, proves the token in the link's handshake, and the loopback
 // serves the REAL control handlers (host/ipc/modules/control.ts), which
 // run the REAL send and pull
@@ -125,12 +125,12 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import { listMirrorInvites } from "@host/mirror/invites";
-import * as Loopback from "@host/socket/loopback";
+import * as Loopback from "@host/socket/Loopback";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";
 import { createServed } from "@shared/ipc/served";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import * as Views from "@host/lib/views";
+import * as Views from "@host/lib/Views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
