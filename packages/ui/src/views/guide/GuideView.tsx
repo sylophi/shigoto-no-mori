@@ -1,10 +1,98 @@
-// The guide in a window it drives: a band over the page saying whose
-// agent it is, with Stop, and a ring around what the agent points at with
-// its sentence beside it (GuideBand.tsx and GuideCallout.tsx bind them).
-import { Compass } from "lucide-react";
+// The guide: the question Help → Ask How… takes (AskHow.tsx binds it),
+// then in the window it drives a band over the page saying whose agent
+// it is, with Stop, and a ring around what the agent points at with its
+// sentence beside it (GuideBand.tsx and GuideCallout.tsx bind them).
+import { Compass, Loader2 } from "lucide-react";
+import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import { Button } from "../../primitives/button.tsx";
+import { Input } from "../../primitives/input.tsx";
 import { TONE_MARK, TONE_PILL } from "../../primitives/status-dot.tsx";
 import { cn, dragRegion } from "../../lib/utils.ts";
+
+// An agent the guide can open.
+export interface GuideHarnessOption {
+  id: GuideHarness;
+  label: string;
+}
+
+// The question, and an Ask for each agent set up here, the first one
+// ↩. Up while the agent's terminal opens.
+export function AskHowDialogView({
+  question,
+  onQuestionChange,
+  harnesses,
+  asking,
+  onAsk,
+  onCancel,
+}: {
+  question: string;
+  onQuestionChange: (question: string) => void;
+  // Undefined until read.
+  harnesses: readonly GuideHarnessOption[] | undefined;
+  // The agent opening, if any.
+  asking: GuideHarness | null;
+  onAsk: (harness: GuideHarness) => void;
+  onCancel: () => void;
+}) {
+  const [first, ...rest] = harnesses ?? [];
+  const ready = question.trim() !== "" && asking === null;
+  const ask = (harness: GuideHarnessOption) => (
+    <>
+      {asking === harness.id && (
+        <Loader2 aria-hidden className="animate-spin" />
+      )}
+      Ask {harness.label}
+    </>
+  );
+  return (
+    <form
+      className="flex flex-col gap-4 p-5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (first && ready) onAsk(first.id);
+      }}
+    >
+      <h2 className="text-base font-semibold">Ask how</h2>
+      <Input
+        aria-label="Question"
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog is for this field
+        autoFocus
+        placeholder="How do I mirror a worktree to my other Mac?"
+        value={question}
+        onChange={(e) => onQuestionChange(e.target.value)}
+        disabled={asking !== null || harnesses?.length === 0}
+        className="h-9 px-3 text-sm"
+      />
+      {harnesses?.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          The guide opens Claude Code or Codex, and neither is installed.
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        {rest.map((harness) => (
+          <Button
+            key={harness.id}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!ready}
+            onClick={() => onAsk(harness.id)}
+          >
+            {ask(harness)}
+          </Button>
+        ))}
+        {first && (
+          <Button type="submit" size="sm" disabled={!ready}>
+            {ask(first)}
+          </Button>
+        )}
+      </div>
+    </form>
+  );
+}
 
 export function GuideBandView({
   harnessLabel,

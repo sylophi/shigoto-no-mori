@@ -1,7 +1,7 @@
 // The guide's how-tos (V3.md, "The guide"): twenty questions a new user
 // asks, each run headless through Claude Code and Codex against a dev
-// app on this machine, on a session the app minted the way the palette's
-// Ask does. A tour passes when the window shows the guide pointing at the
+// app on this machine, on a session the app minted the way Ask How…'s
+// dialog does. A tour passes when the window shows the guide pointing at the
 // control that answers the question. README.md has what it reports.
 /* oxlint-disable no-await-in-loop -- one tour at a time, each on the window the last one left */
 import { execFileSync, spawn } from "node:child_process";

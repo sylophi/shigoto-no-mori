@@ -1,6 +1,5 @@
 // What the palette lists, as the app's buildPaletteEntries.ts and
 // PaletteRows.tsx build it for the views.
-import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import type { LucideIcon } from "lucide-react";
 import type {
   Project,
@@ -62,8 +61,7 @@ export interface PalettePage {
 }
 
 // Everything the list can hold: the worktrees, the projects and pages a
-// query names, and, for a query, the worktree it could make and the
-// question it could ask.
+// query names, and, for a query, the worktree it could make.
 export type PaletteRow =
   | { kind: "worktree"; key: string; entry: PaletteEntry }
   | { kind: "project"; key: string; item: PaletteProject }
@@ -74,17 +72,4 @@ export type PaletteRow =
       branch: string;
       // Where it can go, the one ↩ picks first.
       targets: [Project, ...Project[]];
-    }
-  | {
-      kind: "ask";
-      key: string;
-      question: string;
-      // The agents installed here, the one ↩ opens first.
-      harnesses: [GuideHarnessOption, ...GuideHarnessOption[]];
     };
-
-// An agent the guide can open.
-export interface GuideHarnessOption {
-  id: GuideHarness;
-  label: string;
-}
