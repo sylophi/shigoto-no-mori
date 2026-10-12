@@ -3,9 +3,11 @@ import { resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
+import { errorWordsOf } from "@host/lib/errorWords";
 import * as Ops from "@host/lib/engineOps";
 import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
@@ -33,6 +35,21 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 }
 
 let moveInFlight = false;
+
+// What follows a data-folder move that failed. Before the host let go
+// of the folder, nothing: the app carries on where it was. After, it
+// runs without its loopback and store watch, so it restarts: for a
+// peer's move at once, nobody here to ask; for one asked here, once
+// the user has read why (the shell's dialog, whose one button
+// restarts and whose dismissal quits).
+export const afterFailedMove = ({
+  watchersStopped,
+  unattended,
+}: {
+  watchersStopped: boolean;
+  unattended: boolean;
+}): "carry-on" | "relaunch" | "ask" =>
+  !watchersStopped ? "carry-on" : unattended ? "relaunch" : "ask";
 
 export const runtimeHandlers = {
   // Host facts only. isDev deliberately isn't here: it describes the
@@ -77,16 +94,23 @@ export const runtimeHandlers = {
           return holders.release;
         }),
       }).pipe(
-        Effect.onError(() =>
+        Effect.onError((cause) =>
           Effect.suspend(() => {
             // A move that failed after the watchers stopped leaves this
-            // app running without them. At this machine the user sees
-            // the error and can restart. For a peer's move nobody here
-            // does, so the restart that brings them back happens anyway
-            // (the data dir and pointer are where they were).
-            if (unattended && watchersStopped) return shell.relaunch;
-            moveInFlight = false;
-            return Effect.void;
+            // app running without them. At this machine the shell says
+            // why and offers a restart, or quits. For a peer's move
+            // nobody here does, so the restart that brings them back
+            // happens anyway (the data dir and pointer are where they
+            // were).
+            switch (afterFailedMove({ watchersStopped, unattended })) {
+              case "relaunch":
+                return shell.relaunch;
+              case "ask":
+                return shell.moveFailed(errorWordsOf(Cause.squash(cause)));
+              case "carry-on":
+                moveInFlight = false;
+                return Effect.void;
+            }
           }),
         ),
       );

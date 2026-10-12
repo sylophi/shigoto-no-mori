@@ -118,6 +118,7 @@ const standIns = Layer.mergeAll(
     Shell.Shell,
     Shell.Shell.of({
       relaunch: Effect.void,
+      moveFailed: () => Effect.void,
       updater: {
         check: Effect.void,
         install: () => Effect.void,

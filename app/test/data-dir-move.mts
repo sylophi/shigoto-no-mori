@@ -13,7 +13,9 @@
 //     was never written.
 // And for one whose copy landed whole but whose pointer was never
 // written: the next start undoes it the same way and removes the copy,
-// which would refuse every retry.
+// which would refuse every retry. And one that failed after the host let
+// go of the folder restarts the app, once its user has read why when
+// they asked for it here (the shell's dialog).
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
@@ -27,6 +29,7 @@ import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
 import { moveDataDir, resumeLayer } from "../host/lib/dataDirMove.ts";
+import { afterFailedMove } from "../host/ipc/modules/runtime.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -228,5 +231,27 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
   assert.equal(
     readdirSync(engineDataDir).includes("data-dir-move.json"),
     false,
+  );
+});
+
+it("a move that failed after the folder was let go never leaves the app running without it", () => {
+  // Before the release, the app carries on where it was.
+  assert.equal(
+    afterFailedMove({ watchersStopped: false, unattended: false }),
+    "carry-on",
+  );
+  assert.equal(
+    afterFailedMove({ watchersStopped: false, unattended: true }),
+    "carry-on",
+  );
+  // After it: asked here, the user reads why and restarts (or quits);
+  // asked by a peer, the app restarts with nobody to ask.
+  assert.equal(
+    afterFailedMove({ watchersStopped: true, unattended: false }),
+    "ask",
+  );
+  assert.equal(
+    afterFailedMove({ watchersStopped: true, unattended: true }),
+    "relaunch",
   );
 });

@@ -1099,6 +1099,10 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "shellCalls:moveFailed": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "shellCalls:ready": {
     "kind": "invoke",
     "scope": "client"
