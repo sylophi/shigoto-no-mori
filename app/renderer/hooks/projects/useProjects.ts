@@ -6,8 +6,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
+import { isCloneCancelledError } from "@shared/ipc/modules/projects";
 import type {
   AddProjectPayload,
+  CancelClonePayload,
   CloneProjectPayload,
   CreateProjectPayload,
   Project,
@@ -67,12 +69,27 @@ export function useAddProject() {
 export function useCloneProject() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<Project, Error, CloneProjectPayload>({
-    mutationFn: (input) => api.projects.clone(input),
+  // Null when the clone was cancelled (useCancelClone), which is no
+  // failure to report.
+  return useMutation<Project | null, Error, CloneProjectPayload>({
+    mutationFn: (input) =>
+      api.projects.clone(input).catch((error: unknown) => {
+        if (isCloneCancelledError(error)) return null;
+        throw error;
+      }),
     // Returned for the same reason useAddProject returns it.
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: keys.projects() }),
     meta: { errorTitle: "Couldn't clone the repository" },
+  });
+}
+
+// Stops a clone useCloneProject has in flight, by where it lands.
+export function useCancelClone() {
+  const { api } = useHostScope();
+  return useMutation<void, Error, CancelClonePayload>({
+    mutationFn: (input) => api.projects.cancelClone(input),
+    meta: { errorTitle: "Couldn't cancel the clone" },
   });
 }
 

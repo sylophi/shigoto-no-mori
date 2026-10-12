@@ -12,6 +12,7 @@ import {
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { localDeviceId } from "@/lib/queryKeys";
+import { cn } from "@/lib/utils";
 import { AddExistingView } from "./addProject/AddExistingView";
 import { CloneView } from "./addProject/CloneView";
 import { CreateView } from "./addProject/CreateView";
@@ -90,13 +91,21 @@ function AddProjectDialog() {
   // view leaves this null otherwise, and whenever it isn't mounted (a
   // tab that can only show a note), so the key closes the dialog.
   const escapeRef = useRef<(() => void) | null>(null);
+  const [working, setWorking] = useState(false);
 
   return (
     <ModalShell
       onClose={onClose}
       onEscape={() => (escapeRef.current ?? onClose)()}
+      dismissable={!working}
     >
-      <div className="flex flex-col gap-2 border-b border-border py-2">
+      <div
+        inert={working}
+        className={cn(
+          "flex flex-col gap-2 border-b border-border py-2",
+          working && "opacity-50",
+        )}
+      >
         <SegmentedControl
           value={mode}
           onChange={setMode}
@@ -132,6 +141,7 @@ function AddProjectDialog() {
               setUrl={setUrl}
               addToTerrier={addToTerrier}
               setAddToTerrier={setAddToTerrier}
+              setWorking={setWorking}
               onClose={onClose}
             />
           )}
@@ -141,6 +151,7 @@ function AddProjectDialog() {
               setName={setName}
               addToTerrier={addToTerrier}
               setAddToTerrier={setAddToTerrier}
+              setWorking={setWorking}
               onClose={onClose}
             />
           )}

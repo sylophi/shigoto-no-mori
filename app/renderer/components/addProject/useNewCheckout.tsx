@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { defaultCloneParent } from "@shared/cloneDestination";
 import { ensureTrailingSep, tildify } from "@shared/projectPaths";
 import type { Project } from "@shared/schemas";
@@ -7,7 +7,6 @@ import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { toast } from "@/lib/toast";
 import { useTerrierOptIn } from "./TerrierOptIn";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 
@@ -54,28 +53,14 @@ export function useNewCheckout({
   // back to this device's.
   const peerLabel = useRemoteDeviceLabel(scope.deviceId);
   const onDevice = scope.remote ? ` on ${peerLabel}` : "";
-  // A clone or a publish outlives the dialog, so what follows has to
-  // know whether anyone is still looking.
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   const parent = pickedParent ?? defaultCloneParent(projects, home);
   // Tildified here, once: a picked parent comes back as the device
   // resolved it, absolute.
   const dest = tildify(`${parent}${folder}`, home);
 
-  // Lands on the project, or, closed meanwhile, says it landed and
-  // leaves the user where they are.
-  const finish = (project: Project, made: string) => {
-    if (!mounted.current) {
-      toast.success(`${made} ${project.name}${onDevice}`);
-      return;
-    }
+  // Lands on the project.
+  const finish = (project: Project) => {
     onClose();
     void openAdded(project.id);
   };

@@ -46,6 +46,7 @@ export function CreateView({
   setName,
   addToTerrier,
   setAddToTerrier,
+  setWorking,
   onClose,
 }: {
   // Owned by the dialog, so it outlives a change of mode or device.
@@ -53,6 +54,7 @@ export function CreateView({
   setName: (value: string) => void;
   addToTerrier: boolean;
   setAddToTerrier: (value: boolean) => void;
+  setWorking: (working: boolean) => void;
   onClose: () => void;
 }) {
   const createProject = useCreateProject();
@@ -85,6 +87,7 @@ export function CreateView({
   const createAndOpen = async () => {
     if (!nameValid) return;
     setStage("creating");
+    setWorking(true);
     // useCreateProject surfaces the error via toast.
     const project = await createProject
       .mutateAsync({
@@ -95,6 +98,7 @@ export function CreateView({
       .catch(() => null);
     if (project === null) {
       setStage("form");
+      setWorking(false);
       return;
     }
     if (publish) {
@@ -110,7 +114,7 @@ export function CreateView({
           ),
         );
     }
-    checkout.finish(project, "Created");
+    checkout.finish(project);
   };
 
   if (stage !== "form") {

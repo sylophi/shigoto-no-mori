@@ -18,7 +18,8 @@ import { GithubMark } from "@/components/ui/svgs/github-mark";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useGithubRepos } from "@/hooks/githubCli/useGithubRepos";
-import { useCloneProject } from "@/hooks/projects/useProjects";
+import type { CancelClonePayload } from "@shared/schemas";
+import { useCancelClone, useCloneProject } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,8 @@ import {
 } from "./DialogParts";
 import { useNewCheckout } from "./useNewCheckout";
 
-// Clones a remote onto the scoped device and opens it as a project.
+// Clones a remote onto the scoped device and opens it as a project, or
+// stops on Cancel and leaves nothing behind.
 // Where the device's gh is signed in, its GitHub repositories are
 // listed under the input to pick from, narrowed by what is typed.
 // react-doctor-disable-next-line react-doctor/no-giant-component -- one form and its progress stage, with the parts that stand alone in DialogParts and useNewCheckout
@@ -39,6 +41,7 @@ export function CloneView({
   setUrl,
   addToTerrier,
   setAddToTerrier,
+  setWorking,
   onClose,
 }: {
   // Owned by the dialog, so a pasted URL is as good on the next device.
@@ -46,11 +49,14 @@ export function CloneView({
   setUrl: (value: string) => void;
   addToTerrier: boolean;
   setAddToTerrier: (value: boolean) => void;
+  setWorking: (working: boolean) => void;
   onClose: () => void;
 }) {
   const scope = useHostScope();
   const cloneProject = useCloneProject();
-  const [cloning, setCloning] = useState(false);
+  const cancelClone = useCancelClone();
+  // Where the clone in flight lands, which is what names it to cancel.
+  const [cloning, setCloning] = useState<CancelClonePayload | null>(null);
   const { data: readiness } = useGithubCliReadiness();
   const { data: repos = [] } = useGithubRepos(readiness?.unavailable === null);
   // A URL names its repository whole, so the list steps aside for it.
@@ -81,25 +87,29 @@ export function CloneView({
 
   const cloneAndOpen = async () => {
     if (name === null) return;
-    setCloning(true);
-    // useCloneProject surfaces the error via toast. No try here: React
-    // Compiler bails on the early return one would need.
+    const dest = { parentDir: checkout.parent, name };
+    setCloning(dest);
+    setWorking(true);
+    // useCloneProject surfaces the error via toast, and answers a
+    // cancel with null. No try here: React Compiler bails on the early
+    // return one would need.
     const project = await cloneProject
       .mutateAsync({
         // A peer clones with its own credentials. Ones pasted in with
         // the URL stay on this device, the rule pickCloneUrl keeps.
         url: scope.remote ? stripUrlCredentials(source) : source.trim(),
-        parentDir: checkout.parent,
-        name,
+        ...dest,
         terrier: checkout.terrier,
       })
       .catch(() => null);
     if (project === null) {
       // Back to the URL, still in the input, to fix it or the folder.
-      setCloning(false);
+      setCloning(null);
+      cancelClone.reset();
+      setWorking(false);
       return;
     }
-    checkout.finish(project, "Cloned");
+    checkout.finish(project);
   };
 
   if (cloning) {
@@ -111,6 +121,10 @@ export function CloneView({
         title={repo}
         status={`Cloning${checkout.onDevice}…`}
         dest={checkout.dest}
+        // Settled, the cancel waits on the clone's own answer, which
+        // the flow follows (a clone already over lands as it would).
+        cancelling={cancelClone.isPending || cancelClone.isSuccess}
+        onCancel={() => cancelClone.mutate(cloning)}
       />
     );
   }

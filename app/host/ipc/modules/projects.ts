@@ -1,8 +1,10 @@
+import { join } from "node:path";
 import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shared/errors";
 import { reorderProjects } from "@shared/reorder";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import type { Project } from "@shared/schemas";
+import type { CancelClonePayload, Project } from "@shared/schemas";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
@@ -43,6 +45,18 @@ import {
 // one's project back.
 let reorderChain: Promise<void> = Promise.resolve();
 
+// The clones in flight on this host, so one can be cancelled: keyed by
+// the calling device and the destination, so a cancel finds only a
+// clone its own caller started.
+const clones = new Map<string, AbortController>();
+
+function cloneKey(
+  ctx: Pick<HandlerContext, "callerDeviceId">,
+  { parentDir, name }: CancelClonePayload,
+): string {
+  return `${ctx.callerDeviceId ?? ""}:${join(expandHome(parentDir), name)}`;
+}
+
 // Registers a checkout the app just made (a clone, a new repository).
 // The checkout stays if registering fails, so the error says where it
 // is: a retry would only find the folder taken. Terrier first, for
@@ -63,7 +77,10 @@ async function registerNewCheckout(
   }
 }
 
-export const projectsHandlers: Handlers<typeof projectsContract> = {
+export const projectsHandlers: Handlers<
+  typeof projectsContract,
+  HandlerContext
+> = {
   list: () => listProjectsWithStatus(),
 
   add: async ({ path: rawPath, terrier }) => {
@@ -83,13 +100,32 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     return registerProject(path);
   },
 
-  clone: async ({ url, parentDir, name, terrier }) => {
+  clone: async ({ url, parentDir, name, terrier }, ctx) => {
     const folder = name ?? cloneFolderName(url);
     // The payload schema has held the URL to a clone source already.
     // Not echoed: it may carry a token.
     if (folder === null) throw new Error("Not a git remote URL");
-    const path = await cloneRepo(url, expandHome(parentDir), folder);
+    const key = cloneKey(ctx, { parentDir, name: folder });
+    // One clone per key, or the second would take the first's cancel.
+    if (clones.has(key)) throw new Error("That folder is being cloned into");
+    const controller = new AbortController();
+    clones.set(key, controller);
+    let path: string;
+    try {
+      path = await cloneRepo(
+        url,
+        expandHome(parentDir),
+        folder,
+        controller.signal,
+      );
+    } finally {
+      clones.delete(key);
+    }
     return registerNewCheckout(path, terrier, "Cloned into");
+  },
+
+  cancelClone: (payload, ctx) => {
+    clones.get(cloneKey(ctx, payload))?.abort();
   },
 
   create: async ({ parentDir, name, terrier }) => {

@@ -106,6 +106,9 @@ export interface RunOptions {
   // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
   // reads raise it (see PATCH_MAX_BUFFER).
   maxBuffer?: number;
+  // Kills the child when it fires. Only a clone, which the user can
+  // cancel, passes one.
+  signal?: AbortSignal;
 }
 
 // Every run is buffered, so a command that never stops printing can't

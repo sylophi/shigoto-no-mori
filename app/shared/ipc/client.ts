@@ -302,6 +302,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       list: projectsClient.list,
       add: projectsClient.add,
       clone: projectsClient.clone,
+      cancelClone: projectsClient.cancelClone,
       create: projectsClient.create,
       remove: (id: string) => projectsClient.remove({ id }),
       relocate: (id: string, path: string) =>

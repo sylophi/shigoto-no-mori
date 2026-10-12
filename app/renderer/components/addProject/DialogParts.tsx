@@ -162,21 +162,25 @@ export function FormFooter({
   );
 }
 
-// The dialog while a clone or a new repository is under way. No
-// cancel: neither can be called back once the device has started it.
-// Closing the dialog leaves it running, and the project shows up in the
-// sidebar when it lands.
+// The dialog while a clone or a new repository is under way, which
+// holds it open until the work is done. A clone, the one that can run
+// long, offers Cancel. A new repository is made at once, and its
+// publish can't be called back halfway.
 export function ProgressPanel({
   icon,
   title,
   status,
   dest,
+  onCancel,
+  cancelling = false,
 }: {
   icon: ReactNode;
   title: string;
   status: string;
   // Already tildified by the caller.
   dest: string;
+  onCancel?: () => void;
+  cancelling?: boolean;
 }) {
   return (
     <div className="flex flex-col">
@@ -195,6 +199,22 @@ export function ProgressPanel({
             line has none to measure. */}
         <span className="font-mono text-xs">{dest}</span>
       </div>
+      {onCancel && (
+        <div
+          data-slot="footer-row"
+          className="flex items-center justify-end border-t border-border px-4 py-2.5"
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={onCancel}
+            disabled={cancelling}
+          >
+            {cancelling ? "Cancelling…" : "Cancel"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

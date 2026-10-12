@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { errorMessageOf } from "@shared/errors";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   AddProjectPayloadSchema,
   BranchListSchema,
+  CancelClonePayloadSchema,
   CloneProjectPayloadSchema,
   CreateProjectPayloadSchema,
   ProjectIconSchema,
@@ -17,6 +19,14 @@ import {
   CarryOverStatsPayloadSchema,
   WorktreeIncludeStatusSchema,
 } from "@shared/schemas";
+
+// How a cancelled clone fails, as text: a peer's answer arrives
+// re-worded, so the marker is matched anywhere in it.
+export const CLONE_CANCELLED = "The clone was cancelled";
+
+export function isCloneCancelledError(error: unknown): boolean {
+  return errorMessageOf(error).includes(CLONE_CANCELLED);
+}
 
 export const projectsContract = defineContract("host", {
   list: invoke("projects:list", z.void(), z.array(ProjectSchema), {
@@ -33,6 +43,15 @@ export const projectsContract = defineContract("host", {
     remote: true,
     gated: true,
   }),
+  // Stops the clone the caller has in flight to that destination, and
+  // removes what it had written. The clone call itself fails with
+  // CLONE_CANCELLED, or, already over, answers as it would have.
+  cancelClone: invoke(
+    "projects:cancelClone",
+    CancelClonePayloadSchema,
+    z.void(),
+    { remote: true, gated: true, movesHostState: false },
+  ),
   // A new repository with an empty first commit, so its default
   // branch exists for worktrees to branch off.
   create: invoke("projects:create", CreateProjectPayloadSchema, ProjectSchema, {
