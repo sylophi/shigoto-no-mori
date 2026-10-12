@@ -27,7 +27,10 @@ import {
   useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
 import { useHasLocalHost } from "@/lib/localHost";
-import { useFanOutErrorToast } from "./useFanOutErrorToast";
+import {
+  useFanOutErrorToast,
+  useUnreachedDevicesToast,
+} from "./useFanOutErrorToast";
 import {
   buildSidebarRows,
   type GroupIdSet,
@@ -150,6 +153,7 @@ function Forest({
     groupByOwner,
     worktreeQueries,
     remoteItems,
+    devicesFailed,
     order,
     local,
     shownRemote,
@@ -333,6 +337,7 @@ function Forest({
     worktreeQueries.filter((q) => q.error).length +
       remoteItems.filter((item) => item.worktreesError).length,
   );
+  useUnreachedDevicesToast(devicesFailed);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 

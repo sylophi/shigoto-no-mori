@@ -1,5 +1,8 @@
 // The bottom drawer a page's terminals sit in: a handle along its top
-// edge that drags its height, over the tabs.
+// edge that drags its height, by pointer or touch, over the tabs. On a
+// phone it is a sheet over the whole page instead (the page is
+// `relative` for it), where a console has the room a script's output
+// needs; its tabs' hide button closes it.
 import type { ReactNode } from "react";
 
 export function TerminalDrawerView({
@@ -17,13 +20,13 @@ export function TerminalDrawerView({
       aria-label="Terminals"
       data-slot="terminal-drawer"
       style={{ height }}
-      className="relative flex shrink-0 flex-col border-t border-border bg-background"
+      className="relative flex shrink-0 flex-col border-t border-border bg-background phone:absolute phone:inset-0 phone:z-30 phone:h-auto! phone:border-t-0"
     >
       <div
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize terminals"
-        className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize"
+        className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none phone:hidden"
         onPointerDown={(event) => {
           const startY = event.clientY;
           event.currentTarget.setPointerCapture(event.pointerId);

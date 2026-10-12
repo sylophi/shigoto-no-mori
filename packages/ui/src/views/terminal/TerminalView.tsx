@@ -46,6 +46,8 @@ export function TerminalView({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  // Proposes the host's size to the process (`claim`: even unchanged).
+  const proposeRef = useRef<((claim: boolean) => void) | null>(null);
   // The latest callbacks, so a new closure from the container does not
   // build a new terminal.
   const handlers = useRef({ onInput, onFit, onLink });
@@ -127,6 +129,7 @@ export function TerminalView({
       proposed = key;
       handlers.current.onFit(cols, rows);
     };
+    proposeRef.current = propose;
     // Observing delivers the current size straight away.
     const observer = new ResizeObserver(() => propose(false));
     observer.observe(host);
@@ -175,11 +178,15 @@ export function TerminalView({
       dataSub.dispose();
       term.dispose();
       termRef.current = null;
+      proposeRef.current = null;
     };
   }, [feed, fontsIn]);
 
   // An exited shell takes no keystrokes: the cursor goes, and focus is
-  // handed back, so Tab and the app's bare-key shortcuts work again.
+  // handed back, so Tab and the app's bare-key shortcuts work again. One
+  // that comes alive (a script's run past its start) takes focus and
+  // claims its size, which its process could not take before it ran.
+  const wasLive = useRef(live);
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -189,6 +196,11 @@ export function TerminalView({
     if (!live && host?.contains(host.ownerDocument.activeElement)) {
       term.blur();
     }
+    if (live && !wasLive.current) {
+      proposeRef.current?.(true);
+      term.focus();
+    }
+    wasLive.current = live;
   }, [live, fontsIn]);
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the

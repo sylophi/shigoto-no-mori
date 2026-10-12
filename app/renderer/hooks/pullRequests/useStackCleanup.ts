@@ -18,6 +18,7 @@ import {
   someWorktreesAtom,
   worktreeListKey,
 } from "@/hooks/worktrees/useWorktrees";
+import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { useViews } from "@/lib/runtime/viewHooks";
 
 interface StackCleanupDevice {
@@ -55,12 +56,15 @@ export function useStackCleanup(
   const holders = useDeviceTargets(stack ? project : undefined).filter(
     isHolder,
   );
+  // A device asleep now still says what it held when last seen, so the
+  // box can say how many more it would take.
+  const wanted = useViewsWanted();
   const listings = useViews(
     someWorktreesAtom,
     holders.map((holder) =>
-      holder.api === undefined
-        ? null
-        : worktreeListKey(holder.deviceId, holder.project.id),
+      wanted(holder)
+        ? worktreeListKey(holder.deviceId, holder.project.id)
+        : null,
     ),
   );
   if (!stack) return null;

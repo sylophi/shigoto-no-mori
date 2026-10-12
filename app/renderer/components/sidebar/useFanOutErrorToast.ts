@@ -6,6 +6,20 @@ import { useEffect } from "react";
 import { toast } from "@/lib/toast";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
+// A peer whose projects could not be read, after the retries: listed,
+// and never reached.
+export function useUnreachedDevicesToast(devices: readonly string[]): void {
+  const names = devices.join(", ");
+  useEffect(() => {
+    const id = "devices-fanout-error";
+    if (names === "") {
+      toast.dismiss(id);
+      return;
+    }
+    toast.error(`Couldn't load the projects on ${names}`, { id });
+  }, [names]);
+}
+
 export function useFanOutErrorToast(failedCount: number): void {
   useEffect(() => {
     const id = "worktrees-fanout-error";

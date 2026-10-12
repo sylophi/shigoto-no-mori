@@ -24,12 +24,27 @@ import {
   someWorktreesAtom,
   worktreeListKey,
 } from "@/hooks/worktrees/useWorktrees";
-import { useViews, viewsOf } from "@/lib/runtime/viewHooks";
+import { peerSessionAtom } from "@/lib/runtime/atoms";
+import { useRegistry, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 import { useRemoteDevices } from "./useRemoteDevices";
 
-// The peers' projects, each as its host streams it: a peer with no
-// session reads nothing, and its rows stay as the sidebar last had them.
+// The peers' projects, each as its host streams it. A peer that has had
+// a session on this page keeps its views while it has none, so its rows
+// stay as the sidebar last had them (faded, as unreachable) while its
+// views redial; one that never had one reads nothing.
 const peersProjectsAtom = viewsOf((deviceId) => projectsAtom(deviceId));
+
+// Whether a peer's views are read: while it can be asked, and after
+// that for as long as the page lives once it had a session.
+export function useViewsWanted(): (device: {
+  readonly deviceId: string;
+  readonly api?: unknown;
+}) => boolean {
+  const registry = useRegistry();
+  return (device) =>
+    device.api !== undefined ||
+    registry.get(peerSessionAtom(device.deviceId)) > 0;
+}
 
 export interface RemoteForests {
   items: RemoteForestItem[];
@@ -38,6 +53,8 @@ export interface RemoteForests {
   // forever). The web sidebar's empty state hangs on this so a slow
   // hub reads as loading, not as "no projects".
   loading: boolean;
+  // The peers whose projects could not be read, by name.
+  devicesFailed: readonly string[];
 }
 
 export interface RemoteForestsOptions {
@@ -62,16 +79,17 @@ export interface RemoteProjectPair {
 export function useRemoteProjects(): {
   pairs: RemoteProjectPair[];
   loading: boolean;
+  // Peers whose projects could not be read, after the retries.
+  failed: readonly string[];
 } {
+  const wanted = useViewsWanted();
   // A peer that isn't sharing lists nothing.
   const devices = useRemoteDevices().filter(
     (device) => device.status.phase !== "notSharing",
   );
   const projectViews = useViews(
     peersProjectsAtom,
-    devices.map((device) =>
-      device.api === undefined ? null : device.deviceId,
-    ),
+    devices.map((device) => (wanted(device) ? device.deviceId : null)),
   );
   // A checkout the peer reports missing is left out, the same gate the
   // local fan-outs apply: every read on it would only throw.
@@ -82,6 +100,9 @@ export function useRemoteProjects(): {
         .map((project) => ({ device, project })),
     ),
     loading: projectViews.some((view) => view.isLoading),
+    failed: devices
+      .filter((_, index) => projectViews[index]?.error != null)
+      .map((device) => device.label),
   };
 }
 
@@ -91,13 +112,12 @@ export function useRemoteForests(
   const { inboxFacts = false } = options;
   // Flattened (device, project) pairs, so the worktree fan-out is one
   // flat read whatever shape the forests have.
-  const { pairs, loading: projectsLoading } = useRemoteProjects();
+  const wanted = useViewsWanted();
+  const { pairs, loading: projectsLoading, failed } = useRemoteProjects();
   const worktreeQueries = useViews(
     someWorktreesAtom,
     pairs.map(({ device, project }) =>
-      device.api === undefined
-        ? null
-        : worktreeListKey(device.deviceId, project.id),
+      wanted(device) ? worktreeListKey(device.deviceId, project.id) : null,
     ),
   );
   // Both served from the peer's own caches (the PR sweep's map, the
@@ -148,5 +168,6 @@ export function useRemoteForests(
     }),
     loading:
       projectsLoading || worktreeQueries.some((query) => query.isLoading),
+    devicesFailed: failed,
   };
 }

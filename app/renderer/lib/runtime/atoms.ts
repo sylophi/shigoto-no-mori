@@ -115,6 +115,12 @@ const REDIAL = Schedule.exponential("250 millis", 2).pipe(
   ),
 );
 
+// How many failed asks a peer's view that never showed a value takes
+// before it gives up (hostViewAtom): about eight seconds on REDIAL's
+// ladder, room for a session still dialing at boot, as v2's three
+// retries a second, two and four apart gave.
+const PEER_TRIES = 6;
+
 // One device's host modules: this machine's over its own link, a peer's
 // over the hub hop.
 const hostLinkOf = (deviceId: string, localDeviceId: string) =>
@@ -272,8 +278,16 @@ export function hostViewAtom<R extends ContractCall>(options: {
 }): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
   type A = Decoded<PayloadOf<R>>;
   const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
-  const valuesOn = (localDeviceId: string) =>
-    Stream.unwrap(
+  const valuesOn = (localDeviceId: string) => {
+    // A peer's view that has never shown a value gives up after a few
+    // asks, as v2's queries did, so a peer listed and never reached
+    // reads empty and says so; a new session to it starts it again.
+    // One that has shown rows keeps them, and redials for as long as
+    // anything reads it. This machine's host is asked for good.
+    const peer = options.deviceId !== localDeviceId;
+    let seen = false;
+    let failures = 0;
+    return Stream.unwrap(
       Effect.map(hostLinkOf(options.deviceId, localDeviceId), (link: Link) =>
         link
           .view(channelOf(options.view), options.input)
@@ -286,11 +300,26 @@ export function hostViewAtom<R extends ContractCall>(options: {
           ),
       ),
     ).pipe(
-      Stream.catchIf(endsView, (error) => Stream.die(error)),
+      Stream.tap(() =>
+        Effect.sync(() => {
+          seen = true;
+          failures = 0;
+        }),
+      ),
+      Stream.tapError(() =>
+        Effect.sync(() => {
+          failures += 1;
+        }),
+      ),
+      Stream.catchIf(
+        (error) => endsView(error) || (peer && !seen && failures >= PEER_TRIES),
+        (error) => Stream.die(error),
+      ),
       Stream.retry(REDIAL),
       Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
       Stream.ensuring(Effect.sync(() => options.onStop?.())),
     );
+  };
   return clientAtoms
     .atom((get) => {
       const localDeviceId = get(localDeviceIdAtom);
