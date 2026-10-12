@@ -19,6 +19,24 @@ import {
   readAll,
 } from "./documents.ts";
 
+// A transfer that stalls (a connection left half open by a sleep or a
+// network that changed) ends rather than waiting for good: http's own
+// floor, under 1 KB/s for a minute. ssh's keepalive is the user's own
+// config to set, which an override here would take from them.
+const NETWORK_SUBCOMMANDS = new Set([
+  "fetch",
+  "pull",
+  "push",
+  "ls-remote",
+  "clone",
+]);
+const STALL_LIMIT = [
+  "-c",
+  "http.lowSpeedLimit=1000",
+  "-c",
+  "http.lowSpeedTime=60",
+];
+
 export const makeRunning = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const slots = yield* Semaphore.make(SPAWN_SLOTS);
@@ -44,21 +62,27 @@ export const makeRunning = Effect.gen(function* () {
       Effect.gen(function* () {
         const handle = yield* spawner
           .spawn(
-            ChildProcess.make("git", [...args], {
-              cwd,
-              // LC_ALL=C pins git's messages to English, so what the
-              // engine matches on and relays reads the same everywhere.
-              env: { ...options.env, LC_ALL: "C" },
-              extendEnv: true,
-              // In a process group of its own (the spawner's default), so
-              // closing the scope ends git with its hooks and its ssh.
-              // That also leaves it no terminal to prompt on: a
-              // credential or host-key question fails instead of waiting.
-              stdin:
-                options.stdin === undefined
-                  ? "ignore"
-                  : Stream.make(encoder.encode(options.stdin)),
-            }),
+            ChildProcess.make(
+              "git",
+              NETWORK_SUBCOMMANDS.has(subcommand)
+                ? [...STALL_LIMIT, ...args]
+                : [...args],
+              {
+                cwd,
+                // LC_ALL=C pins git's messages to English, so what the
+                // engine matches on and relays reads the same everywhere.
+                env: { ...options.env, LC_ALL: "C" },
+                extendEnv: true,
+                // In a process group of its own (the spawner's default), so
+                // closing the scope ends git with its hooks and its ssh.
+                // That also leaves it no terminal to prompt on: a
+                // credential or host-key question fails instead of waiting.
+                stdin:
+                  options.stdin === undefined
+                    ? "ignore"
+                    : Stream.make(encoder.encode(options.stdin)),
+              },
+            ),
           )
           .pipe(Effect.mapError(failed(null)));
         const [stdout, stderr] = yield* Effect.all(
