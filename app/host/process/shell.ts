@@ -24,6 +24,7 @@ export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
         Effect.sync(() => void runFork(Effect.ignore(call)));
       return Shell.Shell.of({
         relaunch: tell(calls.relaunch()),
+        moveFailed: (reason) => tell(calls.moveFailed({ reason })),
         updater: {
           check: ask(calls.updaterCheck()),
           install: (unattended) => ask(calls.updaterInstall({ unattended })),

@@ -14,6 +14,7 @@ import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import * as Predicate from "effect/Predicate";
 import { chromium, type Browser, type Page } from "playwright-core";
 
 const { values } = parseArgs({
@@ -195,31 +196,69 @@ function compare(
   );
 }
 
+// How long the base's install may take: a minute or two from the store.
+const INSTALL_TIMEOUT_MS = 10 * 60_000;
+
+// The repo's own script, no dependency's, run where one exists (a base
+// from before it has none, and draws no icons on either side's terms).
+const copyIconsInto = (checkout: string) => {
+  const script = join(checkout, "app", "scripts", "copy-material-icons.mts");
+  if (existsSync(script)) {
+    execFileSync(process.execPath, [script], { stdio: "ignore" });
+  }
+};
+
 try {
   const baseCommit = git("rev-parse", "--short", base);
   const headCommit = git("rev-parse", "--short", "HEAD");
   const dirty = git("status", "--porcelain") !== "";
   console.log(`base ${base} (${baseCommit}), installing…`);
   git("worktree", "add", "--detach", baseCheckout, base);
-  execFileSync(
-    "pnpm",
-    ["install", "--frozen-lockfile", "--ignore-scripts", "--prefer-offline"],
-    { cwd: baseCheckout, stdio: "ignore" },
-  );
-  // The install runs no scripts, the app's own postinstall among them,
-  // which copies the file icons into public/ (scripts/
-  // copy-material-icons.mts): without it the base's scenes drew no file
-  // icons and every comparison carried those pairs as changes. The
-  // repo's own script, run here, is no dependency's.
-  const copyIcons = join(
-    baseCheckout,
-    "app",
-    "scripts",
-    "copy-material-icons.mts",
-  );
-  if (existsSync(copyIcons)) {
-    execFileSync(process.execPath, [copyIcons], { stdio: "ignore" });
+  // Its words kept and its time bounded: a failed or stalled install
+  // otherwise read as the tool hanging, with nothing to say why.
+  try {
+    execFileSync(
+      "pnpm",
+      ["install", "--frozen-lockfile", "--ignore-scripts", "--prefer-offline"],
+      {
+        cwd: baseCheckout,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: INSTALL_TIMEOUT_MS,
+        encoding: "utf8",
+      },
+    );
+  } catch (error) {
+    // Which pnpm answered, if it can say so quickly: the install's own
+    // failure stands either way.
+    let which = "unknown";
+    try {
+      which = execFileSync("sh", ["-c", "command -v pnpm; pnpm --version"], {
+        cwd: baseCheckout,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 10_000,
+      })
+        .trim()
+        .replace("\n", ", ");
+    } catch {
+      which = "not found, or not answering";
+    }
+    const said = Predicate.hasProperty(error, "stderr")
+      ? String(error.stderr)
+      : "";
+    throw new Error(
+      `the base's install failed (pnpm: ${which}):\n${said || String(error)}`,
+      { cause: error },
+    );
   }
+  // Both sides' file icons, from each checkout's own copy script
+  // (scripts/copy-material-icons.mts, the app's postinstall): an
+  // install that runs no scripts, the base's above or this machine's
+  // with scripts off, leaves public/ without them, and every comparison
+  // carried those pairs as changes. Idempotent, so a side that has them
+  // costs nothing.
+  copyIconsInto(baseCheckout);
+  copyIconsInto(repo);
 
   const [baseOrigin, headOrigin] = await Promise.all([
     serve(baseCheckout),
@@ -248,14 +287,32 @@ try {
     mkdirSync(join(out, dir), { recursive: true });
   }
   const differing: { shot: string; pixels: number }[] = [];
+  const unshot: { shot: string; side: "base" | "head"; reason: string }[] = [];
   for (const scene of scenes) {
     for (const theme of THEMES) {
       const shot = `${theme}-${scene}`;
       // oxlint-disable-next-line no-await-in-loop -- one page a side, so the shots go one after another
-      const [before, after] = await Promise.all([
+      const [baseShot, headShot] = await Promise.allSettled([
         shoot(basePage, baseOrigin, scene, theme),
         shoot(headPage, headOrigin, scene, theme),
       ]);
+      // A scene that never settles enough to shoot (a side that keeps
+      // moving) is named in the report, not the end of the run.
+      if (baseShot.status === "rejected" || headShot.status === "rejected") {
+        const why = [
+          ["base", baseShot],
+          ["head", headShot],
+        ] as const;
+        for (const [side, result] of why) {
+          if (result.status !== "rejected") continue;
+          const reason = String(result.reason).split("\n")[0] ?? "";
+          unshot.push({ shot, side, reason });
+          console.log(`unshot   ${shot}  (${side}: ${reason})`);
+        }
+        continue;
+      }
+      const before = baseShot.value;
+      const after = headShot.value;
       // oxlint-disable-next-line no-await-in-loop -- see above
       const { pixels, diff } = await compare(diffPage, before, after);
       if (pixels <= threshold) continue;
@@ -281,6 +338,15 @@ try {
     `${differing.length} of ${total} shots differ by more than ${threshold} pixels. Took ${seconds} s.`,
     "",
   ];
+  if (unshot.length > 0) {
+    lines.push(
+      "Couldn't shoot:",
+      ...unshot.map(
+        ({ shot, side, reason }) => `- ${shot} (${side}): ${reason}`,
+      ),
+      "",
+    );
+  }
   if (differing.length > 0) {
     lines.push("| Shot | Pixels | Images |", "| --- | --- | --- |");
     for (const { shot, pixels } of differing) {
@@ -297,7 +363,12 @@ try {
   console.log(
     `${differing.length} of ${total} shots differ (${seconds} s): ${join(out, "report.md")}`,
   );
-  process.exitCode = differing.length > 0 ? 1 : 0;
+  if (unshot.length > 0) {
+    console.log(
+      `${unshot.length} shots couldn't be taken (listed in the report)`,
+    );
+  }
+  process.exitCode = differing.length > 0 || unshot.length > 0 ? 1 : 0;
 } finally {
   await browser?.close();
   cleanUp();
