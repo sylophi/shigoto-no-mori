@@ -471,6 +471,8 @@ let toListener: Awaited<ReturnType<typeof bootDirectWire>>["toListener"];
 let connected: string[];
 // What the hub's device list fails with, null while it answers.
 let registryFails: unknown = null;
+// What the hub's device list waits on before it answers.
+let registryWaits: Effect.Effect<void> = Effect.void;
 let peerOwns: string;
 let removalsOf: (
   worktreeId: string,
@@ -621,9 +623,13 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   };
   standInAccount({
     listDevices: Effect.suspend(() =>
-      registryFails === null
-        ? Effect.succeed(registry)
-        : Effect.fail(listDevicesFailure(registryFails)),
+      registryWaits.pipe(
+        Effect.andThen(
+          registryFails === null
+            ? Effect.succeed(registry)
+            : Effect.fail(listDevicesFailure(registryFails)),
+        ),
+      ),
     ),
     directPeers: Effect.sync(() =>
       Object.fromEntries(
@@ -1442,6 +1448,18 @@ it("the hub out of reach says so with its cause, and a revoked credential reads 
     registryFails = null;
   }
 });
+
+it("an answer the app takes past two pings still reaches the terminal", async () => {
+  // ---- (8c) A slow account (a hub taking its time) is not a lost
+  // connection: the pings between keep the call alive.
+  registryWaits = Effect.sleep("12 seconds");
+  try {
+    const listed = await runCli(["--json", "devices"]);
+    assert.equal(listed.code, 0, listed.stderrTail);
+  } finally {
+    registryWaits = Effect.void;
+  }
+}, 60_000);
 
 it("a loopback.json removed under the running app is republished", async () => {
   // ---- (9) A data wipe takes loopback.json with the rest of the data

@@ -423,16 +423,19 @@ describe("what a socket may send", () => {
     expect((await socket.closed).code).toBe(1009);
   });
 
-  // A thousand messages through workerd take seconds on a loaded
-  // machine, past vitest's default 5 s.
   it("cuts a socket that sends faster than its budget", async () => {
     const { socket } = await enrollAndConnect("acct-input-rate", "dev-rate");
     await socket.untilPresence(["dev-rate"]);
     // Malformed, so nothing is relayed or answered: only the count
-    // matters. Far more than the burst, in less time than it refills.
-    for (let i = 0; i < 1000; i++) socket.ws.send("{}");
+    // matters. Sent until the hub cuts the socket, however long the hub
+    // takes over each, so no count has to outrun the refill.
+    while (socket.ws.readyState === WebSocket.OPEN) {
+      for (let i = 0; i < 100; i++) socket.ws.send("{}");
+      // oxlint-disable-next-line no-await-in-loop -- a turn for the close to land
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
     expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
-  }, 30_000);
+  });
 
   it("lets a dial storm's worth of asks through", async () => {
     const { socket } = await enrollAndConnect("acct-input-storm", "dev-storm");

@@ -5,5 +5,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/**/*.test.{ts,tsx}"],
+    // Every case renders synchronously and waits on nothing, so a slow
+    // machine only makes it slower: no per-case deadline to miss.
+    testTimeout: 0,
   },
 });

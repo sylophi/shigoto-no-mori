@@ -128,6 +128,12 @@ export const LOOPBACK_FILE = "loopback.json";
 // this long is not the app.
 const HANDSHAKE_TIMEOUT = "5 seconds";
 
+// A ping every 5 s, and the app gone once 15 s pass with no frame from
+// it. Effect's default timeout is the interval itself, timed from the
+// last frame, and the last pong arrives a moment after the ping the next
+// check counts from, so a call the app took over 5 s to answer was cut.
+const PING = { pingInterval: "5 seconds", pingTimeout: "15 seconds" } as const;
+
 // The close code the link's listener turns a connection away with when
 // it holds as many as it takes.
 const CLOSE_OVER_CAPACITY = 1013;
@@ -197,6 +203,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     );
     // One connection per call: a drop fails the call, as the answer.
     const protocol = yield* RpcClient.makeProtocolSocket({
+      ...PING,
       retryPolicy: Schedule.recurs(0),
     }).pipe(
       Effect.provideService(Socket.Socket, socket),
