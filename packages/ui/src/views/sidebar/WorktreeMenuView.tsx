@@ -22,6 +22,7 @@ import {
   ContextMenuTrigger,
 } from "../../primitives/context-menu.tsx";
 import {
+  DropdownMenuArmedLabel,
   DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -41,7 +42,7 @@ export function WorktreeMenuView({
   return (
     <ContextMenu onOpenChange={onOpenChange}>
       <ContextMenuTrigger render={row} />
-      <ContextMenuContent className="min-w-48">{children}</ContextMenuContent>
+      <ContextMenuContent>{children}</ContextMenuContent>
     </ContextMenu>
   );
 }
@@ -179,7 +180,11 @@ export function WorktreeMenuManageView({
           }}
         >
           <Trash2 />
-          {remove.armed ? "Click again to delete" : "Delete worktree"}
+          <DropdownMenuArmedLabel
+            armed={remove.armed}
+            label="Delete worktree"
+            armedLabel="Click again to delete"
+          />
         </DropdownMenuItem>
       )}
     </>

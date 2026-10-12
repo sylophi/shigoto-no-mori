@@ -93,7 +93,7 @@ export function SidebarPartsScene() {
           <WorktreeSortMenuView sort="recent" onPick={noop} />
         </Part>
         <Part label="Worktree menu">
-          <StaticMenu className="min-w-48">
+          <StaticMenu>
             <WorktreeMenuLeadView
               onGoToProject={noop}
               pullRequest={{ number: 142, url: "" }}
