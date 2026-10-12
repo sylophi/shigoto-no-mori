@@ -2,7 +2,8 @@
 // re-render (renderer/lib/guideTarget.ts, which GuideCallout.tsx runs).
 //
 // Asserts: a control re-rendered into a new element is the same control
-// (its tag, role, label, the text of what labels it, link and text,
+// (its tag, role, label, the text of what labels it or its own labels,
+// link and text,
 // whitespace aside, and not the ids a remount draws anew), so the callout finds the replacement after the
 // shell's mark went with the old one. Of two of one name, the one nearest
 // where the last stood is kept. A control the page no longer has, or one
@@ -122,6 +123,23 @@ it("tells switches named only by their labels apart, through a remount", () => {
   );
   assert.equal(
     refindTarget(page(other, again), key, { x: 0, y: 0 })?.label,
+    "again",
+  );
+});
+
+it("tells fields apart by their own labels", () => {
+  const field = (label: string, text: string) => ({
+    ...el(label, "INPUT", {}, ""),
+    labels: [{ textContent: text }],
+  });
+  const key = targetKey(field("branch", "Branch name"));
+  assert.equal(
+    refindTarget(page(field("folder", "Worktree folder")), key, { x: 0, y: 0 }),
+    null,
+  );
+  assert.equal(
+    refindTarget(page(field("again", "Branch name")), key, { x: 0, y: 0 })
+      ?.label,
     "again",
   );
 });

@@ -342,9 +342,11 @@ const make = Effect.gen(function* () {
   const sessions = yield* Ref.make<ReadonlyMap<string, Session>>(new Map());
   // One action at a time, so two never interleave their input.
   const lock = yield* Semaphore.make(1);
-  // One start or end at a time, so a window never holds two sessions,
-  // and a launch has opened or failed before the next one replaces it.
-  const turns = yield* Semaphore.make(1);
+  // One start at a time, so a window never holds two sessions, and a
+  // launch has opened or failed before the next one replaces it. Stop
+  // and a window's close never wait on it: a launch can hang on macOS
+  // asking whether the app may control the terminal.
+  const starts = yield* Semaphore.make(1);
 
   const byWindow = (windowId: number) =>
     Effect.map(Ref.get(sessions), (all) =>
@@ -364,13 +366,23 @@ const make = Effect.gen(function* () {
   const tell = (session: Session) =>
     windows.tell(session.windowId, stateOf(session));
 
+  // The window hears what guides it once the session is gone: nothing,
+  // or a start's that came in meanwhile (a start while the agent's
+  // server ends its session, or while a launch fails).
   const endSession = (session: Session) =>
-    Effect.andThen(close(session), windows.tell(session.windowId, null));
+    Effect.gen(function* () {
+      yield* close(session);
+      const now = yield* byWindow(session.windowId);
+      yield* windows.tell(
+        session.windowId,
+        now === undefined ? null : stateOf(now),
+      );
+    });
 
   const end = Effect.fn("Guide.end")(function* (windowId: number) {
     const session = yield* byWindow(windowId);
     if (session !== undefined) yield* endSession(session);
-  }, turns.withPermits(1));
+  });
 
   const start = Effect.fn("Guide.start")(function* (
     windowId: number,
@@ -393,7 +405,7 @@ const make = Effect.gen(function* () {
     yield* windows
       .launch({ session: session.token, harness })
       .pipe(Effect.onError(() => endSession(session)));
-  }, turns.withPermits(1));
+  }, starts.withPermits(1));
 
   const read = Effect.fn("Guide.read")(function* (windowId: number) {
     const session = yield* byWindow(windowId);

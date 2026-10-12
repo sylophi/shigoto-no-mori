@@ -556,9 +556,12 @@ try {
     }
   }
 } finally {
-  quitTerminal();
-  await app.stop();
-  logs.end();
+  try {
+    quitTerminal();
+  } finally {
+    await app.stop();
+    logs.end();
+  }
 }
 
 for (const harness of harnesses) {

@@ -16,8 +16,10 @@ import type {
 } from "@shigomori/contracts/modules/guide";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
@@ -97,6 +99,8 @@ function makeShell() {
   const told: { windowId: number; state: GuideState | null }[] = [];
   const launched: string[] = [];
   let launchFails = false;
+  // A launch held until released, as one waiting on the user is.
+  let holding: Deferred.Deferred<void> | undefined;
   const closing = new Set<(windowId: number) => void>();
   const layer = Guide.layer.pipe(
     Layer.provide(
@@ -130,7 +134,10 @@ function makeShell() {
               ? Effect.fail(
                   new RemoteCallError({ text: "Couldn't open Terminal" }),
                 )
-              : Effect.sync(() => void launched.push(session)),
+              : Effect.andThen(
+                  Effect.sync(() => void launched.push(session)),
+                  holding === undefined ? Effect.void : Deferred.await(holding),
+                ),
           closed: Stream.callback<number>((queue) =>
             Effect.acquireRelease(
               Effect.sync(() => {
@@ -172,6 +179,10 @@ function makeShell() {
     failLaunches: () => {
       launchFails = true;
     },
+    holdLaunches: (deferred: Deferred.Deferred<void>) => {
+      holding = deferred;
+    },
+    launched,
     // Whether anything heard it.
     close: (windowId: number) => {
       for (const listener of closing) listener(windowId);
@@ -298,6 +309,49 @@ it("keeps one session a window when two starts overlap", async () => {
           ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
         );
       }
+    }),
+  );
+});
+
+it("stops a guide whose launch hangs, and leaves it stopped once the launch opens", async () => {
+  const shell = makeShell();
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const release = yield* Deferred.make<void>();
+      shell.holdLaunches(release);
+      const starting = yield* Effect.forkChild(guide.start(1, "claude"));
+      while (shell.launched.length === 0) yield* Effect.yieldNow;
+      const token = shell.launched[0] ?? "";
+      // Stop, and the window's close, go through while it waits.
+      yield* guide.end(1);
+      assert.equal(yield* guide.read(1), null);
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(starting);
+      assert.equal(yield* guide.read(1), null);
+      assert.ok(
+        ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
+      );
+    }),
+  );
+});
+
+it("keeps a start's band when the agent's server ends the session it replaces", async () => {
+  const shell = makeShell();
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const first = yield* shell.start(guide, 1, "claude");
+      // Attached, so its end takes a turn.
+      yield* guide.drive(first, { _tag: "look" });
+      const [, second] = yield* Effect.all(
+        [
+          Effect.exit(guide.drive(first, { _tag: "end" })),
+          shell.start(guide, 1, "codex"),
+        ],
+        { concurrency: "unbounded" },
+      );
+      yield* guide.drive(second, { _tag: "look" });
+      assert.equal((yield* guide.read(1))?.harness, "codex");
+      assert.equal(shell.told.at(-1)?.state?.harness, "codex");
     }),
   );
 });

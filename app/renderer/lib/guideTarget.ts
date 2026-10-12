@@ -21,11 +21,14 @@ export interface TargetLike {
   readonly ownerDocument: {
     getElementById(id: string): { readonly textContent: string | null } | null;
   };
+  // A field's own labels (`<label for>`, or one wrapping it).
+  readonly labels?: ArrayLike<{ readonly textContent: string | null }> | null;
 }
 
 // The attributes that name a control and stay the same through a
 // re-render. Not an id or aria-labelledby's ids, which a remount draws
-// anew: what those ids label it with is read instead.
+// anew: what those ids label it with is read instead, as are a field's
+// own labels.
 const NAMING = ["role", "aria-label", "href", "name"] as const;
 
 const collapsed = (text: string | null) =>
@@ -45,6 +48,9 @@ export function targetKey(el: TargetLike): string {
         .filter(Boolean)
         .map((id) => el.ownerDocument.getElementById(id)?.textContent ?? "")
         .join(" "),
+    ),
+    collapsed(
+      Array.from(el.labels ?? [], (label) => label.textContent ?? "").join(" "),
     ),
     collapsed(el.textContent),
   ].join("\u0000");
