@@ -12,9 +12,11 @@ import { SignInButtonView } from "@shigomori/ui/views/account/AccountButtonsView
 // signed in but the device is not enrolled (the automatic attempt
 // failed: hub down, mint error), opening the modal again would do
 // nothing, so the button becomes the manual enrollment retry instead
-// (useEnrollment).
+// (useEnrollment). In the banners the device reads enrolled, so it
+// follows the session alone: Sign in where it lapsed, Retry enrollment
+// where it lives.
 export function ClerkSignInButton() {
-  const enrollment = useEnrollment();
+  const enrollment = useEnrollment({ again: true });
   return (
     <SignInButtonView
       retry={enrollment.step !== "sign-in"}

@@ -1950,8 +1950,20 @@ export function installFakeHostBridge(
         ? { ...posed, sidebarView: posedView }
         : posed;
     },
-    "clientConfig:write": ({ config }) => {
-      localStorage.setItem("sm.fakeHost.clientConfig", JSON.stringify(config));
+    "clientConfig:patch": ({ set, clear }) => {
+      let next: Record<string, unknown> = {};
+      try {
+        next = JSON.parse(
+          localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}",
+        );
+      } catch {
+        // Corrupt storage reads as defaults.
+      }
+      for (const [key, value] of Object.entries(set)) {
+        if (value !== undefined) next[key] = value;
+      }
+      for (const key of clear) delete next[key];
+      localStorage.setItem("sm.fakeHost.clientConfig", JSON.stringify(next));
     },
     "hub:status": hubSnapshot,
     "hub:invokePeer": ({ deviceId, channel, input }) => {

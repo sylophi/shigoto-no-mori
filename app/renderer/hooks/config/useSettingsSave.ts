@@ -6,7 +6,6 @@ import {
 import {
   type ClientConfig,
   type DeviceSettingsPatch,
-  type GlobalConfig,
   type LauncherCommand,
 } from "@shigomori/contracts/schemas";
 import {
@@ -14,14 +13,10 @@ import {
   DEFAULT_LIGHT_THEME,
 } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import {
-  queryKeys,
-  queryKeysFor,
-  type QueryKeyRegistry,
-} from "@/lib/queryKeys";
-import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
+import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
+import { patchClientConfig } from "./useClientConfig";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
-import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // A launcher row persists only once both halves are filled in.
@@ -118,11 +113,32 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
   };
 }
 
-// The docs are canonical by construction (one encoder, undefined keys
-// dropped by JSON.stringify), so equal serializations mean an
-// unchanged store.
-function serialize(doc: DeviceSettingsPatch | ClientConfig): string {
-  return JSON.stringify(doc);
+// What a Save writes: each store's keys the form changed from what it
+// last saved, nothing else.
+export function settingsWrites(
+  saved: SettingsFormState,
+  state: SettingsFormState,
+): { devicePatch: DeviceSettingsPatch; clientPatch: Partial<ClientConfig> } {
+  return {
+    devicePatch: changedKeys(
+      toLocalDeviceSettingsPatch(saved),
+      toLocalDeviceSettingsPatch(state),
+    ),
+    clientPatch: changedKeys(toClientConfig(saved), toClientConfig(state)),
+  };
+}
+
+// The keys of `now` that differ from `was`, a key gone from `now`
+// given as undefined (its default, stored by omission).
+function changedKeys<T extends object>(was: T, now: T): Partial<T> {
+  const changed: Record<string, unknown> = {};
+  const keys = new Set([...Object.keys(was), ...Object.keys(now)]);
+  for (const key of keys) {
+    const before = (was as Record<string, unknown>)[key];
+    const after = (now as Record<string, unknown>)[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) changed[key] = after;
+  }
+  return changed as Partial<T>;
 }
 
 // Thrown when the appearance write fails after the device write
@@ -145,7 +161,6 @@ export class SettingsSaveError extends Error {
 interface SettingsSaveResult {
   devicePersisted: boolean;
   clientPersisted: boolean;
-  clientConfig: ClientConfig;
 }
 
 // What a device-settings write stales, for whichever device's registry
@@ -170,82 +185,47 @@ export function invalidateDeviceSettingsQueries(
 
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
 // error reset atomically per save (two mutations left a failed half's
-// error sticky across later successful saves). Each store gets a dirty
-// guard on its canonical serialized doc: an unchanged device patch
-// skips the device write entirely (a store write plus launcher
-// re-detection), and an unchanged appearance doc skips
-// clientConfig.json.
+// error sticky across later successful saves). Each store is sent only
+// the keys the form changed from what it last saved (`saved`), so a
+// form seeded while a read was failing, or before another window
+// changed a key, never writes back what it did not change. A store
+// with nothing changed is not written.
 // Writes run device first, then client, sequentially: a device failure
 // persists nothing, and a client failure after a landed device write
 // throws SettingsSaveError so the form can advance the persisted half.
-export function useSettingsSave({
-  initialConfig,
-  initialClientConfig,
-}: {
-  initialConfig: GlobalConfig;
-  initialClientConfig: ClientConfig;
-}) {
+export function useSettingsSave() {
   const page = useApi();
+  const registry = useRegistry();
   const queryClient = useQueryClient();
-  const initialState = fromConfig(initialConfig, initialClientConfig);
-  const initialDevicePatch = serialize(
-    toLocalDeviceSettingsPatch(initialState),
-  );
-  const initialClientDoc = serialize(toClientConfig(initialState));
-
   return useMutation({
-    mutationFn: async (
-      state: SettingsFormState,
-    ): Promise<SettingsSaveResult> => {
-      const clientConfig = toClientConfig(state);
-      const devicePatch = toLocalDeviceSettingsPatch(state);
-      const devicePersisted = serialize(devicePatch) !== initialDevicePatch;
-      const clientPersisted = serialize(clientConfig) !== initialClientDoc;
+    mutationFn: async ({
+      state,
+      saved,
+    }: {
+      state: SettingsFormState;
+      saved: SettingsFormState;
+    }): Promise<SettingsSaveResult> => {
+      const { devicePatch, clientPatch } = settingsWrites(saved, state);
+      const devicePersisted = Object.keys(devicePatch).length > 0;
+      const clientPersisted = Object.keys(clientPatch).length > 0;
       if (devicePersisted) {
         // The same patch write a peer's save rides, on this machine's
         // own api: the host applies it over the stored document under
-        // its config write lock, so everything the form does not manage
-        // rides through untouched.
+        // its config write lock, absent keys kept.
         await page.run(
           page.globalConfig.writeDeviceSettings({ patch: devicePatch }),
         );
       }
-      // keepReachable rides the same client store but is written
-      // immediately by useKeepReachableUpdate, never staged in this form.
-      // The whole-document write clears every modeled key it does not
-      // carry, so route the appearance keys through mergeClientConfigWrite:
-      // it merges them over the live cached doc, carrying keepReachable
-      // (and any other out-of-band key) through so an appearance save
-      // cannot wipe it. keepReachable never appears in the dirty diff
-      // above, so it cannot trigger a save on its own or get reverted on
-      // discard. The returned merged doc is what onSuccess caches.
-      let persistedClientConfig: ClientConfig = clientConfig;
       if (clientPersisted) {
         try {
-          persistedClientConfig = await mergeClientConfigWrite(
-            page,
-            queryClient,
-            clientConfig,
-          );
+          await patchClientConfig(page, registry, clientPatch);
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);
         }
       }
-      return {
-        devicePersisted,
-        clientPersisted,
-        clientConfig: persistedClientConfig,
-      };
+      return { devicePersisted, clientPersisted };
     },
-    onSuccess: ({ devicePersisted, clientPersisted, clientConfig }) => {
-      if (clientPersisted) {
-        // setQueryData where the device half invalidates: the
-        // divergence is deliberate. No CLI merge can change the client
-        // store behind our back, so the payload IS the new stored
-        // document and a refetch could only tell us what we already
-        // know.
-        queryClient.setQueryData(queryKeys.clientConfig(), clientConfig);
-      }
+    onSuccess: ({ devicePersisted }) => {
       if (devicePersisted) {
         invalidateDeviceSettingsQueries(
           queryClient,

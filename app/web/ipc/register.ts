@@ -107,6 +107,8 @@ export type WebBridge = {
   // transition. The storage event itself only fires in OTHER tabs, so
   // the tab's own push and this never double-fire.
   notifyAccountChanged(): void;
+  // The same for the client config another tab wrote.
+  notifyClientConfigChanged(): void;
   // Reconciles the hub socket with the current account state.
   refreshHub(): Promise<void>;
   // The liveness probe for the hub socket and every direct session,
@@ -121,7 +123,7 @@ export type WebBridge = {
   stop(): Promise<void>;
 };
 
-const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
+export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
@@ -291,6 +293,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           ),
         ),
       );
+      clientConfigChanged();
     }
     tab.push(accountContract, "changed", { accountId });
     void refreshHub();
@@ -405,16 +408,33 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // ---- clientConfig module ----
 
+  const readClientConfig = () =>
+    readJsonKey(
+      deps.localStorage,
+      CLIENT_CONFIG_KEY,
+      StoredClientConfigSchema,
+      {},
+    );
+  // The watchers of this tab's client config (clientConfig:watch), told
+  // of this tab's writes and, through notifyClientConfigChanged, another
+  // tab's.
+  const clientConfigWatchers = new Set<(stored: unknown) => void>();
+  const clientConfigChanged = () => {
+    const stored = readClientConfig();
+    for (const watcher of clientConfigWatchers) watcher(stored);
+  };
   const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
-    read: () =>
-      readJsonKey(
-        deps.localStorage,
-        CLIENT_CONFIG_KEY,
-        StoredClientConfigSchema,
-        {},
-      ),
-    write: ({ config: next }) => {
+    read: readClientConfig,
+    // Over the stored config as it is now, which another tab may have
+    // written since this one last read it.
+    patch: ({ set, clear }) => {
+      const next: Record<string, unknown> = { ...readClientConfig() };
+      for (const [key, value] of Object.entries(set)) {
+        if (value !== undefined) next[key] = value;
+      }
+      for (const key of clear) delete next[key];
       writeKey(deps.localStorage, CLIENT_CONFIG_KEY, JSON.stringify(next));
+      clientConfigChanged();
     },
   };
 
@@ -481,6 +501,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   tab.served.serve(accountContract, accountHandlers);
   tab.served.serve(clientConfigContract, clientConfigHandlers);
+  tab.view(clientConfigContract, "watch", (_input, observer) => {
+    observer.value(readClientConfig());
+    clientConfigWatchers.add(observer.value);
+    return () => {
+      clientConfigWatchers.delete(observer.value);
+    };
+  });
   const hubServed: EffectHandlers<typeof hubContract> = {
     status: () =>
       Effect.promise(async () => hubHandlers.status(undefined, undefined)),
@@ -530,6 +557,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     links: client.links,
 
     notifyAccountChanged: accountChanged,
+    notifyClientConfigChanged: clientConfigChanged,
 
     refreshHub,
 

@@ -110,7 +110,7 @@ export function ThemeProvider({
 
   // Keep the main process in sync so the BrowserWindow background tracks
   // the applied theme (including unsaved previews). Non-persisting: the
-  // saved value lands through the clientConfig write instead.
+  // saved value lands through the clientConfig patch instead.
   useEffect(() => {
     if (!fromRoot) void api.run(api.window.previewTheme({ theme: applied }));
   }, [fromRoot, applied, api]);

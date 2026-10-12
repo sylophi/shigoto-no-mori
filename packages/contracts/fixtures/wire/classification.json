@@ -140,12 +140,16 @@
     "gated": true,
     "grant": "changeApp"
   },
+  "clientConfig:patch": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "clientConfig:read": {
     "kind": "invoke",
     "scope": "client"
   },
-  "clientConfig:write": {
-    "kind": "invoke",
+  "clientConfig:watch": {
+    "kind": "view",
     "scope": "client"
   },
   "control:bring": {

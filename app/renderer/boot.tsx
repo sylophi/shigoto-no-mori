@@ -131,7 +131,7 @@ export function startApp({
 
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
-  startSharedSettingsSync(api, queryClient, registry);
+  startSharedSettingsSync(api, registry);
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
@@ -153,7 +153,7 @@ export function startApp({
 
   // Agent sessions on any device: the waiting ones for the Live page,
   // and on the desktop the notifications.
-  startAgentWatch(api, queryClient, registry);
+  startAgentWatch(api, registry);
 
   return { api, registry, queryClient };
 }

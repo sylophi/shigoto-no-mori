@@ -10,13 +10,12 @@
 // where the sidebar's mark can't be seen, and a list seen for the first
 // time (or again after its stream stopped) tells nothing: nothing
 // changed that this window saw.
-import type { QueryClient } from "@tanstack/react-query";
 import type {
   AgentSession,
   ClientConfig,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { clientConfigNow } from "@/hooks/config/useClientConfig";
 import { needView } from "@shigomori/ui/lib/agentNeeds.ts";
 import { harnessLabel } from "@shigomori/ui/lib/agentSessions.ts";
 import { documentFocused } from "@/lib/focus";
@@ -48,7 +47,6 @@ export function useWaitingAgents(): readonly WaitingAgent[] {
 // Boot wiring, once per window, like the other boot subscriptions.
 export function startAgentWatch(
   api: RendererApi,
-  queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
 ): void {
   // Each list as last seen, by its key: the list itself (the view sends
@@ -82,8 +80,7 @@ export function startAgentWatch(
     // Read once per list, and only where a notice could go out.
     const config =
       before !== undefined && api.isElectron && !documentFocused()
-        ? (queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig()) ??
-          {})
+        ? (clientConfigNow(registry) ?? {})
         : undefined;
     for (const worktree of list) {
       for (const now of worktree.agentSessions ?? []) {

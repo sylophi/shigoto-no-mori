@@ -5,7 +5,9 @@
 // machine's host's, or in the web client the tab's own.
 import { useAtomValue } from "@effect/atom-react";
 import { useMutation } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import * as Cause from "effect/Cause";
+import { notifyError } from "@/lib/toast";
 import { callOf } from "@shigomori/contracts/contract";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import type {
@@ -67,15 +69,21 @@ export function useSharedSettingsView<T>(
   });
 }
 
-// Whether the local copy has been read (or the read has failed, which
-// leaves nothing to wait for). Until then an unset setting and an
-// unread one look alike, and a surface that acts on the difference
-// holds off.
+// Whether the local copy has been read. Until then an unset setting and
+// an unread one look alike, and a surface that acts on the difference
+// holds off; a read that failed says so and keeps it off, since a write
+// over a document never read would replace what is stored.
 export function useSharedSettingsSettled(): boolean {
-  return useAtomValue(
-    sharedSettingsAtom(useApi().deviceId),
-    (result) => !AsyncResult.isInitial(result),
-  );
+  const result = useAtomValue(sharedSettingsAtom(useApi().deviceId));
+  const failure = AsyncResult.isFailure(result)
+    ? Cause.squash(result.cause)
+    : null;
+  useEffect(() => {
+    if (failure !== null) {
+      notifyError("Couldn't load shared settings", failure);
+    }
+  }, [failure]);
+  return AsyncResult.isSuccess(result);
 }
 
 // The writer for one key (undefined: nothing to write to, a no-op).

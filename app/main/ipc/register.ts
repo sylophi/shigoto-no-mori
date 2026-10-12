@@ -14,6 +14,7 @@ import type {
   PushKeys,
   PushProducerPayload,
   Handlers,
+  ViewHandlers,
 } from "@shigomori/contracts/types";
 import { resolvePush } from "@shared/ipc/served";
 import { SHELL_PORT_CHANNEL } from "@shared/ipc/shell";
@@ -68,6 +69,16 @@ export function registerContract<M extends ContractModule>(
     throw new Error(`${nameOf(module)} is the host's, not the shell's`);
   }
   shellRegistrar.serve(module, handlers);
+}
+
+export function registerViews<M extends ContractModule>(
+  module: M,
+  views: ViewHandlers<M, never>,
+): void {
+  if (isHostSide(module)) {
+    throw new Error(`${nameOf(module)} is the host's, not the shell's`);
+  }
+  shellRegistrar.view(module, views);
 }
 
 // A push to one window alone (its menu's events, its focus), on its

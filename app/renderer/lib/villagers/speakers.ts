@@ -5,7 +5,6 @@ import {
   villageLifeEnabled,
   villageLifeShows,
 } from "@shigomori/ui/lib/villageLife.ts";
-import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { villagerDataStatusQueryOptions } from "@/hooks/villagers/useVillagerData";
 import {
   faceUrl,
@@ -29,12 +28,7 @@ export async function villageProfiles(
 ): Promise<VillagerProfiles | null> {
   // No retries: a read that fails leaves the toast plain, now, rather
   // than seconds late.
-  const config = await throughCancel(() =>
-    queryClient.ensureQueryData({
-      ...clientConfigQueryOptions(api),
-      retry: false,
-    }),
-  );
+  const config = await api.run(api.clientConfig.read());
   if (!villageLifeEnabled(config)) return null;
   const status = await throughCancel(() =>
     queryClient.ensureQueryData({

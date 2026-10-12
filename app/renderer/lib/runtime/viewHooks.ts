@@ -6,7 +6,8 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as AsyncResultValue from "effect/reactivity/AsyncResult";
-import { use } from "react";
+import { use, useEffect, useRef } from "react";
+import { notifyError } from "@/lib/toast";
 import { noView, type ViewState, viewStateOf } from "./atoms";
 
 export type LiveViewState<A> = ViewState<A> & {
@@ -24,6 +25,22 @@ export function useView<A>(
       if (view !== null) registry.refresh(view);
     },
   };
+}
+
+// A view that failed says so, as a failed query does (its errorTitle):
+// once per failure, for a view this window cannot do without.
+export function useViewErrorToast(
+  state: Pick<ViewState<unknown>, "error">,
+  title: string,
+) {
+  // By its message: a failure that is not an Error is wrapped afresh on
+  // every render.
+  const message = state.error?.message ?? null;
+  const error = useRef(state.error);
+  error.current = state.error;
+  useEffect(() => {
+    if (message !== null) notifyError(title, error.current);
+  }, [message, title]);
 }
 
 // The view's first value, or undefined if none comes within `withinMs`

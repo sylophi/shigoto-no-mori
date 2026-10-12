@@ -4,8 +4,8 @@
 // window the port was handed to. Every window that loads asks the
 // preload for a port, the preload asks here (attach), and a page that
 // goes takes its port with it.
-import { channelOf, isPush } from "@shigomori/contracts/contract";
-import { RemoteCallError } from "@shigomori/contracts/errors";
+import { channelOf, isInvoke, isPush } from "@shigomori/contracts/contract";
+import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -159,6 +159,21 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
       const channel = channelOf(call);
       if (isPush(call)) {
         handlers[channel] = push(channel);
+        continue;
+      }
+      // A view, failing as a call does.
+      if (!isInvoke(call)) {
+        const view = registrar.viewOf(call);
+        handlers[channel] =
+          view === undefined
+            ? () =>
+                Stream.fail(
+                  new RemoteCallError({
+                    text: `No view registered for channel "${channel}"`,
+                  }),
+                )
+            : (payload: unknown) =>
+                view(payload).pipe(Stream.mapError(callFailureOf));
         continue;
       }
       const fn = registrar.invokeOf(call);

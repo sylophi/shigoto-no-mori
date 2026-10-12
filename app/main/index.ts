@@ -307,7 +307,7 @@ app.on("ready", async () => {
   // Host liveness. Install the crash guards before
   // the window exists so an early fatal error is still caught, then
   // reconcile the login item to the saved keepReachable opt-in. The same
-  // reconcile reruns after every clientConfig write (the write handler)
+  // reconcile reruns after every clientConfig patch (the patch handler)
   // and every sign-in or sign-out (the account fan-out in
   // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();

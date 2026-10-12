@@ -98,6 +98,22 @@ import { useApi } from "@/lib/runtime/pageApi";
 // form only ever carries appearance, and every device in the tab bar
 // is a peer, edited over that peer's direct session exactly as from
 // another desktop.
+// A draft over a seed that moved: what the form changed stays, the rest
+// takes the new seed.
+function keepTouched(
+  form: SettingsFormState,
+  saved: SettingsFormState,
+  next: SettingsFormState,
+): SettingsFormState {
+  const merged = { ...next };
+  for (const key of Object.keys(form) as (keyof SettingsFormState)[]) {
+    if (JSON.stringify(form[key]) !== JSON.stringify(saved[key])) {
+      Object.assign(merged, { [key]: form[key] });
+    }
+  }
+  return merged;
+}
+
 export function SettingsForm({
   initialConfig,
   initialClientConfig,
@@ -107,7 +123,7 @@ export function SettingsForm({
 }) {
   const localDeviceId = useApi().deviceId;
   const hasLocalHost = useHasLocalHost();
-  const save = useSettingsSave({ initialConfig, initialClientConfig });
+  const save = useSettingsSave();
   const { setOverride } = useTheme();
   const { setOverride: setPaletteOverride } = usePalette();
   const devices = useHostDevices();
@@ -121,11 +137,16 @@ export function SettingsForm({
     picked?.deviceId === deviceId ? hostTab : undefined;
   const villageLife = useVillageLife();
 
-  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
-    useDirtyForm<SettingsFormState>(
-      fromConfig(initialConfig, initialClientConfig),
-    );
+  const seed = fromConfig(initialConfig, initialClientConfig);
+  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
+    useDirtyForm<SettingsFormState>(seed);
   const setField = fieldSetter(setForm);
+  // Another window, a hotkey or a peer moved a stored setting: the form
+  // follows it, keeping the fields changed here unsaved over it.
+  const seedJson = JSON.stringify(seed);
+  useEffect(() => {
+    reseed(JSON.parse(seedJson) as SettingsFormState, keepTouched);
+  }, [seedJson, reseed]);
 
   // Drop any staged previews when leaving the settings page so the rest
   // of the app falls back to the saved values.
@@ -141,7 +162,7 @@ export function SettingsForm({
     // Two stores behind one Save. useSettingsSave routes each field to
     // its engine and skips whichever store is unchanged.
     try {
-      await save.mutateAsync(form);
+      await save.mutateAsync({ state: form, saved: savedSnapshot });
       setSavedSnapshot(form);
     } catch (error) {
       // The mutation's toast and the banner below already surface the

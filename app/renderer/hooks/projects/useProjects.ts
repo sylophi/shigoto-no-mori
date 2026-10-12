@@ -24,8 +24,10 @@ import {
   type LiveViewState,
   useRegistry,
   useView,
+  useViewErrorToast,
   whenViewShows,
 } from "@/lib/runtime/viewHooks";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // A device's projects, as its host streams them (projects:watch).
 export const projectsAtom = Atom.family((deviceId: string) =>
@@ -56,9 +58,16 @@ export function useDeviceProjects(
   );
 }
 
+// This machine's failure is a toast, as v2's was; a peer's list reads
+// empty with its device's status beside it.
 export function useProjects(): LiveViewState<readonly Project[]> {
   const { deviceId, hasHost } = useHostScope();
-  return useDeviceProjects(deviceId, hasHost);
+  const state = useDeviceProjects(deviceId, hasHost);
+  useViewErrorToast(
+    deviceId === useApi().deviceId ? state : { error: null },
+    "Couldn't load projects",
+  );
+  return state;
 }
 
 // Settles once the device's list has the project, so a caller can move

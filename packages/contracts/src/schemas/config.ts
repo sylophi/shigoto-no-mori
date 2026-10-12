@@ -528,7 +528,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
 // Client config: how this app instance looks, kept in clientConfig.json
 // under Electron's userData and owned by the main process alone. The
 // CLI never reads or writes it, unlike the device config above.
-// Doubles as the clientConfig:write IPC input. A plain struct STRIPS
+// Doubles as the set half of a clientConfig:patch. A plain struct STRIPS
 // unknown keys rather than rejecting them, which drops a key the
 // renderer invents at the boundary, and it must not become strict: a
 // key from a newer build has to keep passing through unrejected.
@@ -690,8 +690,20 @@ export function keepReachableOn(
 // Read-side counterpart, loose like StoredGlobalConfigSchema.
 export const StoredClientConfigSchema = loose(ClientConfigSchema);
 
-export const WriteClientConfigPayloadSchema = Schema.Struct({
-  config: ClientConfigSchema,
+// A change to the client config: the keys to set, and the keys to clear
+// (back to their default, the store's omit-on-default). Applied by the
+// store's owner over the config as it stands, so a window writes only
+// the keys it changed and never one another window changed meanwhile.
+export const PatchClientConfigPayloadSchema = Schema.Struct({
+  set: ClientConfigSchema,
+  clear: Schema.Array(
+    Schema.Literals(
+      Object.keys(ClientConfigSchema.fields) as [
+        keyof typeof ClientConfigSchema.fields,
+        ...(keyof typeof ClientConfigSchema.fields)[],
+      ],
+    ),
+  ),
 });
 
 export const WriteShigomoriPayloadSchema = Schema.Struct({

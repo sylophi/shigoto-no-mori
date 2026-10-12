@@ -37,6 +37,7 @@ import { createWebBridge, type WebBridgeDeps } from "../web/ipc/register.ts";
 import * as Effect from "effect/Effect";
 import { createLocalRegistrar } from "../web/ipc/localRegistrar.ts";
 import { windowContract } from "@shigomori/contracts/modules/window";
+import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import type { KeyValueStorage } from "../web/lib/kvStorage.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults.ts";
@@ -144,13 +145,14 @@ it("deviceId: stable across bridges over the same storage, schema-valid, and dis
   assert.ok(Schema.is(DeviceIdSchema)(healed.api.deviceId));
 });
 
-it("clientConfig: reads default to {}, writes round-trip through localStorage, and corrupt JSON heals to defaults", async () => {
+it("clientConfig: reads default to {}, patches round-trip through localStorage, and corrupt JSON heals to defaults", async () => {
   const localStorage = memoryStorage();
   const bridge = createWebBridge(makeDeps({ localStorage }));
   assert.deepEqual(await bridge.api.run(bridge.api.clientConfig.read()), {});
   await bridge.api.run(
-    bridge.api.clientConfig.write({
-      config: { theme: "dark", doubutsu: false },
+    bridge.api.clientConfig.patch({
+      set: { theme: "dark", doubutsu: false },
+      clear: [],
     }),
   );
   assert.deepEqual(await bridge.api.run(bridge.api.clientConfig.read()), {
@@ -164,6 +166,38 @@ it("clientConfig: reads default to {}, writes round-trip through localStorage, a
   );
   localStorage.setItem("sm.web.clientConfig", "{corrupt");
   assert.deepEqual(await bridge.api.run(bridge.api.clientConfig.read()), {});
+});
+
+it("clientConfig: a patch keeps what another tab wrote, and the watch follows this tab's patches and another tab's writes", async () => {
+  const localStorage = memoryStorage();
+  const bridge = createWebBridge(makeDeps({ localStorage }));
+  const seen: unknown[] = [];
+  const stop = bridge.api.listen(
+    bridge.api.view(clientConfigContract, "watch", undefined),
+    (config) => seen.push(config),
+  );
+  trackTest(stop);
+  await waitFor(() => seen.length === 1, "the watch's first value");
+  assert.deepEqual(seen[0], {});
+  // Another tab picks a theme, and this one hears of it.
+  localStorage.setItem(
+    "sm.web.clientConfig",
+    JSON.stringify({ theme: "dark" }),
+  );
+  bridge.notifyClientConfigChanged();
+  await waitFor(() => seen.length === 2, "another tab's write");
+  assert.deepEqual(seen[1], { theme: "dark" });
+  // This tab's patch, made off a copy that never saw the theme, keeps it.
+  await bridge.api.run(
+    bridge.api.clientConfig.patch({ set: { villageLife: true }, clear: [] }),
+  );
+  await waitFor(() => seen.length === 3, "this tab's patch");
+  assert.deepEqual(seen[2], { theme: "dark", villageLife: true });
+  await bridge.api.run(
+    bridge.api.clientConfig.patch({ set: {}, clear: ["theme"] }),
+  );
+  await waitFor(() => seen.length === 4, "a cleared key");
+  assert.deepEqual(seen[3], { villageLife: true });
 });
 
 it("stubs: read-classified channels answer structural defaults, the previewTheme allowlist entry resolves, and stub subscriptions unsubscribe cleanly", async () => {

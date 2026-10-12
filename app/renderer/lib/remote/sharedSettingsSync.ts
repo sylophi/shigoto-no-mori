@@ -28,8 +28,6 @@
 // to do its pulling: the app quits with its last one.) The window reads
 // the local copy as its view streams it
 // (hooks/sharedSettings/useSharedSettings.ts).
-import { throughCancel } from "@/lib/queryClientOptions";
-import type { QueryClient } from "@tanstack/react-query";
 import type {
   SharedSettingsDoc,
   SharedSettingValue,
@@ -39,9 +37,10 @@ import {
   exchangeSharedSettings,
   sharedSettingKeys,
 } from "@shigomori/contracts/sharedSettings";
-import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
-import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
-import { queryKeys } from "@/lib/queryKeys";
+import {
+  clientConfigOnce,
+  patchClientConfig,
+} from "@/hooks/config/useClientConfig";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -100,13 +99,9 @@ function mergePeerSharedSettings(
 // one setting, and nothing recorded which pick was the later.
 async function migrateQuickCreateDevices(
   api: RendererApi,
-  queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
 ): Promise<void> {
-  const config = await throughCancel(() =>
-    queryClient.fetchQuery(clientConfigQueryOptions(api)),
-  );
-  const legacy = config.quickCreateDevices;
+  const legacy = (await clientConfigOnce(registry))?.quickCreateDevices;
   if (legacy === undefined) return;
   const entries: SharedSettingsDoc["entries"] = {};
   for (const [identity, deviceId] of Object.entries(legacy)) {
@@ -120,18 +115,12 @@ async function migrateQuickCreateDevices(
   // Offered like any pick: a browser's copy reaches its peers no other
   // way, and the sessions may have landed while this was reading.
   offerToPeers(registry, { entries });
-  queryClient.setQueryData(
-    queryKeys.clientConfig(),
-    await mergeClientConfigWrite(api, queryClient, {
-      quickCreateDevices: undefined,
-    }),
-  );
+  await patchClientConfig(api, registry, { quickCreateDevices: undefined });
 }
 
 // Boot wiring, never unsubscribed.
 export function startSharedSettingsSync(
   api: RendererApi,
-  queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
 ): void {
   // Each peer's pushes are followed from its first landing on, which
@@ -160,9 +149,7 @@ export function startSharedSettingsSync(
       },
     ).catch(() => undefined);
   });
-  migrateQuickCreateDevices(api, queryClient, registry).catch(
-    (error: unknown) => {
-      console.warn("[sharedSettings] create-device migration failed", error);
-    },
-  );
+  migrateQuickCreateDevices(api, registry).catch((error: unknown) => {
+    console.warn("[sharedSettings] create-device migration failed", error);
+  });
 }
