@@ -199,6 +199,51 @@ jobs:
           spctl --assess --type execute --verbose "$APP_PATH"
           xcrun stapler validate "$APP_PATH"
 
+      # The terminal command as the release signed it: Bun's binary under
+      # the hardened runtime with the app's entitlements, which no local
+      # build carries (those are signed ad hoc). It is also the updater's
+      # installer, so one that cannot start strands every install on
+      # this release. Each verb runs on an empty data dir: the version,
+      # the store opened and read, and the feed asked. The check needs
+      # the network, so only a start that failed (a signal, a refused
+      # exec, no word at all) fails it; its answer goes to the log.
+      - name: Run the signed terminal command
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          BINARY_NAME="$(node --input-type=module -e '
+            import { flavorNames } from "@shigomori/engine/flavor";
+            console.log(flavorNames(process.env.SM_FLAVOR).binaryName);
+          ')"
+          SM="$PWD/out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app/Contents/Resources/$BINARY_NAME"
+          export SHIGOMORI_DATA_DIR="$RUNNER_TEMP/sm-empty-data"
+          mkdir -p "$SHIGOMORI_DATA_DIR"
+          cd "$RUNNER_TEMP"
+
+          VERSION_OUT="$("$SM" --version)"
+          echo "$BINARY_NAME --version: $VERSION_OUT"
+          if [[ "$VERSION_OUT" != *"${TAG#v}"* ]]; then
+            echo "$BINARY_NAME --version did not name ${TAG#v}."
+            exit 1
+          fi
+
+          PROJECTS_OUT="$("$SM" --json projects list)"
+          echo "$BINARY_NAME --json projects list: $PROJECTS_OUT"
+          if [[ "$PROJECTS_OUT" != "[]" ]]; then
+            echo "$BINARY_NAME did not read an empty store."
+            exit 1
+          fi
+
+          set +e
+          CHECK_OUT="$("$SM" --json update --check 2>&1)"
+          CHECK_EXIT=$?
+          set -e
+          echo "$BINARY_NAME --json update --check (exit $CHECK_EXIT): $CHECK_OUT"
+          if (( CHECK_EXIT >= 126 )) || [[ -z "$CHECK_OUT" ]]; then
+            echo "$BINARY_NAME update --check failed to start."
+            exit 1
+          fi
+
       - name: Upload assets to release
         env:
           GITHUB_TOKEN: ${{ github.token }}
