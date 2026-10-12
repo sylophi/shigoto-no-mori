@@ -43,12 +43,10 @@ import { join } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Deferred from "effect/Deferred";
-import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
-import { type GitError, run, runLenient } from "@host/lib/git/core";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 
 // A state that can't be read or applied, in the words the other device
@@ -83,7 +81,7 @@ export function indexRefFor(worktreeId: string): string {
 
 // Pinned identity for the carrier commits, so they never depend on
 // the machine's git config.
-const CAPTURE_IDENT: NodeJS.ProcessEnv = {
+const CAPTURE_IDENT: Readonly<Record<string, string>> = {
   GIT_AUTHOR_NAME: "shigomori",
   GIT_AUTHOR_EMAIL: "shigomori@localhost",
   GIT_COMMITTER_NAME: "shigomori",
@@ -122,21 +120,23 @@ type HeadFacts = {
 };
 
 const readHeadFacts = Effect.fnUntraced(function* (worktreePath: string) {
-  const out = yield* run(worktreePath, [
-    "rev-parse",
-    "HEAD",
-    "HEAD^{tree}",
-    "--symbolic-full-name",
-    "HEAD",
-    "--absolute-git-dir",
-  ]).pipe(
-    Effect.mapError(
-      (error) =>
-        new GitStateError({
-          reason: `the worktree has no commits yet (${errorWordsOf(error)})`,
-        }),
-    ),
-  );
+  const out = yield* (yield* Git.Git)
+    .run(worktreePath, [
+      "rev-parse",
+      "HEAD",
+      "HEAD^{tree}",
+      "--symbolic-full-name",
+      "HEAD",
+      "--absolute-git-dir",
+    ])
+    .pipe(
+      Effect.mapError(
+        (error) =>
+          new GitStateError({
+            reason: `the worktree has no commits yet (${errorWordsOf(error)})`,
+          }),
+      ),
+    );
   const [tip = "", headTree = "", ref = "", gitDir = ""] = out
     .split("\n")
     .map((line) => line.trim());
@@ -288,9 +288,11 @@ const computeIndexTree = Effect.fnUntraced(function* (
     try: () => copyIndexToScratch(worktreePath, indexPath),
     catch: unsnapshotted,
   });
-  const tree = (yield* run(worktreePath, ["write-tree"], {
-    env: { GIT_INDEX_FILE: copy },
-  }).pipe(Effect.mapError(unsnapshotted))).trim();
+  const tree = (yield* (yield* Git.Git)
+    .run(worktreePath, ["write-tree"], {
+      env: { GIT_INDEX_FILE: copy },
+    })
+    .pipe(Effect.mapError(unsnapshotted))).trim();
   indexSnapshots.set(worktreePath, { ...identity, tree });
   return tree;
 });
@@ -362,7 +364,7 @@ export const readGitState = Effect.fnUntraced(function* (
   ) {
     return { ...core, indexCommit: existing.value } satisfies GitState;
   }
-  const commit = (yield* run(
+  const commit = (yield* git.run(
     projectPath,
     [
       "commit-tree",
@@ -500,10 +502,10 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
           expected: existingTip ?? Git.ZERO_SHA,
         });
       }
-      yield* run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
+      yield* git.run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
     }
   } else if (current.head.kind !== "detached" || current.tip !== state.tip) {
-    yield* run(worktree.path, [
+    yield* git.run(worktree.path, [
       "update-ref",
       "--no-deref",
       "--end-of-options",
@@ -517,7 +519,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
   // so unchanged ones do not read as modified. refresh exits non-zero
   // when files differ from the index, which is the ordinary dirty case.
   yield* readTreeRetrying(worktree.path, state.indexTree);
-  yield* runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
+  yield* git.runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
   return { applied: true } as ApplyGitStateResult;
 });
 
@@ -532,15 +534,16 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
 const INDEX_LOCK_BACKOFF_MS = [50, 100, 200, 400, 800];
 
 const readTreeRetrying = (worktreePath: string, tree: string) => {
-  const attempt = (
-    n: number,
-  ): Effect.Effect<void, GitError, ChildProcessSpawner.ChildProcessSpawner> =>
-    run(worktreePath, ["read-tree", tree]).pipe(
+  const attempt = (n: number): Effect.Effect<void, Git.GitError, Git.Git> =>
+    Effect.flatMap(Git.Git, (git) =>
+      git.run(worktreePath, ["read-tree", tree]),
+    ).pipe(
       Effect.asVoid,
       Effect.catchIf(
         (error) =>
           INDEX_LOCK_BACKOFF_MS[n] !== undefined &&
-          error.reason.includes("index.lock"),
+          error instanceof Git.GitCommandError &&
+          Git.stderrOf(error).includes("index.lock"),
         () =>
           Effect.andThen(
             Effect.sleep(INDEX_LOCK_BACKOFF_MS[n] ?? 0),

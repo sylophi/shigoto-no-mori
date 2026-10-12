@@ -209,7 +209,7 @@ export const worktreesContract = defineContract(
     Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },
   ),
-  // One modified file's hunks (host/lib/git/hunks.ts), to tick and
+  // One modified file's hunks (the engine's git/hunks.ts), to tick and
   // throw away one at a time.
   invoke("fileHunks", FileHunksPayloadSchema, FileHunksSchema, {
     remote: true,
@@ -286,13 +286,13 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: false,
   }),
-  // The commit menu's history moves (host/lib/git/history.ts). A
+  // The commit menu's history moves (the engine's git/rewriting.ts). A
   // cherry-pick's worktree is the one the commit lands on.
   worktreeMutationOf("revertCommit", CommitDiffPayloadSchema),
   worktreeMutationOf("cherryPick", CommitDiffPayloadSchema),
   worktreeMutationOf("rewordCommit", RewordCommitPayloadSchema),
   worktreeMutationOf("squashCommit", SquashCommitPayloadSchema),
-  // The stashes made on the worktree's branch (host/lib/git/stash.ts).
+  // The stashes made on the worktree's branch (the engine's git/stash.ts).
   invoke(
     "stashes",
     WorktreeScopedPayloadSchema,
@@ -318,13 +318,13 @@ export const worktreesContract = defineContract(
     grant: "changeCode",
   }),
   // A merge, rebase, cherry-pick or revert stopped on conflicts
-  // (host/lib/git/operation.ts), and the moves that see it through.
+  // (the engine's git/operation.ts), and the moves that see it through.
   invoke("operation", WorktreeScopedPayloadSchema, GitOperationStateSchema, {
     remote: true,
     gated: false,
   }),
   worktreeMutationOf("resolveConflict", ResolveConflictPayloadSchema),
-  // Another branch brought into the worktree's (host/lib/git/merge.ts):
+  // Another branch brought into the worktree's (the engine's git/merging.ts):
   // first how the two stand, then the move.
   invoke("mergePreview", MergePreviewPayloadSchema, MergePreviewSchema, {
     remote: true,

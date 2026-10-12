@@ -1,6 +1,6 @@
 // Durable proof for the Git section's commit menu, stashes and
-// conflicts (host/lib/git/history.ts, stash.ts, operation.ts, and the
-// sync from primary in sync.ts) against a REAL
+// conflicts (the engine's git/rewriting.ts, stash.ts, operation.ts, and the
+// sync from primary in its remote area) against a REAL
 // repository: revert and cherry-pick with their conflict abort, reword
 // and squash of local commits leaving the working tree alone with every
 // refusal (moved HEAD, a merge, a commit off the line), stashes listed

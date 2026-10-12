@@ -525,7 +525,7 @@ export const ListCommitsPayloadSchema = Schema.Struct({
   from: Schema.optional(CommitHashSchema),
 });
 
-// What the Git page's History tab draws (host/lib/git/worktrees.ts,
+// What the Git page's History tab draws (the engine's git/history.ts,
 // readBranchHistory): the branch's own commits, newest first, the
 // commit it left its base at, and how it stands against the upstream it
 // pushes to.

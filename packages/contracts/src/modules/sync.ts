@@ -116,7 +116,7 @@ export type SyncCapture = typeof SyncCaptureSchema.Type;
 // so refusing the teardown over it would make the teardown
 // unreachable. Instead the transplant dialog lists these so the user
 // decides in the know. This is the one place that reasoning lives.
-// Same shape as the carry-over listing (host/lib/git/branches.ts
+// Same shape as the carry-over listing (the engine's Git.listIgnoredPaths
 // listIgnoredPaths): fully-ignored directories collapse to one
 // trailing-slash entry.
 const SyncIgnoredPathsPayloadSchema = strict(
@@ -140,7 +140,7 @@ const SyncIgnoredPathsResultSchema = strict(
     ),
     total: Schema.Natural,
     // The gitignore rules behind them (the root .gitignore and
-    // info/exclude, host/lib/git/ignoreRules.ts), for a mirror that
+    // info/exclude, the engine's Git.listIgnoreRules), for a mirror that
     // leaves gitignored files behind: a rule keeps out what is ignored
     // tomorrow, where the paths above only cover today.
     patterns: Schema.Array(Schema.String).check(

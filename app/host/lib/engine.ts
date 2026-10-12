@@ -11,6 +11,7 @@ import * as Store from "@shigomori/engine/Store";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
   callFailureOf,
+  RemoteCallError,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
@@ -20,6 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import { errorWordsOf } from "./errorWords";
 import { registerInflightContributor } from "./scripts";
 
 // The scope an engine run outlives its caller in: a create the app
@@ -95,13 +97,12 @@ export const asCall = <A, E, R>(
 ) => effect.pipe(Effect.mapError((error) => engineFailure(error, ids)));
 
 // What a host call's failure crosses a wire as: a git the engine ran
-// in git's own words, as `sm` prints it, and anything else as
+// in the words errorWordsOf gives it, and anything else as
 // callFailureOf makes it.
 export const hostCallFailure = (error: unknown) =>
   callFailureOf(
-    error instanceof Git.GitCommandError ||
-      error instanceof Git.GitOutputTooLargeError
-      ? engineFailure(error)
+    error instanceof Git.GitCommandError
+      ? new RemoteCallError({ text: errorWordsOf(error) })
       : error,
   );
 

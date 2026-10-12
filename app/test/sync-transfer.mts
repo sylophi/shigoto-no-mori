@@ -341,7 +341,7 @@ beforeAll(async () => {
     "second feature",
   );
   feature2Tip = await gitOut(worktree2Path, "rev-parse", "HEAD");
-  // The real app derivation (host/lib/git/worktrees.ts), imported straight from its home now that
+  // The real app derivation (the engine's worktreeLayout.ts), imported straight from its home now that
   // tsAliasLoader handles the transitive JSON import. The capture ref
   // must land at refs/shigomori/dirty/<this id>, asserted below.
   worktreeId = worktreeIdFromPath(worktreePath);

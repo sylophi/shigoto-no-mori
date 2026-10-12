@@ -213,7 +213,7 @@ export const RestoreStashPayloadSchema = Schema.Struct({
   named: Schema.Boolean,
 });
 
-// A git operation the worktree is stopped in (host/lib/git/operation.ts
+// A git operation the worktree is stopped in (the engine's git/operation.ts
 // names them: "merge", "rebase", "cherry-pick", "revert", "squash",
 // "git am", "bisect"), whether the app can continue it, and how many files still
 // conflict. Conflicts can stand without an operation too, after a stash
@@ -236,7 +236,7 @@ export const ResolveConflictPayloadSchema = Schema.Struct({
 });
 
 // The ways another branch's work comes into the worktree's branch
-// (host/lib/git/merge.ts): a merge commit, a fast-forward, one new
+// (the engine's git/merging.ts): a merge commit, a fast-forward, one new
 // commit holding it all, or the branch's own commits replayed on top.
 const IntegrateMethodSchema = Schema.Literals([
   "merge",

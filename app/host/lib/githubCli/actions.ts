@@ -6,7 +6,6 @@ import {
   CommitHashSchema,
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
-import { run } from "../git/core";
 import * as Git from "@shigomori/engine/Git";
 import { isCommandError, stderrOf, stdoutOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
@@ -150,7 +149,7 @@ const getLocalPullRequestDiff = Effect.fnUntraced(function* (
           `remote points at ${pr.url} to fetch it from.`,
       });
     }
-    yield* run(cwd, [
+    yield* (yield* Git.Git).run(cwd, [
       "fetch",
       "--quiet",
       "--no-tags",

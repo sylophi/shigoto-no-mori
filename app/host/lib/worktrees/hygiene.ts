@@ -12,7 +12,6 @@ import {
   isRealBranch,
   type WorktreeHygiene,
 } from "@shigomori/contracts/schemas";
-import { run, runLenient } from "../git/core";
 import * as Git from "@shigomori/engine/Git";
 import { splitRemoteRef } from "@shigomori/engine/gitParse";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
@@ -40,7 +39,9 @@ interface HeadCommit {
 
 // The commit HEAD points at. Both fields null for an empty repo.
 const getHeadCommit = (worktreePath: string) =>
-  run(worktreePath, ["log", "-1", "--format=%ct%n%h"]).pipe(
+  Effect.flatMap(Git.Git, (git) =>
+    git.run(worktreePath, ["log", "-1", "--format=%ct%n%h"]),
+  ).pipe(
     Effect.map((stdout): HeadCommit => {
       const [seconds, hash] = stdout.trim().split("\n");
       const at = Number(seconds);
@@ -64,7 +65,9 @@ const getHeadCommit = (worktreePath: string) =>
 // main", which is the one mistake this surface must not make. Unparsable
 // output is treated the same way, failing safe like `contentAlreadyIn`.
 const countUniqueCommits = (worktreePath: string, primaryRef: string) =>
-  run(worktreePath, ["rev-list", "--count", `${primaryRef}..HEAD`]).pipe(
+  Effect.flatMap(Git.Git, (git) =>
+    git.run(worktreePath, ["rev-list", "--count", `${primaryRef}..HEAD`]),
+  ).pipe(
     Effect.map((stdout) => {
       const count = Number(stdout.trim());
       return Number.isInteger(count) && count >= 0 ? count : null;
@@ -80,7 +83,9 @@ const countUniqueCommits = (worktreePath: string, primaryRef: string) =>
 // that would otherwise be ticked. `--exclude-standard` keeps it off
 // ignored paths, so node_modules costs nothing.
 const hasUntrackedFiles = (worktreePath: string) =>
-  run(worktreePath, ["ls-files", "--others", "--exclude-standard", "-z"]).pipe(
+  Effect.flatMap(Git.Git, (git) =>
+    git.run(worktreePath, ["ls-files", "--others", "--exclude-standard", "-z"]),
+  ).pipe(
     Effect.map((stdout) => stdout.length > 0),
     // Unreadable cuts the same way as dirty: assume there is something
     // to lose.
@@ -108,12 +113,14 @@ const contentAlreadyIn = (
 ) =>
   candidate.tree === null
     ? Effect.succeed(false)
-    : runLenient(projectPath, [
-        "merge-tree",
-        "--write-tree",
-        candidate.ref,
-        head,
-      ]).pipe(
+    : Effect.flatMap(Git.Git, (git) =>
+        git.runLenient(projectPath, [
+          "merge-tree",
+          "--write-tree",
+          candidate.ref,
+          head,
+        ]),
+      ).pipe(
         Effect.map((merged) => {
           const mergedTree = merged.split("\n", 1)[0]?.trim();
           return Boolean(mergedTree) && mergedTree === candidate.tree;
