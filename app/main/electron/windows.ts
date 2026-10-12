@@ -36,7 +36,7 @@ import {
   LAB_FLAG,
   ROUTE_FLAG,
 } from "../argFlags";
-import { noteWindowFocused } from "../hostProcess";
+import { noteWindowFocused, noteWindowGainedFocus } from "../hostProcess";
 import { clerkPublishableKey } from "../ipc/modules/account";
 import { broadcast } from "../ipc/register";
 import { rendererSchemeUrl } from "./clerk";
@@ -257,7 +257,7 @@ function create(
     held.splice(held.indexOf(entry), 1);
     held.push(entry);
     broadcast(windowContract, "focused", undefined, webContents);
-    noteWindowFocused(true);
+    noteWindowGainedFocus();
     noteMenuWindowFocused(entry.id);
   });
   window.on("blur", () => {

@@ -132,7 +132,7 @@ it("an edit outside the app reaches the rows through the working tree's watch, w
   );
 });
 
-it("a window here gaining focus reads the rows again, for an edit no watch saw", async () => {
+it("each window here gaining focus reads the rows again, for an edit no watch saw", async () => {
   await runHost(
     Effect.gen(function* () {
       const pushes = yield* HostPushes.HostPushes;
@@ -164,6 +164,11 @@ it("a window here gaining focus reads the rows again, for an edit no watch saw",
       );
       fetch.setWindowFocused(true);
       assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 1);
+      // Focus moving to another of this machine's windows: the app stays
+      // focused, and the window that gained it reads the rows again.
+      writeFileSync(join(repo, "e.txt"), "e\n");
+      fetch.setWindowFocused(true);
+      assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 2);
     }).pipe(Effect.scoped),
   );
 });

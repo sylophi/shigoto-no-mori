@@ -66,10 +66,10 @@ export class BackgroundFetch extends Context.Service<
     // git:sweep. Answers with the lease so the peer knows how often to
     // renew.
     readonly sweepForPeer: Effect.Effect<{ leaseMs: number }>;
-    // A window here gained or lost focus. Gaining it reads every
-    // project's rows again and asks for a pass at once: whoever returns
-    // sees the working trees as they are and refs as fresh as the sweep
-    // keeps them.
+    // A window here gained or lost focus. Each window gaining it reads
+    // every project's rows again, and the app coming back asks for a
+    // pass at once: whoever returns sees the working trees as they are
+    // and refs as fresh as the sweep keeps them.
     readonly setWindowFocused: (focused: boolean) => void;
   }
 >()("sm/host/BackgroundFetch") {}
@@ -317,10 +317,13 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         });
       }).pipe(Effect.provide(context)),
       setWindowFocused: (focused) => {
+        const wasFocused = windowFocused;
         windowFocused = focused;
         if (!focused) return;
         rereadRows();
-        Queue.offerUnsafe(inbox, sweepProjects());
+        // A pass only as the app comes back, not as focus moves between
+        // its windows.
+        if (!wasFocused) Queue.offerUnsafe(inbox, sweepProjects());
       },
     });
   });
