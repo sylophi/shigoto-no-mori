@@ -21,6 +21,7 @@ import {
   type ConfigureFormState as FormState,
   ConfigureFormView,
 } from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 function fromConfig(
   config: ShigomoriConfig | null,
@@ -85,6 +86,7 @@ export function ConfigureForm({
   initialConfig,
   resolvedDefaultBranch,
 }: ConfigureFormProps) {
+  const api = useApi();
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
   // Which device's project file this form edits. `remote` gates what
@@ -171,7 +173,7 @@ export function ConfigureForm({
       remote={remote}
       deviceLabel={deviceLabel}
       onReveal={() => {
-        window.api.shell
+        api.shell
           .showItemInFolder({ path: projectPath })
           .catch((err) => notifyError("Couldn't reveal folder", err));
       }}

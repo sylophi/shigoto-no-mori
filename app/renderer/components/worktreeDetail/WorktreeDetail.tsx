@@ -8,8 +8,10 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 import { WorktreeUnavailableView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function WorktreeDetail() {
+  const api = useApi();
   const { projectId, worktreeId } = useScopedWorktreeParams();
   const { remote } = useHostScope();
   const { data: projects = [], isPending: projectsPending } = useProjects();
@@ -48,8 +50,8 @@ export function WorktreeDetail() {
     // refuse it, and push invalidation plus the sweep requests already
     // keep a peer fresh).
     if (remote) return;
-    void window.api.git.refreshProject({ projectId });
-  }, [projectId, worktreeId, remote]);
+    void api.git.refreshProject({ projectId });
+  }, [projectId, worktreeId, remote, api]);
 
   if (!worktree || !project) {
     // Cold cache (e.g. a reload landing directly on this route): the

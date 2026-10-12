@@ -15,11 +15,11 @@ import type {
   ClientConfig,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
+import { queryKeys } from "@/lib/queryKeys";
 import { needView } from "@shigomori/ui/lib/agentNeeds.ts";
 import { harnessLabel } from "@shigomori/ui/lib/agentSessions.ts";
 import { documentFocused } from "@/lib/focus";
-import { hasLocalHost } from "@/lib/localHost";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { onWorktreeLists } from "@/lib/viewFeed";
 import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import {
@@ -63,7 +63,10 @@ function publishWaiting(): void {
 }
 
 // Boot wiring, once per window, like the other boot subscriptions.
-export function startAgentWatch(queryClient: QueryClient): void {
+export function startAgentWatch(
+  api: RendererApi,
+  queryClient: QueryClient,
+): void {
   onWorktreeLists(({ key: listKey, deviceId, list }) => {
     if (list === null) {
       if (lastSeen.delete(listKey)) publishWaiting();
@@ -76,10 +79,9 @@ export function startAgentWatch(queryClient: QueryClient): void {
     const notices: Notice[] = [];
     // Read once per list, and only where a notice could go out.
     const config =
-      before !== undefined && hasLocalHost && !documentFocused()
-        ? (queryClient.getQueryData<ClientConfig>(
-            clientConfigQueryOptions.queryKey,
-          ) ?? {})
+      before !== undefined && api.isElectron && !documentFocused()
+        ? (queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig()) ??
+          {})
         : undefined;
     for (const worktree of list) {
       for (const now of worktree.agentSessions ?? []) {
@@ -100,7 +102,7 @@ export function startAgentWatch(queryClient: QueryClient): void {
     }
     lastSeen.set(listKey, { list, sessions, waiting });
     publishWaiting();
-    for (const notice of notices) notify(notice);
+    for (const notice of notices) notify(api, notice);
   });
 }
 
@@ -111,8 +113,11 @@ type Notice = {
   deviceId: string;
 };
 
-function notify({ title, body, worktree, deviceId }: Notice): void {
-  void window.api.window.notify({
+function notify(
+  api: Pick<RendererApi, "window">,
+  { title, body, worktree, deviceId }: Notice,
+): void {
+  void api.window.notify({
     title,
     body: [worktree.title ?? worktree.name, body].filter(Boolean).join("\n"),
     route: fillRoutePath(WORKTREE_ROUTE_PATHS.detail, {

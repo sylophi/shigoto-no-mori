@@ -3,7 +3,6 @@ import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { Terminal } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useView } from "@/lib/runtime/viewHooks";
 
@@ -11,7 +10,6 @@ import { useView } from "@/lib/runtime/viewHooks";
 const terminalsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(terminalsContract, "list"),
     input: undefined,
   }),

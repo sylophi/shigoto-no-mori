@@ -5,8 +5,8 @@
 // the web has none, so the controls structurally never render there. The handlers re-verify the match. This is UX, not the wall.
 import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceProjects } from "@/hooks/projects/useProjects";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The first local project sharing this repo identity, if any. A null
 // identity (a project git couldn't identify) never matches, not even
@@ -14,6 +14,8 @@ import { localDeviceId } from "@/lib/queryKeys";
 export function useLocalProjectForIdentity(
   identity: string | null | undefined,
 ): Project | undefined {
+  const localDeviceId = useApi().deviceId;
+  const hasLocalHost = useHasLocalHost();
   const { data: localProjects = [] } = useDeviceProjects(
     localDeviceId,
     hasLocalHost,

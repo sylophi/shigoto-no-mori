@@ -6,8 +6,8 @@ import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { WhatsNewLinkView } from "@shigomori/ui/views/WhatsNewLinkView.tsx";
 import { useOutdatedDevices, useUpdateAll } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { localDeviceId } from "@/lib/queryKeys";
 import { toast } from "@/lib/toast";
+import { useApi } from "@/lib/runtime/pageApi";
 
 const TOAST_ID = "updater:ready";
 
@@ -33,6 +33,7 @@ let wanted = false;
 // and goes once no device is behind (every device updated, or the
 // release pulled).
 export function UpdateReadyToast() {
+  const localDeviceId = useApi().deviceId;
   const { latest, oldest, outdated } = useOutdatedDevices();
   const { mutate: updateAll, isPending: updating } = useUpdateAll(outdated);
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);

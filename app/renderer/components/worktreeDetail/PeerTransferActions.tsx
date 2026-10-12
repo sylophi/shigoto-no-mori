@@ -19,7 +19,7 @@ import {
   useWorktreeMirrorLinks,
   type WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
-import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   type TransferDialog,
   TransferActionsView,
@@ -76,6 +76,7 @@ export function usePeerTransferOffers(
   worktree: Worktree,
   project: Project,
 ): TransferOffers & { targets: PeerTarget[] } {
+  const canForwardPorts = useCanForwardPorts();
   const targets = usePeerTargets(project);
   const links = useWorktreeMirrorLinks(worktree);
   const mirrorBlocker = useLocalMirrorBlocker();

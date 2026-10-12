@@ -9,11 +9,11 @@ import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { peerOutputHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { openExternalUrl } from "@/lib/openExternal";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptConsoleView } from "@shigomori/ui/views/scriptConsole/ScriptConsoleView.tsx";
+import { useOutside } from "@shigomori/ui/outside.tsx";
 
 // A script's console in the drawer, on whichever device the scope
 // names: its run-a-slot state, and the run's output in a terminal. The
@@ -32,6 +32,7 @@ export function ScriptConsole({
     { follow: true },
   );
   const scriptRuns = useScriptRuns();
+  const { openUrl } = useOutside();
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
   const screen = useRef<TerminalScreen | null>(null);
@@ -67,7 +68,7 @@ export function ScriptConsole({
             screen.current?.resize(cols, rows);
             scriptRuns.resize(key, cols, rows);
           }}
-          onLink={openExternalUrl}
+          onLink={openUrl}
         />
       }
     />

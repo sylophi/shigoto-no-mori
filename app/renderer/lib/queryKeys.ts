@@ -16,11 +16,6 @@ import type { QueryClient } from "@tanstack/react-query";
 const PR_BRANCH_SCOPE = "branch";
 const HOST_SCOPE = "host";
 
-// The local device's id, on window.api before the renderer's modules
-// load (it comes with the host's address, renderer/index.tsx), so it is
-// a constant before any module can build a key.
-export const localDeviceId: string = window.api.deviceId;
-
 // A host-scoped key builder for an ARBITRARY device id, the tuple body
 // behind every host builder below. A remote device's data caches under
 // its OWN id (its welcome deviceId), in exactly the families the local
@@ -53,11 +48,52 @@ export function hostKeyDeviceId(queryKey: readonly unknown[]): unknown {
   return queryKey[0] === HOST_SCOPE ? queryKey[1] : undefined;
 }
 
+// The client-scoped builders: they carry no device id and build the
+// same tuple whichever device a caller is looking at.
+export const queryKeys = {
+  // Client-scoped: the store lives in this app instance's userData, so
+  // no host sentinel and no device id.
+  clientConfig: () => ["clientConfig"] as const,
+
+  // Client-scoped: the v3 migration as the shell serves it.
+  migration: () => ["migration"] as const,
+
+  // Client-scoped: this window's guide as its shell serves it.
+  guide: () => ["guide"] as const,
+
+  // Client-scoped: the code highlighter holding a language, loaded in
+  // this window whichever device the code came from.
+  codeHighlighter: (lang: string) => ["codeHighlighter", lang] as const,
+
+  // Client-scoped: the hub account credential lives in this app
+  // instance's userData, not a host's state. Status and the device list
+  // share the "account" prefix so the changed broadcast can invalidate
+  // both at once.
+  account: () => ["account"] as const,
+  accountStatus: () => ["account", "status"] as const,
+  accountDevices: () => ["account", "devices"] as const,
+  // Whether this host accepts commands from the account's other
+  // devices. Kept OUTSIDE the "account" prefix so the toggle (which
+  // fans out on commandAccessChanged) writes only this query and
+  // never thrashes status or the device list.
+  accountCommandAccess: () => ["accountCommandAccess"] as const,
+
+  // Client-scoped: the port-forward engine (its listeners and conns)
+  // lives in this machine's host process, whichever device a
+  // forward targets, so no host sentinel and no device id. One key
+  // for the whole list, and the UI filters per device.
+  portForwards: () => ["portForwards"] as const,
+
+  // Client-scoped: the app's GitHub releases, one list for every
+  // device, which the changelog measures each one's version against.
+  releases: () => ["releases"] as const,
+} as const;
+
 // The full builder set, bound to one device id. Host builders key
 // through hostKeysFor(deviceId), so a registry names exactly one
-// device's cache slots. The client-scoped builders carry no device id
-// and build the same tuple in every registry. They live here anyway so
-// one object answers for the whole key namespace wherever it came from.
+// device's cache slots. The client-scoped builders (queryKeys) come
+// along, so one object answers for the whole key namespace wherever it
+// came from.
 function buildQueryKeys(deviceId: string) {
   const host = hostKeysFor(deviceId);
   return {
@@ -257,33 +293,6 @@ function buildQueryKeys(deviceId: string) {
     // a set of per-host facts served by the host-scoped runtime contract.
     runtimeInfo: () => host("runtime", "info"),
 
-    // Client-scoped: the store lives in this app instance's userData, so
-    // no host sentinel and no device id.
-    clientConfig: () => ["clientConfig"] as const,
-
-    // Client-scoped: the v3 migration as the shell serves it.
-    migration: () => ["migration"] as const,
-
-    // Client-scoped: this window's guide as its shell serves it.
-    guide: () => ["guide"] as const,
-
-    // Client-scoped: the code highlighter holding a language, loaded in
-    // this window whichever device the code came from.
-    codeHighlighter: (lang: string) => ["codeHighlighter", lang] as const,
-
-    // Client-scoped: the hub account credential lives in this app
-    // instance's userData, not a host's state. Status and the device list
-    // share the "account" prefix so the changed broadcast can invalidate
-    // both at once.
-    account: () => ["account"] as const,
-    accountStatus: () => ["account", "status"] as const,
-    accountDevices: () => ["account", "devices"] as const,
-    // Whether this host accepts commands from the account's other
-    // devices. Kept OUTSIDE the "account" prefix so the toggle (which
-    // fans out on commandAccessChanged) writes only this query and
-    // never thrashes status or the device list.
-    accountCommandAccess: () => ["accountCommandAccess"] as const,
-
     // Host-scoped: the update is a fact about the machine the app runs
     // on, and a peer's Settings tab shows that device's state under its
     // own id. Seeded by updater:get and then driven by the updater:state
@@ -295,15 +304,7 @@ function buildQueryKeys(deviceId: string) {
     // host's view, hooks/remote/useMirrors.ts.)
     mirrorHistory: (worktreeId: string) => host("mirrorHistory", worktreeId),
 
-    // Client-scoped: the port-forward engine (its listeners and conns)
-    // lives in this machine's host process, whichever device a
-    // forward targets, so no host sentinel and no device id. One key
-    // for the whole list, and the UI filters per device.
-    portForwards: () => ["portForwards"] as const,
-
-    // Client-scoped: the app's GitHub releases, one list for every
-    // device, which the changelog measures each one's version against.
-    releases: () => ["releases"] as const,
+    ...queryKeys,
   } as const;
 }
 
@@ -320,12 +321,6 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
   registries.set(deviceId, built);
   return built;
 }
-
-// The local device's registry: for module-scope and deliberately
-// local call sites, which always mean this machine's cache. Anything
-// rendered under a HostScopeProvider must use the scoped registry from
-// useHostScope instead.
-export const queryKeys = queryKeysFor(localDeviceId);
 
 // The "state on this device moved, refetch what you're showing" sweep,
 // for every device's externalChange broadcast (lib/hostWatch.ts, with
@@ -491,7 +486,10 @@ export function removeDeviceCache(
 // Deriving length and scope position from a sample built key keeps the
 // match exact (a projectId literally named "branch" can't slip in) and
 // immune to the builder growing at either end.
-const sampleWorktreePullRequestKey = queryKeys.worktreePullRequest("p", "b");
+const sampleWorktreePullRequestKey = queryKeysFor("d").worktreePullRequest(
+  "p",
+  "b",
+);
 const worktreePullRequestKeyLength = sampleWorktreePullRequestKey.length;
 const prBranchScopeIndex =
   sampleWorktreePullRequestKey.indexOf(PR_BRANCH_SCOPE);

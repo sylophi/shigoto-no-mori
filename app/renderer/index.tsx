@@ -1,18 +1,17 @@
-// The desktop window's entry: window.api over the window's links to its
-// shell and its host (lib/runtime/desktop.ts), on the window's runtime,
-// then the shared boot with the Electron flavor of Clerk and a memory
-// history (a window has no address bar) starting on the page the shell
-// opened the window on. window.api must be in place
-// before any renderer module evaluates, since several read it at module
-// scope, so the boot comes in through a dynamic import (a static one
-// would hoist above the install).
+// The desktop window's entry: the page's api over the window's links to
+// its shell and its host (lib/runtime/desktop.ts), on the window's
+// runtime, then the shared boot with the Electron flavor of Clerk and a
+// memory history (a window has no address bar) starting on the page the
+// shell opened the window on.
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
+import { mountWindow, startApp } from "./boot";
 import { disposeWithPage, startClient } from "./lib/runtime/client";
+import type { RendererApi } from "./lib/runtime/pageApi";
 import { pageRoot } from "./lib/themeRoot";
 import * as Desktop from "./lib/runtime/desktop";
 
-async function installApi() {
+async function boot() {
   const bridge = window.electronBridge;
   if (bridge === undefined) throw new Error("the preload's bridge is missing");
   const { requestShellPort: _, route, ...facts } = bridge;
@@ -20,19 +19,16 @@ async function installApi() {
   disposeWithPage(client);
   // The device id is the host's, read from its store.
   const { deviceId } = await client.api.window.hostAddress();
-  window.api = { ...facts, deviceId, ...client.api };
-  return { links: client.links, route };
-}
-
-void installApi().then(async ({ links, route }) => {
-  const { mountWindow, startApp } = await import("./boot");
-  const router = mountWindow(startApp({ links }), {
+  const api: RendererApi = { ...facts, deviceId, ...client.api };
+  const router = mountWindow(startApp({ api, links: client.links }), {
     element: pageRoot(),
     ClerkProvider,
     history: createMemoryHistory({ initialEntries: [route] }),
   });
   // The page it shows, which a quit remembers it on.
   router.subscribe("onResolved", ({ toLocation }) => {
-    void window.api.window.showing({ route: toLocation.href });
+    void api.window.showing({ route: toLocation.href });
   });
-});
+}
+
+void boot();

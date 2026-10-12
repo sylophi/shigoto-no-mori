@@ -28,15 +28,11 @@ import {
   villageNewsEnabled,
 } from "@shigomori/ui/lib/villageLife.ts";
 import { it } from "vitest";
-
-// The settings encoders sit beside their React hook, whose imports read
-// window.api.deviceId at load. Nothing here calls into window, so a
-// bare stand-in is enough to load them under node.
-// @ts-expect-error a bare stand-in, not the whole preload api
-globalThis.window = { api: { deviceId: "village-life-check" } };
-const { toClientConfig, toDeviceSettingsPatch } =
-  await import("@/hooks/config/useSettingsSave");
-const { fromConfig } = await import("@shigomori/ui/lib/settingsForm.ts");
+import {
+  toClientConfig,
+  toDeviceSettingsPatch,
+} from "@/hooks/config/useSettingsSave";
+import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
 
 it("unset, each setting reads off", () => {
   assert.equal(doubutsuNamesEnabled({}), false);

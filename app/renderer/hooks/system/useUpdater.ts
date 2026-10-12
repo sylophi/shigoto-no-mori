@@ -10,7 +10,7 @@ import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   findOutdated,
   type KnownUpdates,
@@ -18,7 +18,8 @@ import {
 } from "@/lib/updates";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { toast } from "@/lib/toast";
-import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import { queryKeysFor } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // One device's updater state, under that device's own key. Errors stay
 // silent: a peer out of reach answers nothing, and the Version section
@@ -104,6 +105,9 @@ interface UpdateTarget {
 }
 
 function useUpdateTargets(): UpdateTarget[] {
+  const page = useApi();
+  const localDeviceId = page.deviceId;
+  const hasLocalHost = useHasLocalHost();
   const reachable = useHostDevices().filter(
     (peer) => deviceStatusView(peer.status).reachable,
   );
@@ -115,13 +119,14 @@ function useUpdateTargets(): UpdateTarget[] {
             deviceId: localDeviceId,
             // Mid-sentence in every line that names it.
             label: "this device",
-            api: window.api,
+            api: page,
             running: __APP_VERSION__,
           },
         ]
       : []),
     ...reachable.flatMap((peer) =>
-      peer.api !== undefined && commandAccessOf(peer.deviceId, peer).granted
+      peer.api !== undefined &&
+      commandAccessOf(localDeviceId, peer.deviceId, peer).granted
         ? [
             {
               deviceId: peer.deviceId,
@@ -192,6 +197,7 @@ export function useOutdatedDevices(): KnownUpdates {
 export function useUpdateAll(
   outdated: Readonly<Record<string, OutdatedDevice>>,
 ) {
+  const localDeviceId = useApi().deviceId;
   const targets = useUpdateTargets();
 
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache

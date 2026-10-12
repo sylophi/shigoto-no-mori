@@ -10,6 +10,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoot } from "react-dom/client";
 import { VillagerIcon } from "@/components/shared/VillagerIcon";
+import { ApiProvider, type RendererApi } from "@/lib/runtime/pageApi";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 import { villagerManifest } from "@shared/villagers/manifest";
 import { fakeHasVillagerData } from "./villagerData";
@@ -94,28 +95,32 @@ function Panel({ dark }: { dark: boolean }) {
   );
 }
 
-const root = document.getElementById("root");
-if (root === null) throw new Error("[fake-host] the sheet has no #root");
-createRoot(root).render(
-  <QueryClientProvider client={new QueryClient()}>
-    <main className="flex flex-col gap-4 bg-muted p-4">
-      {!fakeHasVillagerData && (
-        <p className="text-sm text-muted-foreground">
-          No villager data in lab/fake-host/villager-data, so no faces. Run{" "}
-          <span className="font-mono">pnpm villagers:fetch</span> to download
-          it.
-        </p>
-      )}
-      <div className="flex gap-4">
-        {doubutsu ? (
-          <Panel dark={posedDark} />
-        ) : (
-          <>
-            <Panel dark={false} />
-            <Panel dark />
-          </>
-        )}
-      </div>
-    </main>
-  </QueryClientProvider>,
-);
+export function mountVillagerSheet(api: RendererApi): void {
+  const root = document.getElementById("root");
+  if (root === null) throw new Error("[fake-host] the sheet has no #root");
+  createRoot(root).render(
+    <ApiProvider api={api}>
+      <QueryClientProvider client={new QueryClient()}>
+        <main className="flex flex-col gap-4 bg-muted p-4">
+          {!fakeHasVillagerData && (
+            <p className="text-sm text-muted-foreground">
+              No villager data in lab/fake-host/villager-data, so no faces. Run{" "}
+              <span className="font-mono">pnpm villagers:fetch</span> to
+              download it.
+            </p>
+          )}
+          <div className="flex gap-4">
+            {doubutsu ? (
+              <Panel dark={posedDark} />
+            ) : (
+              <>
+                <Panel dark={false} />
+                <Panel dark />
+              </>
+            )}
+          </div>
+        </main>
+      </QueryClientProvider>
+    </ApiProvider>,
+  );
+}

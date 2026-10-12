@@ -36,7 +36,7 @@ import { useKeymapListener } from "@/hooks/ui/useKeymap";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   AppShellView,
   PhoneBackBarView,
@@ -52,8 +52,11 @@ import {
   migrationOwed,
   migrationShows,
 } from "@shigomori/contracts/schemas/migration";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function AppShell() {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   // The always-mounted account watch, keeping every staleTime-Infinity
   // account read fresh across sign-in, sign-out and renames.
   useWatchAccountChanges();
@@ -80,10 +83,10 @@ export function AppShell() {
   // the desktop's menu ever sends).
   useEffect(
     () =>
-      window.api.nav.onOpenSettings(() => {
+      api.nav.onOpenSettings(() => {
         void navigate({ to: "/settings" });
       }),
-    [navigate],
+    [navigate, api],
   );
   // The v3 migration's page until the app opens past it, whatever the
   // window showed: while a step isn't done, or this device's key is due

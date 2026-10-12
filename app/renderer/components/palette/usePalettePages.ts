@@ -16,7 +16,7 @@ import {
 } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { useKeymap } from "@/hooks/ui/useKeymap";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
 // The pages the palette can open: the sidebar footer's (Live, the
@@ -24,6 +24,7 @@ import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts"
 // terminals, and Settings' list (the account, its sections, Tidy), as
 // this window offers them.
 export function usePalettePages(): PalettePage[] {
+  const hasLocalHost = useHasLocalHost();
   const navigate = useNavigate();
   const settingsKeys = useKeymap().get("settings");
   const villageLife = useVillageLife();

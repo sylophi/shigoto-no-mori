@@ -19,8 +19,9 @@ import {
 } from "@shigomori/ui/lib/keymap.ts";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // ⌘ or Ctrl: which key `Mod` is here. A phone or tablet browser counts
 // as a Mac, whose glyphs its keyboards print.
@@ -30,10 +31,11 @@ export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 // defaults, for this window.
 export const keymapOf = (
   stored: Readonly<Record<string, string>> | undefined,
-) => resolveKeymap(stored, { mac: isMac, desktop: hasLocalHost });
+  desktop: boolean,
+) => resolveKeymap(stored, { mac: isMac, desktop });
 
 export function useKeymap(): ReadonlyMap<string, Binding> {
-  return keymapOf(useClientConfig().data?.keybindings);
+  return keymapOf(useClientConfig().data?.keybindings, useHasLocalHost());
 }
 
 // While Settings records an action's keys, nothing else hears them:
@@ -165,11 +167,13 @@ export function useKeymapListener(): void {
 // Another window's Settings may have saved new keys: a window takes the
 // stored ones as it gains focus, the keys of the menu with them.
 function useKeymapFollowsOtherWindows(): void {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!hasLocalHost) return;
-    return window.api.window.onFocused(() => {
-      void window.api.clientConfig.read().then(({ keybindings }) => {
+    return api.window.onFocused(() => {
+      void api.clientConfig.read().then(({ keybindings }) => {
         const key = queryKeys.clientConfig();
         const cached = queryClient.getQueryData<ClientConfig>(key);
         if (!cached) return;
@@ -181,7 +185,7 @@ function useKeymapFollowsOtherWindows(): void {
         queryClient.setQueryData<ClientConfig>(key, { ...cached, keybindings });
       });
     });
-  }, [queryClient]);
+  }, [queryClient, api, hasLocalHost]);
 }
 
 // The menu's actions' keys, handed to the shell's menu, which shows the
@@ -190,6 +194,8 @@ function useMenuChords(
   keymap: ReadonlyMap<string, Binding>,
   paused: boolean,
 ): void {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   useEffect(() => {
     if (!hasLocalHost) return;
     const chords: Record<string, string> = {};
@@ -199,6 +205,6 @@ function useMenuChords(
         chords[action.id] = chordAccelerator(binding.chord);
       }
     }
-    void window.api.menu.setChords({ chords });
-  }, [keymap, paused]);
+    void api.menu.setChords({ chords });
+  }, [keymap, paused, api, hasLocalHost]);
 }

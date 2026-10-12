@@ -26,7 +26,7 @@ import {
   useSidebarViewHotkey,
   useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import {
   buildSidebarRows,
@@ -131,6 +131,7 @@ function Forest({
   // Pins the view (a phone tab). Absent, the saved preference decides.
   pinnedView: SidebarView | undefined;
 }) {
+  const hasLocalHost = useHasLocalHost();
   // A hostless client reaches its forest only through the account:
   // signed out there is nothing to list. A machine with projects of
   // its own lists them whatever the account says.
@@ -373,6 +374,7 @@ function Forest({
     empty: rows.length === 0 && pinned === undefined,
     noProjects: projects.length === 0,
     viewMessage: view.emptyMessage,
+    hasLocalHost,
   });
 
   // The list unmounts while a page holds the sidebar, rather than
@@ -518,6 +520,7 @@ function emptyForestMessage({
   empty,
   noProjects,
   viewMessage,
+  hasLocalHost,
 }: {
   loading: boolean;
   // The device filter's pick, by label. Undefined for All.
@@ -525,6 +528,7 @@ function emptyForestMessage({
   empty: boolean;
   noProjects: boolean;
   viewMessage: string | null;
+  hasLocalHost: boolean;
 }): string | null {
   if (loading) return null;
   if (narrowedTo !== undefined && empty)

@@ -27,6 +27,7 @@ import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useWorktreeRemoving } from "@/store/worktreeLifecycle";
 import type { QueryClient } from "@tanstack/react-query";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -220,19 +221,21 @@ export function isOwnDeletePending(
 // success, by a mirror stop, and for every removal a host announces
 // (boot's worktrees:removal follower), whoever asked for it.
 export function forgetDeletedWorktree(
+  api: RendererApi,
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
   deviceId: string,
   projectId: string,
   worktreeId: string,
 ): void {
-  forgetDeletedWorktrees(queryClient, registry, deviceId, projectId, [
+  forgetDeletedWorktrees(api, queryClient, registry, deviceId, projectId, [
     worktreeId,
   ]);
 }
 
 // Several at once (a stack's layers): one list edit for all of them.
 function forgetDeletedWorktrees(
+  api: RendererApi,
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
   deviceId: string,
@@ -242,7 +245,7 @@ function forgetDeletedWorktrees(
   if (worktreeIds.length === 0) return;
   forgetWorktreeRows(registry, deviceId, projectId, worktreeIds);
   for (const worktreeId of worktreeIds) {
-    scriptRunsFor(deviceId).clearForWorktree(worktreeId);
+    scriptRunsFor(api, deviceId).clearForWorktree(worktreeId);
     // Same treatment as project removal. Active queries (the detail
     // route unmounts only after the post-delete navigation) are left
     // to go inactive and gc naturally.
@@ -256,6 +259,7 @@ function forgetDeletedWorktrees(
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
   const registry = useRegistry();
+  const page = useApi();
   const { api, deviceId } = useHostScope();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
@@ -276,6 +280,7 @@ export function useDeleteWorktree() {
       // keep the worktree around for retry.
       if (data.ok) {
         forgetDeletedWorktree(
+          page,
           queryClient,
           registry,
           deviceId,
@@ -319,6 +324,7 @@ export interface StackCleanupInput {
 export function useDeleteStackWorktrees() {
   const queryClient = useQueryClient();
   const registry = useRegistry();
+  const page = useApi();
   const { deviceId } = useHostScope();
   return useMutation<StackCleanupOutcome, Error, StackCleanupInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
@@ -335,6 +341,7 @@ export function useDeleteStackWorktrees() {
             });
             outcome.removed.set(device.deviceId, result.removed);
             forgetDeletedWorktrees(
+              page,
               queryClient,
               registry,
               device.deviceId,

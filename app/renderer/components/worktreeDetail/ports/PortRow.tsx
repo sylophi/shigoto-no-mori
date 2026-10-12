@@ -2,7 +2,7 @@
 // remote scope where this client can forward.
 import type { ComponentProps } from "react";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
-import { canForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import { ForwardControl } from "./ForwardControl";
 import {
   forwardBandClass,
@@ -19,6 +19,7 @@ export function PortRow({
   worktree: PortForwardWorktree;
   granted: boolean;
 }) {
+  const canForwardPorts = useCanForwardPorts();
   return (
     <PortRowView
       {...props}

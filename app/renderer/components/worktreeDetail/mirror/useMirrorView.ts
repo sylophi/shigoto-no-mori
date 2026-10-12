@@ -6,13 +6,14 @@
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { WorktreeMirrorLink } from "@/hooks/remote/useMirrors";
 import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
-import { localDeviceId } from "@/lib/queryKeys";
 import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function useMirrorView(
   link: WorktreeMirrorLink,
   session: MirrorSession,
 ) {
+  const localDeviceId = useApi().deviceId;
   const runner = useDeviceProperName(link.runnerDeviceId);
   const copy = useDeviceProperName(session.deviceId);
   const other = useDeviceProperName(link.otherDeviceId);

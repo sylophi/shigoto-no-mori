@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { terrierMarksHere } from "@/hooks/config/useSidebarMarks";
+import { useHasLocalHost } from "@/lib/localHost";
 import { SidebarSectionView } from "@shigomori/ui/views/settings/SidebarSectionView.tsx";
 
 // The sidebar settings (SidebarSectionView), with what the account and
@@ -20,7 +21,7 @@ export function SidebarSection(props: {
       // Read off the terrier toggle as staged in this same form (the
       // device's own section), so switching it on there unlocks this
       // at once.
-      terrierOn={terrierMarksHere(props.form.terrier)}
+      terrierOn={terrierMarksHere(useHasLocalHost(), props.form.terrier)}
     />
   );
 }

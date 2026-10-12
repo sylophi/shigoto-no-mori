@@ -6,6 +6,7 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { mountWindow, startApp } from "@/boot";
 import { pageRoot } from "@/lib/themeRoot";
 import type { ClientLinks } from "@/lib/runtime/ClientLinks";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { poseToday } from "@shigomori/ui/hooks/useToday.ts";
 
 // ?today=MM-DD (or YYYY-MM-DD): the calendar day the fake host poses, for a
@@ -18,8 +19,14 @@ if (today) {
   poseToday(new Date(year, Number(today[2]) - 1, Number(today[3]), 12));
 }
 
-export function bootFakeHost(links: ClientLinks["Service"]): void {
-  const router = mountWindow(startApp({ links }), {
+export function bootFakeHost({
+  api,
+  links,
+}: {
+  api: RendererApi;
+  links: ClientLinks["Service"];
+}): void {
+  const router = mountWindow(startApp({ api, links }), {
     element: pageRoot(),
     ClerkProvider,
     history: createMemoryHistory({ initialEntries: ["/"] }),

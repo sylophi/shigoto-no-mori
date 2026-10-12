@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";
 import { useLaunch } from "./useLaunchers";
+import { useApi } from "@/lib/runtime/pageApi";
 
 interface LaunchTarget {
   projectId: string;
@@ -20,32 +21,33 @@ export function useLaunchShortcuts(
   entries: readonly LauncherEntry[] | undefined,
   onLaunch?: () => void,
 ) {
+  const api = useApi();
   const { mutate: launch } = useLaunch();
   const held = target !== undefined && entries !== undefined;
 
   useEffect(() => {
     if (!held) return;
     const menuEntries = entries.map((e) => ({ id: e.id, label: e.label }));
-    void window.api.menu.setLaunchToolsEnabled({
+    void api.menu.setLaunchToolsEnabled({
       enabled: true,
       entries: menuEntries,
     });
-  }, [held, entries]);
+  }, [held, entries, api]);
 
   useEffect(() => {
     if (!held) return;
     return () => {
-      void window.api.menu.setLaunchToolsEnabled({ enabled: false });
+      void api.menu.setLaunchToolsEnabled({ enabled: false });
     };
-  }, [held]);
+  }, [held, api]);
 
   const projectId = target?.projectId;
   const worktreeId = target?.id;
   useEffect(() => {
     if (projectId === undefined || worktreeId === undefined) return;
-    return window.api.nav.onLaunchById((launcherId) => {
+    return api.nav.onLaunchById((launcherId) => {
       launch({ projectId, worktreeId, launcherId });
       onLaunch?.();
     });
-  }, [launch, projectId, worktreeId, onLaunch]);
+  }, [launch, projectId, worktreeId, onLaunch, api]);
 }

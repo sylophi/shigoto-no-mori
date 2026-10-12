@@ -1,7 +1,5 @@
-// Fake host entry. Same rule as web/main.tsx: the bridge must own window.api
-// before any renderer module evaluates (queryKeys and the remote
-// registry read it at module scope), so the app boots via dynamic
-// import.
+// Fake host entry: the fixture bridge, then the shared boot on its api.
+import { bootFakeHost } from "./boot";
 import { installFakeHostBridge } from "./bridge";
 import { applyPose } from "./pose";
 
@@ -10,6 +8,4 @@ import { applyPose } from "./pose";
 // applied after mount.
 applyPose();
 
-const links = installFakeHostBridge();
-
-void import("./boot").then(({ bootFakeHost }) => bootFakeHost(links));
+bootFakeHost(installFakeHostBridge());

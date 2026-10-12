@@ -1,7 +1,7 @@
 // The device-scope seam for the host-scoped data layer. Every
 // host-scoped hook reads WHICH device it talks to — the api its
 // queryFns and mutationFns call, and the key registry its queries
-// cache under — from this context instead of hard-wiring window.api.
+// cache under — from this context instead of hard-wiring the page's api.
 // With no provider mounted the context resolves to the local device,
 // so the hooks behave identically outside a provider.
 //
@@ -9,25 +9,20 @@
 // - Client-scoped calls (dialog, shell, menu, nav, window, account,
 //   hub, clientConfig, portForward): they
 //   belong to the machine the window runs on, so their call sites keep
-//   window.api and HostApi excludes them.
+//   the page's api (useApi) and HostApi excludes them.
 // - Host broadcast subscriptions: they are boot-scoped, one watchHost
 //   per device (lib/hostWatch.ts) over that device's api, writing into
 //   that device's registry, so no scope is involved.
 // - Host-scoped hooks whose write path is deliberately local-only
 //   (the local settings save in useSettingsSave, which writes through
-//   window.api): the write lands on this machine's disk, so their
-//   reads and invalidations must stay pinned to the local `queryKeys`
+//   the page's api): the write lands on this machine's disk, so their
+//   reads and invalidations must stay pinned to this machine's key
 //   registry.
 import type { HostApi } from "@shared/ipc/client";
-import { hasLocalHost } from "@/lib/localHost";
 import { createContext, use, type ReactNode } from "react";
 import { remoteDeviceById } from "@/lib/remote/devices";
-import {
-  localDeviceId,
-  queryKeys,
-  queryKeysFor,
-  type QueryKeyRegistry,
-} from "@/lib/queryKeys";
+import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // The host-scoped api (shared/ipc/client.ts), the one a scope's hooks
 // reach: scope.api.dialog fails to compile rather than rejecting on a
@@ -48,7 +43,7 @@ export interface HostScope {
   // the hooks that read one gate on this instead of asking and being
   // refused.
   hasHost: boolean;
-  // The api those calls go through: window.api locally, a connected
+  // The api those calls go through: the page's locally, a connected
   // remote device's socket- or hub-backed api under a provider.
   api: HostApi;
   // The key registry the subtree's queries cache under, bound to
@@ -57,25 +52,39 @@ export interface HostScope {
   keys: QueryKeyRegistry;
 }
 
-// Default is the local device, read synchronously off window.api, so
-// every hook works unchanged with no provider mounted.
-const localHostScope: HostScope = {
-  deviceId: localDeviceId,
-  remote: false,
-  hasHost: hasLocalHost,
-  api: window.api,
-  keys: queryKeys,
-};
+// The local device's scope, over the page's api: what every hook
+// reads with no provider mounted. One per page api, so the value is
+// stable for the page's life.
+const localScopes = new WeakMap<RendererApi, HostScope>();
 
-const HostScopeContext = createContext<HostScope>(localHostScope);
+function localHostScope(api: RendererApi): HostScope {
+  const existing = localScopes.get(api);
+  if (existing !== undefined) return existing;
+  const scope: HostScope = {
+    deviceId: api.deviceId,
+    remote: false,
+    hasHost: api.isElectron,
+    api,
+    keys: queryKeysFor(api.deviceId),
+  };
+  localScopes.set(api, scope);
+  return scope;
+}
+
+// Null where no provider wraps the caller: the local device's scope.
+const HostScopeContext = createContext<HostScope | null>(null);
 
 // A device's scope, the one shape both providers below hand down.
-function hostScopeFor(deviceId: string, api: HostApi): HostScope {
-  const remote = deviceId !== localDeviceId;
+function hostScopeFor(
+  page: RendererApi,
+  deviceId: string,
+  api: HostApi,
+): HostScope {
+  const remote = deviceId !== page.deviceId;
   return {
     deviceId,
     remote,
-    hasHost: remote || hasLocalHost,
+    hasHost: remote || page.isElectron,
     api,
     keys: queryKeysFor(deviceId),
   };
@@ -84,10 +93,13 @@ function hostScopeFor(deviceId: string, api: HostApi): HostScope {
 // Any device's scope by id, for a caller outside React (the villager
 // toasts, lib/villagers/moves.ts): this machine's, or a peer's while
 // it has an api. Undefined for a peer without one.
-export function hostScopeOf(deviceId: string): HostScope | undefined {
-  if (deviceId === localDeviceId) return localHostScope;
+export function hostScopeOf(
+  page: RendererApi,
+  deviceId: string,
+): HostScope | undefined {
+  if (deviceId === page.deviceId) return localHostScope(page);
   const api = remoteDeviceById(deviceId)?.api;
-  return api === undefined ? undefined : hostScopeFor(deviceId, api);
+  return api === undefined ? undefined : hostScopeFor(page, deviceId, api);
 }
 
 export function HostScopeProvider({
@@ -98,7 +110,7 @@ export function HostScopeProvider({
   children: ReactNode;
 }) {
   return (
-    <HostScopeContext value={hostScopeFor(deviceId, api)}>
+    <HostScopeContext value={hostScopeFor(useApi(), deviceId, api)}>
       {children}
     </HostScopeContext>
   );
@@ -106,7 +118,7 @@ export function HostScopeProvider({
 
 // Scopes a subtree to a device only when there is a session to scope
 // it to: a peer with an api gets the provider, this machine (whose api
-// is window.api, the default scope) and a peer that is asleep render
+// is the page's, the default scope) and a peer that is asleep render
 // the children where they are. The seam the sidebar's per-device
 // actions and menus mount through.
 export function MaybeHostScope({
@@ -118,6 +130,7 @@ export function MaybeHostScope({
   api: HostApi | undefined;
   children: ReactNode;
 }) {
+  const localDeviceId = useApi().deviceId;
   if (api === undefined || deviceId === localDeviceId) return children;
   return (
     <HostScopeProvider deviceId={deviceId} api={api}>
@@ -129,11 +142,15 @@ export function MaybeHostScope({
 // Re-pins a subtree to THIS machine from inside a remote scope, for
 // the half of a cross-device flow that belongs here (the transplant
 // dialog's destination: its project config, carry-over and runtime
-// paths). The same constant the provider-less default resolves to, so
-// the value is stable and the hooks beneath behave exactly as they do
-// on a local page.
+// paths). The same value the provider-less default resolves to, so
+// it is stable and the hooks beneath behave exactly as they do on a
+// local page.
 export function LocalHostScope({ children }: { children: ReactNode }) {
-  return <HostScopeContext value={localHostScope}>{children}</HostScopeContext>;
+  return (
+    <HostScopeContext value={localHostScope(useApi())}>
+      {children}
+    </HostScopeContext>
+  );
 }
 
 // The destination half of a cross-device flow, for the dialogs that
@@ -146,7 +163,7 @@ export function LocalHostScope({ children }: { children: ReactNode }) {
 // provider is mounted either way, so picking re-scopes the subtree
 // without remounting it, and nothing beneath reads a destination
 // before there is one.
-const DestinationContext = createContext<HostScope>(localHostScope);
+const DestinationContext = createContext<HostScope | null>(null);
 
 export function DestinationProvider({
   peer,
@@ -155,10 +172,13 @@ export function DestinationProvider({
   peer: Pick<HostScope, "deviceId" | "api"> | null;
   children: ReactNode;
 }) {
+  const page = useApi();
   return (
     <DestinationContext
       value={
-        peer === null ? localHostScope : hostScopeFor(peer.deviceId, peer.api)
+        peer === null
+          ? localHostScope(page)
+          : hostScopeFor(page, peer.deviceId, peer.api)
       }
     >
       {children}
@@ -169,20 +189,22 @@ export function DestinationProvider({
 // The destination as it stands, for a piece that names it (the pull
 // flow's two ends) without re-pinning a subtree to it.
 export function useDestinationScope(): HostScope {
-  return use(DestinationContext);
+  const page = useApi();
+  return use(DestinationContext) ?? localHostScope(page);
 }
 
 export function DestinationScope({ children }: { children: ReactNode }) {
   return (
-    <HostScopeContext value={use(DestinationContext)}>
+    <HostScopeContext value={useDestinationScope()}>
       {children}
     </HostScopeContext>
   );
 }
 
-// No null check: the context always resolves (to the local device when
-// no provider wraps the caller), so converting a host-scoped hook to
-// read its scope from here must not change its local behavior.
+// Always a scope: the local device's when no provider wraps the
+// caller, so converting a host-scoped hook to read its scope from here
+// must not change its local behavior.
 export function useHostScope(): HostScope {
-  return use(HostScopeContext);
+  const page = useApi();
+  return use(HostScopeContext) ?? localHostScope(page);
 }

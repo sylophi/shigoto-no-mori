@@ -34,7 +34,6 @@ import {
   useTunnelState,
 } from "@/hooks/remote/useHubStatus";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
-import { localDeviceId } from "@/lib/queryKeys";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import {
@@ -44,8 +43,11 @@ import {
 } from "@shigomori/ui/views/remote/DeviceRegistryView.tsx";
 import { useHostChipIndex } from "./deviceHostChips";
 import { deviceRowStatus } from "@shigomori/ui/views/remote/deviceRegistryStatus.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 export function DeviceRegistry({ accountId }: { accountId: string }) {
+  const api = useApi();
+  const localDeviceId = api.deviceId;
   useWatchCommandAccessChanges();
   const local = useLocalDevice();
   const devicesQuery = useAccountDevices();
@@ -103,12 +105,10 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       ),
       // Whether THIS device may drive verbs on the peer: the peer's own
       // "allow control from other devices" switch, as it reports it.
-      access: commandAccessOf(device.deviceId, hubDevice),
+      access: commandAccessOf(localDeviceId, device.deviceId, hubDevice),
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
-      appVersion: isThisDevice
-        ? window.api.appVersion
-        : (hubDevice?.appVersion ?? ""),
+      appVersion: isThisDevice ? api.appVersion : (hubDevice?.appVersion ?? ""),
     };
   });
   // Two machines wearing the same name are told apart by their ids,

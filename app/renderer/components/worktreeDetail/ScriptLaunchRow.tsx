@@ -4,7 +4,7 @@ import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   pinnedEntries,
@@ -42,6 +42,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   loading: boolean;
   pinned: boolean;
 } {
+  const hasLocalHost = useHasLocalHost();
   const { data: config } = useLocalGlobalConfig();
   const { data: pkg, isPending } = usePackageScripts(
     worktree.projectId,

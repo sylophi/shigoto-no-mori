@@ -22,7 +22,6 @@ import { usePortForwardCount } from "@/hooks/remote/usePortForwards";
 import { useEveryHost } from "@/hooks/remote/useRemoteDevices";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
-import { localDeviceId } from "@/lib/queryKeys";
 
 // A host's running scripts. The api is undefined while a peer has no
 // session.
@@ -40,7 +39,6 @@ export type HostScripts = {
 const runningScriptsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    localDeviceId,
     view: callOf(scriptsContract, "watch"),
     input: undefined,
   }),

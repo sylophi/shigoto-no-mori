@@ -1,12 +1,9 @@
 // Contact sheet entry: the fixture bridge with Village life on, so the
-// faces show, then the sheet (villagerSheet.tsx). The bridge owns
-// window.api before any renderer module evaluates, as in
-// main.tsx.
+// faces show, then the sheet (villagerSheet.tsx) on its api.
 import "./villager-icons.css";
 import { installFakeHostBridge } from "./bridge";
 import { applyPose } from "./pose";
+import { mountVillagerSheet } from "./villagerSheet";
 
 applyPose();
-installFakeHostBridge({ villageLife: true });
-
-void import("./villagerSheet");
+mountVillagerSheet(installFakeHostBridge({ villageLife: true }).api);

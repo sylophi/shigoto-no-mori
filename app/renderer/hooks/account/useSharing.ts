@@ -5,26 +5,29 @@
 import { callOf } from "@shigomori/contracts/contract";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { useMutation } from "@tanstack/react-query";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import * as Atom from "effect/reactivity/Atom";
 import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useView } from "@/lib/runtime/viewHooks";
 
-const sharingAtom = hostViewAtom({
-  deviceId: localDeviceId,
-  localDeviceId,
-  view: callOf(sharingContract, "watch"),
-  input: undefined,
-});
+const sharingAtom = Atom.family((deviceId: string) =>
+  hostViewAtom({
+    deviceId,
+    view: callOf(sharingContract, "watch"),
+    input: undefined,
+  }),
+);
 
 export function useSharing() {
-  return useView(hasLocalHost ? sharingAtom : null);
+  const api = useApi();
+  return useView(api.isElectron ? sharingAtom(api.deviceId) : null);
 }
 
 // The view follows the write, so this sets nothing itself.
 export function useSetSharing() {
+  const api = useApi();
   return useMutation<void, Error, boolean>({
-    mutationFn: (on) => window.api.sharing.set(on),
+    mutationFn: (on) => api.sharing.set(on),
     meta: { errorTitle: "Couldn't change sharing" },
   });
 }

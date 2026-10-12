@@ -23,15 +23,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { createCliRunner } from "./lib/checkKit.mts";
+import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
 import { builtSm } from "./lib/smBinary.mts";
-
-// The settings encoders sit beside their React hook, whose imports read
-// window.api.deviceId at load. Nothing here calls into window, so a
-// bare stand-in is enough to load them under node.
-Object.assign(globalThis, {
-  window: { api: { deviceId: "fresh-install-check" } },
-});
-const { fromConfig } = await import("@shigomori/ui/lib/settingsForm.ts");
 
 let sandbox: string;
 let smBinary = "";

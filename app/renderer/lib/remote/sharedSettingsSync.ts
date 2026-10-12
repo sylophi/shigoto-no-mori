@@ -40,6 +40,7 @@ import {
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
 import { queryKeys } from "@/lib/queryKeys";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { remoteDeviceStore } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
@@ -59,10 +60,11 @@ function offerToPeers(doc: SharedSettingsDoc): void {
 // the pick holds here whatever the network is doing, then an offer to
 // each peer with a session.
 export async function writeSharedSetting(
+  api: Pick<RendererApi, "sharedSettings">,
   key: string,
   value: SharedSettingValue,
 ): Promise<SharedSettingsDoc> {
-  const doc = await window.api.sharedSettings.set({ key, value });
+  const doc = await api.sharedSettings.set({ key, value });
   const entry = doc.entries[key];
   if (entry !== undefined) offerToPeers({ entries: { [key]: entry } });
   return doc;
@@ -72,8 +74,11 @@ export async function writeSharedSetting(
 // purpose. The host settles an echo cheaply, and asking it every time
 // is what lets a local copy that was reset behind the window fill back
 // in. The peer's client decoded the copy (shared/ipc/buildClient.ts).
-function mergePeerSharedSettings(doc: SharedSettingsDoc): void {
-  window.api.sharedSettings.merge({ doc }).catch(() => undefined);
+function mergePeerSharedSettings(
+  api: Pick<RendererApi, "sharedSettings">,
+  doc: SharedSettingsDoc,
+): void {
+  api.sharedSettings.merge({ doc }).catch(() => undefined);
 }
 
 // The create-device picks lived in client config before they were
@@ -84,9 +89,10 @@ function mergePeerSharedSettings(doc: SharedSettingsDoc): void {
 // differently settle on one of the two by device id: they were never
 // one setting, and nothing recorded which pick was the later.
 async function migrateQuickCreateDevices(
+  api: RendererApi,
   queryClient: QueryClient,
 ): Promise<void> {
-  const config = await queryClient.fetchQuery(clientConfigQueryOptions);
+  const config = await queryClient.fetchQuery(clientConfigQueryOptions(api));
   const legacy = config.quickCreateDevices;
   if (legacy === undefined) return;
   const entries: SharedSettingsDoc["entries"] = {};
@@ -94,23 +100,26 @@ async function migrateQuickCreateDevices(
     entries[sharedSettingKeys.quickCreateDevice(identity)] = {
       value: deviceId,
       at: 0,
-      by: window.api.deviceId,
+      by: api.deviceId,
     };
   }
-  await window.api.sharedSettings.merge({ doc: { entries } });
+  await api.sharedSettings.merge({ doc: { entries } });
   // Offered like any pick: a browser's copy reaches its peers no other
   // way, and the sessions may have landed while this was reading.
   offerToPeers({ entries });
   queryClient.setQueryData(
     queryKeys.clientConfig(),
-    await mergeClientConfigWrite(queryClient, {
+    await mergeClientConfigWrite(api, queryClient, {
       quickCreateDevices: undefined,
     }),
   );
 }
 
 // Boot wiring, never unsubscribed.
-export function startSharedSettingsSync(queryClient: QueryClient): void {
+export function startSharedSettingsSync(
+  api: RendererApi,
+  queryClient: QueryClient,
+): void {
   // Each peer's pushes are followed from its first landing on, which
   // is also the first moment it can push at all, and the exchange that
   // runs on every landing covers whatever it sent while unfollowed.
@@ -122,13 +131,14 @@ export function startSharedSettingsSync(queryClient: QueryClient): void {
   onSessionLanded((deviceId) => {
     const peer = apiFor(deviceId).sharedSettings;
     if (!followed.has(deviceId)) {
-      followed.set(deviceId, peer.onChanged(mergePeerSharedSettings));
+      followed.set(
+        deviceId,
+        peer.onChanged((doc) => mergePeerSharedSettings(api, doc)),
+      );
     }
-    exchangeSharedSettings(window.api.sharedSettings, peer).catch(
-      () => undefined,
-    );
+    exchangeSharedSettings(api.sharedSettings, peer).catch(() => undefined);
   });
-  migrateQuickCreateDevices(queryClient).catch((error: unknown) => {
+  migrateQuickCreateDevices(api, queryClient).catch((error: unknown) => {
     console.warn("[sharedSettings] create-device migration failed", error);
   });
 }

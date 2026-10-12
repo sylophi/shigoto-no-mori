@@ -14,6 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { findPageApi } from "./reliability/pageApi.mts";
 
 const bundle = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
 const portArg = process.argv.indexOf("--port");
@@ -103,26 +104,26 @@ execFileSync("open", [
   "--args",
   `--remote-debugging-port=${port}`,
 ]);
+// The window's api (findPageApi), as an expression.
+const api = `(${findPageApi})()`;
 const first = await until("the app", 60_000, async () =>
-  (await evaluate("typeof window.api")) === "object" ? pidOfApp() : null,
+  (await evaluate(`typeof ${api}`)) === "object" ? pidOfApp() : null,
 );
 const killedBefore = killedLines().length;
 const asked = Date.now();
-await evaluate("window.api.window.relaunch()").catch(() => null);
+await evaluate(`${api}.window.relaunch()`).catch(() => null);
 const second = await until("the relaunched app", 60_000, async () => {
   const pid = pidOfApp();
   return pid !== null && pid !== first ? pid : null;
 });
 const windowBack = await until("its window", 30_000, async () =>
-  (await evaluate("typeof window.api")) === "object"
-    ? Date.now() - asked
-    : null,
+  (await evaluate(`typeof ${api}`)) === "object" ? Date.now() - asked : null,
 ).catch(() => null);
 // Past the subordinate termination, which lands a second or so after
 // the old instance is gone.
 await sleep(5000);
 const answer = await evaluate(
-  "window.api.account.status().then(() => 'live')",
+  `${api}.account.status().then(() => 'live')`,
 ).catch((error) => `no answer: ${error}`);
 const killed = killedLines().slice(killedBefore);
 // A window whose renderer was killed ignores a quit.

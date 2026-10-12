@@ -12,18 +12,18 @@ import type { RunningScript } from "@shigomori/contracts/schemas";
 import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   EMPTY_STATE,
   type ScriptKey,
   type ScriptRunsStore,
   scriptRunsFor,
 } from "@/store/scriptRuns";
+import { useApi } from "@/lib/runtime/pageApi";
 
 // The scoped device's store.
 export function useScriptRuns(): ScriptRunsStore {
-  return scriptRunsFor(useHostScope().deviceId);
+  return scriptRunsFor(useApi(), useHostScope().deviceId);
 }
 
 export function useScriptRunState(key: ScriptKey): ScriptRunState {
@@ -36,7 +36,7 @@ function useDeviceScriptRunState(
   deviceId: string,
   key: ScriptKey,
 ): ScriptRunState {
-  const store = scriptRunsFor(deviceId);
+  const store = scriptRunsFor(useApi(), deviceId);
   return useSyncExternalStore(
     (cb) => store.subscribe(key, cb),
     () => store.snapshot(key),
@@ -51,9 +51,13 @@ function useDeviceScriptRunState(
 // the device's running scripts.
 export function useWorktreeScriptActivity(
   worktreeId: string,
-  deviceId: string = localDeviceId,
+  device?: string,
 ): ScriptActivityKind | null {
-  const store = scriptRunsFor(deviceId);
+  const api = useApi();
+  const localDeviceId = api.deviceId;
+  const deviceId = device ?? localDeviceId;
+  const hasLocalHost = useHasLocalHost();
+  const store = scriptRunsFor(api, deviceId);
   const held = useSyncExternalStore(
     (cb) => store.subscribeWorktree(worktreeId, cb),
     () => store.getActivityKind(worktreeId),
@@ -63,7 +67,7 @@ export function useWorktreeScriptActivity(
   const peerApi = useRemoteDeviceApi(local ? undefined : deviceId);
   const listed = useDeviceRunningScripts(
     deviceId,
-    local ? (hasLocalHost ? window.api : undefined) : peerApi,
+    local ? (hasLocalHost ? api : undefined) : peerApi,
   );
   if (held !== null && held !== "failed") return held;
   return listedActivity(listed ?? [], worktreeId) ?? held;

@@ -19,6 +19,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
+import { useApi } from "@/lib/runtime/pageApi";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 export function useClientConfigPatch<Input>(
@@ -31,6 +32,7 @@ export function useClientConfigPatch<Input>(
   ) => Partial<ClientConfig>,
   errorTitle: string,
 ) {
+  const api = useApi();
   const queryClient = useQueryClient();
   const current = () =>
     queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig());
@@ -41,7 +43,7 @@ export function useClientConfigPatch<Input>(
     });
   const mutation = useMutation({
     mutationFn: (patch: Partial<ClientConfig>): Promise<ClientConfig> =>
-      mergeClientConfigWrite(queryClient, patch),
+      mergeClientConfigWrite(api, queryClient, patch),
     onMutate: async (patch) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.clientConfig() });
       const previous = current();

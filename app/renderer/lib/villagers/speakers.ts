@@ -13,6 +13,7 @@ import {
 } from "@/hooks/villagers/useVillagers";
 import { type Speaker, speakerFor } from "@shigomori/ui/lib/villagerVoice.ts";
 import { faceColor } from "@shigomori/ui/lib/villagers/faceColor.ts";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 
 // Who speaks for which worktrees, for a toast fired outside render.
 // Same gate as useVillageLife, this window's Village life and villager
@@ -22,22 +23,23 @@ import { faceColor } from "@shigomori/ui/lib/villagers/faceColor.ts";
 // The villager profiles while this window's Village life shows, or
 // null. The visit log (visitLog.ts) records under the same gate.
 export async function villageProfiles(
+  api: RendererApi,
   queryClient: QueryClient,
 ): Promise<VillagerProfiles | null> {
   // No retries: a read that fails leaves the toast plain, now, rather
   // than seconds late.
   const config = await queryClient.ensureQueryData({
-    ...clientConfigQueryOptions,
+    ...clientConfigQueryOptions(api),
     retry: false,
   });
   if (!villageLifeEnabled(config)) return null;
   const status = await queryClient.ensureQueryData({
-    ...villagerDataStatusQueryOptions(),
+    ...villagerDataStatusQueryOptions(api),
     retry: false,
   });
   if (!villageLifeShows(config, status)) return null;
   return queryClient.ensureQueryData({
-    ...villagerProfilesQueryOptions(),
+    ...villagerProfilesQueryOptions(api),
     retry: false,
   });
 }
@@ -47,19 +49,20 @@ export async function villageProfiles(
 // fails: a toast then stays plain rather than not showing. `withColor`
 // reads a rare one's color off their face, for their dialogue box.
 export async function speakersFor(
+  api: RendererApi,
   queryClient: QueryClient,
   worktrees: readonly { id: string; name: string }[],
   { withColor = false }: { withColor?: boolean } = {},
 ): Promise<Map<string, Speaker>> {
   const speakers = new Map<string, Speaker>();
-  const profiles = await villageProfiles(queryClient).catch(() => null);
+  const profiles = await villageProfiles(api, queryClient).catch(() => null);
   if (profiles === null) return speakers;
   await Promise.all(
     worktrees.map(async ({ id, name }) => {
       const speaker = speakerFor(name, profiles);
       if (speaker === null) return;
       const base64 = await queryClient
-        .ensureQueryData(villagerFaceQueryOptions(speaker.slug))
+        .ensureQueryData(villagerFaceQueryOptions(api, speaker.slug))
         .catch(() => null);
       const face = base64 ? faceUrl(base64) : null;
       // Only a rare one wears their color, on their dialogue box's name

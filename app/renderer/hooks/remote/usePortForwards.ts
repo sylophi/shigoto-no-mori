@@ -1,6 +1,6 @@
 // The port-forward engine's control surface for one device: the forward
 // list and the start/stop pair. Everything here is CLIENT-scoped and
-// calls window.api directly: the listener belongs to THIS machine, only
+// calls the page's api directly: the listener belongs to THIS machine, only
 // its target is the named device. The list caches under one client key
 // for all devices, and these hooks filter to the one asked for, so both
 // the account page's per-peer section and the worktree detail's port
@@ -24,12 +24,15 @@ import type {
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { hasLocalHost } from "@/lib/localHost";
+import { useHasLocalHost } from "@/lib/localHost";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // Forwarding binds a real local TCP listener, which only the app can do
 // -- the capability gate for every surface that offers a forward, kept
 // here so the mechanism and its precondition travel together.
-export const canForwardPorts = hasLocalHost;
+export function useCanForwardPorts(): boolean {
+  return useHasLocalHost();
+}
 
 // The engine broadcasts on every forward/conn change, so conn counts and
 // engine-side teardowns (peer offline) render live. It also fires for
@@ -44,8 +47,11 @@ export const canForwardPorts = hasLocalHost;
 // restarts an in-flight refetch by default. The engine already
 // coalesces conn bursts to one signal per 150ms, which a per-consumer
 // listener would multiply straight back up.
-export function watchPortForwards(queryClient: QueryClient): void {
-  window.api.portForward.onChanged(() => {
+export function watchPortForwards(
+  api: RendererApi,
+  queryClient: QueryClient,
+): void {
+  api.portForward.onChanged(() => {
     void queryClient.invalidateQueries({
       queryKey: queryKeys.portForwards(),
     });
@@ -60,13 +66,14 @@ type PortForwardList = { readonly forwards: readonly PortForwardSummary[] };
 function usePortForwardList<T = PortForwardList>(
   select?: (list: PortForwardList) => T,
 ) {
+  const api = useApi();
   return useQuery({
     queryKey: queryKeys.portForwards(),
-    queryFn: () => window.api.portForward.list(),
+    queryFn: () => api.portForward.list(),
     select,
     // The sidebar reads it on every peer row, and the web client's
     // loopback refuses the channel: nothing to ask there.
-    enabled: canForwardPorts,
+    enabled: api.isElectron,
     meta: { silentError: true },
   });
 }
@@ -97,18 +104,19 @@ export function describeForwardError(
 // Stopping a forward, from any surface that lists them. A purely
 // local act, whatever the peer.
 export function usePortForwardStop() {
+  const api = useApi();
   return useMutation({
-    mutationFn: (forwardId: string) =>
-      window.api.portForward.stop({ forwardId }),
+    mutationFn: (forwardId: string) => api.portForward.stop({ forwardId }),
     meta: { errorTitle: "Couldn't stop forwarding" },
   });
 }
 
 export function usePortForwards(deviceId: string) {
+  const api = useApi();
   const { data } = usePortForwardList();
   const start = useMutation({
     mutationFn: (input: { remotePort: number; localPort?: number }) =>
-      window.api.portForward.start({ deviceId, ...input }),
+      api.portForward.start({ deviceId, ...input }),
     // The engine's start probe surfaces the coded errors here
     // (too-many-conns). Refusals surface centrally.
     onError: (err, input) => {
@@ -179,6 +187,7 @@ export function usePortForwardControl(
   remotePort: number,
   worktree: PortForwardWorktree,
 ) {
+  const api = useApi();
   const { data } = usePortForwardList();
   const forward = data?.forwards.find(
     (entry) => entry.deviceId === deviceId && entry.remotePort === remotePort,
@@ -188,14 +197,14 @@ export function usePortForwardControl(
       target: { on: false } | { on: true; localPort: number },
     ) => {
       if (target.on) {
-        await window.api.portForward.start({
+        await api.portForward.start({
           deviceId,
           remotePort,
           localPort: target.localPort,
           worktree,
         });
       } else if (forward !== undefined) {
-        await window.api.portForward.stop({ forwardId: forward.forwardId });
+        await api.portForward.stop({ forwardId: forward.forwardId });
       }
     },
     meta: { silentError: true },

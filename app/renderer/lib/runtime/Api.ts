@@ -1,7 +1,7 @@
-// window.api's contract half: one client per contract module over the
-// link its scope rides, and a peer's (peerApi) over the hub hop, their
-// calls, views and pushes run on the client's runtime, so they end
-// with it.
+// The page api's contract half (pageApi.tsx): one client per contract
+// module over the link its scope rides, and a peer's (peerApi) over the
+// hub hop, their calls, views and pushes run on the client's runtime,
+// so they end with it.
 import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import * as Context from "effect/Context";

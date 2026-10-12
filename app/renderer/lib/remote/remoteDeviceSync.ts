@@ -41,11 +41,13 @@ import { hashKey, type QueryClient } from "@tanstack/react-query";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { directPresenceRule } from "@shared/hub/directPresence";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
 import {
   hostKeyDeviceId,
   invalidateDeviceSession,
+  queryKeys,
   queryKeysFor,
   removeDeviceCache,
 } from "@/lib/queryKeys";
@@ -80,7 +82,7 @@ let lastRoster: ReadonlySet<string> = new Set();
 
 // The queryHash of that one entry, so the cache subscription below can
 // tell its events from every other query's in one comparison.
-const deviceListHash = hashKey(accountDevicesQueryOptions.queryKey);
+const deviceListHash = hashKey(queryKeys.accountDevices());
 
 // One api per hub deviceId, built on first reachable sighting and
 // kept: the transport forwards through the bridge, whose session for
@@ -107,6 +109,18 @@ function boundClient(): QueryClient {
     throw new Error("remote device sync used before startRemoteDeviceSync");
   }
   return boundQueryClient;
+}
+
+// The page's api the boot started the sync with: the hub and account
+// it follows, and the hop each peer's api rides. Bound with the query
+// client.
+let boundPageApi: RendererApi | null = null;
+
+function pageApi(): RendererApi {
+  if (boundPageApi === null) {
+    throw new Error("remote device sync used before startRemoteDeviceSync");
+  }
+  return boundPageApi;
 }
 
 // The devices whose direct session was live in the last snapshot seen,
@@ -142,7 +156,7 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
   if (watchPeer === null) {
     throw new Error("remote device sync used before startRemoteDeviceSync");
   }
-  const api = window.api.peerApi(deviceId);
+  const api = pageApi().peerApi(deviceId);
   apis.set(deviceId, { api, unwatch: watchPeer(deviceId, api) });
   return api;
 }
@@ -153,7 +167,7 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
 // swallowed there and the store keeps the last good list.
 function refetchDeviceList(): void {
   void boundClient().refetchQueries({
-    queryKey: accountDevicesQueryOptions.queryKey,
+    queryKey: queryKeys.accountDevices(),
   });
 }
 
@@ -162,13 +176,13 @@ function refetchDeviceList(): void {
 // honours an invalidation regardless of it).
 function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
   return boundClient().fetchQuery({
-    ...accountDevicesQueryOptions,
+    ...accountDevicesQueryOptions(pageApi()),
     staleTime: Infinity,
   });
 }
 
 async function reconcileNow(status?: HubStatus): Promise<void> {
-  const current = status ?? (await window.api.hub.status());
+  const current = status ?? (await pageApi().hub.status());
   // A fetched snapshot seeds the shared store (a broadcast that raced
   // it is newer and wins), so this module stays the store's single
   // writer and the hooks never race a fetch of their own.
@@ -176,7 +190,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // must not roll the session diff back either.
   if (status === undefined && seedHubStatus(current)) noteSessions(current);
   const phase = current.socket.phase;
-  const localDeviceId = window.api.deviceId;
+  const localDeviceId = pageApi().deviceId;
   const online = new Set(current.onlineDeviceIds);
   const reconnected = phase === "connected" && lastSocketPhase !== "connected";
   lastSocketPhase = phase;
@@ -202,7 +216,9 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
     // good data through a failed refetch, so the store keeps whatever
     // we had, an empty list when nothing was ever fetched.
     list =
-      boundClient().getQueryData(accountDevicesQueryOptions.queryKey) ?? [];
+      boundClient().getQueryData<readonly DeviceInfo[]>(
+        queryKeys.accountDevices(),
+      ) ?? [];
   }
   const knownIds = new Set(list.map((info) => info.deviceId));
   // A presence roster naming a device the account list has never seen
@@ -311,10 +327,11 @@ export function onSessionLanded(listener: (deviceId: string) => void): void {
 
 // Followers with per-device state of their own to drop when the
 // account is left (the script run stores). Boot-scoped like the
-// session-landed listeners.
-const accountLeftListeners = new Set<() => void>();
+// session-landed listeners. Each hears this machine's id, for state it
+// keeps for this machine beside the peers'.
+const accountLeftListeners = new Set<(localDeviceId: string) => void>();
 
-export function onAccountLeft(listener: () => void): void {
+export function onAccountLeft(listener: (localDeviceId: string) => void): void {
   accountLeftListeners.add(listener);
 }
 
@@ -330,16 +347,16 @@ function leaveAccount(queryClient: QueryClient): void {
   lastAccess = {};
   lastSharing = {};
   queryClient.removeQueries({
-    queryKey: accountDevicesQueryOptions.queryKey,
+    queryKey: queryKeys.accountDevices(),
     exact: true,
   });
   queryClient.removeQueries({
     predicate: (query) => {
       const deviceId = hostKeyDeviceId(query.queryKey);
-      return deviceId !== undefined && deviceId !== window.api.deviceId;
+      return deviceId !== undefined && deviceId !== pageApi().deviceId;
     },
   });
-  for (const listener of accountLeftListeners) listener();
+  for (const listener of accountLeftListeners) listener(pageApi().deviceId);
 }
 
 // Pure and synchronous: the peer's appVersion and command access ride
@@ -439,9 +456,11 @@ async function drainReconciles(): Promise<void> {
 // (renderer/boot.tsx, one for both shells) build their own, and so
 // does the push wiring each peer's api gets.
 export function startRemoteDeviceSync(
+  api: RendererApi,
   queryClient: QueryClient,
   watch: WatchPeer,
 ): void {
+  boundPageApi = api;
   boundQueryClient = queryClient;
   watchPeer = watch;
   // This process's own enroll, sign-out, rename or revoke. A change of
@@ -456,7 +475,7 @@ export function startRemoteDeviceSync(
   // departure whatever came before, and the seed never overwrites a
   // change that beat it (null is a known value here).
   let syncedAccountId: string | null | undefined;
-  window.api.account.onChanged(({ accountId }) => {
+  api.account.onChanged(({ accountId }) => {
     const leaving =
       syncedAccountId === undefined
         ? accountId === null
@@ -465,7 +484,7 @@ export function startRemoteDeviceSync(
     if (leaving) leaveAccount(queryClient);
     refetchDeviceList();
   });
-  void window.api.account.status().then((status) => {
+  void api.account.status().then((status) => {
     if (syncedAccountId === undefined) {
       syncedAccountId = status.signedIn ? status.accountId : null;
     }
@@ -481,7 +500,7 @@ export function startRemoteDeviceSync(
     if (event.query.queryHash !== deviceListHash) return;
     reconcile();
   });
-  window.api.hub.onStatusChanged((status) => {
+  api.hub.onStatusChanged((status) => {
     publishHubStatus(status);
     // Session landings are diffed here, on EVERY snapshot in order,
     // ahead of the coalesced reconcile that may skip intermediate

@@ -25,6 +25,7 @@ import {
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
 import { projectGroupKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 
 const store = createExternalStore<{
   // Null on the list.
@@ -97,7 +98,14 @@ export function useOpenProject(
     deviceId === undefined || projectId === undefined
       ? null
       : `${deviceId}:${projectId}:${worktreeId ?? ""}`;
-  const onScreenKey = groupKeyOnScreen(deviceId, projectId, projects, remote);
+  const localDeviceId = useApi().deviceId;
+  const onScreenKey = groupKeyOnScreen(
+    localDeviceId,
+    deviceId,
+    projectId,
+    projects,
+    remote,
+  );
   // Waits, render after render, for the page's project to be listed.
   const follow =
     page !== null && page !== followed && onScreenKey !== undefined;
@@ -128,13 +136,14 @@ export function usePageOnScreen(): {
 }
 
 function groupKeyOnScreen(
+  localDeviceId: string,
   deviceId: string | undefined,
   projectId: string | undefined,
   projects: readonly Project[],
   remote: readonly RemoteForestItem[],
 ): string | undefined {
   if (deviceId === undefined || projectId === undefined) return undefined;
-  const peer = rowDeviceId(deviceId);
+  const peer = rowDeviceId(localDeviceId, deviceId);
   if (peer === undefined) {
     const project = projects.find((p) => p.id === projectId);
     return project && projectGroupKey(project, undefined);

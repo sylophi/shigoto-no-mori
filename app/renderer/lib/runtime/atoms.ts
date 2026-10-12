@@ -1,7 +1,8 @@
 // The atoms a container reads a host view through (app/DESIGN.md,
 // "Views and containers"): each on the client's runtime, over the links
-// window.api rides, which the boot seeds into the window's registry
-// (clientLinksAtom). A request stays a React Query query.
+// the page's api rides, which the boot seeds into the page's registry
+// (clientLinksAtom) with this device's id (localDeviceIdAtom). A request
+// stays a React Query query.
 import type { Decoded, Encoded } from "@shigomori/contracts/codec";
 import {
   type ContractCall,
@@ -36,6 +37,10 @@ import { peerLink } from "./peerLink";
 export const clientLinksAtom = Atom.keepAlive(
   Atom.make<ClientLinks["Service"] | null>(null),
 );
+
+// This device's id, put in the registry by the boot beside the links:
+// a view of it rides the local link, any other device's the hub hop.
+export const localDeviceIdAtom = Atom.keepAlive(Atom.make(""));
 
 const clientAtoms = Atom.runtime((get) => {
   const links = get(clientLinksAtom);
@@ -107,7 +112,6 @@ const hostLinkOf = (deviceId: string, localDeviceId: string) =>
 // streaming.
 export function hostViewAtom<R extends ContractCall>(options: {
   readonly deviceId: string;
-  readonly localDeviceId: string;
   // The view (contracts' callOf), whose values are decoded with its own
   // schema.
   readonly view: R;
@@ -119,10 +123,9 @@ export function hostViewAtom<R extends ContractCall>(options: {
 }): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
   type A = Decoded<PayloadOf<R>>;
   const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
-  const values = Stream.unwrap(
-    Effect.map(
-      hostLinkOf(options.deviceId, options.localDeviceId),
-      (link: Link) =>
+  const valuesOn = (localDeviceId: string) =>
+    Stream.unwrap(
+      Effect.map(hostLinkOf(options.deviceId, localDeviceId), (link: Link) =>
         link
           .view(channelOf(options.view), options.input)
           .pipe(
@@ -132,18 +135,20 @@ export function hostViewAtom<R extends ContractCall>(options: {
                 : Effect.orDie(decode(value)),
             ),
           ),
-    ),
-  ).pipe(
-    Stream.catchIf(endsView, (error) => Stream.die(error)),
-    Stream.retry(REDIAL),
-    Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
-    Stream.ensuring(Effect.sync(() => options.onStop?.())),
-  );
-  const remote = options.deviceId !== options.localDeviceId;
+      ),
+    ).pipe(
+      Stream.catchIf(endsView, (error) => Stream.die(error)),
+      Stream.retry(REDIAL),
+      Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
+      Stream.ensuring(Effect.sync(() => options.onStop?.())),
+    );
   return clientAtoms
     .atom((get) => {
-      if (remote) get(peerSessionAtom(options.deviceId));
-      return values;
+      const localDeviceId = get(localDeviceIdAtom);
+      if (options.deviceId !== localDeviceId) {
+        get(peerSessionAtom(options.deviceId));
+      }
+      return valuesOn(localDeviceId);
     })
     .pipe(Atom.setIdleTTL("1 minute")) as Atom.Atom<
     AsyncResult.AsyncResult<A, unknown>
@@ -254,12 +259,11 @@ export function endWith<A, E>(
 // the device's link.
 export function hostCallFn<Arg>(options: {
   readonly deviceId: string;
-  readonly localDeviceId: string;
   readonly call: (arg: Arg) => { channel: string; input: unknown };
 }) {
-  return clientAtoms.fn((arg: Arg) =>
+  return clientAtoms.fn((arg: Arg, get) =>
     Effect.flatMap(
-      hostLinkOf(options.deviceId, options.localDeviceId),
+      hostLinkOf(options.deviceId, get(localDeviceIdAtom)),
       (link) => {
         const { channel, input } = options.call(arg);
         return link.call(channel, input);

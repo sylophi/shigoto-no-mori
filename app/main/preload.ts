@@ -1,7 +1,7 @@
 // Preload script. Runs in an isolated context with access to Node + Electron APIs.
 // Exposes the window's facts as `window.electronBridge`, and asks for
 // the port the window's calls to its shell ride, which the renderer
-// builds `window.api` over (renderer/lib/runtime/desktop.ts).
+// builds its page api over (renderer/lib/runtime/desktop.ts).
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
@@ -16,7 +16,7 @@ import {
 import { requestShellPort } from "./preloadPort";
 
 // The narrow bridge @clerk/electron/react rides for token storage and
-// the system-browser OAuth transport, published beside window.api.
+// the system-browser OAuth transport, published beside the bridge.
 exposeClerkBridge();
 
 // This build's version, on argv (main passes it via

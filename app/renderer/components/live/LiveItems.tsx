@@ -24,7 +24,6 @@ import {
 } from "@/hooks/remote/useRemoteDevices";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { openExternalUrl } from "@/lib/openExternal";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { slotLabel } from "@/store/scriptRuns";
 import {
@@ -34,6 +33,7 @@ import {
   MirrorStreamItemView,
   ScriptItemView,
 } from "@shigomori/ui/views/live/LiveItemsView.tsx";
+import { useOutside } from "@shigomori/ui/outside.tsx";
 
 // A device inline, by its id.
 function DeviceName({ deviceId }: { deviceId: string }) {
@@ -158,6 +158,7 @@ export function ForwardItem({
   worktree: Worktree | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const { openUrl } = useOutside();
   const stop = usePortForwardStop();
   return (
     <ForwardItemView
@@ -165,7 +166,7 @@ export function ForwardItem({
       remotePort={forward.remotePort}
       connCount={forward.connCount}
       onOpen={() =>
-        openExternalUrl(
+        openUrl(
           `http://localhost:${forward.localPort}`,
           "Couldn't open the port",
         )

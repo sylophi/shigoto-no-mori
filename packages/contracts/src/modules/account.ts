@@ -14,7 +14,7 @@ import { DeviceIconSchema } from "../deviceIcon.ts";
 
 // The renderer's whole view of account state in one object. accountId is
 // empty when signed out. This device's id is not carried here since the
-// renderer already has it synchronously as window.api.deviceId, so the
+// renderer already has it synchronously as its page api's deviceId, so the
 // "this device" marker reads that instead. configured is false until the
 // owner sets the service env vars, and the UI shows a "not configured"
 // state instead of a dead Sign in button.

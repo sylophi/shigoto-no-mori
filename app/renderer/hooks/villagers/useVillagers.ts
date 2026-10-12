@@ -1,7 +1,8 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { VillagerProfiles } from "@shigomori/contracts/schemas";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeysFor } from "@/lib/queryKeys";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // The villager extras' data, read from this device's copy
 // (host/lib/VillagerData.ts) and only while useVillageLife() says the
@@ -13,7 +14,7 @@ import { queryKeys } from "@/lib/queryKeys";
 export function useVillagerFace(slug: string | null): string | null {
   const shown = useVillageLife();
   const { data } = useQuery({
-    ...villagerFaceQueryOptions(slug ?? ""),
+    ...villagerFaceQueryOptions(useApi(), slug ?? ""),
     enabled: shown && slug !== null,
   });
   return shown && slug !== null && data ? faceUrl(data) : null;
@@ -25,7 +26,7 @@ export function useVillagerFace(slug: string | null): string | null {
 export function useVillagerProfiles(): VillagerProfiles | undefined {
   const shown = useVillageLife();
   const { data } = useQuery({
-    ...villagerProfilesQueryOptions(),
+    ...villagerProfilesQueryOptions(useApi()),
     enabled: shown,
   });
   return shown ? (data ?? undefined) : undefined;
@@ -33,20 +34,20 @@ export function useVillagerProfiles(): VillagerProfiles | undefined {
 
 // The reads themselves, shared with callers outside React (the villager
 // toasts, lib/villagers/speakers.ts), so both use one cache entry.
-export function villagerFaceQueryOptions(slug: string) {
+export function villagerFaceQueryOptions(api: RendererApi, slug: string) {
   return queryOptions({
-    queryKey: queryKeys.villagerFace(slug),
-    queryFn: () => window.api.villagers.face({ slug }),
+    queryKey: queryKeysFor(api.deviceId).villagerFace(slug),
+    queryFn: () => api.villagers.face({ slug }),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     meta: { silentError: true },
   });
 }
 
-export function villagerProfilesQueryOptions() {
+export function villagerProfilesQueryOptions(api: RendererApi) {
   return queryOptions({
-    queryKey: queryKeys.villagerProfiles(),
-    queryFn: () => window.api.villagers.profiles(),
+    queryKey: queryKeysFor(api.deviceId).villagerProfiles(),
+    queryFn: () => api.villagers.profiles(),
     staleTime: Number.POSITIVE_INFINITY,
     meta: { silentError: true },
   });

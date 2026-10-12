@@ -20,6 +20,7 @@ import { parseArgs } from "node:util";
 import { guideCommand } from "@shigomori/engine/agentGuide";
 import type { Page } from "playwright-core";
 import { DevApp } from "../reliability/devApp.mts";
+import { pageApi, withPageApi } from "../reliability/pageApi.mts";
 import { appDir, git, repoDir, sleep, waitFor } from "../reliability/util.mts";
 
 type Harness = "claude" | "codex";
@@ -212,10 +213,9 @@ async function fresh(page: Page): Promise<void> {
   await waitFor(
     "the window",
     () =>
-      page.evaluate(
-        () =>
-          window.api?.guide !== undefined &&
-          (document.querySelector("#root")?.textContent?.length ?? 0) > 20,
+      withPageApi(
+        page,
+        () => (document.querySelector("#root")?.textContent?.length ?? 0) > 20,
       ),
     30_000,
   );
@@ -232,7 +232,9 @@ async function ask(
 ) {
   const before = sessionsRunning();
   const asked = Date.now();
-  await page.evaluate((input) => window.api.guide.ask(input), {
+  await (
+    await pageApi(page)
+  ).evaluate((api, input) => api.guide.ask(input), {
     harness,
     question,
   } as const);
