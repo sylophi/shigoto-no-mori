@@ -1,8 +1,8 @@
 // The worktree's remote-sync moves (WorktreeSyncPill binds them): a
 // move held while something else runs, and the pick between two
-// histories that diverged.
+// histories that split.
 import { ArrowDown, ArrowUp, Ellipsis, GitMerge } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,16 +41,42 @@ export function HeldSyncView({
 
 type SideMove = { armed: boolean; pending: boolean; onClick: () => void };
 
-// Histories have diverged, and merging them conflicts. The merge `git
-// pull` would make, stopped on its conflicts for the Changes tab to
-// settle, or one side wins: "overwrite the remote" (force-push) or
+// The merge `git pull` would make, stopped on its conflicts for the
+// Changes tab to settle: PickSideView's lead when the merge conflicts.
+export function MergeUpstreamView({
+  behind,
+  busy,
+  pending,
+  onClick,
+}: {
+  behind: number;
+  busy: boolean;
+  pending: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <SyncActionButtonView
+      tone="sky"
+      icon={GitMerge}
+      label={`Merge ${behind}`}
+      tip="git pull --no-rebase, stopping on the conflicts for you to resolve"
+      pending={pending}
+      disabled={busy}
+      onClick={onClick}
+    />
+  );
+}
+
+// History has split from the remote. The lead move takes both sides
+// (pull and push where they merge cleanly, otherwise MergeUpstreamView),
+// or one side wins: "overwrite the remote" (force-push) or
 // "overwrite local" (reset hard), both behind a two-step confirm.
 export function PickSideView({
   ahead,
   behind,
   compact,
   busy,
-  merge,
+  lead,
   pushForce,
   overwrite,
   onDisarm,
@@ -58,9 +84,9 @@ export function PickSideView({
   ahead: number;
   behind: number;
   compact: boolean;
-  // One of the three is under way.
+  // A move in the pill is under way.
   busy: boolean;
-  merge: { pending: boolean; onClick: () => void };
+  lead: ReactNode;
   // Each a two-step confirm: armed by the first click.
   pushForce: SideMove;
   overwrite: SideMove;
@@ -68,23 +94,12 @@ export function PickSideView({
   // away from firing.
   onDisarm: () => void;
 }) {
-  const mergeButton = (
-    <SyncActionButtonView
-      tone="sky"
-      icon={GitMerge}
-      label={`Merge ${behind}`}
-      tip="git pull --no-rebase, stopping on the conflicts for you to resolve"
-      pending={merge.pending}
-      disabled={busy}
-      onClick={merge.onClick}
-    />
-  );
-  // Narrow, the overwrites wait in a menu behind the merge, each still
+  // Narrow, the overwrites wait in a menu behind the lead move, each still
   // confirmed with a second click.
   if (compact) {
     return (
       <span className="inline-flex shrink-0 items-center gap-0.5 self-center text-xs">
-        {mergeButton}
+        {lead}
         {/* Closing the menu disarms both, so a reopen never finds one
             a click away from firing. */}
         <DropdownMenu
@@ -133,11 +148,11 @@ export function PickSideView({
   }
   return (
     <span className="inline-flex shrink-0 items-center gap-1 self-center text-xs">
-      {mergeButton}
+      {lead}
       {/* On the label, not the row: each button has its own tip, and
           two tooltips would stack. */}
       <SimpleTooltip
-        tip={`Diverged: ${ahead} local, ${behind} remote. History has split. Pick which side wins.`}
+        tip={`History has split: ${ahead} local, ${behind} remote. Pick which side wins.`}
       >
         <span className="px-1.5 text-rose-500">Overwrite:</span>
       </SimpleTooltip>
