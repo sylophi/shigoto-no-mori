@@ -12,7 +12,7 @@ import { SceneSidebar } from "./sidebar.tsx";
 
 const noop = () => {};
 
-// A fresh window with no project yet.
+// The home with no project: the way to the first, and what it leads to.
 export function FirstRunScene() {
   return (
     <SceneWindowFrame>

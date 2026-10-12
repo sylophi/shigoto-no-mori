@@ -11,7 +11,10 @@
 //   - the shell's link (shared/remote/hostLink.ts) to a host that came
 //     back elsewhere dials it once: the reconnect the shell asks for as
 //     the new host says it is up, made while no link was up, does not
-//     close the link that dial makes. Over the REAL loopback
+//     close the link that dial makes. It says the host stopped
+//     answering from the drop until that dial lands (the window's
+//     "Not responding" on this device), and a reconnect asked while
+//     a link is up is no drop. Over the REAL loopback
 //     (host/socket/Loopback.ts), with the shell's token.
 //
 // Run: pnpm test host-hold.
@@ -188,6 +191,7 @@ it("the shell's link dials a restarted host once, the reconnect asked as it came
   // The shell's address: the current host's, replaced as one forks.
   let address = Deferred.makeUnsafe<HostAddress>();
   const dialed: number[] = [];
+  const answering: boolean[] = [];
   const scope = Scope.makeUnsafe();
   const link = await Effect.runPromise(
     hostLink({
@@ -197,6 +201,7 @@ it("the shell's link dials a restarted host once, the reconnect asked as it came
         dialed.push(Number(new URL(url).port));
         return new WsWebSocket(url);
       },
+      onAnswering: (now) => answering.push(now),
     }).pipe(Scope.provide(scope)),
   );
   try {
@@ -204,11 +209,13 @@ it("the shell's link dials a restarted host once, the reconnect asked as it came
     const first = await startHost(dataDir);
     Deferred.doneUnsafe(address, Exit.succeed(first.address));
     assert.deepEqual(await Effect.runPromise(session.busy()), IDLE);
+    assert.deepEqual(answering, [true]);
 
     // The host exits: its waiters go to the next one, which comes up on
     // another port and says so, and the shell asks for a reconnect.
     address = Deferred.makeUnsafe<HostAddress>();
     await first.stop();
+    await waitFor(() => answering.at(-1) === false, "the drop said");
     const second = await startHost(dataDir);
     try {
       Deferred.doneUnsafe(address, Exit.succeed(second.address));
@@ -225,6 +232,15 @@ it("the shell's link dials a restarted host once, the reconnect asked as it came
         1,
         "the new host was dialed again: its first link was closed",
       );
+      assert.deepEqual(answering, [true, false, true]);
+      // A reconnect asked while the link is up dials again, and the
+      // host never read as not answering meanwhile.
+      await Effect.runPromise(link.reconnect);
+      await waitFor(
+        () => answering.length === 4,
+        "the reconnect's dial to land",
+      );
+      assert.deepEqual(answering, [true, false, true, true]);
     } finally {
       await second.stop();
     }

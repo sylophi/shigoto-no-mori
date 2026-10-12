@@ -275,6 +275,11 @@ Rules that keep a machine looking like itself everywhere:
   `deviceStatusView`. This device has no connection to show: it wears
   the glyph alone, and where a surface tags it, the tag is
   `THIS_DEVICE_VIEW` (a `RowTag` in a list), never a lowercase aside.
+  Its one state is its own host not answering the window (from the
+  host stopping, or the shell's watchdog stopping a silent one, until
+  the next one answers): then it wears a rose dot and reads "Not
+  responding" (`THIS_DEVICE_NOT_RESPONDING_VIEW`), wherever its tab,
+  filter or card shows it.
 - **A device's tooltip is `deviceTitle`** ("Thinkpad, Connected",
   "Studio Mac, This device") where it has one, as on the chip. The
   device pickers have none (above).
