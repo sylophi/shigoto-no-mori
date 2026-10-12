@@ -168,21 +168,6 @@ const make = Effect.gen(function* () {
     spawner,
   );
 
-  // `gh auth token` exits non-zero when not signed in, and is not asked
-  // when gh is missing. It reads gh's own store, where `gh auth status`
-  // asks GitHub, so a machine offline (or a stale second account) read
-  // as signed out. The token itself is dropped unread.
-  const probe = yield* Effect.gen(function* () {
-    const installed = (yield* Processes.resolveOnPath("gh")) !== null;
-    const authed =
-      installed &&
-      (yield* gh(["auth", "token"]).pipe(
-        Effect.as(true),
-        Effect.orElseSucceed(() => false),
-      ));
-    return { installed, authed };
-  }).pipe(withSpawner, Effect.cachedWithTTL(READINESS_TTL));
-
   // gh keeps its logged-in hosts as the keys of a top-level YAML map,
   // which a regex over "<host>:" lines reads without a YAML parser.
   // github.com always counts, with the file missing (most users, a
@@ -201,6 +186,26 @@ const make = Effect.gen(function* () {
     Effect.orElseSucceed(() => new Set(["github.com"])),
     Effect.cachedWithTTL(KNOWN_HOSTS_TTL),
   );
+
+  // `gh auth token` exits non-zero when not signed in, and is not asked
+  // when gh is missing. It reads gh's own store, where `gh auth status`
+  // asks GitHub, so a machine offline (or a stale second account) read
+  // as signed out. Asked per host gh knows, since bare it answers for
+  // github.com alone and an Enterprise login would read as none. The
+  // token itself is dropped unread.
+  const probe = yield* Effect.gen(function* () {
+    const installed = (yield* Processes.resolveOnPath("gh")) !== null;
+    if (!installed) return { installed, authed: false };
+    let authed = false;
+    for (const host of yield* knownHosts) {
+      authed = yield* gh(["auth", "token", "--hostname", host]).pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false),
+      );
+      if (authed) break;
+    }
+    return { installed, authed };
+  }).pipe(withSpawner, Effect.cachedWithTTL(READINESS_TTL));
 
   const repos = yield* Cache.makeWith(
     (cwd: string) =>

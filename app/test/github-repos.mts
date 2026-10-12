@@ -38,7 +38,7 @@ it("a partial answer's repositories are offered, and a bare failure stands", asy
     join(bin, "gh"),
     `#!/bin/sh
 case "$*" in
-"auth token") ;;
+"auth token "*) ;;
 "api graphql "*)
   cat '${answer}'
   if [ -e '${failing}' ]; then echo "gh: Resource protected by organization SAML enforcement." >&2; exit 1; fi;;
