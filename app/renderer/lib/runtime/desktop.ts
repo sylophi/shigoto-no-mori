@@ -12,6 +12,7 @@ import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
 import type { ElectronBridge } from "../../../main/preload";
 import { ClientLinks } from "./ClientLinks";
+import { hostAnswering } from "./hostAnswering";
 
 export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
   Layer.effect(
@@ -38,6 +39,7 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         >,
         appVersion: bridge.appVersion,
         openSocket: (url) => new WebSocket(url),
+        onAnswering: (answering) => hostAnswering.publish(answering),
       });
       // The shell is this window's own build.
       const ownShell = { ...shell, local: true };

@@ -159,7 +159,7 @@ export const scenes = {
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },
   missingWorktree: { Scene: MissingWorktreeScene, ...DESKTOP },
-  marks: { Scene: MarksScene, size: [640, 420] },
+  marks: { Scene: MarksScene, size: [640, 480] },
   folderPicker: { Scene: FolderPickerScene, ...DESKTOP },
   pathPicker: { Scene: PathPickerScene, ...DESKTOP },
   terminalParts: { Scene: TerminalPartsScene, size: [1100, 720] },
