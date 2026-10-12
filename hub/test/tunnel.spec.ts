@@ -52,11 +52,19 @@ function ok(result: unknown): Response {
 // In-memory Cloudflare API: exactly the endpoints hub/src/tunnel.ts
 // calls, answering the CF `{ success, result }` envelope. Everything
 // the worker did is observable on the returned state.
-function createCfStub(opts: { failDeletes?: boolean } = {}) {
+function createCfStub(
+  opts: {
+    failDeletes?: boolean;
+    // A rewrite of a tunnel's ingress answers success and changes
+    // nothing, as the connector's own log has shown.
+    ignoredRewrites?: boolean;
+  } = {},
+) {
   const tunnels: StubTunnel[] = [];
   const dnsRecords: StubDnsRecord[] = [];
   // tunnelId to its last-PUT ingress config.
-  const configs = new Map<string, unknown>();
+  const configs = new Map<string, { config: unknown }>();
+  const versions = new Map<string, number>();
   const calls: string[] = [];
   let nextId = 1;
 
@@ -95,8 +103,19 @@ function createCfStub(opts: { failDeletes?: boolean } = {}) {
     if (tunnelMatch !== null) {
       const [, id = "", rest] = tunnelMatch;
       if (method === "PUT" && rest === "/configurations") {
-        configs.set(id, body);
-        return ok(body);
+        const version = (versions.get(id) ?? 0) + 1;
+        if (opts.ignoredRewrites !== true || !configs.has(id)) {
+          configs.set(id, body);
+          versions.set(id, version);
+        }
+        return ok({ tunnel_id: id, version, ...body });
+      }
+      if (method === "GET" && rest === "/configurations") {
+        return ok({
+          tunnel_id: id,
+          version: versions.get(id) ?? 0,
+          ...configs.get(id),
+        });
       }
       if (method === "GET" && rest === "/token") {
         return ok(`connector-token-for-${id}`);
@@ -249,6 +268,31 @@ describe("POST /tunnel", () => {
         ],
       },
     });
+  });
+
+  it("a rewrite of the ingress that does not take is written again, then fails the provision as the hub unavailable rather than answering success", async () => {
+    const stub = createCfStub({ ignoredRewrites: true });
+    const worker = makeTestWorker({ cfFetch: stub.cfFetch });
+    const { credential } = await enroll("acct-tunnel-stale", "dev-ts-1");
+    expect(
+      (await call(provisionRequest(credential, 4321), tunnelEnv(), worker))
+        .status,
+    ).toBe(200);
+    const moved = await call(
+      provisionRequest(credential, 9999),
+      tunnelEnv(),
+      worker,
+    );
+    expect(moved.status).toBe(502);
+    expect(await moved.json()).toMatchObject({
+      _tag: "HubUnavailableError",
+      operation: "tunnel",
+    });
+    const puts = stub.calls.filter((line) =>
+      line.startsWith("PUT /client/v4/accounts/cf-test-account/cfd_tunnel/"),
+    );
+    // Once for the first provision, twice for the one that did not take.
+    expect(puts).toHaveLength(3);
   });
 
   it("answers the typed unconfigured status when the tunnel env is unset, and the CF API is never called", async () => {
