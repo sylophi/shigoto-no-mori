@@ -1,6 +1,7 @@
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import {
+  DropdownMenuArmedLabel,
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -138,7 +139,11 @@ export function ProjectRemoveMenuItem({
         removeArm.trigger(armKey, () => removeProject.mutate(project.id));
       }}
     >
-      {armed ? "Click again to confirm" : (deviceRow ?? "Remove")}
+      <DropdownMenuArmedLabel
+        armed={armed}
+        label={deviceRow ?? "Remove"}
+        armedLabel="Click again to confirm"
+      />
     </DropdownMenuItem>
   );
 }

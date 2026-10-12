@@ -23,6 +23,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  DropdownMenuArmedLabel,
   DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -91,7 +92,7 @@ export function WorktreeMenu({
       }}
     >
       <ContextMenuTrigger render={row} />
-      <ContextMenuContent className="min-w-48">
+      <ContextMenuContent>
         <MenuItems {...props} deleteArm={deleteArm} />
       </ContextMenuContent>
     </ContextMenu>
@@ -308,7 +309,11 @@ function ManageItems({
           }}
         >
           <Trash2 />
-          {deleteArm.armed ? "Click again to delete" : "Delete worktree"}
+          <DropdownMenuArmedLabel
+            armed={deleteArm.armed}
+            label="Delete worktree"
+            armedLabel="Click again to delete"
+          />
         </DropdownMenuItem>
       )}
     </>

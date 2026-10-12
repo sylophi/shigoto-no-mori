@@ -218,7 +218,7 @@ function OwnerMenu({
         <span className="max-w-40 truncate">{owner}</span>
         <ChevronDown aria-hidden className="size-3" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
+      <DropdownMenuContent align="end" sideOffset={4}>
         <DropdownMenuRadioGroup
           value={owner}
           onValueChange={(value) => onChange(value as string)}
