@@ -690,8 +690,20 @@ export function keepReachableOn(
 // Read-side counterpart, loose like StoredGlobalConfigSchema.
 export const StoredClientConfigSchema = loose(ClientConfigSchema);
 
-export const WriteClientConfigPayloadSchema = Schema.Struct({
-  config: ClientConfigSchema,
+// A change to the client config: the keys to set, and the keys to clear
+// (back to their default, the store's omit-on-default). Applied by the
+// store's owner over the config as it stands, so a window writes only
+// the keys it changed and never one another window changed meanwhile.
+export const PatchClientConfigPayloadSchema = Schema.Struct({
+  set: ClientConfigSchema,
+  clear: Schema.Array(
+    Schema.Literals(
+      Object.keys(ClientConfigSchema.fields) as [
+        keyof typeof ClientConfigSchema.fields,
+        ...(keyof typeof ClientConfigSchema.fields)[],
+      ],
+    ),
+  ),
 });
 
 export const WriteShigomoriPayloadSchema = Schema.Struct({

@@ -53,7 +53,6 @@ export function hostKeyDeviceId(queryKey: readonly unknown[]): unknown {
 export const queryKeys = {
   // Client-scoped: the store lives in this app instance's userData, so
   // no host sentinel and no device id.
-  clientConfig: () => ["clientConfig"] as const,
 
   // Client-scoped: the v3 migration as the shell serves it.
   migration: () => ["migration"] as const,

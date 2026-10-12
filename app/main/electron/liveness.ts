@@ -58,7 +58,7 @@ function keepReachableEnabled(): boolean {
 // same value is a no-op) and never throws: it is called at boot and on
 // every client-config write, and a liveness reconcile must not be able
 // to take the app down. Called from boot in main/index.ts, from the
-// clientConfig write handler, and from the account fan-out: the login
+// clientConfig patch handler, and from the account fan-out: the login
 // item is for staying reachable to an account, so a signed-out device
 // has none (the crash relaunch below keeps the plain setting: a
 // relaunch is this machine's business whatever the account).

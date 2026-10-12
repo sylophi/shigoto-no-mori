@@ -1,30 +1,32 @@
 import { keepReachableOn } from "@shigomori/contracts/schemas/config";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import {
+  clientConfigChanges,
+  patchClientConfig,
   readClientConfigSync,
-  writeClientConfig,
 } from "../../electron/clientConfig";
 import { reconcileLaunchAtLogin } from "../../electron/liveness";
 
 // Pure persistence on both sides. nativeTheme has one owner
 // (applyThemeSource in electron/clientConfig.ts), fed by boot and the
-// window module's previewTheme, never by a write landing here.
+// window module's previewTheme, never by a patch landing here.
 export const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
   read: () => readClientConfigSync(),
-  // Async so a save never blocks the main thread. Only the boot-path
-  // read in electron/clientConfig.ts stays sync.
-  write: async ({ config }) => {
+  patch: async ({ set, clear }) => {
+    const { before, after } = await patchClientConfig(set, clear);
     // keepReachable rides this store but drives the OS login item, so
-    // capture the prior persisted value before the write and reconcile
-    // only when it actually changed. Unrelated writes (theme, palettes)
-    // then skip a redundant setLoginItemSettings syscall. reconcile is
-    // still idempotent and never-throws, so gating is purely an
-    // optimization, not a correctness requirement.
-    const priorKeepReachable = keepReachableOn(readClientConfigSync());
-    await writeClientConfig(config);
-    if (keepReachableOn(config) !== priorKeepReachable) {
+    // only a patch that changed it reconciles: unrelated ones (theme,
+    // palettes) skip a redundant setLoginItemSettings syscall.
+    if (keepReachableOn(after) !== keepReachableOn(before)) {
       reconcileLaunchAtLogin();
     }
   },
+};
+
+export const clientConfigViews: ViewHandlers<
+  typeof clientConfigContract,
+  never
+> = {
+  watch: () => clientConfigChanges,
 };

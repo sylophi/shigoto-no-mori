@@ -1,9 +1,11 @@
-import { useQueryClient } from "@tanstack/react-query";
-import type { ClientConfig, SidebarView } from "@shigomori/contracts/schemas";
-import { useClientConfig } from "@/hooks/config/useClientConfig";
+import type { SidebarView } from "@shigomori/contracts/schemas";
+import {
+  clientConfigNow,
+  useClientConfig,
+} from "@/hooks/config/useClientConfig";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 import { useKeymapAction } from "@/hooks/ui/useKeymap";
-import { queryKeys } from "@/lib/queryKeys";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 
 // Which layout the sidebar shows. A preference of the window showing
 // it, kept in the client config like the theme, so a hostless client
@@ -43,7 +45,7 @@ export function useSetSidebarView() {
 // forward focus traversal for the whole window, not just the sidebar.
 // Shift+Tab still walks backwards, and pointer focus is untouched.
 export function useSidebarViewHotkey(enabled: boolean): void {
-  const queryClient = useQueryClient();
+  const registry = useRegistry();
   const { mutate: setView } = useSetSidebarView();
 
   useKeymapAction(
@@ -55,9 +57,7 @@ export function useSidebarViewHotkey(enabled: boolean): void {
       // later, and that re-render rebuilds the whole sidebar row model.
       // Two quick presses off the stale value would write the same
       // layout twice and leave the sidebar one flip behind the keyboard.
-      const view =
-        queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig())
-          ?.sidebarView ?? "projects";
+      const view = clientConfigNow(registry)?.sidebarView ?? "projects";
       setView(view === "inbox" ? "projects" : "inbox");
     },
     { enabled },

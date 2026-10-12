@@ -240,15 +240,22 @@
       "onPath": false
     }
   },
+  "clientConfig:patch": {
+    "payload": {
+      "set": {},
+      "clear": ["groupProjectsByOwner", "markTerrierProjects"]
+    }
+  },
   "clientConfig:read": {
     "success": {
       "pauseAnimationsOnBattery": false,
       "ZJ": "f"
     }
   },
-  "clientConfig:write": {
-    "payload": {
-      "config": {}
+  "clientConfig:watch": {
+    "success": {
+      "inlineWorktrees": true,
+      "collapsedProjects": []
     }
   },
   "control:bring": {

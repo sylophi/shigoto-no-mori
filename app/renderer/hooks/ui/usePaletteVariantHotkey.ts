@@ -1,6 +1,4 @@
 import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import type { ClientConfig } from "@shigomori/contracts/schemas";
 import {
   DEFAULT_LIGHT_THEME,
   type LightTheme,
@@ -9,7 +7,8 @@ import {
 } from "@shigomori/ui/lib/themes.ts";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
-import { queryKeys } from "@/lib/queryKeys";
+import { useRegistry } from "@/lib/runtime/viewHooks";
+import { clientConfigNow } from "@/hooks/config/useClientConfig";
 import { usePalette } from "./usePalette";
 import { useTheme } from "./useTheme";
 
@@ -24,7 +23,7 @@ import { useTheme } from "./useTheme";
 // Settings, whose form keeps a staged copy of the pick its Save would write
 // back.
 export function usePaletteVariantHotkey(enabled: boolean): void {
-  const queryClient = useQueryClient();
+  const registry = useRegistry();
   const { resolved } = useTheme();
   const { saved, applied } = usePalette();
   const { mutate } = useClientConfigPatch(
@@ -55,8 +54,7 @@ export function usePaletteVariantHotkey(enabled: boolean): void {
       // Read at press time, as useSidebarViewHotkey does: two quick
       // presses off the rendered pick would both write the same step.
       const current =
-        queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig())
-          ?.lightTheme ?? DEFAULT_LIGHT_THEME;
+        clientConfigNow(registry)?.lightTheme ?? DEFAULT_LIGHT_THEME;
       const next = nextVariant(LIGHT_THEMES, current);
       if (next === null) return;
       e.preventDefault();
@@ -65,5 +63,5 @@ export function usePaletteVariantHotkey(enabled: boolean): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mutate is a fresh closure per render, and the handler reads the pick from the cache, so re-subscribing each render would be churn.
-  }, [listening, queryClient]);
+  }, [listening, registry]);
 }

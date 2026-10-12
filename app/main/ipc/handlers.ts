@@ -17,12 +17,12 @@ import { shellContract } from "@shigomori/contracts/modules/shell";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { withoutPeerState } from "@shigomori/contracts/schemas/config";
 import { logFailure } from "@shared/log";
-import {
-  readClientConfigSync,
-  writeClientConfig,
-} from "../electron/clientConfig";
+import { updateClientConfig } from "../electron/clientConfig";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
-import { clientConfigHandlers } from "./modules/clientConfig";
+import {
+  clientConfigHandlers,
+  clientConfigViews,
+} from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
 import { guideHandlers } from "./modules/guide";
 import { menuHandlers } from "./modules/menu";
@@ -37,10 +37,11 @@ import {
   accountFactsForHost,
   makeAccountHandlers,
 } from "./modules/account";
-import { broadcastAll, registerContract } from "./register";
+import { broadcastAll, registerContract, registerViews } from "./register";
 
 export function registerShellHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
+  registerViews(clientConfigContract, clientConfigViews);
   // The account the client config's peer-keyed state was built under,
   // so a change can tell a rename from a departure. Unknown until the
   // first change: reading it here would open the credential store
@@ -60,7 +61,7 @@ export function registerShellHandlers(): void {
       if (leaving) {
         await logFailure(
           "[account] dropping the peer-keyed client config failed",
-          () => writeClientConfig(withoutPeerState(readClientConfigSync())),
+          () => updateClientConfig(withoutPeerState),
         );
       }
       // The host tears down what was the account's and follows it with

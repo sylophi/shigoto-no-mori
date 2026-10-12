@@ -20,13 +20,11 @@
 // that tells of a worktree coming or going itself (a transplant, a
 // mirror) quiets its moves (quietVillagerMoves), so one action is one
 // piece of news.
-import { throughCancel } from "@/lib/queryClientOptions";
 import type { QueryClient } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
-import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { onWorktreeLists } from "@/lib/viewFeed";
@@ -168,12 +166,7 @@ async function tell({
   pending.clear();
   // Village news off, the moves go untold. The album still counts
   // them (visitLog.ts).
-  const config = await throughCancel(() =>
-    queryClient.ensureQueryData({
-      ...clientConfigQueryOptions(api),
-      retry: false,
-    }),
-  ).catch(() => undefined);
+  const config = await api.run(api.clientConfig.read()).catch(() => undefined);
   if (!config || !villageNewsEnabled(config)) return;
   await Promise.all(
     batch.map(async ([deviceId, moves]) => {

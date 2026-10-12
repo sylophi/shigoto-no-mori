@@ -107,7 +107,7 @@ export function SettingsForm({
 }) {
   const localDeviceId = useApi().deviceId;
   const hasLocalHost = useHasLocalHost();
-  const save = useSettingsSave({ initialConfig, initialClientConfig });
+  const save = useSettingsSave();
   const { setOverride } = useTheme();
   const { setOverride: setPaletteOverride } = usePalette();
   const devices = useHostDevices();
@@ -141,7 +141,7 @@ export function SettingsForm({
     // Two stores behind one Save. useSettingsSave routes each field to
     // its engine and skips whichever store is unchanged.
     try {
-      await save.mutateAsync(form);
+      await save.mutateAsync({ state: form, saved: savedSnapshot });
       setSavedSnapshot(form);
     } catch (error) {
       // The mutation's toast and the banner below already surface the

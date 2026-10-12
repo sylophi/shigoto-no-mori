@@ -870,10 +870,10 @@
       }
     ]
   },
-  "WriteClientConfigPayloadSchema": {
+  "PatchClientConfigPayloadSchema": {
     "accepts": [
       {
-        "config": {
+        "set": {
           "theme": "dark",
           "doubutsu": true,
           "lightTheme": "latte-sage",
@@ -894,45 +894,45 @@
           "projectsSort": "recent",
           "groupProjectsByOwner": false,
           "collapsedProjects": ["remote:github.com/alex/notes"]
-        }
+        },
+        "clear": ["keybindings", "villageNews"]
       },
       {
-        "config": {}
+        "set": {},
+        "clear": []
       }
     ],
     "normalizes": [
       {
         "input": {
-          "config": {
+          "set": {
             "theme": "dark",
             "windowBounds": {
               "width": 1280,
               "height": 800
             }
-          }
+          },
+          "clear": []
         },
         "output": {
-          "config": {
+          "set": {
             "theme": "dark"
-          }
-        }
-      },
-      {
-        "input": {
-          "config": {},
-          "origin": "settings"
-        },
-        "output": {
-          "config": {}
+          },
+          "clear": []
         }
       }
     ],
     "rejects": [
       {},
       {
-        "config": {
+        "set": {
           "theme": "sepia"
-        }
+        },
+        "clear": []
+      },
+      {
+        "set": {},
+        "clear": ["windowBounds"]
       }
     ]
   },
