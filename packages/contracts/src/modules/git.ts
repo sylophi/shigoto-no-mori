@@ -16,14 +16,19 @@ export const gitContract = defineContract(
   // A peer saying it is looking at this host: runs the host's
   // background sweep (refs and PRs, every project) if it is stale, and
   // keeps the host's sweep timer ticking for the returned lease. The
-  // peer renews within that lease while its window stays focused.
+  // peer renews within that lease while its window stays focused. An
+  // ask that is no renewal (the window regained focus, or a session
+  // landed) also reads every project's rows again, for an edit no watch
+  // saw, as this machine's own windows do on their focus.
   // Read-class: the sweep is the host's own scheduled pass, including
   // the auto-pulls the host's user marked for it, and a request only
   // decides when it runs, never more often than its interval.
-  invoke("sweep", VoidSchema, Schema.Struct({ leaseMs: Schema.Finite }), {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "sweep",
+    Schema.Struct({ renewal: Schema.Boolean }),
+    Schema.Struct({ leaseMs: Schema.Finite }),
+    { remote: true, gated: false },
+  ),
   push("refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),

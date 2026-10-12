@@ -215,7 +215,9 @@ export const mirrors = Command.make("mirrors", { rest }, (input) =>
     if (json) return yield* emit(listed);
     if (listed.daemon !== "running") {
       yield* note(
-        styles(stderrColor).yellow(`! the mirror engine is ${listed.daemon}`),
+        styles(stderrColor).yellow(
+          `! the mirror engine is ${listed.daemon}${listed.daemonFailure === "" ? "" : `: it ${listed.daemonFailure}`}`,
+        ),
       );
     }
     const { dim } = styles(stdoutColor);

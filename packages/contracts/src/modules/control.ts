@@ -250,6 +250,9 @@ export const controlContract = defineContract(
     strict(
       Schema.Struct({
         daemon: Schema.String,
+        // Why a "failing" engine last stopped or couldn't start, empty
+        // otherwise.
+        daemonFailure: Schema.String,
         mirrors: Schema.Array(ControlMirrorSchema),
       }),
     ),

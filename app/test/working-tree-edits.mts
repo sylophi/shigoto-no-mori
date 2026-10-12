@@ -3,8 +3,9 @@
 // worktree page read): through the host's watch on the working trees
 // (host/lib/GitWatcher.ts) within a couple of seconds, with no window
 // focused, and for an edit no watch saw: through a window here gaining
-// focus (BackgroundFetch reads the rows again), and through
-// `worktrees:reread`, which a peer's window sends.
+// focus (BackgroundFetch reads the rows again), and through a peer's
+// `git:sweep` that is no renewal (its window regained focus, or its
+// session landed), which its renewals are not.
 //
 // Run: pnpm test working-tree-edits.
 import assert from "node:assert/strict";
@@ -20,10 +21,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterAll, beforeAll, it } from "vitest";
-import {
-  worktreesHandlers,
-  worktreesViews,
-} from "../host/ipc/modules/worktrees.ts";
+import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
 import * as BackgroundFetch from "../host/lib/BackgroundFetch.ts";
 import * as GitWatcher from "../host/lib/GitWatcher.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
@@ -68,7 +66,7 @@ const changedCountWithin = (
     }),
   );
 
-it("an edit outside the app reaches the rows through the working tree's watch, with no focus, and through a reread", async () => {
+it("an edit outside the app reaches the rows through the working tree's watch, with no focus", async () => {
   await runHost(
     Effect.gen(function* () {
       const project = yield* addProject(repo);
@@ -110,26 +108,6 @@ it("an edit outside the app reaches the rows through the working tree's watch, w
       assert.equal(yield* changedCountWithin(values, "2 seconds"), 2);
     }).pipe(Effect.scoped),
   );
-
-  // With no watch running, an edit waits for a window's reread.
-  await runHost(
-    Effect.gen(function* () {
-      const values = yield* Stream.toQueue(
-        worktreesViews.watch({ projectId }),
-        { capacity: "unbounded" },
-      );
-      const [first] = yield* Queue.take(values);
-      assert.equal(first?.changedCount, 2);
-      writeFileSync(join(repo, "c.txt"), "c\n");
-      assert.equal(
-        yield* changedCountWithin(values, "1 second"),
-        "no new rows",
-        "nothing watches the tree here",
-      );
-      yield* worktreesHandlers.reread();
-      assert.equal(yield* changedCountWithin(values, "2 seconds"), 3);
-    }).pipe(Effect.scoped),
-  );
 });
 
 it("each window here gaining focus reads the rows again, for an edit no watch saw", async () => {
@@ -169,6 +147,17 @@ it("each window here gaining focus reads the rows again, for an edit no watch sa
       writeFileSync(join(repo, "e.txt"), "e\n");
       fetch.setWindowFocused(true);
       assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 2);
+      // A peer's renewal of its sweep reads nothing again; its ask on a
+      // focus or a landing does.
+      writeFileSync(join(repo, "f.txt"), "f\n");
+      yield* fetch.sweepForPeer(true);
+      assert.equal(
+        yield* changedCountWithin(values, "1 second"),
+        "no new rows",
+        "a renewal read the rows again",
+      );
+      yield* fetch.sweepForPeer(false);
+      assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 3);
     }).pipe(Effect.scoped),
   );
 });

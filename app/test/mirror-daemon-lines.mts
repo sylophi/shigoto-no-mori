@@ -21,7 +21,11 @@
 //     than resolving with what it carried,
 //   - the engine's id-less refusal (an empty id) is logged, not dropped,
 //   - a child that exits is spawned again on the restart ladder, and
-//     one that ran past the stable window restarts from its bottom.
+//     one that ran past the stable window restarts from its bottom,
+//   - a child that exits reads as failing, with its code and its last
+//     word on stderr, through its restarts until one is ready; one
+//     that can't be spawned is failing too, saying why, and only a
+//     missing engine reads as unavailable.
 //
 // Run: pnpm test mirror-daemon-lines.
 import assert from "node:assert/strict";
@@ -35,6 +39,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as TestClock from "effect/testing/TestClock";
+import * as PlatformError from "effect/PlatformError";
 import * as FileSync from "@host/fileSync/FileSync";
 import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
 import { it } from "vitest";
@@ -72,6 +77,13 @@ async function harness() {
   const requests: Record<string, unknown>[] = [];
   const logs: string[] = [];
   const out = Effect.runSync(Queue.unbounded<Uint8Array>());
+  const err = Effect.runSync(Queue.unbounded<Uint8Array>());
+  // How often the daemon announced a change.
+  const changes = { count: 0 };
+  // What the next spawns fail with, while set.
+  const spawning: {
+    refusal?: FileSync.FileSyncUnavailableError | PlatformError.PlatformError;
+  } = {};
   // One per spawn: the child's exit, which the proof decides.
   const exits: Deferred.Deferred<number>[] = [];
   const fakeFileSync = Layer.succeed(
@@ -79,6 +91,9 @@ async function harness() {
     FileSync.FileSync.of({
       spawn: (_args, { stdin }) =>
         Effect.gen(function* () {
+          if (spawning.refusal !== undefined) {
+            return yield* Effect.fail(spawning.refusal);
+          }
           yield* stdin.pipe(
             Stream.decodeText(),
             Stream.splitLines,
@@ -101,7 +116,9 @@ async function harness() {
             stdout: Stream.fromQueue(out).pipe(
               Stream.interruptWhen(Deferred.await(exit)),
             ),
-            stderr: Stream.empty,
+            stderr: Stream.fromQueue(err).pipe(
+              Stream.interruptWhen(Deferred.await(exit)),
+            ),
             all: Stream.empty,
             getInputFd: () => Sink.drain,
             getOutputFd: () => Stream.empty,
@@ -119,6 +136,9 @@ async function harness() {
       gatewayAddress: () => "127.0.0.1:1",
       gatewayToken: () => "token",
       dataDir: () => "unused",
+      onChange: () => {
+        changes.count += 1;
+      },
     }).pipe(
       Layer.provide(fakeFileSync),
       Layer.provide(Logger.layer([captured])),
@@ -129,6 +149,7 @@ async function harness() {
   await runtime.context();
   const daemon = {
     status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
+    failure: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.failure)),
     sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
     pause: (id: string) =>
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
@@ -148,13 +169,28 @@ async function harness() {
     await runtime.runPromise(TestClock.adjust(ms));
     await settle();
   };
+  const say = async (line: string) => {
+    Queue.offerUnsafe(err, new TextEncoder().encode(line + "\n"));
+    await settle();
+  };
   const exit = async (index: number) => {
     const deferred = exits[index];
     assert.ok(deferred !== undefined, `no child ${index} was spawned`);
     Effect.runSync(Deferred.succeed(deferred, 1));
     await settle();
   };
-  return { daemon, send, requests, logs, exits, adjust, exit };
+  return {
+    daemon,
+    send,
+    say,
+    spawning,
+    changes,
+    requests,
+    logs,
+    exits,
+    adjust,
+    exit,
+  };
 }
 
 it("a well-formed state line is the sessions", async () => {
@@ -269,7 +305,7 @@ it("a daemon that exits is restarted on the ladder, from its bottom after a long
   await send({ event: "ready" });
   assert.equal(daemon.status(), "running");
   await exit(0);
-  assert.equal(daemon.status(), "starting");
+  assert.equal(daemon.status(), "failing");
   await adjust(999);
   assert.equal(exits.length, 1, "restarted before the first rung");
   await adjust(1);
@@ -284,4 +320,45 @@ it("a daemon that exits is restarted on the ladder, from its bottom after a long
   await exit(2);
   await adjust(1_000);
   assert.equal(exits.length, 4, "a long run did not reset the ladder");
+});
+
+it("a daemon that stops reads failing with why until it is ready, one that can't start says why, and only a missing one is unavailable", async () => {
+  const { daemon, send, say, spawning, changes, exit, adjust, exits } =
+    await harness();
+  await send({ event: "ready" });
+  assert.equal(daemon.failure(), undefined);
+  await say("panic: the session store is locked");
+  await exit(0);
+  assert.equal(daemon.status(), "failing");
+  assert.equal(
+    daemon.failure(),
+    "stopped with code 1: panic: the session store is locked",
+  );
+  // Its restart doesn't read as a fresh start: still failing, still
+  // saying why, until it is ready.
+  await adjust(1_000);
+  assert.equal(exits.length, 2);
+  assert.equal(daemon.status(), "failing");
+  await send({ event: "ready" });
+  assert.equal(daemon.status(), "running");
+  assert.equal(daemon.failure(), undefined);
+
+  // An engine that is there and can't be spawned.
+  spawning.refusal = PlatformError.systemError({
+    _tag: "PermissionDenied",
+    module: "ChildProcess",
+    method: "spawn",
+    description: "the engine can't be run",
+  });
+  await exit(1);
+  const announced = changes.count;
+  await adjust(30_000);
+  assert.equal(daemon.status(), "failing");
+  assert.match(daemon.failure() ?? "", /^couldn't start: /);
+  // The new reason is announced, though the status stayed failing.
+  assert.ok(changes.count > announced, "the new reason went unannounced");
+  // And one that isn't there at all.
+  spawning.refusal = new FileSync.FileSyncUnavailableError();
+  await adjust(30_000);
+  assert.equal(daemon.status(), "unavailable");
 });
