@@ -397,14 +397,15 @@ let quitting = false;
 app.on("before-quit", (event) => {
   if (quitting) return;
   event.preventDefault();
-  if (askingToQuit) return;
   // An update install was already confirmed by the renderer's
   // installUpdate dialog, and a relaunch's cancelled quit would leave a
-  // live app on a data dir that has moved.
+  // live app on a data dir that has moved. Ahead of a busy prompt
+  // already open, whose cancel must not keep such an app running.
   if (isHurriedQuit()) {
     quit();
     return;
   }
+  if (askingToQuit) return;
   askingToQuit = true;
   void Effect.runPromise(hostBusyForQuit())
     .then((busy) => confirmBusyAction("quit", busy))
@@ -415,6 +416,8 @@ app.on("before-quit", (event) => {
     })
     .then((proceed) => {
       askingToQuit = false;
+      // A hurried quit taken while this prompt was open is underway.
+      if (quitting) return;
       if (proceed) {
         quit();
         return;
