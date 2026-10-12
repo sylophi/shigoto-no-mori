@@ -16,7 +16,6 @@
 import { createAccountService } from "@shared/account/service";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
-import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -35,6 +34,7 @@ import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSetti
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import type { EffectHandlers, Handlers } from "@shigomori/contracts/types";
+import { servedInvokePeer } from "@shared/hub/bridgeHandlers";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import { fetchReleases } from "@shared/releases";
@@ -481,21 +481,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   tab.served.serve(accountContract, accountHandlers);
   tab.served.serve(clientConfigContract, clientConfigHandlers);
-  // As effects, so a call interrupted in the page (a query superseded
-  // or dropped) cancels it on the peer too. A failure reaches the page
-  // as it does a window's: the contract error, or RemoteCallError with
-  // its message.
   const hubServed: EffectHandlers<typeof hubContract> = {
     status: () =>
       Effect.promise(async () => hubHandlers.status(undefined, undefined)),
-    invokePeer: (hop) =>
-      Effect.tryPromise({
-        try: (signal) =>
-          hubHandlers.invokeOnPeer(hop.deviceId, hop.channel, hop.input, {
-            signal,
-          }),
-        catch: callFailureOf,
-      }),
+    invokePeer: servedInvokePeer(() => hubHandlers),
   };
   tab.served.serve(hubContract, hubServed);
   tab.view(hubContract, "watchPeer", (input, observer) =>

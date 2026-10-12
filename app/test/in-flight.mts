@@ -17,6 +17,9 @@
 //     so it has answered once before), and that git and its hook are
 //     gone while the new fetch answers. The connection then takes all 64 calls the cap
 //     allows, so the cancelled call's place came back.
+//   - calls dropped while their host cleanup still runs (a killed git
+//     not yet gone) free their places as they are dropped: as many
+//     new calls made at once all run, and none is refused.
 //   - a burst of 300 calls on the link all answer, with no refusal: the
 //     host never runs more than LINK_CALLS_IN_FLIGHT (48) at once, and
 //     starts them in the order they were made.
@@ -81,6 +84,9 @@ const held = {
   peak: 0,
   releases: [] as (() => void)[],
 };
+// A "stuck" call's cleanup, once interrupted, waits as well, as a
+// killed git's exit does, until let go.
+const cleanups: (() => void)[] = [];
 const resetHeld = () => {
   held.order = [];
   held.running = 0;
@@ -89,6 +95,7 @@ const resetHeld = () => {
 };
 const releaseHeld = () => {
   for (const release of held.releases.splice(0)) release();
+  for (const release of cleanups.splice(0)) release();
 };
 
 // A call that runs until released, counting itself in and out, on a
@@ -101,7 +108,16 @@ const hold = ({ projectId }: { projectId: string }) =>
     return Effect.callback<void>((resume) => {
       held.releases.push(() => resume(Effect.void));
     });
-  }).pipe(Effect.ensuring(Effect.sync(() => (held.running -= 1))));
+  }).pipe(
+    Effect.onInterrupt(() =>
+      projectId.startsWith("stuck")
+        ? Effect.callback<void>((resume) => {
+            cleanups.push(() => resume(Effect.void));
+          })
+        : Effect.void,
+    ),
+    Effect.ensuring(Effect.sync(() => (held.running -= 1))),
+  );
 
 // The slow git: an fsmonitor hook that holds the `git status` the
 // changes page runs (--untracked-files=all, read off its parent's
@@ -307,6 +323,52 @@ it("superseded: a fetch a query's refetch cancels stops the host's git, and its 
   assert.equal(slowPids().length, 2, "only the superseded git was held");
 
   await fillCap(connection);
+});
+
+it("dropped: calls cancelled while their host cleanup runs free their places at once, so as many new ones are all taken", async () => {
+  resetHeld();
+  const { link, run } = await openLink();
+  const dropping = new AbortController();
+  const dropped = Array.from({ length: LINK_CALLS_IN_FLIGHT }, (_, n) =>
+    run(link.call("git:refreshProject", { projectId: `stuck${n}` }), {
+      signal: dropping.signal,
+    }).catch(() => undefined),
+  );
+  await waitFor(
+    () => held.running === LINK_CALLS_IN_FLIGHT,
+    "the calls to be dropped to run",
+  );
+  // A page going: every call dropped, and the next page's made at once.
+  dropping.abort();
+  const refusals: unknown[] = [];
+  const next = Array.from({ length: LINK_CALLS_IN_FLIGHT }, (_, n) =>
+    run(link.call("git:refreshProject", { projectId: `next${n}` })).catch(
+      (error: unknown) => {
+        refusals.push(error);
+      },
+    ),
+  );
+  trackTest(async () => {
+    releaseHeld();
+    await Promise.allSettled([...dropped, ...next]);
+  });
+  await waitFor(
+    () =>
+      held.order.filter((id) => id.startsWith("next")).length +
+        refusals.length ===
+      LINK_CALLS_IN_FLIGHT,
+    "the next calls to reach the host or be refused",
+  );
+  assert.equal(
+    refusals.length,
+    0,
+    `${refusals.length} refused: ${String(refusals[0])}`,
+  );
+  // The dropped calls' cleanup still runs on the host.
+  assert.equal(cleanups.length, LINK_CALLS_IN_FLIGHT);
+  releaseHeld();
+  await Promise.all([...dropped, ...next]);
+  await waitFor(() => held.running === 0, "the host's calls to drain");
 });
 
 it("burst: 300 calls on the link all answer, never more than the gate's at once on the host, started in the order they were made", async () => {

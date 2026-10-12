@@ -16,7 +16,7 @@ import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import type { HubHandlers } from "@shared/hub/bridgeHandlers";
+import { type HubHandlers, servedInvokePeer } from "@shared/hub/bridgeHandlers";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -740,18 +740,7 @@ export function registerHostHandlers(): void {
         try: async () => hubHandlers().status(undefined, undefined),
         catch: callFailureOf,
       }),
-    // A window's call interrupted (a query superseded or dropped)
-    // cancels the call on the peer too, so the peer's work stops.
-    invokePeer: ({
-      deviceId,
-      channel,
-      input,
-    }: Parameters<HubHandlers["invokePeer"]>[0]) =>
-      Effect.tryPromise({
-        try: (signal) =>
-          hubHandlers().invokeOnPeer(deviceId, channel, input, { signal }),
-        catch: callFailureOf,
-      }),
+    invokePeer: servedInvokePeer(hubHandlers),
   });
   registerViews(hubContract, {
     watchPeer: (input: Parameters<HubHandlers["watchPeer"]>[0]) =>

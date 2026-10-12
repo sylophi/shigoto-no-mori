@@ -61,6 +61,7 @@ import { boundedMessages } from "./boundedMessages";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -811,8 +812,7 @@ export const make = (options: {
                 new RemoteCallError({ text: "too many in-flight requests" }),
               );
             }
-            if (!streaming) connection.inFlight += 1;
-            return effect.pipe(
+            const served = effect.pipe(
               Effect.provideService(LinkPeer, {
                 deviceId: local ? undefined : deviceId,
                 closed: connection.closed.signal,
@@ -825,12 +825,36 @@ export const make = (options: {
                   });
                 },
               }),
-              Effect.ensuring(
-                Effect.sync(() => {
-                  if (!streaming) connection.inFlight -= 1;
-                }),
-              ),
             );
+            if (streaming) return served;
+            // A call's place frees the moment it is interrupted, not once
+            // its cleanup (the git it spawned, killed) ends: the client's
+            // gate frees its own when it sends the interrupt, and a page
+            // that drops its calls and makes as many new ones would
+            // otherwise find the old still counted here.
+            connection.inFlight += 1;
+            let held = true;
+            const free = Effect.sync(() => {
+              if (!held) return;
+              held = false;
+              connection.inFlight -= 1;
+            });
+            // Started at once, so a call still begins before the next
+            // one on the connection (a channel's bytes after its open).
+            return Effect.uninterruptibleMask((restore) =>
+              Effect.forkDetach(served, {
+                startImmediately: true,
+                uninterruptible: false,
+              }).pipe(
+                Effect.flatMap((fiber) =>
+                  restore(Fiber.join(fiber)).pipe(
+                    Effect.onInterrupt(() =>
+                      free.pipe(Effect.andThen(Fiber.interrupt(fiber))),
+                    ),
+                  ),
+                ),
+              ),
+            ).pipe(Effect.ensuring(free));
           }),
         );
 
