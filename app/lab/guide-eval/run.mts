@@ -269,11 +269,17 @@ function sessionsRunning(): string[] {
   );
 }
 
-// The Terminal the launches opened, when the run started it: its windows
-// ask before they close a shell with a job, so it goes whole.
+// The Terminal the launches opened, when the run started it: its
+// windows closed and it quit, so none come back at its next launch (a
+// killed Terminal restores them). Their agents are gone by then.
 function quitTerminal(): void {
   if (!terminalWasRunning && running("Terminal")) {
-    kill("/Terminal.app/Contents/MacOS/Terminal", "SIGTERM");
+    execFileSync("osascript", [
+      "-e",
+      'tell application "Terminal" to close every window saving no',
+      "-e",
+      'tell application "Terminal" to quit',
+    ]);
   }
 }
 
