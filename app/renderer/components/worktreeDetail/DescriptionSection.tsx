@@ -9,6 +9,7 @@ import {
   DescriptionEditorView,
   DescriptionSectionView,
 } from "@shigomori/ui/views/worktreeDetail/DescriptionSectionView.tsx";
+import { useProjectImageHosts } from "@/hooks/projects/useProjectImageHosts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDescribeWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 
@@ -28,6 +29,7 @@ export function DescriptionSection({
   const [draft, setDraft] = useState<string | null>(null);
   const describe = useDescribeWorktree("Couldn't save the description");
   const { canCommand } = useCommandAccess();
+  const imageHosts = useProjectImageHosts(worktree.projectId);
   // The worktree's own text, or the merged PR's body it shows instead.
   const current = worktree.description ?? description;
 
@@ -60,6 +62,7 @@ export function DescriptionSection({
       // Folded again for a new text.
       key={description}
       description={description}
+      imageHosts={imageHosts}
       onEdit={canCommand && editable ? () => setDraft(current) : undefined}
     />
   );
@@ -67,9 +70,11 @@ export function DescriptionSection({
 
 function DescriptionBody({
   description,
+  imageHosts,
   onEdit,
 }: {
   description: string;
+  imageHosts: readonly string[];
   onEdit: (() => void) | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -82,6 +87,7 @@ function DescriptionBody({
   return (
     <DescriptionSectionView
       description={description}
+      imageHosts={imageHosts}
       expanded={expanded}
       onToggle={() => setExpanded((open) => !open)}
       truncated={truncated}

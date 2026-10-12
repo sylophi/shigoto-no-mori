@@ -7,7 +7,7 @@ decisions 6 and 9).
 
 - `index.ts`: the shell's start, the composition root. It builds the
   shell's runtime over `shellLayer.ts`, its layer graph, and quits with
-  the last window. `flavor.ts` is this build's flavor (prod, test or
+  the last window. `flavor.ts` is this build's flavor (prod, v3 or
   dev) and its names.
 - `hostProcess.ts`: the shell's hold on its host, the top layer of
   the shell's graph. It forks `host/process/host.ts` with its facts,

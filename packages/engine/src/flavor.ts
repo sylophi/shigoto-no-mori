@@ -1,7 +1,7 @@
 // The three builds and every name that tells them apart, so two of
 // them run side by side on one machine without one reading or writing
-// another's files: prod is what ships, test is a `-test.N` prerelease
-// dogfooded beside prod, and dev is what `pnpm dev` runs. A packaged
+// another's files: prod is what ships, v3 is a `-v3.N` prerelease
+// dogfooded beside prod until v3 merges into main, and dev is what `pnpm dev` runs. A packaged
 // build's flavor is baked in when it is built (the release workflow
 // builds test for a test tag and prod for anything else), and a dev run
 // is always dev. The names are on-disk formats, frozen like the files
@@ -13,7 +13,7 @@
 // safeStorage keeps its key in is "<appName> Safe Storage"; the
 // file-sync daemon's state is <dataDir>/file-sync; a managed root on a
 // project's own drive is /Volumes/<drive>/<dataDir>/wt.
-export type Flavor = "prod" | "test" | "dev";
+export type Flavor = "prod" | "v3" | "dev";
 
 export type FlavorNames = {
   // What the OS shows: the bundle's name, the dock and the menu bar.
@@ -39,8 +39,8 @@ export type FlavorNames = {
   readonly binaryName: string;
   readonly alias: string;
   // Which releases the updater offers: full releases and the build's
-  // own prerelease line (an rc), the test prereleases alone, or none.
-  readonly updates: "releases" | "test" | null;
+  // own prerelease line (an rc), the v3 prereleases alone, or none.
+  readonly updates: "releases" | "v3" | null;
 };
 
 export const FLAVORS: Readonly<Record<Flavor, FlavorNames>> = {
@@ -58,19 +58,19 @@ export const FLAVORS: Readonly<Record<Flavor, FlavorNames>> = {
     alias: "shigomori",
     updates: "releases",
   },
-  test: {
-    appName: "Shigoto no Mori (Test)",
-    userDataDir: "Shigoto no Mori (Test)",
-    bundleId: "com.sylophi.shigomori.test",
-    scheme: "shigomori-test",
-    dataDir: ".smt",
+  v3: {
+    appName: "Shigoto no Mori (v3)",
+    userDataDir: "Shigoto no Mori (v3)",
+    bundleId: "com.sylophi.shigomori.v3",
+    scheme: "shigomori-v3",
+    dataDir: ".smv3",
     legacyDataDir: null,
-    configDir: "shigomori-test",
+    configDir: "shigomori-v3",
     pointer: "data-dir",
     legacyPointer: null,
-    binaryName: "smt",
-    alias: "shigomori-test",
-    updates: "test",
+    binaryName: "smv3",
+    alias: "shigomori-v3",
+    updates: "v3",
   },
   dev: {
     appName: "Shigoto no Mori (Dev)",
@@ -91,9 +91,9 @@ export const FLAVORS: Readonly<Record<Flavor, FlavorNames>> = {
 export const flavorNames = (flavor: Flavor): FlavorNames => FLAVORS[flavor];
 
 export const isFlavor = (text: string): text is Flavor =>
-  text === "prod" || text === "test" || text === "dev";
+  text === "prod" || text === "v3" || text === "dev";
 
-// A release tag's flavor: a `-test.N` prerelease builds test, anything
+// A release tag's flavor: a `-v3.N` prerelease builds v3, anything
 // else prod.
-export const flavorOfVersion = (version: string): "prod" | "test" =>
-  /^v?\d+\.\d+\.\d+-test(\.|$)/.test(version) ? "test" : "prod";
+export const flavorOfVersion = (version: string): "prod" | "v3" =>
+  /^v?\d+\.\d+\.\d+-v3(\.|$)/.test(version) ? "v3" : "prod";

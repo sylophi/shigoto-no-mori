@@ -664,11 +664,11 @@ function hostHandlersFor(
       syncAfter(worktreeId, (w) => {
         w.behind = 0;
       }),
-    "worktrees:pullAndPush": ({ worktreeId }) =>
-      syncAfter(worktreeId, (w) => {
-        w.behind = 0;
-        pushed(w);
-      }),
+    // Taking both sides and either side winning all leave the branch
+    // even with its upstream.
+    "worktrees:pullAndPush": ({ worktreeId }) => syncAfter(worktreeId, evened),
+    "worktrees:pushForce": ({ worktreeId }) => syncAfter(worktreeId, evened),
+    "worktrees:overwrite": ({ worktreeId }) => syncAfter(worktreeId, evened),
     "worktrees:commitDiff": () => FAKE_DIFF,
     "worktrees:branchDiff": () => FAKE_DIFF,
     // The Git timeline's reads: the row's own commits, from a fork on
@@ -1106,6 +1106,11 @@ function setHooks(
 function pushed(worktree: FakeWorktree): void {
   worktree.ahead = 0;
   worktree.unpushedCount = 0;
+}
+
+function evened(worktree: FakeWorktree): void {
+  worktree.behind = 0;
+  pushed(worktree);
 }
 
 // The posed moves under way, by source worktree, and whether each was
