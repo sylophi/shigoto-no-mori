@@ -58,9 +58,9 @@ function traceFile(logsPath: string): (line: string) => void {
   const path = join(logsPath, "host-trace.log");
   // Opened at once, so a rename moves the file this stream writes, and
   // what it has yet to write lands in the old one.
-  const open = () => {
+  const open = (flags: "a" | "w") => {
     try {
-      const stream = createWriteStream("", { fd: openSync(path, "a") });
+      const stream = createWriteStream("", { fd: openSync(path, flags) });
       stream.on("error", () => {});
       return stream;
     } catch {
@@ -74,16 +74,19 @@ function traceFile(logsPath: string): (line: string) => void {
   } catch {
     // No file yet.
   }
-  let stream = open();
+  let stream = open("a");
   return (line) => {
     if (size > 1_000_000) {
       stream?.end();
+      let renamed = true;
       try {
         renameSync(path, join(logsPath, "host-trace.old.log"));
       } catch {
-        // Gone already: the new stream starts it again.
+        renamed = false;
       }
-      stream = open();
+      // A file that can't be moved aside starts over in place, so the
+      // log stays bounded either way.
+      stream = open(renamed ? "a" : "w");
       size = 0;
     }
     size += Buffer.byteLength(line) + 1;

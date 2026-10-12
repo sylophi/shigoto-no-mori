@@ -8,10 +8,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { afterEach, beforeEach, it } from "vitest";
 import { watchedTables } from "../src/migrations/changes.ts";
 import * as Paths from "../src/Paths.ts";
@@ -48,21 +48,23 @@ const run = <A>(
             }),
           ),
         ),
+        Layer.merge(TestClock.layer()),
       ),
     ),
     Effect.runPromise,
   );
 
-it("names the tables this process wrote, as it commits", () =>
+// The longest a commit waits for a look with no event: the backstop's.
+const backstop = TestClock.adjust("10 seconds");
+
+it("names the tables this process wrote, by the backstop's look at the latest", () =>
   run(
     Effect.gen(function* () {
       const changes = yield* (yield* StoreChanges.StoreChanges).subscribe;
       const usage = yield* Usage.Usage;
-      // Written until it shows: the log's watch comes up just after the
-      // service does.
-      yield* usage
-        .record("script", "P", "dev")
-        .pipe(Effect.repeat(Schedule.spaced("50 millis")), Effect.forkScoped);
+      // One write, made before the log's watch may be up.
+      yield* usage.record("script", "P", "dev");
+      yield* backstop;
       const [first] = yield* changes.pipe(Stream.take(1), Stream.runCollect);
       assert.deepEqual(first, new Set(["usage"]));
     }),
@@ -85,6 +87,7 @@ it("names the tables another process wrote", () =>
           join(dataDir, "store.db"),
         ]),
       );
+      yield* backstop;
       const seen = new Set<string>();
       yield* changes.pipe(
         Stream.takeUntil((tables) => {

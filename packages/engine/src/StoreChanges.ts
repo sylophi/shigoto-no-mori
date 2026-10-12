@@ -1,10 +1,12 @@
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
@@ -12,6 +14,14 @@ import { watchedTables } from "./migrations/changes.ts";
 import * as Paths from "./Paths.ts";
 
 export type Table = (typeof watchedTables)[number];
+
+// A writer puts a commit in the write-ahead log before it makes it
+// visible, so the log's first event can come before the commit reads
+// as one: a look follows once the writes have been quiet this long.
+const SETTLE = Duration.millis(100);
+// A look with no event, for a commit no event announced: one made
+// before the watch was up, or after it failed.
+const BACKSTOP = Duration.seconds(10);
 
 // What changed in the store, for a process that shows it: the host, so
 // that what the terminal `sm` or the app itself writes reaches every
@@ -62,6 +72,8 @@ const make = Effect.gen(function* () {
     written: yield* written,
     versions: yield* versions,
   });
+  // One look at a time, as two at once would publish one change twice.
+  const looking = yield* Semaphore.make(1);
   const look = Effect.gen(function* () {
     const last = yield* Ref.get(seen);
     const now = yield* written;
@@ -78,18 +90,22 @@ const make = Effect.gen(function* () {
     // A read that fails reads as no change, and the next write looks
     // again.
     Effect.ignore,
+    looking.withPermit,
   );
   // Every commit, on any connection, writes the write-ahead log, which
-  // the reads above opened. A look finds nothing when a burst of writes
-  // was one commit, or a checkpoint. Watching by the time this returns,
-  // so a write right after is seen.
+  // the reads above opened: a look as it is written, and another once
+  // the writes settle. A look finds nothing when a burst of writes was
+  // one commit, or a checkpoint. A watch that fails leaves the backstop.
   const watching = yield* FiberHandle.make();
-  yield* FiberHandle.set(
+  yield* FiberHandle.run(
     watching,
-    yield* fs.watch(`${store}-wal`).pipe(
-      Stream.buffer({ capacity: 1, strategy: "sliding" }),
+    Stream.merge(
+      fs.watch(`${store}-wal`).pipe(Stream.ignore({ log: "Warn" })),
+      Stream.tick(BACKSTOP),
+    ).pipe(
+      Stream.tap(() => look),
+      Stream.debounce(SETTLE),
       Stream.runForEach(() => look),
-      Effect.forkScoped({ startImmediately: true }),
     ),
   );
   return StoreChanges.of({
