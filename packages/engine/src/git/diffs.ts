@@ -24,14 +24,20 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
       // peers reach this, so git says first whether it is an untracked
       // change. A symlink prints where it points, never what is there.
       if (untracked) {
-        const known = yield* run(worktree, [
-          ...pathspec,
-          "ls-files",
-          "--others",
-          "--exclude-standard",
-          "--",
-          file,
-        ]).pipe(Effect.orElseSucceed(() => ""));
+        // Output past the cap still fails: an answer cut short says
+        // nothing about whether the file is there.
+        const known = yield* run(
+          worktree,
+          [
+            ...pathspec,
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "--",
+            file,
+          ],
+          { anyExit: true },
+        ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
         if (known === "") return "";
       }
       return yield* run(
