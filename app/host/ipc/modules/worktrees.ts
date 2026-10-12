@@ -64,17 +64,14 @@ import {
   pushForceWithLease,
   syncWithPrimary,
 } from "@host/lib/git/sync";
-import {
-  findWorktreeIdentity,
-  listCommits,
-  listWorktrees,
-  readBranchHistory,
-  type WorktreeIdentity,
-} from "@host/lib/git/worktrees";
+import { listCommits, readBranchHistory } from "@host/lib/git/worktrees";
+import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
   findProject,
   findProjectAndWorktree,
+  findWorktreeIdentity,
   findWorktreePath,
+  listWorktrees,
 } from "@host/lib/projects";
 import {
   assertWorktreeMutable,
@@ -459,7 +456,7 @@ export const worktreesHandlers = {
 
   // A flag flip only, like setShelved, answered with the refreshed row.
   // The pull itself has one entry point, the fetch scheduler's sweep
-  // (host/lib/git/backgroundFetch.ts): the renderer follows a mark with
+  // (host/lib/BackgroundFetch.ts): the renderer follows a mark with
   // git:refreshProject so the first pull happens right away, through
   // the same path as every later one.
   setAutoPull: ({ projectId, worktreeId, autoPull }) =>

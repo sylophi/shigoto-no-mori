@@ -33,7 +33,7 @@ import * as Ops from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
 import * as Views from "../host/lib/views.ts";
 import * as Sharing from "../host/lib/sharing.ts";
-import { listWorktrees } from "../host/lib/git/worktrees.ts";
+import { listWorktrees } from "../host/lib/projects/index.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
 import { sharedSettingsCopy } from "../host/lib/sharedSettings/store.ts";

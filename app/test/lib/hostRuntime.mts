@@ -25,7 +25,7 @@ import * as Migration from "@shigomori/engine/Migration";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
 import * as Engine from "../../host/lib/engine.ts";
-import * as BackgroundFetch from "../../host/lib/git/backgroundFetch.ts";
+import * as BackgroundFetch from "../../host/lib/BackgroundFetch.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";

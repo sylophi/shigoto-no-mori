@@ -602,9 +602,28 @@ it("clone checks its destination, and keeps a URL's userinfo out of the error", 
   const parent = tempDir("clone-into-");
   assert.equal(
     await withGit((g) =>
-      g.clone({ url: remote, parentDir: parent, name: "c" }),
+      g.clone({
+        url: remote,
+        parentDir: parent,
+        name: "c",
+        config: [
+          ["credential.https://example.test.helper", ""],
+          ["credential.https://example.test.helper", "!true"],
+        ],
+      }),
     ),
     join(parent, "c"),
+  );
+  // The config lands in the clone's own, every value in order.
+  assert.deepEqual(
+    git(
+      join(parent, "c"),
+      "config",
+      "--local",
+      "--get-all",
+      "credential.https://example.test.helper",
+    ).split("\n"),
+    ["", "!true", ""],
   );
   const exists = await failureOf((g) =>
     g.clone({ url: remote, parentDir: parent, name: "c" }),
@@ -622,6 +641,22 @@ it("clone checks its destination, and keeps a URL's userinfo out of the error", 
     }),
   );
   assert.doesNotMatch(stderrOf(leaked), /s3cret/);
+});
+
+it("a new repository lands on main with one empty commit, and never over a folder", async () => {
+  const parent = tempDir("create-into-");
+  const dest = await withGit((g) => g.createRepository(parent, "fresh"));
+  assert.equal(dest, join(parent, "fresh"));
+  assert.equal(git(dest, "rev-parse", "--abbrev-ref", "HEAD").trim(), "main");
+  assert.equal(git(dest, "rev-list", "--count", "HEAD").trim(), "1");
+  const taken = await failureAs(CloneDestinationError, (g) =>
+    g.createRepository(parent, "fresh"),
+  );
+  assert.equal(taken.reason, "exists");
+  const missing = await failureAs(CloneDestinationError, (g) =>
+    g.checkDestination(join(parent, "nope"), "x"),
+  );
+  assert.equal(missing.reason, "not-a-folder");
 });
 
 // --- diffs ----------------------------------------------------------

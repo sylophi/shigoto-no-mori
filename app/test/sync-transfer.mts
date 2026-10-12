@@ -96,7 +96,7 @@ import {
 } from "@host/lib/sync/sourceLink";
 import { mintHexId } from "@host/lib/hexId";
 import * as Projects from "@host/lib/projects";
-import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
   createCliRunner,
   handlerCtx,

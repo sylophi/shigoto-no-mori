@@ -8,14 +8,16 @@
 // on every call, and nothing learns a project id except from that list
 // or a CLI verb that just wrote it, so the snapshot is never behind a
 // caller that holds an id.
-import { UnknownProjectError } from "@shigomori/contracts/errors";
+import {
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Ops from "@host/lib/engineOps";
-import { findWorktreeIdentity } from "../git/worktrees";
 import { dataDir, toAbsolute } from "@shared/paths";
 
 let snapshot: readonly ProjectRow[] = [];
@@ -176,6 +178,30 @@ export const findProject = Effect.fnUntraced(function* (projectId: string) {
   const fresh = (yield* refresh).find((p) => p.id === projectId);
   if (fresh === undefined) return yield* new UnknownProjectError({ projectId });
   return toProject(fresh);
+});
+
+// The sidebar asks for every project's rows at once on a refresh, and
+// each list runs up to six rows' probes at a time in the engine (five git
+// processes a row), so a couple of lists at a time keeps a refresh from
+// forking hundreds of gits at once.
+const rowLists = Semaphore.makeUnsafe(2);
+
+// A project's rows, primary first.
+export const listWorktrees = (projectId: string) =>
+  Ops.listWorktrees(projectId).pipe(rowLists.withPermits(1));
+
+// The checkout `worktreeId` names, or the entity-gone error.
+export const findWorktreeIdentity = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+  opts: { primaryRef?: boolean } = {},
+) {
+  const [identity] = yield* Ops.listWorktreeIdentities(
+    { projectId, worktreeId },
+    opts,
+  );
+  if (!identity) return yield* new UnknownWorktreeError({ worktreeId });
+  return identity;
 });
 
 // The preamble every worktree-scoped IPC handler opens with, so a change

@@ -50,7 +50,7 @@ import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
 import { type GitError, run, runLenient } from "@host/lib/git/core";
 import { gitDirOf, operationInProgress } from "@host/lib/git/operation";
-import { listCheckouts, worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 
 // A state that can't be read or applied, in the words the other device
 // hears (an operation in progress among them, operationInRefusal).
@@ -472,9 +472,9 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
       // it carries commits the incoming tip does not (moving it would
       // orphan them). Otherwise create it or fast-forward it, then
       // point HEAD at it.
-      const checkouts = yield* listCheckouts(project.path);
+      const checkouts = yield* git.listWorktrees(project.path);
       const elsewhere = checkouts.find(
-        (w) => w.branch === target && w.path !== worktree.path,
+        (w) => w.branch === targetRef && w.path !== worktree.path,
       );
       if (elsewhere !== undefined) {
         return refused(

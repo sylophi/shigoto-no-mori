@@ -11,7 +11,7 @@ import { getBusyOperations } from "@host/lib/scripts";
 import * as Graph from "./graph";
 import type { HostServices } from "./services";
 import * as Terminals from "@host/lib/terminals/Terminals";
-import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
+import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import { launchGuide } from "@host/lib/engineOps";
 import { projectImageHosts } from "@host/lib/projects/imageHosts";
 import { dirname } from "node:path";

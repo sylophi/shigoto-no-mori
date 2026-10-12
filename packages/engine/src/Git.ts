@@ -15,6 +15,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import {
   type BranchRefs,
   parseBranchList,
@@ -31,6 +32,7 @@ import { makeBranches } from "./git/branches.ts";
 import { makeRemote } from "./git/remote.ts";
 import { makeGitIndex } from "./git/gitIndex.ts";
 import { makeDiffs } from "./git/diffs.ts";
+import { makeRepositories } from "./git/repositories.ts";
 import {
   type BranchMovedError,
   BranchNotMergedError,
@@ -404,14 +406,37 @@ export class Git extends Context.Service<
       readonly repo: string;
       readonly primaryRef: string;
     }) => Effect.Effect<void, GitError>;
-    // Clones `url` into `parentDir/name` and returns the checkout. Git
+    // `parentDir/name`, refused unless the parent is a folder and the
+    // destination is not there yet: where a new checkout may land.
+    readonly checkDestination: (
+      parentDir: string,
+      name: string,
+    ) => Effect.Effect<
+      string,
+      CloneDestinationError | PlatformError.PlatformError
+    >;
+    // Clones `url` into `parentDir/name` and returns the checkout, with
+    // `config` (git's key and value) in the clone's own config. Git
     // never prompts for credentials here, and a URL's userinfo stays
     // out of the error.
     readonly clone: (input: {
       readonly url: string;
       readonly parentDir: string;
       readonly name: string;
-    }) => Effect.Effect<string, GitError | CloneDestinationError>;
+      readonly config?: ReadonlyArray<readonly [string, string]> | undefined;
+    }) => Effect.Effect<
+      string,
+      GitError | CloneDestinationError | PlatformError.PlatformError
+    >;
+    // A repository at `parentDir/name` on the user's default branch
+    // (main without one), with an empty first commit, and its path.
+    readonly createRepository: (
+      parentDir: string,
+      name: string,
+    ) => Effect.Effect<
+      string,
+      GitError | CloneDestinationError | PlatformError.PlatformError
+    >;
 
     // --- the index ---
     // `reset --soft` along HEAD's own line: back to an ancestor (an
@@ -468,6 +493,9 @@ const make = Effect.gen(function* () {
   const remote = yield* makeRemote({ running, worktreeVerbs, workingTree });
   const gitIndex = yield* makeGitIndex({ running, refs });
   const diffs = yield* makeDiffs({ running });
+  const { checkDestination, clone, createRepository } = yield* makeRepositories(
+    { running },
+  );
   const { run, succeeds } = running;
   const {
     listWorktrees,
@@ -512,8 +540,7 @@ const make = Effect.gen(function* () {
     listOthersIgnored,
     listIgnoreRules,
   } = branches;
-  const { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish, clone } =
-    remote;
+  const { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish } = remote;
   const { resetSoft, discard, restoreDiscard } = gitIndex;
   const { fileDiff } = diffs;
   const fs = yield* FileSystem.FileSystem;
@@ -693,7 +720,9 @@ const make = Effect.gen(function* () {
       yield* fetchAll(input.repo);
       yield* rebaseOrMerge(input.worktree, input.primaryRef);
     }),
+    checkDestination,
     clone,
+    createRepository,
     resetSoft,
     discard,
     restoreDiscard,
