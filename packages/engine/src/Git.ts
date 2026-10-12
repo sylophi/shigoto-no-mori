@@ -467,17 +467,29 @@ export class Git extends Context.Service<
     // files are conflicted, and a rebase's branch.
     readonly readOperation: (
       worktree: string,
-    ) => Effect.Effect<GitOperationState, GitError>;
+    ) => Effect.Effect<
+      GitOperationState,
+      GitError | PlatformError.PlatformError
+    >;
     // Refused while an operation is under way or files are conflicted.
     readonly refuseMidOperation: (
       worktree: string,
-    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    ) => Effect.Effect<
+      void,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
     readonly continueOperation: (
       worktree: string,
-    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    ) => Effect.Effect<
+      void,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
     readonly abortOperation: (
       worktree: string,
-    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    ) => Effect.Effect<
+      void,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
     // Settles one conflicted file with one side's version, or as it
     // stands, and stages it.
     readonly resolveConflict: (input: {
@@ -496,7 +508,11 @@ export class Git extends Context.Service<
       readonly expectHead?: string | undefined;
     }) => Effect.Effect<
       string,
-      GitError | UndoRefusedError | BranchMovedError | GitRefusedError
+      | GitError
+      | UndoRefusedError
+      | BranchMovedError
+      | GitRefusedError
+      | PlatformError.PlatformError
     >;
     // `reset --hard` to `ref`, after keeping what it would overwrite in a
     // discard snapshot. With `restore`, the undo of one: back, and that
@@ -508,7 +524,11 @@ export class Git extends Context.Service<
       readonly restore?: string | undefined;
     }) => Effect.Effect<
       { previousHead: string; head: string; snapshot: string | null },
-      GitError | GitRefusedError | BranchMovedError | UnknownRevisionError
+      | GitError
+      | GitRefusedError
+      | BranchMovedError
+      | UnknownRevisionError
+      | PlatformError.PlatformError
     >;
     // `paths` as they are on disk now, kept in a snapshot commit under
     // DISCARD_REF_PREFIX, and the commit.
@@ -526,7 +546,7 @@ export class Git extends Context.Service<
     readonly restoreDiscard: (input: {
       readonly worktree: string;
       readonly snapshot: string;
-    }) => Effect.Effect<void, GitError>;
+    }) => Effect.Effect<void, GitError | PlatformError.PlatformError>;
 
     // --- diffs ---
     // One file's diff: against HEAD for a tracked file (`paths` leads
@@ -823,7 +843,7 @@ const make = Effect.gen(function* () {
           hash,
           "--",
         ],
-        { maxOutputBytes: PATCH_MAX_OUTPUT },
+        { maxOutputBytes: PATCH_MAX_OUTPUT, anyExit: true },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     }),
     // Both have to be commits the repository already holds.

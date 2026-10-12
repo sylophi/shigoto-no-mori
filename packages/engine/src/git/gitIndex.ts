@@ -263,9 +263,7 @@ export const makeGitIndex = ({
           );
         }
         yield* Effect.forEach(remove, (file) =>
-          fs
-            .remove(path.join(worktree, file), { force: true })
-            .pipe(Effect.ignore),
+          fs.remove(path.join(worktree, file), { force: true }),
         );
       });
 
@@ -362,9 +360,12 @@ export const makeGitIndex = ({
           }
           const snapshot =
             paths.length > 0 ? yield* snapshotPaths(worktree, paths) : null;
+          // Quiet: what it prints is never read, and a subject past the
+          // output cap would fail the reset with the snapshot unnamed.
           yield* run(worktree, [
             "reset",
             "--hard",
+            "--quiet",
             "--end-of-options",
             target,
           ]).pipe(

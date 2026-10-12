@@ -76,7 +76,11 @@ export const makeRunning = Effect.gen(function* () {
           { concurrency: 2 },
         );
         const code = yield* handle.exitCode.pipe(Effect.mapError(failed(null)));
-        if (code !== 0 && !(options.okExitCodes ?? []).includes(code)) {
+        if (
+          code !== 0 &&
+          options.anyExit !== true &&
+          !(options.okExitCodes ?? []).includes(code)
+        ) {
           return yield* failed(code)(
             new Error(stderr.trim() || `git ${subcommand} exited with ${code}`),
           );

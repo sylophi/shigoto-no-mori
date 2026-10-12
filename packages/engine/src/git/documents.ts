@@ -158,6 +158,11 @@ export type RunOptions = {
   // Exit codes that still mean an answer: `diff --no-index` exits 1
   // whenever it has a diff to print.
   readonly okExitCodes?: readonly number[] | undefined;
+  // Any exit still answers with what git printed before it: a patch
+  // read keeps the files git got through when a later one fails (an
+  // external diff driver, a textconv). Output past the cap and a git
+  // that never ran still fail.
+  readonly anyExit?: boolean | undefined;
   // The output cap, over DEFAULT_MAX_OUTPUT. Only the patch reads
   // raise it.
   readonly maxOutputBytes?: number | undefined;

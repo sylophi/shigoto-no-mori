@@ -42,7 +42,7 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
             ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
             : ["diff", "HEAD", "--no-color", "--", ...paths]),
         ],
-        { okExitCodes: [1], maxOutputBytes: PATCH_MAX_OUTPUT },
+        { anyExit: true, maxOutputBytes: PATCH_MAX_OUTPUT },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     });
 

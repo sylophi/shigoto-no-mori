@@ -102,7 +102,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
         const message = path.join(dir, "SQUASH_MSG");
         if (!(yield* there(message))) return false;
         if (conflicted > 0 || (yield* hasStagedChanges(worktree))) return true;
-        yield* fs.remove(message, { force: true }).pipe(Effect.ignore);
+        yield* fs.remove(message, { force: true });
         return false;
       });
 
