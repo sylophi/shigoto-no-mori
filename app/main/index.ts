@@ -35,7 +35,8 @@ import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import * as ClientConfig from "./electron/clientConfig";
 import { confirmBusyAction } from "./electron/busyPrompt";
-import { isRelaunching } from "./electron/relaunch";
+import { isRelaunching, relaunchApp } from "./electron/relaunch";
+import { LAB_FLAG } from "./argFlags";
 import {
   rememberVisibilityAtShutdown,
   rememberVisibilityForRestart,
@@ -243,6 +244,14 @@ app.on("open-url", (event, url) => {
   event.preventDefault();
   openDeepLink(route);
 });
+
+// Started for the lab (argFlags.ts LAB_FLAG): SIGUSR2 relaunches the
+// app as a window's own relaunch does. lab/relaunch.mts sends it, since
+// a packaged build takes no debugger to ask its window with
+// (electron/debugSwitches.ts).
+if (process.argv.includes(LAB_FLAG)) {
+  process.on("SIGUSR2", () => relaunchApp());
+}
 
 app.on("ready", async () => {
   // Electron grants most permission requests by default, and this

@@ -10,7 +10,8 @@ are written bare; run each the same way.
 The app keeps it in a React context, not on `window`. A dev build, the
 fake host and an app started with `--sm-lab` hand it to tools outside
 the page as `window.__smLab.api` (`renderer/lib/runtime/labHandle.ts`),
-which `api` below stands for:
+which `api` below stands for. Reaching it takes a debugging port, which
+a packaged build refuses (`dev-app.md`, "Packaged build"):
 
 ```json
 { "js": "const api = window.__smLab.api; return api.run(api.hub.status())" }
