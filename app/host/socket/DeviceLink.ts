@@ -195,6 +195,9 @@ const SWITCHES = new Set([
 const UNCOUNTED_CALLS = new Set(["link:read", "link:write", "link:ping"]);
 
 export type WsServerStartOpts = {
+  // The port to listen on, 0 for any. A port another process holds
+  // falls back to any, so a remembered port never keeps a host from
+  // listening.
   port: number;
   // The host binds "::" (dual stack), because it advertises IPv6
   // candidates too. Tests bind loopback.
@@ -1248,20 +1251,36 @@ export const make = (options: {
     const sameListener = (opts: WsServerStartOpts): boolean => {
       if (current === null) return false;
       const was = current.opts;
+      // A port it already listens on, or any, is the same: the one asked
+      // for may have been taken, and the host asks for the last one.
       return (
-        was.port === opts.port &&
+        (opts.port === 0 ||
+          opts.port === was.port ||
+          opts.port === status.port) &&
         was.bindAddress === opts.bindAddress &&
         was.accountId === opts.accountId &&
         was.allowedOrigin === opts.allowedOrigin
       );
     };
 
-    const startNow = (opts: WsServerStartOpts) =>
+    const attempt = (opts: WsServerStartOpts) =>
       Effect.gen(function* () {
         const scope = yield* Scope.make();
         const started = yield* Effect.exit(listen(opts, scope));
+        if (Exit.isFailure(started)) yield* Scope.close(scope, Exit.void);
+        return { scope, started };
+      });
+
+    const startNow = (opts: WsServerStartOpts) =>
+      Effect.gen(function* () {
+        let { scope, started } = yield* attempt(opts);
+        if (Exit.isFailure(started) && opts.port !== 0) {
+          log.warn(
+            `[link] could not listen on port ${opts.port}, listening on another`,
+          );
+          ({ scope, started } = yield* attempt({ ...opts, port: 0 }));
+        }
         if (Exit.isFailure(started)) {
-          yield* Scope.close(scope, Exit.void);
           const error = errorWordsOf(
             Option.getOrElse(Exit.findErrorOption(started), () => "failed"),
           );
