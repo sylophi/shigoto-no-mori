@@ -31,6 +31,7 @@ import {
   type Project,
 } from "@shigomori/contracts/schemas/project";
 import { createCliRunner, repoRoot, type CliRunner } from "./checkKit.mts";
+import { isOutsideGitVariable } from "../../../gitIsolation.ts";
 
 // What goes into the binary: the sources of the terminal, the engine
 // and the contracts, and the darwin helper's.
@@ -72,7 +73,7 @@ export function builtSm(): string {
   const dir = join(binary, "..");
   mkdirSync(dir, { recursive: true });
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+    Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
   );
   const macfs = join(dir, `macfs.${process.pid}`);
   execFileSync("go", ["build", "-buildvcs=false", "-o", macfs, "."], {

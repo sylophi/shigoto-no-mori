@@ -79,7 +79,6 @@ it("a write held by the user's hook leaves the probes their slots", async () => 
     `#!/bin/sh\ncat >/dev/null\ntouch '${marks}'/$$\nwhile [ ! -e '${release}' ]; do sleep 0.05; done\n`,
   );
   chmodSync(hook, 0o755);
-  const started = Date.now();
   await withGit((g) =>
     Effect.gen(function* () {
       const writes = yield* Effect.forkChild(
@@ -91,16 +90,20 @@ it("a write held by the user's hook leaves the probes their slots", async () => 
         ),
       );
       // As many writes as there are slots are waiting on the hook, and
-      // a probe still answers.
-      while (readdirSync(marks).length < SPAWN_SLOTS) {
-        yield* Effect.sleep("20 millis");
-      }
-      assert.equal(yield* g.verifyRev(repo, "HEAD"), head);
-      writeFileSync(release, "");
+      // a probe still answers. Released whatever happens, so no hook
+      // outlives the test.
+      yield* Effect.gen(function* () {
+        while (readdirSync(marks).length < SPAWN_SLOTS) {
+          yield* Effect.sleep("20 millis");
+        }
+        assert.equal(yield* g.verifyRev(repo, "HEAD"), head);
+      }).pipe(
+        Effect.timeout("15 seconds"),
+        Effect.ensuring(Effect.sync(() => writeFileSync(release, ""))),
+      );
       yield* Fiber.join(writes);
     }),
   );
-  assert.ok(Date.now() - started < 20_000);
   assert.equal(rev(repo, `refs/heads/held-${SPAWN_SLOTS}`), head);
 });
 

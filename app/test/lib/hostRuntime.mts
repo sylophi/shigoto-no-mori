@@ -43,6 +43,7 @@ import * as Villagers from "../../host/lib/VillagerData.ts";
 import * as Worktrees from "../../host/lib/Worktrees.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
 import * as HostStandIns from "./hostStandIns.mts";
+import { isOutsideGitVariable } from "../../../gitIsolation.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -77,7 +78,7 @@ function builtMacfs(): string {
   mkdirSync(join(binary, ".."), { recursive: true });
   const partial = `${binary}.${process.pid}`;
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+    Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
   );
   execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
     cwd: dir,

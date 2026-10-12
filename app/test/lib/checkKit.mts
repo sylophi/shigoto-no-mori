@@ -26,6 +26,7 @@ import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
 import type { KeyValueStorage } from "../../web/lib/kvStorage.ts";
+import { isOutsideGitVariable } from "../../../gitIsolation.ts";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
@@ -233,7 +234,7 @@ const GIT_CONFIG_CUT = {
 export function scrubbedGitEnv(): NodeJS.ProcessEnv {
   return {
     ...Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+      Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
     ),
     ...GIT_CONFIG_CUT,
     LC_ALL: "C",
@@ -247,7 +248,7 @@ export function scrubbedGitEnv(): NodeJS.ProcessEnv {
 // leaves the locale alone unless `extra` pins it.
 export function scrubProcessGitEnv(extra: NodeJS.ProcessEnv = {}): void {
   for (const key of Object.keys(process.env)) {
-    if (key.startsWith("GIT_")) delete process.env[key];
+    if (isOutsideGitVariable(key)) delete process.env[key];
   }
   Object.assign(process.env, GIT_CONFIG_CUT, extra);
 }

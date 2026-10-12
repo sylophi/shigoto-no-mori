@@ -47,6 +47,7 @@ import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
+import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
 
 // The services a harness case calls.
 export type Engine =
@@ -80,7 +81,7 @@ const macfsDir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
 // Git service runs git under this process's environment, so the
 // process's own goes the same way.
 for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
+  if (isOutsideGitVariable(key)) delete process.env[key];
 }
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",

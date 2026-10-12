@@ -183,7 +183,9 @@ export const SPAWN_SLOTS = Math.max(
 // run none of the user's hooks. Anything else goes outside the slots,
 // since it can hold one for minutes while the probes queue behind it:
 // a wait on a remote, or the hooks a write runs (a commit's, a
-// checkout's, and any ref update's reference-transaction).
+// checkout's, and any ref update's reference-transaction). A status
+// still runs a configured fsmonitor and a diff an external driver,
+// under a slot as before: the probes the cap is for.
 export const SLOTTED_SUBCOMMANDS = new Set([
   "status",
   "rev-parse",
@@ -203,6 +205,8 @@ export const SLOTTED_SUBCOMMANDS = new Set([
   "check-ignore",
   "config",
   "remote",
+  // `worktree add` runs the post-checkout hook, its list nothing.
+  "worktree list",
 ]);
 
 // Covers any status, log or ref output by a wide margin.

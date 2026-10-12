@@ -29,6 +29,11 @@ export const makeRunning = Effect.gen(function* () {
     options: RunOptions = {},
   ) {
     const subcommand = subcommandOf(args);
+    // `worktree`'s own subcommand decides, as `worktree list`.
+    const slotKey =
+      subcommand === "worktree"
+        ? `worktree ${args[args.indexOf(subcommand) + 1] ?? ""}`
+        : subcommand;
     yield* Effect.annotateCurrentSpan({ subcommand, cwd });
     const failed = (exitCode: number | null) => (cause: unknown) =>
       new GitCommandError({ subcommand, exitCode, cause });
@@ -78,7 +83,7 @@ export const makeRunning = Effect.gen(function* () {
         }
         return stdout;
       }),
-    ).pipe(SLOTTED_SUBCOMMANDS.has(subcommand) ? slots.withPermit : identity);
+    ).pipe(SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity);
   });
 
   // Exit 0 or not, for the checks git answers with its exit code.
