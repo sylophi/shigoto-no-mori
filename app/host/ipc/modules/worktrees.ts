@@ -1,5 +1,7 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Effect from "effect/Effect";
+import * as HostPushes from "@host/lib/hostPushes";
+import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -12,7 +14,7 @@ import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type { Project, WorktreeRemoval } from "@shigomori/contracts/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import { GitRefusal } from "@host/lib/git/core";
 import {
@@ -110,18 +112,6 @@ export function notifierFor(ctx: HandlerContext) {
     ),
     notifyScript: scriptEventNotifier(ctx),
   };
-}
-
-// A removal goes to everyone, not just the caller: the root installs a
-// broadcaster at boot that fans it out to every window and remote
-// wire. Before that (and in checks that never mount one) the delete
-// is unannounced.
-let broadcastRemoval: ((payload: WorktreeRemoval) => void) | null = null;
-
-export function setWorktreeRemovalBroadcaster(
-  broadcaster: ((payload: WorktreeRemoval) => void) | null,
-): void {
-  broadcastRemoval = broadcaster;
 }
 
 const gitMoved = (projectId: string) =>
@@ -349,7 +339,11 @@ export const worktreesHandlers = {
       // drops the row exactly when the delete did.
       const busy = "This worktree is already being removed.";
       yield* assertWorktreeMutable(worktreeId, busy);
-      broadcastRemoval?.({ projectId, worktreeId, state: "removing" });
+      yield* HostPushes.push(worktreesContract, "removal", {
+        projectId,
+        worktreeId,
+        state: "removing",
+      });
       let removed = false;
       return yield* withDeleteInflight(
         worktreeId,
@@ -368,8 +362,8 @@ export const worktreesHandlers = {
           }),
         ),
         Effect.ensuring(
-          Effect.sync(() =>
-            broadcastRemoval?.({
+          Effect.suspend(() =>
+            HostPushes.push(worktreesContract, "removal", {
               projectId,
               worktreeId,
               state: removed ? "removed" : "kept",
@@ -410,7 +404,11 @@ export const worktreesHandlers = {
       const busy = "A worktree of this stack is already being removed.";
       for (const id of ids) yield* assertWorktreeMutable(id, busy);
       for (const id of ids) {
-        broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
+        yield* HostPushes.push(worktreesContract, "removal", {
+          projectId,
+          worktreeId: id,
+          state: "removing",
+        });
       }
       let removed: readonly string[] = [];
       return yield* withDeletesInflight(
@@ -438,15 +436,18 @@ export const worktreesHandlers = {
           }),
         ),
         Effect.ensuring(
-          Effect.sync(() => {
-            for (const id of ids) {
-              broadcastRemoval?.({
-                projectId,
-                worktreeId: id,
-                state: removed.includes(id) ? "removed" : "kept",
-              });
-            }
-          }),
+          Effect.suspend(() =>
+            Effect.forEach(
+              ids,
+              (id) =>
+                HostPushes.push(worktreesContract, "removal", {
+                  projectId,
+                  worktreeId: id,
+                  state: removed.includes(id) ? "removed" : "kept",
+                }),
+              { discard: true },
+            ),
+          ),
         ),
       );
     }),
@@ -682,6 +683,8 @@ export const worktreesHandlers = {
   | Terminals
   | GithubCli
   | PeerReach
+  | HostPushes.HostPushes
+  | ScriptChanges
   | ChildProcessSpawner.ChildProcessSpawner
   | Engine.Services
 >;

@@ -69,11 +69,6 @@ import {
 import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { mirrorHandlers, mirrorViews } from "@host/ipc/modules/mirror";
-import {
-  setMirrorGitAppliedListener,
-  setMirrorGitChangedListener,
-  setMirrorServingListener,
-} from "@host/mirror/serving";
 import { currentMirrorList, endMirrorIfCopyGone } from "@host/mirror/sessions";
 import {
   createNoAccountSweep,
@@ -86,12 +81,13 @@ import {
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
+import { MirrorSignals } from "@host/mirror/MirrorSignals";
 import {
   loadMirrorInvites,
   reconcileMirrorInvites,
 } from "@host/mirror/invites";
 import { findProjectAndWorktree } from "@host/lib/projects";
-import { onRunningScriptsChanged } from "@host/lib/scripts";
+import { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import { portForwardHandlers } from "@host/ipc/modules/portForward";
 import * as PortForwards from "@host/portForward/PortForwards";
@@ -125,11 +121,7 @@ import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
-import {
-  setWorktreeRemovalBroadcaster,
-  worktreesHandlers,
-  worktreesViews,
-} from "@host/ipc/modules/worktrees";
+import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/daemon";
@@ -242,18 +234,14 @@ export const mirrorChangesLayer = Layer.effectDiscard(
 // setup and port-pool together, a project's scripts stopped at once)
 // goes out as one ping.
 export const scriptsChangedLayer = Layer.effectDiscard(
-  Stream.callback<void>(
-    (queue) =>
-      Effect.sync(() =>
-        onRunningScriptsChanged(() => void Queue.offerUnsafe(queue, undefined)),
+  Effect.flatMap(ScriptChanges, ({ changes }) =>
+    changes.pipe(
+      Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
+      Stream.runForEach(() =>
+        Effect.sync(() => broadcastAll(scriptsContract, "changed", undefined)),
       ),
-    { bufferSize: 1, strategy: "sliding" },
-  ).pipe(
-    Stream.groupedWithin(Infinity, CHANGE_WINDOW_MS),
-    Stream.runForEach(() =>
-      Effect.sync(() => broadcastAll(scriptsContract, "changed", undefined)),
+      Effect.forkScoped,
     ),
-    Effect.forkScoped,
   ),
 );
 const fileSyncDir = () => join(dataDir(), "file-sync");
@@ -598,7 +586,7 @@ let lastMembership = new Set<string>();
 // copy). Every step is fenced so one failing cannot leave the remote
 // plane up.
 export async function applyAccount(next: AccountFacts | null): Promise<void> {
-  const previous = setAccountFacts(next);
+  const previous = await setAccountFacts(next);
   const leaving =
     started &&
     previous !== null &&
@@ -662,11 +650,28 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
 }
 
 // The services the root provides the graph from its own wiring: the
-// peers' reach, the mirror engine, and the account the control ops
-// read, its device registry riding the stored credential.
+// peers' reach, the mirror engine, what the mirror's serving side
+// tells, and the account the control ops read, its device registry
+// riding the stored credential.
 export const rootServices = Layer.mergeAll(
   Layer.succeed(PeerReach.PeerReach, peerReach),
   Layer.succeed(MirrorEngine, mirrorImpl),
+  Layer.succeed(
+    MirrorSignals,
+    MirrorSignals.of({
+      // The serving set (streams this host serves for peers) fans out
+      // on the mirror's changed push.
+      servingChanged: broadcastMirrorChanged,
+      // A served worktree's index moved: to the device mirroring it
+      // (remote, so it rides the peer push path to the follower there).
+      gitChanged: (change) =>
+        broadcastAll(mirrorContract, "gitChanged", change),
+      // A peer's follower landed its side here (a push into a copy):
+      // the pages showing the project refetch, as for the follower's
+      // own pulls.
+      gitApplied: announceProjectChanged,
+    }),
+  ),
   Layer.succeed(
     AccountPeers,
     AccountPeers.of({
@@ -761,26 +766,6 @@ export function registerHostHandlers(): void {
   // The listeners belong to this machine, so the surface never mounts
   // on a remote wire.
   registerContract(portForwardContract, portForwardHandlers);
-  // The mirror surface: host-scoped (a device's mirrors are its facts,
-  // and peers read the list), its daemon provided from above
-  // (rootServices). The serving set (streams this host serves for
-  // peers) fans out on the same changed signal.
-  setMirrorServingListener(broadcastMirrorChanged);
-  // A delete's removal, to every window and peer (remote:true by
-  // contract): the row a mirror stop or a peer's teardown is taking
-  // away dims for whoever is looking, not only for the caller, and
-  // goes for everyone the moment it is gone.
-  setWorktreeRemovalBroadcaster((payload) =>
-    broadcastAll(worktreesContract, "removal", payload),
-  );
-  // A served worktree's index moved: tell the device mirroring it
-  // (remote:true, so it rides the peer push path to the follower there).
-  setMirrorGitChangedListener((change) =>
-    broadcastAll(mirrorContract, "gitChanged", change),
-  );
-  // A peer's follower landed its side here (a push into a copy): the
-  // pages showing the project refetch, as for the follower's own pulls.
-  setMirrorGitAppliedListener(announceProjectChanged);
   // The follower's peer-side signals: a peer's git state moved (its
   // git-directory watcher) or a served worktree's index did. And a
   // peer's worktree gone, which ends the mirrors into it running here.

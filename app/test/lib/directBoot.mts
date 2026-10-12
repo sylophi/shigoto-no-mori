@@ -21,6 +21,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as HostPushes from "@host/lib/hostPushes";
+import { pushesLayer } from "./hostStandIns.mts";
 import * as Views from "@host/lib/views";
 import * as Sharing from "@host/lib/sharing";
 import {
@@ -210,7 +211,7 @@ export async function startDirectListener(
       Layer.mergeAll(
         // The host's services, beneath the stand-ins below.
         Layer.succeedContext(host),
-        HostPushes.layer,
+        pushesLayer,
         Views.layer,
         Layer.succeed(
           Sharing.Sharing,
