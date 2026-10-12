@@ -1,9 +1,12 @@
 // Landing's cleanup: the landed worktrees and branches going, past the removal guards, and the primary checkout catching up.
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { errorDocument } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
+import * as GitHub from "../GitHub.ts";
 import type { PullRequestSummary } from "../GitHub.ts";
+import * as Config from "../Config.ts";
 import * as Paths from "../Paths.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
@@ -17,6 +20,12 @@ import {
 } from "./documents.ts";
 import type { PullRequestsArea } from "./pullRequests.ts";
 
+// The commits named in a refusal: the first three, and how many more.
+const named = (commits: ReadonlyArray<string>) =>
+  commits.length > 3
+    ? `${commits.slice(0, 3).join("; ")}; and ${commits.length - 3} more`
+    : commits.join("; ");
+
 export const makeCleanup = ({
   pullRequests,
 }: {
@@ -28,6 +37,85 @@ export const makeCleanup = ({
     const binary = (yield* Paths.Paths).binaryName;
 
     const { refuse } = pullRequests;
+    const github = yield* GitHub.GitHub;
+
+    // --- what a delete would lose ---
+
+    // The branch's commits `head` never had, as `<short> <subject>`
+    // lines: what deleting the branch would lose. A head this clone
+    // lacks is fetched first; none when it still can't be read.
+    const commitsBeyond = (
+      repo: string,
+      branch: string,
+      head: string,
+      remote: string,
+    ) =>
+      Effect.gen(function* () {
+        if (!(yield* git.hasCommit(repo, head)) && remote !== "") {
+          // Its failure is the check below's.
+          yield* git
+            .run(repo, ["fetch", "--quiet", "--no-tags", remote, head])
+            .pipe(Effect.ignore);
+        }
+        if (!(yield* git.hasCommit(repo, head))) {
+          return Option.none<ReadonlyArray<string>>();
+        }
+        const logged = yield* git.run(repo, [
+          "log",
+          "--format=%h %s",
+          `${head}..refs/heads/${branch}`,
+        ]);
+        return Option.some(logged.split("\n").filter((line) => line !== ""));
+      });
+
+    const config = yield* Config.Config;
+    // Whether removing `worktree` under `options` deletes its branch, as
+    // the removal decides (the primary land's done deletes unless kept):
+    // what the commits guard is for.
+    const deletesBranch = (
+      worktree: Worktrees.WorktreeIdentity,
+      options: RemoveOptions,
+    ) =>
+      Effect.gen(function* () {
+        if (options.force || options.keepBranch) return false;
+        if (worktree.isPrimary) return true;
+        if (worktree.isExternal) return false;
+        const policy = yield* config
+          .get({ kind: "device" }, "deleteBranchOnRemove")
+          .pipe(Effect.orDie);
+        return policy.value !== false;
+      });
+
+    // Refuses the delete of `branch` when PR #`number`'s head, `head`,
+    // lacks any of its commits, or can't be read to tell.
+    const guardCommits = (
+      repo: string,
+      branch: string,
+      number: number,
+      head: string,
+      remote: string,
+      verb: LandingRefused["verb"],
+    ) =>
+      Effect.gen(function* () {
+        const beyond = yield* commitsBeyond(repo, branch, head, remote);
+        if (Option.isNone(beyond)) {
+          return yield* refuse(
+            verb,
+            "head-unread",
+            [number],
+            [branch, head.slice(0, 7)],
+          );
+        }
+        if (beyond.value.length > 0) {
+          return yield* refuse(
+            verb,
+            "unpushed",
+            [beyond.value.length, number],
+            [branch, named(beyond.value)],
+          );
+        }
+      });
+
     // --- cleanup ---
 
     // Fast-forwards `branch`, checked out at `worktree`, from
@@ -213,6 +301,7 @@ export const makeCleanup = ({
       chain: ReadonlyArray<PullRequestSummary>,
       set: ReadonlyArray<PullRequestSummary>,
       options: RemoveOptions,
+      remote: string,
     ) =>
       Effect.gen(function* () {
         const landing = new Set(
@@ -246,6 +335,17 @@ export const makeCleanup = ({
               "guard",
               [],
               [other.name, other.branch, errorDocument(guarded.failure).error],
+            );
+          }
+          const layer = chain.find((pr) => pr.headRefName === other.branch);
+          if (layer !== undefined && (yield* deletesBranch(other, options))) {
+            yield* guardCommits(
+              located.project.path,
+              other.branch,
+              layer.number,
+              yield* github.headOf(located.project.path, layer.number),
+              remote,
+              "land",
             );
           }
         }
@@ -323,6 +423,9 @@ export const makeCleanup = ({
       });
 
     return {
+      deletesBranch,
+      guardCommits,
+      commitsBeyond,
       execDone,
       describeAfterDone,
       landCleanup,
