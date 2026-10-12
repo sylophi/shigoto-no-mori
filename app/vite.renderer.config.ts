@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
+import { materialIcons } from "./vite.materialIcons";
 import { dedupe } from "./vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
@@ -74,7 +75,8 @@ export default defineConfig(({ mode }) => {
       exclude: ["@shigomori/contracts", "effect"],
     },
     // The web client's public files, for the boot script the window's
-    // page loads too (index.html).
+    // page loads too (index.html). The material icons come in through
+    // their plugin (vite.materialIcons.ts).
     publicDir: resolve(__dirname, "web/public"),
     define: {
       __APP_VERSION__: JSON.stringify(version),
@@ -82,7 +84,7 @@ export default defineConfig(({ mode }) => {
     },
     // The package's stylesheet stops at the theme root.
     css: { postcss: { plugins: [insideTheRoot()] } },
-    plugins: [tailwindcss(), react(), reactCompiler()],
+    plugins: [tailwindcss(), react(), reactCompiler(), materialIcons()],
     build: {
       // Keep material-icon-theme SVGs as separate hashed files so each one
       // loads on-demand when its icon is actually displayed. Inlined as

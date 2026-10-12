@@ -7,10 +7,10 @@
 // entries that bake the non-secret account service config into the
 // bundle (see web/account/config.ts).
 import { execSync } from "node:child_process";
-import { cpSync, createReadStream, existsSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
+import { materialIcons } from "./vite.materialIcons";
 import { dedupe } from "./vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
@@ -61,48 +61,6 @@ function remoteTag(sha: string): string | undefined {
     .find((line) => line.startsWith(`${sha}\t`))
     ?.split("\t")[1]
     ?.replace(/^refs\/tags\/|\^\{\}$/g, "");
-}
-
-// The material icons the file pickers show. scripts/copy-material-icons.mts
-// stages them in the app-root public/ (with the bare-name aliases of
-// the package's .clone.svg files the manifest asks for), which this
-// build's web/ root never sees, and without them every icon request
-// falls through to index.html. So that directory is copied into the
-// output, and served from where it is in dev. A build that finds it
-// missing fails, where skipping would ship every icon broken. The
-// `web:build` script stages the icons itself first rather than trusting
-// the postinstall to have run: a deploy that restores its install from
-// a build cache (Vercel's) skips lifecycle scripts, which is how v2.10.0's
-// web client first failed to deploy.
-function materialIcons(): Plugin {
-  const source = resolve(__dirname, "public", "material-icons");
-  let outDir = "";
-  return {
-    name: "sm-material-icons",
-    configResolved(config) {
-      outDir = config.build.outDir;
-    },
-    configureServer(server) {
-      server.middlewares.use("/material-icons", (req, res, next) => {
-        const [path = ""] = (req.url ?? "").split("?");
-        const file = join(source, basename(path));
-        if (!file.endsWith(".svg") || !existsSync(file)) {
-          next();
-          return;
-        }
-        res.setHeader("Content-Type", "image/svg+xml");
-        createReadStream(file).pipe(res);
-      });
-    },
-    closeBundle() {
-      if (!existsSync(source)) {
-        throw new Error(
-          `no material icons at ${source}: run node scripts/copy-material-icons.mts`,
-        );
-      }
-      cpSync(source, join(outDir, "material-icons"), { recursive: true });
-    },
-  };
 }
 
 // web/main.tsx reaches the app through a dynamic import (the bridge
@@ -184,8 +142,7 @@ export default defineConfig(({ mode }) => {
     },
     // web/public (the default under this root) carries the CSP-safe
     // external theme boot script, copied verbatim into dist-web. The
-    // desktop's app-root public/ is outside this root, so its
-    // material icons come in through the materialIcons plugin above.
+    // material icons come in through their plugin (vite.materialIcons.ts).
     // The contracts package is served as source, and effect with it, as
     // the contracts import it: prebundled, either is a second copy.
     // The ui package is source the app imports, so the scanner crawls it
