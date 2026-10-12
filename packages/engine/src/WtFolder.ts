@@ -24,7 +24,7 @@ import * as Git from "./Git.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
-import { externalVolumeRoot } from "./worktreeLayout.ts";
+import { externalVolumeRoot, worktreeIdFromPath } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 
 // A worktree still in its v2 folder, and why when a move failed.
@@ -51,6 +51,10 @@ export class WtFolder extends Context.Service<
     readonly movedTo: (
       fromPath: string,
     ) => Effect.Effect<Option.Option<string>>;
+    // The id each moved worktree had, to the one it has now, for a peer
+    // or a mirror session that still names it by the old one. A folder
+    // back at the old path keeps the id to itself.
+    readonly movedIds: Effect.Effect<ReadonlyMap<string, string>>;
   }
 >()("sm/engine/WtFolder") {}
 
@@ -355,7 +359,32 @@ const make = Effect.gen(function* () {
     return Option.fromNullishOr(at);
   });
 
-  return WtFolder.of({ drain, unmoved, retry, movedTo });
+  const movedIds = Effect.gen(function* () {
+    const rows = yield* sql<{ from_path: string; to_path: string }>`
+      SELECT from_path, to_path FROM wt_moves WHERE moved = 1`.pipe(
+      Effect.orDie,
+    );
+    const next = new Map(rows.map((row) => [row.from_path, row.to_path]));
+    const ids = new Map<string, string>();
+    for (const { from_path } of rows) {
+      const taken = yield* fs
+        .exists(from_path)
+        .pipe(Effect.orElseSucceed(() => true));
+      if (taken) continue;
+      let at = from_path;
+      for (let hop = 0; hop < 8; hop++) {
+        const to = next.get(at);
+        if (to === undefined || to === from_path) break;
+        at = to;
+      }
+      if (at !== from_path) {
+        ids.set(worktreeIdFromPath(from_path), worktreeIdFromPath(at));
+      }
+    }
+    return ids as ReadonlyMap<string, string>;
+  }).pipe(Effect.withSpan("WtFolder.movedIds"));
+
+  return WtFolder.of({ drain, unmoved, retry, movedTo, movedIds });
 });
 
 export const layer = Layer.effect(WtFolder, make);

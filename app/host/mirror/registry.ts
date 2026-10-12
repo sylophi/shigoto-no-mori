@@ -25,6 +25,7 @@ import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
 import {
   dropMirrorInvitesWithPeers,
   forgetMirrorInvitesOf,
+  moveMirrorInvitesOf,
 } from "@host/mirror/invites";
 import { log } from "@shared/log";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -445,6 +446,7 @@ export const moveMirrorsOfWorktree = (
   moved: { id: string; path: string },
 ) =>
   Effect.gen(function* () {
+    yield* moveMirrorInvitesOf(oldId, moved.id);
     const daemon = yield* engineOrNull;
     if (daemon === null) return;
     if ((yield* daemon.status) !== "running") {
