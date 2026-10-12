@@ -22,7 +22,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { promised } from "./lib/gitPromises.mts";
+import { engineGit, promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // Same as git-changes: the hook's GIT_* variables go before the git
@@ -46,8 +46,16 @@ const {
   stashChanges,
 } = promised(await import("../host/lib/git/stash.ts"));
 
-const { abortOperation, continueOperation, readOperation, resolveConflict } =
-  promised(await import("../host/lib/git/operation.ts"));
+// The engine's Git, in the shapes these cases call it by.
+const abortOperation = (worktree: string) => engineGit.abortOperation(worktree);
+const continueOperation = (worktree: string) =>
+  engineGit.continueOperation(worktree);
+const readOperation = (worktree: string) => engineGit.readOperation(worktree);
+const resolveConflict = (
+  worktree: string,
+  path: string,
+  side: "mine" | "theirs" | "as-is",
+) => engineGit.resolveConflict({ worktree, path, side });
 const {
   mergePrimaryKeepingConflicts,
   mergeUpstreamKeepingConflicts,

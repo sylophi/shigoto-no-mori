@@ -13,14 +13,20 @@ import type {
 } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
-import { onIndex } from "./changes";
 import { GitRefusal, run, runLenient, splitZ } from "./core";
-import {
-  gitDirOf,
-  hasStagedChanges,
-  readOperation,
-  refuseMidOperation,
-} from "./operation";
+
+// The engine's index lock, which every write to a worktree's index
+// takes, until this moves to the engine's Git too.
+const onIndex = <A, E, R>(worktreePath: string, task: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Git.Git, (git) => git.withIndexLock(worktreePath, task));
+const gitDirOf = (worktreePath: string) =>
+  Effect.flatMap(Git.Git, (git) => git.gitDir(worktreePath));
+const hasStagedChanges = (worktreePath: string) =>
+  Effect.flatMap(Git.Git, (git) => git.hasStagedChanges(worktreePath));
+const readOperation = (worktreePath: string) =>
+  Effect.flatMap(Git.Git, (git) => git.readOperation(worktreePath));
+const refuseMidOperation = (worktreePath: string) =>
+  Effect.flatMap(Git.Git, (git) => git.refuseMidOperation(worktreePath));
 
 // `countsOnly` leaves out the merge's conflicts and the incoming
 // subject, for a move that makes no merge (a hard reset): the trial

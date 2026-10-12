@@ -38,3 +38,6 @@ export const promised = <M extends object>(module: M): Promised<M> =>
         : value,
     ]),
   ) as Promised<M>;
+
+// The engine's Git itself, every call a Promise, on the same runtime.
+export const engineGit = promised(runtime.runSync(Git.Git));

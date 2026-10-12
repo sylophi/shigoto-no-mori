@@ -17,20 +17,7 @@ import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import { GitRefusal } from "@host/lib/git/core";
-import {
-  discardChanges,
-  listChangesForPage,
-  readCommitMessage,
-  resetHard,
-  resetSoft,
-  restoreDiscard,
-} from "@host/lib/git/changes";
 import { commitPicks } from "@host/lib/git/commit";
-import {
-  getCommitDiff,
-  getFileDiff,
-  getMergeBaseDiff,
-} from "@host/lib/git/diff";
 import {
   cherryPickCommit,
   revertCommit,
@@ -46,12 +33,6 @@ import {
   restoreStash,
   stashChanges,
 } from "@host/lib/git/stash";
-import {
-  abortOperation,
-  continueOperation,
-  readOperation,
-  resolveConflict,
-} from "@host/lib/git/operation";
 import { mergeBranch, readMergePreview } from "@host/lib/git/merge";
 import {
   mergePrimaryKeepingConflicts,
@@ -233,7 +214,7 @@ export const worktreesViews: ViewHandlers<
   watchChangeStatus: (input) =>
     Views.view(
       `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`,
-      () => atPath(input, listChangesForPage),
+      () => atPath(input, (path) => withGit((git) => git.changes(path))),
       Views.either(
         gitMoved(input.projectId),
         filesChanged(input.projectId),
@@ -528,12 +509,21 @@ export const worktreesHandlers = {
     ),
 
   fileDiff: (input) =>
-    atPath(input, (path) => getFileDiff(path, input.paths, input.untracked)),
+    atPath(input, (path) =>
+      withGit((git) =>
+        git.fileDiff({
+          worktree: path,
+          paths: input.paths,
+          untracked: input.untracked,
+        }),
+      ),
+    ),
 
   readFile: ({ path, ...input }) =>
     atPath(input, (root) => readWorktreeFile(root, path)),
 
-  changeStatus: (input) => atPath(input, listChangesForPage),
+  changeStatus: (input) =>
+    atPath(input, (path) => withGit((git) => git.changes(path))),
 
   fileHunks: (input) => atPath(input, (path) => readHunks(path, input.path)),
   discardHunks: (input) =>
@@ -550,20 +540,32 @@ export const worktreesHandlers = {
 
   discardChanges: (input) =>
     mutateAndDescribeWith(input, (wt) =>
-      discardChanges(wt.path, input.paths),
+      withGit((git) => git.discard({ worktree: wt.path, paths: input.paths })),
     ).pipe(
       Effect.map(({ result, worktree }) => ({ snapshot: result, worktree })),
     ),
 
   restoreDiscard: (input) =>
-    mutateAndDescribe(input, (wt) => restoreDiscard(wt.path, input.snapshot)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) =>
+        git.restoreDiscard({ worktree: wt.path, snapshot: input.snapshot }),
+      ),
+    ),
 
   commitMessage: (input) =>
-    atPath(input, (path) => readCommitMessage(path, input.hash)),
+    atPath(input, (path) =>
+      withGit((git) => git.readCommitMessage(path, input.hash)),
+    ),
 
   resetSoft: (input) =>
     mutateAndDescribeWith(input, (wt) =>
-      resetSoft(wt.path, input.target, input.expectHead),
+      withGit((git) =>
+        git.resetSoft({
+          worktree: wt.path,
+          target: input.target,
+          expectHead: input.expectHead,
+        }),
+      ),
     ).pipe(
       Effect.map(({ result, worktree }) => ({
         previousHead: result,
@@ -573,11 +575,18 @@ export const worktreesHandlers = {
 
   resetHard: (input) =>
     mutateAndDescribeWith(input, (wt) =>
-      resetHard(wt.path, input.ref, input.expectHead, input.restore),
+      withGit((git) =>
+        git.resetHard({
+          worktree: wt.path,
+          ref: input.ref,
+          expectHead: input.expectHead,
+          restore: input.restore,
+        }),
+      ),
     ).pipe(Effect.map(({ result, worktree }) => ({ ...result, worktree }))),
 
   commitDiff: (input) =>
-    atPath(input, (path) => getCommitDiff(path, input.hash)),
+    atPath(input, (path) => withGit((git) => git.commitDiff(path, input.hash))),
 
   listCommits: ({ skip, count, query, from, ...input }) =>
     atPath(input, (path) => listCommits(path, { skip, count, query, from })),
@@ -608,7 +617,11 @@ export const worktreesHandlers = {
           reason: "This branch has no primary branch to compare with.",
         });
       }
-      return yield* getMergeBaseDiff(identity.path, base, "HEAD");
+      return yield* (yield* Git.Git).mergeBaseDiff({
+        repo: identity.path,
+        base,
+        head: "HEAD",
+      });
     }),
 
   revertCommit: (input) =>
@@ -685,10 +698,17 @@ export const worktreesHandlers = {
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
     ),
 
-  operation: (input) => atPath(input, readOperation),
+  operation: (input) =>
+    atPath(input, (path) => withGit((git) => git.readOperation(path))),
   resolveConflict: (input) =>
     mutateAndDescribe(input, (wt) =>
-      resolveConflict(wt.path, input.path, input.side),
+      withGit((git) =>
+        git.resolveConflict({
+          worktree: wt.path,
+          path: input.path,
+          side: input.side,
+        }),
+      ),
     ),
   mergePreview: (input) =>
     atPath(input, (path) =>
@@ -701,9 +721,13 @@ export const worktreesHandlers = {
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
     ),
   continueOperation: (input) =>
-    mutateAndDescribe(input, (wt) => continueOperation(wt.path)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.continueOperation(wt.path)),
+    ),
   abortOperation: (input) =>
-    mutateAndDescribe(input, (wt) => abortOperation(wt.path)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.abortOperation(wt.path)),
+    ),
   switchToPrimaryAndDeleteBranch: (input) =>
     Effect.flatMap(findProject(input.projectId), (project) =>
       Ops.finishWorktree(project, input.worktreeId),
@@ -761,6 +785,11 @@ const primaryRefToSync = Effect.fnUntraced(function* (
 });
 
 // A git read or write on the worktree's checkout.
+// A call on the engine's Git.
+const withGit = <A, E, R>(
+  call: (git: Git.Git["Service"]) => Effect.Effect<A, E, R>,
+) => Effect.flatMap(Git.Git, call);
+
 const atPath = <A, E, R>(
   scope: { projectId: string; worktreeId: string },
   action: (path: string) => Effect.Effect<A, E, R>,

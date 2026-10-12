@@ -50,6 +50,17 @@ export class UnknownRevisionError extends Schema.TaggedError<UnknownRevisionErro
   }
 }
 
+// A move git would make that the app refuses, in words for the person
+// who asked: an operation under way, conflicts left, nothing to do.
+export class GitRefusedError extends Schema.TaggedError<GitRefusedError>()(
+  "GitRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 // HEAD moved on from where a caller pinned it: what a move made from a
 // loaded page asks, so it can't land on a branch that changed since.
 export class BranchMovedError extends Schema.TaggedError<BranchMovedError>()(
@@ -88,16 +99,14 @@ export class NoRemoteError extends Schema.TaggedError<NoRemoteError>()(
   }
 }
 
-// Why an undo (or its redo) would not move HEAD: it moved since the
-// page loaded, the target is off HEAD's line, or a merge is between.
+// Why an undo (or its redo) would not move HEAD: the target is off
+// HEAD's line, or a merge is between.
 export class UndoRefusedError extends Schema.TaggedError<UndoRefusedError>()(
   "UndoRefusedError",
-  { reason: Schema.Literals(["moved", "off-history", "across-merge"]) },
+  { reason: Schema.Literals(["off-history", "across-merge"]) },
 ) {
   override get message(): string {
     switch (this.reason) {
-      case "moved":
-        return "The branch has moved on since this was loaded. Reload and try again.";
       case "off-history":
         return "That commit isn't on this branch's history.";
       case "across-merge":
@@ -149,6 +158,11 @@ export type RunOptions = {
   // Exit codes that still mean an answer: `diff --no-index` exits 1
   // whenever it has a diff to print.
   readonly okExitCodes?: readonly number[] | undefined;
+  // Any exit still answers with what git printed before it: a patch
+  // read keeps the files git got through when a later one fails (an
+  // external diff driver, a textconv). Output past the cap and a git
+  // that never ran still fail.
+  readonly anyExit?: boolean | undefined;
   // The output cap, over DEFAULT_MAX_OUTPUT. Only the patch reads
   // raise it.
   readonly maxOutputBytes?: number | undefined;

@@ -6,10 +6,27 @@
 // terminal's `git add`) goes in only if it is ticked.
 import { readFile, rm, writeFile } from "node:fs/promises";
 import type { CommitPicks } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
-import { onIndex, runChunked } from "./changes";
-import { GitRefusal, run, splitZ } from "./core";
+import { chunked, GitRefusal, run, splitZ } from "./core";
 import { stageHunks, staleCommit } from "./hunks";
+
+// The engine's index lock, which every write to a worktree's index
+// takes, until this moves to the engine's Git too.
+const onIndex = <A, E, R>(worktreePath: string, task: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Git.Git, (git) => git.withIndexLock(worktreePath, task));
+
+// One git per chunk of paths, in order, since index writes take
+// index.lock. `--literal-pathspecs`: every path came out of git status
+// and is a filename, never a pattern.
+const runChunked = (
+  worktreePath: string,
+  args: string[],
+  paths: readonly string[],
+) =>
+  Effect.forEach(chunked(paths), (chunk) =>
+    run(worktreePath, ["--literal-pathspecs", ...args, "--", ...chunk]),
+  );
 
 // Two `-m` flags give git the summary and body as separate paragraphs.
 // Hooks run as they would in a terminal, and their output rides along
