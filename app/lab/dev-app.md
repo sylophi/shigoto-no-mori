@@ -237,6 +237,16 @@ cloning exists.
   running on the old code: type `rs` in the `pnpm start` terminal to
   restart it. The peer keeps the code it booted with until it is
   relaunched.
+- **An edit to a workspace package doesn't reach a running window.**
+  The renderer's dev server serves `packages/ui` under its
+  `node_modules` link (`/node_modules/@shigomori/ui/src/…`, and
+  `contracts` the same way, not tried), and its watcher never
+  invalidates those modules: the old file is served after a reload
+  too. Stop the window, remove `node_modules/.vite` and start it again.
+  `ui` is also prebundled (`optimizeDeps` excludes only `contracts`
+  and `effect`); excluding it serves it as source but changes nothing
+  else, and neither does un-ignoring the links in `server.watch.ignored`.
+  The fix lies in how vite resolves the links, still open.
 - **The host is a process of its own** (`main/hostProcess.ts` forks
   `host/process/host.ts`), and its log lines come prefixed `[host]`.
   Killing it is a crash the shell recovers from: it forks the host
