@@ -15,14 +15,24 @@
 // (marks, the worktree's data, a pending dirty capture) is re-keyed
 // (the engine's rekey, `sm worktrees rekey`), and git's own worktree links are
 // re-pointed by `git worktree repair`.
-import { cp, mkdir, rename, rm, rmdir } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+//
+// A move a crash cuts short is finished or undone at the next start
+// (resumeDataDirMove): the move keeps a journal in the data dir from
+// before its re-key to its end, and a copy to another volume goes into a
+// sibling of the destination, renamed in only once whole.
+import { cp, mkdir, rm, rmdir } from "node:fs/promises";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Ops from "./engineOps";
 import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
@@ -44,12 +54,10 @@ import {
 // A step on the file system, its failure as it crosses a wire.
 const fsStep = <A>(step: () => Promise<A>) =>
   Effect.tryPromise({ try: step, catch: callFailureOf });
-// newId is filled in by the re-key, which the engine answers with.
 type MovedWorktree = {
   oldId: string;
   oldPath: string;
   newPath: string;
-  newId?: string;
 };
 
 // A move refused before anything moved.
@@ -62,29 +70,80 @@ class DataDirMoveError extends Schema.TaggedError<DataDirMoveError>()(
   }
 }
 
+// Where this session's data dir is, and where a move of it writes: its
+// pointer and the pre-2.0 one it clears, the default location (which
+// needs no pointer) and the flavor's name for the folder. Refused when
+// the data dir was overridden, since a pointer would then be ignored.
+export type DataDirPlace = {
+  readonly dataDir: string;
+  readonly pointerFile: string;
+  readonly legacyPointerFile: string | null;
+  readonly defaultDataDir: string;
+  readonly dataDirName: string;
+};
+
+export const sessionPlace = Effect.try({
+  try: (): DataDirPlace => ({
+    dataDir: dataDir(),
+    pointerFile: dataDirPointerPath(),
+    legacyPointerFile: legacyDataDirPointerPath(),
+    defaultDataDir: defaultDataDir(),
+    dataDirName: canonicalDataDirName(),
+  }),
+  catch: (error) =>
+    new DataDirMoveError({
+      reason: error instanceof Error ? error.message : String(error),
+    }),
+});
+
+// The journal a move keeps in the data dir while it runs.
+const JOURNAL = "data-dir-move.json";
+const Journal = Schema.Struct({
+  from: Schema.String,
+  to: Schema.String,
+  // The sibling a copy to another volume fills, null for a rename.
+  partial: Schema.NullOr(Schema.String),
+  moved: Schema.Array(
+    Schema.Struct({
+      projectId: Schema.String,
+      oldPath: Schema.String,
+      newPath: Schema.String,
+    }),
+  ),
+});
+type Journal = typeof Journal.Type;
+const JournalJson = Schema.fromJsonString(Journal);
+
+// The tree at `from` copied to `to`, symlinks (carry-over entries) as
+// links rather than followed.
+const copyTree = (from: string, to: string) =>
+  fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
+
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
   parentDir: string | undefined,
   opts: {
+    readonly place: DataDirPlace;
     // The caller closes its fs watchers on the data dir here, before the
     // rename -- they're moot anyway, the app relaunches after the move.
-    beforeMove: Effect.Effect<void, E, R>;
+    readonly beforeMove: Effect.Effect<void, E, R>;
     // Every script's kill chain, waited for (host/lib/scripts).
-    killAllScripts: Effect.Effect<void, never, R>;
+    readonly killAllScripts: Effect.Effect<void, never, R>;
+    // The copy to another volume, `copyTree` but where a proof stops it.
+    readonly copy?: (
+      from: string,
+      to: string,
+    ) => Effect.Effect<void, unknown, R>;
   },
 ) {
-  const oldDir = dataDir();
-  // Resolved first: they throw when this session's data dir came from
-  // an override, and nothing may be marked or reaped before that.
-  const [pointerFile, legacyPointerFile] = yield* Effect.try({
-    try: () => [dataDirPointerPath(), legacyDataDirPointerPath()] as const,
-    catch: (error) =>
-      new DataDirMoveError({
-        reason: error instanceof Error ? error.message : String(error),
-      }),
-  });
+  const { place } = opts;
+  const oldDir = place.dataDir;
+  const pointerFile = place.pointerFile;
+  const legacyPointerFile = place.legacyPointerFile;
   const parent =
-    parentDir === undefined ? dirname(defaultDataDir()) : expandHome(parentDir);
+    parentDir === undefined
+      ? dirname(place.defaultDataDir)
+      : expandHome(parentDir);
   // Never resolve against the process cwd: a relative parent would land
   // the data dir somewhere the user never saw.
   if (!isAbsolute(parent)) {
@@ -92,8 +151,8 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       reason: `The new parent folder must be an absolute path: ${parentDir}`,
     });
   }
-  const newDir = join(parent, canonicalDataDirName());
-  const toDefault = newDir === defaultDataDir();
+  const newDir = join(parent, place.dataDirName);
+  const toDefault = newDir === place.defaultDataDir;
 
   if (isSameOrInside(newDir, oldDir)) {
     return yield* new DataDirMoveError({
@@ -130,10 +189,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     await mkdir(parent, { recursive: true });
     // Clear an existing empty placeholder before the rename. A non-empty
     // directory is refused, never merged into.
-    await rmdir(newDir).catch((err) => {
-      if (!isENOENT(err)) {
+    await rmdir(newDir).catch((err: NodeJS.ErrnoException) => {
+      if (isENOENT(err)) return;
+      if (err.code === "ENOTEMPTY" || err.code === "EEXIST") {
         throw new Error(`${newDir} already exists and is not empty.`);
       }
+      throw err;
     });
   });
 
@@ -176,14 +237,31 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   );
   for (const id of marked) markDeleteInflight(id);
   const fs = yield* FileSystem.FileSystem;
+  const suffix = (yield* Random.nextInt).toString(36);
   // The pointer is written beside itself under a name of its own, then
   // renamed in.
-  const pointerTmp = `${pointerFile}.tmp.${(yield* Random.nextInt).toString(36)}`;
+  const pointerTmp = `${pointerFile}.tmp.${suffix}`;
+  const journalFile = join(oldDir, JOURNAL);
+  const journal: Types.Mutable<Journal> = {
+    from: oldDir,
+    to: newDir,
+    partial: null,
+    moved: repairTargets.flatMap(({ project, moved }) =>
+      moved.map((m) => ({
+        projectId: project.id,
+        oldPath: m.oldPath,
+        newPath: m.newPath,
+      })),
+    ),
+  };
   // Gone already is gone.
   const removeIfThere = (file: string) =>
     fs.remove(file, { force: true }).pipe(Effect.mapError(callFailureOf));
+  const writeJournal = Effect.suspend(() =>
+    writeWhole(fs, journalFile, Schema.encodeSync(JournalJson)(journal)),
+  );
   let pointerStaged = false;
-  let rekeyed = false;
+  let journaled = false;
   let renamed = false;
   yield* Effect.gen(function* () {
     // Scripts running inside the worktrees we're about to move would
@@ -204,36 +282,37 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       pointerStaged = true;
     }
 
+    // The journal before the re-key: from here, a start that finds it
+    // with the pointer unmoved undoes the re-key, and one that finds it
+    // at the new place finishes the move.
+    yield* writeJournal;
+    journaled = true;
+
     // Re-key the marks and per-worktree data while the engine still
     // reads the old location (the pointer file moves below). Undone
-    // below if the rename never happens.
-    yield* rekeyWorktrees(repairTargets, false);
-    rekeyed = true;
+    // below, or by the next start, if the move never lands.
+    yield* rekeyWorktrees(journal.moved, false);
 
     yield* opts.beforeMove;
 
-    // rename() can't cross volumes. Fall back to copy, commit the
-    // pointer, then remove the old tree. Symlinks (carry-over entries)
-    // are copied as links, not followed.
-    const copied = yield* fsStep(async () => {
-      try {
-        await rename(oldDir, newDir);
-        return false;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EXDEV") throw err;
-      }
-      try {
-        await cp(oldDir, newDir, { recursive: true, verbatimSymlinks: true });
-      } catch (cpErr) {
-        // Don't strand a partial tree at the destination: it would make
-        // every retry fail the empty-directory check above.
-        await rm(newDir, { recursive: true, force: true }).catch(
-          () => undefined,
-        );
-        throw cpErr;
-      }
-      return true;
-    });
+    // rename() can't cross volumes. Then the tree is copied into a
+    // sibling of the destination, renamed in once whole, the pointer
+    // committed, and the old tree removed.
+    const sameVolume = yield* fs.rename(oldDir, newDir).pipe(
+      Effect.as(true),
+      Effect.catchIf(crossesVolumes, () => Effect.succeed(false)),
+      Effect.mapError(callFailureOf),
+    );
+    if (!sameVolume) {
+      journal.partial = `${newDir}.partial-${suffix}`;
+      yield* writeJournal;
+      yield* (opts.copy ?? copyTree)(oldDir, journal.partial).pipe(
+        Effect.mapError(callFailureOf),
+      );
+      yield* fs
+        .rename(journal.partial, newDir)
+        .pipe(Effect.mapError(callFailureOf));
+    }
     renamed = true;
 
     // Point both readers (app boot, CLI) at the new location. Atomic
@@ -247,38 +326,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       ? removeIfThere(pointerFile)
       : fs.rename(pointerTmp, pointerFile).pipe(Effect.mapError(callFailureOf));
     if (legacyPointerFile !== null) yield* removeIfThere(legacyPointerFile);
-    if (copied) {
-      yield* fsStep(() =>
-        rm(oldDir, { recursive: true, force: true }).catch(() => undefined),
-      );
-    }
-
-    // Re-link git's worktree metadata (each worktree's .git file and
-    // the repo's .git/worktrees/<name>/gitdir both record absolute
-    // paths). Repair is idempotent and re-runnable from the repo by
-    // hand, so a failure here shouldn't undo an otherwise complete
-    // move.
-    yield* Effect.forEach(
-      repairTargets.filter(({ moved }) => moved.length > 0),
-      ({ project, moved }) =>
-        Effect.ignore(
-          Effect.flatMap(Git.Git, (git) =>
-            git.run(project.path, [
-              "worktree",
-              "repair",
-              ...moved.map((m) => m.newPath),
-            ]),
-          ),
-        ),
-      { concurrency: "unbounded", discard: true },
-    );
+    yield* finishMove(journal, newDir);
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
         if (pointerStaged) yield* Effect.ignore(removeIfThere(pointerTmp));
-        if (rekeyed && !renamed) {
-          yield* Effect.ignore(rekeyWorktrees(repairTargets, true));
-        }
+        if (journaled && !renamed) yield* undoMove(journal, oldDir);
       }),
     ),
     Effect.ensuring(
@@ -289,32 +342,148 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   );
 });
 
+// A rename refused because the two paths are on different volumes.
+const crossesVolumes = (error: PlatformError.PlatformError) =>
+  (error.reason.cause as { readonly code?: unknown } | undefined)?.code ===
+  "EXDEV";
+
+// `text` at `file`, written beside it and renamed in.
+const writeWhole = (fs: FileSystem.FileSystem, file: string, text: string) =>
+  Effect.gen(function* () {
+    const staged = `${file}.tmp`;
+    yield* fs.writeFileString(staged, text);
+    yield* fs.rename(staged, file);
+  }).pipe(Effect.mapError(callFailureOf));
+
+// The end of a move that landed at `at`: the old tree a copy left goes,
+// git's worktree links are re-pointed (each worktree's .git file and the
+// repo's .git/worktrees/<name>/gitdir record absolute paths), and the
+// journal goes last. Each step is idempotent, so a start that finds the
+// journal runs it again; none of them can undo a complete move.
+const finishMove = (journal: Journal, at: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    if (journal.partial !== null && resolve(journal.from) !== resolve(at)) {
+      yield* fsStep(() =>
+        rm(journal.from, { recursive: true, force: true }).catch(
+          () => undefined,
+        ),
+      );
+    }
+    const byProject = new Map<string, string[]>();
+    for (const m of journal.moved) {
+      byProject.set(m.projectId, [
+        ...(byProject.get(m.projectId) ?? []),
+        m.newPath,
+      ]);
+    }
+    const projects = yield* Effect.orElseSucceed(freshProjects, () => []);
+    const git = yield* Git.Git;
+    yield* Effect.forEach(
+      byProject,
+      ([projectId, paths]) => {
+        const project = projects.find((one) => one.id === projectId);
+        return project === undefined
+          ? Effect.void
+          : Effect.ignore(
+              git.run(project.path, ["worktree", "repair", ...paths]),
+            );
+      },
+      { concurrency: "unbounded", discard: true },
+    );
+    yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+  });
+
+// A move that never landed, undone where the data still is (`at`): the
+// re-key reversed (a worktree never re-keyed has nothing under its new
+// id, which the re-key passes over), the partial copy removed, the
+// journal last.
+const undoMove = (journal: Journal, at: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* Effect.ignore(rekeyWorktrees(journal.moved, true));
+    if (journal.partial !== null) {
+      yield* Effect.ignore(
+        fs.remove(journal.partial, { recursive: true, force: true }),
+      );
+      // A copy renamed in before the pointer moved: this move's own, as
+      // the journal it carries says, and never the data the pointer
+      // names.
+      const landed = yield* fs.readFileString(join(journal.to, JOURNAL)).pipe(
+        Effect.map(Schema.decodeUnknownOption(JournalJson)),
+        Effect.orElseSucceed(() => Option.none<Journal>()),
+      );
+      if (
+        Option.isSome(landed) &&
+        landed.value.from === journal.from &&
+        landed.value.partial === journal.partial &&
+        resolve(journal.to) !== resolve(at)
+      ) {
+        yield* Effect.ignore(
+          fs.remove(journal.to, { recursive: true, force: true }),
+        );
+      }
+    }
+    yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+  });
+
+// At start, with the graph up and before anything reads a worktree by
+// its id: a journal in this session's data dir is a move a crash cut
+// short. At its destination it is finished; at its source, where the
+// pointer still leads, it is undone.
+const resumeDataDirMove = (at: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const text = yield* fs
+      .readFileString(join(at, JOURNAL))
+      .pipe(Effect.option);
+    if (Option.isNone(text)) return;
+    const journal = Schema.decodeUnknownOption(JournalJson)(text.value);
+    if (Option.isNone(journal)) {
+      yield* Effect.logWarning("[data] an unreadable move journal, removed");
+      return yield* Effect.ignore(fs.remove(join(at, JOURNAL)));
+    }
+    // The pointer may name the folder with a trailing slash.
+    if (resolve(journal.value.to) === resolve(at)) {
+      yield* Effect.logInfo(
+        `[data] finishing the move from ${journal.value.from}`,
+      );
+      return yield* finishMove(journal.value, at);
+    }
+    yield* Effect.logInfo(`[data] undoing the move to ${journal.value.to}`);
+    yield* undoMove(journal.value, at);
+  });
+
 // Carries what the engine keys by each moved worktree's id from its old
 // id to the one its new path hashes to (or back, on `reverse`). The
 // relocate flow's `sm worktrees move` does the same for one worktree.
 // Each re-key is a read-modify-write of the same rows, so they run
 // one at a time.
-const rekeyWorktrees = (
-  targets: readonly { project: { id: string }; moved: MovedWorktree[] }[],
-  reverse: boolean,
-) =>
+const rekeyWorktrees = (moved: Journal["moved"], reverse: boolean) =>
   Effect.forEach(
-    targets.flatMap(({ project, moved }) =>
-      moved.map((m) => ({ projectId: project.id, m })),
-    ),
-    ({ projectId, m }) => {
-      if (!reverse) {
-        return Ops.rekeyWorktree(projectId, m.oldId, m.newPath).pipe(
-          Effect.tap((newId) =>
-            Effect.sync(() => {
-              m.newId = newId;
-            }),
+    moved,
+    (m) =>
+      reverse
+        ? Ops.rekeyWorktree(
+            m.projectId,
+            worktreeIdFromPath(m.newPath),
+            m.oldPath,
+          )
+        : Ops.rekeyWorktree(
+            m.projectId,
+            worktreeIdFromPath(m.oldPath),
+            m.newPath,
           ),
-        );
-      }
-      return m.newId === undefined
-        ? Effect.void
-        : Ops.rekeyWorktree(projectId, m.newId, m.oldPath);
-    },
     { discard: true },
   );
+
+// The resume as the host's graph runs it at start (process/layer.ts),
+// on this session's data dir. A failure is a log line: the move's
+// leftovers never keep the app from starting.
+export const resumeLayer = Layer.effectDiscard(
+  Effect.suspend(() => resumeDataDirMove(dataDir())).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("[data] the unfinished move failed", cause),
+    ),
+  ),
+);

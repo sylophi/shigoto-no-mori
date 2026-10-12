@@ -518,7 +518,8 @@ const make = Effect.gen(function* () {
             AND mark IN (SELECT mark FROM worktree_marks WHERE worktree_id = ${from})`,
         sql`UPDATE worktree_marks SET worktree_id = ${to} WHERE worktree_id = ${from}`,
         sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${from}`,
-        sql`DELETE FROM unshelved_at WHERE worktree_id = ${to}`,
+        sql`DELETE FROM unshelved_at WHERE worktree_id = ${to}
+            AND EXISTS (SELECT 1 FROM unshelved_at WHERE worktree_id = ${from})`,
         sql`UPDATE unshelved_at SET worktree_id = ${to} WHERE worktree_id = ${from}`,
         sql`UPDATE agent_sessions SET worktree_id = ${to} WHERE worktree_id = ${from}`,
       ]),

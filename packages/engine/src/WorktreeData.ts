@@ -215,8 +215,12 @@ const make = Effect.gen(function* () {
   ) {
     yield* sql.withTransaction(
       Effect.all([
+        // What `to` held goes only for what `from` brings: a move of
+        // nothing moves nothing, so a move undone twice keeps its data.
         sql`DELETE FROM worktree_data
-            WHERE project_id = ${projectId} AND worktree_id = ${to}`,
+            WHERE project_id = ${projectId} AND worktree_id = ${to}
+            AND EXISTS (SELECT 1 FROM worktree_data
+              WHERE project_id = ${projectId} AND worktree_id = ${from})`,
         sql`UPDATE worktree_data SET worktree_id = ${to}
             WHERE project_id = ${projectId} AND worktree_id = ${from}`,
       ]),

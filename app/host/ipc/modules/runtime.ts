@@ -9,7 +9,7 @@ import { uninstallCliEverything } from "@host/lib/cli/install";
 import * as Ops from "@host/lib/engineOps";
 import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
-import { moveDataDir } from "@host/lib/dataDirMove";
+import { moveDataDir, sessionPlace } from "@host/lib/dataDirMove";
 import { getBusyOperations, killAllScripts } from "@host/lib/scripts";
 import { busyRemoteRefusal } from "@shared/busy";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
@@ -70,6 +70,7 @@ export const runtimeHandlers = {
       moveInFlight = true;
       let watchersStopped = false;
       yield* moveDataDir(parentDir, {
+        place: yield* sessionPlace,
         killAllScripts: killAllScripts(),
         beforeMove: Effect.suspend(() => {
           watchersStopped = true;
