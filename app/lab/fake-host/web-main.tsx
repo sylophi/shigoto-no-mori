@@ -6,9 +6,12 @@
 import { bootWeb } from "../../web/boot";
 import { applyPose } from "./pose";
 import { installFakeHostBridge } from "./bridge";
+import { exposeToLab } from "@/lib/runtime/labHandle";
 
 applyPose();
 
 // Fake host stand-in for web/preload.ts: the web page boots on the
 // fixture api instead of the real hub-backed bridge.
-bootWeb(installFakeHostBridge({ webShell: true }));
+const page = installFakeHostBridge({ webShell: true });
+exposeToLab(page.api);
+bootWeb(page);

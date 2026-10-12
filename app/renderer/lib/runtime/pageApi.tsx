@@ -8,14 +8,14 @@ import { createContext, type ReactNode, use } from "react";
 import type { ElectronBridge } from "../../../main/preload";
 import type { ClientApi } from "./Api";
 
-export type RendererApi = Omit<ElectronBridge, "requestShellPort" | "route"> & {
+export type RendererApi = Omit<
+  ElectronBridge,
+  "requestShellPort" | "route" | "isLab"
+> & {
   readonly deviceId: string;
 } & ClientApi;
 
 const ApiContext = createContext<RendererApi | null>(null);
-// The name the lab's tools find the page's api by
-// (lab/reliability/pageApi.mts).
-ApiContext.displayName = "PageApi";
 
 export function ApiProvider({
   api,

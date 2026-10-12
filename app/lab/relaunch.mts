@@ -103,6 +103,8 @@ execFileSync("open", [
   bundle,
   "--args",
   `--remote-debugging-port=${port}`,
+  // Started for the lab, so the window hands over its api.
+  "--sm-lab",
 ]);
 // The window's api (findPageApi), as an expression.
 const api = `(${findPageApi})()`;

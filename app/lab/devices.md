@@ -31,9 +31,9 @@ Then drive them:
 
 ```json
 { "session": "a", "steps": [
-  { "expect": { "js": "weblab.react.find('ApiProvider')[0].props.api.account.status().then((s) => s.signedIn)" }, "timeout": 60000 },
-  { "js": "weblab.react.find('ApiProvider')[0].props.api.hub.status()" },
-  { "js": "weblab.react.find('ApiProvider')[0].props.api.deviceId", "on": "b" },
+  { "expect": { "js": "window.__smLab.api.account.status().then((s) => s.signedIn)" }, "timeout": 60000 },
+  { "js": "window.__smLab.api.hub.status()" },
+  { "js": "window.__smLab.api.deviceId", "on": "b" },
   { "shot": "b-devices", "on": "b" }
 ] }
 ```
@@ -103,8 +103,8 @@ lives. Never use the **Sign out** button in a cloned window
 
 ```json
 { "session": "a", "steps": [
-  { "js": "((api) => api.account.listDevices().then((ds) => Promise.all(ds.filter((d) => / \\[<tag>-[a-z0-9-]+\\]$/.test(d.name) && d.deviceId !== api.deviceId).map((d) => api.account.revokeDevice(d.deviceId).then(() => d.name)))))(weblab.react.find('ApiProvider')[0].props.api)" },
-  { "js": "weblab.react.find('ApiProvider')[0].props.api.account.signOut()" }
+  { "js": "((api) => api.account.listDevices().then((ds) => Promise.all(ds.filter((d) => / \\[<tag>-[a-z0-9-]+\\]$/.test(d.name) && d.deviceId !== api.deviceId).map((d) => api.account.revokeDevice(d.deviceId).then(() => d.name)))))(window.__smLab.api)" },
+  { "js": "window.__smLab.api.account.signOut()" }
 ] }
 ```
 

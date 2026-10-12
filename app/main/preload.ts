@@ -9,6 +9,7 @@ import {
   APP_VERSION_FLAG,
   CLERK_PK_FLAG,
   DEV_BUILD_FLAG,
+  LAB_FLAG,
   optionalArgFlag,
   requireArgFlag,
   ROUTE_FLAG,
@@ -39,6 +40,9 @@ const bridge = {
   // affordances key off the build showing the window, never the host
   // (a packaged client on a dev host must not grow dev hotkeys).
   isDev: process.argv.includes(DEV_BUILD_FLAG),
+  // Started for the lab (argFlags.ts LAB_FLAG): the entry hands the
+  // lab's tools the page's api.
+  isLab: process.argv.includes(LAB_FLAG),
   // Client fact, constant per bridge: true here, false on the web
   // bridge. App-only UI (the port-forward controls, which need a real
   // local TCP listener) gates its mount on it, since the shared pages

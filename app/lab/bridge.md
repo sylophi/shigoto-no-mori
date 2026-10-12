@@ -5,15 +5,16 @@ terminal. The page's api (`renderer/lib/runtime/pageApi.tsx`) is built
 over the window's real links, to its shell and to its host, and a `js`
 step awaits what a call returns.
 
-The app keeps it in a React context, not on `window`. A `js` step
-reaches it as the `api` prop of the page's `ApiProvider`, which `api`
-below stands for:
+The app keeps it in a React context, not on `window`. A dev build, the
+fake host and an app started with `--sm-lab` hand it to tools outside
+the page as `window.__smLab.api` (`renderer/lib/runtime/labHandle.ts`),
+which `api` below stands for:
 
 ```json
-{ "js": "weblab.react.find('ApiProvider')[0].props.api.hub.status()" }
+{ "js": "window.__smLab.api.hub.status()" }
 ```
 
-The lab's scripts find it through `reliability/pageApi.mts`.
+The lab's scripts read it through `reliability/pageApi.mts`.
 
 ## Useful bridge calls
 

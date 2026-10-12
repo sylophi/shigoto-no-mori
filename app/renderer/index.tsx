@@ -9,17 +9,19 @@ import { mountWindow, startApp } from "./boot";
 import { disposeWithPage, startClient } from "./lib/runtime/client";
 import type { RendererApi } from "./lib/runtime/pageApi";
 import { pageRoot } from "./lib/themeRoot";
+import { exposeToLab } from "./lib/runtime/labHandle";
 import * as Desktop from "./lib/runtime/desktop";
 
 async function boot() {
   const bridge = window.electronBridge;
   if (bridge === undefined) throw new Error("the preload's bridge is missing");
-  const { requestShellPort: _, route, ...facts } = bridge;
+  const { requestShellPort: _, route, isLab, ...facts } = bridge;
   const client = await startClient(Desktop.layer(bridge));
   disposeWithPage(client);
   // The device id is the host's, read from its store.
   const { deviceId } = await client.api.window.hostAddress();
   const api: RendererApi = { ...facts, deviceId, ...client.api };
+  if (facts.isDev || isLab) exposeToLab(api);
   const router = mountWindow(startApp({ api, links: client.links }), {
     element: pageRoot(),
     ClerkProvider,

@@ -2,5 +2,8 @@
 // preload: make the binding, then boot the renderer on its api.
 import { bootWeb } from "./boot";
 import { installWebBridge } from "./preload";
+import { exposeToLab } from "@/lib/runtime/labHandle";
 
-bootWeb(installWebBridge());
+const page = installWebBridge();
+if (import.meta.env.DEV) exposeToLab(page.api);
+bootWeb(page);

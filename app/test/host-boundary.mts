@@ -33,6 +33,10 @@
 //   7. The contracts package imports nothing from the app: no app
 //      alias, no relative path out of the package. Every side compiles
 //      it, the hub included, which has no app to reach.
+//   8. No module reads the page's api off window: there is no
+//      `window.api`, and the lab's handle (`__smLab`) is named only
+//      where it is declared and handed over
+//      (renderer/lib/runtime/labHandle.ts, renderer/window.d.ts).
 //
 // covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/** packages/contracts/src/**
 import assert from "node:assert/strict";
@@ -54,6 +58,12 @@ const DEFINE_CONTRACT_SCOPE =
   /defineContract\(\s*["']\w+["'],\s*["'](host|client)["']/;
 const IS_REMOTE = /\bisRemote\b/;
 const IPC_RENDERER = /\bipcRenderer\b/;
+const WINDOW_API = /\bwindow\.api\b/;
+const LAB_HANDLE = /\b__smLab\b/;
+const LAB_HANDLE_ALLOWLIST = new Set([
+  "renderer/lib/runtime/labHandle.ts",
+  "renderer/window.d.ts",
+]);
 
 const mainDir = join(appRoot, "main");
 const mainCoreDir = join(mainDir, "core");
@@ -171,6 +181,18 @@ for (const { dir, root, contractLayer } of LAYERS) {
     if (dir !== "main" && IS_REMOTE.test(src)) {
       failures.push(
         `${rel} references isRemote -- remoteness lives at the connection layer, not in feature modules. A sanctioned connection-layer use gets an allowlist added to this check.`,
+      );
+    }
+
+    // 8. The page's api reaches no module off window.
+    if (WINDOW_API.test(src)) {
+      failures.push(
+        `${rel} reads window.api -- the page's api comes from its provider (useApi) or is handed in`,
+      );
+    }
+    if (!LAB_HANDLE_ALLOWLIST.has(rel) && LAB_HANDLE.test(src)) {
+      failures.push(
+        `${rel} names the lab's handle -- it is for tools outside the page, and only labHandle.ts sets it`,
       );
     }
 
