@@ -78,6 +78,16 @@ export const THIS_DEVICE_VIEW: DeviceStatusView = {
   reachable: true,
 };
 
+// The same machine while the window's link to its own host is down,
+// from the host stopping (or the shell's watchdog stopping a host that
+// went silent) until the host that replaces it answers. The one state
+// this device has to show: its pages can't load meanwhile.
+export const THIS_DEVICE_NOT_RESPONDING_VIEW: DeviceStatusView = {
+  tone: "rose",
+  label: "Not responding",
+  reachable: false,
+};
+
 // A device's name and its state, in one spelling ("Thinkpad,
 // Connected", "Studio Mac, This device"): the chip's tooltip and a
 // filter pill's accessible name.
