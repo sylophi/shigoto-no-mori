@@ -38,7 +38,12 @@ export const makeRepositories = ({
         });
       }
       const dest = path.join(parentDir, name);
-      if (yield* fs.exists(dest)) {
+      // A symlink is there even when what it points at isn't.
+      const symlink = fs.readLink(dest).pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false),
+      );
+      if ((yield* fs.exists(dest)) || (yield* symlink)) {
         return yield* new CloneDestinationError({
           path: dest,
           reason: "exists",

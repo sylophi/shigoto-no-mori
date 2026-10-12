@@ -8,6 +8,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
@@ -657,6 +658,11 @@ it("a new repository lands on main with one empty commit, and never over a folde
     g.checkDestination(join(parent, "nope"), "x"),
   );
   assert.equal(missing.reason, "not-a-folder");
+  symlinkSync(join(parent, "gone"), join(parent, "dangling"));
+  const dangling = await failureAs(CloneDestinationError, (g) =>
+    g.createRepository(parent, "dangling"),
+  );
+  assert.equal(dangling.reason, "exists");
 });
 
 // --- diffs ----------------------------------------------------------

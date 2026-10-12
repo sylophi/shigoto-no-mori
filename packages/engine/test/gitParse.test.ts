@@ -40,7 +40,7 @@ const ref = textOf(["main", "feat", "x", "-", "1", "/"], {
 );
 const flag = Arbitrary.schema(Schema.Boolean);
 
-// As `git worktree list --porcelain` prints them.
+// As `git worktree list --porcelain -z` prints them.
 const porcelain = (entries: ReadonlyArray<WorktreeEntry>) =>
   entries
     .map((one) =>
@@ -52,15 +52,19 @@ const porcelain = (entries: ReadonlyArray<WorktreeEntry>) =>
         ...(one.detached ? ["detached"] : []),
         ...(one.locked ? ["locked"] : []),
       ]
-        .map((line) => `${line}\n`)
+        .map((field) => `${field}\0`)
         .join(""),
     )
-    .join("\n");
+    .join("\0");
 
 describe("worktree list", () => {
   const entry: Arbitrary.Arbitrary<WorktreeEntry> = Arbitrary.map(
     Arbitrary.all({
-      path: Arbitrary.map(path, (rest) => `/${rest}`),
+      // A newline in a path, blank line and all, stays in it.
+      path: Arbitrary.map(
+        Arbitrary.all([path, Arbitrary.schema(Schema.Literals(["", "\n\n"]))]),
+        ([rest, gap]) => `/${rest}${gap}`,
+      ),
       head: Arbitrary.schema(Schema.Literals(["", "0123abcd".repeat(5)])),
       branch: Arbitrary.flatMap(flag, (detached) =>
         detached
