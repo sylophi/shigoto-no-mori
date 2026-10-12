@@ -44,8 +44,7 @@ on.
 
 The shell reads the data dir: `index.ts` finds it (`initDataDir`)
 before it builds the menu or forks the host, and modules here read it
-through `@host/lib/util/paths`, which moves to `app/shared` with the
-other code both processes compile (V3.md, step 7, Leftover mechanisms).
+through `@shared/paths`, which both processes compile.
 Most of the shell is plain Electron code (the menu, windows, deep
 links); EFFECT.md holds what is Effect here: the layer graph
 (`shellLayer.ts`), the services (`ClerkTokens`, `ShellLink`) and the

@@ -19,7 +19,7 @@ import * as Layer from "effect/Layer";
 import * as DeviceId from "../config/DeviceId";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
-import { layerLatch } from "../util/layerLatch";
+import { layerLatch } from "@shared/layerLatch";
 
 let held: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
 // The device a pick here is stamped with, read with the copy.

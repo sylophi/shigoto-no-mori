@@ -21,7 +21,7 @@ import {
   dataDir,
   dataDirSource,
   defaultDataDir,
-} from "@host/lib/util/paths";
+} from "@shared/paths";
 
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   "MoveRefusedError",

@@ -22,10 +22,10 @@ import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import { type HostFailure, host } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
-import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
-import { applyUserShellEnv } from "@host/lib/util/shellEnv";
+import { dataDir, dataDirPointerRead, initDataDir } from "@shared/paths";
+import { applyUserShellEnv } from "@shared/shellEnv";
 import { cliBinaryName } from "@shared/packaging/cliDist.mts";
-import * as Observability from "@host/lib/util/observability";
+import * as Observability from "@shared/observability";
 import * as UpdaterEngine from "./electron/updaterEngine";
 import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
@@ -130,7 +130,7 @@ captureConsoleToFile();
 
 // A packaged launch starts from its launcher's environment, Finder's
 // stripped one or a terminal's (or an agent's) whole one: rebuild it
-// from the login shell, see host/lib/util/shellEnv.ts. Started here, after the
+// from the login shell, see shared/shellEnv.ts. Started here, after the
 // lock (a losing second instance must not run the user's startup
 // files for nothing) and before Chromium's own startup, which the
 // shell then runs alongside. Awaited in the ready handler, before

@@ -35,7 +35,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { afterAll, afterEach, beforeEach, it, vi } from "vitest";
-import { dataDir, initDataDirAt } from "@host/lib/util/paths";
+import { dataDir, initDataDirAt } from "@shared/paths";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,

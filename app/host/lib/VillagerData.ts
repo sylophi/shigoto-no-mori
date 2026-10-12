@@ -65,7 +65,7 @@ import {
   WIKI_API,
   WIKI_USER_AGENT,
 } from "@shared/villagers/wiki";
-import { dataDir } from "./util/paths";
+import { dataDir } from "@shared/paths";
 
 // Villagers per API request (the API's cap on titles), and faces in
 // flight at once.

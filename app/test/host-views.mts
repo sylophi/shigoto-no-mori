@@ -37,7 +37,7 @@ import { listWorktrees } from "../host/lib/git/worktrees.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
 import { sharedSettingsCopy } from "../host/lib/sharedSettings/store.ts";
-import { initDataDirAt } from "../host/lib/util/paths.ts";
+import { initDataDirAt } from "../shared/paths.ts";
 import type { MirrorEngine } from "../host/mirror/MirrorEngine.ts";
 import { standInMirror } from "./lib/hostStandIns.mts";
 import {

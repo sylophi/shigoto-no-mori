@@ -7,11 +7,11 @@ import {
   HOST_FACTS_FLAG,
   type HostFacts,
   HostFactsSchema,
-} from "@host/lib/HostFacts";
+} from "@shared/hostFacts";
 
-let parsed: HostFacts["Service"] | undefined;
+let parsed: HostFacts | undefined;
 
-export function hostFacts(): HostFacts["Service"] {
+export function hostFacts(): HostFacts {
   if (parsed !== undefined) return parsed;
   const arg = process.argv.find((value) => value.startsWith(HOST_FACTS_FLAG));
   if (arg === undefined) throw new Error("the host was started without facts");

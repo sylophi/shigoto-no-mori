@@ -63,7 +63,7 @@ const APP_CONTRACT_PREFIX = "SHIGOMORI_";
 // the app for the app's whole life. The dev-only inputs (the debug
 // port, the profile) never reach a packaged build. The data dir
 // override is inherited by the app's children on purpose (initDataDir
-// in host/lib/util/paths.ts).
+// in shared/paths.ts).
 const LAUNCHER_KEYS = ["SHIGOMORI_DATA_DIR"] as const;
 
 // State of the capture shell's own session, not exports of its startup

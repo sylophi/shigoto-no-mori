@@ -5,7 +5,7 @@
 import { powerMonitor } from "electron";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { lifetime } from "@host/lib/util/lifetimes";
+import { lifetime } from "@shared/lifetimes";
 import * as HostProcess from "./hostProcess";
 import * as Guide from "./electron/guide";
 import * as Updater from "./electron/updater";

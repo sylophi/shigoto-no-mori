@@ -123,7 +123,7 @@ export async function wireHostCli(
 // graph does at launch, until `close`. `macfs` only matters to a proof
 // that reaches the darwin helper.
 export async function hostEngine(dataDir: string, macfs = "macfs") {
-  const { initDataDirAt } = await import("@host/lib/util/paths");
+  const { initDataDirAt } = await import("@shared/paths");
   const Engine = await import("@host/lib/engine");
   initDataDirAt(dataDir);
   process.env["SHIGOMORI_DATA_DIR"] = dataDir;

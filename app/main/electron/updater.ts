@@ -32,7 +32,7 @@ import {
   StagedManifestSchema,
   UpdateStageResultSchema,
 } from "@shigomori/contracts/schemas";
-import { dataDir } from "@host/lib/util/paths";
+import { dataDir } from "@shared/paths";
 import { readJson } from "../core/files/jsonFile";
 import { busyRemoteRefusal } from "@shared/busy";
 import { host, noteUpdaterState } from "../hostProcess";

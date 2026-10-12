@@ -22,7 +22,7 @@ import {
 import { checkNewCheckoutDestination } from "@host/lib/git/clone";
 import { GitRefusal, run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
-import { expandHome } from "@host/lib/util/paths";
+import { expandHome } from "@shared/paths";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);

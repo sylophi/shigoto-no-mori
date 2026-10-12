@@ -29,7 +29,7 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { log } from "@shared/log";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
-import { HOST_FACTS_FLAG, type HostFacts } from "@host/lib/HostFacts";
+import { HOST_FACTS_FLAG, type HostFacts } from "@shared/hostFacts";
 import { appPlace } from "./electron/appPlace";
 import { noteMigration } from "./ipc/modules/migration";
 import { relaunchAppUnattended } from "./electron/relaunch";
@@ -72,7 +72,7 @@ export type HostFailure = {
   readonly storeReport: string | null;
 };
 
-function hostFacts(): HostFacts["Service"] {
+function hostFacts(): HostFacts {
   return {
     ...appPlace(),
     appVersion: app.getVersion(),

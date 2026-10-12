@@ -6,7 +6,7 @@ import { app, ipcMain, MessageChannelMain, type WebContents } from "electron";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
-import { layerLatch } from "@host/lib/util/layerLatch";
+import { layerLatch } from "@shared/layerLatch";
 import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { isHostSide } from "@shigomori/contracts/link";
 import type {

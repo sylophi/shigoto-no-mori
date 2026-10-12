@@ -131,7 +131,7 @@ import { createMirrorGateway } from "@host/mirror/gateway";
 import { createMirrorHistory, type MirrorHistory } from "@host/mirror/history";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
-import { dataDir } from "@host/lib/util/paths";
+import { dataDir } from "@shared/paths";
 import {
   type AccountFacts,
   acceptsPeerCommands,
@@ -152,7 +152,7 @@ import {
   onPeerPush,
 } from "./wires";
 import { log, logFailure } from "@shared/log";
-import { layerLatch } from "@host/lib/util/layerLatch";
+import { layerLatch } from "@shared/layerLatch";
 import * as Graph from "./graph";
 
 // The pull/transplant orchestrations' and the port-forward engine's
