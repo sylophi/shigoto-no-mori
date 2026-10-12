@@ -11,10 +11,12 @@ import * as AccountPeers from "../../host/lib/control/AccountPeers.ts";
 import * as DeviceId from "../../host/lib/config/DeviceId.ts";
 import { DataDirHolders } from "../../host/lib/DataDirHolders.ts";
 import * as HostFacts from "../../host/lib/HostFacts.ts";
+import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Ops from "../../host/lib/engineOps.ts";
 import * as Shell from "../../host/lib/Shell.ts";
 import * as PeerReach from "../../host/ipc/PeerReach.ts";
 import { MirrorEngine } from "../../host/mirror/MirrorEngine.ts";
+import { MirrorSignals } from "../../host/mirror/MirrorSignals.ts";
 import * as PortForwards from "../../host/portForward/PortForwards.ts";
 import { inertMirrorImpl } from "./mirrorFakes.mts";
 
@@ -126,9 +128,38 @@ const standIns = Layer.mergeAll(
     }),
   ),
   Layer.succeed(DataDirHolders, DataDirHolders.of({ release: Effect.void })),
+  // Nothing the serving side tells reaches a window here.
+  Layer.succeed(
+    MirrorSignals,
+    MirrorSignals.of({
+      servingChanged: () => {},
+      gitChanged: () => {},
+      gitApplied: () => {},
+    }),
+  ),
 );
 
 // The forwards are the real engine's, over the stood-in peers.
 export const layer = PortForwards.layer({ onChange: () => {} }).pipe(
   Layer.provideMerge(standIns),
 );
+
+let pushListener: (push: HostPushes.Push) => void = () => {};
+// Every push the proofs' host services make, seen as it is published.
+export const onHostPush = (listener: (push: HostPushes.Push) => void): void => {
+  pushListener = listener;
+};
+
+// The host's pushes, as HostPushes.layer, told to onHostPush first.
+export const pushesLayer = Layer.effect(
+  HostPushes.HostPushes,
+  Effect.map(HostPushes.HostPushes, (pushes) =>
+    HostPushes.HostPushes.of({
+      ...pushes,
+      publish: (push) =>
+        Effect.sync(() => pushListener(push)).pipe(
+          Effect.andThen(pushes.publish(push)),
+        ),
+    }),
+  ),
+).pipe(Layer.provide(HostPushes.layer));

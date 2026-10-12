@@ -123,15 +123,11 @@ import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { syncHandlers } from "@host/ipc/modules/sync";
-import {
-  setWorktreeRemovalBroadcaster,
-  worktreesHandlers,
-} from "@host/ipc/modules/worktrees";
+import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { listMirrorInvites } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
 import { createLinkRegistrar } from "@host/socket/server";
-import * as HostPushes from "@host/lib/hostPushes";
 import * as Views from "@host/lib/views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
@@ -161,6 +157,8 @@ import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
 import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import {
+  onHostPush,
+  pushesLayer,
   standInAccount,
   standInDeviceId,
   standInMirror,
@@ -234,11 +232,9 @@ async function startLoopback(options: {
         }),
       ).pipe(
         Layer.provide(
-          Layer.mergeAll(
-            StoreChanges.layer,
-            HostPushes.layer,
-            Views.layer,
-          ).pipe(Layer.provideMerge(Layer.succeedContext(host))),
+          Layer.mergeAll(StoreChanges.layer, pushesLayer, Views.layer).pipe(
+            Layer.provideMerge(Layer.succeedContext(host)),
+          ),
         ),
       ),
       scope,
@@ -659,15 +655,16 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   // copy a stop removes is announced only once its session is gone,
   // since the delete follows the terminate.
   const removals: (WorktreeRemoval & { endedThen: string[] })[] = [];
-  setWorktreeRemovalBroadcaster((payload) =>
+  onHostPush((push) => {
+    if (push.channel !== "worktrees:removal") return;
     removals.push({
-      ...payload,
+      ...(push.payload as WorktreeRemoval),
       endedThen: [
         ...engine.state.terminated,
         ...listenerEngine.state.terminated,
       ],
-    }),
-  );
+    });
+  });
   removalsOf = (worktreeId: string) =>
     removals.filter((entry) => entry.worktreeId === worktreeId);
 

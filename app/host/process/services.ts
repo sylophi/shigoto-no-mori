@@ -8,6 +8,7 @@ import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import type * as Ports from "@host/lib/Ports";
 import type * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import type * as ScriptRuns from "@host/lib/scripts/pty";
+import type * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import type * as Sharing from "@host/lib/sharing";
 import type * as Moves from "@host/lib/sync/Moves";
 import type * as Terminals from "@host/lib/terminals/Terminals";
@@ -24,6 +25,7 @@ import type * as HostFacts from "@host/lib/HostFacts";
 import type * as Shell from "@host/lib/Shell";
 import type * as PeerReach from "@host/ipc/PeerReach";
 import type * as MirrorEngine from "@host/mirror/MirrorEngine";
+import type * as MirrorSignals from "@host/mirror/MirrorSignals";
 import type * as PortForwards from "@host/portForward/PortForwards";
 
 export type HostServices =
@@ -35,6 +37,7 @@ export type HostServices =
   | Ports.Ports
   | OrphanSweep.OrphanSweep
   | ScriptRuns.ScriptRuns
+  | ScriptChanges.ScriptChanges
   | Sharing.Sharing
   | Moves.Moves
   | Terminals.Terminals
@@ -49,5 +52,6 @@ export type HostServices =
   | PeerReach.PeerReach
   | AccountPeers.AccountPeers
   | MirrorEngine.MirrorEngine
+  | MirrorSignals.MirrorSignals
   | PortForwards.PortForwards
   | DataDirHolders.DataDirHolders;

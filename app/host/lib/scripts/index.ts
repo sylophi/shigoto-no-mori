@@ -29,6 +29,7 @@ import {
 import { SCRIPT_ENV_KEYS } from "@shigomori/contracts/scriptEnv";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { ScriptChanges } from "./ScriptChanges";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { OrphanSweep } from "./OrphanSweep";
@@ -287,81 +288,78 @@ const cliScripts = new Map<string, CliScriptRun>();
 // 143). `end` is for the engine run going away without an exit for a script
 // it started (killed, crashed): the booking is dropped so a pending
 // kill chain returns and nothing can be signalled at a stale pid.
-export function cliScriptStream(notify: NotifyScriptEvent): {
-  forward: (event: ScriptEvent) => void;
-  end: () => void;
-} {
-  const own = new Set<string>();
-  const drop = (runId: string): CliScriptRun | undefined => {
-    const run = cliScripts.get(runId);
-    if (!run) return undefined;
-    run.exited = true;
-    run.settle();
-    cliScripts.delete(runId);
-    own.delete(runId);
-    return run;
-  };
-  return {
-    forward: (event) => {
-      if (event.kind === "started" && event.pid !== undefined) {
-        const pid = event.pid;
-        let settle!: () => void;
-        const done = new Promise<void>((resolve) => {
-          settle = resolve;
-        });
-        const stream = createRunStream(notify);
-        cliScripts.set(event.runId, {
-          runId: event.runId,
-          pid,
-          scriptName: runScriptName(event.slot),
-          exited: false,
-          cancelling: false,
-          done,
-          stream,
-          stop: (graceMs) => stopPidTree(pid, done, graceMs),
-          flushOutput: () => {},
-          settle,
-          projectId: event.projectId,
-          worktreeId: event.worktreeId,
-          slot: event.slot,
-          startedAt: Date.now(),
-        });
-        own.add(event.runId);
-        runningScriptsChanged();
-        notify(event);
-        return;
-      }
-      // A booked run's events go through its stream, so a window that
-      // attached to it hears them too.
-      const run = cliScripts.get(event.runId);
-      if (event.kind === "exit" && run) {
-        drop(event.runId);
-        if (run.cancelling) event = { ...event, code: null };
-        runningScriptsChanged();
-      }
-      (run?.stream.emit ?? notify)(event);
+export const cliScriptStream = (notify: NotifyScriptEvent) =>
+  Effect.map(
+    ScriptChanges,
+    ({
+      announce,
+    }): {
+      forward: (event: ScriptEvent) => void;
+      end: () => void;
+    } => {
+      const own = new Set<string>();
+      const drop = (runId: string): CliScriptRun | undefined => {
+        const run = cliScripts.get(runId);
+        if (!run) return undefined;
+        run.exited = true;
+        run.settle();
+        cliScripts.delete(runId);
+        own.delete(runId);
+        return run;
+      };
+      return {
+        forward: (event) => {
+          if (event.kind === "started" && event.pid !== undefined) {
+            const pid = event.pid;
+            let settle!: () => void;
+            const done = new Promise<void>((resolve) => {
+              settle = resolve;
+            });
+            const stream = createRunStream(notify);
+            cliScripts.set(event.runId, {
+              runId: event.runId,
+              pid,
+              scriptName: runScriptName(event.slot),
+              exited: false,
+              cancelling: false,
+              done,
+              stream,
+              stop: (graceMs) => stopPidTree(pid, done, graceMs),
+              flushOutput: () => {},
+              settle,
+              projectId: event.projectId,
+              worktreeId: event.worktreeId,
+              slot: event.slot,
+              startedAt: Date.now(),
+            });
+            own.add(event.runId);
+            announce();
+            notify(event);
+            return;
+          }
+          // A booked run's events go through its stream, so a window that
+          // attached to it hears them too.
+          const run = cliScripts.get(event.runId);
+          if (event.kind === "exit" && run) {
+            drop(event.runId);
+            if (run.cancelling) event = { ...event, code: null };
+            announce();
+          }
+          (run?.stream.emit ?? notify)(event);
+        },
+        end: () => {
+          if (own.size === 0) return;
+          for (const runId of own) {
+            const run = drop(runId);
+            // Its exit never came, so it is said here: the window that
+            // started it and any that attached would otherwise wait on it.
+            run?.stream.emit({ runId, kind: "exit", code: null });
+          }
+          announce();
+        },
+      };
     },
-    end: () => {
-      if (own.size === 0) return;
-      for (const runId of own) {
-        const run = drop(runId);
-        // Its exit never came, so it is said here: the window that
-        // started it and any that attached would otherwise wait on it.
-        run?.stream.emit({ runId, kind: "exit", code: null });
-      }
-      runningScriptsChanged();
-    },
-  };
-}
-
-// Told whenever a script starts or ends, whoever ran it, so the
-// binding can tell every window and peer (scripts:changed). One
-// listener: the binding is the only one that asks.
-let runningScriptsChanged: () => void = () => {};
-
-export function onRunningScriptsChanged(listener: () => void): void {
-  runningScriptsChanged = listener;
-}
+  );
 
 // Ref-counted: overlapping deleters can mark the same worktree (a
 // per-worktree delete racing a nuke that lists it too), and the guard
@@ -658,6 +656,7 @@ const stopPidTree = Effect.fnUntraced(function* (
 export const startScript = Effect.fn("Scripts.start")(function* (
   args: RunArgs,
 ) {
+  const { announce } = yield* ScriptChanges;
   const refuse = (reason: string) => new ScriptRefusedError({ reason });
   if (shuttingDown) {
     return yield* refuse(
@@ -773,7 +772,7 @@ export const startScript = Effect.fn("Scripts.start")(function* (
     flushOutput,
   };
   runningScripts.set(runId, record);
-  runningScriptsChanged();
+  announce();
 
   pty.onData((data) => {
     pendingOutput += data;
@@ -800,7 +799,7 @@ export const startScript = Effect.fn("Scripts.start")(function* (
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
-    runningScriptsChanged();
+    announce();
   });
 
   // Recorded until its exit, so a crash that skips the kill chains

@@ -28,9 +28,9 @@ import * as Engine from "../../host/lib/engine.ts";
 import * as BackgroundFetch from "../../host/lib/git/backgroundFetch.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
+import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as Terrier from "../../host/lib/terrier.ts";
-import * as HostPushes from "../../host/lib/hostPushes.ts";
 import * as Sharing from "../../host/lib/sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
 import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
@@ -128,13 +128,14 @@ const runtime = ManagedRuntime.make(
       ),
     ),
     Layer.provideMerge(
-      Layer.mergeAll(HostPushes.layer, EngineStoreChanges.layer),
+      Layer.mergeAll(HostStandIns.pushesLayer, EngineStoreChanges.layer),
     ),
     // The copy of the shared settings, read from the store.
     Layer.provideMerge(SharedSettingsStore.layer),
     // What the app's root provides from its own wiring.
     Layer.provideMerge(HostStandIns.layer),
     Layer.provideMerge(ScriptRuns.layer),
+    Layer.provideMerge(ScriptChanges.layer),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),
     Layer.provideMerge(engine),
