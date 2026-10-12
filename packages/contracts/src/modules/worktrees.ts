@@ -374,4 +374,12 @@ export const worktreesContract = defineContract(
   push("removal", WorktreeRemovalSchema, {
     remote: true,
   }),
+  // A file changed in one of the project's working trees (the host's
+  // watch on them, host/lib/GitWatcher.ts): its rows are read again.
+  // The host's own signal to its views; a viewer reads the rows.
+  push("filesChanged", ProjectScopedPayloadSchema),
+  // A window looking at this host again (it regained focus, or a
+  // session landed): every project's rows are read again, for an edit
+  // no watch saw. Read-class, like the view it refreshes.
+  invoke("reread", VoidSchema, VoidSchema, { remote: true, gated: false }),
 );

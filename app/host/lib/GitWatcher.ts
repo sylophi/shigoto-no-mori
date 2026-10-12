@@ -16,11 +16,15 @@
 // commit, logs/ mirrors every ref update, FETCH_HEAD is rewritten by
 // the app's own minute sweep, and `index` is refreshed by the very
 // `git status` the app runs to list a worktree, which would loop a
-// refetch into another refetch. Uncommitted file edits are therefore
-// NOT observed here (they live in the working tree, which is far too
-// big to watch). Dirty state still refreshes on focus and on every
-// other ping, and the moment the edit is committed the ref moves and
-// this fires.
+// refetch into another refetch. Uncommitted file edits are not seen
+// there: they live in the working trees.
+//
+// So each worktree's working tree is watched too, its own `.git` left
+// out, and a change there is a second, quieter signal
+// (worktrees:filesChanged): the project's rows are read again (each
+// worktree's changed files), and nothing else moves. Which working
+// trees a project has is read off its git directory (the main checkout,
+// and each `worktrees/<name>/gitdir`), again whenever that changes.
 //
 // The signal is project scoped (git:projectChanged) rather than the
 // broad externalChange sweep: a commit in one repo says nothing about
@@ -53,6 +57,16 @@ const RELEVANT = [
   // own appearing and going, not their contents' churn.
   /^(worktrees\/[^/]+\/)?(MERGE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|BISECT_LOG|sequencer|rebase-merge|rebase-apply)$/,
 ];
+
+// Any `.git` in a working tree (the main checkout's directory, a linked
+// worktree's file, a submodule's) churns with every git command the
+// app runs, its own reads of the rows included.
+const GIT_SEGMENT = /(^|\/)\.git(\/|$)/;
+
+export function isWorkingTreeChange(file: string): boolean {
+  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
+  return !GIT_SEGMENT.test(normalized);
+}
 
 // Exported for the git-watcher check, which pins the allowlist: the
 // loop-safety of this watcher rests on it.
@@ -95,8 +109,47 @@ export const refsDirOf = (projectPath: string) =>
     return path.isAbsolute(dir) ? dir : path.resolve(gitDir, dir);
   });
 
+// The working trees of a project: its own folder when it is a checkout,
+// and every linked worktree its git directory lists, by the `.git` path
+// each `worktrees/<name>/gitdir` names. Read off the files, with no git.
+const workingTreesOf = (projectPath: string, gitDir: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const trees = new Set<string>();
+    if (
+      yield* fs
+        .exists(path.join(projectPath, ".git"))
+        .pipe(Effect.orElseSucceed(() => false))
+    ) {
+      trees.add(projectPath);
+    }
+    const entries = yield* fs
+      .readDirectory(path.join(gitDir, "worktrees"))
+      .pipe(Effect.orElseSucceed((): string[] => []));
+    for (const entry of entries) {
+      const pointer = yield* fs
+        .readFileString(path.join(gitDir, "worktrees", entry, "gitdir"))
+        .pipe(Effect.option);
+      if (Option.isNone(pointer)) continue;
+      const dotGit = pointer.value.trim();
+      if (dotGit === "") continue;
+      const tree = path.dirname(
+        path.isAbsolute(dotGit) ? dotGit : path.resolve(gitDir, dotGit),
+      );
+      if (yield* fs.exists(tree).pipe(Effect.orElseSucceed(() => false))) {
+        trees.add(tree);
+      }
+    }
+    return trees;
+  });
+
+const treeKey = (projectId: string, tree: string) => `${projectId}\0${tree}`;
+
 export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
+  // A file changed in one of the project's working trees.
+  onFilesChanged: (projectId: string) => void;
   // The projects to follow. Defaults to the registry. The git-watcher
   // check injects its own list against a sandbox repository.
   projects?: () => Project[];
@@ -121,19 +174,83 @@ const make = (deps: GitWatcherDeps) =>
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     // Each watched project's git directory and the fiber watching it.
     const watches = yield* FiberMap.make<string>();
+    // Each watched working tree, by project and path, and its fiber.
+    const treeWatches = yield* FiberMap.make<string>();
+    const trees = new Map<string, ReadonlySet<string>>();
     // What each running watch watches. Written only under `serial`, so
     // two reconciles fired at once (an external change and a settled
     // mutation) cannot interleave their reads of the registry.
-    const gitDirs = new Map<string, { readonly gitDir: string }>();
+    const gitDirs = new Map<
+      string,
+      { readonly gitDir: string; readonly projectPath: string }
+    >();
     const serial = yield* Semaphore.make(1);
 
+    // One working tree's edits, debounced. A tree that goes away drops
+    // its watch, and the next read of the project's trees settles it.
+    const watchTree = (projectId: string, tree: string) =>
+      fs.watch(tree, { recursive: true }).pipe(
+        Stream.filter((event) => isWorkingTreeChange(event.path)),
+        Stream.debounce(DEBOUNCE_MS),
+        Stream.runForEach(() =>
+          Effect.sync(() => deps.onFilesChanged(projectId)),
+        ),
+        Effect.ignore,
+      );
+
+    // The project's working trees watched, and only those.
+    const followTrees = (
+      projectId: string,
+      projectPath: string,
+      gitDir: string,
+    ) =>
+      Effect.gen(function* () {
+        const wanted = yield* workingTreesOf(projectPath, gitDir).pipe(
+          Effect.provide(platform),
+        );
+        const held = trees.get(projectId) ?? new Set<string>();
+        for (const tree of held) {
+          if (!wanted.has(tree)) {
+            yield* FiberMap.remove(treeWatches, treeKey(projectId, tree));
+          }
+        }
+        for (const tree of wanted) {
+          if (held.has(tree)) continue;
+          yield* FiberMap.run(
+            treeWatches,
+            treeKey(projectId, tree),
+            watchTree(projectId, tree),
+          );
+        }
+        trees.set(projectId, wanted);
+      });
+
+    const dropTrees = (projectId: string) =>
+      Effect.gen(function* () {
+        for (const tree of trees.get(projectId) ?? []) {
+          yield* FiberMap.remove(treeWatches, treeKey(projectId, tree));
+        }
+        trees.delete(projectId);
+      });
+
     // One project's pings: its git directory's relevant changes,
-    // debounced.
-    const watch = (projectId: string, entry: { readonly gitDir: string }) =>
+    // debounced, and its working trees followed as worktrees come and go.
+    const watch = (
+      projectId: string,
+      entry: { readonly gitDir: string; readonly projectPath: string },
+    ) =>
       fs.watch(entry.gitDir, { recursive: true }).pipe(
         Stream.filter((event) => isRelevantGitPath(event.path)),
         Stream.debounce(DEBOUNCE_MS),
-        Stream.runForEach(() => Effect.sync(() => deps.onChange(projectId))),
+        Stream.runForEach(() =>
+          Effect.sync(() => deps.onChange(projectId)).pipe(
+            Effect.andThen(
+              followTrees(projectId, entry.projectPath, entry.gitDir).pipe(
+                serial.withPermits(1),
+              ),
+            ),
+          ),
+        ),
         // The repository went away (deleted, unmounted), or is not
         // watchable right now: the watch drops, and a later reconcile
         // re-adds it if it comes back.
@@ -152,22 +269,31 @@ const make = (deps: GitWatcherDeps) =>
       ).pipe(Effect.option);
       // The registry is unreadable right now, so keep what is watched.
       if (Option.isNone(projects)) return;
-      const wanted = new Map<string, string>();
+      const wanted = new Map<
+        string,
+        { readonly gitDir: string; readonly projectPath: string }
+      >();
       for (const project of projects.value) {
         const gitDir = yield* refsDirOf(project.path).pipe(
           Effect.provide(platform),
         );
-        if (gitDir !== null) wanted.set(project.id, gitDir);
+        if (gitDir !== null) {
+          wanted.set(project.id, { gitDir, projectPath: project.path });
+        }
       }
       for (const [projectId, { gitDir }] of gitDirs) {
-        if (wanted.get(projectId) !== gitDir) {
+        if (wanted.get(projectId)?.gitDir !== gitDir) {
           gitDirs.delete(projectId);
           yield* FiberMap.remove(watches, projectId);
         }
       }
-      for (const [projectId, gitDir] of wanted) {
+      for (const projectId of trees.keys()) {
+        if (!wanted.has(projectId)) yield* dropTrees(projectId);
+      }
+      for (const [projectId, entry] of wanted) {
+        // A worktree moved by `sm` writes the store, which reconciles.
+        yield* followTrees(projectId, entry.projectPath, entry.gitDir);
         if (gitDirs.has(projectId)) continue;
-        const entry = { gitDir };
         gitDirs.set(projectId, entry);
         yield* FiberMap.run(watches, projectId, watch(projectId, entry));
       }

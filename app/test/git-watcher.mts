@@ -8,8 +8,11 @@
 // watcher's loop-safety rests on that allowlist (the app's own
 // `git status` must never feed a refetch that feeds a `git status`),
 // so this is where it is pinned. Also covered: refsDirOf resolving a
-// linked worktree's `.git` file to the repository's common dir, and
-// the reconcile dropping a project that left the registry.
+// linked worktree's `.git` file to the repository's common dir, the
+// reconcile dropping a project that left the registry, and the working
+// trees' watch: an edit in the main checkout or a linked worktree
+// lands as one files change, `.git` churn as none, and a worktree
+// added or removed is followed.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
@@ -17,10 +20,11 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import { watch, writeFileSync } from "node:fs";
+import { mkdirSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   isRelevantGitPath,
+  isWorkingTreeChange,
   refsDirOf,
   GitWatcher,
   layer as gitWatcherLayer,
@@ -110,6 +114,28 @@ it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operatio
   }
 });
 
+it("working trees: a file anywhere counts, and anything under a .git does not", () => {
+  for (const path of [
+    "a.txt",
+    "src/b.ts",
+    "node_modules/x/y.js",
+    ".github/ci.yml",
+    ".gitignore",
+  ]) {
+    assert.ok(isWorkingTreeChange(path), `${path} must count`);
+  }
+  for (const path of [
+    ".git",
+    ".git/index",
+    ".git/objects/ab/cd",
+    "sub/.git",
+    "sub/.git/index",
+    "sub\\.git\\HEAD",
+  ]) {
+    assert.ok(!isWorkingTreeChange(path), `${path} must not count`);
+  }
+});
+
 const refsDir = (path: string) =>
   Effect.runPromise(refsDirOf(path).pipe(Effect.provide(NodeServices.layer)));
 
@@ -135,6 +161,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   assert.equal(await refsDir(join(root, "nowhere")), null);
 
   const changes: string[] = [];
+  const edits: string[] = [];
   let projects = [{ id: "p1", name: "repo", path: repo }];
   // (Re)start the watcher over the sandbox, past what came before, and
   // let the platform watcher settle before producing events.
@@ -153,6 +180,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
     runtime = ManagedRuntime.make(
       gitWatcherLayer({
         onChange: (projectId) => changes.push(projectId),
+        onFilesChanged: (projectId) => edits.push(projectId),
         projects: () => projects,
       }).pipe(Layer.provide(NodeServices.layer)),
     );
@@ -174,6 +202,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
     [],
     "status, an edit and a staged add must not ping (they would loop)",
   );
+  assert.deepEqual(edits, ["p1"], "the edit lands as one files change");
 
   // A commit in the linked worktree moves refs/heads/feat.
   git(worktree, "commit", "-q", "-m", "two");
@@ -193,6 +222,37 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   await delay(350);
   assert.deepEqual(changes, ["p1", "p1", "p1"]);
 
+  // Edits in either working tree land as files changes, and `.git`
+  // churn (status refreshing the main checkout's index) as none.
+  edits.length = 0;
+  git(repo, "status", "--porcelain");
+  await delay(700);
+  assert.deepEqual(edits, [], "the main checkout's .git churn is no edit");
+  writeFileSync(join(repo, "c.txt"), "three\n");
+  await waitFor(() => edits.length >= 1, "the main checkout's edit");
+  writeFileSync(join(worktree, "c.txt"), "three\n");
+  await waitFor(() => edits.length >= 2, "the linked worktree's edit");
+  await delay(350);
+  assert.deepEqual(edits, ["p1", "p1"]);
+
+  // A worktree added after the watch began is followed, and one
+  // removed stops being watched.
+  const later = join(root, "later");
+  git(repo, "worktree", "add", "-q", "-b", "later", later);
+  await waitFor(() => changes.length >= 4, "the new worktree to ping");
+  await delay(350);
+  edits.length = 0;
+  writeFileSync(join(later, "e.txt"), "five\n");
+  await waitFor(() => edits.length >= 1, "the added worktree's edit");
+  git(repo, "worktree", "remove", "--force", later);
+  await waitFor(() => changes.length >= 5, "the removal to ping");
+  await delay(350);
+  edits.length = 0;
+  mkdirSync(later);
+  writeFileSync(join(later, "f.txt"), "six\n");
+  await delay(700);
+  assert.deepEqual(edits, [], "a removed worktree is no longer watched");
+
   // The project leaves the registry: its watch closes and a later
   // commit is not observed.
   await restart();
@@ -202,13 +262,16 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
       yield* (yield* GitWatcher).reconcile;
     }),
   );
+  const before = changes.length;
+  edits.length = 0;
   writeFileSync(join(worktree, "d.txt"), "four\n");
   git(worktree, "add", "d.txt");
   git(worktree, "commit", "-q", "-m", "four");
   await delay(700);
   assert.equal(
     changes.length,
-    3,
+    before,
     "a project dropped from the registry must not ping",
   );
+  assert.deepEqual(edits, [], "nor report its edits");
 });

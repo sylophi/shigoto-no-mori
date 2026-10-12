@@ -9,6 +9,12 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { remoteDevicesAtom } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
 
+// The host's worktree rows read again, for an edit its watch missed.
+function reread(deviceId: string): void {
+  const api = apiFor(deviceId);
+  void api.run(api.worktrees.reread()).catch(() => undefined);
+}
+
 export function startRemoteSweepRequests(
   registry: AtomRegistry.AtomRegistry,
 ): void {
@@ -46,7 +52,9 @@ export function startRemoteSweepRequests(
       return;
     }
     for (const device of registry.get(remoteDevicesAtom)) {
-      if (device.status.phase === "connected") request(device.deviceId);
+      if (device.status.phase !== "connected") continue;
+      request(device.deviceId);
+      reread(device.deviceId);
     }
   });
   // Signing out drops every peer api. A renewal firing after that
@@ -56,6 +64,8 @@ export function startRemoteSweepRequests(
   // the boot-time ask as well. A landed session's first reads come
   // from the host's caches, as old as the last time anyone looked.
   onSessionLanded((deviceId) => {
-    if (focused) request(deviceId);
+    if (!focused) return;
+    request(deviceId);
+    reread(deviceId);
   });
 }

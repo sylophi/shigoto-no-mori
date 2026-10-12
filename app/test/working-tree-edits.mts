@@ -1,0 +1,130 @@
+// Durable proof that a file edited outside the app reaches the
+// worktree rows (the `worktrees:watch` view, which the sidebar and the
+// worktree page read): through the host's watch on the working trees
+// (host/lib/GitWatcher.ts) within a couple of seconds, with no window
+// focused, and through `worktrees:reread`, which a window sends as it
+// regains focus, for an edit no watch saw.
+//
+// Run: pnpm test working-tree-edits.
+import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import type { Worktree } from "@shigomori/contracts/schemas";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { afterAll, beforeAll, it } from "vitest";
+import {
+  worktreesHandlers,
+  worktreesViews,
+} from "../host/ipc/modules/worktrees.ts";
+import * as GitWatcher from "../host/lib/GitWatcher.ts";
+import * as HostPushes from "../host/lib/HostPushes.ts";
+import { addProject } from "../host/lib/projects/index.ts";
+import { initDataDirAt } from "../shared/paths.ts";
+import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
+import {
+  makeTracker,
+  sandboxGit,
+  scrubProcessGitEnv,
+  tempDir,
+} from "./lib/checkKit.mts";
+
+scrubProcessGitEnv();
+const { track, teardown } = makeTracker();
+const git = sandboxGit();
+let repo: string;
+
+beforeAll(() => {
+  initDataDirAt(engineDataDir);
+  repo = join(tempDir("sm-edits-", track), "repo");
+  mkdirSync(repo);
+  git(repo, "init", "-q", "-b", "main");
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "a");
+});
+afterAll(() => teardown());
+
+let projectId = "";
+
+// The rows' changed files as the view next says them, within `within`.
+const changedCountWithin = (
+  values: Queue.Dequeue<readonly Worktree[], unknown>,
+  within: Duration.Input,
+) =>
+  Queue.take(values).pipe(
+    Effect.map((rows) => rows[0]?.changedCount),
+    Effect.timeoutOrElse({
+      duration: within,
+      orElse: () => Effect.succeed("no new rows" as const),
+    }),
+  );
+
+it("an edit outside the app reaches the rows through the working tree's watch, with no focus, and through a reread", async () => {
+  await runHost(
+    Effect.gen(function* () {
+      const project = yield* addProject(repo);
+      projectId = project.id;
+      const pushes = yield* HostPushes.HostPushes;
+      const values = yield* Stream.toQueue(
+        worktreesViews.watch({ projectId: project.id }),
+        { capacity: "unbounded" },
+      );
+      const [first] = yield* Queue.take(values);
+      assert.equal(first?.changedCount, 0);
+
+      // The watch as the host's root wires it (process/layer.ts): an
+      // edit is the project's files push.
+      yield* Layer.build(
+        GitWatcher.layer({
+          onChange: () => {},
+          onFilesChanged: (changed) =>
+            Effect.runFork(
+              HostPushes.push(worktreesContract, "filesChanged", {
+                projectId: changed,
+              }).pipe(Effect.provideService(HostPushes.HostPushes, pushes)),
+            ),
+          projects: () => [project],
+        }).pipe(Layer.provide(NodeServices.layer)),
+      );
+      // Past the platform watch's first events (FSEvents hands a new
+      // watch what came just before it).
+      yield* Effect.sleep("500 millis");
+
+      writeFileSync(join(repo, "b.txt"), "b\n");
+      assert.equal(
+        yield* changedCountWithin(values, "2 seconds"),
+        1,
+        "the edit reaches the rows within two seconds",
+      );
+
+      writeFileSync(join(repo, "a.txt"), "changed\n");
+      assert.equal(yield* changedCountWithin(values, "2 seconds"), 2);
+    }).pipe(Effect.scoped),
+  );
+
+  // With no watch running, an edit waits for a window's reread.
+  await runHost(
+    Effect.gen(function* () {
+      const values = yield* Stream.toQueue(
+        worktreesViews.watch({ projectId }),
+        { capacity: "unbounded" },
+      );
+      const [first] = yield* Queue.take(values);
+      assert.equal(first?.changedCount, 2);
+      writeFileSync(join(repo, "c.txt"), "c\n");
+      assert.equal(
+        yield* changedCountWithin(values, "1 second"),
+        "no new rows",
+        "nothing watches the tree here",
+      );
+      yield* worktreesHandlers.reread();
+      assert.equal(yield* changedCountWithin(values, "2 seconds"), 3);
+    }).pipe(Effect.scoped),
+  );
+});

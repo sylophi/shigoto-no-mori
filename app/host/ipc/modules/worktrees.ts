@@ -72,6 +72,7 @@ import {
   findWorktreeIdentity,
   findWorktreePath,
   listWorktrees,
+  loadProjects,
 } from "@host/lib/projects";
 import {
   assertWorktreeMutable,
@@ -120,6 +121,13 @@ const gitMoved = (projectId: string) =>
       return fetched.projectId === projectId;
     }),
   );
+
+// A file edited in one of the project's working trees, or a window
+// asking for the rows again (`reread`).
+const filesChanged = (projectId: string) =>
+  Views.pushed(worktreesContract, "filesChanged", (changed) => {
+    return changed.projectId === projectId;
+  });
 
 // The transplant's teardown refused: scripts run in the worktree.
 class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>()(
@@ -217,16 +225,18 @@ export const worktreesViews: ViewHandlers<
           "device_config",
         ),
         gitMoved(projectId),
+        filesChanged(projectId),
       ),
     ),
-  // A file edited in the worktree moves no ref and writes no row, so the
-  // list is also read again every few seconds.
+  // The open page's changes: also read again every few seconds, for an
+  // edit no watch saw.
   watchChangeStatus: (input) =>
     Views.view(
       `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`,
       () => atPath(input, listChangesForPage),
       Views.either(
         gitMoved(input.projectId),
+        filesChanged(input.projectId),
         Views.pushed(mirrorContract, "gitChanged", (staged) => {
           return staged.worktreeId === input.worktreeId;
         }),
@@ -239,6 +249,16 @@ export const worktreesHandlers = {
   // The rows are the engine's (`sm worktrees list`), which also answers
   // an unknown project id with the entity-gone error.
   list: ({ projectId }) => listWorktrees(projectId),
+
+  reread: () =>
+    Effect.forEach(
+      loadProjects(),
+      (project) =>
+        HostPushes.push(worktreesContract, "filesChanged", {
+          projectId: project.id,
+        }),
+      { discard: true },
+    ),
 
   // Lifecycle mutations run the engine a terminal runs.
   create: (
