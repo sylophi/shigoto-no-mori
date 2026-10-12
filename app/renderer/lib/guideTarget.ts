@@ -18,19 +18,35 @@ export interface TargetLike {
     width: number;
     height: number;
   };
+  readonly ownerDocument: {
+    getElementById(id: string): { readonly textContent: string | null } | null;
+  };
 }
 
 // The attributes that name a control and stay the same through a
-// re-render. Not an id or aria-labelledby, which a remount draws anew.
+// re-render. Not an id or aria-labelledby's ids, which a remount draws
+// anew: what those ids label it with is read instead.
 const NAMING = ["role", "aria-label", "href", "name"] as const;
 
-// Which control an element is: its tag, the attributes that name it and
-// its text, which a re-render of the same control draws again.
+const collapsed = (text: string | null) =>
+  (text ?? "").replace(/\s+/g, " ").trim();
+
+// Which control an element is: its tag, the attributes that name it, the
+// text of what labels it, and its own text, which a re-render of the same
+// control draws again. Two switches named only by their labels differ by
+// those.
 export function targetKey(el: TargetLike): string {
   return [
     el.tagName,
     ...NAMING.map((name) => el.getAttribute(name) ?? ""),
-    (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+    collapsed(
+      (el.getAttribute("aria-labelledby") ?? "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => el.ownerDocument.getElementById(id)?.textContent ?? "")
+        .join(" "),
+    ),
+    collapsed(el.textContent),
   ].join("\u0000");
 }
 

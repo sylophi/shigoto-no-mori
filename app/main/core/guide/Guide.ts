@@ -342,6 +342,9 @@ const make = Effect.gen(function* () {
   const sessions = yield* Ref.make<ReadonlyMap<string, Session>>(new Map());
   // One action at a time, so two never interleave their input.
   const lock = yield* Semaphore.make(1);
+  // One start or end at a time, so a window never holds two sessions,
+  // and a launch has opened or failed before the next one replaces it.
+  const turns = yield* Semaphore.make(1);
 
   const byWindow = (windowId: number) =>
     Effect.map(Ref.get(sessions), (all) =>
@@ -367,7 +370,7 @@ const make = Effect.gen(function* () {
   const end = Effect.fn("Guide.end")(function* (windowId: number) {
     const session = yield* byWindow(windowId);
     if (session !== undefined) yield* endSession(session);
-  });
+  }, turns.withPermits(1));
 
   const start = Effect.fn("Guide.start")(function* (
     windowId: number,
@@ -390,7 +393,7 @@ const make = Effect.gen(function* () {
     yield* windows
       .launch({ session: session.token, harness })
       .pipe(Effect.onError(() => endSession(session)));
-  });
+  }, turns.withPermits(1));
 
   const read = Effect.fn("Guide.read")(function* (windowId: number) {
     const session = yield* byWindow(windowId);

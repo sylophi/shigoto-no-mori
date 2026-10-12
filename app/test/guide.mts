@@ -113,10 +113,14 @@ function makeShell() {
                 held.window.attached = true;
                 return held.page;
               }),
+              // Detaching takes a turn, as the DevTools protocol's does.
               () =>
-                Effect.sync(() => {
-                  held.window.detached = true;
-                }),
+                Effect.andThen(
+                  Effect.yieldNow,
+                  Effect.sync(() => {
+                    held.window.detached = true;
+                  }),
+                ),
             );
           },
           tell: (windowId, state) =>
@@ -270,6 +274,34 @@ it("refuses a token once its window stops it, opens another or closes", async ()
   );
 });
 
+it("keeps one session a window when two starts overlap", async () => {
+  const shell = makeShell();
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const first = yield* shell.start(guide, 1, "claude");
+      // Attached, so replacing it takes a turn.
+      yield* guide.drive(first, { _tag: "look" });
+      const [one, two] = yield* Effect.all(
+        [shell.start(guide, 1, "claude"), shell.start(guide, 1, "codex")],
+        { concurrency: "unbounded" },
+      );
+      const live = [];
+      for (const token of new Set([first, one, two])) {
+        const exit = yield* Effect.exit(guide.drive(token, { _tag: "look" }));
+        if (Exit.isSuccess(exit)) live.push(token);
+      }
+      assert.equal(live.length, 1);
+      // Stop leaves none.
+      yield* guide.end(1);
+      for (const token of live) {
+        assert.ok(
+          ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
+        );
+      }
+    }),
+  );
+});
+
 it("ends a window's session as the window closes, and leaves none when the agent won't open", async () => {
   const shell = makeShell();
   await run(shell.layer, (guide) =>
@@ -282,7 +314,8 @@ it("ends a window's session as the window closes, and leaves none when the agent
       assert.ok(
         ended(yield* Effect.exit(guide.drive(token, { _tag: "look" }))),
       );
-      assert.ok(shell.window(1).detached);
+      // Its page detached, a turn after the session went.
+      while (!shell.window(1).detached) yield* Effect.yieldNow;
 
       shell.failLaunches();
       const failed = yield* Effect.exit(shell.start(guide, 2, "codex"));

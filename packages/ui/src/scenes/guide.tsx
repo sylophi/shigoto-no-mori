@@ -36,7 +36,7 @@ export function GuidePartsScene() {
           </div>
           <GuideCalloutView
             place={{
-              radius: "var(--radius-lg)",
+              radius: "9999px",
               ring: { x: 115, y: 24, width: 57, height: 28 },
               left: 115,
               top: 64,
@@ -52,7 +52,7 @@ export function GuidePartsScene() {
           </div>
           <GuideCalloutView
             place={{
-              radius: "var(--radius-lg)",
+              radius: "9999px",
               ring: { x: 24, y: 124, width: 50, height: 28 },
               left: 24,
               bottom: 64,

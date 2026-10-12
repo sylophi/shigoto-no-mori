@@ -2,8 +2,8 @@
 // re-render (renderer/lib/guideTarget.ts, which GuideCallout.tsx runs).
 //
 // Asserts: a control re-rendered into a new element is the same control
-// (its tag, role, label, link and text, whitespace aside, and not the ids
-// a remount draws anew), so the callout finds the replacement after the
+// (its tag, role, label, the text of what labels it, link and text,
+// whitespace aside, and not the ids a remount draws anew), so the callout finds the replacement after the
 // shell's mark went with the old one. Of two of one name, the one nearest
 // where the last stood is kept. A control the page no longer has, or one
 // whose text changed, is not found, so the ring goes rather than moving
@@ -20,6 +20,15 @@ import {
 
 type Fake = TargetLike & { readonly label: string };
 
+// The page's labels by id, which aria-labelledby names.
+const labels = new Map<string, string>();
+const doc = {
+  getElementById: (id: string) => {
+    const text = labels.get(id);
+    return text === undefined ? null : { textContent: text };
+  },
+};
+
 // An element as the page draws it: a tag, attributes, text and a box.
 function el(
   label: string,
@@ -33,6 +42,7 @@ function el(
     tagName,
     textContent: text,
     getAttribute: (name) => attributes[name] ?? null,
+    ownerDocument: doc,
     getBoundingClientRect: () => ({
       left: box.x,
       top: box.y,
@@ -83,6 +93,37 @@ it("keeps the nearest of two controls of one name", () => {
   const far = el("far", "BUTTON", {}, "Add port", { x: 600, y: 300 });
   const kept = el("kept", "BUTTON", {}, "Add port", { x: 1650, y: 880 });
   assert.equal(refindTarget(page(far, kept), key, near)?.label, "kept");
+});
+
+it("tells switches named only by their labels apart, through a remount", () => {
+  labels.set("a1", "Doubutsu theme");
+  labels.set("b1", "Clone files from an existing checkout");
+  const pointed = el(
+    "doubutsu",
+    "BUTTON",
+    { role: "switch", "aria-labelledby": "a1" },
+    "",
+  );
+  const key = targetKey(pointed);
+  const other = el(
+    "clone",
+    "BUTTON",
+    { role: "switch", "aria-labelledby": "b1" },
+    "",
+  );
+  assert.equal(refindTarget(page(other), key, { x: 0, y: 0 }), null);
+  // Remounted, its label drawn under a new id.
+  labels.set("a2", "Doubutsu theme");
+  const again = el(
+    "again",
+    "BUTTON",
+    { role: "switch", "aria-labelledby": "a2" },
+    "",
+  );
+  assert.equal(
+    refindTarget(page(other, again), key, { x: 0, y: 0 })?.label,
+    "again",
+  );
 });
 
 it("tells controls apart by tag, role, label and text", () => {
