@@ -146,6 +146,15 @@
     ) {
     min-height: var(--touch-target);
   }
+  /* A footer verb whose label gave way (the worktree page's footer,
+   footerFit.ts) is a bare icon packed beside its neighbours, so it gets
+   a full target's width for real: a hit area reaching past it would
+   read to the fit as overflow, and fold every other label too. */
+  [data-shell] footer [data-size]:has(> [data-collapsed]) {
+    min-width: var(--touch-target);
+    justify-content: center;
+  }
+
   /* The forest's row is a wrapper around its controls, so it is the
    wrapper that grows, with the controls centered in it at their drawn
    size: their hit areas then fill the row and stop at its edges. */

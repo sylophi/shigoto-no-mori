@@ -230,10 +230,17 @@ const stage = (shown: UpdaterState | null) =>
     }),
   ).pipe(Effect.timeout(STAGE_TIMEOUT_MS));
 
-const runCheck: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
+// A call turned away here leaves the flag to the check under way: only
+// a check that ran clears it.
+const runCheck: Effect.Effect<void, never, UpdaterServices> = Effect.suspend(
+  () =>
+    !started || checkInFlight || state.kind === "downloading"
+      ? Effect.void
+      : check,
+);
+
+const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
   function* () {
-    if (!started || checkInFlight) return;
-    if (state.kind === "downloading") return;
     checkInFlight = true;
     const shown = state.kind === "ready" ? state : null;
     if (shown === null) setState({ kind: "checking" });
