@@ -10,6 +10,9 @@
 //   - the next start's resume puts the title back under the worktree's
 //     own id, removes the partial copy and the journal, and the pointer
 //     was never written.
+// And for one whose copy landed whole but whose pointer was never
+// written: the next start undoes it the same way and removes the copy,
+// which would refuse every retry.
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
@@ -31,6 +34,7 @@ import {
   sandboxGit,
   scrubProcessGitEnv,
   tempDir,
+  waitFor,
 } from "./lib/checkKit.mts";
 
 scrubProcessGitEnv();
@@ -57,6 +61,31 @@ beforeAll(async () => {
 });
 afterAll(teardown);
 
+// Another volume: the data folder can't be renamed there. `stall`
+// names the renames the crash stops for good.
+const acrossVolumes = (
+  real: FileSystem.FileSystem,
+  stall: (from: string) => boolean = () => false,
+): FileSystem.FileSystem => ({
+  ...real,
+  rename: (from, to) =>
+    from === engineDataDir
+      ? Effect.fail(
+          PlatformError.systemError({
+            _tag: "Unknown",
+            module: "FileSystem",
+            method: "rename",
+            pathOrDescriptor: from,
+            cause: Object.assign(new Error("cross-device link"), {
+              code: "EXDEV",
+            }),
+          }),
+        )
+      : stall(from)
+        ? Effect.never
+        : real.rename(from, to),
+});
+
 const titleOf = (worktreeId: string) =>
   runHost(Ops.describeWorktree(projectId, worktreeId)).then(
     (row) => row.title,
@@ -82,24 +111,7 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   const move = runHost(
     Effect.gen(function* () {
       const real = yield* FileSystem.FileSystem;
-      // Another volume: the data folder can't be renamed there.
-      const fs: FileSystem.FileSystem = {
-        ...real,
-        rename: (from, to) =>
-          from === engineDataDir
-            ? Effect.fail(
-                PlatformError.systemError({
-                  _tag: "Unknown",
-                  module: "FileSystem",
-                  method: "rename",
-                  pathOrDescriptor: from,
-                  cause: Object.assign(new Error("cross-device link"), {
-                    code: "EXDEV",
-                  }),
-                }),
-              )
-            : real.rename(from, to),
-      };
+      const fs = acrossVolumes(real);
       return yield* moveDataDir(parent, {
         place: {
           dataDir: engineDataDir,
@@ -145,6 +157,45 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
     false,
     "the journal removed",
   );
+  assert.equal(existsSync(pointerFile), false, "no pointer committed");
+  await Effect.runPromise(Fiber.interrupt(crashed));
+});
+
+it("a move whose copy landed but whose pointer was never written is undone, its copy removed", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  assert.equal(await titleOf(identity.id), "Fox");
+  const parent = join(elsewhere, "volume-2");
+  const destination = join(parent, "moved");
+  const pointerFile = join(elsewhere, "config-2", "data-dir");
+  const crashed = await runHost(
+    Effect.gen(function* () {
+      const real = yield* FileSystem.FileSystem;
+      return yield* moveDataDir(parent, {
+        place: {
+          dataDir: engineDataDir,
+          pointerFile,
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        beforeMove: Effect.void,
+        killAllScripts: Effect.void,
+      }).pipe(
+        Effect.provideService(
+          FileSystem.FileSystem,
+          // The app is killed as it commits the pointer.
+          acrossVolumes(real, (from) => from.startsWith(`${pointerFile}.tmp`)),
+        ),
+      );
+    }).pipe(Effect.forkDetach),
+  );
+  await waitFor(() => existsSync(destination), "the copy renamed in");
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(await titleOf(identity.id), "Fox");
+  assert.equal(existsSync(destination), false, "the copy removed");
   assert.equal(existsSync(pointerFile), false, "no pointer committed");
   await Effect.runPromise(Fiber.interrupt(crashed));
 });

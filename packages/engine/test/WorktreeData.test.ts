@@ -104,6 +104,19 @@ it("carries a worktree's ports when it moves", async () => {
   assert.deepEqual(ports, [[], [{ port: 3000 }]]);
 });
 
+it("moves nothing from an id that holds nothing, keeping the target's", async () => {
+  const title = await run(
+    Effect.gen(function* () {
+      const data = yield* WorktreeData.WorktreeData;
+      yield* data.describe("A", "aaaaaaaaaaaa", { title: "Kept" });
+      // A move undone twice: the second has nothing to bring back.
+      yield* data.move("A", "bbbbbbbbbbbb", "aaaaaaaaaaaa");
+      return (yield* data.description("A", "aaaaaaaaaaaa")).title;
+    }),
+  );
+  assert.equal(title, "Kept");
+});
+
 it("carries a pair described elsewhere only when it is newer", async () => {
   const stored = await run(
     Effect.gen(function* () {

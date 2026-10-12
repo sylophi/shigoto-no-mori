@@ -405,6 +405,22 @@ const undoMove = (journal: Journal, at: string) =>
       yield* Effect.ignore(
         fs.remove(journal.partial, { recursive: true, force: true }),
       );
+      // A copy renamed in before the pointer moved: this move's own, as
+      // the journal it carries says, and never the data the pointer
+      // names.
+      const landed = yield* fs.readFileString(join(journal.to, JOURNAL)).pipe(
+        Effect.map(Schema.decodeUnknownOption(JournalJson)),
+        Effect.orElseSucceed(() => Option.none<Journal>()),
+      );
+      if (
+        Option.isSome(landed) &&
+        landed.value.from === journal.from &&
+        landed.value.partial === journal.partial
+      ) {
+        yield* Effect.ignore(
+          fs.remove(journal.to, { recursive: true, force: true }),
+        );
+      }
     }
     yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
   });
