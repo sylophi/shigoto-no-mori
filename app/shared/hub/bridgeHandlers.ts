@@ -36,10 +36,14 @@ import type { InvokeOptions } from "@shared/ipc/transport";
 import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 import * as Effect from "effect/Effect";
+import * as Cause from "effect/Cause";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import {
   callFailureOf,
   NoDirectConnectionError,
 } from "@shigomori/contracts/errors";
+import { peerViewFailure } from "./peerViewFailure";
 
 // hub:invokePeer as a window's host and a web tab serve it: an effect,
 // so a call interrupted where it was made (a query superseded or
@@ -56,6 +60,57 @@ export const servedInvokePeer =
 
 // A view not started yet stops nothing.
 const noop = (): void => {};
+
+// Values of a peer's view this host holds for a window that has not
+// taken them, as many as a terminal's client may fall behind its shell
+// by (host/lib/terminals/Terminals.ts).
+export const RELAY_BACKLOG = 64;
+
+// hub:watchPeer as a window's host serves it. A window that falls
+// RELAY_BACKLOG values behind the peer's view has it ended as no
+// session, which it asks again on (a terminal picking up after the last
+// chunk it has), so a flood it cannot keep up with is not buffered here.
+// Not held back to the peer's pace instead: the RPC client's buffer
+// for a stream, full, stops its whole link's reading.
+export const servedWatchPeer =
+  (hub: () => HubHandlers) =>
+  (input: Parameters<HubHandlers["watchPeer"]>[0]) =>
+    Stream.callback<unknown, unknown>(
+      (queue) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            let behind = false;
+            let stop = noop;
+            stop = hub().watchPeer(input, {
+              value: (value) => {
+                if (behind || Queue.offerUnsafe(queue, value)) return;
+                // Stopped at once, not once the window reaches the end.
+                behind = true;
+                Queue.failCauseUnsafe(
+                  queue,
+                  Cause.fail(
+                    new NoDirectConnectionError({
+                      deviceId: input.deviceId,
+                      reason: "the window fell behind the peer's view",
+                    }),
+                  ),
+                );
+                stop();
+              },
+              end: (failure) =>
+                failure === undefined
+                  ? Queue.endUnsafe(queue)
+                  : Queue.failCauseUnsafe(
+                      queue,
+                      Cause.fail(peerViewFailure(input.deviceId, failure)),
+                    ),
+            });
+            return () => stop();
+          }),
+          (stop) => Effect.sync(stop),
+        ),
+      { bufferSize: RELAY_BACKLOG },
+    );
 
 type HubHandlerDeps = {
   status(): HubStatus;
