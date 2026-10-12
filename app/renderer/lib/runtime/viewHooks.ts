@@ -6,7 +6,7 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as AsyncResultValue from "effect/reactivity/AsyncResult";
-import { use, useEffect } from "react";
+import { use, useEffect, useRef } from "react";
 import { notifyError } from "@/lib/toast";
 import { noView, type ViewState, viewStateOf } from "./atoms";
 
@@ -33,10 +33,14 @@ export function useViewErrorToast(
   state: Pick<ViewState<unknown>, "error">,
   title: string,
 ) {
-  const { error } = state;
+  // By its message: a failure that is not an Error is wrapped afresh on
+  // every render.
+  const message = state.error?.message ?? null;
+  const error = useRef(state.error);
+  error.current = state.error;
   useEffect(() => {
-    if (error !== null) notifyError(title, error);
-  }, [error, title]);
+    if (message !== null) notifyError(title, error.current);
+  }, [message, title]);
 }
 
 // The view's first value, or undefined if none comes within `withinMs`

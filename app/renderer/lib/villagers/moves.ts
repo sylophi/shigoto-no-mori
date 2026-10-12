@@ -26,6 +26,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
+import { clientConfigOnce } from "@/hooks/config/useClientConfig";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { onWorktreeLists } from "@/lib/viewFeed";
 import { remoteDeviceById } from "@/lib/remote/devices";
@@ -166,7 +167,7 @@ async function tell({
   pending.clear();
   // Village news off, the moves go untold. The album still counts
   // them (visitLog.ts).
-  const config = await api.run(api.clientConfig.read()).catch(() => undefined);
+  const config = await clientConfigOnce(registry);
   if (!config || !villageNewsEnabled(config)) return;
   await Promise.all(
     batch.map(async ([deviceId, moves]) => {

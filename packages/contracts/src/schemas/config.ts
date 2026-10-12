@@ -528,7 +528,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
 // Client config: how this app instance looks, kept in clientConfig.json
 // under Electron's userData and owned by the main process alone. The
 // CLI never reads or writes it, unlike the device config above.
-// Doubles as the clientConfig:write IPC input. A plain struct STRIPS
+// Doubles as the set half of a clientConfig:patch. A plain struct STRIPS
 // unknown keys rather than rejecting them, which drops a key the
 // renderer invents at the boundary, and it must not become strict: a
 // key from a newer build has to keep passing through unrejected.

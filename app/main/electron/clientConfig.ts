@@ -107,6 +107,9 @@ export function updateClientConfig(
 ): Promise<{ readonly before: ClientConfig; readonly after: ClientConfig }> {
   return Effect.runPromise(
     Effect.promise(async () => {
+      // Over the stored config, never the empty one standing in for it
+      // before the boot has read it.
+      await clientConfigRead();
       const before = SubscriptionRef.getUnsafe(memo);
       const after = update(before);
       await writeClientConfig(after);

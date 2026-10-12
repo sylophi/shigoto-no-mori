@@ -37,7 +37,10 @@ import {
   exchangeSharedSettings,
   sharedSettingKeys,
 } from "@shigomori/contracts/sharedSettings";
-import { patchClientConfig } from "@/hooks/config/useClientConfig";
+import {
+  clientConfigOnce,
+  patchClientConfig,
+} from "@/hooks/config/useClientConfig";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -98,8 +101,7 @@ async function migrateQuickCreateDevices(
   api: RendererApi,
   registry: AtomRegistry.AtomRegistry,
 ): Promise<void> {
-  const config = await api.run(api.clientConfig.read());
-  const legacy = config.quickCreateDevices;
+  const legacy = (await clientConfigOnce(registry))?.quickCreateDevices;
   if (legacy === undefined) return;
   const entries: SharedSettingsDoc["entries"] = {};
   for (const [identity, deviceId] of Object.entries(legacy)) {
