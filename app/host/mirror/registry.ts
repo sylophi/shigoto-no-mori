@@ -10,6 +10,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
+import { unmountedVolume } from "@shared/unmountedVolume";
 import {
   MIRROR_LABEL_MODE,
   MIRROR_LABEL_REPLACES,
@@ -351,16 +352,8 @@ export function holdRootChecks(worktreeIds: readonly string[]): () => void {
 export const rootExists = (path: string): Promise<boolean> =>
   access(path).then(
     () => true,
-    (error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") return true;
-      const volume = /^\/Volumes\/[^/]+/.exec(path)?.[0];
-      return volume === undefined
-        ? false
-        : access(volume).then(
-            () => false,
-            () => true,
-          );
-    },
+    (error: NodeJS.ErrnoException) =>
+      error.code !== "ENOENT" || unmountedVolume(path) !== null,
   );
 
 export const settleMirrorBookkeeping = Effect.gen(function* () {
