@@ -8,7 +8,10 @@ import type {
   ChangedFile,
   CommitMessage,
   CommitSummary,
+  FileHunks,
   GitOperationState,
+  LineChange,
+  StashEntry,
 } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -35,10 +38,14 @@ import { makeGitIndex } from "./git/gitIndex.ts";
 import { makeDiffs } from "./git/diffs.ts";
 import { makeRepositories } from "./git/repositories.ts";
 import { makeOperation } from "./git/operation.ts";
+import { makeHunks } from "./git/hunks.ts";
+import { makeCommit } from "./git/commit.ts";
+import { makeStash } from "./git/stash.ts";
 import {
   type BranchMovedError,
   BranchNotMergedError,
   CloneDestinationError,
+  type CommitRequest,
   type GitError,
   type GitRefusedError,
   LOCAL_TIPS_LIMIT,
@@ -69,6 +76,7 @@ export {
   stderrOf,
 } from "./git/documents.ts";
 export type {
+  CommitRequest,
   GitError,
   PrimaryRelation,
   RunOptions,
@@ -548,6 +556,64 @@ export class Git extends Context.Service<
       readonly snapshot: string;
     }) => Effect.Effect<void, GitError | PlatformError.PlatformError>;
 
+    // --- hunks, the commit, stashes ---
+    // One modified file's changes against HEAD, and HEAD itself, for
+    // the page to tick one at a time.
+    readonly readHunks: (
+      worktree: string,
+      path: string,
+    ) => Effect.Effect<FileHunks, GitError | PlatformError.PlatformError>;
+    // Throws the picked changes of one file away, after a snapshot of
+    // it, and answers with the snapshot.
+    readonly discardHunks: (input: {
+      readonly worktree: string;
+      readonly path: string;
+      readonly changes: readonly LineChange[];
+    }) => Effect.Effect<
+      string,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
+    // A commit of the ticked files and hunks, whatever was staged, and
+    // the new commit (short).
+    readonly commitPicks: (
+      worktree: string,
+      message: CommitRequest,
+    ) => Effect.Effect<
+      string,
+      GitError | GitRefusedError | PlatformError.PlatformError
+    >;
+    // The stashes made on `branch`.
+    readonly listStashes: (
+      worktree: string,
+      branch: string,
+    ) => Effect.Effect<StashEntry[], GitError>;
+    readonly stashChanges: (
+      worktree: string,
+      message: string | undefined,
+    ) => Effect.Effect<void, GitError>;
+    // With `drop`, a pop: the stash goes only once it applied cleanly.
+    readonly applyStash: (input: {
+      readonly worktree: string;
+      readonly hash: string;
+      readonly drop: boolean;
+    }) => Effect.Effect<void, GitError | GitRefusedError>;
+    readonly dropStash: (
+      worktree: string,
+      hash: string,
+    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    // Lists a dropped stash again, under its subject.
+    readonly restoreStash: (input: {
+      readonly worktree: string;
+      readonly branch: string;
+      readonly hash: string;
+      readonly message: string;
+      readonly named: boolean;
+    }) => Effect.Effect<void, GitError>;
+    readonly readStashDiff: (
+      worktree: string,
+      hash: string,
+    ) => Effect.Effect<string, GitError | GitRefusedError>;
+
     // --- diffs ---
     // One file's diff: against HEAD for a tracked file (`paths` leads
     // with its old name for a rename), against nothing for an untracked
@@ -638,6 +704,9 @@ const make = Effect.gen(function* () {
   const { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish } = remote;
   const { resetSoft, resetHard, snapshotPaths, discard, restoreDiscard } =
     gitIndex;
+  const hunks = yield* makeHunks({ running, gitIndex });
+  const { commitPicks } = yield* makeCommit({ running, hunks });
+  const stash = yield* makeStash({ running, operation });
   const { fileDiff } = diffs;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -645,6 +714,10 @@ const make = Effect.gen(function* () {
     run,
     withIndexLock: onIndex,
     ...operation,
+    readHunks: hunks.readHunks,
+    discardHunks: hunks.discardHunks,
+    commitPicks,
+    ...stash,
     adminDirOf: (worktreePath) =>
       fs.readFileString(path.join(worktreePath, ".git")).pipe(
         Effect.map((text) => {

@@ -1,4 +1,4 @@
-// Durable proof for the changes page's hunks (host/lib/git/hunks.ts)
+// Durable proof for the changes page's hunks (the engine's Git)
 // against a REAL repository: a file's changes read, a commit of some of
 // them taking HEAD plus exactly those (insertions, deletions and a
 // missing final newline among them), a pick still found after an edit
@@ -20,7 +20,8 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { engineGit, promised } from "./lib/gitPromises.mts";
+import type { CommitRequest } from "@shigomori/engine/Git";
+import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -31,13 +32,18 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { discardHunks, readHunks } = promised(
-  await import("../host/lib/git/hunks.ts"),
-);
 // The engine's Git, in the shapes these cases call it by.
+const readHunks = (worktree: string, path: string) =>
+  engineGit.readHunks(worktree, path);
+const discardHunks = (
+  worktree: string,
+  path: string,
+  changes: readonly LineChange[],
+) => engineGit.discardHunks({ worktree, path, changes });
 const restoreDiscard = (worktree: string, snapshot: string) =>
   engineGit.restoreDiscard({ worktree, snapshot });
-const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
+const commitPicks = (worktree: string, message: CommitRequest) =>
+  engineGit.commitPicks(worktree, message);
 
 const git = sandboxGit(gitEnv);
 

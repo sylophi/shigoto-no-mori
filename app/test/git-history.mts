@@ -37,14 +37,22 @@ scrubProcessGitEnv({
 
 const { cherryPickCommit, revertCommit, rewordCommit, squashIntoParent } =
   promised(await import("../host/lib/git/history.ts"));
-const {
-  applyStash,
-  dropStash,
-  listStashes,
-  readStashDiff,
-  restoreStash,
-  stashChanges,
-} = promised(await import("../host/lib/git/stash.ts"));
+const applyStash = (worktree: string, hash: string, drop: boolean) =>
+  engineGit.applyStash({ worktree, hash, drop });
+const dropStash = (worktree: string, hash: string) =>
+  engineGit.dropStash(worktree, hash);
+const listStashes = (worktree: string, branch: string) =>
+  engineGit.listStashes(worktree, branch);
+const readStashDiff = (worktree: string, hash: string) =>
+  engineGit.readStashDiff(worktree, hash);
+const restoreStash = (
+  worktree: string,
+  branch: string,
+  hash: string,
+  stash: { message: string; named: boolean },
+) => engineGit.restoreStash({ worktree, branch, hash, ...stash });
+const stashChanges = (worktree: string, message: string | undefined) =>
+  engineGit.stashChanges(worktree, message);
 
 // The engine's Git, in the shapes these cases call it by.
 const abortOperation = (worktree: string) => engineGit.abortOperation(worktree);

@@ -17,22 +17,12 @@ import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import { GitRefusal } from "@host/lib/git/core";
-import { commitPicks } from "@host/lib/git/commit";
 import {
   cherryPickCommit,
   revertCommit,
   rewordCommit,
   squashIntoParent,
 } from "@host/lib/git/history";
-import { discardHunks, readHunks } from "@host/lib/git/hunks";
-import {
-  applyStash,
-  dropStash,
-  listStashes,
-  readStashDiff,
-  restoreStash,
-  stashChanges,
-} from "@host/lib/git/stash";
 import { mergeBranch, readMergePreview } from "@host/lib/git/merge";
 import {
   mergePrimaryKeepingConflicts,
@@ -525,18 +515,25 @@ export const worktreesHandlers = {
   changeStatus: (input) =>
     atPath(input, (path) => withGit((git) => git.changes(path))),
 
-  fileHunks: (input) => atPath(input, (path) => readHunks(path, input.path)),
+  fileHunks: (input) =>
+    atPath(input, (path) => withGit((git) => git.readHunks(path, input.path))),
   discardHunks: (input) =>
     mutateAndDescribeWith(input, (wt) =>
-      discardHunks(wt.path, input.path, input.changes),
+      withGit((git) =>
+        git.discardHunks({
+          worktree: wt.path,
+          path: input.path,
+          changes: input.changes,
+        }),
+      ),
     ).pipe(
       Effect.map(({ result, worktree }) => ({ snapshot: result, worktree })),
     ),
 
   commit: (input) =>
-    mutateAndDescribeWith(input, (wt) => commitPicks(wt.path, input)).pipe(
-      Effect.map(({ result, worktree }) => ({ hash: result, worktree })),
-    ),
+    mutateAndDescribeWith(input, (wt) =>
+      withGit((git) => git.commitPicks(wt.path, input)),
+    ).pipe(Effect.map(({ result, worktree }) => ({ hash: result, worktree }))),
 
   discardChanges: (input) =>
     mutateAndDescribeWith(input, (wt) =>
@@ -644,24 +641,44 @@ export const worktreesHandlers = {
         input.worktreeId,
       );
       if (worktree.detached) return [];
-      return yield* listStashes(worktree.path, worktree.branch);
+      return yield* (yield* Git.Git).listStashes(
+        worktree.path,
+        worktree.branch,
+      );
     }),
   stashDiff: (input) =>
-    atPath(input, (path) => readStashDiff(path, input.hash)),
+    atPath(input, (path) =>
+      withGit((git) => git.readStashDiff(path, input.hash)),
+    ),
   stashChanges: (input) =>
-    mutateAndDescribe(input, (wt) => stashChanges(wt.path, input.message)),
+    mutateAndDescribe(input, (wt) =>
+      withGit((git) => git.stashChanges(wt.path, input.message)),
+    ),
   applyStash: (input) =>
     mutateAndDescribe(input, (wt) =>
-      applyStash(wt.path, input.hash, input.drop),
+      withGit((git) =>
+        git.applyStash({
+          worktree: wt.path,
+          hash: input.hash,
+          drop: input.drop,
+        }),
+      ),
     ),
-  dropStash: (input) => atPath(input, (path) => dropStash(path, input.hash)),
+  dropStash: (input) =>
+    atPath(input, (path) => withGit((git) => git.dropStash(path, input.hash))),
   restoreStash: (input) =>
     Effect.gen(function* () {
       const { worktree } = yield* findProjectAndWorktree(
         input.projectId,
         input.worktreeId,
       );
-      yield* restoreStash(worktree.path, worktree.branch, input.hash, input);
+      yield* (yield* Git.Git).restoreStash({
+        worktree: worktree.path,
+        branch: worktree.branch,
+        hash: input.hash,
+        message: input.message,
+        named: input.named,
+      });
     }),
 
   push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
