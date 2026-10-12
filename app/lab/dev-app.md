@@ -321,4 +321,10 @@ removed one the next time they read the registry. A relaunch after
   Developer-ID-signed build (the release workflow). A local prod
   build shares the installed app's userData, and tokens it writes are
   under the mock key, so switching between it and the installed app
-  signs the other out once.
+  signs the other out once. It takes no debugging port: a packaged
+  build quits when started with `--remote-debugging-port` or
+  `--remote-debugging-pipe` (`main/electron/debugSwitches.ts`), so
+  weblab can't attach to it. Read and drive its window through macOS
+  accessibility instead, asking the app for its page's tree by setting
+  `AXManualAccessibility` once the page is up (`lab/relaunch.mts`), and
+  read `main.log`. Started with `--sm-lab`, it relaunches on `SIGUSR2`.

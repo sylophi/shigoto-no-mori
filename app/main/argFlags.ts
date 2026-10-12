@@ -26,9 +26,9 @@ export const ROUTE_FLAG = "--sm-route=";
 export const DEV_BUILD_FLAG = "--sm-dev-build";
 
 // A presence flag, passed on to each window when the app itself was
-// started with it (lab/relaunch.mts drives a packaged build so): the
-// window then hands the lab's tools its api (renderer/lib/runtime/
-// labHandle.ts), as a dev build's always does.
+// started with it: the window then hands the lab's tools its api
+// (renderer/lib/runtime/labHandle.ts), as a dev build's always does,
+// and the app relaunches on SIGUSR2 (lab/relaunch.mts, main/index.ts).
 export const LAB_FLAG = "--sm-lab";
 
 // Reads a required value flag off process.argv in the preload. The

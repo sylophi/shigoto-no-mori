@@ -1,28 +1,35 @@
 // A packaged build's relaunch must leave a live window: opens the app
-// with a debugging port, asks its window to relaunch (what the
-// migration, a data-folder move and a nuke end with), waits past the
-// second or so after which macOS terminates a quit app's subordinate
-// processes (main/electron/relaunch.ts), and asks the new window
-// something only a live renderer answers. Fails, naming what it saw,
-// when the new instance never came or lost a child process.
+// for the lab, has it relaunch (what the migration, a data-folder move
+// and a nuke end with), waits past the second or so after which macOS
+// terminates a quit app's subordinate processes (main/electron/
+// relaunch.ts), and reads the new window again. Fails, naming what it
+// saw, when the new instance never came, its window drew nothing, or a
+// child process was killed.
 //
-// Run: node lab/relaunch.mts "<path to the .app>" [--port 9341]
+// A packaged build takes no debugging port (main/electron/
+// debugSwitches.ts), so the lab asks and looks from outside: started
+// with --sm-lab, the app relaunches on SIGUSR2 (main/index.ts); the
+// window is read through macOS accessibility, which a page whose
+// renderer died has nothing in (as the flavors thread drove its window); and main.log says which child process
+// was killed. Accessibility needs the terminal running this to be
+// allowed in System Settings > Privacy & Security > Accessibility.
+//
+// Run: node lab/relaunch.mts "<path to the .app>"
 // A v3 build (SM_FLAVOR=v3 pnpm package) runs beside the installed
 // app. It quits the app at the end.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { findPageApi } from "./reliability/pageApi.mts";
 
-const bundle = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
-const portArg = process.argv.indexOf("--port");
-const port = portArg > 0 ? Number(process.argv[portArg + 1]) : 9341;
-if (bundle === undefined || !existsSync(bundle)) {
-  console.error('Usage: node lab/relaunch.mts "<path to the .app>" [--port n]');
+const given = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
+if (given === undefined || !existsSync(given)) {
+  console.error('Usage: node lab/relaunch.mts "<path to the .app>"');
   process.exit(2);
 }
+// Whole: `open -a` reads a relative path as an app's name.
+const bundle = resolve(given);
 const appName = basename(bundle, ".app");
 const executable = join(bundle, "Contents", "MacOS", appName);
 const mainLog = join(homedir(), "Library", "Logs", appName, "main.log");
@@ -39,51 +46,81 @@ const pidOfApp = (): number | null => {
   }
 };
 
-// Polls `probe` every 200 ms until it answers something, for `ms`.
+// What the app's windows show, through accessibility (JavaScript for
+// Automation over System Events), for `pid`.
+const accessibility = (pid: number, body: string): string => {
+  const script = `
+    const app = Application("System Events").processes.whose({ unixId: ${pid} })[0];
+    ${body}`;
+  try {
+    return execFileSync("osascript", ["-l", "JavaScript", "-e", script], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (error) {
+    const said = String((error as { stderr?: unknown }).stderr ?? error);
+    if (said.includes("assistive access")) {
+      console.error(
+        "The terminal running this isn't allowed to use accessibility (System Settings > Privacy & Security > Accessibility).",
+      );
+      process.exit(2);
+    }
+    return "";
+  }
+};
+
+const hasWindow = (pid: number) =>
+  accessibility(pid, "app.windows.length;") === "1";
+
+// Chromium builds a page's tree only for a client that asks for it, by
+// AXManualAccessibility on the app, and hears the ask only as its value
+// changes, so it is asked once the page is there.
+const askForTree = (pid: number) =>
+  accessibility(
+    pid,
+    `const ask = app.attributes.byName("AXManualAccessibility");
+    ask.value = false;
+    ask.value = true;`,
+  );
+
+// How many texts and buttons the app's window shows: a few at least
+// once it draws a page, none once its renderer is gone.
+const drawn = (pid: number): number =>
+  Number(
+    accessibility(
+      pid,
+      `app.windows[0].entireContents().filter(
+        (element) => ["AXStaticText", "AXButton"].includes(element.role()),
+      ).length;`,
+    ) || 0,
+  );
+
+// A window that draws a page shows a few of each at least.
+const LIVE = 5;
+
+// The pid's window once it draws a page, after `since`, in ms.
+const drawnWindow = async (pid: number, since: number) => {
+  await until("its window", 30_000, () => (hasWindow(pid) ? true : null));
+  // The page loads behind the window before it can be asked.
+  await sleep(2000);
+  askForTree(pid);
+  return until("its page", 30_000, () =>
+    drawn(pid) >= LIVE ? Date.now() - since : null,
+  );
+};
+
+// Polls `probe` every 500 ms until it answers something, for `ms`.
 const until = async <A,>(
   what: string,
   ms: number,
-  probe: () => Promise<A | null>,
+  probe: () => A | null,
   end = Date.now() + ms,
 ): Promise<A> => {
-  const value = await probe().catch(() => null);
+  const value = probe();
   if (value !== null) return value;
   if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
-  await sleep(200);
+  await sleep(500);
   return until(what, ms, probe, end);
-};
-
-// Evaluates in the app's window over its debugging port.
-const evaluate = async (expression: string) => {
-  const list = (await (
-    await fetch(`http://127.0.0.1:${port}/json/list`)
-  ).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
-  const page = list.find((t) => t.type === "page" && t.url.includes("://app/"));
-  if (page === undefined) return null;
-  const socket = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener("open", resolve);
-    socket.addEventListener("error", reject);
-  });
-  try {
-    return await new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("no answer")), 3000);
-      socket.addEventListener("message", (event) => {
-        clearTimeout(timer);
-        const reply = JSON.parse(String(event.data));
-        resolve(reply.result?.result?.value ?? null);
-      });
-      socket.send(
-        JSON.stringify({
-          id: 1,
-          method: "Runtime.evaluate",
-          params: { expression, awaitPromise: true, returnByValue: true },
-        }),
-      );
-    });
-  } finally {
-    socket.close();
-  }
 };
 
 const killedLines = () =>
@@ -97,47 +134,33 @@ if (pidOfApp() !== null) {
   console.error(`${appName} is running. Quit it first.`);
   process.exit(2);
 }
-execFileSync("open", [
-  "-n",
-  "-a",
-  bundle,
-  "--args",
-  `--remote-debugging-port=${port}`,
-  // Started for the lab, so the window hands over its api.
-  "--sm-lab",
-]);
-// The window's api (findPageApi), as an expression.
-const api = `(${findPageApi})()`;
-const first = await until("the app", 60_000, async () =>
-  (await evaluate(`typeof ${api}`)) === "object" ? pidOfApp() : null,
-);
+const opened = Date.now();
+execFileSync("open", ["-n", "-a", bundle, "--args", "--sm-lab"]);
+const first = await until("the app", 60_000, () => pidOfApp());
+await drawnWindow(first, opened);
 const killedBefore = killedLines().length;
 const asked = Date.now();
-await evaluate(`${api}.window.relaunch()`).catch(() => null);
-const second = await until("the relaunched app", 60_000, async () => {
+process.kill(first, "SIGUSR2");
+const second = await until("the relaunched app", 60_000, () => {
   const pid = pidOfApp();
   return pid !== null && pid !== first ? pid : null;
 });
-const windowBack = await until("its window", 30_000, async () =>
-  (await evaluate(`typeof ${api}`)) === "object" ? Date.now() - asked : null,
-).catch(() => null);
+const windowBack = await drawnWindow(second, asked).catch(() => null);
 // Past the subordinate termination, which lands a second or so after
 // the old instance is gone.
 await sleep(5000);
-const answer = await evaluate(
-  `${api}.account.status().then(() => 'live')`,
-).catch((error) => `no answer: ${error}`);
+const later = drawn(second);
 const killed = killedLines().slice(killedBefore);
 // A window whose renderer was killed ignores a quit.
 const last = pidOfApp();
 if (last !== null) process.kill(last, "SIGKILL");
 
 console.log(
-  `relaunched as ${second} (was ${first}), window ${windowBack === null ? "never answered" : `back in ${windowBack} ms`}`,
+  `relaunched as ${second} (was ${first}), window ${windowBack === null ? "never drew" : `drawn in ${windowBack} ms`}`,
 );
-console.log(`5 s later the window says: ${answer}`);
+console.log(`5 s later the window shows ${later} texts and buttons`);
 for (const line of killed) console.log(`  ${line}`);
-if (answer !== "live" || killed.length > 0) {
+if (later < LIVE || killed.length > 0) {
   console.error("FAIL: the relaunched app lost its window or a child process");
   process.exit(1);
 }
