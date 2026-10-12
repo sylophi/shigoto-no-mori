@@ -202,6 +202,8 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
     [],
     "status, an edit and a staged add must not ping (they would loop)",
   );
+  await waitFor(() => edits.length >= 1, "the edit to land");
+  await delay(1200);
   assert.deepEqual(edits, ["p1"], "the edit lands as one files change");
 
   // A commit in the linked worktree moves refs/heads/feat.
@@ -226,31 +228,45 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   // churn (status refreshing the main checkout's index) as none.
   edits.length = 0;
   git(repo, "status", "--porcelain");
-  await delay(700);
+  await delay(1500);
   assert.deepEqual(edits, [], "the main checkout's .git churn is no edit");
   writeFileSync(join(repo, "c.txt"), "three\n");
   await waitFor(() => edits.length >= 1, "the main checkout's edit");
   writeFileSync(join(worktree, "c.txt"), "three\n");
   await waitFor(() => edits.length >= 2, "the linked worktree's edit");
-  await delay(350);
+  await delay(1200);
   assert.deepEqual(edits, ["p1", "p1"]);
+
+  // A worktree kept inside the main checkout counts once, by the main
+  // checkout's watch.
+  const nested = join(repo, "nested");
+  git(repo, "worktree", "add", "-q", "-b", "nested", nested);
+  await waitFor(() => changes.length >= 4, "the nested worktree to ping");
+  await delay(1500);
+  edits.length = 0;
+  writeFileSync(join(nested, "n.txt"), "nested\n");
+  await waitFor(() => edits.length >= 1, "the nested worktree's edit");
+  await delay(1500);
+  assert.deepEqual(edits, ["p1"], "an edit in a nested worktree counts once");
+  git(repo, "worktree", "remove", "--force", nested);
+  await waitFor(() => changes.length >= 5, "the nested removal to ping");
 
   // A worktree added after the watch began is followed, and one
   // removed stops being watched.
   const later = join(root, "later");
   git(repo, "worktree", "add", "-q", "-b", "later", later);
-  await waitFor(() => changes.length >= 4, "the new worktree to ping");
+  await waitFor(() => changes.length >= 6, "the new worktree to ping");
   await delay(350);
   edits.length = 0;
   writeFileSync(join(later, "e.txt"), "five\n");
   await waitFor(() => edits.length >= 1, "the added worktree's edit");
   git(repo, "worktree", "remove", "--force", later);
-  await waitFor(() => changes.length >= 5, "the removal to ping");
+  await waitFor(() => changes.length >= 7, "the removal to ping");
   await delay(350);
   edits.length = 0;
   mkdirSync(later);
   writeFileSync(join(later, "f.txt"), "six\n");
-  await delay(700);
+  await delay(1500);
   assert.deepEqual(edits, [], "a removed worktree is no longer watched");
 
   // The project leaves the registry: its watch closes and a later
@@ -267,7 +283,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   writeFileSync(join(worktree, "d.txt"), "four\n");
   git(worktree, "add", "d.txt");
   git(worktree, "commit", "-q", "-m", "four");
-  await delay(700);
+  await delay(1500);
   assert.equal(
     changes.length,
     before,

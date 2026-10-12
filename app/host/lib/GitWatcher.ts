@@ -43,6 +43,7 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
 
 const DEBOUNCE_MS = 300;
+const EDIT_WINDOW = "1 second";
 
 // Git-dir relative paths whose change means the project's git state
 // moved. Paths arrive with the platform separator and are normalized
@@ -112,17 +113,27 @@ export const refsDirOf = (projectPath: string) =>
 // The working trees of a project: its own folder when it is a checkout,
 // and every linked worktree its git directory lists, by the `.git` path
 // each `worktrees/<name>/gitdir` names. Read off the files, with no git.
+// By real path, and a tree inside another (a worktree kept under the
+// main checkout) left to the outer one's watch, so no edit counts twice.
 const workingTreesOf = (projectPath: string, gitDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const trees = new Set<string>();
+    const found = new Set<string>();
+    const add = (tree: string) =>
+      fs.realPath(tree).pipe(
+        Effect.map((real) => {
+          found.add(real);
+        }),
+        // Gone since git listed it.
+        Effect.ignore,
+      );
     if (
       yield* fs
         .exists(path.join(projectPath, ".git"))
         .pipe(Effect.orElseSucceed(() => false))
     ) {
-      trees.add(projectPath);
+      yield* add(projectPath);
     }
     const entries = yield* fs
       .readDirectory(path.join(gitDir, "worktrees"))
@@ -134,12 +145,18 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
       if (Option.isNone(pointer)) continue;
       const dotGit = pointer.value.trim();
       if (dotGit === "") continue;
-      const tree = path.dirname(
-        path.isAbsolute(dotGit) ? dotGit : path.resolve(gitDir, dotGit),
+      yield* add(
+        path.dirname(
+          path.isAbsolute(dotGit) ? dotGit : path.resolve(gitDir, dotGit),
+        ),
       );
-      if (yield* fs.exists(tree).pipe(Effect.orElseSucceed(() => false))) {
-        trees.add(tree);
-      }
+    }
+    const trees = new Set<string>();
+    for (const tree of found) {
+      const outer = [...found].some(
+        (other) => other !== tree && tree.startsWith(other + path.sep),
+      );
+      if (!outer) trees.add(tree);
     }
     return trees;
   });
@@ -186,12 +203,15 @@ const make = (deps: GitWatcherDeps) =>
     >();
     const serial = yield* Semaphore.make(1);
 
-    // One working tree's edits, debounced. A tree that goes away drops
-    // its watch, and the next read of the project's trees settles it.
+    // One working tree's edits: a burst's first change opens a window,
+    // and the window's end is one signal, so a tree that never goes
+    // quiet (a build writing its output) still reports, at most once a
+    // window. A tree that goes away drops its watch, which the next read
+    // of the project's trees starts again if the tree is back.
     const watchTree = (projectId: string, tree: string) =>
       fs.watch(tree, { recursive: true }).pipe(
         Stream.filter((event) => isWorkingTreeChange(event.path)),
-        Stream.debounce(DEBOUNCE_MS),
+        Stream.groupedWithin(Number.POSITIVE_INFINITY, EDIT_WINDOW),
         Stream.runForEach(() =>
           Effect.sync(() => deps.onFilesChanged(projectId)),
         ),
@@ -215,7 +235,9 @@ const make = (deps: GitWatcherDeps) =>
           }
         }
         for (const tree of wanted) {
-          if (held.has(tree)) continue;
+          if (yield* FiberMap.has(treeWatches, treeKey(projectId, tree))) {
+            continue;
+          }
           yield* FiberMap.run(
             treeWatches,
             treeKey(projectId, tree),

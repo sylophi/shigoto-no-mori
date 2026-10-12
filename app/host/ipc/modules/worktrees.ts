@@ -251,13 +251,19 @@ export const worktreesHandlers = {
   list: ({ projectId }) => listWorktrees(projectId),
 
   reread: () =>
-    Effect.forEach(
-      loadProjects(),
-      (project) =>
-        HostPushes.push(worktreesContract, "filesChanged", {
-          projectId: project.id,
-        }),
-      { discard: true },
+    // An unreadable registry has nothing to read again.
+    Effect.try(loadProjects).pipe(
+      Effect.orElseSucceed(() => []),
+      Effect.flatMap((projects) =>
+        Effect.forEach(
+          projects,
+          (project) =>
+            HostPushes.push(worktreesContract, "filesChanged", {
+              projectId: project.id,
+            }),
+          { discard: true },
+        ),
+      ),
     ),
 
   // Lifecycle mutations run the engine a terminal runs.
