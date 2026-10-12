@@ -32,6 +32,7 @@ export {
   MergeLostTrack,
   MergeNeedsAttention,
   MergePollInterval,
+  MergeUnverified,
 } from "./landing/documents.ts";
 export type { Document, MergeOutcome, Reporter } from "./landing/documents.ts";
 

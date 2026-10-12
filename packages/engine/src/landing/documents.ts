@@ -35,6 +35,8 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
       "stack-step",
       "no-primary",
       "not-merged",
+      "unpushed",
+      "head-unread",
       "not-on-branch",
       "vanished",
       "guard",
@@ -103,6 +105,18 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
         return `No local branches found in ${a}`;
       case "not-merged":
         return `Branch ${a} isn't merged into ${b} (no merge found, no merged PR). Merge it first, or pass --force to discard it.`;
+      case "unpushed": {
+        // `n0` commits on branch `a` that PR #`n1`'s head lacks, `b`
+        // naming them.
+        const commits = n0 === 1 ? "a commit" : `${n0} commits`;
+        return this.verb === "done"
+          ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which deleting it would lose: ${b}. Push them to a new PR, or pass --force to discard them.`
+          : this.verb === "rm"
+            ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which removing it would delete: ${b}. Push them to a new PR, or pass --force or --keep-branch.`
+            : `Branch ${a} has ${commits} PR #${n1} doesn't have, which landing would delete: ${b}. Push them to the PR first, or pass --force to discard them.`;
+      }
+      case "head-unread":
+        return `Couldn't read PR #${n0}'s head (${b}) to check that ${a} has no commits it lacks. Fetch it, or pass --force to discard what it lacks.`;
       case "not-on-branch":
         return `${a} is on ${b}, not ${c}`;
       case "vanished":
@@ -111,6 +125,17 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
         // A worktree a stack land would remove refused the removal.
         return `worktree ${a} (${b}): ${c}${d}`;
     }
+  }
+}
+
+// `done` couldn't ask GitHub whether the branch merged. gh's own words
+// are the cause's, which the document puts beside the message.
+export class MergeUnverified extends Schema.TaggedError<MergeUnverified>()(
+  "MergeUnverified",
+  { branch: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Couldn't ask GitHub whether ${this.branch} was merged. Try again once gh can reach it, or pass --force to discard the branch.`;
   }
 }
 
@@ -237,6 +262,7 @@ export type MergeError =
   | MergeLostTrack;
 export type DoneError =
   | LandingRefused
+  | MergeUnverified
   | Git.GitError
   | Git.BranchNotMergedError;
 export type RemoveStackError =

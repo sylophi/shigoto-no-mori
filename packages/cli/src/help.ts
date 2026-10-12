@@ -89,7 +89,7 @@ const catalog = (names: Names) => {
       [
         "worktrees done [<name>] [-f]",
         "Post-merge cleanup",
-        "Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f.",
+        "Lands the checkout back on the primary branch and deletes the merged one. Refuses without -f a branch that isn't merged, one with commits its merged PR never had (it names them), and one GitHub couldn't be asked about.",
       ],
       [
         "worktrees pr [<name>]",
@@ -104,7 +104,7 @@ const catalog = (names: Names) => {
       [
         "worktrees land [<name>] [-m <method>] [--stack] [-f] [--keep-branch]",
         "Merge the PR, then clean up",
-        "merge + rm in one step (done when landing the primary checkout), fast-forwarding the checkout that has the PR's base branch out in between. An already-merged PR skips straight to cleanup. A PR that doesn't merge on the spot (auto-merge enabled, or a merge queue took it) is waited on as merge does, then cleaned up. One that needs attention instead stops it with an error and nothing removed. A stack a merge queue took stops before the cleanup, and running land again once it has merged does the rest. " +
+        "merge + rm in one step (done when landing the primary checkout), fast-forwarding the checkout that has the PR's base branch out in between. An already-merged PR skips straight to cleanup. A PR that doesn't merge on the spot (auto-merge enabled, or a merge queue took it) is waited on as merge does, then cleaned up. One that needs attention instead stops it with an error and nothing removed. A stack a merge queue took stops before the cleanup, and running land again once it has merged does the rest. A branch with commits the PR doesn't have (made after its last push) is refused before anything merges, naming them, unless -f or --keep-branch. " +
           "--stack lands the PR with every open PR under it in its stack (merge --stack), then removes every worktree whose branch landed, the lower layers' included. A PR that sits on another open PR is refused without it. The removal guards cover all of them before anything merges.",
       ],
       [
