@@ -16,8 +16,7 @@ import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import { type HubHandlers, servedInvokePeer } from "@shared/hub/bridgeHandlers";
-import * as Cause from "effect/Cause";
+import { servedInvokePeer, servedWatchPeer } from "@shared/hub/bridgeHandlers";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
@@ -30,7 +29,6 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
-import { peerViewFailure } from "@shared/hub/peerViewFailure";
 import { callFailureOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
@@ -743,24 +741,7 @@ export function registerHostHandlers(): void {
     invokePeer: servedInvokePeer(hubHandlers),
   });
   registerViews(hubContract, {
-    watchPeer: (input: Parameters<HubHandlers["watchPeer"]>[0]) =>
-      Stream.callback<unknown, unknown>((queue) =>
-        Effect.acquireRelease(
-          Effect.sync(() =>
-            hubHandlers().watchPeer(input, {
-              value: (value) => Queue.offerUnsafe(queue, value),
-              end: (failure) =>
-                failure === undefined
-                  ? Queue.endUnsafe(queue)
-                  : Queue.failCauseUnsafe(
-                      queue,
-                      Cause.fail(peerViewFailure(input.deviceId, failure)),
-                    ),
-            }),
-          ),
-          (stop) => Effect.sync(stop),
-        ),
-      ),
+    watchPeer: servedWatchPeer(hubHandlers),
   });
   // The listeners belong to this machine, so the surface never mounts
   // on a remote wire.

@@ -25,8 +25,14 @@
 //
 // Interruption: a call its caller cancels, or whose link drops, is
 // interrupted on the host, its handler's signal aborted. Views stream
-// their values. Tracing: the host's span for a call continues the
-// caller's trace.
+// their values, and end as a disconnect when this side closes their
+// link. Tracing: the host's span for a call continues the caller's
+// trace.
+//
+// The relay a window's host serves a peer's view through (hub:watchPeer,
+// servedWatchPeer) holds a bounded backlog for a window that falls
+// behind, then ends the view, and the flood with it. A link the host
+// cuts writes nothing more to its socket once it is closing.
 //
 // What each call may do over the link, its annotations, is held whole
 // in packages/contracts/fixtures/wire/classification.json
@@ -41,6 +47,7 @@ import assert from "node:assert/strict";
 import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Cause from "effect/Cause";
@@ -58,6 +65,7 @@ import {
   CommandRefusedError,
   LinkRefusedError,
   LinkUnauthenticatedError,
+  NoDirectConnectionError,
   NotSharingError,
   ProtocolVersionMismatchError,
   RemoteCallError,
@@ -102,6 +110,12 @@ import {
   mirrorInviteAdmits,
   mirrorInviteSees,
 } from "@host/mirror/invites";
+import {
+  makeHubHandlers,
+  RELAY_BACKLOG,
+  servedWatchPeer,
+} from "@shared/hub/bridgeHandlers";
+import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 import { runHost } from "./lib/hostRuntime.mts";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import type { ChannelHandle } from "@shigomori/contracts/link";
@@ -123,6 +137,8 @@ import { testDeviceKey } from "./lib/hubStub.mts";
 // What the test handlers saw.
 type Seen = {
   refreshes: number;
+  // The values a peer's endless flood has been pulled for.
+  pulled: number;
   // What a call that leaves something going (a script's console) keeps
   // to reach its caller with.
   notifiers: HandlerContext["notifier"][];
@@ -137,6 +153,9 @@ type Seen = {
 // (host/lib/terminals/Terminals.ts), 16 MiB in all.
 const FLOOD_CHUNKS = 64;
 const FLOOD_CHUNK_CHARS = 256 * 1024;
+// A flood a relay with no bound buffers whole: 64 MiB of chunks.
+const ENDLESS_CHUNKS = 4096;
+const ENDLESS_CHUNK_CHARS = 16 * 1024;
 
 // Stand-ins for real handlers, on real contract calls: a read
 // (git:sweep), a command (git:refreshProject, which also fails on cue
@@ -166,16 +185,26 @@ function serve(listener: DirectListener, seen: Seen): void {
   // A terminal's output as a client that fell behind a flood is handed
   // it: its whole backlog at once, the most a chunk holds each. Or one
   // event past what the dialer's decoder takes.
+  // Or a flood that goes on for as long as it is read, counting what it
+  // was read for.
   binding.view("terminals:attach", (input) =>
     (input as { terminalId: string }).terminalId === "huge"
       ? Stream.make({ kind: "output", data: "y".repeat(17 << 20), seq: 1 })
-      : Stream.fromIterable(
-          Array.from({ length: FLOOD_CHUNKS }, (_, n) => ({
-            kind: "output",
-            data: "y".repeat(FLOOD_CHUNK_CHARS),
-            seq: n + 1,
-          })),
-        ),
+      : (input as { terminalId: string }).terminalId === "endless"
+        ? Stream.fromEffectRepeat(
+            Effect.sync(() => ({
+              kind: "output",
+              data: "y".repeat(ENDLESS_CHUNK_CHARS),
+              seq: ++seen.pulled,
+            })),
+          ).pipe(Stream.take(ENDLESS_CHUNKS))
+        : Stream.fromIterable(
+            Array.from({ length: FLOOD_CHUNKS }, (_, n) => ({
+              kind: "output",
+              data: "y".repeat(FLOOD_CHUNK_CHARS),
+              seq: n + 1,
+            })),
+          ),
   );
   binding.handle("forward:open", async (ctx, input) => {
     const { channelId } = input as { channelId: string };
@@ -218,6 +247,7 @@ async function listen(
 ): Promise<{ listener: DirectListener; seen: Seen }> {
   const seen: Seen = {
     refreshes: 0,
+    pulled: 0,
     notifiers: [],
     hanging: [],
     channels: new Map(),
@@ -265,6 +295,27 @@ const invoke = (
   input?: unknown,
   signal?: AbortSignal,
 ) => connection.transport.invoke(channel, input, { signal });
+
+// What a view on one worktree asks with.
+const WORKTREE = { projectId: "p", worktreeId: "w" };
+
+// The bridge a window's host serves hub:watchPeer from, its one peer
+// session this link.
+const bridgeOver = (connection: DeviceConnection) =>
+  makeHubHandlers({
+    status: () => ({
+      socket: { phase: "connected", remoteDeviceId: "", remoteAppVersion: "" },
+      onlineDeviceIds: [],
+      peerAppVersions: {},
+      peerAcceptsCommands: {},
+      peerSharesData: {},
+    }),
+    connectDirect: async () => ({
+      ...connection,
+      acceptsCommands: true,
+      sharesData: true,
+    }),
+  });
 
 const rejection = (promise: Promise<unknown>) =>
   promise.then(
@@ -1112,6 +1163,112 @@ it("streams: a client behind a flood is handed it in messages within the cap, an
   assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
     leaseMs: 5,
   });
+});
+
+it("relay: a window that falls behind a peer's flood has its view ended as no session once this host holds the backlog, the flood stops, and the link's calls still answer", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dialListener(track, listener);
+  const hub = bridgeOver(connection);
+  await hub.dialPeer(LISTENER);
+  // A window that takes three values, then nothing until it is let go.
+  let taken = 0;
+  const behind = Deferred.makeUnsafe<void>();
+  const window = Effect.runPromiseExit(
+    Stream.runForEach(
+      servedWatchPeer(() => hub)({
+        deviceId: LISTENER,
+        channel: "terminals:attach",
+        input: { terminalId: "endless" },
+      }),
+      () => (++taken === 3 ? Deferred.await(behind) : Effect.void),
+    ),
+  );
+  await waitFor(() => taken === 3, "the window's three values");
+  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+    leaseMs: 5,
+  });
+  await waitFor(
+    () => seen.pulled > RELAY_BACKLOG + 3,
+    "the flood to pass the backlog",
+  );
+  Effect.runSync(Deferred.succeed(behind, undefined));
+  const failure = failureOf(await window);
+  assert.ok(failure instanceof NoDirectConnectionError, String(failure));
+  assert.ok(taken <= RELAY_BACKLOG + 3, `the window was handed ${taken}`);
+  const pulled = seen.pulled;
+  await delay(200);
+  assert.ok(pulled < ENDLESS_CHUNKS, "the whole flood was read");
+  assert.equal(seen.pulled, pulled, "the flood went on after the view ended");
+});
+
+it("views: a view on a link this side closes ends as a disconnect, which a window's host relays as no session", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const connection = await dialListener(track, listener);
+  const hub = bridgeOver(connection);
+  await hub.dialPeer(LISTENER);
+  const watched = new Promise<unknown>((resolve) => {
+    connection.transport.watch?.("ports:watch", WORKTREE, {
+      value: () => {},
+      end: resolve,
+    });
+  });
+  const relayed = Effect.runPromiseExit(
+    Stream.runDrain(
+      servedWatchPeer(() => hub)({
+        deviceId: LISTENER,
+        channel: "ports:watch",
+        input: WORKTREE,
+      }),
+    ),
+  );
+  // Both views running on the host before the link goes.
+  await delay(100);
+  connection.close();
+  assert.ok((await watched) instanceof RemoteDisconnectedError);
+  assert.ok(failureOf(await relayed) instanceof NoDirectConnectionError);
+});
+
+it("close: a link the host cuts while its dialer goes on calling writes nothing to the socket once it is closing, and the calls reject as a disconnect", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  let late = 0;
+  let closes = 0;
+  const connection = await dialListener(track, listener, {
+    openSocket: (url) => {
+      const ws = new WebSocket(url);
+      const send = ws.send.bind(ws);
+      ws.send = ((...args: Parameters<typeof send>) => {
+        if (ws.readyState !== WebSocket.OPEN) late += 1;
+        send(...args);
+      }) as typeof ws.send;
+      return ws;
+    },
+    onClose: () => closes++,
+  });
+  // A page busy through its sign-out: a call every turn of the loop.
+  const failures: unknown[] = [];
+  const calling = () => {
+    if (closes > 0) return;
+    invoke(connection, "git:sweep", { renewal: true }).catch((error) =>
+      failures.push(error),
+    );
+    setImmediate(calling);
+  };
+  calling();
+  await listener.binding.closePeersNotIn([]);
+  await waitFor(() => closes === 1, "the dialer to hear the drop");
+  await delay(100);
+  assert.equal(late, 0, "writes to the socket once it was closing");
+  assert.ok(failures.length > 0);
+  assert.ok(
+    failures.every((error) => error instanceof RemoteDisconnectedError),
+    String(
+      failures.find((error) => !(error instanceof RemoteDisconnectedError)),
+    ),
+  );
 });
 
 it("streams: a frame past the decoder's cap drops the link rather than failing every call after it, and a dial again answers", async () => {
