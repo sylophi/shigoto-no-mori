@@ -49,7 +49,8 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
     Effect.runPromiseWith(clock.context)(effect);
   let answers: "yes" | "fails" | "never" = "yes";
   let watching = true;
-  let wakes = 0;
+  let asleep = false;
+  let sleeps = 0;
   let silent = 0;
   const probe = Effect.suspend(() =>
     answers === "yes"
@@ -64,7 +65,8 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
       every: "10 seconds",
       limit: "30 seconds",
       watching: () => watching,
-      wakes: () => wakes,
+      asleep: () => asleep,
+      sleeps: () => sleeps,
       silent: () => {
         silent += 1;
       },
@@ -74,16 +76,26 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
   answers = "fails";
   await clock.advance(60_000);
   assert.equal(silent, 0, "an answer, or a failed link, is not silence");
-  // The machine sleeps through a round with its probe out: the clock
-  // runs on, and on waking the round is asked again.
+  // Rounds start every 10 s after the last ended: one ran at 120 s.
+  // The machine sleeps through the round begun at 130 s: the clock runs
+  // on, and its deadline (160 s) proves nothing.
   answers = "never";
-  await clock.advance(10_000 + 5_000);
-  wakes += 1;
+  await clock.advance(15_000);
+  asleep = true;
+  sleeps += 1;
   await clock.advance(25_000);
+  asleep = false;
+  sleeps += 1;
   assert.equal(silent, 0, "a round the machine slept through");
-  answers = "yes";
-  await clock.advance(20_000);
-  answers = "never";
+  // The machine says it will sleep (160 s) before the next round begins
+  // (170 s), whose deadline (200 s) comes due before the wake is heard.
+  asleep = true;
+  sleeps += 1;
+  await clock.advance(40_000);
+  asleep = false;
+  sleeps += 1;
+  assert.equal(silent, 0, "a round begun as the machine went to sleep");
+  // Awake: the round begun at 210 s goes unanswered to 240 s.
   await clock.advance(10_000 + 29_000);
   assert.equal(silent, 0, "not before the limit");
   await clock.advance(1_000);
@@ -101,7 +113,8 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
       every: "10 seconds",
       limit: "30 seconds",
       watching: () => watching,
-      wakes: () => wakes,
+      asleep: () => asleep,
+      sleeps: () => sleeps,
       silent: () => {
         silent += 1;
       },

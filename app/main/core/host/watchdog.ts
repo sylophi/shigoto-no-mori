@@ -20,28 +20,36 @@ export const busyWithin = <A, E>(
 // Asks `probe` every `every` while `watching` holds, and calls `silent`
 // once a probe goes `limit` without an answer. A probe that fails is an
 // answer: the host is there, and its link is what went (a restart the
-// next probe sees). A round the machine slept through (`wakes` counts
-// the wakes) proves nothing, since the clock ran on while the host could
-// not answer, and the next round asks again.
+// next probe sees). A round that starts or ends with the machine asleep,
+// or sees it go to sleep or wake (`sleeps` counts both), proves
+// nothing, since the clock runs on while the host cannot answer, and
+// the next round asks again.
 export const watchHost = (options: {
   readonly probe: Effect.Effect<unknown, unknown>;
   readonly every: Duration.Input;
   readonly limit: Duration.Input;
   readonly watching: () => boolean;
-  readonly wakes: () => number;
+  readonly asleep: () => boolean;
+  readonly sleeps: () => number;
   readonly silent: () => void;
 }): Effect.Effect<void> =>
   Effect.gen(function* () {
     while (true) {
       yield* Effect.sleep(options.every);
       if (!options.watching()) return;
-      const woken = options.wakes();
+      const slept = options.sleeps();
+      const startedAsleep = options.asleep();
       const answered = yield* options.probe.pipe(
         Effect.ignore,
         Effect.timeoutOption(options.limit),
       );
       if (!options.watching()) return;
-      if (Option.isNone(answered) && options.wakes() === woken) {
+      if (
+        Option.isNone(answered) &&
+        !startedAsleep &&
+        !options.asleep() &&
+        options.sleeps() === slept
+      ) {
         return options.silent();
       }
     }

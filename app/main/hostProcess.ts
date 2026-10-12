@@ -171,7 +171,8 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
           every: WATCH_EVERY,
           limit: SILENT_LIMIT,
           watching: () => child === watched && !quitting,
-          wakes: () => wakes,
+          asleep: () => asleep,
+          sleeps: () => sleeps,
           silent: () => {
             log.warn("[host] silent for 30 s, starting it again");
             watched.kill();
@@ -260,12 +261,17 @@ export const hostBusyForQuit = () =>
     );
   });
 
-// The machine is going to sleep, or woke: a watchdog round it slept
-// through proves nothing. Counted at both, since the round's deadline
-// can come due on waking before the resume is heard.
-let wakes = 0;
+// The machine is going to sleep, or woke: a watchdog round around
+// either proves nothing (watchHost).
+let asleep = false;
+let sleeps = 0;
 export function noteSleep(): void {
-  wakes += 1;
+  asleep = true;
+  sleeps += 1;
+}
+export function noteWake(): void {
+  asleep = false;
+  sleeps += 1;
 }
 
 export function hostAddress(): Promise<Address> {

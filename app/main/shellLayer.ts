@@ -16,7 +16,7 @@ import { shellLinkLayer } from "./ipc/register";
 // direct session, so the dead ones are redialed within seconds rather
 // than read as connected until the next heartbeat.
 const wake = () => {
-  HostProcess.noteSleep();
+  HostProcess.noteWake();
   void Effect.runFork(Effect.ignore(HostProcess.host().wake()));
 };
 const resumeProbe = lifetime(
