@@ -13,6 +13,7 @@ import type { HostServices } from "./services";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import * as BackgroundFetch from "@host/lib/git/backgroundFetch";
 import { launchGuide } from "@host/lib/engineOps";
+import { projectImageHosts } from "@host/lib/projects/imageHosts";
 import { dirname } from "node:path";
 import * as HostFacts from "@host/lib/HostFacts";
 import {
@@ -89,6 +90,7 @@ export function startHost(options: {
           Effect.catchDefect((defect) => Effect.fail(callFailureOf(defect))),
         ),
       ),
+    imageHosts: () => onRoot(() => Graph.run(projectImageHosts)),
     quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
   };
   registerLoopbackContract(sessionContract, session);

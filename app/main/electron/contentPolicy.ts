@@ -8,6 +8,8 @@
 // are inline and whose updates arrive over a socket of its own, and
 // runs react-grab, which fetches its font and asks for its version.
 
+import { GITHUB_IMAGE_HOSTS } from "@shigomori/contracts/predicates/imageHosts";
+
 // The Clerk instance's Frontend API host, which serves its script and
 // answers its calls: what a publishable key encodes, base64 after its
 // pk_test_ or pk_live_ prefix and ending in "$". None for an
@@ -23,6 +25,10 @@ export function clerkFrontendHost(publishableKey: string): string | null {
 export function rendererContentPolicy(options: {
   readonly clerkHost: string | null;
   readonly dev: boolean;
+  // The hosts beside GitHub's that images may load from: this machine's
+  // projects' remotes (contracts' predicates/imageHosts.ts), each with
+  // its subdomains.
+  readonly imageHosts: readonly string[];
 }): string {
   const clerk =
     options.clerkHost === null ? [] : [`https://${options.clerkHost}`];
@@ -37,8 +43,18 @@ export function rendererContentPolicy(options: {
       "'unsafe-inline'",
       ...dev("https://fonts.googleapis.com"),
     ],
-    // A description's images come from wherever its author put them.
-    "img-src": ["'self'", "data:", "blob:", "https:"],
+    // Clerk's avatars, and a description's images from GitHub or a
+    // remote's host, as the page's markdown allows them.
+    "img-src": [
+      "'self'",
+      "data:",
+      "blob:",
+      "https://img.clerk.com",
+      ...[...GITHUB_IMAGE_HOSTS, ...options.imageHosts].flatMap((host) => [
+        `https://${host}`,
+        `https://*.${host}`,
+      ]),
+    ],
     "font-src": ["'self'", "data:", ...dev("https://fonts.gstatic.com")],
     "connect-src": [
       "'self'",
