@@ -1,3 +1,4 @@
+import { useBinding } from "@/hooks/ui/useKeymap";
 import { useState } from "react";
 import type { CommitActions } from "@shigomori/ui/lib/commitRewrite.ts";
 import { useQuery } from "@tanstack/react-query";
@@ -168,6 +169,7 @@ function RewordForm({
   onRewritten: ((worktree: Worktree) => void) | undefined;
 }) {
   const [summary, setSummary] = useState(initial.summary);
+  const saveKeys = useBinding("save");
   const [description, setDescription] = useState(initial.description);
   const reword = useRewordCommit();
   const canSave = summary.trim().length > 0 && !reword.isPending;
@@ -199,6 +201,7 @@ function RewordForm({
       canSave={canSave}
       onSave={save}
       onCancel={onClose}
+      saveKeys={saveKeys}
     />
   );
 }

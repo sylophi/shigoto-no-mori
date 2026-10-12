@@ -1,6 +1,7 @@
 // The worktree page's sections over the fixtures (git, ports, scripts),
 // for the page's scene, and the Git page's parts and the sections'
 // other states in a scene of their own.
+import { defaultBinding } from "../lib/keymap.ts";
 import type { ReactNode } from "react";
 import { GitBranch } from "lucide-react";
 import { StaticMenu } from "../primitives/dropdown-menu.tsx";
@@ -608,6 +609,7 @@ export function WorktreeSectionsPartsScene({
                   canSave
                   onSave={noop}
                   onCancel={noop}
+                  saveKeys={defaultBinding("save")}
                 />
               }
             />
