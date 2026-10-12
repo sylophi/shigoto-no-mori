@@ -1,3 +1,4 @@
+import { cn } from "../../lib/utils.ts";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { Command } from "cmdk";
 import { Folder, FolderGit2, FolderSearch } from "lucide-react";
@@ -93,7 +94,9 @@ export function AddExistingFormView({
       shouldFilter={false}
       value={highlighted}
       onValueChange={onHighlight}
-      className={MODAL_COMMAND_CLASS}
+      // Fills what holds it (the welcome page's card), so its footer sits
+      // at the bottom however few folders the list has.
+      className={cn(MODAL_COMMAND_CLASS, "flex-1")}
     >
       <div
         data-slot="search-row"
@@ -128,7 +131,7 @@ export function AddExistingFormView({
 
       <Command.List
         onMouseDown={keepFocusInInput}
-        className="overflow-y-auto p-2"
+        className="min-h-0 flex-1 overflow-y-auto p-2"
       >
         {canBrowseUp && <BrowseUpItemView onSelect={onBrowseUp} />}
 
