@@ -1,8 +1,7 @@
 // The host's views (host/lib/Views.ts and each module's `*Views`): every
 // one answers its query's value first, then again after a write through
 // the engine (or the push the write makes), and says nothing while the
-// value stays the same. The store's tick and the views' polls run on a
-// TestClock.
+// value stays the same. The views' polls run on a TestClock.
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -77,14 +76,14 @@ afterAll(async () => {
 type Services = Views.Services | HostServices;
 
 // A view watched: `next` is its next value, `push` makes a host push as
-// the broadcast seam would, `tick` moves the clock past the store's
-// tick, and `quiet` says nothing more came.
+// the broadcast seam would, `tick` moves the clock past a view's poll,
+// and `quiet` says nothing more came.
 const watch = <A,>(
   stream: Stream.Stream<A, unknown, Services>,
   body: (watching: {
     readonly first: A;
     readonly next: Effect.Effect<A>;
-    readonly tick: (by?: Duration.Input) => Effect.Effect<void>;
+    readonly tick: (by: Duration.Input) => Effect.Effect<void>;
     readonly push: (channel: string) => Effect.Effect<void>;
     readonly quiet: Effect.Effect<void>;
   }) => Effect.Effect<void, unknown, Services | Scope.Scope>,
@@ -99,7 +98,7 @@ const watch = <A,>(
       yield* body({
         first,
         next,
-        tick: (by = "500 millis") => TestClock.adjust(by),
+        tick: (by) => TestClock.adjust(by),
         push: (channel) =>
           pushes.publish({ channel, payload: undefined, remote: true }),
         quiet: Effect.promise(
@@ -111,7 +110,7 @@ const watch = <A,>(
       });
     }).pipe(
       Effect.scoped,
-      // The store's tick runs on the TestClock the body moves.
+      // The views' polls run on the TestClock the body moves.
       // The host's services beneath, the proof file's own.
       Effect.provide(
         Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer).pipe(
@@ -138,29 +137,26 @@ const primaryId = async () => {
 };
 
 it("projects: a project registered through the engine joins the list", async () => {
-  await watch(projectsViews.watch(undefined), ({ first, next, tick, quiet }) =>
+  await watch(projectsViews.watch(undefined), ({ first, next, quiet }) =>
     Effect.gen(function* () {
       assert.ok(first.every((listed) => listed.path !== repo));
       project = yield* addProject(repo);
       projectId = project.id;
-      yield* tick();
       const after = yield* next;
       assert.ok(after.some((listed) => listed.id === projectId));
-      // A tick with nothing written says nothing.
-      yield* tick();
+      // Nothing written, nothing said.
       yield* quiet;
     }),
   );
 });
 
 it("worktrees: an auto-pull mark set through the engine shows on its row", async () => {
-  await watch(worktreesViews.watch({ projectId }), ({ first, next, tick }) =>
+  await watch(worktreesViews.watch({ projectId }), ({ first, next }) =>
     Effect.gen(function* () {
       const primary = first[0];
       assert.ok(primary !== undefined);
       assert.equal(primary.autoPull, false);
       yield* Ops.setAutoPull(project, primary.id, true);
-      yield* tick();
       const [row] = yield* next;
       assert.equal(row?.autoPull, true);
     }),
@@ -198,30 +194,26 @@ it("a worktree's changes: an edit shows on the next poll, a commit on the projec
 
 it("ports: a port added through the engine joins the list", async () => {
   const worktreeId = await primaryId();
-  await watch(
-    portsViews.watch({ projectId, worktreeId }),
-    ({ first, next, tick }) =>
-      Effect.gen(function* () {
-        assert.deepEqual(first.ports, []);
-        yield* Ops.writeWorktreeData(projectId, worktreeId, {
-          ports: [{ port: 45_123, label: "api" }],
-        });
-        yield* tick();
-        const after = yield* next;
-        assert.deepEqual(
-          after.ports.map((port) => port.port),
-          [45_123],
-        );
-      }),
+  await watch(portsViews.watch({ projectId, worktreeId }), ({ first, next }) =>
+    Effect.gen(function* () {
+      assert.deepEqual(first.ports, []);
+      yield* Ops.writeWorktreeData(projectId, worktreeId, {
+        ports: [{ port: 45_123, label: "api" }],
+      });
+      const after = yield* next;
+      assert.deepEqual(
+        after.ports.map((port) => port.port),
+        [45_123],
+      );
+    }),
   );
 });
 
 it("settings: a device setting written through the engine", async () => {
-  await watch(globalConfigViews.watch(undefined), ({ first, next, tick }) =>
+  await watch(globalConfigViews.watch(undefined), ({ first, next }) =>
     Effect.gen(function* () {
       assert.equal(first.hiddenLaunchers, undefined);
       yield* Ops.writeGlobalConfig({ hiddenLaunchers: ["app:zed"] });
-      yield* tick();
       assert.deepEqual((yield* next).hiddenLaunchers, ["app:zed"]);
     }),
   );
@@ -248,7 +240,6 @@ it("sharing: set from the account page, then by a terminal's write, the switch m
         const { shareWithDevices: _, ...rest } = doc;
         return rest;
       });
-      yield* TestClock.adjust("500 millis");
       assert.equal(yield* next, true);
       assert.equal(yield* sharing.current, true);
       assert.deepEqual(announced, [false, true]);

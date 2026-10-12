@@ -26,8 +26,8 @@ const forest: readonly Table[] = [
   "agent_sessions",
 ];
 
-// `onChange` runs once a tick in which the store wrote any of the
-// forest's tables.
+// `onChange` runs after the store commits a write to any of the forest's
+// tables.
 export const layer = (onChange: () => void) =>
   Layer.effectDiscard(
     Effect.gen(function* () {

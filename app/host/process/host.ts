@@ -4,7 +4,7 @@
 // (packages/contracts/src/modules/shellCalls.ts). It serves its windows,
 // its shell and the terminal on the loopback, and its peers on the
 // device link, until the shell asks it to stop (session:quit) or goes.
-import { createWriteStream, renameSync, statSync } from "node:fs";
+import { createWriteStream, openSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -51,19 +51,44 @@ type ParentPort = {
 };
 
 // Every span that ends, a JSON line in host-trace.log beside the
-// shell's trace.log, rotated to host-trace.old.log past 1 MB at start.
+// shell's trace.log, rotated to host-trace.old.log past 1 MB as the
+// shell's is: a host that runs for weeks writes a line every few
+// seconds while nothing happens.
 function traceFile(logsPath: string): (line: string) => void {
   const path = join(logsPath, "host-trace.log");
-  try {
-    if (statSync(path).size > 1_000_000) {
-      renameSync(path, join(logsPath, "host-trace.old.log"));
+  // Opened at once, so a rename moves the file this stream writes, and
+  // what it has yet to write lands in the old one.
+  const open = () => {
+    try {
+      const stream = createWriteStream("", { fd: openSync(path, "a") });
+      stream.on("error", () => {});
+      return stream;
+    } catch {
+      // No logs folder: the spans go unwritten.
+      return null;
     }
+  };
+  let size = 0;
+  try {
+    size = statSync(path).size;
   } catch {
     // No file yet.
   }
-  const stream = createWriteStream(path, { flags: "a" });
-  stream.on("error", () => {});
-  return (line) => void stream.write(`${line}\n`);
+  let stream = open();
+  return (line) => {
+    if (size > 1_000_000) {
+      stream?.end();
+      try {
+        renameSync(path, join(logsPath, "host-trace.old.log"));
+      } catch {
+        // Gone already: the new stream starts it again.
+      }
+      stream = open();
+      size = 0;
+    }
+    size += Buffer.byteLength(line) + 1;
+    stream?.write(`${line}\n`);
+  };
 }
 
 const facts = hostFacts();
