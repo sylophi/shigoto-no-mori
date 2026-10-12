@@ -3,7 +3,6 @@ import * as Fiber from "effect/Fiber";
 import { app, dialog, session } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import { existsSync } from "node:fs";
 import { platform } from "node:os";
 import path from "node:path";
 import { devProfileUserData } from "@shared/packaging/appName.mts";
@@ -16,6 +15,7 @@ import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
+import { unmountedVolume } from "./core/files/unmountedVolume";
 import { finishPendingNuke } from "./core/nuke/finish";
 import { asksForRemoteDebugging } from "./electron/debugSwitches";
 import { enableDevCdpPort } from "./electron/devCdp";
@@ -293,9 +293,10 @@ app.on("ready", async () => {
     // A pointer to a folder on a volume that isn't there (an external
     // drive unplugged) finds nothing to stand on: said here, rather than
     // as a host that couldn't start.
-    const holder = path.dirname(dataDir());
-    if (dataDirSource() === "pointer" && !existsSync(holder)) {
-      throw new Error(`${holder} isn't there.`);
+    const volume =
+      dataDirSource() === "pointer" ? unmountedVolume(dataDir()) : null;
+    if (volume !== null) {
+      throw new Error(`${volume} isn't connected.`);
     }
   } catch (err) {
     // A pointer file can aim the data dir somewhere that isn't reachable
@@ -364,7 +365,11 @@ function showHostFailure(failure: HostFailure): void {
   // devices: relaunched within the fatal-relaunch budget rather than
   // left on a dialog nobody may be there to dismiss. A store that won't
   // open is no better for a relaunch, and says so.
-  if (failure.storeReport === null && tryFatalRelaunch(rememberWindows)) {
+  if (
+    failure.storeReport === null &&
+    !isShuttingDown() &&
+    tryFatalRelaunch(rememberWindows)
+  ) {
     app.exit(1);
     return;
   }
