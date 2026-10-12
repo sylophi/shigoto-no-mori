@@ -39,6 +39,7 @@ import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import {
   cloneSourceCommand,
   GUIDE_LAUNCHERS,
+  GUIDE_OPENING,
   guideCommand,
   guideInstructions,
   SOURCE_URL,
@@ -162,11 +163,10 @@ export type GuideSource =
   | { readonly tag: string }
   | { readonly checkout: string };
 
-// A guide to open: the harness, the question, the session it drives the
-// window on, and the source it reads.
+// A guide to open: the harness, the session it drives the window on,
+// and the source it reads.
 export type GuideLaunch = {
   readonly harness: GuideHarness;
-  readonly question: string;
   readonly session: string;
   readonly source: GuideSource;
 };
@@ -635,7 +635,7 @@ const make = (binary: string) =>
       );
       yield* open.inTerminal(
         folder,
-        `${before}${guideCommand({ ...input, sm, dataDir })}`,
+        `${before}${guideCommand({ ...input, sm, dataDir, prompt: GUIDE_OPENING })}`,
       );
     });
 

@@ -4,12 +4,11 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  GUIDE_HARNESS_LABELS,
   guideContract,
+  type GuideHarness,
   type GuideState,
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
-import type { GuideHarnessOption } from "@shigomori/ui/views/guide/GuideView.tsx";
 import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys, queryKeysFor } from "@/lib/queryKeys";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -35,8 +34,8 @@ export function useGuide(): GuideState | null {
 
 // The agents a guide can open on this machine: those of the guide's
 // harnesses that are set up here, undefined until read. Read once a
-// minute at most: the dialog mounts on every ask.
-export function useGuideHarnesses(): GuideHarnessOption[] | undefined {
+// minute at most.
+export function useGuideHarnesses(): GuideHarness[] | undefined {
   const api = useApi();
   const hasLocalHost = useHasLocalHost();
   const { data } = useQuery({
@@ -45,9 +44,7 @@ export function useGuideHarnesses(): GuideHarnessOption[] | undefined {
     staleTime: 60_000,
     enabled: hasLocalHost,
   });
-  return data?.flatMap((harness) =>
-    harness.detected && isGuideHarness(harness.id)
-      ? [{ id: harness.id, label: GUIDE_HARNESS_LABELS[harness.id] }]
-      : [],
+  return data?.flatMap(({ id, detected }) =>
+    detected && isGuideHarness(id) ? [id] : [],
   );
 }

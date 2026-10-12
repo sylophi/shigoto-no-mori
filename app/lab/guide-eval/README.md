@@ -8,29 +8,29 @@ It needs both CLIs installed and signed in, and it spends their tokens.
 pnpm guide-eval                      # every how-to, both agents
 pnpm guide-eval --harness codex      # one agent
 pnpm guide-eval --only 5,11          # some how-tos, by number
-pnpm guide-eval --asks 1             # fewer Asks to time
+pnpm guide-eval --openings 1         # fewer openings
 ```
 
 It starts a fresh dev profile, `<tag>-guide-eval` (`--tag`, default
 this checkout's folder name), with one project and one worktree, not
-signed in. For each agent it first times the window's own Ask
-(`--asks` times, default 3), which opens the agent in Terminal the way
-the palette does, from the Ask to the agent's first action. Each
-how-to then asks the same way for a session of its own, closes the
-agent the Ask opened, and runs headless on that session: the launch
-line the app types plus each CLI's flags for a run with no one at it
-(`claude -p`, `codex exec`), from a freshly reloaded window.
+signed in. Every run launches the agent the way the Help menu's item
+does (`guide:start`, which opens it in Terminal on a session of its
+own), closes the agent it opened, and runs headless on that session:
+the launch line the app types plus each CLI's flags for a run with no
+one at it (`claude -p`, `codex exec`), from a freshly reloaded window.
 
-A how-to passes when the window shows the guide pointing at a control
-whose name answers it (`HOW_TOS` in `run.mts`).
+For each agent it first runs the app's own opening (`--openings`
+times, default 3). An opening passes when the agent asks the user
+something and does nothing in the window but read it (`look`,
+`screenshot`). Each how-to then starts the agent with its question,
+which it answers without asking first, and passes when the window
+shows the guide pointing at a control whose name answers it
+(`HOW_TOS` in `run.mts`).
 
-The report, per agent: the pass rate, the Ask to the first action, a
-tour's time to its first action, to its first point and to its end,
-its tokens (all of them, and the output's), and the round trip of
-`look` and `screenshot` through `sm guide mcp` (medians). The first
-action's time comes from the shell's trace (`Guide.drive` spans), the
-points from the window. Each tour's detail is in `report/tours.json`,
-and the app's output in `report/app.log`.
-
-Claude Code asks to trust the guide's folder the first time. The run
-answers yes, and leaves that Ask out of the times.
+The report, per agent: the pass rate, the openings that asked first
+and touched nothing and their time, a tour's time to its first action,
+to its first point and to its end, its tokens (all of them, and the
+output's), and the round trip of `look` and `screenshot` through
+`sm guide mcp` (medians). The actions come from the shell's trace
+(`Guide.drive` spans), the points from the window. Each run's detail
+is in `report/tours.json`, and the app's output in `report/app.log`.

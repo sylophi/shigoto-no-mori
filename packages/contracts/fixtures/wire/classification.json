@@ -419,16 +419,16 @@
     "gated": true,
     "grant": "changeApp"
   },
-  "guide:ask": {
-    "kind": "invoke",
-    "scope": "client"
-  },
   "guide:changed": {
     "kind": "push",
     "scope": "client",
     "gated": false
   },
   "guide:read": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "guide:start": {
     "kind": "invoke",
     "scope": "client"
   },
@@ -530,6 +530,10 @@
     "gated": false
   },
   "menu:setChords": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "menu:setGuideHarnesses": {
     "kind": "invoke",
     "scope": "client"
   },
@@ -658,11 +662,6 @@
     "scope": "client",
     "gated": false
   },
-  "nav:askHow": {
-    "kind": "push",
-    "scope": "client",
-    "gated": false
-  },
   "nav:deepLink": {
     "kind": "push",
     "scope": "client",
@@ -674,6 +673,11 @@
     "gated": false
   },
   "nav:openSettings": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
+  },
+  "nav:showAround": {
     "kind": "push",
     "scope": "client",
     "gated": false

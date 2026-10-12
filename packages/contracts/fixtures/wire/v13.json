@@ -665,12 +665,6 @@
       }
     }
   },
-  "guide:ask": {
-    "payload": {
-      "harness": "codex",
-      "question": "\ud800"
-    }
-  },
   "guide:changed": {
     "payload": {
       "harness": "codex",
@@ -684,6 +678,11 @@
         "say": " ",
         "seq": -3
       }
+    }
+  },
+  "guide:start": {
+    "payload": {
+      "harness": "codex"
     }
   },
   "guide:stop": {},
@@ -844,6 +843,9 @@
         "launchTool1": "Cmd+1"
       }
     }
+  },
+  "menu:setGuideHarnesses": {
+    "payload": ["claude", "codex"]
   },
   "menu:setLaunchToolsEnabled": {
     "payload": {
@@ -1471,12 +1473,14 @@
     }
   },
   "nav:addProject": {},
-  "nav:askHow": {},
   "nav:deepLink": {},
   "nav:launchById": {
     "payload": "\udc00"
   },
   "nav:openSettings": {},
+  "nav:showAround": {
+    "payload": "claude"
+  },
   "nav:takeDeepLink": {
     "success": " "
   },
@@ -1923,8 +1927,7 @@
   "session:guideLaunch": {
     "payload": {
       "session": "n80D$PJ9Ebstno7q",
-      "harness": "claude",
-      "question": "\u0000"
+      "harness": "claude"
     }
   },
   "session:imageHosts": {

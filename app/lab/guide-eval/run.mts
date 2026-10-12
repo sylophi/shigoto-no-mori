@@ -1,8 +1,11 @@
 // The guide's how-tos (V3.md, "The guide"): twenty questions a new user
 // asks, each run headless through Claude Code and Codex against a dev
-// app on this machine, on a session the app minted the way Ask How…'s
-// dialog does. A tour passes when the window shows the guide pointing at the
-// control that answers the question. README.md has what it reports.
+// app on this machine, on a session the app launched the way its Help
+// menu's item does, the agent started with the question. A tour passes
+// when the window shows the guide pointing at the control that answers
+// the question. Before them, the agent started on the app's own opening
+// should say what it can do and ask, touching nothing in the window.
+// README.md has what it reports.
 /* oxlint-disable no-await-in-loop -- one tour at a time, each on the window the last one left */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -17,7 +20,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
-import { guideCommand } from "@shigomori/engine/agentGuide";
+import { GUIDE_OPENING, guideCommand } from "@shigomori/engine/agentGuide";
 import type { Page } from "playwright-core";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";
@@ -101,7 +104,7 @@ const { values: flags } = parseArgs({
     harness: { type: "string", multiple: true },
     only: { type: "string" },
     tag: { type: "string", default: basename(repoDir) },
-    asks: { type: "string", default: "3" },
+    openings: { type: "string", default: "3" },
   },
 });
 const harnesses = (flags.harness ?? ["claude", "codex"]) as Harness[];
@@ -221,57 +224,24 @@ async function fresh(page: Page): Promise<void> {
   );
 }
 
-// The session the window's Ask mints, read off the agent it opened. A
-// timed Ask waits for the agent's first action. Then the agent goes, by
-// SIGKILL, so its server can't end the session as it stops.
-async function ask(
-  page: Page,
-  harness: Harness,
-  question: string,
-  timed: boolean,
-) {
+// The session the Help menu's item launches, read off the agent it
+// opened, which then goes by SIGKILL, so its server can't end the
+// session as it stops.
+async function launch(page: Page, harness: Harness): Promise<string> {
   const before = sessionsRunning();
-  const asked = Date.now();
   await (
     await pageApi(page)
-  ).evaluate((api, input) => api.guide.ask(input), {
+  ).evaluate((api, input) => api.run(api.guide.start(input)), {
     harness,
-    question,
   } as const);
-  // A new one: the last Ask's agent may still be on its way out.
+  // A new one: the last launch's agent may still be on its way out.
   const session = await waitFor(
     `${harness} to open`,
     async () => sessionsRunning().find((token) => !before.includes(token)),
     60_000,
   );
-  if (!timed) {
-    kill(session, "SIGKILL");
-    return { session, firstAction: 0, prompted: false };
-  }
-  // Claude Code asks once to trust the folder, its default "No, exit".
-  let trusted = harness !== "claude";
-  const first = await waitFor(
-    `${harness}'s first action`,
-    async () => {
-      if (
-        !trusted &&
-        Date.now() - asked > 8000 &&
-        terminalSays(/trust this folder/)
-      ) {
-        terminalKeys(`(ASCII character 27) & "[B"`);
-        trusted = true;
-      }
-      return driveStarts(asked)[0];
-    },
-    120_000,
-    100,
-  );
   kill(session, "SIGKILL");
-  return {
-    session,
-    firstAction: first.at - asked,
-    prompted: trusted && harness === "claude",
-  };
+  return session;
 }
 
 // Every process whose command line holds `text`.
@@ -299,47 +269,85 @@ function sessionsRunning(): string[] {
   );
 }
 
-function terminalSays(pattern: RegExp): boolean {
-  try {
-    return pattern.test(
-      execFileSync("osascript", [
-        "-e",
-        'tell application "Terminal" to get contents of selected tab of front window',
-      ]).toString(),
-    );
-  } catch {
-    return false;
-  }
-}
-
-function terminalKeys(keys: string): void {
-  execFileSync("osascript", [
-    "-e",
-    `tell application "Terminal" to do script (${keys}) in selected tab of front window`,
-  ]);
-}
-
-// The Terminal the asks opened, when the run started it: its windows
-// ask before they close a shell with a job, so it goes whole.
+// The Terminal the launches opened, when the run started it: its
+// windows closed and it quit, so none come back at its next launch (a
+// killed Terminal restores them). Their agents are gone by then.
 function quitTerminal(): void {
   if (!terminalWasRunning && running("Terminal")) {
-    kill("/Terminal.app/Contents/MacOS/Terminal", "SIGTERM");
+    execFileSync("osascript", [
+      "-e",
+      'tell application "Terminal" to close every window saving no',
+      "-e",
+      'tell application "Terminal" to quit',
+    ]);
   }
 }
 
-// The launch line the app types, run headless: the same server, tools
-// and question, with each harness's flags for a run with no one at it.
-function headless(harness: Harness, session: string, question: string): string {
+// The launch line the app types, run headless on `prompt`: the same
+// server and tools, with each harness's flags for a run with no one at
+// it.
+function headless(harness: Harness, session: string, prompt: string): string {
   const line = guideCommand({
     harness,
     sm: smd,
     dataDir: app.dataDir,
     session,
-    question,
+    prompt,
   });
   return harness === "claude"
     ? line.replace(/^claude /, "claude -p --output-format json ")
     : line.replace(/^codex /, "codex exec --json --skip-git-repo-check ");
+}
+
+// The harness run headless on a session, in the guide folder: its end,
+// and what it answered.
+function run(harness: Harness, session: string, prompt: string) {
+  const child = spawn("/bin/sh", ["-c", headless(harness, session, prompt)], {
+    cwd: guideFolder,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+  child.stderr.on("data", (chunk: Buffer) => logs.write(chunk));
+  const ended = new Promise<void>((resolve) =>
+    child.on("exit", () => resolve()),
+  );
+  const output = () =>
+    harness === "claude" ? claudeOutput(stdout) : codexOutput(stdout);
+  return { ended, output };
+}
+
+// The agent started on the app's opening: what it did in the window
+// (reading it aside), and whether it asked the user.
+type Opening = {
+  harness: Harness;
+  ms: number;
+  acted: string[];
+  asked: boolean;
+  answer: string;
+};
+
+// Reading the window, and the server's end as the agent stops.
+const UNTOUCHED = new Set(["look", "screenshot", "end"]);
+
+async function opening(page: Page, harness: Harness): Promise<Opening> {
+  await fresh(page);
+  const session = await launch(page, harness);
+  const started = Date.now();
+  const { ended, output } = run(harness, session, GUIDE_OPENING);
+  await Promise.race([ended, sleep(TOUR_LIMIT_MS)]);
+  kill(session, "SIGTERM");
+  await ended;
+  const { answer } = output();
+  return {
+    harness,
+    ms: Date.now() - started,
+    acted: driveStarts(started)
+      .map(({ action }) => action)
+      .filter((action) => !UNTOUCHED.has(action)),
+    asked: answer.includes("?"),
+    answer,
+  };
 }
 
 type Tour = {
@@ -360,22 +368,9 @@ type Tour = {
 // session as it stops.
 async function tour(page: Page, harness: Harness, howTo: HowTo): Promise<Tour> {
   await fresh(page);
-  const { session } = await ask(page, harness, howTo.question, false);
+  const session = await launch(page, harness);
   const started = Date.now();
-  const child = spawn(
-    "/bin/sh",
-    ["-c", headless(harness, session, howTo.question)],
-    {
-      cwd: guideFolder,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  let stdout = "";
-  child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-  child.stderr.on("data", (chunk: Buffer) => logs.write(chunk));
-  const ended = new Promise<void>((resolve) =>
-    child.on("exit", () => resolve()),
-  );
+  const { ended, output } = run(harness, session, howTo.question);
   const pointed: { at: number; name: string }[] = [];
   let timedOut = false;
   for (;;) {
@@ -389,14 +384,13 @@ async function tour(page: Page, harness: Harness, howTo: HowTo): Promise<Tour> {
     if (done) break;
     if (Date.now() - started > TOUR_LIMIT_MS) {
       timedOut = true;
-      child.kill("SIGTERM");
+      kill(session, "SIGTERM");
       await ended;
       break;
     }
   }
   const ms = Date.now() - started;
-  const { answer, tokens } =
-    harness === "claude" ? claudeOutput(stdout) : codexOutput(stdout);
+  const { answer, tokens } = output();
   const actions = driveStarts(started);
   const passed = pointed.some(({ name }) => howTo.point.test(name));
   return {
@@ -527,8 +521,13 @@ function median(values: readonly number[]): number | null {
 }
 
 const tours: Tour[] = [];
-const asks: Record<string, number[]> = {};
+const openings: Opening[] = [];
 const trips: Record<string, unknown> = {};
+const save = () =>
+  writeFileSync(
+    join(out, "tours.json"),
+    JSON.stringify({ openings, trips, tours }, null, 2),
+  );
 try {
   await app.launch(false);
   const page = await waitFor(
@@ -537,35 +536,32 @@ try {
     60_000,
   );
   for (const harness of harnesses) {
-    asks[harness] = [];
-    let session = "";
-    for (let i = 0; i < Number(flags.asks); i++) {
-      await fresh(page);
-      const asked = await ask(page, harness, "What can this app do?", true);
-      session = asked.session;
-      // A prompt the harness answered is the user's time, not the app's.
-      if (!asked.prompted) asks[harness].push(asked.firstAction);
+    for (let i = 0; i < Number(flags.openings); i++) {
+      const done = await opening(page, harness);
+      openings.push(done);
       console.log(
-        `${harness} ask: first action ${asked.firstAction} ms${asked.prompted ? " (trust prompt)" : ""}`,
+        `${done.asked && done.acted.length === 0 ? "pass" : "FAIL"} ${harness} opening ${(done.ms / 1000).toFixed(1)}s, acted [${done.acted.join(" ")}]: ${done.answer.replace(/\s+/g, " ").slice(0, 200)}`,
       );
+      save();
     }
-    trips[harness] = await roundTrips(session);
+    await fresh(page);
+    trips[harness] = await roundTrips(await launch(page, harness));
     for (const howTo of howTos) {
       const done = await tour(page, harness, howTo);
       tours.push(done);
       console.log(
         `${done.passed ? "pass" : "FAIL"} ${harness} ${(done.ms / 1000).toFixed(1)}s first point ${done.firstPoint ?? "-"} ms, ${done.tokens?.total ?? "?"} tokens: ${done.question} [${done.pointed.join(" | ")}]`,
       );
-      writeFileSync(
-        join(out, "tours.json"),
-        JSON.stringify({ asks, trips, tours }, null, 2),
-      );
+      save();
     }
   }
 } finally {
-  quitTerminal();
-  await app.stop();
-  logs.end();
+  try {
+    quitTerminal();
+  } finally {
+    await app.stop();
+    logs.end();
+  }
 }
 
 for (const harness of harnesses) {
@@ -580,7 +576,7 @@ for (const harness of harnesses) {
   console.log(
     [
       `${harness}: ${mine.filter((done) => done.passed).length} of ${mine.length} passed`,
-      `ask to first action ${median(asks[harness] ?? [])} ms (median of ${asks[harness]?.length})`,
+      `opening: ${openings.filter((done) => done.harness === harness && done.asked && done.acted.length === 0).length} of ${openings.filter((done) => done.harness === harness).length} asked first and touched nothing, in ${median(openings.filter((done) => done.harness === harness).map((done) => done.ms))} ms (median)`,
       `first action ${of((done) => done.firstAction)} ms, first point ${of((done) => done.firstPoint)} ms, a tour ${of((done) => done.ms)} ms`,
       `tokens ${of((done) => done.tokens?.total)} (output ${of((done) => done.tokens?.output)})`,
       `round trips ${JSON.stringify(trips[harness])}`,
