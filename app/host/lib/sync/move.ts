@@ -135,18 +135,27 @@ export const pullWorktree = (
     let files: TransferFilesResult | undefined;
     if (pullBringsIgnoredFiles(ignoreMode)) {
       progress({ step: "files" });
+      // The source device can have gone meanwhile (a lid closed during
+      // a long setup): the landing stands, and the files say so.
       const source = yield* peerWorktree(
         sourceDeviceId,
         sourceProjectId,
         sourceWorktreeId,
+      ).pipe(
+        Effect.map((found) =>
+          found === undefined
+            ? "the source worktree is no longer listed there"
+            : found,
+        ),
+        Effect.catch((error) =>
+          Effect.succeed(
+            `the other device couldn't be asked: ${errorWordsOf(error)}`,
+          ),
+        ),
       );
       files =
-        source === undefined
-          ? {
-              crossed: false,
-              conflicts: 0,
-              error: "the source worktree is no longer listed there",
-            }
+        typeof source === "string"
+          ? { crossed: false, conflicts: 0, error: source }
           : yield* transferFilesOnce(
               {
                 localRoot: landed.worktree.path,
