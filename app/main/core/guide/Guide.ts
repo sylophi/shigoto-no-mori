@@ -134,7 +134,6 @@ export class GuideWindows extends Context.Service<
     readonly launch: (input: {
       readonly session: string;
       readonly harness: GuideHarness;
-      readonly question: string;
     }) => Effect.Effect<void, CallFailure>;
     // Each window as it closes.
     readonly closed: Stream.Stream<number>;
@@ -153,12 +152,11 @@ type Session = {
 export class Guide extends Context.Service<
   Guide,
   {
-    // Opens the harness on the question, on a new session for the window
-    // in place of the one it had. A launch that fails leaves none.
-    readonly ask: (
+    // Opens the harness on a new session for the window, in place of the
+    // one it had. A launch that fails leaves none.
+    readonly start: (
       windowId: number,
       harness: GuideHarness,
-      question: string,
     ) => Effect.Effect<void, CallFailure>;
     // Ends the window's session, if it has one.
     readonly end: (windowId: number) => Effect.Effect<void>;
@@ -344,6 +342,11 @@ const make = Effect.gen(function* () {
   const sessions = yield* Ref.make<ReadonlyMap<string, Session>>(new Map());
   // One action at a time, so two never interleave their input.
   const lock = yield* Semaphore.make(1);
+  // One start at a time, so a window never holds two sessions, and a
+  // launch has opened or failed before the next one replaces it. Stop
+  // and a window's close never wait on it: a launch can hang on macOS
+  // asking whether the app may control the terminal.
+  const starts = yield* Semaphore.make(1);
 
   const byWindow = (windowId: number) =>
     Effect.map(Ref.get(sessions), (all) =>
@@ -363,21 +366,29 @@ const make = Effect.gen(function* () {
   const tell = (session: Session) =>
     windows.tell(session.windowId, stateOf(session));
 
+  // The window hears what guides it once the session is gone: nothing,
+  // or a start's that came in meanwhile (a start while the agent's
+  // server ends its session, or while a launch fails).
   const endSession = (session: Session) =>
-    Effect.andThen(close(session), windows.tell(session.windowId, null));
+    Effect.gen(function* () {
+      yield* close(session);
+      const now = yield* byWindow(session.windowId);
+      yield* windows.tell(
+        session.windowId,
+        now === undefined ? null : stateOf(now),
+      );
+    });
 
   const end = Effect.fn("Guide.end")(function* (windowId: number) {
     const session = yield* byWindow(windowId);
     if (session !== undefined) yield* endSession(session);
   });
 
-  const ask = Effect.fn("Guide.ask")(function* (
+  const start = Effect.fn("Guide.start")(function* (
     windowId: number,
     harness: GuideHarness,
-    question: string,
   ) {
     const previous = yield* byWindow(windowId);
-    if (previous !== undefined) yield* close(previous);
     const session: Session = {
       token: randomBytes(32).toString("base64url"),
       windowId,
@@ -386,14 +397,23 @@ const make = Effect.gen(function* () {
       page: undefined,
       point: null,
     };
-    yield* Ref.update(sessions, (all) =>
-      new Map(all).set(session.token, session),
-    );
+    // The new session in the old one's place at once, so a Stop while
+    // the old one lets go of the page ends the new one.
+    yield* Ref.update(sessions, (all) => {
+      const next = new Map(all);
+      if (previous !== undefined) next.delete(previous.token);
+      return next.set(session.token, session);
+    });
+    if (previous !== undefined) {
+      yield* Scope.close(previous.scope, Exit.void);
+    }
+    // Stopped meanwhile: nothing to show or open.
+    if (!(yield* Ref.get(sessions)).has(session.token)) return;
     yield* tell(session);
     yield* windows
-      .launch({ session: session.token, harness, question })
+      .launch({ session: session.token, harness })
       .pipe(Effect.onError(() => endSession(session)));
-  });
+  }, starts.withPermits(1));
 
   const read = Effect.fn("Guide.read")(function* (windowId: number) {
     const session = yield* byWindow(windowId);
@@ -555,7 +575,7 @@ const make = Effect.gen(function* () {
     ),
   );
 
-  return Guide.of({ ask, end, read, drive });
+  return Guide.of({ start, end, read, drive });
 });
 
 export const layer = Layer.effect(Guide, make);

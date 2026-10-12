@@ -3,18 +3,19 @@ import { push, defineContract, invoke, Remote } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// The guide: a user asks how to do something, and their own agent (Claude
-// Code or Codex, in their terminal) shows them in the window they asked
-// from. The window asks its shell (guideContract), the shell mints a
-// session bound to that window and has the host open the agent
-// (session's guideLaunch), and the agent drives the window through
+// The guide: from the Help menu a user opens their own agent (Claude
+// Code or Codex, in their terminal), asks it how to do something, and
+// it shows them in the window they opened it from. The window asks its
+// shell (guideContract), the shell mints a session bound to that window
+// and has the host open the agent (session's guideLaunch), and the
+// agent drives the window through
 // `sm guide mcp`, whose tools are the actions below: the terminal `sm`
 // calls the host (guideDriveContract), the host passes the call on to
 // its shell (shellCalls' guide), and the shell drives the window.
 
 // The harnesses the guide opens, by their id in the engine's agent
 // hooks table.
-const GuideHarnessSchema = Schema.Literals(["claude", "codex"]);
+export const GuideHarnessSchema = Schema.Literals(["claude", "codex"]);
 export type GuideHarness = typeof GuideHarnessSchema.Type;
 export const isGuideHarness = Schema.is(GuideHarnessSchema);
 
@@ -115,24 +116,15 @@ const GuideStateSchema = strict(
 );
 export type GuideState = typeof GuideStateSchema.Type;
 
-const GuideQuestionSchema = Schema.String.check(
-  Schema.isBetweenLength(1, 2000),
-);
-
 // The window's side, served by its shell.
 export const guideContract = defineContract(
   "guide",
   "client",
-  // Opens the harness on the question, guiding this window. A window
-  // already guided is guided by the new session alone.
+  // Opens the harness, guiding this window. A window already guided is
+  // guided by the new session alone.
   invoke(
-    "ask",
-    strict(
-      Schema.Struct({
-        harness: GuideHarnessSchema,
-        question: GuideQuestionSchema,
-      }),
-    ),
+    "start",
+    strict(Schema.Struct({ harness: GuideHarnessSchema })),
     VoidSchema,
   ),
   // This window's guide, null when none drives it.
@@ -158,6 +150,5 @@ export const GuideLaunchSchema = strict(
   Schema.Struct({
     session: GuideSessionSchema,
     harness: GuideHarnessSchema,
-    question: GuideQuestionSchema,
   }),
 );

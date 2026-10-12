@@ -11,8 +11,8 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
-import { AskHow } from "@/components/guide/AskHow";
 import { GuideBand } from "@/components/guide/GuideBand";
+import { GuideMenu } from "@/components/guide/GuideMenu";
 import { GuideCallout } from "@/components/guide/GuideCallout";
 import { WorktreePalette } from "@/components/palette/WorktreePalette";
 import { PhoneTabBar } from "@/components/PhoneTabBar";
@@ -151,7 +151,7 @@ export function AppShell() {
           <WorktreePalette />
           <AddProjectModal />
           {hasLocalHost && <GuideCallout />}
-          {hasLocalHost && <AskHow />}
+          {hasLocalHost && <GuideMenu />}
         </>
       }
     >
