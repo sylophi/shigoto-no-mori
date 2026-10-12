@@ -1,9 +1,51 @@
 import { useLayoutEffect, useRef } from "react";
+import {
+  GITHUB_IMAGE_HOSTS,
+  isAllowedImage,
+} from "@shigomori/contracts/predicates/imageHosts";
 import { isWebUrl } from "@shigomori/contracts/predicates/webUrl";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useOutside } from "../outside.tsx";
 import { cn } from "../lib/utils.ts";
+
+const NO_HOSTS: readonly string[] = [];
+
+// The hosts the sanitize running now lets images load from: GitHub's
+// and the ones its caller named (contracts' predicates/imageHosts.ts).
+let imageHosts: readonly string[] = GITHUB_IMAGE_HOSTS;
+
+// What can load something into the page, by attribute. An element of
+// the first kind with a URL from elsewhere goes whole, any other loses
+// the attribute. Inline styles and the old `background` attribute go
+// always: their url() loads from anywhere.
+const LOADERS = new Set(["IMG", "SOURCE", "VIDEO", "AUDIO", "TRACK"]);
+const URL_ATTRIBUTES = ["src", "srcset", "poster"];
+
+const urlsOf = (attribute: string, value: string) =>
+  attribute === "srcset"
+    ? value
+        .split(",")
+        .map((candidate) => candidate.trim().split(/\s+/)[0] ?? "")
+        .filter((url) => url !== "")
+    : [value];
+
+// A URL with no scheme and no host of its own (`./shot.png`): it can
+// only reach the page's own origin, and the caller may show an image of
+// its own there (`images`).
+const isLocal = (url: string) =>
+  !/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.startsWith("//");
+
+// Whether an attribute's URLs (every candidate of a srcset) all load
+// from `hosts`, or stay on the page's own origin.
+export const loadsFrom = (
+  attribute: string,
+  value: string,
+  hosts: readonly string[],
+) =>
+  urlsOf(attribute, value).every(
+    (url) => isLocal(url) || isAllowedImage(url, hosts),
+  );
 
 // Remote images load lazily and without a referrer: a long changelog
 // shouldn't pull every screenshot at once, and GitHub needn't learn
@@ -26,6 +68,18 @@ if (purify.isSupported) {
     }
   });
   purify.addHook("afterSanitizeAttributes", (node) => {
+    node.removeAttribute("style");
+    node.removeAttribute("background");
+    for (const attribute of URL_ATTRIBUTES) {
+      const value = node.getAttribute(attribute);
+      if (value === null) continue;
+      if (loadsFrom(attribute, value, imageHosts)) continue;
+      if (LOADERS.has(node.tagName)) {
+        node.parentNode?.removeChild(node);
+        return;
+      }
+      node.removeAttribute(attribute);
+    }
     if (node.tagName === "IMG") {
       const signed = node
         .getAttribute("src")
@@ -64,14 +118,16 @@ const PROSE = cn(
 const RENDERED_CAP = 100;
 const rendered = new Map<string, string>();
 
-function htmlOf(source: string): string {
-  let html = rendered.get(source);
+function htmlOf(source: string, hosts: readonly string[]): string {
+  const key = `${hosts.join(" ")}\n${source}`;
+  let html = rendered.get(key);
   if (html === undefined) {
+    imageHosts = [...GITHUB_IMAGE_HOSTS, ...hosts];
     html = purify.sanitize(
       marked.parse(source, { async: false, gfm: true, breaks: true }),
       { FORBID_TAGS: ["style", "form", "button"] },
     );
-    rendered.set(source, html);
+    rendered.set(key, html);
     if (rendered.size > RENDERED_CAP) {
       rendered.delete(rendered.keys().next().value ?? "");
     }
@@ -87,10 +143,14 @@ function htmlOf(source: string): string {
 // through the same web-URL-only door as every other link.
 export function Markdown({
   source,
+  imageHosts: hosts = NO_HOSTS,
   className,
   images,
 }: {
   source: string;
+  // The hosts beside GitHub's its images may load from: the remotes'
+  // of the project it belongs to.
+  imageHosts?: readonly string[];
   className?: string;
   // Images the source refers to by a local name (`./shot.png`), and
   // where each is shown from, set on the rendered <img> rather than
@@ -98,7 +158,7 @@ export function Markdown({
   images?: Readonly<Record<string, string>>;
 }) {
   const { openUrl } = useOutside();
-  const html = purify.isSupported ? htmlOf(source) : "";
+  const html = purify.isSupported ? htmlOf(source, hosts) : "";
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!images) return;
@@ -132,7 +192,7 @@ export function Markdown({
         if (isWebUrl(href)) openUrl(href);
       }}
       // Sanitized above: DOMPurify strips scripts, handlers and
-      // non-web URLs.
+      // non-web URLs, and the hooks images from hosts it doesn't know.
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

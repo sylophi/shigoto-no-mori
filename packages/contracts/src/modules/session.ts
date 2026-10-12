@@ -64,6 +64,9 @@ export const sessionContract = defineContract(
   // Open the user's agent on a guide session the shell minted for one
   // of its windows.
   invoke("guideLaunch", GuideLaunchSchema, VoidSchema),
+  // The hosts of this machine's projects' remotes, beside GitHub's, that
+  // the window's images may load from (predicates/imageHosts.ts).
+  invoke("imageHosts", VoidSchema, Schema.Array(Schema.String)),
   // Stop: the host closes its graph and exits. A hurried quit (an
   // update install, a relaunch) signals scripts instead of waiting.
   invoke(

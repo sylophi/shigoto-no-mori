@@ -265,6 +265,7 @@ app.on("ready", async () => {
           ),
         },
     clerkPublishableKey(),
+    () => Effect.runPromise(host().imageHosts()),
   );
   // The rebuilt environment (module top), before the first spawn.
   await shellEnvReady;
