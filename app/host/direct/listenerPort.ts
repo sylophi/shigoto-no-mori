@@ -20,7 +20,7 @@ export const rememberedPort = (path: string) =>
 
 // Written whole or not at all, so a host killed mid-write leaves the
 // port before.
-export const rememberPort = (path: string, port: number) =>
+const rememberPort = (path: string, port: number) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) =>
     fs
       .writeFileString(`${path}.next`, `${port}\n`)
