@@ -108,20 +108,38 @@ export const makeCommit = ({
             Effect.orElseSucceed(() => ""),
           );
           const before = yield* headOf;
-          const restore = Option.isSome(saved)
-            ? fs.writeFile(indexFile, saved.value)
-            : fs.remove(indexFile, { force: true });
+          // Put back under git's own lock, so no other git (a terminal's
+          // commit) writes the index meanwhile, and only while HEAD is
+          // where it was: an index no commit was made from. A lock some
+          // git holds leaves the index to it.
+          const restore = Effect.gen(function* () {
+            const lock = `${indexFile}.lock`;
+            const held = yield* fs
+              .writeFile(
+                lock,
+                Option.isSome(saved) ? saved.value : new Uint8Array(),
+                { flag: "wx" },
+              )
+              .pipe(
+                Effect.as(true),
+                Effect.orElseSucceed(() => false),
+              );
+            if (!held) return;
+            yield* Effect.gen(function* () {
+              if ((yield* headOf) !== before) return yield* fs.remove(lock);
+              if (Option.isSome(saved))
+                return yield* fs.rename(lock, indexFile);
+              yield* fs.remove(indexFile, { force: true });
+              yield* fs.remove(lock);
+            }).pipe(
+              Effect.onError(() =>
+                Effect.ignore(fs.remove(lock, { force: true })),
+              ),
+            );
+          }).pipe(Effect.ignore);
           yield* commitWith(worktree, message).pipe(
             Effect.onExit((exit) =>
-              Exit.isSuccess(exit)
-                ? Effect.void
-                : Exit.hasInterrupts(exit)
-                  ? // Cut short, maybe after git committed: put back only
-                    // an index no commit was made from.
-                    Effect.flatMap(headOf, (after) =>
-                      after === before ? restore : Effect.void,
-                    ).pipe(Effect.ignore)
-                  : restore.pipe(Effect.ignore),
+              Exit.isSuccess(exit) ? Effect.void : restore,
             ),
           );
           return (yield* run(worktree, [

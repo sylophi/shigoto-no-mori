@@ -52,6 +52,9 @@ export const capture = (
       const handle = yield* spawner.spawn(
         ChildProcess.make(command, [...args], {
           stdin: "ignore",
+          // A command that ignores the scope's SIGTERM is killed after
+          // this, so a deadline is one.
+          forceKillAfter: "3 seconds",
           ...(options.env === undefined
             ? {}
             : { env: options.env, extendEnv: true }),

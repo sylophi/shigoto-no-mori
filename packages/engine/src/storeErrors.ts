@@ -69,7 +69,13 @@ export const categoryOf = (error: unknown): Category => {
 };
 
 // A failure the store's SQL raised, in words; none for anything else.
-export const storeErrorOf = (error: unknown): StoreError | undefined =>
-  Predicate.isTagged(error, "SqlError")
-    ? new StoreError({ category: categoryOf(error), cause: error })
+export const storeErrorOf = (error: unknown): StoreError | undefined => {
+  if (Predicate.isTagged(error, "SqlError")) {
+    return new StoreError({ category: categoryOf(error), cause: error });
+  }
+  // A migration's statement comes wrapped in the migrator's own error.
+  return Predicate.isTagged(error, "MigrationError") &&
+    Predicate.hasProperty(error, "cause")
+    ? storeErrorOf(error.cause)
     : undefined;
+};
