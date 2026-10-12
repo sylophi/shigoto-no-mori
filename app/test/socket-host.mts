@@ -1193,14 +1193,16 @@ it("relay: a window that falls behind a peer's flood has its view ended as no se
     () => seen.pulled > RELAY_BACKLOG + 3,
     "the flood to pass the backlog",
   );
+  // The window still behind: the flood has stopped all the same.
+  await delay(300);
+  const pulled = seen.pulled;
+  await delay(200);
+  assert.ok(pulled < ENDLESS_CHUNKS, "the whole flood was read");
+  assert.equal(seen.pulled, pulled, "the flood went on past the backlog");
   Effect.runSync(Deferred.succeed(behind, undefined));
   const failure = failureOf(await window);
   assert.ok(failure instanceof NoDirectConnectionError, String(failure));
   assert.ok(taken <= RELAY_BACKLOG + 3, `the window was handed ${taken}`);
-  const pulled = seen.pulled;
-  await delay(200);
-  assert.ok(pulled < ENDLESS_CHUNKS, "the whole flood was read");
-  assert.equal(seen.pulled, pulled, "the flood went on after the view ended");
 });
 
 it("views: a view on a link this side closes ends as a disconnect, which a window's host relays as no session", async () => {

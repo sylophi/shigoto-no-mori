@@ -58,6 +58,9 @@ export const servedInvokePeer =
       catch: callFailureOf,
     });
 
+// A view not started yet stops nothing.
+const noop = (): void => {};
+
 // Values of a peer's view this host holds for a window that has not
 // taken them, as many as a terminal's client may fall behind its shell
 // by (host/lib/terminals/Terminals.ts).
@@ -75,20 +78,24 @@ export const servedWatchPeer =
     Stream.callback<unknown, unknown>(
       (queue) =>
         Effect.acquireRelease(
-          Effect.sync(() =>
-            hub().watchPeer(input, {
+          Effect.sync(() => {
+            let behind = false;
+            let stop = noop;
+            stop = hub().watchPeer(input, {
               value: (value) => {
-                if (!Queue.offerUnsafe(queue, value)) {
-                  Queue.failCauseUnsafe(
-                    queue,
-                    Cause.fail(
-                      new NoDirectConnectionError({
-                        deviceId: input.deviceId,
-                        reason: "the window fell behind the peer's view",
-                      }),
-                    ),
-                  );
-                }
+                if (behind || Queue.offerUnsafe(queue, value)) return;
+                // Stopped at once, not once the window reaches the end.
+                behind = true;
+                Queue.failCauseUnsafe(
+                  queue,
+                  Cause.fail(
+                    new NoDirectConnectionError({
+                      deviceId: input.deviceId,
+                      reason: "the window fell behind the peer's view",
+                    }),
+                  ),
+                );
+                stop();
               },
               end: (failure) =>
                 failure === undefined
@@ -97,15 +104,13 @@ export const servedWatchPeer =
                       queue,
                       Cause.fail(peerViewFailure(input.deviceId, failure)),
                     ),
-            }),
-          ),
+            });
+            return () => stop();
+          }),
           (stop) => Effect.sync(stop),
         ),
       { bufferSize: RELAY_BACKLOG },
     );
-
-// A view not started yet stops nothing.
-const noop = (): void => {};
 
 type HubHandlerDeps = {
   status(): HubStatus;
