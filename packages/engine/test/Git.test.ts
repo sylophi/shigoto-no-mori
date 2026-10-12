@@ -732,6 +732,42 @@ it("an interrupted clone leaves no folder behind", async () => {
   }
 });
 
+it("an interrupted create leaves no folder behind", async () => {
+  const parent = tempDir("create-into-");
+  const dest = join(parent, "c");
+  // A hook from the global config (`--no-verify` doesn't skip this
+  // one) holds the first commit's ref update, so the folder is made and
+  // the commit under way when the create is interrupted.
+  const hooks = tempDir("hooks-");
+  const held = join(tempDir("held-"), "held");
+  const release = join(tempDir("release-"), "go");
+  writeFileSync(
+    join(hooks, "reference-transaction"),
+    `#!/bin/sh\ngrep -q refs/heads/ || exit 0\ntouch '${held}'\nwhile [ ! -e '${release}' ]; do sleep 0.05; done\n`,
+  );
+  chmodSync(join(hooks, "reference-transaction"), 0o755);
+  const config = join(hooks, "config");
+  writeFileSync(config, `[core]\n\thooksPath = ${hooks}\n`);
+  vi.stubEnv("GIT_CONFIG_GLOBAL", config);
+  try {
+    const outcome = await withGit((g) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(g.createRepository(parent, "c"));
+        while (!existsSync(held)) {
+          yield* Effect.sleep("20 millis");
+        }
+        yield* Fiber.interrupt(fiber);
+        return yield* Effect.exit(Fiber.join(fiber));
+      }),
+    );
+    assert.ok(Exit.hasInterrupts(outcome));
+    assert.ok(!existsSync(dest));
+  } finally {
+    vi.unstubAllEnvs();
+    writeFileSync(release, "");
+  }
+});
+
 it("a new repository lands on main with one empty commit, and never over a folder", async () => {
   const parent = tempDir("create-into-");
   const dest = await withGit((g) => g.createRepository(parent, "fresh"));
