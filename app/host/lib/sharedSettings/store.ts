@@ -16,6 +16,7 @@ import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSetti
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as DeviceId from "../config/DeviceId";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
@@ -27,6 +28,12 @@ let deviceId = "";
 // The changes not stored yet, in the order they were made, which the
 // layer's writer stores one at a time.
 const unstored: SharedSettingsDoc[] = [];
+// A second, doubling, then every half minute.
+const WRITE_RETRY = Schedule.min([
+  Schedule.exponential("1 second", 2),
+  Schedule.spaced("30 seconds"),
+]);
+
 const waiting = Latch.makeUnsafe(false);
 const allStored = Latch.makeUnsafe(true);
 
@@ -45,7 +52,20 @@ const writer = Effect.forever(
       allStored.openUnsafe();
       return;
     }
-    yield* Ops.storeSharedSettings(doc);
+    // A write that fails (the store busy, the disk full) is tried again
+    // until it lands, the changes after it waiting their turn: the loop
+    // ending on one would leave every later change announced and never
+    // stored.
+    yield* Ops.storeSharedSettings(doc).pipe(
+      Effect.sandbox,
+      Effect.tapError((cause) =>
+        Effect.logWarning(
+          "[settings] couldn't store the shared settings, trying again",
+          cause,
+        ),
+      ),
+      Effect.retry(WRITE_RETRY),
+    );
   }),
 );
 
