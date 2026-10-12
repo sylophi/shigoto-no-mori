@@ -10,8 +10,16 @@ import * as Predicate from "effect/Predicate";
 export const errorWordsOf = (error: unknown): string => {
   if (!(error instanceof Git.GitCommandError)) return errorMessageOf(error);
   if (error.exitCode !== null) return Git.stderrOf(error);
-  return error.cause instanceof PlatformError.PlatformError &&
-    Predicate.isTagged(error.cause.reason, "NotFound")
+  const cause = error.cause;
+  if (
+    !(cause instanceof PlatformError.PlatformError) ||
+    !Predicate.isTagged(cause.reason, "NotFound")
+  ) {
+    return "git did not finish.";
+  }
+  // The spawn checks the folder it runs in first: a worktree deleted
+  // under the app fails there, before git is looked for.
+  return cause.reason.module === "ChildProcess"
     ? "git is not installed."
-    : "git did not finish.";
+    : `${String(cause.reason.pathOrDescriptor)} is not there anymore.`;
 };

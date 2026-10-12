@@ -251,17 +251,27 @@ describe("the data dir", () => {
     statSync(join(dataDir(), "state.json.lock"));
   });
 
-  it("tells a live update stager from a crashed one, and a pidfile that holds no pid", async () => {
+  it("tells a live update stager from a crashed one, a pid handed to another process, and a pidfile that holds no pid", async () => {
     box.write("registry.json", { projects: [] });
     assert.deepEqual(findingsFor(await run(), "staging-lock"), []);
     const pidfile = join(dataDir(), "updates", "staging.pid");
     mkdirSync(dirname(pidfile), { recursive: true });
     writeFileSync(pidfile, `${process.pid}\n`);
     only(await run(), "staging-lock", "ok");
+    // A live pid recorded with its own start holds it; one recorded with
+    // another start is a process the number was handed to since.
+    const started = Date.now() - process.uptime() * 1000;
+    writeFileSync(pidfile, `${process.pid} ${Math.round(started)}\n`);
+    only(await run(), "staging-lock", "ok");
+    writeFileSync(
+      pidfile,
+      `${process.pid} ${Math.round(started) - 3_600_000}\n`,
+    );
+    only(await run(), "staging-lock", "warn");
     writeFileSync(pidfile, "nope");
     assert.match(
       only(await run(), "staging-lock", "warn").detail,
-      /^left behind by a crashed update, so/,
+      /^left behind by an update that stopped; the next update takes it over$/,
     );
     writeFileSync(pidfile, "99999");
     const fixed = await run({ fix: true });

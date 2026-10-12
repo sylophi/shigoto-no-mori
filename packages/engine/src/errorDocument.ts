@@ -9,6 +9,7 @@ import * as GitHub from "./GitHub.ts";
 import { UnknownProject } from "./Registry.ts";
 import { NoScripts } from "./Scripts.ts";
 import { UpdateInProgress } from "./stagingLock.ts";
+import { storeErrorOf } from "./storeErrors.ts";
 import {
   DirtyWorktree,
   PullRequestOwnsDescription,
@@ -24,6 +25,8 @@ export type ErrorDocument = {
 // hook or checkout under it, else the error's own message.
 export const messageOf = (error: unknown): string => {
   if (error instanceof Git.GitCommandError) return Git.stderrOf(error);
+  const store = storeErrorOf(error);
+  if (store !== undefined) return store.message;
   if (error instanceof GitHub.GitHubCliError) {
     return GitHub.commandMessageOf(error);
   }
@@ -43,6 +46,8 @@ export const messageOf = (error: unknown): string => {
 };
 
 export const codeOf = (error: unknown): string | undefined => {
+  const store = storeErrorOf(error);
+  if (store !== undefined) return store.documentCode;
   if (error instanceof DirtyWorktree) {
     return error.reason === "uncommitted"
       ? "uncommitted-changes"

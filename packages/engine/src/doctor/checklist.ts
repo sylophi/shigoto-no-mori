@@ -1,5 +1,6 @@
 // The doctor's checklist: every check in order, given the store's services.
 import * as Effect from "effect/Effect";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -32,6 +33,7 @@ export const makeChecklist = ({
   readonly projectChecks: ProjectChecksArea;
 }) =>
   Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const { checkGit, checkGh, checkApp, checkPath, checkShellHook } =
@@ -89,7 +91,12 @@ export const makeChecklist = ({
             onSome: ({ registry }) => registry.status !== "fail",
           });
         const device = (yield* config.read({ kind: "device" })) ?? {};
-        const holder = yield* stagingHolder(stagingLock);
+        const holder = yield* stagingHolder(stagingLock).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+        );
         const kept = yield* data.kept;
         const environment = yield* checkEnvironment(input);
         const dir = yield* checkDataDir;

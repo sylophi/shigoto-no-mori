@@ -11,6 +11,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { it } from "vitest";
 import {
   DISCARD_REF_PREFIX,
@@ -409,4 +411,34 @@ it("a hunk discard in a file that starts with a byte order mark keeps the mark",
     g.discardHunks({ worktree: repo, path: "bom.txt", changes: [first] }),
   );
   assert.equal(read(repo, "bom.txt"), `${BOM}one\ntwo\nthree\nfour\nfive\n6\n`);
+});
+
+// A commit the app quits on (a long pre-commit hook) never ran to its
+// commit, so what was staged before it (an agent's `git add`) is staged
+// again, as when git refuses one.
+it("a commit cut short before it committed puts the index back", async () => {
+  const repo = seedRepo();
+  write(repo, "a.txt", "staged by someone else\n");
+  git(repo, "add", "a.txt");
+  write(repo, "b.txt", "ticked\n");
+  const started = join(repo, ".git", "hook-started");
+  mkdirSync(join(repo, ".git", "hooks"), { recursive: true });
+  writeFileSync(
+    join(repo, ".git", "hooks", "pre-commit"),
+    `#!/bin/sh\ntouch '${started}'\nexec sleep 30\n`,
+    { mode: 0o755 },
+  );
+  await withGit((g) =>
+    Effect.gen(function* () {
+      const committing = yield* Effect.forkChild(
+        g.commitPicks(repo, { summary: "b", paths: ["b.txt"], hunks: [] }),
+      );
+      while (!existsSync(started)) yield* Effect.sleep("20 millis");
+      yield* Fiber.interrupt(committing);
+    }),
+  );
+  assert.deepEqual(
+    git(repo, "diff", "--cached", "--name-only").split("\n").filter(Boolean),
+    ["a.txt"],
+  );
 });

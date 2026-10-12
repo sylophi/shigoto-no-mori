@@ -2,6 +2,7 @@
 import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -119,6 +120,7 @@ const checkDormantState = (
 export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const darwin = yield* Darwin.Darwin;
@@ -418,14 +420,23 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       return [
         repairable(
           line.warn(
-            `left behind by a crashed update${pid !== 0 ? ` (pid ${pid} is gone)` : ""}, so \`${binaryName} update\` refuses to run`,
+            `left behind by an update that stopped${pid !== 0 ? ` (pid ${pid} is gone)` : ""}; the next update takes it over`,
             `Delete ${collapseHome(home, stagingLock)}.`,
           ),
           {
             prompt: `Delete the stale update staging lock at ${collapseHome(home, stagingLock)}?`,
             label: "deleted the stale update staging lock",
             destructive: true,
-            apply: fs.remove(stagingLock),
+            // Through the lock, which breaks only a dead holder's: an
+            // update that took it over meanwhile keeps it.
+            apply: Effect.scoped(acquireStagingLock(stagingLock)).pipe(
+              Effect.provideService(
+                ChildProcessSpawner.ChildProcessSpawner,
+                spawner,
+              ),
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.provideService(Path.Path, path),
+            ),
           },
         ),
       ];
@@ -503,7 +514,12 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               // Under the stager's own lock, and listed again once it is
               // held: a run that staged something newer since keeps it.
               apply: Effect.gen(function* () {
-                yield* acquireStagingLock(stagingLock);
+                yield* acquireStagingLock(stagingLock).pipe(
+                  Effect.provideService(
+                    ChildProcessSpawner.ChildProcessSpawner,
+                    spawner,
+                  ),
+                );
                 for (const item of yield* updateLeftovers(version)) {
                   yield* fs.remove(item, { recursive: true });
                 }

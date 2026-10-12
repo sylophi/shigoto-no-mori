@@ -4,6 +4,7 @@ import { StagedManifestSchema } from "@shigomori/contracts/schemas/runtime";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -46,6 +47,7 @@ export const makeStaging = ({
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const updatesDir = path.join(paths.dataDir, "updates");
@@ -63,6 +65,7 @@ export const makeStaging = ({
     // in Go's words.
     const lock = acquireStagingLock(lockPath).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.provideService(Path.Path, path),
       Effect.mapError((error) =>
         error instanceof UpdateInProgress ||
