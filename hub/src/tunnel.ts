@@ -169,6 +169,48 @@ async function ensureDnsRecord(
   return false;
 }
 
+// A tunnel's remotely managed configuration as the CF API answers it.
+interface CfTunnelConfig {
+  version?: number;
+  config?: { ingress?: { hostname?: string; service: string }[] };
+}
+
+const ingressServiceOf = (held: CfTunnelConfig | null, hostname: string) =>
+  held?.config?.ingress?.find((rule) => rule.hostname === hostname)?.service ??
+  null;
+
+// Writes the ingress and reads it back: a rewrite that answered success
+// while the connector kept the first port it was given has been seen
+// (V3.md, step 7, the reliability pass), so the provision holds only
+// when the configuration CF holds names this port. Written again once,
+// then the provision fails, logging what each side said.
+async function writeIngress(
+  api: CfApi,
+  path: string,
+  hostname: string,
+  port: number,
+): Promise<void> {
+  const service = `http://127.0.0.1:${port}`;
+  const body = {
+    config: {
+      ingress: [{ hostname, service }, { service: "http_status:404" }],
+    },
+  };
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- a write is read back before the next
+    const written = await api.call<CfTunnelConfig | null>("PUT", path, body);
+    // oxlint-disable-next-line no-await-in-loop -- see above
+    const held = await api.call<CfTunnelConfig | null>("GET", path);
+    const holds = ingressServiceOf(held, hostname);
+    if (holds === service) return;
+    console.warn(
+      `[tunnel] ${hostname}: wrote ${service} as version ${written?.version ?? "?"}, ` +
+        `holds ${holds ?? "nothing"} at version ${held?.version ?? "?"} (attempt ${attempt})`,
+    );
+  }
+  throw new Error(`the tunnel's ingress did not take port ${port}`);
+}
+
 // Create-or-reuse provisioning, idempotent by the deterministic name:
 //   1. reuse the named tunnel or create it (remotely managed config),
 //   2. PUT the ingress config routing the hostname to the device's
@@ -207,17 +249,11 @@ export async function provisionTunnel(
   }
 
   const [, dnsCreated, connectorToken] = await Promise.all([
-    api.call(
-      "PUT",
+    writeIngress(
+      api,
       `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}/configurations`,
-      {
-        config: {
-          ingress: [
-            { hostname, service: `http://127.0.0.1:${port}` },
-            { service: "http_status:404" },
-          ],
-        },
-      },
+      hostname,
+      port,
     ),
     ensureDnsRecord(cf, api, hostname, tunnel.id),
     api.call<string>(
