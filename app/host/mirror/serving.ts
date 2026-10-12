@@ -17,7 +17,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { FileSync } from "@host/fileSync/FileSync";
-import { dataDir } from "@host/lib/util/paths";
+import { dataDir } from "@shared/paths";
 import { findProjectAndWorktree, findWorktreePath } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";

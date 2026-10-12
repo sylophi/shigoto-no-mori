@@ -1,5 +1,5 @@
 import { terrierContract } from "@shigomori/contracts/modules/terrier";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Terrier from "@host/lib/terrier";
 

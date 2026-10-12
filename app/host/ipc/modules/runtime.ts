@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
@@ -13,7 +13,7 @@ import { moveDataDir } from "@host/lib/dataDirMove";
 import { getBusyOperations, killAllScripts } from "@host/lib/scripts";
 import { busyRemoteRefusal } from "@shared/busy";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
-import * as HostPushes from "@host/lib/hostPushes";
+import * as HostPushes from "@host/lib/HostPushes";
 import * as Shell from "@host/lib/Shell";
 import type { HostServices } from "@host/process/services";
 import {
@@ -21,7 +21,7 @@ import {
   dataDir,
   dataDirSource,
   defaultDataDir,
-} from "@host/lib/util/paths";
+} from "@shared/paths";
 
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   "MoveRefusedError",

@@ -3,7 +3,7 @@
 // window, the menu, the account, the client config). The rest, the
 // host's, ride the loopback (@shigomori/contracts/link, LoopbackGroup).
 // Effect RPC over a MessagePort the preload hands the window
-// (main/preload.ts), served by main/ipc/shellLink.ts.
+// (main/preload.ts), served by main/ipc/ShellLink.ts.
 import { allContractModules } from "@shigomori/contracts/allModules";
 import { callsOf } from "@shigomori/contracts/contract";
 import { isHostSide } from "@shigomori/contracts/link";

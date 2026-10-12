@@ -1,5 +1,4 @@
 import type { ContractModule } from "@shigomori/contracts/contract";
-import type { CallFailure } from "@shigomori/contracts/errors";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type * as Tracer from "effect/Tracer";
@@ -110,51 +109,3 @@ export function isRemoteCaller(
 ): boolean {
   return ctx.callerDeviceId !== undefined;
 }
-
-// A server transport owns the wire. `handle` mounts one channel and
-// supplies each call with a context bound to the calling peer.
-// `broadcastAll` ships one payload to every connected peer. Both
-// directions take wire shapes: parsing happens in registerContract.ts
-// before anything reaches a transport.
-//
-// `opts.remote` is the exposure axis: the registrar passes each call's
-// Remote annotation here so a composite transport can decide whether the
-// channel reaches a remote (websocket) peer at all. Scope answers "runs
-// where the files live"; remote answers "safe to serve a remote peer",
-// and the two are independent decisions. Single-wire transports ignore
-// it (they already know their reach).
-//
-// `opts.gated` is the command-vs-read axis: the registrar passes each
-// call's Gated annotation here so a remote binding can gate commands. The
-// device link serves channels explicitly registered gated:false to
-// every peer and holds everything else to the host's command-access
-// switch (CommandGate, fail-closed). The loopback and the shell's port
-// ignore it: a local window commands its own machine.
-type TransportCallOpts = { remote?: boolean; gated?: boolean };
-
-export type ServerTransport = {
-  handle(
-    channel: string,
-    fn: (ctx: HandlerContext, raw: unknown) => Promise<unknown>,
-    opts?: TransportCallOpts,
-  ): void;
-  broadcastAll(
-    channel: string,
-    payload: unknown,
-    opts?: TransportCallOpts,
-  ): void;
-};
-
-// The server side of a layer graph's wires: each call mounted as an
-// effect on the graph's `Services`.
-export type EffectServerTransport<Services> = {
-  handle(
-    channel: string,
-    fn: (
-      ctx: HandlerContext,
-      raw: unknown,
-    ) => Effect.Effect<unknown, CallFailure, Services>,
-    opts?: TransportCallOpts,
-  ): void;
-  broadcastAll: ServerTransport["broadcastAll"];
-};

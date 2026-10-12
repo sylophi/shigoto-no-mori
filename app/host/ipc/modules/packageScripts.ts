@@ -1,5 +1,5 @@
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import { findProject } from "@host/lib/projects";
 import { startScript } from "@host/lib/scripts";
 import {

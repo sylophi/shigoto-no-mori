@@ -2,7 +2,7 @@ import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -33,7 +33,7 @@ import {
 import type { HostServices } from "@host/process/services";
 import * as Terrier from "@host/lib/terrier";
 import * as Worktrees from "@host/lib/Worktrees";
-import { expandHome } from "@host/lib/util/paths";
+import { expandHome } from "@shared/paths";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";
 

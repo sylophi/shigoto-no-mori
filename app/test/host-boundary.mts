@@ -204,7 +204,7 @@ for (const entry of IPC_RENDERER_ALLOWLIST) {
 
 // When one fails: move the Electron dependency into main/, or route the capability
 // through the contract's transport layer (see shared/ipc/transport.ts
-// and shared/ipc/registerContract.ts).
+// and shared/ipc/served.ts).
 it("host boundary", () => {
   assert.deepEqual(failures, []);
 });

@@ -1,5 +1,5 @@
 import { gitContract } from "@shigomori/contracts/modules/git";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import { BackgroundFetch } from "@host/lib/git/backgroundFetch";
 import { findProject } from "@host/lib/projects";

@@ -22,7 +22,7 @@ import type {
   UpdaterStatus,
 } from "@shigomori/contracts/schemas";
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
-import { dataDir } from "@host/lib/util/paths";
+import { dataDir } from "@shared/paths";
 import { readJson, writeJson } from "../core/files/jsonFile";
 
 const REQUEST_STALE_MS = 2 * 60_000;

@@ -19,7 +19,7 @@ import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as RcMap from "effect/RcMap";
 import * as Stream from "effect/Stream";
-import * as HostPushes from "./hostPushes";
+import * as HostPushes from "./HostPushes";
 
 // What every view reads its signals from, and shares its read through.
 export type Services =

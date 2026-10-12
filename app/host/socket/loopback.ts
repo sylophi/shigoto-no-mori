@@ -28,7 +28,7 @@ import {
   type LateServices,
   type LinkRegistrar,
   make as makeLink,
-} from "./server";
+} from "./DeviceLink";
 
 // The engine's Control.ts reads this name and shape.
 export const LOOPBACK_FILE = "loopback.json";

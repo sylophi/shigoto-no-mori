@@ -19,7 +19,7 @@ import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import type { Handlers } from "@shigomori/contracts/types";
 import { hostDeviceId } from "../../hostProcess";
-import type { AccountFacts } from "@host/process/account";
+import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import {
   createAccountStore,
   type AccountStore,

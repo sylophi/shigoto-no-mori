@@ -29,7 +29,7 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {

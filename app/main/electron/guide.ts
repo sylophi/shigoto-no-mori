@@ -10,7 +10,7 @@ import * as Stream from "effect/Stream";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
 import { guideContract } from "@shigomori/contracts/modules/guide";
-import { layerLatch } from "@host/lib/util/layerLatch";
+import { layerLatch } from "@shared/layerLatch";
 import * as Guide from "../core/guide/Guide";
 import { host } from "../hostProcess";
 import { broadcast } from "../ipc/register";
@@ -93,10 +93,7 @@ const windowsLayer = Layer.succeed(
         }
       }),
     launch: (input) =>
-      Effect.tryPromise({
-        try: () => host().guideLaunch(input),
-        catch: callFailureOf,
-      }),
+      host().guideLaunch(input).pipe(Effect.mapError(callFailureOf)),
     closed: Stream.callback<number>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() =>

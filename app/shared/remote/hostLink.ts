@@ -16,10 +16,10 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { ClientTransport, Link } from "@shared/ipc/transport";
+import type { Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { dialDevice, type OpenClientSocket } from "./deviceLink";
-import { linkTransport, pushFanOut } from "./rpcTransport";
+import { pushFanOut } from "./rpcTransport";
 
 // Where the host listens now, and the device it is (this machine's).
 export type HostAddress = {
@@ -98,13 +98,12 @@ export const hostLink = Effect.fnUntraced(function* (options: {
   };
 });
 
-// The Promise face, for the shell, whose link lives as long as its
-// process.
+// The link for as long as the process lives: the shell's to its host.
 export function connectHost(options: {
   readonly address: () => Promise<HostAddress>;
   readonly appVersion: string;
   readonly openSocket: OpenClientSocket;
-}): ClientTransport & { readonly reconnect: () => void } {
+}): Link & { readonly reconnect: () => void } {
   return Effect.runSync(
     Effect.gen(function* () {
       const runFork = yield* FiberSet.makeRuntime<never>();
@@ -113,7 +112,7 @@ export function connectHost(options: {
         address: Effect.tryPromise(options.address),
       });
       return {
-        ...linkTransport(link, runFork),
+        ...link,
         reconnect: () => {
           runFork(link.reconnect);
         },

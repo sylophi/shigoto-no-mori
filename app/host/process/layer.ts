@@ -67,7 +67,7 @@ import {
   sharingLayer,
   tunnelLayer,
 } from "./wires";
-import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
+import { lifetime, onQuit, starts } from "@shared/lifetimes";
 import * as Migration from "@shigomori/engine/Migration";
 import { hostFacts } from "./facts";
 import * as Graph from "./graph";

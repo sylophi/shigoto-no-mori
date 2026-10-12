@@ -1,4 +1,4 @@
-// Wire benchmark: the device link's real listener (host/socket/server.ts)
+// Wire benchmark: the device link's real listener (host/socket/DeviceLink.ts)
 // and its real dialer (shared/remote/deviceLink.ts)
 // talking through a link shaped like an internet path
 // (lib/shapedLink.mts), so a change to the wire shows up as time and

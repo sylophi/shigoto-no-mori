@@ -18,7 +18,7 @@ import {
   dataDirPointerPath,
   legacyDataDirPointerPath,
 } from "@shared/packaging/cliDist.mts";
-import { dataDir, dataDirSource } from "@host/lib/util/paths";
+import { dataDir, dataDirSource } from "@shared/paths";
 import { writeNukeMarker } from "../core/nuke/finish";
 import { signOutForNuke } from "../ipc/modules/account";
 import { flavor } from "../flavor";

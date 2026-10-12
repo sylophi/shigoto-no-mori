@@ -1,6 +1,6 @@
 // A Link over an RpcClient (rpcLink), and the Promise face over any
 // Link (linkTransport): what a connection hands the contract clients
-// (buildClient) once it is open, for the device link (deviceLink.ts),
+// (effectClient, buildClient) once it is open, for the device link (deviceLink.ts),
 // the loopback (hostLink.ts) and the desktop window's link to its shell
 // (portLink.ts) alike. Every push the group serves is subscribed to as
 // the link is made, and fanned out here by channel.

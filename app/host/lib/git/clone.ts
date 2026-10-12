@@ -4,7 +4,7 @@ import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
-import { isENOENT, pathExists } from "@host/lib/util/paths";
+import { isENOENT, pathExists } from "@shared/paths";
 import { GitError, run } from "./core";
 
 // A place a checkout cannot land.

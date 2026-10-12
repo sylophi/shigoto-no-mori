@@ -6,7 +6,7 @@
 // core over a different backing, so the on-storage envelope stays
 // identical across platforms and the desktop file format is unchanged.
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isENOENT } from "@host/lib/util/paths";
+import { isENOENT } from "@shared/paths";
 import {
   mkdirSync,
   readFileSync,

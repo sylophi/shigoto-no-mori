@@ -26,7 +26,7 @@ import {
   startScript,
 } from "@host/lib/scripts";
 import { OrphanSweep } from "@host/lib/scripts/OrphanSweep";
-import { initDataDirAt } from "@host/lib/util/paths";
+import { initDataDirAt } from "@shared/paths";
 import { runHost } from "./lib/hostRuntime.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import {

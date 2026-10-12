@@ -1,6 +1,6 @@
 // The direct sandbox: two devices on a REAL direct link, beside the
 // stub device hub (hubStub.mts). The listener is a REAL direct ws
-// listener (host/socket/server.ts) with its ticket store and switches,
+// listener (host/socket/DeviceLink.ts) with its ticket store and switches,
 // answering connectInfo through the hub as the host does. The dialer
 // drives the REAL shared composition (shared/hub/directPlane.ts) or
 // dials the listener straight. What each proof adds is its own
@@ -8,8 +8,8 @@
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
-import * as DeviceLink from "@host/socket/server";
-import type { WsServerStartOpts } from "@host/socket/server";
+import * as DeviceLink from "@host/socket/DeviceLink";
+import type { WsServerStartOpts } from "@host/socket/DeviceLink";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -20,7 +20,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
-import * as HostPushes from "@host/lib/hostPushes";
+import * as HostPushes from "@host/lib/HostPushes";
 import { pushesLayer } from "./hostStandIns.mts";
 import * as Views from "@host/lib/views";
 import * as Sharing from "@host/lib/sharing";
@@ -35,23 +35,22 @@ import {
   type DirectPlaneDeps,
   make as makeDirectPlane,
 } from "@shared/hub/directPlane";
-import type { ContractModule } from "@shigomori/contracts/contract";
+import {
+  callsOf,
+  channelOf,
+  type ContractModule,
+  keyOf,
+} from "@shigomori/contracts/contract";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
-import {
-  broadcastAll,
-  type EffectHandlers,
-  registerHostContract,
-} from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
+import { createServed, resolvePush, type View } from "@shared/ipc/served";
+import { allContractModules } from "@shigomori/contracts/allModules";
 import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
-import type {
-  ClientTransport,
-  HandlerContext,
-  ServerTransport,
-} from "@shared/ipc/transport";
+import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import { WebSocket as WsClient } from "ws";
 import type { KeyPair } from "@shared/crypto/noise";
 import {
@@ -68,25 +67,38 @@ import { type Track, waitFor } from "./checkKit.mts";
 export const DIALER = "dialer";
 export const LISTENER = "listener";
 
+// A channel's module and key, for a proof that names a call by its
+// channel.
+function callByChannel(channel: string): {
+  module: ContractModule;
+  key: string;
+} {
+  for (const module of allContractModules) {
+    for (const call of callsOf(module)) {
+      if (channelOf(call) === channel) return { module, key: keyOf(call) };
+    }
+  }
+  throw new Error(`no contract call is ${channel}`);
+}
+
 // How long a dial may take before it fails, unless a check shortens it
 // to see a failure settle.
 const DIAL_DEADLINE_MS = 3000;
 
-// The listener as a proof drives it: the registrar it serves, its calls
-// Promise handlers (a ServerTransport, for registerContract and
-// broadcastAll) each handed a signal that aborts when the call is
-// interrupted, and the listener's own state.
-type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> & {
+// The listener as a proof drives it: what it serves (a whole module, as
+// the host registers one), a call of its own by channel, a Promise
+// handler handed a signal that aborts when the call is interrupted, a
+// view by channel, and the listener's own state.
+type WsServerBinding = {
+  served: DeviceLink.LinkRegistrar;
   handle(
     channel: string,
     fn: (
       ctx: HandlerContext & { readonly signal: AbortSignal },
       raw: unknown,
     ) => Promise<unknown>,
-    opts?: Parameters<ServerTransport["handle"]>[2],
   ): void;
-  // A call as the host serves it, an effect (registerHostContract).
-  serve: DeviceLink.LinkRegistrar["handle"];
+  view(channel: string, view: View<HostServices>): void;
   // A push from the host, as the host's broadcastAll publishes it.
   broadcastAll(
     channel: string,
@@ -169,7 +181,10 @@ export async function startDirectListener(
       : (opts.peerKey?.(deviceId) ?? testDeviceKey(deviceId).pair.publicKey);
   let accepts = false;
   const sharing = Effect.runSync(SubscriptionRef.make(true));
-  const registrar = DeviceLink.createLinkRegistrar();
+  const registrar: DeviceLink.LinkRegistrar = createServed({
+    // The host's usage bump is its own concern.
+    onUsageTracked: () => {},
+  });
   const host = await hostContext();
   const runtime = ManagedRuntime.make(
     Layer.provideMerge(
@@ -217,6 +232,7 @@ export async function startDirectListener(
           Sharing.Sharing,
           Sharing.Sharing.of({
             current: SubscriptionRef.get(sharing),
+            now: () => SubscriptionRef.getUnsafe(sharing),
             changes: SubscriptionRef.changes(sharing),
             set: (on) => SubscriptionRef.set(sharing, on),
           }),
@@ -237,20 +253,25 @@ export async function startDirectListener(
   ) => runtime.runPromise(Effect.flatMap(DeviceLink.DeviceLink, f));
   let current = await onLink((link) => link.status);
   const binding: WsServerBinding = {
-    ...registrar,
-    serve: registrar.handle,
+    served: registrar,
     // A proof's own channel: each call's signal aborts when the call is
     // interrupted.
-    handle: (channel, fn, handleOpts) =>
-      registrar.handle(
-        channel,
-        (ctx, raw) =>
+    handle: (channel, fn) => {
+      const { module, key } = callByChannel(channel);
+      registrar.serveOne(
+        module,
+        key as never,
+        ((raw: unknown, ctx: HandlerContext) =>
           Effect.tryPromise({
             try: async (signal) => fn({ ...ctx, signal }, raw),
             catch: callFailureOf,
-          }),
-        handleOpts,
-      ),
+          })) as never,
+      );
+    },
+    view: (channel, view) => {
+      const { module, key } = callByChannel(channel);
+      registrar.view(module, { [key]: view } as never);
+    },
     broadcastAll: (channel, payload, broadcastOpts) =>
       runtime.runSync(
         Effect.flatMap(HostPushes.HostPushes, (pushes) =>
@@ -298,12 +319,14 @@ export async function startDirectListener(
     acceptsCommands: () => accepts,
     setAccepts: (next) => {
       accepts = next;
-      broadcastAll(accountContract, "commandAccessChanged", next, binding);
+      const push = resolvePush(accountContract, "commandAccessChanged", next);
+      binding.broadcastAll(push.channel, push.payload, push);
     },
     sharesData: () => Effect.runSync(SubscriptionRef.get(sharing)),
     setSharing: (next) => {
       Effect.runSync(SubscriptionRef.set(sharing, next));
-      broadcastAll(sharingContract, "changed", next, binding);
+      const push = resolvePush(sharingContract, "changed", next);
+      binding.broadcastAll(push.channel, push.payload, push);
     },
     port,
     listenerPort: () => {
@@ -465,15 +488,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     ...(opts.provide === undefined ? {} : { provide: opts.provide }),
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
-        registerHostContract(
-          contract,
-          handlers,
-          { handle: binding.serve, broadcastAll: binding.broadcastAll },
-          {
-            validateOutputs: true,
-            onUsageTracked: () => {},
-          },
-        );
+        binding.served.serve(contract, handlers);
       }
     },
   });
