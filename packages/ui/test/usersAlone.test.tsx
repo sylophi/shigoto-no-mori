@@ -2,7 +2,9 @@
 // declared where the page draws it:
 //   1. every control a destructive variant draws carries the mark, as
 //      the primitives draw it and as every scene does;
-//   2. the access switches and the terminal carry theirs.
+//   2. the access switches, the terminal, and what runs code (a script's
+//      Run, the launch tools, a script's or a launcher's command) carry
+//      theirs.
 import assert from "node:assert/strict";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -14,6 +16,10 @@ import { scenes } from "../src/scenes/index.ts";
 import { AcceptCommandsToggleView } from "../src/views/remote/AcceptCommandsToggleView.tsx";
 import { ShareDataToggleView } from "../src/views/remote/ShareDataToggleView.tsx";
 import { TerminalView } from "../src/views/terminal/TerminalView.tsx";
+import { ScriptFieldView } from "../src/views/configure/ScriptFieldView.tsx";
+import { CustomLauncherInputView } from "../src/views/shared/CustomLauncherInputView.tsx";
+import { LaunchSectionView } from "../src/views/worktreeDetail/LaunchSectionView.tsx";
+import { ScriptRowView } from "../src/views/worktreeDetail/scripts/ScriptRowView.tsx";
 
 const html = (element: ReactElement) => renderToStaticMarkup(element);
 
@@ -101,4 +107,44 @@ it("marks the access switches and the terminal", () => {
       "terminal",
     ),
   );
+});
+
+it("marks what runs code: a script's Run, the launch tools and the command fields", () => {
+  const ran = {
+    runId: null,
+    status: "idle" as const,
+    hasOutput: false,
+    interactive: true,
+    exitCode: null,
+    startedAt: null,
+    endedAt: null,
+    cancelling: false,
+  };
+  for (const element of [
+    createElement(ScriptRowView, {
+      label: "dev",
+      command: "vite",
+      state: ran,
+      busy: false,
+      canRun: true,
+      disabledReason: undefined,
+      onRun: noop,
+      onStop: noop,
+      onOpenConsole: noop,
+    }),
+    createElement(LaunchSectionView, { tools: "Terminal", scripts: "dev" }),
+    createElement(ScriptFieldView, {
+      id: "script-setup",
+      label: "Setup",
+      value: "pnpm install",
+      onChange: noop,
+    }),
+    createElement(CustomLauncherInputView, {
+      launcher: { id: "a", label: "Shell", command: "devbox shell" },
+      onChange: noop,
+      onRemove: noop,
+    }),
+  ]) {
+    assert.ok(marked(html(element), "run"), html(element).slice(0, 120));
+  }
 });

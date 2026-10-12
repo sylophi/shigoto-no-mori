@@ -1,5 +1,6 @@
 import { ChevronRight, Play, Square } from "lucide-react";
 import { cn } from "../../../lib/utils.ts";
+import { usersAlone } from "../../../lib/usersAlone.ts";
 import type { ScriptRunState } from "../../../lib/scriptRun.ts";
 import { ScriptStatusBadgeView } from "../../shared/ScriptStatusBadgeView.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
@@ -40,6 +41,7 @@ export function ScriptRowView({
         <button
           type="button"
           onClick={busy ? onStop : onRun}
+          {...usersAlone("run")}
           disabled={state.cancelling || !canRun}
           aria-label={actionLabel}
           className={cn(
