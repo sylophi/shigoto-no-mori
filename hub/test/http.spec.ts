@@ -610,10 +610,12 @@ describe("the version floor", () => {
     // A build below the floor whose credential the hub no longer takes:
     // it must hear update required, which it can act on, and not sign
     // in again, which would not help it.
-    for (const [method, path] of [
-      ["GET", "/devices"],
-      ["POST", "/tickets"],
-      ["POST", "/tunnel"],
+    // Each with a body its route reads, so nothing but the order
+    // decides the answer.
+    for (const [method, path, body] of [
+      ["GET", "/devices", undefined],
+      ["POST", "/tickets", { connectionId: "a".repeat(32) }],
+      ["POST", "/tunnel", { port: 4000 }],
     ] as const) {
       // oxlint-disable-next-line no-await-in-loop -- three routes, order does not matter
       const response = await call(
@@ -621,8 +623,10 @@ describe("the version floor", () => {
           method,
           headers: {
             Authorization: `Bearer smdc_${"a".repeat(43)}`,
+            "Content-Type": "application/json",
             [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR - 1),
           },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         }),
       );
       expect(response.status, path).toBe(403);
