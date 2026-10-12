@@ -7,7 +7,6 @@ import {
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
 import { run } from "../git/core";
-import { getMergeBaseDiff } from "../git/diff";
 import * as Git from "@shigomori/engine/Git";
 import { isCommandError, stderrOf, stdoutOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
@@ -160,7 +159,11 @@ const getLocalPullRequestDiff = Effect.fnUntraced(function* (
       ...missing,
     ]);
   }
-  return yield* getMergeBaseDiff(cwd, pr.baseRefOid, pr.headRefOid);
+  return yield* (yield* Git.Git).mergeBaseDiff({
+    repo: cwd,
+    base: pr.baseRefOid,
+    head: pr.headRefOid,
+  });
 });
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles

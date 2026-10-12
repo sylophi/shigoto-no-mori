@@ -110,14 +110,15 @@ export const makeRunning = Effect.gen(function* () {
   // index.lock for each, so two quick discards, or a discard racing a
   // reset, would otherwise fail on the lock instead of waiting.
   const indexLocks = new Map<string, Semaphore.Semaphore>();
-  const onIndex = <A, E>(worktree: string, task: Effect.Effect<A, E>) => {
-    let lock = indexLocks.get(worktree);
-    if (!lock) {
-      lock = Semaphore.makeUnsafe(1);
-      indexLocks.set(worktree, lock);
-    }
-    return lock.withPermit(task);
-  };
+  const onIndex = <A, E, R>(worktree: string, task: Effect.Effect<A, E, R>) =>
+    Effect.suspend(() => {
+      let lock = indexLocks.get(worktree);
+      if (!lock) {
+        lock = Semaphore.makeUnsafe(1);
+        indexLocks.set(worktree, lock);
+      }
+      return lock.withPermit(task);
+    });
 
   return { run, succeeds, runChunked, onIndex };
 });

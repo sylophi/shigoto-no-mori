@@ -6,10 +6,8 @@ import { SyncConflictsError } from "@shigomori/contracts/errors";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { resetHard } from "./changes";
 import { GitRefusal, run, runLenient } from "./core";
 import { mergeKeepingConflicts } from "./merge";
-import { conflictedPaths } from "./operation";
 
 export const pushFastForward = (worktreePath: string) =>
   Effect.asVoid(run(worktreePath, ["push"]));
@@ -72,7 +70,7 @@ export const overwriteFromUpstream = Effect.fnUntraced(function* (
     "--symbolic-full-name",
     "@{u}",
   ])).trim();
-  yield* resetHard(worktreePath, upstream, undefined, undefined);
+  yield* (yield* Git.Git).resetHard({ worktree: worktreePath, ref: upstream });
 });
 
 // Publish: push the current branch to the first configured remote with
@@ -138,7 +136,8 @@ const rebaseOrMergeAgainst = Effect.fnUntraced(function* (
     Effect.catch((err) =>
       Effect.gen(function* () {
         // Git reports conflicts on stdout, so the files say it instead.
-        const conflicted = (yield* conflictedPaths(worktreePath)).length > 0;
+        const conflicted =
+          (yield* (yield* Git.Git).conflictedPaths(worktreePath)).length > 0;
         yield* runLenient(worktreePath, ["merge", "--abort"]);
         return yield* conflicted ? new SyncConflictsError({ ref }) : err;
       }),

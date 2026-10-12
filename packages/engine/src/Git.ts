@@ -8,6 +8,7 @@ import type {
   ChangedFile,
   CommitMessage,
   CommitSummary,
+  GitOperationState,
 } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -33,11 +34,13 @@ import { makeRemote } from "./git/remote.ts";
 import { makeGitIndex } from "./git/gitIndex.ts";
 import { makeDiffs } from "./git/diffs.ts";
 import { makeRepositories } from "./git/repositories.ts";
+import { makeOperation } from "./git/operation.ts";
 import {
   type BranchMovedError,
   BranchNotMergedError,
   CloneDestinationError,
   type GitError,
+  type GitRefusedError,
   LOCAL_TIPS_LIMIT,
   NestedRepositoryError,
   NoRemoteError,
@@ -51,6 +54,7 @@ import {
 } from "./git/documents.ts";
 export {
   BranchMovedError,
+  GitRefusedError,
   BranchNotMergedError,
   CloneDestinationError,
   DISCARD_REF_PREFIX,
@@ -81,6 +85,13 @@ export class Git extends Context.Service<
       options?: RunOptions,
     ) => Effect.Effect<string, GitError>;
     readonly isRepo: (path: string) => Effect.Effect<boolean>;
+    // Runs `task` while no other write to `worktree`'s index runs: git
+    // takes index.lock for each, so two would otherwise fail on the lock
+    // instead of waiting. Every index write below takes it.
+    readonly withIndexLock: <A, E, R>(
+      worktree: string,
+      task: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E, R>;
     // The checkout `dir` is in, its repository's common dir and its
     // primary checkout, from one git: the common dir points at the
     // primary's .git even from a linked worktree. None outside a
@@ -438,6 +449,43 @@ export class Git extends Context.Service<
       GitError | CloneDestinationError | PlatformError.PlatformError
     >;
 
+    // --- an operation under way ---
+    // The worktree's own git dir.
+    readonly gitDir: (worktree: string) => Effect.Effect<string, GitError>;
+    readonly conflictedPaths: (
+      worktree: string,
+    ) => Effect.Effect<string[], GitError>;
+    readonly hasStagedChanges: (
+      worktree: string,
+    ) => Effect.Effect<boolean, GitError>;
+    // The operation under way in the worktree whose git dir this is
+    // ("merge", "rebase", "cherry-pick", ...), or null.
+    readonly operationInProgress: (
+      gitDir: string,
+    ) => Effect.Effect<string | null>;
+    // The operation under way, whether it can be continued, how many
+    // files are conflicted, and a rebase's branch.
+    readonly readOperation: (
+      worktree: string,
+    ) => Effect.Effect<GitOperationState, GitError>;
+    // Refused while an operation is under way or files are conflicted.
+    readonly refuseMidOperation: (
+      worktree: string,
+    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    readonly continueOperation: (
+      worktree: string,
+    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    readonly abortOperation: (
+      worktree: string,
+    ) => Effect.Effect<void, GitError | GitRefusedError>;
+    // Settles one conflicted file with one side's version, or as it
+    // stands, and stages it.
+    readonly resolveConflict: (input: {
+      readonly worktree: string;
+      readonly path: string;
+      readonly side: "mine" | "theirs" | "as-is";
+    }) => Effect.Effect<void, GitError>;
+
     // --- the index ---
     // `reset --soft` along HEAD's own line: back to an ancestor (an
     // undo), or forward to a descendant when `expectHead` pins where
@@ -446,7 +494,28 @@ export class Git extends Context.Service<
       readonly worktree: string;
       readonly target: string;
       readonly expectHead?: string | undefined;
-    }) => Effect.Effect<string, GitError | UndoRefusedError>;
+    }) => Effect.Effect<
+      string,
+      GitError | UndoRefusedError | BranchMovedError | GitRefusedError
+    >;
+    // `reset --hard` to `ref`, after keeping what it would overwrite in a
+    // discard snapshot. With `restore`, the undo of one: back, and that
+    // reset's snapshot put back.
+    readonly resetHard: (input: {
+      readonly worktree: string;
+      readonly ref: string;
+      readonly expectHead?: string | undefined;
+      readonly restore?: string | undefined;
+    }) => Effect.Effect<
+      { previousHead: string; head: string; snapshot: string | null },
+      GitError | GitRefusedError | BranchMovedError | UnknownRevisionError
+    >;
+    // `paths` as they are on disk now, kept in a snapshot commit under
+    // DISCARD_REF_PREFIX, and the commit.
+    readonly snapshotPaths: (
+      worktree: string,
+      paths: readonly string[],
+    ) => Effect.Effect<string, GitError>;
     // Throws away the changes to `paths` after keeping them in a
     // snapshot commit under DISCARD_REF_PREFIX, and answers with it.
     readonly discard: (input: {
@@ -491,12 +560,18 @@ const make = Effect.gen(function* () {
   const refs = yield* makeRefs({ running });
   const branches = yield* makeBranches({ running, worktreeVerbs });
   const remote = yield* makeRemote({ running, worktreeVerbs, workingTree });
-  const gitIndex = yield* makeGitIndex({ running, refs });
+  const operation = yield* makeOperation({ running });
+  const gitIndex = yield* makeGitIndex({
+    running,
+    refs,
+    operation,
+    workingTree,
+  });
   const diffs = yield* makeDiffs({ running });
   const { checkDestination, clone, createRepository } = yield* makeRepositories(
     { running },
   );
-  const { run, succeeds } = running;
+  const { run, succeeds, onIndex } = running;
   const {
     listWorktrees,
     addWorktree,
@@ -541,12 +616,15 @@ const make = Effect.gen(function* () {
     listIgnoreRules,
   } = branches;
   const { fetchAll, rebaseOrMerge, overwriteFromUpstream, publish } = remote;
-  const { resetSoft, discard, restoreDiscard } = gitIndex;
+  const { resetSoft, resetHard, snapshotPaths, discard, restoreDiscard } =
+    gitIndex;
   const { fileDiff } = diffs;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   return Git.of({
     run,
+    withIndexLock: onIndex,
+    ...operation,
     adminDirOf: (worktreePath) =>
       fs.readFileString(path.join(worktreePath, ".git")).pipe(
         Effect.map((text) => {
@@ -724,15 +802,27 @@ const make = Effect.gen(function* () {
     clone,
     createRepository,
     resetSoft,
+    resetHard,
+    snapshotPaths,
     discard,
     restoreDiscard,
     fileDiff,
-    // --format= drops the commit header, so the patch parses as is.
-    // Empty for a commit git can't show one for.
+    // --format= drops the commit header, so the patch parses as is. A
+    // merge's is against its first parent, what it brought in, as a
+    // plain patch rather than git's combined one. Empty for a commit git
+    // can't show one for.
     commitDiff: Effect.fn("Git.commitDiff")(function* (worktree, hash) {
       return yield* run(
         worktree,
-        ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
+        [
+          "show",
+          "--format=",
+          "--no-color",
+          "--diff-merges=first-parent",
+          "--end-of-options",
+          hash,
+          "--",
+        ],
         { maxOutputBytes: PATCH_MAX_OUTPUT },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     }),

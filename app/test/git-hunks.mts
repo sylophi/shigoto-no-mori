@@ -20,7 +20,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { promised } from "./lib/gitPromises.mts";
+import { engineGit, promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -34,7 +34,9 @@ scrubProcessGitEnv({
 const { discardHunks, readHunks } = promised(
   await import("../host/lib/git/hunks.ts"),
 );
-const { restoreDiscard } = promised(await import("../host/lib/git/changes.ts"));
+// The engine's Git, in the shapes these cases call it by.
+const restoreDiscard = (worktree: string, snapshot: string) =>
+  engineGit.restoreDiscard({ worktree, snapshot });
 const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
 
 const git = sandboxGit(gitEnv);

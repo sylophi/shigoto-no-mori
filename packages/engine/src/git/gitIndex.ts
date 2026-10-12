@@ -1,34 +1,55 @@
-// Git's index: staging, unstaging and committing.
+// Git's index: undoing commits, hard resets, and discarding changes into snapshots that put them back.
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { splitLines, splitZ } from "../gitParse.ts";
+import { isUntracked } from "@shigomori/contracts/schemas";
 import {
   DISCARD_REF_PREFIX,
   DISCARD_SNAPSHOTS_KEPT,
+  GitCommandError,
+  GitRefusedError,
+  listed,
   NestedRepositoryError,
   SHOWN,
+  stderrOf,
   UndoRefusedError,
 } from "./documents.ts";
+import type { OperationArea } from "./operation.ts";
 import type { RunningArea } from "./running.ts";
 import type { RefsArea } from "./refs.ts";
+import type { WorkingTreeArea } from "./workingTree.ts";
 
 export const makeGitIndex = ({
   running,
   refs,
+  operation,
+  workingTree,
 }: {
   readonly running: RunningArea;
   readonly refs: RefsArea;
+  readonly operation: OperationArea;
+  readonly workingTree: WorkingTreeArea;
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { run, runChunked, onIndex } = running;
-    const { verifyRev, refTip, isAncestor } = refs;
+    const { verifyRev, refTip, isAncestor, headAt, resolveCommit } = refs;
+    const { status } = workingTree;
     // --- the index ---
 
+    // `reset --soft`: HEAD moves and nothing else does, so the commits
+    // between come back as staged changes. Only along HEAD's own line:
+    // back to an ancestor for an undo, or forward to a descendant for
+    // that undo's redo, which pins where HEAD must still be. Refused
+    // across a merge, since soft-resetting past one stages its whole
+    // other side as edits. A merge on top, undone to its first parent,
+    // comes off whole instead (`reset --keep`, which refuses rather than
+    // lose a local edit), and its redo puts it back. Answers with where
+    // HEAD was, for the redo.
     const resetSoft = Effect.fn("Git.resetSoft")(function* (input: {
       readonly worktree: string;
       readonly target: string;
@@ -38,28 +59,41 @@ export const makeGitIndex = ({
       return yield* onIndex(
         worktree,
         Effect.gen(function* () {
-          const head = yield* verifyRev(worktree, "HEAD");
-          if (
-            expectHead !== undefined &&
-            head !== (yield* verifyRev(worktree, expectHead))
-          ) {
-            return yield* new UndoRefusedError({ reason: "moved" });
-          }
-          // Anything committed since makes it a different line, and a
-          // revision that doesn't resolve is off it too.
+          yield* operation.refuseMidOperation(worktree);
+          const head = yield* headAt(worktree, expectHead);
+          // A revision that doesn't resolve is off the line too.
           const onLine = (a: string, b: string) =>
             isAncestor(worktree, a, b).pipe(Effect.orElseSucceed(() => false));
-          const range = (yield* onLine(target, head))
-            ? [target, head]
-            : expectHead !== undefined && (yield* onLine(head, target))
-              ? [head, target]
-              : undefined;
-          if (range === undefined) {
+          const backwards = yield* onLine(target, head);
+          const forwards =
+            !backwards && expectHead !== undefined
+              ? yield* onLine(head, target)
+              : false;
+          if (!backwards && !forwards) {
             return yield* new UndoRefusedError({ reason: "off-history" });
           }
-          // Soft-resetting past a merge stages its whole other side as
-          // edits, which is nothing anyone means by undo.
-          const [older, newer] = range;
+          const [older, newer] = backwards ? [target, head] : [head, target];
+          // One merge, stepped over to its first parent and back: the
+          // merge comes off (or goes back on) whole.
+          const firstParent = yield* verifyRev(worktree, `${newer}^1`).pipe(
+            Effect.orElseSucceed(() => undefined),
+          );
+          const wholeMerge =
+            firstParent !== undefined &&
+            (yield* verifyRev(worktree, older)) === firstParent &&
+            (yield* verifyRev(worktree, `${newer}^2`).pipe(
+              Effect.as(true),
+              Effect.orElseSucceed(() => false),
+            ));
+          if (wholeMerge) {
+            yield* run(worktree, [
+              "reset",
+              "--keep",
+              "--end-of-options",
+              target,
+            ]);
+            return head;
+          }
           const merges = yield* run(worktree, [
             "rev-list",
             "--merges",
@@ -194,55 +228,165 @@ export const makeGitIndex = ({
       );
     });
 
+    // Puts a snapshot back in the working tree only, so what comes back
+    // is unstaged, as if edited by hand. Its diff against its parent is
+    // exactly what went: --root diffs a parentless one (an unborn-branch
+    // discard) against the empty tree.
+    const restoreSnapshot = (worktree: string, snapshot: string) =>
+      Effect.gen(function* () {
+        const fields = splitZ(
+          yield* run(worktree, [
+            "diff-tree",
+            "-r",
+            "-z",
+            "--root",
+            "--no-commit-id",
+            "--no-renames",
+            "--name-status",
+            "--end-of-options",
+            snapshot,
+            "--",
+          ]),
+        );
+        const restore: string[] = [];
+        const remove: string[] = [];
+        for (let i = 0; i + 1 < fields.length; i += 2) {
+          const [state, file] = [fields[i], fields[i + 1]];
+          if (!state || !file) continue;
+          (state.startsWith("D") ? remove : restore).push(file);
+        }
+        if (restore.length > 0) {
+          yield* runChunked(
+            worktree,
+            ["restore", "--worktree", `--source=${snapshot}`],
+            restore,
+          );
+        }
+        yield* Effect.forEach(remove, (file) =>
+          fs
+            .remove(path.join(worktree, file), { force: true })
+            .pipe(Effect.ignore),
+        );
+      });
+
     const restoreDiscard = Effect.fn("Git.restoreDiscard")(function* (input: {
       readonly worktree: string;
       readonly snapshot: string;
     }) {
-      const { worktree, snapshot } = input;
       yield* onIndex(
+        input.worktree,
+        restoreSnapshot(input.worktree, input.snapshot),
+      );
+    });
+
+    // `reset --hard`: the branch, the index and the working tree all move
+    // to `ref`, wherever it is. What it throws away can come back: the
+    // commits through the previous HEAD it answers with, and the files it
+    // overwrites through a discard snapshot taken first, for
+    // restoreDiscard. Those are the uncommitted changes to tracked files,
+    // and the untracked files where `ref` tracks the same path. Every
+    // other untracked file stays. `expectHead` pins HEAD to where the
+    // page that asked last saw it.
+    //
+    // The only paths the reset can overwrite untracked are those `ref`
+    // tracks and HEAD doesn't, so one divergence-sized listing finds them.
+    // `--no-renames`, or a rename reads as R, not A, and its destination
+    // slips through. Git itself then says which of those are on disk
+    // (`ls-files -o` with them as pathspecs): an exists-check would
+    // false-positive on case-insensitive APFS after a case-only rename.
+    // An ignored file among them (a carried-over `.env` colliding with a
+    // committed one) never was in git, and a snapshot can't hold it, so
+    // that refuses.
+    //
+    // The undo resets back to the previous HEAD, pinned to where this one
+    // left it, and puts the snapshot back (`restore`). Anything changed
+    // since would be overwritten by it, so that refuses too.
+    const resetHard = Effect.fn("Git.resetHard")(function* (input: {
+      readonly worktree: string;
+      readonly ref: string;
+      readonly expectHead?: string | undefined;
+      readonly restore?: string | undefined;
+    }) {
+      const { worktree, ref, expectHead, restore } = input;
+      return yield* onIndex(
         worktree,
         Effect.gen(function* () {
-          // The snapshot's diff against its parent is exactly what went.
-          // --root diffs a parentless one (an unborn-branch discard)
-          // against the empty tree.
-          const fields = splitZ(
+          // The refusals first, and only then the status: a refusal that
+          // cut a status short could leave its index.lock behind.
+          const [, previousHead, target] = yield* Effect.all(
+            [
+              operation.refuseMidOperation(worktree),
+              headAt(worktree, expectHead),
+              resolveCommit(worktree, ref),
+            ],
+            { concurrency: "unbounded" },
+          );
+          const changed = yield* status(worktree);
+          const added = splitZ(
             yield* run(worktree, [
-              "diff-tree",
-              "-r",
-              "-z",
-              "--root",
-              "--no-commit-id",
+              "diff",
+              "--name-only",
               "--no-renames",
-              "--name-status",
-              "--end-of-options",
-              snapshot,
-              "--",
+              "--diff-filter=A",
+              "-z",
+              "HEAD",
+              target,
             ]),
           );
-          const restore: string[] = [];
-          const remove: string[] = [];
-          for (let i = 0; i + 1 < fields.length; i += 2) {
-            const [state, file] = [fields[i], fields[i + 1]];
-            if (!state || !file) continue;
-            (state.startsWith("D") ? remove : restore).push(file);
-          }
-          if (restore.length > 0) {
-            yield* runChunked(
+          const others = (extra: readonly string[]) =>
+            runChunked(
               worktree,
-              ["restore", "--worktree", `--source=${snapshot}`],
-              restore,
-            );
-          }
-          yield* Effect.forEach(remove, (file) =>
-            fs
-              .remove(path.join(worktree, file), { force: true })
-              .pipe(Effect.ignore),
+              ["ls-files", "-z", "--others", "--exclude-standard", ...extra],
+              added,
+            ).pipe(Effect.map((out) => out.flatMap(splitZ)));
+          const [overwritten, ignored] = yield* Effect.all(
+            [others([]), others(["--ignored"])],
+            { concurrency: 2 },
           );
+          if (ignored.length > 0) {
+            return yield* new GitRefusedError({
+              reason: `This would replace ignored local file(s) that ${ref} tracks: ${listed(ignored.slice(0, SHOWN), ignored.length)}. Move them aside first.`,
+            });
+          }
+          const paths = [
+            ...changed
+              .filter((f) => !isUntracked(f))
+              .flatMap((f) => (f.prevPath ? [f.path, f.prevPath] : [f.path])),
+            ...overwritten,
+          ];
+          if (restore && paths.length > 0) {
+            return yield* new GitRefusedError({
+              reason:
+                "Files changed since the hard reset. Commit, stash, or discard them first.",
+            });
+          }
+          const snapshot =
+            paths.length > 0 ? yield* snapshotPaths(worktree, paths) : null;
+          yield* run(worktree, [
+            "reset",
+            "--hard",
+            "--end-of-options",
+            target,
+          ]).pipe(
+            Effect.mapError((error) =>
+              snapshot !== null && error instanceof GitCommandError
+                ? new GitCommandError({
+                    subcommand: error.subcommand,
+                    exitCode: error.exitCode,
+                    cause: new Error(
+                      `${stderrOf(error)}\nThe uncommitted changes were snapshotted first, as ${snapshot}.`,
+                    ),
+                  })
+                : error,
+            ),
+          );
+          if (restore) yield* restoreSnapshot(worktree, restore);
+          return { previousHead, head: target, snapshot };
         }),
       );
     });
 
-    return { resetSoft, discard, restoreDiscard };
+    return { resetSoft, resetHard, snapshotPaths, discard, restoreDiscard };
   });
 
 export type GitIndexArea = Effect.Success<ReturnType<typeof makeGitIndex>>;

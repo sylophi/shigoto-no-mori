@@ -24,7 +24,7 @@ import {
   type StagedAttachment,
 } from "@shigomori/contracts/schemas";
 import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
-import { parseNumstat } from "../git/changes";
+import { parseNumstat } from "@shigomori/engine/gitParse";
 import { GitRefusal, run, runLenient } from "../git/core";
 import * as Git from "@shigomori/engine/Git";
 import { publishCurrentBranch } from "../git/sync";

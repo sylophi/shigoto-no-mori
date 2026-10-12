@@ -8,6 +8,7 @@ import type { ChangedFile } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 import {
   DISCARD_REF_PREFIX,
+  BranchMovedError,
   GitCommandError,
   UndoRefusedError,
 } from "../src/Git.ts";
@@ -180,8 +181,11 @@ it("undo refuses a moved HEAD, a commit off the line, and a range over a merge",
     );
   };
 
+  const moved = await failureAs(BranchMovedError, (g) =>
+    g.resetSoft({ worktree: repo, target: root, expectHead: root }),
+  );
   assert.equal(
-    (await refusal(root, root)).message,
+    moved.message,
     "The branch has moved on since this was loaded. Reload and try again.",
   );
 
@@ -197,6 +201,20 @@ it("undo refuses a moved HEAD, a commit off the line, and a range over a merge",
   git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side");
   assert.equal((await refusal(root)).reason, "across-merge");
   assert.equal(rev(repo, "HEAD~1"), second);
+
+  // The merge on top, undone to its first parent, comes off whole, and
+  // its redo puts it back.
+  const merge = rev(repo, "HEAD");
+  assert.equal(
+    await withGit((g) => g.resetSoft({ worktree: repo, target: second })),
+    merge,
+  );
+  assert.equal(rev(repo, "HEAD"), second);
+  assert.equal(git(repo, "status", "--porcelain").trim(), "");
+  await withGit((g) =>
+    g.resetSoft({ worktree: repo, target: merge, expectHead: second }),
+  );
+  assert.equal(rev(repo, "HEAD"), merge);
 });
 
 it("discard restores tracked files, removes untracked ones, and keeps a snapshot ref", async () => {

@@ -25,7 +25,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { promised } from "./lib/gitPromises.mts";
+import { engineGit, promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -39,14 +39,27 @@ scrubProcessGitEnv({
 const { mergeBranch, mergeKeepingConflicts, readMergePreview } = promised(
   await import("../host/lib/git/merge.ts"),
 );
-const { abortOperation, continueOperation, readOperation, resolveConflict } =
-  promised(await import("../host/lib/git/operation.ts"));
+// The engine's Git, in the shapes these cases call it by.
+const abortOperation = (worktree: string) => engineGit.abortOperation(worktree);
+const continueOperation = (worktree: string) =>
+  engineGit.continueOperation(worktree);
+const readOperation = (worktree: string) => engineGit.readOperation(worktree);
+const resolveConflict = (
+  worktree: string,
+  path: string,
+  side: "mine" | "theirs" | "as-is",
+) => engineGit.resolveConflict({ worktree, path, side });
 const { readBranchHistory } = promised(
   await import("../host/lib/git/worktrees.ts"),
 );
-const { getCommitDiff } = promised(await import("../host/lib/git/diff.ts"));
+const getCommitDiff = (worktree: string, hash: string) =>
+  engineGit.commitDiff(worktree, hash);
 const { revertCommit } = promised(await import("../host/lib/git/history.ts"));
-const { resetSoft } = promised(await import("../host/lib/git/changes.ts"));
+const resetSoft = (
+  worktree: string,
+  target: string,
+  expectHead: string | undefined,
+) => engineGit.resetSoft({ worktree, target, expectHead });
 
 const git = sandboxGit(gitEnv);
 

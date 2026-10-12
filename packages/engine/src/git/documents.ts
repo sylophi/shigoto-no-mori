@@ -50,6 +50,17 @@ export class UnknownRevisionError extends Schema.TaggedError<UnknownRevisionErro
   }
 }
 
+// A move git would make that the app refuses, in words for the person
+// who asked: an operation under way, conflicts left, nothing to do.
+export class GitRefusedError extends Schema.TaggedError<GitRefusedError>()(
+  "GitRefusedError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 // HEAD moved on from where a caller pinned it: what a move made from a
 // loaded page asks, so it can't land on a branch that changed since.
 export class BranchMovedError extends Schema.TaggedError<BranchMovedError>()(
@@ -88,16 +99,14 @@ export class NoRemoteError extends Schema.TaggedError<NoRemoteError>()(
   }
 }
 
-// Why an undo (or its redo) would not move HEAD: it moved since the
-// page loaded, the target is off HEAD's line, or a merge is between.
+// Why an undo (or its redo) would not move HEAD: the target is off
+// HEAD's line, or a merge is between.
 export class UndoRefusedError extends Schema.TaggedError<UndoRefusedError>()(
   "UndoRefusedError",
-  { reason: Schema.Literals(["moved", "off-history", "across-merge"]) },
+  { reason: Schema.Literals(["off-history", "across-merge"]) },
 ) {
   override get message(): string {
     switch (this.reason) {
-      case "moved":
-        return "The branch has moved on since this was loaded. Reload and try again.";
       case "off-history":
         return "That commit isn't on this branch's history.";
       case "across-merge":

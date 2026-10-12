@@ -1,4 +1,4 @@
-// Durable proof for the changes page's git (host/lib/git/changes.ts and
+// Durable proof for the changes page's git (the engine's Git, and
 // commit.ts) against a REAL repository: the status parser's rows and
 // counts, a commit taking exactly the picked files whatever was staged
 // (a rename included, a file deleted since skipped, on an unborn branch,
@@ -29,7 +29,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
-import { promised } from "./lib/gitPromises.mts";
+import { engineGit, promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // changes.ts runs git under this process's environment. The pre-commit
@@ -44,15 +44,26 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const {
-  discardChanges,
-  listChangedFiles,
-  listChangesForPage,
-  readCommitMessage,
-  resetHard,
-  resetSoft,
-  restoreDiscard,
-} = promised(await import("../host/lib/git/changes.ts"));
+// The engine's Git, in the shapes these cases call it by.
+const discardChanges = (worktree: string, paths: readonly string[]) =>
+  engineGit.discard({ worktree, paths });
+const listChangedFiles = (worktree: string) => engineGit.status(worktree);
+const listChangesForPage = (worktree: string) => engineGit.changes(worktree);
+const readCommitMessage = (worktree: string, hash: string) =>
+  engineGit.readCommitMessage(worktree, hash);
+const resetHard = (
+  worktree: string,
+  ref: string,
+  expectHead: string | undefined,
+  restore: string | undefined,
+) => engineGit.resetHard({ worktree, ref, expectHead, restore });
+const resetSoft = (
+  worktree: string,
+  target: string,
+  expectHead: string | undefined,
+) => engineGit.resetSoft({ worktree, target, expectHead });
+const restoreDiscard = (worktree: string, snapshot: string) =>
+  engineGit.restoreDiscard({ worktree, snapshot });
 const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
 
 // A commit of whole files, the way the page sends one with nothing
