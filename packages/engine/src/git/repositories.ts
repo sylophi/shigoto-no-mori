@@ -96,7 +96,8 @@ export const makeRepositories = ({
 
     // A repository at `parentDir/name`, with an empty first commit: a
     // worktree branches off the default branch, and an unborn one has
-    // nothing to branch off. A failed start leaves nothing behind.
+    // nothing to branch off. A start that fails or is interrupted (the
+    // add-project dialog's Cancel) leaves nothing behind.
     const createRepository = Effect.fn("Git.createRepository")(function* (
       parentDir: string,
       name: string,
@@ -125,7 +126,7 @@ export const makeRepositories = ({
           "Initial commit",
         ]);
       }).pipe(
-        Effect.tapError(() =>
+        Effect.onError(() =>
           Effect.ignore(fs.remove(dest, { recursive: true })),
         ),
       );
