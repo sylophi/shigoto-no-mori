@@ -10,9 +10,15 @@ export const worktreeDataHandlers = {
   // bogus id names nothing. A mirror's peer may name its copy by the id
   // it had before a move, here and in describe.
   read: ({ projectId, worktreeId }) =>
-    Effect.andThen(findProject(projectId), currentWorktreeId(worktreeId)).pipe(
-      Effect.flatMap((id) => Ops.readWorktreeData(projectId, id)),
-    ),
+    Effect.gen(function* () {
+      yield* findProject(projectId);
+      const data = yield* Ops.readWorktreeData(projectId, worktreeId);
+      if (data !== null) return data;
+      const now = yield* currentWorktreeId(projectId, worktreeId);
+      return now === worktreeId
+        ? null
+        : yield* Ops.readWorktreeData(projectId, now);
+    }),
 
   // The renderer only surfaces a ports editor for managed worktrees
   // and the primary checkout, so we don't re-verify here. Enforcing the
@@ -26,7 +32,10 @@ export const worktreeDataHandlers = {
     ).pipe(Effect.asVoid),
 
   describe: ({ projectId, worktreeId, description }) =>
-    Effect.andThen(findProject(projectId), currentWorktreeId(worktreeId)).pipe(
+    Effect.andThen(
+      findProject(projectId),
+      currentWorktreeId(projectId, worktreeId),
+    ).pipe(
       Effect.flatMap((id) =>
         Ops.writeWorktreeDescription(projectId, id, description),
       ),

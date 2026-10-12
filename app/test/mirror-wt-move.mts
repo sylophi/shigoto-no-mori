@@ -17,12 +17,17 @@
 //     new id,
 //   - the git follower, on a session naming the v2 id, reads the copy
 //     and reports synced, never the copy gone,
-//   - the copy-gone check on that session finds the copy there, with
-//     the switches on so the gate is not what answers.
+//   - a rename while the app runs carries the invitation along, and an
+//     id a live worktree has is never taken for the one its old
+//     worktree moved to.
+//
+// The runner's copy-gone check (sessions.ts copyIsGone) still reads the
+// peer's list, which names the copy by its new id only; the follower
+// above no longer asks it, since its reads resolve.
 //
 // Run: pnpm test mirror-wt-move.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { connect as netConnect } from "node:net";
 import { join } from "node:path";
 import { Duplex, PassThrough } from "node:stream";
@@ -54,7 +59,7 @@ import {
   MIRROR_LABEL_LOCAL_WORKTREE,
 } from "@host/mirror/registry";
 import { listMirrorServing } from "@host/mirror/serving";
-import { endMirrorIfCopyGone } from "@host/mirror/sessions";
+import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { makeTracker, waitFor } from "./lib/checkKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import {
@@ -84,7 +89,6 @@ let v2Id: string;
 let newId: string;
 let runnerRoot: string;
 let runnerId: string;
-let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
 let closeEngine: () => Promise<void>;
 
@@ -167,6 +171,7 @@ beforeAll(async () => {
   ({ close: closeEngine } = await hostEngine(dataDir));
 
   // ---- The copy's device: commands and sharing off, the invitation its one exception ----
+  let listener: DirectWire["listener"];
   ({ listener, toListener } = await bootDirectWire(track, {
     provide: fileSync,
     isInvited: mirrorInviteAdmits,
@@ -301,19 +306,57 @@ it("the git follower reads the copy by the v2 id and reports synced, never the c
   assert.deepEqual(gone, []);
 });
 
-it("the copy-gone check on a session naming the v2 id finds the copy there", async () => {
-  // With the switches on, as for a mirror they admit, so the answer is
-  // the copy's and not the gate's.
-  listener.setAccepts(true);
-  listener.setSharing(true);
+it("a rename while the app runs carries the invitation, and a live id is never taken for the one its old worktree moved to", async () => {
+  // The copy renamed here: its invitation follows, and the peer's calls
+  // by either id it had still name it.
+  const renamed = await runHost(
+    worktreesHandlers.rename({
+      projectId: COPY_PROJECT,
+      worktreeId: newId,
+      name: "renamed",
+    }),
+  );
+  assert.deepEqual(
+    listMirrorInvites().map((invite) => invite.copy?.worktreeId),
+    [renamed.id],
+  );
+  for (const worktreeId of [v2Id, newId, renamed.id]) {
+    assert.equal(
+      mirrorInviteAdmits(DIALER, "mirror:gitState", {
+        projectId: COPY_PROJECT,
+        worktreeId,
+      }),
+      true,
+      worktreeId,
+    );
+  }
+  // A new worktree where the copy was, its folder then deleted by hand:
+  // git still lists it, so its id is its own, not the renamed copy's.
+  await git(repo, ["worktree", "add", "-q", "-b", "again", wtPath]);
+  rmSync(wtPath, { recursive: true, force: true });
+  await runHost(
+    worktreeDataHandlers.describe({
+      projectId: COPY_PROJECT,
+      worktreeId: renamed.id,
+      description: { title: "the copy", describedAt: 1 },
+    }),
+  );
   assert.equal(
     await runHost(
-      endMirrorIfCopyGone({
-        deviceId: LISTENER,
-        projectId: COPY_PROJECT,
-        worktreeId: v2Id,
-      }),
+      worktreeDataHandlers.read({ projectId: COPY_PROJECT, worktreeId: newId }),
     ),
-    false,
+    null,
+  );
+  assert.equal(
+    (
+      await runHost(
+        worktreeDataHandlers.read({
+          projectId: COPY_PROJECT,
+          worktreeId: v2Id,
+        }),
+      )
+    )?.title,
+    "the copy",
+    "an id no worktree has any longer still reads the copy's",
   );
 });

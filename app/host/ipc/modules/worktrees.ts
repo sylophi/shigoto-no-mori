@@ -290,7 +290,7 @@ export const worktreesHandlers = {
       const project = yield* findProject(projectId);
       // A mirror's stop names its copy by the id it may have had before a
       // move.
-      const worktreeId = yield* currentWorktreeId(named);
+      const worktreeId = yield* currentWorktreeId(projectId, named);
       // Local delete kills scripts by design (withDeleteInflight reaps
       // them). The transplant orchestrator refuses instead, since its
       // teardown must never take down work still running on the source

@@ -217,12 +217,14 @@ export const findWorktreeIdentity = Effect.fnUntraced(function* (
 
 // The id a worktree has now, for one a peer or a mirror session may
 // hold from before a move (the v3 migration's into wt/, a move, a
-// rename), for a call that keys state by the id without looking the
-// worktree up.
-export const currentWorktreeId = (worktreeId: string) =>
-  Effect.map(
-    Ops.wtFolderMovedIds,
-    (moved) => moved.get(worktreeId) ?? worktreeId,
+// rename), for a call that keys state by the id: the id itself while it
+// names a worktree, else the one its worktree moved to, else the id.
+export const currentWorktreeId = (projectId: string, worktreeId: string) =>
+  findWorktreeIdentity(projectId, worktreeId).pipe(
+    Effect.map((worktree) => worktree.id),
+    Effect.catchTags({
+      UnknownWorktreeError: () => Effect.succeed(worktreeId),
+    }),
   );
 
 // The preamble every worktree-scoped IPC handler opens with, so a change

@@ -85,7 +85,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   );
   child.stderr?.on("data", (chunk: Buffer) => {
     const text = chunk.toString("utf8").trim();
-    if (text !== "") log.warn(`[mirror] serve ${worktreeId}: ${text}`);
+    if (text !== "") log.warn(`[mirror] serve ${worktree.id}: ${text}`);
   });
   const key = servingKey(ctx, channelId);
   const stopChild = () => {

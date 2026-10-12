@@ -31,8 +31,9 @@
 // The v3 migration moved every worktree into wt/, and a worktree's id is
 // a hash of its path, so a copy that landed before it has a new id while
 // the peer running its mirror still names the old one. The invitations
-// are re-keyed to the new ids as they load, and admit a call naming an
-// old id as the copy it became (WtFolder.movedIds).
+// are re-keyed to the new ids as they load, and as a move or a rename
+// here lands, and admit a call naming an old id as the copy it became
+// (WtFolder.movedIds).
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -138,6 +139,26 @@ export const forgetMirrorInvitesOf = (worktreeId: string) =>
       invite.copy === undefined || !namesCopy(invite.copy, worktreeId),
   );
 
+// A worktree here moved while the app runs (a move, a rename): the
+// invitation of a copy it was follows it, and the peer's calls by the
+// id it had still name it.
+export const moveMirrorInvitesOf = (fromId: string, toId: string) =>
+  Effect.suspend(() => {
+    const ids = new Map(
+      [...movedIds].map(([old, now]) => [old, now === fromId ? toId : now]),
+    );
+    ids.set(fromId, toId);
+    ids.delete(toId);
+    movedIds = ids;
+    let moved = false;
+    for (const invite of invites) {
+      if (invite.copy?.worktreeId !== fromId) continue;
+      invite.copy = { ...invite.copy, worktreeId: toId };
+      moved = true;
+    }
+    return moved ? persist : Effect.void;
+  });
+
 // The peers this device no longer shares an account with lose their
 // invitations, like their mirrors.
 export const dropMirrorInvitesWithPeers = (
@@ -160,7 +181,7 @@ export const loadMirrorInvites = Effect.gen(function* () {
       ).pipe(Effect.as(new Map<string, string>())),
     ),
   );
-  const loaded = yield* Effect.flatMap(
+  const loaded: ReadonlyArray<MirrorInvite> = yield* Effect.flatMap(
     MirrorInvites.MirrorInvites,
     (store) => store.load,
   ).pipe(
@@ -171,14 +192,16 @@ export const loadMirrorInvites = Effect.gen(function* () {
       ).pipe(Effect.as([])),
     ),
   );
-  invites = structuredClone(loaded.filter(isLanded));
   let rekeyed = false;
-  for (const invite of invites.filter(isLanded)) {
+  invites = loaded.filter(isLanded).map((invite): Landed => {
     const now = movedIds.get(invite.copy.worktreeId);
-    if (now === undefined) continue;
-    invite.copy = { ...invite.copy, worktreeId: now };
+    if (now === undefined) return structuredClone(invite);
     rekeyed = true;
-  }
+    return structuredClone({
+      ...invite,
+      copy: { ...invite.copy, worktreeId: now },
+    });
+  });
   if (rekeyed) yield* persist;
 });
 

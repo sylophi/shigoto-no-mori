@@ -47,7 +47,6 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import {
   PeerReach,
@@ -437,25 +436,13 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
 
 // Whether the peer answers, within a few seconds, that it no longer
 // lists the session's copy. A peer that fails or stalls is no answer.
-// A folder deleted by hand still lists until git prunes it. A copy the
-// peer moved (the v3 migration's move into wt/) lists under a new id,
-// so one missing from the list is asked about by the id the session
-// holds, which the peer follows to the copy it became.
+// A folder deleted by hand still lists until git prunes it.
 const COPY_PROBE_MS = 5_000;
 const copyIsGone = (
   raw: Pick<MirrorSessionRaw, "deviceId" | "projectId" | "worktreeId">,
 ) =>
   peerWorktree(raw.deviceId, raw.projectId, raw.worktreeId).pipe(
-    Effect.flatMap((copy) =>
-      copy !== undefined
-        ? Effect.succeed(false)
-        : peerMirrorFor(raw.deviceId)
-            .gitState({ projectId: raw.projectId, worktreeId: raw.worktreeId })
-            .pipe(
-              Effect.as(false),
-              Effect.catch((error) => Effect.succeed(isEntityGoneError(error))),
-            ),
-    ),
+    Effect.map((copy) => copy === undefined),
     Effect.timeoutOrElse({
       duration: COPY_PROBE_MS,
       orElse: () => Effect.succeed(false),
