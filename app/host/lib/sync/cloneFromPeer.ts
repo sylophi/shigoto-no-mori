@@ -19,7 +19,6 @@ import {
   SyncBundleRefSchema,
   type SyncCloneInto,
 } from "@shigomori/contracts/modules/sync";
-import { GitRefusal, run } from "@host/lib/git/core";
 import * as Git from "@shigomori/engine/Git";
 import { expandHome } from "@shared/paths";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
@@ -64,7 +63,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
     landing.startsWith(`${branch}/`) ||
     branch.startsWith(`${landing}/`)
   ) {
-    return yield* new GitRefusal({
+    return yield* new Git.GitRefusedError({
       reason: `The copy would land on ${landing}, which the clone here checks out as the repo's default branch. Bring a worktree on another branch, or mirror the primary checkout.`,
     });
   }
@@ -73,11 +72,12 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
 
   yield* Effect.promise(() => mkdir(dest));
   yield* Effect.gen(function* () {
-    yield* run(dest, ["init", "--quiet"]);
+    const git = yield* Git.Git;
+    yield* git.run(dest, ["init", "--quiet"]);
     // HEAD names the branch before it exists, so the checkout below is
     // one reset, and a clone of a repo whose default branch is not
     // git's own default lands on the right one.
-    yield* run(dest, ["symbolic-ref", "HEAD", branchRef]);
+    yield* git.run(dest, ["symbolic-ref", "HEAD", branchRef]);
     const { fetched } = yield* source.fetch({
       refs: [branchRef],
       haves: [],
@@ -86,31 +86,30 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
     });
     const tip = fetched.find((entry) => entry.ref === incomingRef)?.commit;
     if (tip === undefined) {
-      return yield* new GitRefusal({
+      return yield* new Git.GitRefusedError({
         reason: `${branch} did not arrive whole from the other device.`,
       });
     }
-    const git = yield* Git.Git;
     yield* git.updateRef({ repo: dest, ref: branchRef, commit: tip });
     yield* git.deleteRef(dest, incomingRef);
-    yield* run(dest, ["reset", "--quiet", "--hard"]);
+    yield* git.run(dest, ["reset", "--quiet", "--hard"]);
     // The remote as `git clone` would leave it: origin, its HEAD on the
     // branch, the branch tracking it. The source answered the URL with
     // the clone payload's own rule (shared/cloneUrl.ts), re-checked
     // here before it reaches argv.
     if (remoteUrl !== null && isCloneableRemote(remoteUrl)) {
-      yield* run(dest, ["remote", "add", "origin", remoteUrl]);
+      yield* git.run(dest, ["remote", "add", "origin", remoteUrl]);
       yield* git.updateRef({
         repo: dest,
         ref: `refs/remotes/origin/${branch}`,
         commit: tip,
       });
-      yield* run(dest, [
+      yield* git.run(dest, [
         "symbolic-ref",
         "refs/remotes/origin/HEAD",
         `refs/remotes/origin/${branch}`,
       ]);
-      yield* run(dest, [
+      yield* git.run(dest, [
         "branch",
         "--set-upstream-to",
         `origin/${branch}`,

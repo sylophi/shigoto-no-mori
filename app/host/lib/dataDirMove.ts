@@ -24,7 +24,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
-import { run } from "./git/core";
+import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import {
   clearDeleteInflight,
@@ -262,11 +262,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       repairTargets.filter(({ moved }) => moved.length > 0),
       ({ project, moved }) =>
         Effect.ignore(
-          run(project.path, [
-            "worktree",
-            "repair",
-            ...moved.map((m) => m.newPath),
-          ]),
+          Effect.flatMap(Git.Git, (git) =>
+            git.run(project.path, [
+              "worktree",
+              "repair",
+              ...moved.map((m) => m.newPath),
+            ]),
+          ),
         ),
       { concurrency: "unbounded", discard: true },
     );
