@@ -1,6 +1,6 @@
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Sharing from "@host/lib/sharing";
 import * as Views from "@host/lib/views";

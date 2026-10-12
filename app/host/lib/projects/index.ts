@@ -16,7 +16,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Ops from "@host/lib/engineOps";
 import { findWorktreeIdentity } from "../git/worktrees";
-import { dataDir, toAbsolute } from "../util/paths";
+import { dataDir, toAbsolute } from "@shared/paths";
 
 let snapshot: readonly ProjectRow[] = [];
 // The first list of a session re-scans projects the icon cache

@@ -2,7 +2,7 @@
 // its wires, and the shell's session
 // (packages/contracts/src/modules/session.ts) on the loopback.
 import { sessionContract } from "@shigomori/contracts/modules/session";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { callFailureOf } from "@shigomori/contracts/errors";

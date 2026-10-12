@@ -5,7 +5,7 @@
 import { powerMonitor } from "electron";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { lifetime } from "@host/lib/util/lifetimes";
+import { lifetime } from "@shared/lifetimes";
 import * as HostProcess from "./hostProcess";
 import * as Guide from "./electron/guide";
 import * as Updater from "./electron/updater";
@@ -15,7 +15,8 @@ import { shellLinkLayer } from "./ipc/register";
 // without a close: on resume, the host probes the hub socket and every
 // direct session, so the dead ones are redialed within seconds rather
 // than read as connected until the next heartbeat.
-const wake = () => void HostProcess.host().wake();
+const wake = () =>
+  void Effect.runFork(Effect.ignore(HostProcess.host().wake()));
 const resumeProbe = lifetime(
   "the resume probe",
   Effect.sync(() => void powerMonitor.on("resume", wake)),
@@ -28,7 +29,7 @@ export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
       Layer.mergeAll(
         Updater.layer,
         resumeProbe,
-        // The windows' links to the shell (ipc/shellLink.ts).
+        // The windows' links to the shell (ipc/ShellLink.ts).
         shellLinkLayer,
         Guide.layer,
       ),

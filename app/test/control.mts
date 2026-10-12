@@ -89,11 +89,10 @@ import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { registerHostContract } from "@shared/ipc/registerContract";
 import { hostContext, runHost } from "./lib/hostRuntime.mts";
 import type { HostServices } from "@host/process/services";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import {
   type RuntimeInfo,
   type WorktreeRemoval,
@@ -127,7 +126,10 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { listMirrorInvites } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
-import { createLinkRegistrar } from "@host/socket/server";
+import type { LinkRegistrar } from "@host/socket/DeviceLink";
+import { createServed } from "@shared/ipc/served";
+import { sessionContract } from "@shigomori/contracts/modules/session";
+import type { ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
@@ -140,7 +142,6 @@ import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import type * as Stream from "effect/Stream";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
@@ -170,8 +171,6 @@ const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
 const { addWorktree, projectIdOf } = fixture;
 const loopbackFile = join(dataDir, Loopback.LOOPBACK_FILE);
 
-type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
-
 // The REAL loopback on `file`, serving the control contract's `handlers`
 // and `transfers`, built on `run`'s engine: this device's, or a second
 // one's.
@@ -182,27 +181,17 @@ async function startLoopback(options: {
     HandlerContext,
     HostServices
   >;
-  readonly transfers: Readonly<Record<string, View>>;
+  readonly transfers: ViewHandlers<typeof controlContract, HostServices>;
   readonly run: <A, E>(effect: Effect.Effect<A, E, never>) => Promise<A>;
   // The services held back until `ready`, as the app's root holds them
   // until its graph is up.
   readonly late?: boolean;
 }) {
-  const registrar = createLinkRegistrar();
-  registerHostContract(
-    controlContract,
-    options.handlers,
-    {
-      handle: (channel, fn) => registrar.handle(channel, fn),
-      broadcastAll: () => {},
-    },
-    { validateOutputs: true },
-  );
-  for (const [key, transfer] of Object.entries(options.transfers)) {
-    registrar.view(`control:${key}`, transfer);
-  }
+  const registrar: LinkRegistrar = createServed();
+  registrar.serve(controlContract, options.handlers);
+  registrar.view(controlContract, options.transfers);
   // One call of the shell's session, which only the shell's token opens.
-  registrar.handle("session:busy", () =>
+  registrar.serveOne(sessionContract, "busy", () =>
     Effect.succeed({ runningScripts: 0, inflightDeletes: 0 }),
   );
   // The proof file's host services, which the handlers and transfers

@@ -1,12 +1,13 @@
 // The shell's wires: the port each window's calls to its shell ride
-// (main/ipc/shellLink.ts), the registrar that mounts the shell's modules
+// (main/ipc/ShellLink.ts), the registrar that mounts the shell's modules
 // there, and the pushes to one window or every one. The host's modules
 // ride the host's own wires (host/process/wires.ts).
-import { app, ipcMain, MessageChannelMain, type WebContents } from "electron";
+import { ipcMain, MessageChannelMain, type WebContents } from "electron";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
-import { layerLatch } from "@host/lib/util/layerLatch";
+import * as PubSub from "effect/PubSub";
+import { layerLatch } from "@shared/layerLatch";
 import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { isHostSide } from "@shigomori/contracts/link";
 import type {
@@ -14,19 +15,16 @@ import type {
   PushProducerPayload,
   Handlers,
 } from "@shigomori/contracts/types";
-import {
-  broadcastAll as broadcastAllCore,
-  registerContract as registerContractCore,
-  resolveBroadcast,
-} from "@shared/ipc/registerContract";
+import { resolvePush } from "@shared/ipc/served";
 import { SHELL_PORT_CHANNEL } from "@shared/ipc/shell";
 import type { HandlerContext } from "@shared/ipc/transport";
-import * as ShellLink from "./shellLink";
+import * as ShellLink from "./ShellLink";
+import { createShellRegistrar } from "./shellRegistrar";
 
 // The shell's half of every window's calls: the client modules this
 // process owns, registered here and served on the port each window's
 // preload asks for (installShellPorts).
-const shellRegistrar = ShellLink.createShellRegistrar();
+const shellRegistrar = createShellRegistrar();
 
 // The link, once its layer is up, with the runtime its work runs in
 // for as long as the layer does.
@@ -69,12 +67,7 @@ export function registerContract<M extends ContractModule>(
   if (isHostSide(module)) {
     throw new Error(`${nameOf(module)} is the host's, not the shell's`);
   }
-  registerContractCore(module, handlers, shellRegistrar, {
-    // Handler results are parsed with their output schema in a dev
-    // build, so drift surfaces here and not as a confusing failure in
-    // the window. A packaged build skips the extra parse.
-    validateOutputs: !app.isPackaged,
-  });
+  shellRegistrar.serve(module, handlers);
 }
 
 // A push to one window alone (its menu's events, its focus), on its
@@ -85,7 +78,7 @@ export function broadcast<M extends ContractModule, K extends PushKeys<M>>(
   payload: PushProducerPayload<M, K>,
   webContents: WebContents,
 ): void {
-  const { channel, parsed } = resolveBroadcast(module, key, payload);
+  const { channel, payload: parsed } = resolvePush(module, key, payload);
   // Before the link is up no window is listening, and the push goes
   // nowhere.
   const up = link.now();
@@ -100,5 +93,6 @@ export function broadcastAll<M extends ContractModule, K extends PushKeys<M>>(
   key: K,
   payload: PushProducerPayload<M, K>,
 ): void {
-  broadcastAllCore(module, key, payload, shellRegistrar);
+  const { channel, payload: parsed } = resolvePush(module, key, payload);
+  PubSub.publishUnsafe(shellRegistrar.pushes, { channel, payload: parsed });
 }

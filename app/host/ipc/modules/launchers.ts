@@ -1,5 +1,5 @@
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/engine";
 import * as Ops from "@host/lib/engineOps";

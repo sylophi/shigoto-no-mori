@@ -1,5 +1,5 @@
 // Proof for the latch a layer hands code outside the graph
-// (host/lib/util/layerLatch.ts): a read before the layer is up waits
+// (shared/layerLatch.ts): a read before the layer is up waits
 // for it and gets what it built, a layer that failed to start refuses
 // the read with why, and a read after the layer closed is refused.
 //
@@ -12,7 +12,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { it } from "vitest";
-import { LayerDownError, layerLatch } from "../host/lib/util/layerLatch.ts";
+import { LayerDownError, layerLatch } from "../shared/layerLatch.ts";
 
 const refusal = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) && Cause.squash(exit.cause) instanceof LayerDownError;

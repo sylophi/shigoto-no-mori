@@ -16,7 +16,7 @@ import {
   forwardContract,
 } from "@shigomori/contracts/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import { dialLoopback } from "@host/lib/net";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 

@@ -254,7 +254,7 @@ it("refuses a tampered, replayed or reordered frame without spending the nonce",
 it("carries a frame at the device link's cap, and bounds handshake messages", () => {
   const { initiatorSide, responderSide } = handshake();
   const ad = new Uint8Array(0);
-  // MAX_INBOUND_FRAME_BYTES on the device link (host/socket/server.ts).
+  // MAX_INBOUND_FRAME_BYTES on the device link (host/socket/DeviceLink.ts).
   const frame = new Uint8Array(1 << 20).map((_, index) => index % 251);
   const sealed = initiatorSide.send.encryptWithAd(ad, frame);
   assert.equal(sealed.length, frame.length + 16);

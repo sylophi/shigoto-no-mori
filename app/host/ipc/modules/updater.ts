@@ -1,6 +1,6 @@
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Shell from "@host/lib/Shell";
 import type { HostServices } from "@host/process/services";

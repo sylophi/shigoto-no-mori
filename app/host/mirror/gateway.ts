@@ -17,11 +17,12 @@
 //
 // Electron-free on purpose, like the port-forward engine: the mirror
 // check drives this exact gateway over a real direct wire.
+import * as Effect from "effect/Effect";
 import { createServer, type Server, type Socket } from "node:net";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type { Client } from "@shigomori/contracts/types";
+import type { PeerCalls } from "@host/ipc/PeerReach";
 import { WorktreeIdSchema } from "@shigomori/contracts/schemas";
 import { mintHexId } from "@host/lib/hexId";
 import { secretsMatch } from "@host/lib/util/secretCompare";
@@ -40,7 +41,10 @@ const isWorktreeId = Schema.is(WorktreeIdSchema);
 // file-sync/engine.go reads this exact name.
 export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
 
-export type MirrorPeerApi = Pick<Client<typeof mirrorContract>, "openStream">;
+export type MirrorPeerApi = Pick<
+  PeerCalls<typeof mirrorContract>,
+  "openStream"
+>;
 
 // The preface's shape (file-sync/engine.go mirrorPreface), reduced to
 // the fields the gateway acts on. Validated by hand rather than Schema:
@@ -187,14 +191,16 @@ export function createMirrorGateway(deps: {
         const conn = bridgeSocket(socket, {
           channels: deps.peerChannelsFor(preface.deviceId),
           open: (channelId) =>
-            api.openStream({
-              projectId: preface.projectId,
-              worktreeId: preface.worktreeId,
-              channelId,
-              ...(preface.localWorktreeId === undefined
-                ? {}
-                : { peerWorktreeId: preface.localWorktreeId }),
-            }),
+            Effect.runPromise(
+              api.openStream({
+                projectId: preface.projectId,
+                worktreeId: preface.worktreeId,
+                channelId,
+                ...(preface.localWorktreeId === undefined
+                  ? {}
+                  : { peerWorktreeId: preface.localWorktreeId }),
+              }),
+            ),
           carried,
           // The bridge resumes the socket itself once the far end is
           // open. The answer line goes out just before.

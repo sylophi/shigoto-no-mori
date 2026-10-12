@@ -38,15 +38,22 @@ type Args<I> = [I] extends [void]
     : [input: I];
 
 // Handlers are always called positionally as `(input, context)`. Even
-// when the input schema is void, the registrar still passes
-// `undefined` in slot 0 so the `context` slot stays at index 1; using
-// `Args<I>` here would let a void-input handler typecheck as
-// `(ctx) => ...` and silently receive `undefined` at runtime.
-// Handlers that don't need either argument can drop them via TypeScript
-// variance (callbacks with fewer params are assignable). A side that
-// serves its calls in a layer graph (the host) names the services in
-// `Services`, and its handlers may answer with an effect on them.
-export type Handlers<
+// when the input schema is void, the server still passes `undefined` in
+// slot 0 so the `context` slot stays at index 1; using `Args<I>` here
+// would let a void-input handler typecheck as `(ctx) => ...` and
+// silently receive `undefined` at runtime. Handlers that don't need
+// either argument can drop them via TypeScript variance (callbacks with
+// fewer params are assignable).
+export type Handlers<M extends ContractModule, Ctx = unknown> = {
+  [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
+    input: Decoded<InputOf<R>>,
+    context: Ctx,
+  ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
+};
+
+// The same for a side served from a layer graph (the host): each
+// handler answers with an effect on the graph's services.
+export type EffectHandlers<
   M extends ContractModule,
   Ctx = unknown,
   Services = never,
@@ -54,12 +61,7 @@ export type Handlers<
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
     input: Decoded<InputOf<R>>,
     context: Ctx,
-  ) =>
-    | Promise<Decoded<OutputOf<R>>>
-    | Decoded<OutputOf<R>>
-    | ([Services] extends [never]
-        ? never
-        : Effect.Effect<Decoded<OutputOf<R>>, unknown, Services>);
+  ) => Effect.Effect<Decoded<OutputOf<R>>, unknown, Services>;
 };
 
 // What serves a module's views: each one's stream, from its input.
@@ -101,6 +103,16 @@ export type Api<M extends ContractModule> = {
   [K in M as ContractInfo<K> extends { readonly name: infer N extends string }
     ? N
     : never]: Client<K>;
+};
+
+// A module's invokes as effects, for a caller that runs on Effect (the
+// host's link to its shell, the shell's session with its host, a
+// peer's surface): each call's answer as its output decodes, and its
+// failure as the far side sent it.
+export type EffectClient<M extends ContractModule> = {
+  [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
+    ...args: Args<Encoded<InputOf<R>>>
+  ) => Effect.Effect<Decoded<OutputOf<R>>, unknown>;
 };
 
 // The API over the host-scoped modules of the set only.

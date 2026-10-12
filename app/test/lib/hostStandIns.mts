@@ -11,7 +11,7 @@ import * as AccountPeers from "../../host/lib/control/AccountPeers.ts";
 import * as DeviceId from "../../host/lib/config/DeviceId.ts";
 import { DataDirHolders } from "../../host/lib/DataDirHolders.ts";
 import * as HostFacts from "../../host/lib/HostFacts.ts";
-import * as HostPushes from "../../host/lib/hostPushes.ts";
+import * as HostPushes from "../../host/lib/HostPushes.ts";
 import * as Ops from "../../host/lib/engineOps.ts";
 import * as Shell from "../../host/lib/Shell.ts";
 import * as PeerReach from "../../host/ipc/PeerReach.ts";
@@ -59,7 +59,9 @@ const standIns = Layer.mergeAll(
   Layer.succeed(
     PeerReach.PeerReach,
     PeerReach.PeerReach.of({
-      client: (contract, id, options) => peers.client(contract, id, options),
+      calls: (contract, id) => peers.calls(contract, id),
+      onPush: (contract, key, id, handler) =>
+        peers.onPush(contract, key, id, handler),
       channels: (id) => peers.channels(id),
     }),
   ),

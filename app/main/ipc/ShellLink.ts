@@ -5,7 +5,7 @@
 // preload for a port, the preload asks here (attach), and a page that
 // goes takes its port with it.
 import { channelOf, isPush } from "@shigomori/contracts/contract";
-import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
+import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -20,40 +20,19 @@ import * as RpcServer from "effect/rpc/RpcServer";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { MessagePortMain, WebContents } from "electron";
-import { resolveBroadcast } from "@shared/ipc/registerContract";
+import { type Invoke, resolvePush, type Served } from "@shared/ipc/served";
 import { ShellGroup } from "@shared/ipc/shell";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { portSocket } from "@shared/remote/portSocket";
 
-type Push = { readonly channel: string; readonly payload: unknown };
-type Served = (ctx: HandlerContext, input: unknown) => Promise<unknown>;
+export type Push = { readonly channel: string; readonly payload: unknown };
 
-// What the shell registers to serve, by channel, and the pushes it fans
-// out to every window. Registration comes first, at boot; the server
-// reads it once each port is attached.
-export type ShellRegistrar = ServerTransport & {
-  readonly served: ReadonlyMap<string, Served>;
+// What the shell registers to serve (shellRegistrar.ts), and the
+// pushes it fans out to every window.
+export type ShellRegistrar = Served<HandlerContext> & {
   readonly pushes: PubSub.PubSub<Push>;
 };
-
-export function createShellRegistrar(): ShellRegistrar {
-  const served = new Map<string, Served>();
-  const pushes = Effect.runSync(PubSub.unbounded<Push>());
-  return {
-    served,
-    pushes,
-    handle(channel, fn) {
-      if (served.has(channel)) {
-        throw new Error(`[shell] "${channel}" is served already`);
-      }
-      served.set(channel, fn);
-    },
-    broadcastAll(channel, payload) {
-      PubSub.publishUnsafe(pushes, { channel, payload });
-    },
-  };
-}
 
 export class ShellLink extends Context.Service<
   ShellLink,
@@ -141,32 +120,21 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
     // contract error it is, or as RemoteCallError with its message and
     // code.
     const serve =
-      (fn: Served) =>
+      (fn: Invoke<HandlerContext, never>) =>
       (payload: unknown, { client }: Options) =>
         Effect.flatMap(connectionOf(client.id), (connection) =>
-          Effect.tryPromise({
-            try: () =>
-              fn(
-                {
-                  connection: connection.closed.signal,
-                  ...(connection.windowId === null
-                    ? {}
-                    : { windowId: connection.windowId }),
-                  notifier: (module, key) => (push) => {
-                    const { channel, parsed } = resolveBroadcast(
-                      module,
-                      key,
-                      push,
-                    );
-                    PubSub.publishUnsafe(connection.pushes, {
-                      channel,
-                      payload: parsed,
-                    });
-                  },
-                },
-                payload,
-              ),
-            catch: callFailureOf,
+          fn(payload, {
+            connection: connection.closed.signal,
+            ...(connection.windowId === null
+              ? {}
+              : { windowId: connection.windowId }),
+            notifier: (module, key) => (push) => {
+              const resolved = resolvePush(module, key, push);
+              PubSub.publishUnsafe(connection.pushes, {
+                channel: resolved.channel,
+                payload: resolved.payload,
+              });
+            },
           }),
         );
 
@@ -193,7 +161,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
         handlers[channel] = push(channel);
         continue;
       }
-      const fn = registrar.served.get(channel);
+      const fn = registrar.invokeOf(call);
       handlers[channel] =
         fn === undefined
           ? () =>

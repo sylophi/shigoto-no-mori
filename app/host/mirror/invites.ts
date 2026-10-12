@@ -11,7 +11,7 @@
 // a mirror into this device makes (the contracts tag them `invitable`,
 // packages/contracts/src/contract.ts), on the one worktree the mirror landed,
 // whatever the switch says, and whether this device shares with its
-// peers at all. The device link's gates consult it (host/socket/server.ts
+// peers at all. The device link's gates consult it (host/socket/DeviceLink.ts
 // isInvited and seesPush), and nothing else reads it.
 //
 // An invitation is pending from the ask until the peer's landing

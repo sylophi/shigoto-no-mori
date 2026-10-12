@@ -1,6 +1,6 @@
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/views";
 import {
   DEVICE_SETTINGS_DEFAULTS,

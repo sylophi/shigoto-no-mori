@@ -28,7 +28,7 @@ import * as Ops from "./engineOps";
 import { pruneStaleWorktrees } from "./git/worktrees";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { clearDeleteInflight, markDeleteInflight } from "./scripts";
-import { dataDir } from "./util/paths";
+import { dataDir } from "@shared/paths";
 
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",

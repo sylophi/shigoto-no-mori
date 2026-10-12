@@ -1,6 +1,6 @@
 import { portsContract } from "@shigomori/contracts/modules/ports";
 import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/views";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";

@@ -99,7 +99,7 @@ export const MAX_ONLINE_DEVICES = 64;
 export const MAX_ACCOUNT_DEVICES = 16;
 
 // Application close codes for the hub socket. Deliberately disjoint
-// from the device link's 4002-4003 (host/socket/server.ts) so a log line's code
+// from the device link's 4002-4003 (host/socket/DeviceLink.ts) so a log line's code
 // names its transport. TICKET_REJECTED covers unknown, expired and
 // replayed tickets alike: every case means "mint a fresh ticket and
 // reconnect", and distinguishing them would only tell an attacker

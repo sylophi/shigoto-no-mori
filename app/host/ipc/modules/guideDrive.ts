@@ -1,5 +1,5 @@
 import { guideDriveContract } from "@shigomori/contracts/modules/guide";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import * as Effect from "effect/Effect";
 import * as Shell from "@host/lib/Shell";

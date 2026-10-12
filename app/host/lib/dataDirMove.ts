@@ -39,7 +39,7 @@ import {
   expandHome,
   isENOENT,
   legacyDataDirPointerPath,
-} from "./util/paths";
+} from "@shared/paths";
 
 // A step on the file system, its failure as it crosses a wire.
 const fsStep = <A>(step: () => Promise<A>) =>

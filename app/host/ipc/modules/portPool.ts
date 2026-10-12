@@ -1,5 +1,5 @@
 import { portPoolContract } from "@shigomori/contracts/modules/portPool";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Ports from "@host/lib/Ports";
 

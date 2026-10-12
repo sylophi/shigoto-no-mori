@@ -30,6 +30,9 @@ import { it } from "vitest";
 import { buildApi } from "@shared/ipc/client";
 import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { createWebBridge, type WebBridgeDeps } from "../web/ipc/register.ts";
+import * as Effect from "effect/Effect";
+import { createLocalRegistrar } from "../web/ipc/localRegistrar.ts";
+import { windowContract } from "@shigomori/contracts/modules/window";
 import type { KeyValueStorage } from "../web/lib/kvStorage.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults.ts";
@@ -327,6 +330,38 @@ it("shell: openExternal reaches the injected opener and showItemInFolder is a ha
     await bridge.api.shell.showItemInFolder({ path: "/somewhere" }),
     undefined,
   );
+});
+
+it("shell: what the opener throws reaches the caller as it is", async () => {
+  const failure = new TypeError("opener unavailable");
+  const bridge = createWebBridge(
+    makeDeps({
+      openExternal: () => {
+        throw failure;
+      },
+    }),
+  );
+  trackTest(() => bridge.stop());
+  await assert.rejects(
+    bridge.api.shell.openExternal({ url: "https://example.com/page" }),
+    (error: unknown) => error === failure,
+  );
+});
+
+it("in the page, a dev build checks each answer against its output schema, and a packaged one hands it through", async () => {
+  const malformed = { port: "not a port", token: 1, deviceId: null };
+  const answer = (validateOutputs: boolean) => {
+    const tab = createLocalRegistrar({ validateOutputs });
+    // oxlint-disable-next-line shigomori/no-double-cast -- the malformed answer is the point
+    tab.served.serveOne(
+      windowContract,
+      "hostAddress",
+      () => malformed as never,
+    );
+    return Effect.runPromise(tab.link.call("window:hostAddress", undefined));
+  };
+  await assert.rejects(answer(true));
+  assert.deepEqual(await answer(false), malformed);
 });
 
 it('enroll: exchanges the Clerk session token for a credential with platform "web" under this deviceId, and persists the enc:false envelope', async () => {

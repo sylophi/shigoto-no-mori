@@ -11,7 +11,7 @@ import {
   makeIgnoreMatcher,
   normalizeRelPath,
 } from "@shigomori/contracts/git/gitPaths";
-import { pathExists } from "../util/paths";
+import { pathExists } from "@shared/paths";
 import type { WorktreeIncludeStatus } from "@shigomori/contracts/schemas";
 import {
   listIgnoredPaths,

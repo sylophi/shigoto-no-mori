@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -38,7 +39,7 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   },
 
   networkChanged: () => {
-    void host().wake();
+    Effect.runFork(Effect.ignore(host().wake()));
   },
 
   nuke: () => nukeShell(),

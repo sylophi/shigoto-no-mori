@@ -17,7 +17,7 @@ import type * as Tunnel from "@host/direct/cloudflared";
 import type * as HostAccount from "@host/lib/HostAccount";
 import type * as MirrorDaemon from "@host/mirror/daemon";
 import type * as Loopback from "@host/socket/loopback";
-import type * as DeviceLink from "@host/socket/server";
+import type * as DeviceLink from "@host/socket/DeviceLink";
 import type { HostServices } from "./services";
 
 // What the root's callbacks reach beyond what the handlers do.
@@ -82,7 +82,7 @@ export const failed = (reason: string): void => {
   );
 };
 
-// The listeners' services (host/socket/server.ts LateServices).
+// The listeners' services (host/socket/DeviceLink.ts LateServices).
 export const services = Effect.suspend(() => Deferred.await(ready)).pipe(
   Effect.map((up) => up.context),
   Effect.mapError(callFailureOf),

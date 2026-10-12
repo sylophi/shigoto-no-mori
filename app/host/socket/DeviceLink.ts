@@ -2,9 +2,8 @@
 // listener another device dials, serving every contract call annotated
 // `remote` over Effect RPC, the pushes as streams, and the byte
 // channels. Registration and listening are apart on purpose:
-// host/process/wires.ts records every remote handler in the registrar at
-// boot whether or not the device is enrolled, so signing in later only
-// starts the listener.
+// host/process/wires.ts registers every module at boot whether or not
+// the device is enrolled, so signing in later only starts the listener.
 //
 // A peer's socket opens sealed (shared/remote/sealedSocket.ts): the
 // ticket minted for it over the hub, checked before any crypto runs,
@@ -75,11 +74,13 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import { resolveBroadcast } from "@shared/ipc/registerContract";
-import type {
-  EffectServerTransport,
-  HandlerContext,
-} from "@shared/ipc/transport";
+import {
+  type Invoke,
+  resolvePush,
+  type Served,
+  type View,
+} from "@shared/ipc/served";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {
   CommandGate,
@@ -102,7 +103,7 @@ import {
   HOST_LIVENESS_TIMEOUT_MS,
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/remote/link";
-import * as HostPushes from "@host/lib/hostPushes";
+import * as HostPushes from "@host/lib/HostPushes";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import * as Sharing from "@host/lib/sharing";
 import type { HostServices } from "@host/process/services";
@@ -163,7 +164,10 @@ export type WsServerTicketAuth = {
 
 // The sharing switch as the device link reads it (SharingGate). The
 // loopback has none: its callers are this machine's own.
-type LinkSharing = Pick<Sharing.Sharing["Service"], "current" | "changes"> & {
+type LinkSharing = Pick<
+  Sharing.Sharing["Service"],
+  "current" | "now" | "changes"
+> & {
   // The pushes a peer still hears while it is off, beside
   // sharing:changed: what a mirror this host invited follows.
   readonly seesPush: (peerDeviceId: string, payload: unknown) => boolean;
@@ -320,44 +324,10 @@ function closeThenTerminate(
 
 type Push = { readonly channel: string; readonly payload: unknown };
 
-type Served = (
-  ctx: HandlerContext,
-  input: unknown,
-) => Effect.Effect<unknown, CallFailure, HostServices>;
-type View = (input: unknown) => Stream.Stream<unknown, unknown, HostServices>;
-
-// What the app registers to serve: every remote handler and view, by
-// channel. The pushes it serves are the host's (HostPushes).
-export type LinkRegistrar = Pick<
-  EffectServerTransport<HostServices>,
-  "handle"
-> & {
-  readonly served: ReadonlyMap<string, Served>;
-  readonly views: ReadonlyMap<string, View>;
-  readonly view: (channel: string, view: View) => void;
-};
-
-export function createLinkRegistrar(): LinkRegistrar {
-  const served = new Map<string, Served>();
-  const views = new Map<string, View>();
-  const once = (channel: string) => {
-    if (served.has(channel) || views.has(channel)) {
-      throw new Error(`[link] "${channel}" is served already`);
-    }
-  };
-  return {
-    served,
-    views,
-    handle(channel, fn) {
-      once(channel);
-      served.set(channel, fn);
-    },
-    view(channel, view) {
-      once(channel);
-      views.set(channel, view);
-    },
-  };
-}
+// What the app registers to serve on a link (shared/ipc/served.ts):
+// its modules' handlers and views. The pushes it serves are the host's
+// (HostPushes).
+export type LinkRegistrar = Served<HandlerContext, HostServices>;
 
 // The graph's services, once the root has them: a call or a view that
 // comes first waits for them, and is refused if the graph failed.
@@ -371,19 +341,21 @@ export type LateServices = Effect.Effect<
 // failure crossing as the contract error it is, or as RemoteCallError
 // with its message and code.
 const serve =
-  (channel: string, fn: Served, services: LateServices) => (payload: unknown) =>
+  (
+    channel: string,
+    fn: Invoke<HandlerContext, HostServices>,
+    services: LateServices,
+  ) =>
+  (payload: unknown) =>
     Effect.gen(function* () {
       const peer = yield* LinkPeer;
       const context = yield* services;
-      return yield* fn(
-        {
-          connection: peer.closed,
-          callerDeviceId: peer.deviceId,
-          channels: peer.channels,
-          notifier: (module, key) => (push) => peer.notify(module, key, push),
-        },
-        payload,
-      ).pipe(Effect.provideContext(context));
+      return yield* fn(payload, {
+        connection: peer.closed,
+        callerDeviceId: peer.deviceId,
+        channels: peer.channels,
+        notifier: (module, key) => (push) => peer.notify(module, key, push),
+      }).pipe(Effect.provideContext(context));
     }).pipe(Effect.annotateSpans({ channel }));
 
 // A frame's messages. One malformed frame is dropped rather than taking
@@ -778,7 +750,7 @@ export const make = (options: {
 
         // A view, failing as an invoke does: the contract error it is,
         // or RemoteCallError with its message and code.
-        const watch = (view: View) => (payload: unknown) =>
+        const watch = (view: View<HostServices>) => (payload: unknown) =>
           Stream.unwrap(
             Effect.map(services, (context) =>
               view(payload).pipe(Stream.provideContext(context)),
@@ -797,14 +769,14 @@ export const make = (options: {
             continue;
           }
           if (!isInvoke(call)) {
-            const view = registrar.views.get(tag);
+            const view = registrar.viewOf(call);
             handlers[tag] =
               view === undefined
                 ? () => Stream.fail(unserved(tag))
                 : watch(view);
             continue;
           }
-          const fn = registrar.served.get(tag);
+          const fn = registrar.invokeOf(call);
           handlers[tag] =
             fn === undefined
               ? () => Effect.fail(unserved(tag))
@@ -843,14 +815,10 @@ export const make = (options: {
                 closed: connection.closed.signal,
                 channels: connection.channels,
                 notify: (module, key, payload) => {
-                  const { channel, parsed } = resolveBroadcast(
-                    module,
-                    key,
-                    payload,
-                  );
+                  const resolved = resolvePush(module, key, payload);
                   PubSub.publishUnsafe(connection.pushes, {
-                    channel,
-                    payload: parsed,
+                    channel: resolved.channel,
+                    payload: resolved.payload,
                   });
                 },
               }),
@@ -960,7 +928,7 @@ export const make = (options: {
                   Effect.provideService(LinkPeer, {
                     ...peer,
                     notify: (module, key, said) => {
-                      if (Effect.runSync(shared.current)) {
+                      if (shared.now()) {
                         peer.notify(module, key, said);
                       }
                     },
@@ -1335,6 +1303,7 @@ export const layer = (options: {
         services: options.services,
         sharing: {
           current: sharing.current,
+          now: sharing.now,
           changes: sharing.changes,
           seesPush: options.seesPush,
         },

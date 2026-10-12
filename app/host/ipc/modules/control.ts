@@ -4,7 +4,7 @@ import type {
   controlContract,
 } from "@shigomori/contracts/modules/control";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { EffectHandlers } from "@shared/ipc/registerContract";
+import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";

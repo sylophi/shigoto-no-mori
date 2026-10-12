@@ -25,7 +25,7 @@ import type {
   PortForwardSummary,
   PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
-import type { Client } from "@shigomori/contracts/types";
+import type { PeerCalls } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
 import {
   type BridgedConn,
@@ -34,7 +34,7 @@ import {
   type PeerChannels,
 } from "./bridge";
 
-export type ForwardApi = Client<typeof forwardContract>;
+export type ForwardApi = PeerCalls<typeof forwardContract>;
 
 // Client-side cap on live conns per device, under the host's own
 // per-connection channel cap (host/ipc/modules/forward.ts): sized so
@@ -118,7 +118,9 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     const conn = bridgeSocket(socket, {
       channels: forward.channels,
       open: (channelId) =>
-        forward.api.open({ port: forward.remotePort, channelId }),
+        Effect.runPromise(
+          forward.api.open({ port: forward.remotePort, channelId }),
+        ),
       onOpened: () => {
         forward.opened.add(conn);
         changed();
@@ -186,7 +188,9 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       onWritable: () => {},
     });
     try {
-      await api.open({ port: input.remotePort, channelId: probeId });
+      await Effect.runPromise(
+        api.open({ port: input.remotePort, channelId: probeId }),
+      );
     } catch (error) {
       if (!isForwardConnectFailedError(error)) throw error;
     } finally {
