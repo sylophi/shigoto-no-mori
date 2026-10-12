@@ -16,7 +16,12 @@ import { callOf } from "@shigomori/contracts/contract";
 import {
   NoDirectConnectionError,
   NotSharingError,
+  RemoteCallError,
+  isNoDirectConnectionError,
 } from "@shigomori/contracts/errors";
+import { peerViewFailure } from "@shared/hub/peerViewFailure";
+import { RemoteConnectError } from "@shared/remote/deviceLink";
+import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type { ContractModule } from "@shigomori/contracts/contract";
@@ -49,6 +54,7 @@ const ROWS = [
 function page({
   peerAnswers = 0,
   hostFails = false,
+  hostAnswersFailure = false,
   peerRefuses = false,
 } = {}) {
   let peerAsks = 0;
@@ -61,6 +67,11 @@ function page({
     view: () => {
       if (local) {
         hostAsks += 1;
+        if (hostAnswersFailure) {
+          return Stream.fail(
+            new RemoteCallError({ text: "Couldn't read or write the store." }),
+          );
+        }
         return hostFails ? Stream.fail(noSession) : Stream.make(ROWS);
       }
       peerAsks += 1;
@@ -167,3 +178,32 @@ it("this machine's host is asked for good", async () => {
     unmount();
   }
 }, 30_000);
+
+it("a view the host answers with its own failure ends, and shows it, rather than being asked again unseen", async () => {
+  const { registry, hostAsks } = page({ hostAnswersFailure: true });
+  const atom = projectsOf(LOCAL);
+  const unmount = registry.mount(atom);
+  try {
+    await waitFor(
+      () => AsyncResult.isFailure(registry.get(atom)),
+      "the view to read as failed",
+    );
+    assert.equal(hostAsks(), 1, "asked once");
+  } finally {
+    unmount();
+  }
+});
+
+// A peer's view as this host serves it to a window: its link going is
+// the redial's (no session, asked again), the peer's own answer ends it.
+it("a peer's link dropping under its view is no session, and the peer's refusal stays itself", () => {
+  const dropped = peerViewFailure(PEER, new RemoteDisconnectedError());
+  assert.ok(isNoDirectConnectionError(dropped));
+  const undialed = peerViewFailure(
+    PEER,
+    new RemoteConnectError("the peer refused the connect ticket", null, true),
+  );
+  assert.ok(isNoDirectConnectionError(undialed));
+  const refused = new NotSharingError();
+  assert.equal(peerViewFailure(PEER, refused), refused);
+});

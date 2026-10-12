@@ -2641,3 +2641,38 @@ it("cloudflared runner: closing the layer pre-empts an in-flight provision, so n
     "a provision that outran the quit spawned",
   );
 });
+
+// A ticket the hub refused (any 401 or 403, as a misdeployed hub gives
+// every device at once) blocks, then is asked again on a slow schedule
+// rather than waiting for the next sign-in.
+it("a refused ticket blocks, and is asked again two minutes on", async () => {
+  const clock = testClock();
+  let connects = 0;
+  const statuses: SupervisorStatus[] = [];
+  madeOn(
+    clock.context,
+    supervise({
+      classifyClose: () => null,
+      connect: () => {
+        connects += 1;
+        return Effect.andThen(
+          Effect.yieldNow,
+          Effect.fail(
+            new RemoteConnectError("the hub refused the ticket", null, true),
+          ),
+        );
+      },
+      onStatus: (status) => statuses.push(status),
+    }),
+  );
+  await clock.settle();
+  assert.equal(connects, 1);
+  const blocked = statuses.at(-1);
+  assert.equal(blocked?.phase, "blocked");
+  assert.equal(blocked?.phase === "blocked" ? blocked.reason : "", "refused");
+  await clock.advance(119_000);
+  assert.equal(connects, 1, "not before its time");
+  // Then the ladder's first rung, as after any failed attempt.
+  await clock.advance(1_000 + BACKOFF_LADDER_MS[0]);
+  assert.equal(connects, 2, "asked again");
+});

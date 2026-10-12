@@ -20,6 +20,7 @@ import {
   isContractError,
   isNoDirectConnectionError,
   isNotSharingError,
+  isRemoteCallError,
 } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -88,12 +89,15 @@ const isRefusal = (error: unknown) =>
   isCommandRefusedError(error) || isNotSharingError(error);
 
 // What ends a view for good: the device's own failure (an unknown
-// project). A refusal is asked again, and so is finding no session to
-// the peer, which is the link between dials, not an answer from it.
+// project), or its read failing in its own words (a RemoteCallError),
+// which asking again every few seconds would only repeat unseen. A
+// refusal is asked again, and so is finding no session to the peer,
+// which is the link between dials, not an answer from it.
 const endsView = (error: unknown) =>
-  isContractError(error) &&
-  !isRefusal(error) &&
-  !isNoDirectConnectionError(error);
+  isRemoteCallError(error) ||
+  (isContractError(error) &&
+    !isRefusal(error) &&
+    !isNoDirectConnectionError(error));
 
 // When a view is asked again, while anyone still reads it (its readers
 // gone, the stream ends with them, and a peer gone from the account has
