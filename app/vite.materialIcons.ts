@@ -22,10 +22,12 @@ const materialIconsDir = fileURLToPath(
 
 export function materialIcons(): Plugin {
   let outDir = "";
+  let building = false;
   return {
     name: "sm-material-icons",
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir);
+      building = config.command === "build";
     },
     configureServer(server) {
       server.middlewares.use("/material-icons", (req, res, next) => {
@@ -39,7 +41,9 @@ export function materialIcons(): Plugin {
         createReadStream(file).pipe(res);
       });
     },
+    // A dev server's close calls this too, and has no output to fill.
     closeBundle() {
+      if (!building) return;
       if (!existsSync(materialIconsDir)) {
         throw new Error(
           `no material icons at ${materialIconsDir}: run node scripts/copy-material-icons.mts`,

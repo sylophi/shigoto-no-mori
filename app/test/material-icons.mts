@@ -64,10 +64,25 @@ it("copies every icon beside the built page", () => {
     configResolved: (config: unknown) => void;
     closeBundle: () => void;
   };
-  plugin.configResolved({ root: app, build: { outDir } });
+  plugin.configResolved({ root: app, command: "build", build: { outDir } });
   plugin.closeBundle();
   const icons = readdirSync(join(outDir, "material-icons"));
   assert.ok(icons.length > 1000, `${icons.length} icons copied`);
   assert.ok(existsSync(join(outDir, "material-icons", "folder-src.svg")));
   assert.ok(existsSync(join(outDir, "material-icons", "readme.svg")));
+});
+
+it("leaves the output alone when a dev server closes", () => {
+  const devOut = join(outDir, "dev");
+  const plugin = materialIcons() as Plugin & {
+    configResolved: (config: unknown) => void;
+    closeBundle: () => void;
+  };
+  plugin.configResolved({
+    root: app,
+    command: "serve",
+    build: { outDir: devOut },
+  });
+  plugin.closeBundle();
+  assert.ok(!existsSync(devOut));
 });
