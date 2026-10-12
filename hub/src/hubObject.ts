@@ -60,7 +60,7 @@ const KEY_TAG_PREFIX = "key:";
 // above that. Terminal and file traffic ride the device links, never
 // this one. The bucket lives in memory: an object that hibernated was
 // idle, so starting it full again loses nothing.
-const RELAY_BURST = 300;
+export const RELAY_BURST = 300;
 const RELAY_PER_SECOND = 30;
 
 // The standard close code for a message over the size the socket
@@ -111,6 +111,8 @@ export class DeviceHub extends DurableObject<Env> {
     WebSocket,
     { tokens: number; at: number }
   >();
+  // The budget's clock, which the proofs stop to send a burst at once.
+  relayClock: () => number = () => Date.now();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -293,7 +295,7 @@ export class DeviceHub extends DurableObject<Env> {
 
   // Whether the socket may send one more message now (RELAY_BURST).
   private withinRelayBudget(ws: WebSocket): boolean {
-    const now = Date.now();
+    const now = this.relayClock();
     const budget = this.relayBudget.get(ws) ?? { tokens: RELAY_BURST, at: now };
     budget.tokens = Math.min(
       RELAY_BURST,

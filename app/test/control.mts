@@ -1449,10 +1449,16 @@ it("the hub out of reach says so with its cause, and a revoked credential reads 
   }
 });
 
-it("an answer the app takes past two pings still reaches the terminal", async () => {
-  // ---- (8c) A slow account (a hub taking its time) is not a lost
-  // connection: the pings between keep the call alive.
-  registryWaits = Effect.sleep("12 seconds");
+it("an app silent past one ping but short of the limit still answers the terminal", async () => {
+  // ---- (8c) An app that goes quiet for a while (its loop held by
+  // other work) is not a lost connection: it answers no ping for 8 s,
+  // past the interval and short of the limit, then the call.
+  registryWaits = Effect.sync(() => {
+    const until = Date.now() + 8_000;
+    while (Date.now() < until) {
+      // The loop held, so nothing on the socket is answered.
+    }
+  });
   try {
     const listed = await runCli(["--json", "devices"]);
     assert.equal(listed.code, 0, listed.stderrTail);

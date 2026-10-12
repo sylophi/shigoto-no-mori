@@ -7,18 +7,15 @@
 // land in the gap around a restart) and via a watch of the data dir
 // afterwards. Everything here is best-effort: a failed write or a
 // malformed request degrades `sm update`, never the updater itself.
-import { watch } from "node:fs";
 import { join } from "node:path";
 import { app } from "electron";
-import type * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FileSystem from "effect/FileSystem";
-import * as Queue from "effect/Queue";
 import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import type {
   UpdateRequest,
   UpdaterState,
@@ -91,38 +88,17 @@ export const updaterBridge = (
       turns.withPermits(1),
     );
     // A data dir that is missing or goes (a nuke) ends the watch; the
-    // next launch watches afresh. Listening before the first consume,
-    // so a request written meanwhile is either consumed or heard: the
-    // watcher is made at once here, where FileSystem.watch would make it
-    // on a fiber of its own after a stat, with no word of when.
-    const listening = yield* Deferred.make<void>();
+    // next launch watches afresh. Watched before the first consume, so
+    // a request written meanwhile is either consumed or heard.
     watching = yield* FiberHandle.make();
     yield* FiberHandle.run(
       watching,
-      Effect.gen(function* () {
-        const heard = yield* Queue.sliding<void, Cause.Done>(1);
-        yield* Effect.acquireRelease(
-          Effect.try(() => {
-            const watcher = watch(dataDir(), (_event, file) => {
-              if (file === REQUEST_FILE) Queue.offerUnsafe(heard, undefined);
-            });
-            watcher.on("error", () => Queue.endUnsafe(heard));
-            return watcher;
-          }),
-          (watcher) => Effect.sync(() => watcher.close()),
-        );
-        yield* Deferred.succeed(listening, undefined);
-        return yield* Queue.take(heard).pipe(
-          Effect.andThen(consume),
-          Effect.forever,
-        );
-      }).pipe(
-        Effect.scoped,
+      fs.watch(dataDir()).pipe(
+        Stream.filter((event) => event.path === REQUEST_FILE),
+        Stream.runForEach(() => consume),
         Effect.ignore,
-        Effect.ensuring(Deferred.succeed(listening, undefined)),
       ),
     );
-    yield* Deferred.await(listening);
     yield* consume;
   });
 

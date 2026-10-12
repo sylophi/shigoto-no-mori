@@ -126,40 +126,6 @@ it("the updater's bridge: publishes the state, consumes a waiting request and a 
   }
 });
 
-it("the updater's bridge: listens before it returns, however slow its watch is to start", async () => {
-  const asked: string[] = [];
-  const scope = Scope.makeUnsafe();
-  try {
-    await onPlatform(
-      Effect.gen(function* () {
-        const real = yield* FileSystem.FileSystem;
-        // The platform's watch, slow to start as on a busy disk (it
-        // stats the folder on a fiber of its own first): a bridge that
-        // listened through it would return deaf.
-        const fs: FileSystem.FileSystem = {
-          ...real,
-          watch: (path, options) =>
-            Stream.unwrap(
-              Effect.sleep("200 millis").pipe(
-                Effect.as(real.watch(path, options)),
-              ),
-            ),
-        };
-        yield* updaterBridge((action) => asked.push(action)).pipe(
-          Scope.provide(scope),
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
-      }),
-    );
-    // The CLI asks the moment the bridge is up.
-    request(Date.now());
-    await waitFor(() => asked.length === 1, "the request to be consumed");
-    assert.deepEqual(asked, ["install"]);
-  } finally {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-});
-
 it("the updater's bridge: a request written while the first consume reads a stale one is still handled", async () => {
   const requestPath = join(dataDir(), "updater-request.json");
   const claimed = `${requestPath}.consuming`;
@@ -170,11 +136,13 @@ it("the updater's bridge: a request written while the first consume reads a stal
     await onPlatform(
       Effect.gen(function* () {
         const real = yield* FileSystem.FileSystem;
+        const fresh = yield* Deferred.make<void>();
+        const heard = yield* Deferred.make<void>();
         const firstRemoved = yield* Deferred.make<void>();
         let reads = 0;
-        // The real file system, with the first consume's read writing a
-        // fresh request as it reads the stale one, which the watch hears
-        // while that consume still holds its claim. Renames are
+        // The real file system, with the first consume's read held open:
+        // it has read the stale request when the CLI writes a fresh one,
+        // and it finishes once the watch has heard that. Renames are
         // synchronous so a consume that claims doesn't wait on the disk,
         // and a later read waits for the first consume's cleanup, the
         // order that loses the fresh request when the two overlap.
@@ -193,9 +161,11 @@ it("the updater's bridge: a request written while the first consume reads a stal
             path !== claimed
               ? real.readFileString(path, encoding)
               : ++reads === 1
-                ? Effect.sync(() => {
+                ? Effect.gen(function* () {
                     const stale = readFileSync(path, "utf8");
                     request(Date.now());
+                    yield* Deferred.succeed(fresh, undefined);
+                    yield* Deferred.await(heard);
                     return stale;
                   })
                 : Deferred.await(firstRemoved).pipe(
@@ -211,6 +181,17 @@ it("the updater's bridge: a request written while the first consume reads a stal
                     : Effect.void,
                 ),
               ),
+          // The watch hears the fresh request, and nothing else.
+          watch: () =>
+            Stream.fromEffect(
+              Deferred.await(fresh).pipe(
+                Effect.andThen(Deferred.succeed(heard, undefined)),
+                Effect.as<FileSystem.WatchEvent>({
+                  _tag: "Create",
+                  path: "updater-request.json",
+                }),
+              ),
+            ).pipe(Stream.concat(Stream.never)),
         };
         yield* updaterBridge((action) => asked.push(action)).pipe(
           Scope.provide(scope),

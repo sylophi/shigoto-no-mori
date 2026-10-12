@@ -2,7 +2,7 @@
 // nacks, supersede, revoke and cross-account isolation. Everything
 // runs against the real DeviceHub Durable Object under workerd.
 import { afterEach, describe, expect, it } from "vitest";
-import { env, listDurableObjectIds } from "cloudflare:test";
+import { env, listDurableObjectIds, runInDurableObject } from "cloudflare:test";
 import {
   CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
@@ -18,6 +18,7 @@ import {
   HUB_PING,
   HUB_PONG,
 } from "@shigomori/contracts/hubProtocol";
+import { type DeviceHub, RELAY_BURST } from "../src/hubObject.ts";
 import { buildTicket } from "../src/ticket.ts";
 import {
   BASE,
@@ -426,14 +427,18 @@ describe("what a socket may send", () => {
   it("cuts a socket that sends faster than its budget", async () => {
     const { socket } = await enrollAndConnect("acct-input-rate", "dev-rate");
     await socket.untilPresence(["dev-rate"]);
+    // The budget's clock stopped, so nothing refills however long the
+    // hub takes over each message.
+    await runInDurableObject(
+      env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-input-rate")),
+      (hub: DeviceHub) => {
+        const stopped = Date.now();
+        hub.relayClock = () => stopped;
+      },
+    );
     // Malformed, so nothing is relayed or answered: only the count
-    // matters. Sent until the hub cuts the socket, however long the hub
-    // takes over each, so no count has to outrun the refill.
-    while (socket.ws.readyState === WebSocket.OPEN) {
-      for (let i = 0; i < 100; i++) socket.ws.send("{}");
-      // oxlint-disable-next-line no-await-in-loop -- a turn for the close to land
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    // matters. One past the burst.
+    for (let i = 0; i <= RELAY_BURST; i++) socket.ws.send("{}");
     expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
   });
 
