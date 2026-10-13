@@ -103,7 +103,11 @@ export function LaunchToolsPanel({
           </SectionIntro>
           <SegmentedControl
             aria-label="Editor"
-            value={form.editor ?? DEFAULT_APP}
+            // A picked editor since uninstalled opens files with
+            // the default app, so that's what reads as picked.
+            value={
+              editors.find((e) => e.value === form.editor)?.value ?? DEFAULT_APP
+            }
             onChange={(editor) =>
               setForm((prev) => ({
                 ...prev,

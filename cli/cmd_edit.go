@@ -12,6 +12,8 @@ package main
 
 import (
 	"cmp"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,10 +55,16 @@ func cmdEdit(ctx cliContext, args []string) (int, error) {
 		}
 		file = filepath.Join(base, file)
 	}
-	if _, err := os.Stat(file); err != nil {
+	info, err := os.Stat(file)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
 		return 1, codedErrf("missing-file", "No file at %s.", file)
+	case err != nil:
+		return 1, err
+	case info.IsDir():
+		return 1, errf("%s is a folder.", file)
 	}
-	if err := editFile(file, target.worktree.Path); err != nil {
+	if err := editFile(file, info, target.worktree.Path); err != nil {
 		return 1, errf("Couldn't open %s: %v", filepath.Base(file), err)
 	}
 	emitOrOut(map[string]any{"ok": true, "path": file}, "opened "+file)
@@ -66,21 +74,18 @@ func cmdEdit(ctx cliContext, args []string) (int, error) {
 func chosenEditor() (launcherApp, bool) {
 	id := readGlobalConfigHints().Editor
 	for _, a := range launcherCatalog {
-		if a.id == id && launcherAvailable(a) {
+		if a.id == id && a.editor && launcherAvailable(a) {
 			return a, true
 		}
 	}
 	return launcherApp{}, false
 }
 
-func editFile(file, worktreePath string) error {
+func editFile(file string, info fs.FileInfo, worktreePath string) error {
 	a, ok := chosenEditor()
 	switch {
 	case !ok:
-		if out, err := exec.Command("open", file).CombinedOutput(); err != nil {
-			return errf("%s", cmp.Or(strings.TrimSpace(string(out)), err.Error()))
-		}
-		return nil
+		return openWithDefaultApp(file, info)
 	case a.inTerminal != "":
 		program := strings.Fields(a.inTerminal)[0]
 		return launchInTerminal(program+" "+shellQuote(file), worktreePath)
@@ -100,4 +105,17 @@ func editFile(file, worktreePath string) error {
 		}
 	}
 	return errf("No installed app found for %s.", a.label)
+}
+
+// An executable's default app runs it, and a file no app claims (a
+// Makefile, often a .ts) has none, so those open in the default text
+// editor (open -t).
+func openWithDefaultApp(file string, info fs.FileInfo) error {
+	if info.Mode()&0o111 == 0 && exec.Command("open", file).Run() == nil {
+		return nil
+	}
+	if out, err := exec.Command("open", "-t", file).CombinedOutput(); err != nil {
+		return errf("%s", cmp.Or(strings.TrimSpace(string(out)), err.Error()))
+	}
+	return nil
 }

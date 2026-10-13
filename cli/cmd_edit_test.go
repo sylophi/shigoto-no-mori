@@ -43,6 +43,26 @@ func TestEditOpensTheFileInTheChosenEditor(t *testing.T) {
 		t.Errorf("open got %q, want %q", got, file)
 	}
 
+	// An executable's default app would run it.
+	if err := os.Chmod(file, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := edit("src/a.txt"); code != 0 || err != nil {
+		t.Fatalf("edit = %d, %v", code, err)
+	}
+	if got, want := calledWith("open"), "-t\n"+file; got != want {
+		t.Errorf("open got %q, want %q", got, want)
+	}
+
+	// A tool that isn't an editor isn't one here either.
+	writeFileT(t, configJSONPath(), `{"editor":"lazygit"}`)
+	if code, err := edit("src/a.txt"); code != 0 || err != nil {
+		t.Fatalf("edit = %d, %v", code, err)
+	}
+	if got, want := calledWith("open"), "-t\n"+file; got != want {
+		t.Errorf("open got %q, want %q", got, want)
+	}
+
 	// An editor with a command takes the worktree along.
 	writeFileT(t, configJSONPath(), `{"editor":"zed"}`)
 	if code, err := edit("src/a.txt"); code != 0 || err != nil {
@@ -52,6 +72,9 @@ func TestEditOpensTheFileInTheChosenEditor(t *testing.T) {
 		t.Errorf("zed got %q, want %q", got, want)
 	}
 
+	if code, _ := edit("src"); code != 1 {
+		t.Errorf("a folder = exit %d, want 1", code)
+	}
 	if _, err := edit("src/gone.txt"); errorKindOf(err) != "missing-file" {
 		t.Errorf("missing file: %v", err)
 	}
