@@ -16,6 +16,9 @@
 //   7. A ⌘ chord answers extra Shift, Alt or Ctrl unless another binding
 //      takes that press, and the menu's defaults read before a window
 //      sends its own.
+//   8. On macOS the palette's chord also answers Ctrl in place of ⌘,
+//      rebound too, unless another binding takes that press; no other
+//      chord does.
 import { expect, it } from "vitest";
 import {
   chordAccelerator,
@@ -77,7 +80,7 @@ it("matches Mod to ⌘ on macOS and to Ctrl elsewhere", () => {
   expect(mac.get("palette")?.matches(press("KeyK", { metaKey: true }))).toBe(
     true,
   );
-  expect(mac.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
+  expect(mac.get("commit")?.matches(press("Enter", { ctrlKey: true }))).toBe(
     false,
   );
   expect(other.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
@@ -254,4 +257,63 @@ it("takes a letter as typed on any key, the physical key with Alt held, and AltG
       ),
   ).toBe(true);
   expect(mac.get("palette")).toBeDefined();
+});
+
+it("answers the palette's Ctrl twin on macOS, and no other action's", () => {
+  const mac = resolveKeymap(undefined, { mac: true, desktop: true });
+  expect(mac.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
+    true,
+  );
+  // Exactly Ctrl for ⌘: no extras, and not on a Ctrl chord's own.
+  expect(
+    mac
+      .get("palette")
+      ?.matches(press("KeyK", { ctrlKey: true, shiftKey: true })),
+  ).toBe(false);
+  for (const action of KEYMAP_ACTIONS) {
+    if (action.ctrlTwin) continue;
+    const own = chord(action.chord);
+    if (!own.mod) continue;
+    const key = own.key.length === 1 ? own.key.toLowerCase() : own.key;
+    const code = /^[A-Z]$/.test(own.key)
+      ? `Key${own.key}`
+      : /^\d$/.test(own.key)
+        ? `Digit${own.key}`
+        : own.key === ","
+          ? "Comma"
+          : own.key;
+    expect(
+      mac.get(action.id)?.matches(
+        press(code, {
+          key,
+          ctrlKey: true,
+          altKey: own.alt,
+          shiftKey: own.shift,
+        }),
+      ),
+      action.id,
+    ).toBe(false);
+  }
+  // Rebound, the twin follows the chord.
+  const moved = resolveKeymap(
+    { palette: "Mod+P" },
+    { mac: true, desktop: true },
+  );
+  expect(moved.get("palette")?.matches(press("KeyP", { ctrlKey: true }))).toBe(
+    true,
+  );
+  expect(moved.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
+    false,
+  );
+  // A binding of its own on Ctrl+K takes the press from the twin.
+  const taken = resolveKeymap(
+    { sidebarLayout: "Ctrl+K" },
+    { mac: true, desktop: true },
+  );
+  expect(taken.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
+    false,
+  );
+  expect(
+    taken.get("sidebarLayout")?.matches(press("KeyK", { ctrlKey: true })),
+  ).toBe(true);
 });

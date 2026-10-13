@@ -18,7 +18,9 @@
 // (`KeyboardEvent.code`), as macOS's own ⌘ shortcuts fall back. Every
 // other key is the physical one: the terminal's Ctrl+` names the key
 // left of 1, which many layouts type no backtick on. A ⌘ chord also
-// answers extra modifiers (bindingOf).
+// answers extra modifiers (bindingOf), and the palette's also answers
+// Ctrl in place of ⌘ on macOS, as it always did (⌃K is ⌘K); no other
+// chord has a Ctrl twin.
 
 // Where an action acts. The window is every page; a page or a dialog
 // is only itself, so two of them can share a chord.
@@ -48,6 +50,8 @@ export interface KeymapAction {
   readonly menu?: true;
   // A focused terminal gives it up, as it gives up nothing else.
   readonly terminal?: true;
+  // On macOS its `Mod` chord also answers Ctrl in place of ⌘.
+  readonly ctrlTwin?: true;
 }
 
 const launchTool = (n: number): KeymapAction => ({
@@ -64,6 +68,7 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     label: "Open or close the palette",
     chord: "Mod+K",
     scope: "window",
+    ctrlTwin: true,
   },
   {
     id: "newWindow",
@@ -393,10 +398,16 @@ export function bindingOf(
   chord: Chord,
   mac: boolean,
   // The presses other bindings in reach of this one take as their own,
-  // which this one gives up when it answers extra modifiers.
+  // which this one gives up when it answers extra modifiers or its twin.
   taken: readonly Pressed[] = [],
+  // Whether Ctrl in place of ⌘ answers too (KeymapAction's ctrlTwin).
+  ctrlTwin = false,
 ): Binding {
   const keys = pressed(chord, mac);
+  const twin: Pressed | null =
+    ctrlTwin && keys.meta && !keys.ctrl
+      ? { ...keys, meta: false, ctrl: true }
+      : null;
   return {
     chord,
     label: chordLabel(chord, mac),
@@ -406,6 +417,9 @@ export function bindingOf(
       if (press === null) return false;
       const held = pressed(press, mac);
       if (samePressed(held, keys)) return true;
+      if (twin && samePressed(held, twin)) {
+        return !taken.some((other) => samePressed(other, held));
+      }
       // A ⌘ chord also answers the same press with Shift, Alt or Ctrl
       // held as well, as the app's ⌘K and ⌘↩ always did, unless another
       // binding in reach takes that press (⇧⌘N is Add project, not New
@@ -448,7 +462,10 @@ export function resolveKeymap(
           other !== action && scopesOverlap(action.scope, other.scope),
       )
       .map(([, held]) => pressed(held, mac));
-    keymap.set(action.id, bindingOf(chord, mac, taken));
+    keymap.set(
+      action.id,
+      bindingOf(chord, mac, taken, action.ctrlTwin === true),
+    );
   }
   return keymap;
 }

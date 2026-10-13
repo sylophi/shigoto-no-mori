@@ -20,8 +20,8 @@ import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
-import { isOverlayOpen } from "@/lib/dom";
+import { isMac, useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
+import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
@@ -96,11 +96,15 @@ export function WorktreePalette() {
   }, [open]);
 
   // Wherever focus sits, a text field and a terminal on macOS included
-  // (a `Mod` chord). Opening waits for any other overlay to close, and
-  // closing is the palette's own toggle.
+  // (a `Mod` chord). Its Ctrl twin on macOS opens it from anywhere but a
+  // text field, where ⌃K is kill-line, and closes it from anywhere.
+  // Opening waits for any other overlay to close, and closing is the
+  // palette's own toggle.
   useKeymapAction(
     "palette",
-    () => {
+    (e) => {
+      const twin = isMac && !e.metaKey && e.ctrlKey;
+      if (!open && twin && isEditableTarget(e.target)) return false;
       if (!open && isOverlayOpen()) return false;
       if (!open) returnFocus.current = document.activeElement;
       setOpen(!open);
@@ -143,6 +147,7 @@ function PaletteDialog({
   const hasLocalHost = useHasLocalHost();
   const [query, setQuery] = useState("");
   const changesKeys = useBinding("paletteChanges");
+  const paletteKeys = useBinding("palette");
   // The row whose verbs have the keys, and the list's query it was
   // picked from, which the input goes back to. Null on the list.
   const [picked, setPicked] = useState<{
@@ -374,6 +379,19 @@ function PaletteDialog({
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // cmdk spends ⌃K as its vim bindings' Up before the window's
+    // listener hears it, so the palette's Ctrl twin closes it here. As
+    // in any text field, only a `Mod` chord and its twin leave it.
+    if (
+      !e.repeat &&
+      !e.nativeEvent.isComposing &&
+      paletteKeys.chord.mod &&
+      paletteKeys.matches(e)
+    ) {
+      e.preventDefault();
+      onClose();
+      return;
+    }
     if (picked) {
       const atStart = e.currentTarget.selectionEnd === 0;
       if (
