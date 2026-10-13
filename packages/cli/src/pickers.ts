@@ -1,6 +1,7 @@
 // The pickers behind every command that runs without naming its
 // target. Only a person at a terminal sees one (`interactive`), so
 // agents, pipelines and --json keep the explicit-forms errors.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Launchers from "@shigomori/engine/Launchers";
 import * as Paths from "@shigomori/engine/Paths";
 import type * as Registry from "@shigomori/engine/Registry";
@@ -14,7 +15,7 @@ import {
   titleCell,
 } from "./commands/cells.ts";
 import { select } from "./menu.ts";
-import { collapseHome, note, Output, styles } from "./output.ts";
+import { note, Output, styles } from "./output.ts";
 
 // A menu with nothing to offer, in Go's words.
 class NothingToPick extends Schema.TaggedError<NothingToPick>()(
@@ -57,7 +58,7 @@ export const pickProject = (at: Worktrees.Here, preferredId = "") =>
       header: ["PROJECT", "PATH"],
       cells: projects.map((project) => [
         project.name,
-        dim(collapseHome(home, project.path)),
+        dim(tildify(project.path, home)),
       ]),
       names: projects.map((project) => project.name),
       initial: Math.max(

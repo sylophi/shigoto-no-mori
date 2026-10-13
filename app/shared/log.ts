@@ -52,8 +52,7 @@ export const warnOnFailure = (
 ): Promise<void> =>
   Effect.runPromise(
     Effect.tryPromise(async () => step()).pipe(
-      Effect.asVoid,
-      Effect.catchCause((cause) => Effect.logWarning(label, cause)),
+      Effect.ignoreCause({ log: "Warn", message: label }),
       Effect.provide(Logger.layer([logger])),
     ),
   );

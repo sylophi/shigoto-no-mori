@@ -22,6 +22,7 @@ import * as Lifecycle from "../Lifecycle.ts";
 import { type PortInfo } from "../ports.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // --- the documents --------------------------------------------------------
 
@@ -433,8 +434,7 @@ export class DirtyWorktree extends Schema.TaggedError<DirtyWorktree>()(
 ) {
   override get message(): string {
     if (this.reason === "unreadable") {
-      const said =
-        this.cause instanceof Error ? this.cause.message : String(this.cause);
+      const said = errorMessageOf(this.cause);
       return `Couldn't check for uncommitted changes (${said}). Fix the worktree, or pass --force to ${this.verb} anyway.`;
     }
     return this.destroys === ""
@@ -516,8 +516,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       case "move-not-listed":
         return `git doesn't list a worktree at ${this.subject} after the move`;
       case "move-copy-failed": {
-        const said =
-          this.cause instanceof Error ? this.cause.message : String(this.cause);
+        const said = errorMessageOf(this.cause);
         return `Couldn't copy the worktree to ${this.subject}: ${said}`;
       }
       case "adopt-primary":

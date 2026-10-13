@@ -1,6 +1,6 @@
 // The login shell a script or a terminal runs in.
 import { userInfo } from "node:os";
-import { envSetting } from "../../../shared/config.ts";
+import { envSetting } from "@shared/config";
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
 // GUI launches depending on launchd state. os.userInfo().shell reads the

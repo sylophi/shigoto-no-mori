@@ -526,7 +526,7 @@ const make = (binary: string) =>
           current.id,
         );
       },
-      Effect.catchCause((cause) => Effect.logDebug("agents: bind", cause)),
+      Effect.ignoreCause({ log: "Debug", message: "agents: bind" }),
     );
 
     const bind = Effect.fn("Agents.bind")(function* (
@@ -692,7 +692,7 @@ const make = (binary: string) =>
           return true;
         });
       },
-      Effect.catchCause((cause) => Effect.logDebug("agents event", cause)),
+      Effect.ignoreCause({ log: "Debug", message: "agents event" }),
     );
 
     return Agents.of({

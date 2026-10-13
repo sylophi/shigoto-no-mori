@@ -21,6 +21,7 @@ import {
 } from "@shigomori/contracts/semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
 import { APP_REPO, formatKitchen } from "../updateFeed.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // What failed underneath, with what failed under an HTTP request too.
 export const causeText = (cause: unknown): string => {
@@ -33,7 +34,7 @@ export const causeText = (cause: unknown): string => {
       : `${cause.message}: ${causeText(under)}`;
   }
   if (PlatformError.isPlatformError(cause)) return errnoText(cause);
-  return cause instanceof Error ? cause.message : String(cause);
+  return errorMessageOf(cause);
 };
 
 // --- errors ------------------------------------------------------------------

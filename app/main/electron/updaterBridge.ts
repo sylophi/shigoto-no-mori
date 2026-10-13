@@ -7,7 +7,7 @@
 // land in the gap around a restart) and via a watch of the data dir
 // afterwards. Everything here is best-effort: a failed write or a
 // malformed request degrades `sm update`, never the updater itself.
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { app } from "electron";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -22,14 +22,14 @@ import type {
   UpdaterStatus,
 } from "@shigomori/contracts/schemas";
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
+import { updaterFiles } from "@shigomori/engine/updaterFiles";
 import { dataDir } from "@shared/paths";
 import { readJson, writeJson } from "../core/files/jsonFile";
 
 const REQUEST_STALE_MS = 2 * 60_000;
-const REQUEST_FILE = "updater-request.json";
 
-const updaterStatePath = () => join(dataDir(), "updater.json");
-const updateRequestPath = () => join(dataDir(), REQUEST_FILE);
+const updaterStatePath = () => updaterFiles({ join }, dataDir()).status;
+const updateRequestPath = () => updaterFiles({ join }, dataDir()).request;
 
 // One publish at a time: setState can fire twice in one tick (a
 // synchronous throw right after entering "checking"), and two racing
@@ -94,7 +94,7 @@ export const updaterBridge = (
     yield* FiberHandle.run(
       watching,
       fs.watch(dataDir()).pipe(
-        Stream.filter((event) => event.path === REQUEST_FILE),
+        Stream.filter((event) => event.path === basename(updateRequestPath())),
         Stream.runForEach(() => consume),
         Effect.ignore,
       ),

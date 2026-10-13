@@ -11,10 +11,10 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Paths from "../Paths.ts";
+import { updaterFiles } from "../updaterFiles.ts";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
-  stagingLockPath,
   UpdateInProgress,
 } from "../stagingLock.ts";
 import {
@@ -50,12 +50,14 @@ export const makeStaging = ({
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const updatesDir = path.join(paths.dataDir, "updates");
-    const stagedDir = path.join(updatesDir, "staged");
-    const manifestPath = path.join(stagedDir, "manifest.json");
-    const lockPath = stagingLockPath(path, paths.dataDir);
-    const downloadPath = path.join(updatesDir, "download.zip");
-    const extractDir = path.join(updatesDir, "extract");
+    const {
+      updates: updatesDir,
+      staged: stagedDir,
+      manifest: manifestPath,
+      stagingLock: lockPath,
+      download: downloadPath,
+      extract: extractDir,
+    } = updaterFiles(path, paths.dataDir);
     const { removeAll, run, readShared, writeShared } = files;
     const { send, queryFeed } = feeds;
     const { verify } = signatures;

@@ -20,7 +20,7 @@ import * as Darwin from "./Darwin.ts";
 import * as Git from "./Git.ts";
 import { splitRemoteRef } from "./gitParse.ts";
 import type { RegisteredProject } from "./Registry.ts";
-import { isSameOrInside } from "./worktreeLayout.ts";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Worktrees from "./Worktrees.ts";
 
 // A folder's measure: `bytes` is its footprint, what `du` reports

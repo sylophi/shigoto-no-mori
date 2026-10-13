@@ -6,6 +6,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { type Flavor, flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
+import { updaterFiles } from "../updaterFiles.ts";
 import { pidAlive } from "../processes.ts";
 import {
   APP_PUBLISH_TIMEOUT,
@@ -55,7 +56,7 @@ export const makeMethods = ({
     // Which releases this build is offered, none for dev.
     const offered = flavorNames(flavor).updates;
 
-    const requestPath = path.join(paths.dataDir, "updater-request.json");
+    const requestPath = updaterFiles(path, paths.dataDir).request;
 
     const { run, writeShared, appRunning, runningApp, installedBundle } = files;
     const { queryFeed } = feeds;

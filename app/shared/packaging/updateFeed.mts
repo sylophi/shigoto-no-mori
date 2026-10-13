@@ -5,7 +5,7 @@
 // (shared/releases.ts) reads the same repo's releases.
 //
 // No imports at all, so the renderer can take it as well as plain
-// `node scripts/*.mts` (cliDist.mts re-exports it for those).
+// `node scripts/*.mts`.
 export const UPDATE_FEED_OWNER = "sylophi";
 export const UPDATE_FEED_NAME = "shigoto-no-mori";
 export const UPDATE_FEED_REPO = `${UPDATE_FEED_OWNER}/${UPDATE_FEED_NAME}`;

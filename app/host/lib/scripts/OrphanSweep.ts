@@ -308,9 +308,10 @@ export class OrphanSweep extends Context.Service<
 
 // Losing the record costs the next boot's sweep and nothing else.
 const recordFailure = (what: string) =>
-  Effect.catchCause((cause) =>
-    Effect.logWarning(`[scripts] couldn't ${what} running scripts`, cause),
-  );
+  Effect.ignoreCause({
+    log: "Warn",
+    message: `[scripts] couldn't ${what} running scripts`,
+  });
 
 export const layer = Layer.effect(
   OrphanSweep,

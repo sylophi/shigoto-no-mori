@@ -10,6 +10,7 @@ import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { type Flavor, flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
+import { updaterFiles } from "../updaterFiles.ts";
 import { isPrerelease, parseSemver } from "@shigomori/contracts/semver";
 import {
   FeedAnswer,
@@ -67,8 +68,7 @@ export const makeFeeds = ({
     // Which releases this build is offered, none for dev.
     const offered = flavorNames(flavor).updates;
 
-    const updatesDir = path.join(paths.dataDir, "updates");
-    const releaseListPath = path.join(updatesDir, "release-list.json");
+    const releaseListPath = updaterFiles(path, paths.dataDir).releaseList;
     const { readShared, writeShared } = files;
     // --- the feeds ---
 

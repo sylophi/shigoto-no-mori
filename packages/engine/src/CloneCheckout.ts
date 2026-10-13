@@ -221,11 +221,6 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const paths = yield* Paths.Paths;
 
-  const configHome = Effect.gen(function* () {
-    const xdg = yield* envVar("XDG_CONFIG_HOME");
-    return xdg !== "" ? xdg : path.join(paths.home, ".config");
-  });
-
   // The process's umask, read the only way that doesn't set it: a file
   // made with every permission keeps those the umask leaves.
   const umask = yield* Effect.cached(
@@ -499,7 +494,7 @@ const make = Effect.gen(function* () {
     // Where the attributes outside the tree live, as git looks for them,
     // and the config files that decide which one is the global one.
     const readAttributeFiles = Effect.gen(function* () {
-      const home = yield* configHome;
+      const home = paths.configHome;
       let globalAttrs = (yield* git
         .run(source, ["config", "--path", "--get", "core.attributesFile"])
         .pipe(Effect.orElseSucceed(() => ""))).trim();

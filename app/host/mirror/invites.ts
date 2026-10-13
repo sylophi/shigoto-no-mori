@@ -80,9 +80,10 @@ function isLanded(invite: MirrorInvite): invite is Landed {
 const persist = Effect.flatMap(MirrorInvites.MirrorInvites, (store) =>
   Effect.suspend(() => store.save(invites.filter(isLanded))),
 ).pipe(
-  Effect.catchCause((cause) =>
-    Effect.logWarning("[mirror] the invitations could not be saved", cause),
-  ),
+  Effect.ignoreCause({
+    log: "Warn",
+    message: "[mirror] the invitations could not be saved",
+  }),
 );
 
 // Keeps the invitations `keep` answers true for, saving when any went.

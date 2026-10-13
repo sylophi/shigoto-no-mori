@@ -43,6 +43,7 @@ import { publishUpdaterState, updaterBridge } from "./updaterBridge";
 import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
+import { updaterFiles } from "@shigomori/engine/updaterFiles";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
@@ -99,20 +100,17 @@ function setState(next: UpdaterState): void {
 
 const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
 
-// Mirrors the engine's Updater.ts.
-const stagedDir = () => join(dataDir(), "updates", "staged");
-
 // null unless a well-formed manifest describes a bundle that is
 // actually on disk.
 const readStagedManifest = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const manifest = yield* readJson(
-    join(stagedDir(), "manifest.json"),
-    StagedManifestSchema,
-  ).pipe(Effect.orElseSucceed(() => null));
+  const files = updaterFiles({ join }, dataDir());
+  const manifest = yield* readJson(files.manifest, StagedManifestSchema).pipe(
+    Effect.orElseSucceed(() => null),
+  );
   if (manifest === null) return null;
   const there = yield* fs
-    .exists(join(stagedDir(), manifest.bundleName))
+    .exists(join(files.staged, manifest.bundleName))
     .pipe(Effect.orElseSucceed(() => false));
   return there ? manifest : null;
 });

@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { canonicalJson } from "./agentSessions.ts";
 import { shellQuote } from "./Lifecycle.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // One hook entry: the event, an optional matcher, and whether it runs
 // in the background. PostToolUse fires on every tool, so it never holds
@@ -299,9 +300,6 @@ export type HooksDoc = {
   readonly hooks: JsonObject;
 };
 
-const problemOf = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-
 export function readHooksDoc(path: string, raw: string): HooksDoc {
   let top: JsonObject;
   try {
@@ -309,7 +307,7 @@ export function readHooksDoc(path: string, raw: string): HooksDoc {
   } catch (error) {
     throw new MalformedHooksFile(
       path,
-      `isn't a JSON object (${problemOf(error)})`,
+      `isn't a JSON object (${errorMessageOf(error)})`,
     );
   }
   let hooks: JsonObject;
@@ -318,7 +316,7 @@ export function readHooksDoc(path: string, raw: string): HooksDoc {
   } catch (error) {
     throw new MalformedHooksFile(
       path,
-      `holds a malformed "hooks" value (${problemOf(error)})`,
+      `holds a malformed "hooks" value (${errorMessageOf(error)})`,
     );
   }
   // Each event holds a list of groups. Anything else would be lost when
