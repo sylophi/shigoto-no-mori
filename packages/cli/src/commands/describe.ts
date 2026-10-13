@@ -1,6 +1,9 @@
 // sm [worktrees] describe [<worktree>] [-t <title>] [-d <text> |
 // --description-file <path|->]: a worktree's title and description,
-// set or shown. An open pull request's own take their place.
+// set or shown. While the branch has an open pull request, its title
+// and body take their place and describe refuses a change; a merged or
+// closed one still names the worktree in the app, and describe takes
+// changes again.
 import { errnoText } from "@shigomori/engine/platformErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { trimGoSpace } from "@shigomori/engine/Worktrees";
