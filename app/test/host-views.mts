@@ -4,7 +4,7 @@
 // value stays the same. The store's backstop and the views' polls run
 // on a TestClock.
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
@@ -28,7 +28,10 @@ import { portsViews } from "../host/ipc/modules/ports.ts";
 import { projectsViews } from "../host/ipc/modules/projects.ts";
 import { scriptsViews } from "../host/ipc/modules/scripts.ts";
 import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
-import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
+import {
+  worktreesHandlers,
+  worktreesViews,
+} from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
 import * as Views from "../host/lib/Views.ts";
@@ -192,6 +195,37 @@ it("a worktree's changes: an edit shows on the next poll, a commit on the projec
             remote: true,
           }),
         );
+        assert.deepEqual(yield* next, []);
+      }),
+  );
+});
+
+it("a worktree's changes: a refresh reads now and answers once that read landed, changed or not, and at once with nothing watching", async () => {
+  const input = { projectId, worktreeId: await primaryId() };
+  // Nothing watches the list: there is no read to ask for.
+  await runHost(
+    worktreesHandlers
+      .refreshChangeStatus(input)
+      .pipe(Effect.provide(Views.layer)),
+  );
+  await watch(
+    worktreesViews.watchChangeStatus(input),
+    ({ first, next, quiet }) =>
+      Effect.gen(function* () {
+        assert.deepEqual(first, []);
+        // An edit no watch reported and no poll has read yet (the clock
+        // stands still): the refresh reads it.
+        writeFileSync(join(repo, "c.txt"), "c\n");
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        assert.deepEqual(
+          (yield* next).map((file) => file.path),
+          ["c.txt"],
+        );
+        // Nothing moved: the refresh still answers, and says nothing.
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        yield* quiet;
+        rmSync(join(repo, "c.txt"));
+        yield* worktreesHandlers.refreshChangeStatus(input);
         assert.deepEqual(yield* next, []);
       }),
   );

@@ -276,10 +276,13 @@ export const layer = Layer.effect(Registry, make);
 The renderer's rule lives in `app/DESIGN.md` ("Views and containers").
 In short: a view takes data and callbacks and only draws; a container
 binds data to a view and has no markup of its own; nothing in the
-renderer touches a global. A host view (a streaming RPC) reaches a
-container as an atom on the client's runtime, and a request (a value
-computed when asked) as a React Query query; a push never feeds a
-reactivity key.
+renderer touches a global. Ongoing state is a view, a refresh is a
+request, and an action is a request. A host view (a streaming RPC)
+reaches a container as an atom on the client's runtime; its refresh
+is a call that reads the view now and answers once that read landed
+(`Views.refresh` in `app/host/lib/Views.ts`), so a spinner bound to it
+ends on time. A request (a value computed when asked, or an action) is
+a React Query query or mutation; a push never feeds a reactivity key.
 
 ## Before you push
 

@@ -16,43 +16,72 @@ import type {
   ResetSoftResult,
   Worktree,
 } from "@shigomori/contracts/schemas";
+import { callOf } from "@shigomori/contracts/contract";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Effect from "effect/Effect";
+import * as Atom from "effect/reactivity/Atom";
 import {
   useHostScope,
   type HostApi,
   type HostScope,
 } from "@/hooks/remote/useHostScope";
 import { clearCommitDraft } from "@/lib/commitDraft";
-import { useRegistry } from "@/lib/runtime/viewHooks";
+import {
+  type LiveViewState,
+  useRegistry,
+  useView,
+} from "@/lib/runtime/viewHooks";
+import { hostViewAtom } from "@/lib/runtime/atoms";
 import { writeBackWorktree } from "@/hooks/worktrees/useWorktrees";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
+const changesAtom = Atom.family((key: string) => {
+  const [deviceId = "", projectId = "", worktreeId = ""] = key.split("\n");
+  return hostViewAtom({
+    deviceId,
+    view: callOf(worktreesContract, "watchChangeStatus"),
+    input: { projectId, worktreeId },
+  });
+});
+
 // Every changed file: what it is, how much of it is staged, and its
 // +/- counts. The changes page draws its whole list from this and
-// fetches a diff only for the picked file.
+// fetches a diff only for the picked file. It is the host's view
+// (worktrees:watchChangeStatus), read again as the worktree's files or
+// its git move and every few seconds for an edit no watch saw.
 export function useWorktreeChanges(
   projectId: string,
-  worktreeId: string | undefined,
-  // A preview (the transplant review's file list) reads the list once;
-  // the changes page itself keeps the default focus refetch so it
-  // tracks the working tree.
-  options: { refetchOnWindowFocus?: boolean } = {},
-) {
+  worktreeId: string,
+): LiveViewState<readonly ChangedFile[]> {
+  const { deviceId, hasHost } = useHostScope();
+  return useView(
+    hasHost ? changesAtom(`${deviceId}\n${projectId}\n${worktreeId}`) : null,
+  );
+}
+
+// The list read once, for a preview (the transplant review's file
+// list) that crosses the device link and need not follow the tree.
+export function useWorktreeChangesOnce(projectId: string, worktreeId: string) {
   const { api, keys } = useHostScope();
   return useQuery<readonly ChangedFile[]>({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
-    queryFn: worktreeId
-      ? ({ signal }) =>
-          api.run(api.worktrees.changeStatus({ projectId, worktreeId }), {
-            signal,
-          })
-      : skipToken,
-    refetchOnWindowFocus: options.refetchOnWindowFocus,
-    // Same reasoning as the diff: the index is shared with every terminal
-    // open on the worktree, so re-entering the page must re-read it.
+    queryFn: ({ signal }) =>
+      api.run(api.worktrees.changeStatus({ projectId, worktreeId }), {
+        signal,
+      }),
+    refetchOnWindowFocus: false,
     staleTime: 0,
     meta: { errorTitle: "Couldn't read change status" },
   });
+}
+
+// The list read now, after a change this window made, so the page
+// shows it without waiting for the worktree's watch.
+export function refreshChanges(
+  api: HostApi,
+  scope: { projectId: string; worktreeId: string },
+): void {
+  void api.run(api.worktrees.refreshChangeStatus(scope)).catch(() => undefined);
 }
 
 // One modified file's hunks, to tick one at a time. Off for anything
@@ -93,8 +122,9 @@ export function useDiscardHunks() {
   );
 }
 
-// Everything derived from the working tree: the patch, the per-file
-// index state, and the operation it may be stopped in.
+// Everything derived from the working tree that is still a request:
+// the patch, the preview's list, and the operation it may be stopped
+// in.
 export function invalidateTreeState(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
@@ -114,13 +144,14 @@ export function invalidateTreeState(
 export function useWorkingTreeWriteBack() {
   const queryClient = useQueryClient();
   const registry = useRegistry();
-  const { deviceId, keys } = useHostScope();
+  const { api, deviceId, keys } = useHostScope();
   return (
     scope: { projectId: string; worktreeId: string },
     worktree: Worktree,
   ): void => {
     writeBackWorktree(registry, deviceId, worktree);
     invalidateTreeState(queryClient, keys, scope);
+    refreshChanges(api, scope);
   };
 }
 
@@ -153,8 +184,7 @@ interface CommitInput extends CommitPicks {
 }
 
 export function useCommitChanges() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<CommitChangesResult, Error, CommitInput>({
     mutationFn: (input) => api.run(api.worktrees.commit(input)),
@@ -169,11 +199,7 @@ export function useCommitChanges() {
     },
     // The index is set to the picks before git can refuse (a hook, no
     // identity), and the status says what is in it, so it is re-read.
-    onError: (_err, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
-      });
-    },
+    onError: (_err, vars) => refreshChanges(api, vars),
     // The composer shows the failure (hook output, identity errors) in
     // place, where it can be read and selected. A toast would truncate it.
     meta: { silentError: true },

@@ -17,7 +17,10 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
 import * as RcMap from "effect/RcMap";
+import * as Ref from "effect/Ref";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as HostPushes from "./HostPushes";
 
@@ -44,6 +47,17 @@ class Shared implements Equal.Equal {
   }
 }
 
+// A read of a view that landed, and the last refresh asked before it
+// started, which it answers.
+type Landed = { readonly key: string; readonly answers: number };
+
+type Heard = {
+  readonly asked: Stream.Stream<void>;
+  readonly landing: <A, E, R>(
+    read: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>;
+};
+
 // The views' reads, one per key, each running while anyone subscribes
 // and ending with its last subscriber. A subscriber that joins late
 // starts from the current value. A slow one skips to the latest, which
@@ -55,6 +69,13 @@ export class ViewShares extends Context.Service<
       key: string,
       read: Stream.Stream<unknown, unknown>,
     ) => Stream.Stream<unknown, unknown>;
+    // The read of `key` hearing its refreshes, from now on and for the
+    // scope's length: the asks, for it to read again, and its reads,
+    // each saying as it lands which asks it answered.
+    readonly hear: (key: string) => Effect.Effect<Heard, never, Scope.Scope>;
+    // A read of `key` now, done once one that started after the ask
+    // has landed, changed or not. Done at once when nothing watches it.
+    readonly refresh: (key: string) => Effect.Effect<void>;
   }
 >()("sm/host/ViewShares") {}
 
@@ -67,8 +88,49 @@ const makeShares = Effect.gen(function* () {
         replay: 1,
       }),
   });
+  const asks = yield* PubSub.unbounded<string>();
+  const landings = yield* PubSub.unbounded<Landed>();
+  // How many refreshes each key was asked so far, and how many reads
+  // hear its asks.
+  const counted = yield* Ref.make(new Map<string, number>());
+  const hearing = yield* Ref.make(new Map<string, number>());
+  const countOf = (key: string) =>
+    Effect.map(Ref.get(counted), (counts) => counts.get(key) ?? 0);
+  const add = (key: string, by: number) =>
+    Ref.update(hearing, (heard) =>
+      new Map(heard).set(key, (heard.get(key) ?? 0) + by),
+    );
   return ViewShares.of({
     join: (key, read) => Stream.unwrap(RcMap.get(reads, new Shared(key, read))),
+    hear: Effect.fn("ViewShares.hear")(function* (key: string) {
+      const heard = yield* PubSub.subscribe(asks);
+      yield* Effect.acquireRelease(add(key, 1), () => add(key, -1));
+      return {
+        asked: Stream.fromSubscription(heard).pipe(
+          Stream.filter((asked) => asked === key),
+          Stream.as(undefined),
+        ),
+        landing: (read) =>
+          Effect.flatMap(countOf(key), (answers) =>
+            read.pipe(
+              Effect.ensuring(PubSub.publish(landings, { key, answers })),
+            ),
+          ),
+      } satisfies Heard;
+    }),
+    refresh: Effect.fn("ViewShares.refresh")(function* (key: string) {
+      const heard = yield* Ref.get(hearing);
+      if ((heard.get(key) ?? 0) === 0) return;
+      const landed = yield* PubSub.subscribe(landings);
+      const ask = (yield* countOf(key)) + 1;
+      yield* Ref.update(counted, (counts) => new Map(counts).set(key, ask));
+      yield* PubSub.publish(asks, key);
+      yield* Stream.fromSubscription(landed).pipe(
+        Stream.filter((read) => read.key === key && read.answers >= ask),
+        Stream.take(1),
+        Stream.runDrain,
+      );
+    }, Effect.scoped),
   });
 });
 
@@ -99,7 +161,9 @@ export const view = <A, R = never>(
       const context = yield* Effect.context<Services | R>();
       return shares.join(
         key,
-        reading(read, when, options).pipe(Stream.provideContext(context)),
+        reading(read, when, shares.hear(key), options).pipe(
+          Stream.provideContext(context),
+        ),
       ) as Stream.Stream<A, unknown>;
     }),
   );
@@ -107,6 +171,7 @@ export const view = <A, R = never>(
 const reading = <A, R>(
   read: () => Effect.Effect<A, unknown, R>,
   when: (signal: Signal) => boolean,
+  hear: Effect.Effect<Heard, never, Scope.Scope>,
   options: { readonly every?: Duration.Input },
 ): Stream.Stream<A, unknown, Services | R> =>
   Stream.unwrap(
@@ -114,10 +179,16 @@ const reading = <A, R>(
       // Subscribed before the first read, so nothing between is lost.
       const store = yield* (yield* StoreChanges.StoreChanges).subscribe;
       const pushes = yield* (yield* HostPushes.HostPushes).subscribe;
+      const { asked, landing } = yield* hear;
       const signals = Stream.merge(
-        store.pipe(Stream.map((tables): Signal => ({ kind: "store", tables }))),
-        pushes.pipe(Stream.map((push): Signal => ({ kind: "push", push }))),
-      ).pipe(Stream.filter(when));
+        Stream.merge(
+          store.pipe(
+            Stream.map((tables): Signal => ({ kind: "store", tables })),
+          ),
+          pushes.pipe(Stream.map((push): Signal => ({ kind: "push", push }))),
+        ).pipe(Stream.filter(when)),
+        asked,
+      );
       const ticks =
         options.every === undefined
           ? Stream.empty
@@ -125,7 +196,7 @@ const reading = <A, R>(
       return Stream.succeed(undefined).pipe(
         Stream.concat(Stream.merge(signals, ticks)),
         Stream.buffer({ capacity: 1, strategy: "sliding" }),
-        Stream.mapEffect(() => Effect.suspend(read)),
+        Stream.mapEffect(() => landing(Effect.suspend(read))),
         Stream.changes,
       );
     }),
@@ -154,3 +225,8 @@ export const either =
   (...whens: readonly ((signal: Signal) => boolean)[]) =>
   (signal: Signal): boolean =>
     whens.some((when) => when(signal));
+
+// A refresh of the view read under `key`: a read now, done once it
+// landed.
+export const refresh = (key: string) =>
+  Effect.flatMap(ViewShares, (shares) => shares.refresh(key));

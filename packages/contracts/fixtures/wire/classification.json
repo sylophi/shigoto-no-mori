@@ -1695,6 +1695,12 @@
     "gated": true,
     "grant": "browseFiles"
   },
+  "worktrees:refreshChangeStatus": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "worktrees:relocate": {
     "kind": "invoke",
     "scope": "host",
