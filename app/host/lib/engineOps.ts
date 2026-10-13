@@ -756,18 +756,26 @@ const rowAfter = Effect.fnUntraced(function* (
   return decodeWorktree(row);
 });
 
-// The worktree's own title, description or both (`sm describe`),
-// refused while an open pull request holds them.
-export const describe = (
+// The worktree's title, description or both (`sm describe`): the open
+// pull request's while one holds them, else its own. Says whether it
+// edited the PR.
+export const describe = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
   change: { readonly title?: string; readonly description?: string },
-) =>
-  rowAfter(project, worktreeId, (located) =>
+) {
+  let editedPullRequest = false;
+  const worktree = yield* rowAfter(project, worktreeId, (located) =>
     Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
-      Effect.asVoid(worktrees.describe(located, change)),
+      worktrees.describe(located, change).pipe(
+        Effect.map((result) => {
+          editedPullRequest = result.pullRequest !== null;
+        }),
+      ),
     ),
   );
+  return { worktree, editedPullRequest };
+});
 
 // Every agent session bound to the worktree goes idle.
 export const idleAgents = (project: Project, worktreeId: string) =>
@@ -1338,6 +1346,22 @@ export const openLauncher = Effect.fnUntraced(function* (
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       yield* (yield* Open.Open).open(located, launcherId);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+});
+
+// A worktree's file, its path relative to the worktree's root, in the
+// editor the device settings name or its default app.
+export const openFile = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  path: string,
+) {
+  yield* asCall(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Open.Open).edit(located, path);
     }),
     { projectId: project.id, worktreeId },
   );

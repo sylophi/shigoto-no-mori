@@ -32,7 +32,7 @@ import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { type ChannelMux, createChannelMux } from "./channels";
 import { type FlatClient, linkTransport, rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
-import { LinkGroup } from "@shigomori/contracts/link";
+import { LINK_MAX_FRAME_BYTES, LinkGroup } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
 import { CLOSE_HANDSHAKE_FAILED, sealDialer } from "./sealedSocket";
 
@@ -235,7 +235,9 @@ export const dialDevice = (
       Effect.provideService(Socket.Socket, socket),
       Effect.provide(
         Layer.mergeAll(
-          RpcSerialization.layerSchemaBinary(),
+          RpcSerialization.layerSchemaBinary({
+            maxFrameSize: LINK_MAX_FRAME_BYTES,
+          }),
           Layer.succeed(RpcClient.ConnectionHooks, {
             onConnect: Effect.void,
             onDisconnect: Deferred.succeed(dropped, undefined),
@@ -243,7 +245,7 @@ export const dialDevice = (
         ),
       ),
     );
-    // A frame this end cannot decode (one past the decoder's size cap)
+    // A frame this end cannot decode (one past LINK_MAX_FRAME_BYTES)
     // leaves the RPC client's parser unable to find the next, so every
     // later answer fails too while the socket stays up (effect 4.0.2's
     // makeProtocolSocket). The link drops instead, and is dialed again.

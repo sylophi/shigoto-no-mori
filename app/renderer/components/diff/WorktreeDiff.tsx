@@ -1,14 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { changesState, treeMovedKey } from "@/lib/changesState";
+import { changesState } from "@/lib/changesState";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
-  invalidateTreeState,
   useCommitChanges,
   useDiscardChanges,
   useDiscardHunks,
@@ -117,29 +113,6 @@ function WorktreeChanges({
     statusError,
     worktree.changedCount,
   );
-  // An edit made while this window keeps the focus (the app's own
-  // terminal, an agent working in the tree) is read again then, not
-  // only on the next focus: on this machine as the working trees' watch
-  // reports any edit in the project, and on a peer's page as the row
-  // moves (its count, its newest change), the peer's push not reaching
-  // here.
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  useEffect(
-    () =>
-      api.listen(api.pushes(worktreesContract, "filesChanged"), (changed) => {
-        if (changed.projectId !== projectId) return;
-        invalidateTreeState(queryClient, keys, { projectId, worktreeId });
-      }),
-    [api, queryClient, keys, projectId, worktreeId],
-  );
-  const treeMoved = treeMovedKey(worktree);
-  const seenTree = useRef(treeMoved);
-  useEffect(() => {
-    if (seenTree.current === treeMoved) return;
-    seenTree.current = treeMoved;
-    invalidateTreeState(queryClient, keys, { projectId, worktreeId });
-  }, [treeMoved, queryClient, keys, projectId, worktreeId]);
   const picks = useChangesPicks(projectId, worktreeId);
   const setPicks = (change: Parameters<typeof updatePicks>[2]) =>
     updatePicks(projectId, worktreeId, change);

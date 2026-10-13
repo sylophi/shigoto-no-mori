@@ -140,7 +140,9 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // The worktree's own title and description, edited on its page.
+  // A worktree's title and description, edited on its page: the branch's
+  // open pull request's on GitHub, through this device's gh, when it has
+  // one, and the worktree's own otherwise.
   invoke("describe", DescribeWorktreePayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
@@ -209,6 +211,27 @@ export const worktreesContract = defineContract(
     Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },
   ),
+  // The picked file's diff and hunks, and the operation the tree is
+  // stopped in, as the changes page shows them.
+  view("watchFileDiff", FileDiffPayloadSchema, Schema.String, {
+    remote: true,
+    gated: false,
+  }),
+  view("watchFileHunks", FileHunksPayloadSchema, FileHunksSchema, {
+    remote: true,
+    gated: false,
+  }),
+  view("watchOperation", WorktreeScopedPayloadSchema, GitOperationStateSchema, {
+    remote: true,
+    gated: false,
+  }),
+  // The changes page's views of one worktree (its list, the picked
+  // file's diff and hunks, the operation) read now, answered once each
+  // read landed: a refresh, or a change this window just made.
+  invoke("refreshChangeStatus", WorktreeScopedPayloadSchema, Schema.Void, {
+    remote: true,
+    gated: false,
+  }),
   // One modified file's hunks (the engine's git/hunks.ts), to tick and
   // throw away one at a time.
   invoke("fileHunks", FileHunksPayloadSchema, FileHunksSchema, {

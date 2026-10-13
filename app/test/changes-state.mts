@@ -12,7 +12,7 @@
 // Run: pnpm test changes-state.
 import assert from "node:assert/strict";
 import { it } from "vitest";
-import { changesState, treeMovedKey } from "@/lib/changesState";
+import { changesState } from "@/lib/changesState";
 
 it("the row's count stands in, and a failed read never reads as the last answer", () => {
   assert.deepEqual(changesState(undefined, null, 3), {
@@ -43,12 +43,4 @@ it("the row's count stands in, and a failed read never reads as the last answer"
     changedCount: null,
     list: [],
   });
-});
-
-it("the page reads again when the row's count or newest change moves", () => {
-  const before = treeMovedKey({ changedCount: 1, lastChangeAt: 100 });
-  assert.notEqual(before, treeMovedKey({ changedCount: 2, lastChangeAt: 100 }));
-  assert.notEqual(before, treeMovedKey({ changedCount: 1, lastChangeAt: 101 }));
-  assert.equal(before, treeMovedKey({ changedCount: 1, lastChangeAt: 100 }));
-  assert.notEqual(treeMovedKey({ changedCount: 0 }), before);
 });

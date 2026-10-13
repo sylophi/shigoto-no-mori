@@ -18,7 +18,9 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EngineConfig from "@shigomori/engine/Config";
+import { ghKnownHosts } from "@shigomori/engine/ghHost";
 import * as Git from "@shigomori/engine/Git";
+import * as GitHub from "@shigomori/engine/GitHub";
 import * as Ops from "../engineOps";
 import { answersFor } from "../util/cacheTtl";
 import * as Processes from "@shigomori/engine/processes";
@@ -163,26 +165,19 @@ const make = Effect.gen(function* () {
   // The device settings, for the integration's switch.
   const engineConfig = yield* EngineConfig.Config;
   const git = yield* Git.Git;
-  const withSpawner = Effect.provideService(
-    ChildProcessSpawner.ChildProcessSpawner,
-    spawner,
-  );
+  const github = yield* GitHub.GitHub;
+  const withGh = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provideService(GitHub.GitHub, github),
+    );
 
-  // gh keeps its logged-in hosts as the keys of a top-level YAML map,
-  // which a regex over "<host>:" lines reads without a YAML parser.
-  // github.com always counts, with the file missing (most users, a
-  // fresh install) or unreadable.
+  // The hosts gh is logged in to. github.com always counts, with the
+  // file missing (most users, a fresh install) or unreadable.
   const knownHosts = yield* Effect.suspend(() =>
     fs.readFileString(ghHostsPath()),
   ).pipe(
-    Effect.map((content) => {
-      const hosts = new Set<string>(["github.com"]);
-      for (const line of content.split("\n")) {
-        const m = line.match(/^([^\s:#]+):\s*$/);
-        if (m?.[1]) hosts.add(m[1]);
-      }
-      return hosts;
-    }),
+    Effect.map(ghKnownHosts),
     Effect.orElseSucceed(() => new Set(["github.com"])),
     Effect.cachedWithTTL(KNOWN_HOSTS_TTL),
   );
@@ -210,7 +205,7 @@ const make = Effect.gen(function* () {
       if (authed) break;
     }
     return { installed, authed };
-  }).pipe(withSpawner, Effect.cachedWithTTL(READINESS_TTL));
+  }).pipe(withGh, Effect.cachedWithTTL(READINESS_TTL));
 
   const repos = yield* Cache.makeWith(
     (cwd: string) =>
@@ -252,7 +247,7 @@ const make = Effect.gen(function* () {
             autoMerge: repository.autoMergeAllowed,
           }),
         ),
-        withSpawner,
+        withGh,
       ),
     { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
   );
@@ -282,7 +277,7 @@ const make = Effect.gen(function* () {
             labels: repository.labels.nodes.flatMap((n) => (n ? [n] : [])),
           }),
         ),
-        withSpawner,
+        withGh,
       ),
     { capacity: Infinity, timeToLive: answersFor(PULL_REQUEST_OPTIONS_TTL) },
   );
@@ -291,16 +286,17 @@ const make = Effect.gen(function* () {
   // clones of one repo share it: an About is rarely edited, and one that is can wait.
   const descriptions = yield* Cache.makeWith(
     (slug: string) =>
-      gh([
-        "api",
-        "--hostname",
-        slug.slice(0, slug.indexOf("/")),
-        `repos/${slug.slice(slug.indexOf("/") + 1)}`,
-        "--jq",
-        '.description // ""',
-      ]).pipe(
+      gh(
+        [
+          "api",
+          `repos/${slug.slice(slug.indexOf("/") + 1)}`,
+          "--jq",
+          '.description // ""',
+        ],
+        { host: slug.slice(0, slug.indexOf("/")) },
+      ).pipe(
         Effect.map(({ stdout }) => stdout.trim() || null),
-        withSpawner,
+        withGh,
       ),
     { capacity: Infinity, timeToLive: answersFor(Duration.infinity) },
   );

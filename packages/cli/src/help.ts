@@ -60,7 +60,7 @@ const catalog = (names: Names) => {
         "worktrees list [--all] [--remote] [--from <device>] [--identities]",
         "List worktrees",
         "All projects when outside one, or with --all; -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
-          "--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull, agentWorking, and title and description when `describe` set them (the worktree's own, not an open PR's). --worktree-id <id> narrows the array to that one row. " +
+          "--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull, agentWorking, and title and description when `describe` set them (the worktree's own, never a pull request's). --worktree-id <id> narrows the array to that one row. " +
           "Listing full rows also takes a shelved worktree back off the shelf once it has been worked in since it was shelved (an edit, a new or deleted file, a commit; not the changes it was shelved with, nor an auto-pull fast-forward), and the row says shelved: false. " +
           "--identities is the cheap form, with no git probe per worktree (only git's worktree list and the registry marks): the same scope, order and array, each entry {id, projectId, name, branch, path, isPrimary, isExternal, detached, shelved, autoPull, agentWorking}. Add --primary-ref for each project's primaryRef and primaryBranch (left out when it has none), resolved once per project. " +
           "A bare repository has no primary checkout; otherwise the checkout at the project path is the primary (the first one listed when none sits there).",
@@ -162,7 +162,7 @@ const catalog = (names: Names) => {
       [
         "worktrees describe [<name>] [-t|--title <title>] [-d|--description <text> | --description-file <path|->]",
         "Set or show a worktree's title and description",
-        "What the work is, like a pull request's title and body, for before there is one: the app shows the title in place of the branch until the branch has a pull request from this repository, whose title it shows then in any state, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints the worktree's own, or its open pull request's. While the branch has an open pull request from this repository (not a fork's branch of the same name), its title and body are the worktree's, and describe refuses a change: edit the PR instead. With --json, that error's code is pull-request-open. External worktrees have none (adopt one first). They travel with send, bring and mirror. --json prints {ok, worktree: <row>}, or {ok, title, description, pullRequest} with no flags, where title and description are the worktree's own and pullRequest the open PR that overrides them.",
+        "What the work is, like a pull request's title and body: the app shows the title in place of the branch until the branch has a pull request from this repository, whose title it shows then in any state, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints the worktree's own, or its open pull request's. While the branch has an open pull request from this repository (not a fork's branch of the same name), its title and body are the worktree's, and describe edits the PR's instead (a PR's title can't be cleared). When gh can't tell whether there is one (other than for a repo with no GitHub remote, or a gh not signed in), it changes nothing. External worktrees have none (adopt one first). They travel with send, bring and mirror. --json prints {ok, worktree: <row>, pullRequest}, pullRequest the PR it edited (null when it wrote the worktree's own), or {ok, title, description, pullRequest} with no flags, where title and description are the worktree's own and pullRequest the open PR that overrides them.",
       ],
       [
         "worktrees autopull [on|off] [<name>]",
@@ -189,6 +189,12 @@ const catalog = (names: Names) => {
         "Launch a launcher-row tool in a worktree",
         "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
           "App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher.",
+      ],
+      [
+        "worktrees edit <file> [<name>]",
+        "Open a worktree's file in your editor",
+        "The editor set in config (editor), or the file's default app while it's unset. A relative <file> reads from cwd in the worktree you're in, and from the root of one you name. " +
+          "App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly, with the file after --. --json prints {ok, path}, and a file that isn't there fails with code missing-file.",
       ],
       [
         "worktrees link [<name>]",

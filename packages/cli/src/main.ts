@@ -31,7 +31,7 @@ import { done, land, merge, pr } from "./commands/landing.ts";
 import { dirty } from "./commands/dirty.ts";
 import { bundle } from "./commands/bundle.ts";
 import { diskUsage } from "./commands/diskUsage.ts";
-import { app, open } from "./commands/open.ts";
+import { app, edit, open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
 import {
   bring,
@@ -150,6 +150,7 @@ const sm = Command.make("sm").pipe(
     loaded(bundle),
     diskUsage.pipe(Command.provide(services)),
     loaded(open),
+    loaded(edit),
     app.pipe(Command.provide(services)),
     loaded(send),
     loaded(bring),

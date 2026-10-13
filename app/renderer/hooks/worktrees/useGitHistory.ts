@@ -15,7 +15,8 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
-  invalidateTreeState,
+  refreshTree,
+  useTreeView,
   useWorkingTreeWriteBack,
   useWorkingTreeMutation,
 } from "./useWorktreeChanges";
@@ -161,16 +162,13 @@ export function useRestoreStash() {
 }
 
 // The operation the worktree is stopped in, and how many files still
-// conflict. Refetched with the working tree after every move here.
+// conflict: the host's view, read again as the tree moves.
 export function useWorktreeOperation(worktree: Worktree) {
-  const { api, keys } = useHostScope();
-  const { projectId, id: worktreeId } = worktree;
-  return useQuery<GitOperationState>({
-    queryKey: keys.worktreeOperation(projectId, worktreeId),
-    queryFn: ({ signal }) =>
-      api.run(api.worktrees.operation({ projectId, worktreeId }), { signal }),
-    meta: { errorTitle: "Couldn't read the git state" },
-  });
+  return useTreeView<GitOperationState>(
+    "watchOperation",
+    { projectId: worktree.projectId, worktreeId: worktree.id },
+    "Couldn't read the git state",
+  );
 }
 
 export function useResolveConflict() {
@@ -249,7 +247,7 @@ export function useMergeBranch() {
   >({
     mutationFn: (input) => api.run(api.worktrees.mergeBranch(input)),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
-    onError: (_err, vars) => invalidateTreeState(queryClient, keys, vars),
+    onError: (_err, vars) => refreshTree(queryClient, { api, keys }, vars),
     meta: { silentError: true },
   });
 }

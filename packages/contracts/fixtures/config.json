@@ -540,6 +540,7 @@
         "hiddenLaunchers": ["app:cursor", "web:github"],
         "launchScripts": false,
         "terminal": "ghostty",
+        "editor": "zed",
         "deleteBranchOnRemove": false,
         "autoPopulateInstall": true,
         "autoPullNew": true,
@@ -606,6 +607,7 @@
       },
       {},
       {
+        "editor": null,
         "autoShelveDays": null
       }
     ],

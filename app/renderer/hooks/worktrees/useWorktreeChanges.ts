@@ -1,9 +1,9 @@
 import {
+  focusManager,
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
-  skipToken,
 } from "@tanstack/react-query";
 import type {
   ChangedFile,
@@ -16,43 +16,129 @@ import type {
   ResetSoftResult,
   Worktree,
 } from "@shigomori/contracts/schemas";
+import { callOf } from "@shigomori/contracts/contract";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Effect from "effect/Effect";
+import { useEffect } from "react";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import {
   useHostScope,
   type HostApi,
   type HostScope,
 } from "@/hooks/remote/useHostScope";
 import { clearCommitDraft } from "@/lib/commitDraft";
-import { useRegistry } from "@/lib/runtime/viewHooks";
+import {
+  type LiveViewState,
+  useRegistry,
+  useView,
+  useViewErrorToast,
+} from "@/lib/runtime/viewHooks";
+import { hostViewAtom } from "@/lib/runtime/atoms";
 import { writeBackWorktree } from "@/hooks/worktrees/useWorktrees";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
+// The changes page's views of a worktree.
+type TreeView =
+  | "watchChangeStatus"
+  | "watchFileDiff"
+  | "watchFileHunks"
+  | "watchOperation";
+
+// One of the changes page's views of a worktree, keyed by the device
+// and the view's input.
+const treeViewAtom = Atom.family((key: string) => {
+  const { deviceId, view, input } = JSON.parse(key) as {
+    deviceId: string;
+    view: TreeView;
+    input: never;
+  };
+  return hostViewAtom({
+    deviceId,
+    view: callOf(worktreesContract, view),
+    input,
+    // A file's diff and hunks stream half a minute after the page moves
+    // to another file: a second look is instant, and a long review
+    // leaves no reads behind.
+    ...(view === "watchFileDiff" || view === "watchFileHunks"
+      ? { idle: "30 seconds" }
+      : {}),
+  });
+});
+
+// The view `view` of the scoped device's worktree, `input` its payload
+// (null while there is nothing to read), its failure a toast titled
+// `failed`.
+export function useTreeView<A>(
+  view: TreeView,
+  input: object | null,
+  failed: string,
+): LiveViewState<A> {
+  const { deviceId, hasHost } = useHostScope();
+  const registry = useRegistry();
+  const atom =
+    hasHost && input !== null
+      ? (treeViewAtom(JSON.stringify({ deviceId, view, input })) as Atom.Atom<
+          AsyncResult.AsyncResult<A, unknown>
+        >)
+      : null;
+  const state = useView(atom);
+  useViewErrorToast(state, failed);
+  // A view whose reads kept failing ends: the window coming back asks
+  // again, as a query's focus refetch did, once however many readers
+  // the view has.
+  const ended = state.error !== null;
+  useEffect(
+    () =>
+      ended && atom !== null
+        ? focusManager.subscribe((focused) => {
+            const result = registry.get(atom);
+            if (focused && AsyncResult.isFailure(result) && !result.waiting) {
+              registry.refresh(atom);
+            }
+          })
+        : undefined,
+    [ended, atom, registry],
+  );
+  return state;
+}
+
 // Every changed file: what it is, how much of it is staged, and its
 // +/- counts. The changes page draws its whole list from this and
-// fetches a diff only for the picked file.
-export function useWorktreeChanges(
-  projectId: string,
-  worktreeId: string | undefined,
-  // A preview (the transplant review's file list) reads the list once;
-  // the changes page itself keeps the default focus refetch so it
-  // tracks the working tree.
-  options: { refetchOnWindowFocus?: boolean } = {},
-) {
+// fetches a diff only for the picked file. It is the host's view
+// (worktrees:watchChangeStatus), read again as the worktree's files or
+// its git move and every few seconds for an edit no watch saw.
+export function useWorktreeChanges(projectId: string, worktreeId: string) {
+  return useTreeView<readonly ChangedFile[]>(
+    "watchChangeStatus",
+    { projectId, worktreeId },
+    "Couldn't read change status",
+  );
+}
+
+// The list read once, for a preview (the transplant review's file
+// list) that crosses the device link and need not follow the tree.
+export function useWorktreeChangesOnce(projectId: string, worktreeId: string) {
   const { api, keys } = useHostScope();
   return useQuery<readonly ChangedFile[]>({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
-    queryFn: worktreeId
-      ? ({ signal }) =>
-          api.run(api.worktrees.changeStatus({ projectId, worktreeId }), {
-            signal,
-          })
-      : skipToken,
-    refetchOnWindowFocus: options.refetchOnWindowFocus,
-    // Same reasoning as the diff: the index is shared with every terminal
-    // open on the worktree, so re-entering the page must re-read it.
+    queryFn: ({ signal }) =>
+      api.run(api.worktrees.changeStatus({ projectId, worktreeId }), {
+        signal,
+      }),
+    refetchOnWindowFocus: false,
     staleTime: 0,
     meta: { errorTitle: "Couldn't read change status" },
   });
+}
+
+// The changes page's views read now, after a change this window made,
+// so the page shows it without waiting for the worktree's watch.
+function refreshChanges(
+  api: HostApi,
+  scope: { projectId: string; worktreeId: string },
+): void {
+  void api.run(api.worktrees.refreshChangeStatus(scope)).catch(() => undefined);
 }
 
 // One modified file's hunks, to tick one at a time. Off for anything
@@ -63,18 +149,11 @@ export function useFileHunks(
   worktreeId: string,
   path: string | undefined,
 ) {
-  const { api, keys } = useHostScope();
-  return useQuery<FileHunks>({
-    queryKey: keys.worktreeFileHunks(projectId, worktreeId, path ?? ""),
-    queryFn: path
-      ? ({ signal }) =>
-          api.run(api.worktrees.fileHunks({ projectId, worktreeId, path }), {
-            signal,
-          })
-      : skipToken,
-    staleTime: 0,
-    meta: { errorTitle: "Couldn't read the file's hunks" },
-  });
+  return useTreeView<FileHunks>(
+    "watchFileHunks",
+    path === undefined ? null : { projectId, worktreeId, path },
+    "Couldn't read the file's hunks",
+  );
 }
 
 export function useDiscardHunks() {
@@ -93,20 +172,17 @@ export function useDiscardHunks() {
   );
 }
 
-// Everything derived from the working tree: the patch, the per-file
-// index state, and the operation it may be stopped in.
-export function invalidateTreeState(
+// The working tree moved by a call this window made: the changes
+// page's views read now, and the transplant preview's list asked again.
+export function refreshTree(
   queryClient: ReturnType<typeof useQueryClient>,
-  keys: QueryKeyRegistry,
-  { projectId, worktreeId }: { projectId: string; worktreeId: string },
+  { api, keys }: { api: HostApi; keys: QueryKeyRegistry },
+  scope: { projectId: string; worktreeId: string },
 ): void {
-  for (const queryKey of [
-    keys.worktreeDiff(projectId, worktreeId),
-    keys.worktreeChanges(projectId, worktreeId),
-    keys.worktreeOperation(projectId, worktreeId),
-  ]) {
-    void queryClient.invalidateQueries({ queryKey });
-  }
+  void queryClient.invalidateQueries({
+    queryKey: keys.worktreeChanges(scope.projectId, scope.worktreeId),
+  });
+  refreshChanges(api, scope);
 }
 
 // That, and the worktree the call answered with written back into its
@@ -114,13 +190,13 @@ export function invalidateTreeState(
 export function useWorkingTreeWriteBack() {
   const queryClient = useQueryClient();
   const registry = useRegistry();
-  const { deviceId, keys } = useHostScope();
+  const { api, deviceId, keys } = useHostScope();
   return (
     scope: { projectId: string; worktreeId: string },
     worktree: Worktree,
   ): void => {
     writeBackWorktree(registry, deviceId, worktree);
-    invalidateTreeState(queryClient, keys, scope);
+    refreshTree(queryClient, { api, keys }, scope);
   };
 }
 
@@ -153,8 +229,7 @@ interface CommitInput extends CommitPicks {
 }
 
 export function useCommitChanges() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<CommitChangesResult, Error, CommitInput>({
     mutationFn: (input) => api.run(api.worktrees.commit(input)),
@@ -169,11 +244,7 @@ export function useCommitChanges() {
     },
     // The index is set to the picks before git can refuse (a hook, no
     // identity), and the status says what is in it, so it is re-read.
-    onError: (_err, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
-      });
-    },
+    onError: (_err, vars) => refreshChanges(api, vars),
     // The composer shows the failure (hook output, identity errors) in
     // place, where it can be read and selected. A toast would truncate it.
     meta: { silentError: true },

@@ -6,6 +6,7 @@
 // goes takes its port with it.
 import { channelOf, isInvoke, isPush } from "@shigomori/contracts/contract";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
+import { LINK_MAX_FRAME_BYTES } from "@shigomori/contracts/link";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
@@ -73,7 +74,11 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
   Effect.gen(function* () {
     const runFork = yield* FiberSet.makeRuntime<never>();
     const serialization = yield* RpcSerialization.RpcSerialization.pipe(
-      Effect.provide(RpcSerialization.layerSchemaBinary()),
+      Effect.provide(
+        RpcSerialization.layerSchemaBinary({
+          maxFrameSize: LINK_MAX_FRAME_BYTES,
+        }),
+      ),
     );
     const connections = new Map<number, Connection>();
     let nextClientId = 0;

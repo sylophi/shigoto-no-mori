@@ -15,7 +15,7 @@ import { splitRemoteRef } from "./gitParse.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import * as Registry from "./Registry.ts";
 import type { RegisteredProject } from "./Registry.ts";
-import * as WorktreeData from "./WorktreeData.ts";
+import type * as GitHub from "./GitHub.ts";
 import { makeListing } from "./worktrees/listing.ts";
 import { makeStatusCard } from "./worktrees/statusCard.ts";
 import { makeResolving } from "./worktrees/resolving.ts";
@@ -29,6 +29,7 @@ import {
   CleanupFailed,
   type Created,
   DescribeRefused,
+  type Described,
   type DescriptionView,
   DirtyWorktree,
   type Here,
@@ -38,7 +39,8 @@ import {
   MarkRefused,
   OrphanedWorktree,
   type PrimaryTarget,
-  PullRequestOwnsDescription,
+  PullRequestNeedsTitle,
+  PullRequestUnchecked,
   RelocateRefused,
   type Removed,
   type Reporter,
@@ -56,7 +58,8 @@ export {
   DirtyWorktree,
   MarkRefused,
   OrphanedWorktree,
-  PullRequestOwnsDescription,
+  PullRequestNeedsTitle,
+  PullRequestUnchecked,
   RelocateRefused,
   TargetError,
   UNKNOWN_BRANCH,
@@ -167,18 +170,17 @@ export class Worktrees extends Context.Service<
     readonly scriptContext: (
       located: Located,
     ) => Effect.Effect<Lifecycle.ScriptContext>;
-    // Sets the title, the description, or both, and answers the pair as
-    // stored, with why the pull request couldn't be looked up as
-    // `description` says it.
+    // Sets the title, the description, or both: the open pull
+    // request's while one holds them, else the worktree's own.
     readonly describe: (
       located: Located,
       change: { readonly title?: string; readonly description?: string },
     ) => Effect.Effect<
-      {
-        readonly described: WorktreeData.Description;
-        readonly pullRequestUnavailable?: string;
-      },
-      DescribeRefused | PullRequestOwnsDescription
+      Described,
+      | DescribeRefused
+      | PullRequestNeedsTitle
+      | PullRequestUnchecked
+      | GitHub.GitHubCliError
     >;
 
     // Where a new worktree named `name` (picked when empty) would go,

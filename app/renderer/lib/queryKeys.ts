@@ -99,30 +99,10 @@ function buildQueryKeys(deviceId: string) {
 
     worktreeData: (projectId: string | null, worktreeId: string | null) =>
       host("worktreeData", projectId, worktreeId),
-    // Every file diff of one worktree sits under this prefix, so the
-    // working-tree invalidation can drop them all with one key.
-    worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
-      host("worktreeDiff", projectId, worktreeId),
-    // `untracked` belongs in the key, not just in the request: one path
-    // can be two rows (a staged deletion and an untracked file of the
-    // same name), and they have different diffs to show.
-    worktreeFileDiff: (
-      projectId: string,
-      worktreeId: string | undefined,
-      paths: readonly string[],
-      untracked: boolean,
-    ) => host("worktreeDiff", projectId, worktreeId, [...paths], untracked),
-    worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
+    worktreeChanges: (projectId: string, worktreeId: string) =>
       host("worktreeChanges", projectId, worktreeId),
-    // One file's hunks and which are staged, under the diff prefix so
-    // the working-tree invalidation drops it with the file's diff.
-    worktreeFileHunks: (projectId: string, worktreeId: string, path: string) =>
-      host("worktreeDiff", projectId, worktreeId, "hunks", path),
     worktreeStashes: (projectId: string, worktreeId: string) =>
       host("worktreeStashes", projectId, worktreeId),
-    // The git operation a worktree is stopped in, if any.
-    worktreeOperation: (projectId: string, worktreeId: string) =>
-      host("worktreeOperation", projectId, worktreeId),
     // The ignored files a transfer leaves behind on a source worktree
     // (sync:ignoredPaths), read by the transplant dialog.
     worktreeIgnored: (projectId: string, worktreeId: string) =>

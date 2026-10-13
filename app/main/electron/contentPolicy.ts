@@ -55,6 +55,8 @@ export function rendererContentPolicy(options: {
         `https://*.${host}`,
       ]),
     ],
+    // The files page's video and audio, read whole into data: URLs.
+    "media-src": ["'self'", "data:"],
     "font-src": ["'self'", "data:", ...dev("https://fonts.gstatic.com")],
     "connect-src": [
       "'self'",

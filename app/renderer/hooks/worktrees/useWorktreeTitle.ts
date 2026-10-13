@@ -5,16 +5,15 @@ import {
   mappedPullRequest,
   worktreeTitle,
 } from "@shigomori/ui/lib/worktreeTitle.ts";
-import {
-  hasWorktreeData,
-  type PullRequest,
-  type PullRequestDetail,
-  type Worktree,
+import type {
+  PullRequest,
+  PullRequestDetail,
+  Worktree,
 } from "@shigomori/contracts/schemas";
 
 // The open worktree's title and description: its own PR's title in
 // any state (worktreeTitle), and while that PR is open its body too
-// (`sm describe` refuses changes then). Once it is merged or closed,
+// (`sm describe` edits the PR's then). Once it is merged or closed,
 // the worktree's own description comes back, or the PR's body when it
 // has none. The project map knows a PR's title before the page's own
 // lookup answers, but only that lookup brings the body, so a worktree
@@ -22,15 +21,14 @@ import {
 // flash the local one it is about to replace.
 //
 // `pullRequest` is the worktree's own PR, so the page can lead with
-// the PR itself instead of naming it twice. `editable` is whether the
-// worktree's own description can be changed here: not while an open
-// PR holds it, and not on an external checkout, which keeps no data
-// for it.
+// the PR itself instead of naming it twice. `pullRequestBody` is the
+// open PR's body as written (bodySource), template comments too: what
+// an edit of the description starts from.
 export function useWorktreeTitle(worktree: Worktree): {
   title: string | null;
   description: string | null;
+  pullRequestBody: string | undefined;
   pullRequest: PullRequest | PullRequestDetail | null;
-  editable: boolean;
 } {
   const { data: detail } = useWorktreePullRequest(
     worktree.projectId,
@@ -49,8 +47,8 @@ export function useWorktreeTitle(worktree: Worktree): {
     description: open
       ? body
       : (shownText(worktree.description) ?? (own ? body : null)),
+    pullRequestBody: open ? (detail?.bodySource ?? detail?.body) : undefined,
     pullRequest: own,
-    editable: hasWorktreeData(worktree) && !open,
   };
 }
 

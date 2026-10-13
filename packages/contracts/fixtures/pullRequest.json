@@ -246,6 +246,32 @@
             }
           ]
         }
+      },
+      {
+        "number": 153,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/153",
+        "title": "Show the hub's latency in the status bar",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "body": "The dot turns amber past 300 ms.\n\n![status bar](https://private-user-images.githubusercontent.com/1/status-bar.png?jwt=eyJhbGciOi.example)",
+        "bodySource": "The dot turns amber past 300 ms.\n\n![status bar](https://github.com/user-attachments/assets/2f1c9e4a-status-bar)",
+        "mergeState": "CLEAN",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-08T14:02:31.000Z",
+        "additions": 38,
+        "deletions": 4,
+        "changedFiles": 3,
+        "checks": {
+          "total": 0,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": []
       }
     ],
     "normalizes": [

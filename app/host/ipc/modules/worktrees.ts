@@ -1,9 +1,11 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HostPushes from "@host/lib/HostPushes";
 import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -32,13 +34,19 @@ import {
   withDeleteInflight,
   withDeletesInflight,
 } from "@host/lib/scripts";
-import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import {
+  evictProjectPullRequests,
+  refreshProjectPullRequests,
+} from "@host/lib/githubCli/pullRequests";
 import {
   pullRequestStackFor,
   stackCleanupFor,
   trunkOf,
 } from "@shigomori/contracts/pullRequestStack";
-import { UnknownWorktreeError } from "@shigomori/contracts/errors";
+import {
+  isEntityGoneError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { Terminals } from "@host/lib/terminals/Terminals";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -62,6 +70,43 @@ export function notifierFor(ctx: HandlerContext) {
     notifyScript: scriptEventNotifier(ctx),
   };
 }
+
+// The changes page's views of one worktree share this key prefix, so
+// a refresh reads them all.
+const treeViews = (input: { projectId: string; worktreeId: string }) =>
+  `worktrees:tree:${input.projectId}:${input.worktreeId}:`;
+
+// One of the changes page's views of a worktree (`part` its name and
+// input), read again as the tree moves: its project's git, an edit in
+// its files (or a window looking again), a mirror staging into it. A
+// read git refuses for a moment (a lock held) is tried again three
+// times, a second apart and doubling, as a request was, before the
+// view fails.
+const treeView = <A, R>(
+  input: { projectId: string; worktreeId: string },
+  part: string,
+  read: () => Effect.Effect<A, unknown, R>,
+  options?: { readonly every?: Duration.Input },
+) =>
+  Views.view(
+    `${treeViews(input)}${part}`,
+    () =>
+      read().pipe(
+        Effect.retry({
+          times: 3,
+          schedule: Schedule.exponential("1 second"),
+          while: (error) => !isEntityGoneError(error),
+        }),
+      ),
+    Views.either(
+      gitMoved(input.projectId),
+      filesChanged(input.projectId),
+      Views.pushed(mirrorContract, "gitChanged", (staged) => {
+        return staged.worktreeId === input.worktreeId;
+      }),
+    ),
+    options,
+  );
 
 const gitMoved = (projectId: string) =>
   Views.either(
@@ -182,17 +227,36 @@ export const worktreesViews: ViewHandlers<
   // The open page's changes: also read again every few seconds, for an
   // edit no watch saw.
   watchChangeStatus: (input) =>
-    Views.view(
-      `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`,
+    treeView(
+      input,
+      "changes",
       () => atPath(input, (path) => withGit((git) => git.changes(path))),
-      Views.either(
-        gitMoved(input.projectId),
-        filesChanged(input.projectId),
-        Views.pushed(mirrorContract, "gitChanged", (staged) => {
-          return staged.worktreeId === input.worktreeId;
-        }),
-      ),
       { every: "2 seconds" },
+    ),
+  watchFileDiff: (input) =>
+    treeView(
+      input,
+      `diff:${JSON.stringify([input.paths, input.untracked])}`,
+      () =>
+        atPath(input, (path) =>
+          withGit((git) =>
+            git.fileDiff({
+              worktree: path,
+              paths: input.paths,
+              untracked: input.untracked,
+            }),
+          ),
+        ),
+    ),
+  watchFileHunks: (input) =>
+    treeView(input, `hunks:${input.path}`, () =>
+      atPath(input, (path) =>
+        withGit((git) => git.readHunks(path, input.path)),
+      ),
+    ),
+  watchOperation: (input) =>
+    treeView(input, "operation", () =>
+      atPath(input, (path) => withGit((git) => git.readOperation(path))),
     ),
 };
 
@@ -443,13 +507,21 @@ export const worktreesHandlers = {
       Ops.resumeAgent(project, worktreeId, harness, session),
     ),
 
+  // An edit made to the open PR leaves the cached PR map behind.
   describe: ({ projectId, worktreeId, title, description }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.describe(project, worktreeId, {
-        ...(title === undefined ? {} : { title }),
-        ...(description === undefined ? {} : { description }),
-      }),
-    ),
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const { worktree, editedPullRequest } = yield* Ops.describe(
+        project,
+        worktreeId,
+        {
+          ...(title === undefined ? {} : { title }),
+          ...(description === undefined ? {} : { description }),
+        },
+      );
+      if (editedPullRequest) evictProjectPullRequests(project.path);
+      return worktree;
+    }),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) =>
@@ -481,6 +553,7 @@ export const worktreesHandlers = {
 
   changeStatus: (input) =>
     atPath(input, (path) => withGit((git) => git.changes(path))),
+  refreshChangeStatus: (input) => Views.refresh(treeViews(input)),
 
   fileHunks: (input) =>
     atPath(input, (path) => withGit((git) => git.readHunks(path, input.path))),
@@ -771,6 +844,7 @@ export const worktreesHandlers = {
   | ScriptChanges
   | ChildProcessSpawner.ChildProcessSpawner
   | Engine.Services
+  | Views.ViewShares
 >;
 
 // How many of a branch's own commits the Git timeline is handed. A

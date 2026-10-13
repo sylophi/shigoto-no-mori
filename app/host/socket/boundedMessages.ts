@@ -3,14 +3,14 @@
 // stream backed by a queue hands over everything waiting: a terminal's
 // output a slow window has not taken, a peer's view relayed through
 // hub:watchPeer. Unbounded, that is one frame past what the far end's
-// decoder takes (effect's schema-binary maxFrameSize, 16 MiB), which
-// fails it, and holds the link for as long as the frame takes besides.
+// decoder takes (LINK_MAX_FRAME_BYTES, 32 MiB), which fails it, and
+// holds the link for as long as the frame takes besides.
 // So a piece is cut into messages of at most MAX_MESSAGE_BYTES, by an
 // upper bound on their encoded size; a single value past it goes alone.
 import * as Stream from "effect/Stream";
 
-// A sixteenth of the decoder's cap, and the size of the largest frame the
-// listener admits the other way (server.ts), so no message of a stream
+// The size of the largest frame the listener admits the other way
+// (MAX_INBOUND_FRAME_BYTES in DeviceLink.ts), so no message of a stream
 // is larger than one a peer may send.
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
 

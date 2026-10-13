@@ -37,6 +37,13 @@ import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract } from "./modules/link.ts";
 import type { PushKeys, PushProducerPayload } from "./types.ts";
 
+// Largest frame any link's binary layout decodes (layerSchemaBinary's
+// maxFrameSize, which is 16 MiB unless given). The largest value a link
+// carries is a media file the files page reads (WORKTREE_MEDIA_MAX_BYTES,
+// 16 MiB), which crosses as base64 in one frame: about 21.4 MiB with its
+// envelope, so twice the default leaves room.
+export const LINK_MAX_FRAME_BYTES = 32 * 1024 * 1024;
+
 // One end of a byte channel, as the side that attached it sees it.
 export type ChannelEndpoint = {
   // Bytes from the far end. Call `consumed` once the sink has taken

@@ -104,8 +104,12 @@ export function ThemeProvider({
       ? systemTheme
       : applied;
 
+  // color-scheme too, which the boot script sets once: native controls
+  // (scrollbars, media players) follow it, not the class.
   useEffect(() => {
-    if (!fromRoot) root.classList.toggle("dark", resolved === "dark");
+    if (fromRoot) return;
+    root.classList.toggle("dark", resolved === "dark");
+    root.style.colorScheme = resolved;
   }, [fromRoot, root, resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks

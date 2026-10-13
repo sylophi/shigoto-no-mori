@@ -493,6 +493,11 @@
     "remote": false,
     "tracksProjectUsage": true
   },
+  "launchers:openFile": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
   "link:end": {
     "kind": "invoke",
     "scope": "host",
@@ -1697,6 +1702,12 @@
     "gated": true,
     "grant": "browseFiles"
   },
+  "worktrees:refreshChangeStatus": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "worktrees:relocate": {
     "kind": "invoke",
     "scope": "host",
@@ -1862,6 +1873,24 @@
     "gated": false
   },
   "worktrees:watchChangeStatus": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchFileDiff": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchFileHunks": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchOperation": {
     "kind": "view",
     "scope": "host",
     "remote": true,

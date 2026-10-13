@@ -1031,11 +1031,15 @@ const make = Effect.gen(function* () {
     // --format= drops the commit header, so the patch parses as is. A
     // merge's is against its first parent, what it brought in, as a
     // plain patch rather than git's combined one. Empty for a commit git
-    // can't show one for.
+    // can't show one for. Paths come out as they are (core.quotePath),
+    // not octal-escaped, here and in mergeBaseDiff and readStashDiff,
+    // since the file list shows them and opens them.
     commitDiff: Effect.fn("Git.commitDiff")(function* (worktree, hash) {
       return yield* run(
         worktree,
         [
+          "-c",
+          "core.quotePath=false",
           "show",
           "--format=",
           "--no-color",
@@ -1052,6 +1056,8 @@ const make = Effect.gen(function* () {
       return yield* run(
         input.repo,
         [
+          "-c",
+          "core.quotePath=false",
           "diff",
           "--no-color",
           "--end-of-options",

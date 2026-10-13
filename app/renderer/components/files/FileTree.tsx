@@ -17,6 +17,9 @@ interface TreeCtx {
   hideIgnored: boolean;
   onToggleFolder: (path: string, open: boolean) => void;
   onSelectFile: (path: string) => void;
+  // Opens a file in the editor, on a double click or from its menu.
+  // Absent where the files aren't this machine's.
+  onOpenFile: ((path: string) => void) | undefined;
 }
 
 // The files page's list: the worktree as a folder tree, read one folder
@@ -26,7 +29,9 @@ interface TreeCtx {
 // git.
 //
 // Rows are one flat run of buttons in document order, whatever their
-// depth, which is what keeps the arrow keys a sibling query away.
+// depth, which is what keeps the arrow keys a sibling query away. Where
+// files open in the editor, a file's right click opens one menu the
+// whole tree shares, anchored at the pointer, like the diff's file list.
 export function FileTree({
   className,
   ...ctx
@@ -35,7 +40,7 @@ export function FileTree({
   // the page itself or its sheet on a phone.
   className?: string;
 }) {
-  const { expanded, onToggleFolder, selectedPath } = ctx;
+  const { expanded, onToggleFolder, selectedPath, onOpenFile } = ctx;
   // The open file holds the tree's one tab stop while its row is on
   // screen. With its folder shut (or no file open) the first row takes
   // it, so Tab always has a way in.
@@ -48,9 +53,12 @@ export function FileTree({
     <FileTreeView
       expanded={expanded}
       onToggleFolder={onToggleFolder}
+      onOpenFile={onOpenFile}
       className={className}
     >
-      <FolderRows ctx={{ ...ctx, tabStop }} relative="" depth={0} />
+      {(menuPath) => (
+        <FolderRows ctx={{ ...ctx, tabStop, menuPath }} relative="" depth={0} />
+      )}
     </FileTreeView>
   );
 }
@@ -60,7 +68,8 @@ function FolderRows({
   relative,
   depth,
 }: {
-  ctx: TreeCtx & { tabStop: string | null };
+  // menuPath is the file whose menu is up: its row stays lit while it is.
+  ctx: TreeCtx & { tabStop: string | null; menuPath: string | null };
   relative: string;
   depth: number;
 }) {
@@ -70,7 +79,9 @@ function FolderRows({
     hideIgnored,
     onToggleFolder,
     onSelectFile,
+    onOpenFile,
     tabStop,
+    menuPath,
   } = ctx;
   const { data, isPending, isError } = useWorktreeFolder(
     ctx.projectId,
@@ -113,8 +124,10 @@ function FolderRows({
       selectedPath={selectedPath}
       expanded={expanded}
       tabStop={tabStop}
+      menuPath={menuPath}
       onToggleFolder={onToggleFolder}
       onSelectFile={onSelectFile}
+      onOpenFile={onOpenFile}
       renderFolder={(path) => (
         <FolderRows ctx={ctx} relative={path} depth={depth + 1} />
       )}

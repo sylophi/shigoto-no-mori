@@ -79,6 +79,7 @@ import {
   fakeDisableAutoMerge,
   fakeMergePullRequest,
   fakePullRequestCompare,
+  fakeEditPullRequest,
   fakePullRequestDetail,
   fakePullRequestDraft,
   fakePullRequests,
@@ -579,9 +580,14 @@ function hostHandlersFor(
       return worktree;
     },
     "worktrees:resumeAgent": () => undefined,
+    // An open PR takes the edit instead, as `sm describe` gives it.
     "worktrees:describe": ({ worktreeId, title, description }) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");
+      const edit = { title, body: description };
+      if (fakeEditPullRequest(worktree.projectId, worktree.branch, edit)) {
+        return worktree;
+      }
       if (title !== undefined) worktree.title = title || undefined;
       if (description !== undefined) {
         worktree.description = description || undefined;
@@ -805,6 +811,7 @@ function hostHandlersFor(
       }, 2_500);
     },
     "launchers:detect": () => [...FAKE_DETECTED],
+    "launchers:openFile": () => undefined,
     "launchers:forProject": () => ({
       entries: [...FAKE_LAUNCHERS],
       hiddenCount: 0,
