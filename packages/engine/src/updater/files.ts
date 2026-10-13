@@ -11,7 +11,7 @@ import { parseJson } from "../json.ts";
 import * as Paths from "../Paths.ts";
 import { captureWithin } from "../processes.ts";
 import { type AppStatus, appStatusOf } from "../updateFeed.ts";
-import { NotInBundle, type Ran } from "./documents.ts";
+import { NotInBundle, type Ran, updaterFiles } from "./documents.ts";
 
 export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
   Effect.gen(function* () {
@@ -23,7 +23,8 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // survives bundle moves and renames, so it tells the app from a
     // process that got a recycled pid.
     const appExecutable = flavorNames(flavor).appName;
-    const statusPath = path.join(paths.dataDir, "updater.json");
+    const at = updaterFiles(path, paths.dataDir);
+    const statusPath = at.status;
     const temporaries = yield* Ref.make(0);
     const removeAll = (target: string) =>
       fs.remove(target, { recursive: true, force: true }).pipe(Effect.ignore);
@@ -131,6 +132,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     });
 
     return {
+      at,
       removeAll,
       run,
       readShared,

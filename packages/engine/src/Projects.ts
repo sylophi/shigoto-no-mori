@@ -112,7 +112,7 @@ const SCAN_DEPTH = 6;
 // A step that only adds to what a project starts with: its failure,
 // or a defect under it, leaves the project as added.
 const bestEffort = <A, E, R>(step: Effect.Effect<A, E, R>) =>
-  step.pipe(Effect.catchCause(() => Effect.void));
+  step.pipe(Effect.ignoreCause);
 
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

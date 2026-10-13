@@ -9,12 +9,11 @@ import { execFileSync } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { config as loadEnv } from "dotenv";
+import { CLI_DIST_DIR, cliBinaryName } from "./shared/packaging/cliDist.mts";
 import {
-  CLI_DIST_DIR,
-  cliBinaryName,
   UPDATE_FEED_NAME,
   UPDATE_FEED_OWNER,
-} from "./shared/packaging/cliDist.mts";
+} from "./shared/packaging/updateFeed.mts";
 import { version } from "./package.json";
 import { flavorNames } from "@shigomori/engine/flavor";
 import { buildFlavor } from "./shared/packaging/buildFlavor.mts";

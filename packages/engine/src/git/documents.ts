@@ -3,6 +3,8 @@ import type { CommitPicks } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+
 // --- errors -----------------------------------------------------------
 
 // A git that failed. `cause` holds git's own words (its stderr), which
@@ -125,7 +127,7 @@ export class CloneDestinationError extends Schema.TaggedError<CloneDestinationEr
 
 // git's own words for a failure, which the error keeps as its cause.
 export const stderrOf = (error: GitCommandError): string =>
-  error.cause instanceof Error ? error.cause.message : String(error.cause);
+  errorMessageOf(error.cause);
 
 export const SHOWN = 3;
 export const listed = (paths: readonly string[], count: number): string =>

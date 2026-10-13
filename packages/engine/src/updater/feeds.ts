@@ -3,13 +3,11 @@ import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { type Flavor, flavorNames } from "../flavor.ts";
-import * as Paths from "../Paths.ts";
 import { isPrerelease, parseSemver } from "@shigomori/contracts/semver";
 import {
   FeedAnswer,
@@ -61,14 +59,11 @@ export const makeFeeds = ({
   readonly files: FilesArea;
 }) =>
   Effect.gen(function* () {
-    const path = yield* Path.Path;
     const http = yield* HttpClient.HttpClient;
-    const paths = yield* Paths.Paths;
     // Which releases this build is offered, none for dev.
     const offered = flavorNames(flavor).updates;
 
-    const updatesDir = path.join(paths.dataDir, "updates");
-    const releaseListPath = path.join(updatesDir, "release-list.json");
+    const releaseListPath = files.at.releaseList;
     const { readShared, writeShared } = files;
     // --- the feeds ---
 

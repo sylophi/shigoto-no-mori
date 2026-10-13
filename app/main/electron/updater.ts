@@ -20,7 +20,7 @@
 // the update server it falls back to (the engine's Updater).
 // updateEndpoints.ts moves both out of our environment and hands them
 // to the check alone.
-import { join } from "node:path";
+import path from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { app } from "electron";
@@ -99,20 +99,17 @@ function setState(next: UpdaterState): void {
 
 const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
 
-// Mirrors the engine's Updater.ts.
-const stagedDir = () => join(dataDir(), "updates", "staged");
-
 // null unless a well-formed manifest describes a bundle that is
 // actually on disk.
 const readStagedManifest = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const manifest = yield* readJson(
-    join(stagedDir(), "manifest.json"),
-    StagedManifestSchema,
-  ).pipe(Effect.orElseSucceed(() => null));
+  const files = Updater.updaterFiles(path, dataDir());
+  const manifest = yield* readJson(files.manifest, StagedManifestSchema).pipe(
+    Effect.orElseSucceed(() => null),
+  );
   if (manifest === null) return null;
   const there = yield* fs
-    .exists(join(stagedDir(), manifest.bundleName))
+    .exists(path.join(files.staged, manifest.bundleName))
     .pipe(Effect.orElseSucceed(() => false));
   return there ? manifest : null;
 });

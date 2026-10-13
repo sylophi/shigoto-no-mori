@@ -88,15 +88,8 @@ export const makeResolving = ({ listing }: { readonly listing: ListingArea }) =>
     });
 
     // A typed path made absolute against the command's cwd, ~ expanded.
-    const absolute = (here: Here, ref: string) => {
-      const expanded =
-        ref === "~"
-          ? paths.home
-          : ref.startsWith("~/")
-            ? path.join(paths.home, ref.slice(2))
-            : ref;
-      return path.resolve(here.cwd, expanded);
-    };
+    const absolute = (here: Here, ref: string) =>
+      path.resolve(here.cwd, paths.expandHome(ref));
 
     const resolveProject = Effect.fn("Worktrees.resolveProject")(function* (
       here: Here,

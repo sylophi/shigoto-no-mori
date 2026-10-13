@@ -41,6 +41,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import {
   callFailureOf,
+  errorMessageOf,
   NoDirectConnectionError,
 } from "@shigomori/contracts/errors";
 import { peerViewFailure } from "./peerViewFailure";
@@ -361,8 +362,7 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
               ? error
               : new NoDirectConnectionError({
                   deviceId,
-                  reason:
-                    error instanceof Error ? error.message : String(error),
+                  reason: errorMessageOf(error),
                 }),
           ),
       );

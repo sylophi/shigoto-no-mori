@@ -3,8 +3,6 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Paths from "../Paths.ts";
 import { type AppStatus, formatLocalRfc3339 } from "../updateFeed.ts";
 import {
   HandoffFailed,
@@ -19,11 +17,7 @@ import type { FilesArea } from "./files.ts";
 export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const paths = yield* Paths.Paths;
-    const updatesDir = path.join(paths.dataDir, "updates");
-    const installLog = path.join(updatesDir, "install.log");
-    const statusPath = path.join(paths.dataDir, "updater.json");
+    const { updates: updatesDir, installLog, status: statusPath } = files.at;
     const { appAlive, readStatus } = files;
     // --- the running app ---
 

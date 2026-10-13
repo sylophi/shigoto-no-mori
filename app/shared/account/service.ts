@@ -39,6 +39,7 @@ import {
   type TunnelProvisionResponse,
 } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // The hub could not be reached at all: offline, a DNS or TLS failure,
 // or a browser hiding a failed response behind CORS.
@@ -215,9 +216,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         // so it stays retryable with the 5xx and network failures.
         if (error instanceof HubTunnelUnconfiguredError) throw error;
         if (isHubRefusal(error) || isRefusedStatus(error)) {
-          throw new TunnelProvisionDeniedError(
-            error instanceof Error ? error.message : String(error),
-          );
+          throw new TunnelProvisionDeniedError(errorMessageOf(error));
         }
         throw error;
       }

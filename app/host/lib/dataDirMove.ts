@@ -23,7 +23,7 @@
 import { cp, mkdir, rm, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
-import { callFailureOf } from "@shigomori/contracts/errors";
+import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -92,7 +92,7 @@ export const sessionPlace = Effect.try({
   }),
   catch: (error) =>
     new DataDirMoveError({
-      reason: error instanceof Error ? error.message : String(error),
+      reason: errorMessageOf(error),
     }),
 });
 
@@ -482,8 +482,9 @@ const rekeyWorktrees = (moved: Journal["moved"], reverse: boolean) =>
 // leftovers never keep the app from starting.
 export const resumeLayer = Layer.effectDiscard(
   Effect.suspend(() => resumeDataDirMove(dataDir())).pipe(
-    Effect.catchCause((cause) =>
-      Effect.logWarning("[data] the unfinished move failed", cause),
-    ),
+    Effect.ignoreCause({
+      log: "Warn",
+      message: "[data] the unfinished move failed",
+    }),
   ),
 );
