@@ -234,7 +234,6 @@ describe("sessions", () => {
       ["Notification", { notification_type: "idle_prompt" }, "idle"],
     ] as const) {
       assert.deepEqual(
-        // oxlint-disable-next-line no-await-in-loop -- each event lands on the one before it
         (await after(fox.id, "s1", event, extra)).map(({ state }) => state),
         [want],
         `after ${event}`,
@@ -388,7 +387,6 @@ describe("sessions", () => {
       ["PostToolUseFailure", edit, "working"],
     ] as const) {
       assert.deepEqual(
-        // oxlint-disable-next-line no-await-in-loop -- each event lands on the one before it
         (await after(fox.id, "s4", event, extra)).map(({ state }) => state),
         [want],
         `after ${event}`,
@@ -507,7 +505,6 @@ describe("sessions", () => {
       ],
     ];
     for (const [event, extra, want] of steps) {
-      // oxlint-disable-next-line no-await-in-loop -- each event lands on the one before it
       const [got] = await after(fox.id, "s6", event, extra);
       assert.deepEqual(
         {
@@ -687,7 +684,6 @@ describe("hooks", () => {
     const link = join(dir, "hooks.json");
     symlinkSync(dotfiles, link);
     for (const install of [true, false]) {
-      // oxlint-disable-next-line no-await-in-loop -- the uninstall undoes the install
       await setHooks(["codex"], install);
       assert.ok(lstatSync(link).isSymbolicLink());
     }

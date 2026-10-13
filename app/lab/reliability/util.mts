@@ -1,6 +1,5 @@
 // What every part of the harness leans on: where things are, time, and
 // the trace's line.
-/* oxlint-disable no-await-in-loop -- polling steps through time on purpose */
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type AddressInfo } from "node:net";

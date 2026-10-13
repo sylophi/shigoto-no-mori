@@ -54,6 +54,17 @@
       { "controlComponents": ["Checkbox"] }
     ]
   },
+  "overrides": [
+    {
+      "files": [
+        "app/test/**",
+        "app/lab/**",
+        "hub/test/**",
+        "packages/*/test/**"
+      ],
+      "rules": { "no-await-in-loop": "off" }
+    }
+  ],
   "ignorePatterns": [
     "**/node_modules/**",
     "**/out/**",
