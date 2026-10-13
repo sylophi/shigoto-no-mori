@@ -1374,7 +1374,6 @@ async function fakeMirrorStartTo(
     session.successfulCycles = 1;
     noteMirrorEvent(input.worktreeId, "connected", "");
     mirrorChanged();
-    // oxlint-disable no-await-in-loop -- a posed mirror cycles in sequence
     for (;;) {
       await sleep(5000);
       if (!live()) return;
@@ -1382,7 +1381,6 @@ async function fakeMirrorStartTo(
       await step("scanning", 500);
       await step("staging-local", 900);
       await step("transitioning", 400);
-      // oxlint-enable no-await-in-loop
       if (!live() || session.paused) continue;
       session.status = "watching";
       session.successfulCycles += 1;
@@ -1430,7 +1428,6 @@ async function fakeSyncPull(
   ) => {
     for (let bytes = 0; bytes < totalBytes; bytes += chunk) {
       progress({ step, bytes, totalBytes });
-      // oxlint-disable-next-line no-await-in-loop -- a posed transfer
       await wait(ms);
     }
     progress({ step, bytes: totalBytes, totalBytes });
@@ -1450,7 +1447,6 @@ async function fakeSyncPull(
     ];
     for (const createPhase of phases) {
       progress({ step: "create", createPhase });
-      // oxlint-disable-next-line no-await-in-loop -- a posed create
       await wait(700);
     }
     progress({ step: "apply" });

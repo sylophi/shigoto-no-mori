@@ -165,7 +165,6 @@ export function makeTracker(): Tracker {
     async teardown() {
       for (const fn of teardowns.toReversed()) {
         try {
-          // oxlint-disable-next-line no-await-in-loop -- teardown is ordered
           await fn();
         } catch {
           // One failing teardown must not strand the rest.
@@ -275,7 +274,6 @@ export function sandboxGit(
 // chains complete before assertions, as `settle` does on its own.
 async function settleTurns(): Promise<void> {
   for (let turn = 0; turn < 5; turn += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- turns of the event loop, in order
     await new Promise((resolve) => setImmediate(resolve));
   }
 }

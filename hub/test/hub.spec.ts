@@ -123,7 +123,6 @@ describe("GET /connect", () => {
     );
     for (const ticket of [swapped, wrongKey]) {
       const params = new URLSearchParams({ ticket: ticket });
-      // oxlint-disable-next-line no-await-in-loop -- two requests, and a failure should name which forgery got through
       const response = await call(
         new Request(`${BASE}/connect?${params}`, {
           headers: { Upgrade: "websocket" },
@@ -193,7 +192,6 @@ describe("a web device's tabs", () => {
     await peer.socket.untilPresence(["dev-tabs-peer", "dev-tabs-web"]);
     peer.socket.send({ t: "relay", to: "dev-tabs-web", frame: "one" });
     for (const tab of [tabA, tabB]) {
-      // oxlint-disable-next-line no-await-in-loop -- two tabs, each reads its own queue
       await tab.untilRelay("one");
     }
     // One tab closing leaves the device online through the other.
@@ -238,7 +236,6 @@ describe("a device's socket cap", () => {
     );
     const sockets = [];
     for (let i = 0; i < MAX_DEVICE_CONNECTIONS; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- age is open order, so these have to land one at a time
       sockets.push(await openSocket((await mintTicket(credential)).ticket));
     }
     const [oldest, next] = sockets;
@@ -507,7 +504,6 @@ describe("ticket storage bounds", () => {
     // evicted while live storage stays bounded.
     const first = await mintTicket(credential);
     for (let i = 0; i < 66; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- minting is sequential by design here
       await mintTicket(credential);
     }
     const last = await mintTicket(credential);

@@ -94,7 +94,6 @@ it("lists none of terrier's while its listing isn't in the shape read", async ()
     { projects: [{ dir: zeta }] },
   ]) {
     box.fakeBin("terrier", `echo '${JSON.stringify(changed)}'`);
-    // oxlint-disable-next-line no-await-in-loop -- one sandbox, one shape at a time
     const rows = await box.engine(
       Effect.flatMap(Effect.service(Registry.Registry), (r) => r.rows()),
     );
