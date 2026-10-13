@@ -13,14 +13,10 @@ const repoDescriptionCache = ttlMapCache<string, string | null>(
   Infinity,
   async (slug) => {
     const [host = "", owner, repo] = slug.split("/");
-    const { stdout } = await execGh([
-      "api",
-      "--hostname",
-      host,
-      `repos/${owner}/${repo}`,
-      "--jq",
-      '.description // ""',
-    ]);
+    const { stdout } = await execGh(
+      ["api", `repos/${owner}/${repo}`, "--jq", '.description // ""'],
+      { host },
+    );
     return stdout.trim() || null;
   },
 );
