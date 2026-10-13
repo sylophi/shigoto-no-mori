@@ -11,7 +11,8 @@ package main
 // While the branch has an open pull request, the PR's title and body
 // are the worktree's, and describe refuses a change: it belongs on the
 // PR (gh pr edit). A merged or closed one (an old PR on a reused branch
-// name, too) no longer holds them. A lookup that can't be made (no gh,
+// name, too) still names the worktree in the app, but no longer holds
+// its description, and describe takes changes again. A lookup that can't be made (no gh,
 // no GitHub remote, gh failing) doesn't block the write, since the app
 // can't find the PR then either and shows the local text.
 
