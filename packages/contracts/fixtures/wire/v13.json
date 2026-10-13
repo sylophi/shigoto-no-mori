@@ -4531,5 +4531,50 @@
       "worktreeId": "P8"
     },
     "success": []
+  },
+  "worktrees:watchFileDiff": {
+    "payload": {
+      "projectId": "-",
+      "worktreeId": "vp",
+      "paths": ["-1"],
+      "untracked": false
+    },
+    "success": "\ud800"
+  },
+  "worktrees:watchFileHunks": {
+    "payload": {
+      "projectId": "\udc00",
+      "worktreeId": "0",
+      "path": "-1"
+    },
+    "success": {
+      "head": "3b91",
+      "changes": [
+        {
+          "oldStart": 0,
+          "oldCount": 0,
+          "newStart": 2,
+          "newCount": 1
+        },
+        {
+          "oldStart": 3,
+          "oldCount": 1,
+          "newStart": 1,
+          "newCount": 2
+        }
+      ]
+    }
+  },
+  "worktrees:watchOperation": {
+    "payload": {
+      "projectId": "\t",
+      "worktreeId": "Ye"
+    },
+    "success": {
+      "operation": null,
+      "continuable": false,
+      "conflicted": 1,
+      "rebasing": "xT"
+    }
   }
 }
