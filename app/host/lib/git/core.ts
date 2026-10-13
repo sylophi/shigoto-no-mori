@@ -131,10 +131,20 @@ function isTruncated(err: unknown): boolean {
   );
 }
 
+// Text unless asked for bytes, which only a blob's contents need.
+type ExecOptions = { cwd: string } & RunOptions;
+function exec(
+  args: string[],
+  options: ExecOptions & { encoding: "utf8" },
+): Promise<string>;
+function exec(
+  args: string[],
+  options: ExecOptions & { encoding: "buffer" },
+): Promise<Buffer>;
 async function exec(
   args: string[],
-  options: { cwd: string } & RunOptions,
-): Promise<{ stdout: string }> {
+  options: ExecOptions & { encoding: "utf8" | "buffer" },
+): Promise<string | Buffer> {
   // In flight for the command's whole run, then an echo window after
   // it: the git-directory watcher checks at event time.
   const endSelfWrite = mutatesRepo(args)
@@ -149,7 +159,7 @@ async function exec(
       env: { ...process.env, ...overlay, LC_ALL: "C" },
       ...execOptions,
     });
-    return { stdout: result.stdout };
+    return result.stdout;
   } catch (err) {
     // execFile's message is "Command failed: git <argv>\n<stderr>". The
     // argv repeats whatever was passed (a commit message, a path list)
@@ -160,7 +170,7 @@ async function exec(
       failure.message = "git produced more output than the app can hold.";
       throw failure;
     }
-    const stderr = failure.stderr?.trim();
+    const stderr = failure.stderr?.toString().trim();
     if (stderr) failure.message = stderr;
     throw failure;
   } finally {
@@ -173,12 +183,26 @@ export async function run(
   args: string[],
   options?: RunOptions,
 ): Promise<string> {
-  const { stdout } = await exec(args, {
+  return exec(args, {
     cwd,
+    encoding: "utf8",
     maxBuffer: DEFAULT_MAX_BUFFER,
     ...options,
   });
-  return stdout;
+}
+
+// `run` for output that isn't text: a blob's contents.
+export async function runBytes(
+  cwd: string,
+  args: string[],
+  options?: RunOptions,
+): Promise<Buffer> {
+  return exec(args, {
+    cwd,
+    encoding: "buffer",
+    maxBuffer: DEFAULT_MAX_BUFFER,
+    ...options,
+  });
 }
 
 // Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
@@ -222,7 +246,7 @@ export function splitZ(stdout: string): string[] {
 }
 
 export function isGitRepo(path: string): Promise<boolean> {
-  return exec(["rev-parse", "--git-dir"], { cwd: path }).then(
+  return exec(["rev-parse", "--git-dir"], { cwd: path, encoding: "utf8" }).then(
     () => true,
     () => false,
   );

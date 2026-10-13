@@ -45,9 +45,19 @@ export async function getFileDiff(
   // `--` keeps a filename like `-weird.txt` from being parsed as flags,
   // and `runLenient` swallows the non-zero exit `--no-index` makes
   // whenever it has a diff to print.
+  // Full blob ids, since a binary file's new side is read back by its
+  // id, and only a full one reaches the disk (readGitBlob).
   const args = untracked
-    ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
-    : ["diff", "HEAD", "--no-color", "--", ...paths];
+    ? [
+        "diff",
+        "--no-index",
+        "--no-color",
+        "--full-index",
+        "--",
+        "/dev/null",
+        file,
+      ]
+    : ["diff", "HEAD", "--no-color", "--full-index", "--", ...paths];
   return runLenient(worktreePath, [...pathspecOpts, ...args], {
     maxBuffer: PATCH_MAX_BUFFER,
   });

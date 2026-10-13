@@ -20,6 +20,14 @@ export const ReadWorktreeFilePayloadSchema = WorktreeScopedPayloadSchema.extend(
   { path: RepoRelPathSchema },
 );
 
+// One side of a binary file in a diff: the blob its patch's `index`
+// line names, abbreviated as git prints it, and the path it had, which
+// picks the media type and holds a blob git never stored.
+export const ReadBlobPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  oid: z.string().regex(/^[0-9a-f]{4,64}$/),
+  path: RepoRelPathSchema,
+});
+
 // What the files page can show for a path. Text travels, and so does
 // media the renderer's Chromium can draw. Any other binary or oversized
 // file answers with its size alone, and a path that went away between

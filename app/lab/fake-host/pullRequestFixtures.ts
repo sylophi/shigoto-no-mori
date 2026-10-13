@@ -535,10 +535,14 @@ const FAKE_PR_DETAIL = {
   ]),
 };
 
-// Three files, so the diff pages pose a real file index (the list in
+// Four files, so the diff pages pose a real file index (the list in
 // the sidebar on a wide viewport) and the phone's sheet, which needs a
-// patch of at least DiffView's SHEET_MIN_FILES.
-export const FAKE_DIFF = `diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx
+// patch of at least DiffView's SHEET_MIN_FILES. One is an image, for
+// the preview of its two sides (fakeBlob in bridge.ts).
+export const FAKE_DIFF = `diff --git a/public/icon.png b/public/icon.png
+index 1a2b3c4..5d6e7f8 100644
+Binary files a/public/icon.png and b/public/icon.png differ
+diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx
 index 4f2c9d1..a91f3c7 100644
 --- a/renderer/components/sidebar/RowContent.tsx
 +++ b/renderer/components/sidebar/RowContent.tsx
