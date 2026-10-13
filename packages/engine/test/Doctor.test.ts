@@ -179,12 +179,22 @@ describe("the data dir", () => {
     assert.equal(only(await run(), "config", "ok").detail, "valid, 1 key");
   });
 
-  it("offers to delete the v2 files an import left, and the fix deletes them", async () => {
-    // A key the import skips, so it can't verify the import and leaves
-    // the files.
+  it("reports the v2 files an unverified import left, and its fix leaves them", async () => {
+    // A key the import skips: it can't verify the import, so the files
+    // hold what the store doesn't.
     box.write("registry.json", { projects: [], unshelvedAt: { a: "x" } });
-    const found = only(await run(), "v2-files", "warn");
-    assert.match(found.detail, /registry\.json left from v2/);
+    const found = only(await run({ fix: true }), "v2-files", "warn");
+    assert.match(found.detail, /couldn't verify/);
+    assert.equal(found.repairable, undefined);
+    assert.ok(existsSync(join(box.side("engine"), "registry.json")));
+  });
+
+  it("offers to delete the v2 files a verified import left, and the fix deletes them", async () => {
+    box.write("registry.json", { projects: [] });
+    assert.deepEqual(findingsFor(await run(), "v2-files"), []);
+    // A v2 build started since wrote its registry again.
+    writeFileSync(join(box.side("engine"), "registry.json"), "{}");
+    only(await run(), "v2-files", "warn");
     const fixed = await run({ fix: true });
     assert.deepEqual(fixed.repaired, ["deleted 1 v2 file"]);
     assert.deepEqual(findingsFor(fixed, "v2-files"), []);

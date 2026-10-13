@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as Config from "../Config.ts";
 import { storedProblem } from "../Config.ts";
@@ -418,12 +419,28 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const files = yield* v2Files.pipe(Effect.provideContext(v2Context));
       const [first] = files;
       if (first === undefined) return [];
+      const sql = yield* SqlClient.SqlClient;
+      const [row] = yield* sql<{ verified: number }>`
+        SELECT verified FROM v2_import`.pipe(
+        Effect.orElseSucceed((): ReadonlyArray<{ verified: number }> => []),
+      );
       const label = `${files.length} v2 file${plural(files.length)}`;
       const extra = files.length - 1;
+      const shown = `${collapseHome(home, first)}${extra > 0 ? ` and ${extra} more` : ""}`;
+      const line = check("Data dir", "v2-files", "v2 files");
+      // Only what a verified import held is the store's to replace.
+      if (row?.verified !== 1) {
+        return [
+          line.warn(
+            `${shown} left from v2, which the import couldn't verify the store holds`,
+            "Check what they hold, then delete them by hand.",
+          ),
+        ];
+      }
       return [
         repairable(
-          check("Data dir", "v2-files", "v2 files").warn(
-            `${collapseHome(home, first)}${extra > 0 ? ` and ${extra} more` : ""} left from v2, which the store holds now`,
+          line.warn(
+            `${shown} left from v2, which the store holds now`,
             "Delete them. Nothing reads them since the import.",
           ),
           {

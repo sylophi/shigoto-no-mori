@@ -259,7 +259,7 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
     autoPullWorktrees: { aaaaaaaaaaaa: true },
   });
   write("config.json", { portPool: true });
-  write("state.json", { launchers: { "app:zed": [1, 2] } });
+  write("state.json", { launcherUseLog: { "app:zed": [1, 2] } });
   write("projects/A/project.json", { defaultBranch: "main" });
   write("projects/A/worktrees/aaaaaaaaaaaa.json", { title: "Fox" });
   write("running-scripts.json", { ownerPid: 99999, scripts: [] });
@@ -294,6 +294,23 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
   );
   assert.deepEqual(await listing(), first);
 });
+
+it.each([
+  ["a key it doesn't know", { projects: [], projectsSort: "name" }],
+  [
+    "an agent session that doesn't parse",
+    { projects: [], agentSessions: { aaaaaaaaaaaa: [{ harness: "claude" }] } },
+  ],
+])(
+  "leaves every v2 file in place when the import drops %s",
+  async (_, registry) => {
+    write("registry.json", registry);
+    write("config.json", { portPool: true });
+    await rows("projects");
+    assert.ok(existsSync(join(dataDir, "registry.json")));
+    assert.ok(existsSync(join(dataDir, "config.json")));
+  },
+);
 
 it("starts a data dir nothing has used with a fresh install's settings", async () => {
   assert.deepEqual(await rows("device_config"), [

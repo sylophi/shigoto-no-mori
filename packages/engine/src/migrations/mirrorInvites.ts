@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import { fileSyncDocument } from "./fileSyncFile.ts";
+import { skip } from "./importJson.ts";
 
 // The mirrors this device asked a peer for and that landed here
 // (MirrorInvites.ts), in the order they were asked, each the JSON of a
@@ -23,13 +24,20 @@ export const mirrorInvites = Effect.gen(function* () {
     onNone: () => undefined,
     onSome: (fields) => fields["invites"],
   });
-  const rows = (Array.isArray(invites) ? invites : [])
-    .flatMap((raw) =>
-      Option.match(decodeInvite(raw), {
-        onNone: () => [],
-        onSome: (invite) => (invite.copy === undefined ? [] : [invite]),
-      }),
-    )
+  const listed = Array.isArray(invites) ? invites : [];
+  const decoded = listed.flatMap((raw) =>
+    Option.match(decodeInvite(raw), {
+      onNone: () => [],
+      onSome: (invite) => [invite],
+    }),
+  );
+  // One that never landed is left out on purpose; one that doesn't
+  // parse is a doubt.
+  if (decoded.length < listed.length) {
+    yield* skip("file-sync/mirror-invites.json", "invites");
+  }
+  const rows = decoded
+    .filter((invite) => invite.copy !== undefined)
     .map((invite, position) => ({
       position,
       invite: JSON.stringify(invite),

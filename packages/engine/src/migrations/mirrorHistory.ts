@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import { fileSyncDocument } from "./fileSyncFile.ts";
+import { skip } from "./importJson.ts";
 
 // Each mirror's thread of events (MirrorHistory.ts), by the local
 // worktree it is keyed by, as the JSON array of its events, newest
@@ -24,14 +25,18 @@ export const mirrorHistory = Effect.gen(function* () {
     onNone: () => undefined,
     onSome: (fields) => fields["events"],
   });
-  const rows = Object.entries(
+  const threads = Object.entries(
     typeof events === "object" && events !== null ? events : {},
-  ).flatMap(([worktree_id, thread]) =>
+  );
+  const rows = threads.flatMap(([worktree_id, thread]) =>
     Option.match(decodeThread(thread), {
       onNone: () => [],
       onSome: (decoded) => [{ worktree_id, events: JSON.stringify(decoded) }],
     }),
   );
+  if (rows.length < threads.length) {
+    yield* skip("file-sync/mirror-history.json", "events");
+  }
   if (rows.length > 0) {
     yield* sql`INSERT INTO mirror_history ${sql.insert(rows)}`;
   }

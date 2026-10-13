@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { registryHint } from "./importJson.ts";
+import { registryHint, skip } from "./importJson.ts";
 
 // One session as a 2.x registry.json keeps it (the Go sm's agents.go).
 const V2SessionSchema = Schema.Struct({
@@ -47,7 +47,10 @@ export const agentSessions = Effect.gen(function* () {
   for (const [worktree_id, list] of Object.entries(bound)) {
     for (const entry of list) {
       const found = decodeSession(entry);
-      if (Option.isNone(found)) continue;
+      if (Option.isNone(found)) {
+        yield* skip("registry.json", "agentSessions");
+        continue;
+      }
       const s = found.value;
       yield* sql`INSERT INTO agent_sessions ${sql.insert({
         harness: s.harness,

@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Paths from "../Paths.ts";
+import { skip } from "./importJson.ts";
 
 // What a 2.x running-scripts.json holds: the app instance that wrote it,
 // and the scripts it started and had not seen exit.
@@ -51,17 +52,23 @@ export const runningScripts = Effect.gen(function* () {
   const path = yield* Path.Path;
   const { dataDir } = yield* Paths.Paths;
   const file = path.join(dataDir, "running-scripts.json");
+  if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
+    return;
+  }
   const snapshot = yield* fs
     .readFileString(file)
     .pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(V2SnapshotText)),
       Effect.option,
     );
-  if (Option.isNone(snapshot)) return;
+  if (Option.isNone(snapshot)) return yield* skip(file, "the file");
   const { ownerPid, scripts } = snapshot.value;
   for (const entry of scripts) {
     const script = decodeScript(entry);
-    if (Option.isNone(script)) continue;
+    if (Option.isNone(script)) {
+      yield* skip(file, "scripts");
+      continue;
+    }
     const s = script.value;
     yield* sql`INSERT INTO running_scripts ${sql.insert({
       run_id: s.runId,

@@ -33,6 +33,24 @@ const JsonObjectText = Schema.fromJsonString(
 // import's verification counts (Store.ts).
 export const SKIPPED = "Skipped what the store could not import";
 
+// What the import does without, logged and counted as a doubt by its
+// verification (Store.ts): a file, a key, or some entries of one.
+export const skip = (file: string, what: string) =>
+  Effect.logWarning(SKIPPED).pipe(Effect.annotateLogs({ path: file, what }));
+
+// The keys a 2.x registry.json and state.json may hold that v3 leaves
+// out on purpose: the files' version, the agent-working marks the agent
+// sessions replaced, and the sidebar view an older 2.x kept here before
+// the client config. Any other key the schemas don't name is a doubt.
+const LEFT_OUT = new Set([
+  "schemaVersion",
+  "agentWorkingWorktrees",
+  "sidebarView",
+]);
+// state.json's copy of the project list and the shelf, from before the
+// registry held them, which the import doesn't read.
+const STATE_BEFORE_REGISTRY = new Set(["projects", "shelvedWorktrees"]);
+
 // A file or key the import does without, logged.
 const skipped = <A>(file: string, what: string, fallback: A) =>
   Effect.logWarning(SKIPPED).pipe(
@@ -131,6 +149,19 @@ export const importFiles = (lenient: boolean) =>
     const state = yield* lenientDocument(stateFile);
     const stateDoc: JsonObject = Option.getOrElse(state, () => ({}));
     const registryDoc: JsonObject = Option.getOrElse(registry, () => ({}));
+    for (const key of Object.keys(registryDoc)) {
+      if (!(key in RegistryFileSchema.fields) && !LEFT_OUT.has(key)) {
+        yield* skip(registryFile, key);
+      }
+    }
+    for (const key of Object.keys(stateDoc)) {
+      if (
+        STATE_BEFORE_REGISTRY.has(key) ||
+        (!(key in StateFileSchema.fields) && !LEFT_OUT.has(key))
+      ) {
+        yield* skip(stateFile, key);
+      }
+    }
     const registryKey = <K extends keyof typeof RegistryFileSchema.fields>(
       key: K,
       fallback: (typeof RegistryFileSchema.fields)[K]["Type"],
@@ -197,18 +228,17 @@ export const importFiles = (lenient: boolean) =>
         (projectPath, position) => ({ path: projectPath, position }),
       ),
     );
-    yield* insertAll(
-      "shelf_snapshots",
-      Object.entries(yield* registryKey("shelfSnapshots", {})).flatMap(
-        ([worktree_id, entry]) =>
-          Option.match(Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry), {
-            onNone: () => [],
-            onSome: ({ at, head, changed }) => [
-              { worktree_id, at, head, changed },
-            ],
-          }),
-      ),
+    const snapshots = Object.entries(yield* registryKey("shelfSnapshots", {}));
+    const snapshotRows = snapshots.flatMap(([worktree_id, entry]) =>
+      Option.match(Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry), {
+        onNone: () => [],
+        onSome: ({ at, head, changed }) => [{ worktree_id, at, head, changed }],
+      }),
     );
+    if (snapshotRows.length < snapshots.length) {
+      yield* skip(registryFile, "shelfSnapshots");
+    }
+    yield* insertAll("shelf_snapshots", snapshotRows);
     const deviceId = yield* registryKey("deviceId", "");
     yield* insertAll(
       "device",

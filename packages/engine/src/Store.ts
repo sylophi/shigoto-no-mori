@@ -24,6 +24,7 @@ import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
 import { unshelvedAt } from "./migrations/unshelvedAt.ts";
+import { v2Import } from "./migrations/v2Import.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
@@ -84,6 +85,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "9_mirror_agreements": Effect.provideContext(mirrorAgreements, platform),
   "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
+  "12_v2_import": v2Import,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files
@@ -135,6 +137,8 @@ const removeImported = (open: OpenDatabase, platform: Platform) =>
         "Left the v2 files in place: the import couldn't be verified",
       );
     }
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT OR REPLACE INTO v2_import (id, verified) VALUES (1, 1)`;
     yield* removeV2Files(files);
   }).pipe(
     Effect.provideContext(platform),
