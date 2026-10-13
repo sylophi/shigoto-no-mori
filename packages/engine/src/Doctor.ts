@@ -170,7 +170,10 @@ export const standalone = <R>(
           "Not moved to v3 yet: the projects, settings and worktrees are read as v2 left them",
           `Open the app to move them, or run \`${binaryName} doctor --fix\`.`,
         );
-        return entries.toSpliced(at + 1, 0, line);
+        // The v2 files are its to import, not leftovers.
+        return entries
+          .toSpliced(at + 1, 0, line)
+          .filter(({ id }) => id !== "v2-files");
       };
       return Doctor.of({
         run: Effect.fn("Doctor.run")(function* (input: RunInput) {

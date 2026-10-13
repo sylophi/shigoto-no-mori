@@ -2,6 +2,7 @@
 import { RegistryFileSchema } from "@shigomori/contracts/schemas/dataDir";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import type * as SqlClient from "effect/sql/SqlClient";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
@@ -125,6 +126,7 @@ export type RepairError =
 
 // What the checks that read the store need.
 export type StoreServices =
+  | SqlClient.SqlClient
   | CloneCheckout.CloneCheckout
   | Config.Config
   | Layout.Layout

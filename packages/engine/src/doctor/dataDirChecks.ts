@@ -2,6 +2,7 @@
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
@@ -9,6 +10,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as Config from "../Config.ts";
 import { storedProblem } from "../Config.ts";
@@ -26,6 +28,7 @@ import { flavorNames } from "../flavor.ts";
 import * as Darwin from "../Darwin.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
+import { hashesOf, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
 import { acquireStagingLock } from "../stagingLock.ts";
 import { updaterFiles } from "../Updater.ts";
@@ -407,6 +410,73 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       );
     });
 
+    // The files a 2.x data dir kept its state in, which the store holds
+    // since its import: what the migration left, when it couldn't verify
+    // the import, or what a v2 build started since wrote.
+    const v2Context = Context.make(Paths.Paths, paths).pipe(
+      Context.merge(platform),
+    );
+    const checkV2Files = Effect.gen(function* () {
+      const files = yield* v2Files.pipe(Effect.provideContext(v2Context));
+      if (files.length === 0) return [];
+      const sql = yield* SqlClient.SqlClient;
+      const [row] = yield* sql<{ files: string }>`
+        SELECT files FROM v2_import`.pipe(
+        Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
+      );
+      const verified: Record<string, unknown> =
+        row === undefined
+          ? {}
+          : (JSON.parse(row.files) as Record<string, unknown>);
+      const now = yield* hashesOf(files).pipe(Effect.provideContext(v2Context));
+      // Only a file as the import verified it is the store's to replace.
+      const held = files.filter(
+        (file) => now[file] !== undefined && now[file] === verified[file],
+      );
+      const kept = files.filter((file) => !held.includes(file));
+      const shownOf = (list: ReadonlyArray<string>) =>
+        `${tildify(list[0] ?? "", home)}${list.length > 1 ? ` and ${list.length - 1} more` : ""}`;
+      const line = check("Data dir", "v2-files", "v2 files");
+      const entries: Entry[] = [];
+      if (kept.length > 0) {
+        entries.push(
+          line.warn(
+            `${shownOf(kept)} left from v2, which the store may not hold: the import couldn't verify them, or v2 wrote them since`,
+            "Check what they hold, then delete them by hand.",
+          ),
+        );
+      }
+      if (held.length > 0) {
+        const label = `${held.length} v2 file${plural(held.length)}`;
+        entries.push(
+          repairable(
+            line.warn(
+              `${shownOf(held)} left from v2, which the store holds now`,
+              "Delete them. Nothing reads them since the import.",
+            ),
+            {
+              prompt: `Delete ${label} (${held.map((file) => tildify(file, home)).join(", ")})?`,
+              label: `deleted ${label}`,
+              destructive: true,
+              // Read again as it runs: a file v2 rewrote since the check
+              // stays.
+              apply: Effect.gen(function* () {
+                const current = yield* hashesOf(held);
+                yield* removeV2Files(
+                  held.filter(
+                    (file) =>
+                      current[file] !== undefined &&
+                      current[file] === verified[file],
+                  ),
+                );
+              }).pipe(Effect.provideContext(v2Context)),
+            },
+          ),
+        );
+      }
+      return entries;
+    });
+
     const updater = updaterFiles(path, dataDir);
 
     // The stager holds its pidfile for a whole download, so a crashed one
@@ -686,6 +756,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       registeredLine,
       checkRegistry,
       checkStaleLocks,
+      checkV2Files,
       stagingLock: updater.stagingLock,
       checkStagingLock,
       checkUpdateLeftovers,
