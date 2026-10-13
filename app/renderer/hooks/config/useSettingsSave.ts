@@ -48,6 +48,8 @@ export interface SettingsFormState {
   hiddenLaunchers: string[];
   launchScripts: boolean;
   terminal: TerminalId;
+  // Null opens a file with its default app.
+  editor: string | null;
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   autoPullNew: boolean;
@@ -93,6 +95,7 @@ export function fromConfig(
     hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
     launchScripts: config.launchScripts ?? DEFAULTS.launchScripts,
     terminal: config.terminal ?? DEFAULTS.terminal,
+    editor: config.editor ?? DEFAULTS.editor,
     deleteBranchOnRemove:
       config.deleteBranchOnRemove ?? DEFAULTS.deleteBranchOnRemove,
     autoPopulateInstall:
@@ -124,9 +127,9 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
 // The peer encoding: the globalConfig.writeDeviceSettings patch,
 // carrying ONLY the keys a peer's Settings section edits. The host
 // applies the patch as absent-means-keep, which is what keeps the
-// launch catalog (launchers, hiddenLaunchers, launchScripts, terminal)
-// out of it: those keys are local by nature and edited only on this
-// machine's Launch tools section, so a peer save must not re-send a
+// launch catalog (launchers, hiddenLaunchers, launchScripts, terminal,
+// editor) out of it: those keys are local by nature and edited only on
+// this machine's Launch tools section, so a peer save must not re-send a
 // snapshot of them taken when the peer's form was seeded. Every key
 // carries an EXPLICIT value, default included: absent means keep, so
 // only an explicit default reverts a key (the host then stores it by
@@ -161,6 +164,7 @@ function toLocalDeviceSettingsPatch(
     hiddenLaunchers: state.hiddenLaunchers,
     launchScripts: state.launchScripts,
     terminal: state.terminal,
+    editor: state.editor,
   };
 }
 

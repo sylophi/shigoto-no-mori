@@ -119,6 +119,9 @@ var worktreeItems = []helpItem{
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
 			"App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher."},
+	{"worktrees edit <file> [<name>]", "Open a worktree's file in your editor",
+		"The editor set in config (editor), or the file's default app while it's unset. A relative <file> reads from cwd in the worktree you're in, and from the root of one you name. " +
+			"App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly, with the file after --. --json prints {ok, path}, and a file that isn't there fails with code missing-file."},
 	{"worktrees link [<name>]", "Print a link that opens the worktree in the app",
 		"A " + deepLinkOrigin + "/devices/<id>/projects/<id>/worktrees/<id> URL, for a chat, a note or a script. It names this device, so it opens this machine's worktree wherever it's clicked. Add /diff, /files or /pr-diff for that page. `open` it to open it now (the installed app launches if it isn't running). --project-id <id> --worktree-id <id> address the worktree exactly. --json prints {ok, url, worktree}."},
 }
@@ -473,6 +476,7 @@ var commands = []command{
 	{name: "cd", aliases: []string{"c"}, worktree: true, run: cmdCd},
 	{name: "switch", worktree: true, run: cmdWorktree},
 	{name: "open", aliases: []string{"o"}, worktree: true, run: cmdOpen},
+	{name: "edit", worktree: true, run: cmdEdit},
 	{name: "link", worktree: true, run: cmdLink},
 	{name: "create", aliases: []string{"new", "n"}, worktree: true, run: cmdCreate},
 	{name: "rm", aliases: []string{"remove"}, worktree: true, run: cmdRm},

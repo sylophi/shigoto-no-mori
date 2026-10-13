@@ -97,6 +97,8 @@ export interface IndexEntry {
   prevPath: string | null;
   mark: ChangeMark;
   stats: ChangeCounts | null;
+  // Gone from the worktree, so there's no file to open.
+  deleted: boolean;
   // The status row behind this file, absent on a read-only diff.
   row: ChangedFile | null;
 }
@@ -112,6 +114,7 @@ export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
     prevPath: file.prevName ?? null,
     mark: PATCH_MARKS[file.type],
     stats: fileStats(file),
+    deleted: file.type === "deleted",
     row: null,
   }));
 }
@@ -130,6 +133,7 @@ export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
       prevPath: row.prevPath ?? null,
       mark: row.conflicted ? CONFLICTED : STATUS_MARKS[row.kind],
       stats: row.counts ?? null,
+      deleted: row.kind === "deleted",
       row,
     }),
   );

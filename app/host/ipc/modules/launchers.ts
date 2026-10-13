@@ -4,6 +4,7 @@ import { findProjectOrThrow } from "@host/lib/projects";
 import {
   launcherCatalogViaCli,
   launchersViaCli,
+  openFileViaCli,
   openLauncherViaCli,
 } from "../cliDelegate";
 
@@ -33,4 +34,8 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       worktreeId,
       launcherId,
     ),
+
+  // `sm worktrees edit`: the editor setting, or the file's default app.
+  openFile: async ({ projectId, worktreeId, path }) =>
+    openFileViaCli(await findProjectOrThrow(projectId), worktreeId, path),
 };

@@ -18,12 +18,14 @@ import (
 // One launcher-row entry, the app's LauncherEntrySchema
 // (shared/schemas/launchers.ts): kind "detected" carries available
 // (always true in the row, since only installed tools are listed there;
-// either way in --catalog), "custom" and "web" don't.
+// either way in --catalog), "custom" and "web" don't. --catalog marks
+// the tools the editor setting can name.
 type launcherEntryJSON struct {
 	Kind      string `json:"kind"`
 	ID        string `json:"id"`
 	Label     string `json:"label"`
 	Available *bool  `json:"available,omitempty"`
+	Editor    bool   `json:"editor,omitempty"`
 }
 
 func (e launcherEntry) kind() string {
@@ -107,7 +109,7 @@ func listLauncherCatalog() (int, error) {
 	apps := make([]launcherEntryJSON, len(launcherCatalog))
 	for i, a := range launcherCatalog {
 		available := launcherAvailable(a)
-		apps[i] = launcherEntryJSON{Kind: "detected", ID: "app:" + a.id, Label: a.label, Available: &available}
+		apps[i] = launcherEntryJSON{Kind: "detected", ID: "app:" + a.id, Label: a.label, Available: &available, Editor: a.editor}
 	}
 	slices.SortStableFunc(apps, func(a, b launcherEntryJSON) int {
 		return cmp.Or(

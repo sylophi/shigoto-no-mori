@@ -55,7 +55,8 @@ export async function getFileDiff(
 
 // Unified patch of a single commit, with the commit metadata stripped
 // (`--format=`) so the output feeds straight into @pierre/diffs'
-// `parsePatchFiles`. A merge's is against its first parent, what it
+// `parsePatchFiles`. Paths come out as they are (core.quotePath), not
+// octal-escaped, since the file list shows them and opens them. A merge's is against its first parent, what it
 // brought into the branch, as a plain patch rather than git's combined
 // one. Empty for a commit that changes nothing.
 export async function getCommitDiff(
@@ -69,6 +70,8 @@ export async function getCommitDiff(
   return runLenient(
     worktreePath,
     [
+      "-c",
+      "core.quotePath=false",
       "show",
       "--format=",
       "--no-color",
@@ -92,7 +95,14 @@ export async function getMergeBaseDiff(
 ): Promise<string> {
   return run(
     repoPath,
-    ["diff", "--no-color", "--end-of-options", `${base}...${head}`],
+    [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--no-color",
+      "--end-of-options",
+      `${base}...${head}`,
+    ],
     { maxBuffer: PATCH_MAX_BUFFER },
   );
 }
