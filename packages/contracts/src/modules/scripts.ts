@@ -49,14 +49,17 @@ export const scriptsContract = defineContract(
   }),
   // Every script running on the host now, for a window that did not
   // see them start (the Live page, a console opened after a reload).
-  // A read, so it rides no grant, like mirror:list.
+  // Gated like the terminals' list: what runs in a worktree and its
+  // command line are as private as the run.
   invoke("list", VoidSchema, RunningScriptsSchema, {
     remote: true,
-    gated: false,
+    gated: true,
+    grant: "runCommands",
   }),
   view("watch", VoidSchema, RunningScriptsSchema, {
     remote: true,
-    gated: false,
+    gated: true,
+    grant: "runCommands",
   }),
   // The set of running scripts changed (one started or ended), on
   // every wire, so a list on screen re-reads. Payload-free like

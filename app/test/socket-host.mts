@@ -1458,7 +1458,7 @@ it("views: a view streams its values over the link, and one nothing serves fails
   );
   assert.deepEqual(values, [[], []]);
   const unserved = failureOf(
-    await Effect.runPromiseExit(Stream.runCollect(raw.watch("scripts:watch"))),
+    await Effect.runPromiseExit(Stream.runCollect(raw.watch("mirror:watch"))),
   );
   assert.ok(unserved instanceof RemoteCallError);
 });

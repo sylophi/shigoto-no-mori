@@ -945,7 +945,8 @@
     "kind": "invoke",
     "scope": "host",
     "remote": true,
-    "gated": false
+    "gated": true,
+    "grant": "runCommands"
   },
   "scripts:orphanReport": {
     "kind": "invoke",
@@ -978,7 +979,8 @@
     "kind": "view",
     "scope": "host",
     "remote": true,
-    "gated": false
+    "gated": true,
+    "grant": "runCommands"
   },
   "scripts:write": {
     "kind": "invoke",
