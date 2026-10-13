@@ -12,7 +12,9 @@ import {
 // (canRewriteCommits), and hold no merge (`merges`, each hash to its
 // first parent): the rewrites replay commits one parent at a time. An
 // amend keeps a merge's parents, so HEAD can be amended either way, and
-// a merge on top is undone whole, back to its first parent.
+// a merge on top is undone whole, back to its first parent. `below` is
+// the commit under the list's oldest, when known (where a branch's own
+// commits began), which a lone commit is undone back to.
 export interface CommitRewrite {
   canAmend: boolean;
   // The commit the list showed on top, which a reword or squash pins
@@ -32,9 +34,11 @@ export function commitRewriteAt(
   commits: readonly CommitSummary[],
   index: number,
   merges: ReadonlyMap<string, string>,
+  below: string | undefined,
 ): CommitRewrite {
   const count = index === 0 ? 1 : index;
-  const target = index === 0 ? commits[1]?.hash : commits[index]?.hash;
+  const target =
+    index === 0 ? (commits[1]?.hash ?? below) : commits[index]?.hash;
   const head = commits[0]?.hash;
   // The newest `n` commits can be rewritten.
   const rewritable = (n: number) =>
