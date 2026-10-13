@@ -3,7 +3,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { listRemoteEntries } from "../git/remotes";
 import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
-import { ghReady } from "./readiness";
 
 // Per-repo gate for any path that would shell out to gh. Without this,
 // non-github repos eat the full TanStack retry budget on every worktree
@@ -136,6 +135,36 @@ export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
 // next read sees it rather than a cached "not on GitHub".
 export function evictGithubRepoInfo(cwd: string): void {
   githubRepoCache.invalidate(cwd);
+  ghHostCache.invalidate(cwd);
+}
+
+// gh's own order for the repo a checkout means (its remote resolver):
+// upstream, then github, then origin, then the rest as git lists them.
+const GH_REMOTE_ORDER = ["origin", "github", "upstream"];
+
+// The GitHub host of the remote gh resolves `cwd`'s repo from, or null.
+// gh runs there are pinned to it (exec.ts), which keeps gh on the repo
+// it would pick anyway when a checkout has remotes on two hosts.
+const ghHostCache = ttlMapCache<string, string | null>(
+  GH_REPO_TTL_MS,
+  async (cwd) => {
+    const [remotes, hosts] = await Promise.all([
+      listRemoteEntries(cwd),
+      knownHostsCache.get(),
+    ]);
+    let best: { host: string; rank: number } | null = null;
+    for (const { name, url } of remotes) {
+      const host = parseRemoteUrl(url)?.host;
+      if (host === undefined || !hosts.has(host)) continue;
+      const rank = GH_REMOTE_ORDER.indexOf(name);
+      if (best === null || rank > best.rank) best = { host, rank };
+    }
+    return best?.host ?? null;
+  },
+);
+
+export function ghHostOf(cwd: string): Promise<string | null> {
+  return ghHostCache.get(cwd);
 }
 
 // The remote pointing at the repo `url` belongs to, by name. Fetching a
@@ -174,12 +203,4 @@ function sameName(a: string, b: string): boolean {
 export function githubRepoUrl(info: GithubRepoInfo): string {
   const host = info.port ? `${info.host}:${info.port}` : info.host;
   return `https://${host}/${info.owner}/${info.repo}`;
-}
-
-// Combined gate for read paths: gh itself ready, AND this specific repo
-// has a remote gh can resolve. Mutations keep ghReady() so their error
-// messages can stay specific.
-export async function ghReadyForRepo(cwd: string): Promise<boolean> {
-  if (!(await ghReady())) return false;
-  return (await getGithubRepoInfo(cwd)) !== null;
 }

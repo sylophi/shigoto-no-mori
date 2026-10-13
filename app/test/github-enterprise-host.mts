@@ -2,8 +2,9 @@
 // that host, with github.com signed in beside it. `gh api` asks
 // github.com unless GH_HOST says otherwise, so the repo's merge
 // settings came back empty and the Git heading never offered a pull
-// request. The host's gh runs in a repo are pinned to its remote's
-// host (githubCli/exec.ts).
+// request. The host's gh runs in a repo are pinned to the host of the
+// remote gh resolves it from (githubCli/exec.ts), so a mirror on
+// github.com beside it changes nothing.
 //
 // Drives the real host code against a fake gh on PATH that answers the
 // merge settings and About reads only when GH_HOST names the
@@ -29,8 +30,8 @@ console.log("github-enterprise-host proof\n");
 const GH = `#!/bin/sh
 case "$GH_HOST $*" in
   *" auth status") ;;
-  "github.ubc.ca api repos/o/r "*) echo "A UBC repo";;
-  "github.ubc.ca api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":false,"autoMergeAllowed":true}}}';;
+  "ghe.example.com api repos/o/r "*) echo "An Enterprise repo";;
+  "ghe.example.com api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":false,"autoMergeAllowed":true}}}';;
   *) echo "gh: Could not resolve to a Repository (HTTP 404)" >&2; exit 1;;
 esac
 `;
@@ -49,7 +50,7 @@ try {
       mkdirSync(ghConfig);
       writeFileSync(
         join(ghConfig, "hosts.yml"),
-        "github.com:\n    user: me\ngithub.ubc.ca:\n    user: me\n",
+        "github.com:\n    user: me\nghe.example.com:\n    user: me\n",
       );
       const saved = {
         PATH: process.env["PATH"],
@@ -80,7 +81,11 @@ try {
       mkdirSync(repo);
       const git = sandboxGit();
       git(repo, "init", "-q");
-      git(repo, "remote", "add", "origin", "git@github.ubc.ca:o/r.git");
+      git(repo, "remote", "add", "origin", "git@ghe.example.com:o/r.git");
+      assert.equal(await getRepoDescription(repo), "An Enterprise repo");
+
+      // Listed first, but gh's own choice of remote is origin.
+      git(repo, "remote", "add", "backup", "git@github.com:o/r.git");
 
       assert.deepEqual(await getRepoMergeConfig(repo), {
         merge: false,
@@ -88,7 +93,6 @@ try {
         rebase: false,
         autoMerge: true,
       });
-      assert.equal(await getRepoDescription(repo), "A UBC repo");
     },
   );
 

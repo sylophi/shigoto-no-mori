@@ -20,7 +20,7 @@ import {
   checkedOutPullRequest,
   checkedOutPullRequests,
 } from "./pullRequestCheckout";
-import { ghReadyForRepo } from "./remote";
+import { ghReadyForRepo } from "./readiness";
 
 const GhPrListItemSchema = z.object({
   number: z.number().int().positive(),

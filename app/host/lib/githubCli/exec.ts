@@ -2,7 +2,7 @@
 // its own error policy (swallow vs. throw) and its own JSON projection.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getGithubRepoInfo } from "./remote";
+import { ghHostOf } from "./remote";
 
 const execFileP = promisify(execFile);
 
@@ -13,9 +13,8 @@ const execFileP = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 // Every gh spawn funnels through here. A run is pinned to `host`, or
-// in a repo to the GitHub host of its remote (getGithubRepoInfo):
-// `gh api` asks github.com otherwise, even in a repo on an Enterprise
-// host, and gh's other commands keep to the remotes on that host.
+// in a repo to the GitHub host gh resolves it on (ghHostOf): `gh api`
+// asks github.com otherwise, even in a repo on an Enterprise host.
 export async function execGh(
   args: string[],
   options: {
@@ -25,9 +24,7 @@ export async function execGh(
     timeout?: number;
   } = {},
 ): Promise<{ stdout: string; stderr: string }> {
-  const host =
-    options.host ??
-    (options.cwd && (await getGithubRepoInfo(options.cwd))?.host);
+  const host = options.host ?? (options.cwd && (await ghHostOf(options.cwd)));
   // No option spreading: a caller passing `timeout: undefined` would
   // override (and disable) the default. Spread own-properties win
   // even when undefined.
