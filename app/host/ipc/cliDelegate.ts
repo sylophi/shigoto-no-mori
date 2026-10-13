@@ -828,11 +828,17 @@ async function worktreeRowViaCli(
   project: Project,
   worktreeId: string,
 ): Promise<Worktree> {
-  const result = await runner().runCli(worktreeArgv(verb, project, worktreeId));
-  const final = finalOkDoc(result, `sm ${verb.join(" ")} failed`, {
-    worktreeId,
-  });
+  const final = await worktreeDocViaCli(verb, project, worktreeId);
   return WorktreeSchema.parse(final["worktree"]);
+}
+
+async function worktreeDocViaCli(
+  verb: string[],
+  project: Project,
+  worktreeId: string,
+) {
+  const result = await runner().runCli(worktreeArgv(verb, project, worktreeId));
+  return finalOkDoc(result, `sm ${verb.join(" ")} failed`, { worktreeId });
 }
 
 // The auto-pull mark. The pull itself stays with the app's fetch sweep
@@ -848,14 +854,15 @@ export const setAutoPullViaCli = (
     worktreeId,
   );
 
-// `sm describe`, which refuses while an open PR holds them. Inline
-// values, so text that starts with a dash isn't read as a flag.
-export const describeViaCli = (
+// `sm describe`, which edits the open PR while one holds them, and
+// says whether it did. Inline values, so text that starts with a dash
+// isn't read as a flag.
+export async function describeViaCli(
   project: Project,
   worktreeId: string,
   { title, description }: { title?: string; description?: string },
-) =>
-  worktreeRowViaCli(
+): Promise<{ worktree: Worktree; editedPullRequest: boolean }> {
+  const final = await worktreeDocViaCli(
     [
       "describe",
       ...(title === undefined ? [] : [`--title=${title}`]),
@@ -864,6 +871,11 @@ export const describeViaCli = (
     project,
     worktreeId,
   );
+  return {
+    worktree: WorktreeSchema.parse(final["worktree"]),
+    editedPullRequest: final["pullRequest"] != null,
+  };
+}
 
 export const idleAgentsViaCli = (project: Project, worktreeId: string) =>
   worktreeRowViaCli(["agents", "idle"], project, worktreeId);

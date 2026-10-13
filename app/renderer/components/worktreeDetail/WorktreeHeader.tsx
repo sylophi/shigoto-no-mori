@@ -12,10 +12,15 @@ import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
-import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
+import {
+  hasWorktreeData,
+  type PullRequest,
+  type PullRequestDetail,
+  type Worktree,
+} from "@shared/schemas";
 import { BranchTitle } from "./branch/BranchTitle";
 import { DiffButton } from "./DiffButton";
-import { OwnTitle } from "./OwnTitle";
+import { EditableTitle } from "./EditableTitle";
 import { PullRequestStateLabel } from "./pullRequests/PullRequestStateLabel";
 import { StackList } from "./pullRequests/StackList";
 import { PullRequestTitleLink } from "./pullRequests/PullRequestIdentity";
@@ -28,8 +33,8 @@ import { MERGE_VERB } from "./pullRequests/pullRequestShared";
 // its number and state beside the title, and on the branch's line
 // where it lands, where it sits in a stack (its list in a popover),
 // and its diff. That line never wraps: the base gives way first, then
-// the branch. A title of the worktree's own is edited in place
-// (OwnTitle). What the work is and what to do about its PR follow
+// the branch. The title is edited in place (EditableTitle), the PR's
+// while it is open. What the work is and what to do about its PR follow
 // under the header. The project map's slim PR draws all of it but the
 // diff at once, so the header doesn't grow when the lookup answers.
 export function WorktreeHeader({
@@ -80,28 +85,29 @@ function TitledHeader({
       {/* One line too: the title truncates beside its number, and the
           state keeps its place at the end. */}
       <div className="mb-1 flex min-w-0 items-center gap-3">
-        {pr ? (
-          <>
-            <h1 className="flex min-w-0 items-baseline gap-1.5 text-2xl font-medium tracking-tight select-text">
-              <SimpleTooltip whenTruncated tip={title}>
-                <span className="min-w-0 truncate">{title}</span>
-              </SimpleTooltip>
-              <PullRequestTitleLink
-                pr={pr}
-                aria-label={`Open pull request #${pr.number} on GitHub`}
-                data-no-hit-area
-                className="shrink-0 font-normal text-muted-foreground/60"
-              >
-                #{pr.number}
-              </PullRequestTitleLink>
-            </h1>
-            {/* At the row's end, where a status sits. */}
-            <span className="ml-auto inline-flex shrink-0">
-              <PullRequestStateLabel pr={pr} pill />
-            </span>
-          </>
-        ) : (
-          <OwnTitle worktree={worktree} title={title} />
+        {/* A merged or closed PR's title stays as GitHub has it, and an
+            external checkout keeps no data file for one of its own. */}
+        <EditableTitle
+          worktree={worktree}
+          title={title}
+          editable={hasWorktreeData(worktree) && (!pr || pr.state === "OPEN")}
+        >
+          {pr && (
+            <PullRequestTitleLink
+              pr={pr}
+              aria-label={`Open pull request #${pr.number} on GitHub`}
+              data-no-hit-area
+              className="shrink-0 font-normal text-muted-foreground/60"
+            >
+              #{pr.number}
+            </PullRequestTitleLink>
+          )}
+        </EditableTitle>
+        {pr && (
+          // At the row's end, where a status sits.
+          <span className="ml-auto inline-flex shrink-0">
+            <PullRequestStateLabel pr={pr} pill />
+          </span>
         )}
       </div>
       {/* One line however narrow. The base gives way first, and goes

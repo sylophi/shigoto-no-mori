@@ -177,6 +177,9 @@ func (node checkNode) verdict() checkVerdict {
 // so a caller can tell "nothing to look up" from a lookup that failed.
 const ghNoGitHubRemote = "no GitHub remote"
 
+// What it says when gh isn't signed in.
+const ghNotAuthenticated = "gh isn't authenticated"
+
 // gh's stderr, folded to one short line for the card. The auth failure
 // is the one worth naming: it's the common case and its own message is
 // four lines of instructions. A repo with no GitHub remote gets an
@@ -185,8 +188,9 @@ func ghProbeReason(stderr string) string {
 	if strings.Contains(stderr, "none of the git remotes") {
 		return ghNoGitHubRemote
 	}
-	if strings.Contains(stderr, "gh auth login") {
-		return "gh isn't authenticated"
+	// GitHub Actions has gh ask for GH_TOKEN instead.
+	if strings.Contains(stderr, "gh auth login") || strings.Contains(stderr, "GH_TOKEN") {
+		return ghNotAuthenticated
 	}
 	for _, line := range strings.Split(stderr, "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
