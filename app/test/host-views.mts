@@ -233,6 +233,33 @@ it("a worktree's changes: a refresh reads now and answers once that read landed,
   );
 });
 
+it("a worktree's tree: one refresh reads the file's diff and hunks and the operation with the list", async () => {
+  const input = { projectId, worktreeId: await primaryId() };
+  writeFileSync(join(repo, "a.txt"), "a\nmore\n");
+  await watch(
+    worktreesViews.watchFileDiff({
+      ...input,
+      paths: ["a.txt"],
+      untracked: false,
+    }),
+    ({ first, next }) =>
+      Effect.gen(function* () {
+        assert.match(first, /\+more/);
+        // An edit no watch reported and no poll will read: the refresh
+        // of the tree reads the diff too.
+        writeFileSync(join(repo, "a.txt"), "a\nmore\nstill\n");
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        assert.match(yield* next, /\+still/);
+        git(repo, "checkout", "--", "a.txt");
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        assert.equal(yield* next, "");
+      }),
+  );
+  await watch(worktreesViews.watchOperation(input), ({ first }) =>
+    Effect.sync(() => assert.equal(first.operation, null)),
+  );
+});
+
 it("a refresh waiting on a read ends when the view's last reader goes", async () => {
   await runHost(
     Effect.gen(function* () {

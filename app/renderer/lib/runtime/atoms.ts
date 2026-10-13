@@ -280,6 +280,9 @@ export function hostViewAtom<R extends ContractCall>(options: {
   // or the device's own failure), for a watcher outside React.
   readonly onValue?: (value: Decoded<PayloadOf<R>>) => void;
   readonly onStop?: () => void;
+  // How long it keeps streaming after its last reader goes, a minute
+  // unless said.
+  readonly idle?: Duration.Input;
 }): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
   type A = Decoded<PayloadOf<R>>;
   const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
@@ -337,7 +340,7 @@ export function hostViewAtom<R extends ContractCall>(options: {
       }
       return valuesOn(localDeviceId);
     })
-    .pipe(Atom.setIdleTTL("1 minute")) as Atom.Atom<
+    .pipe(Atom.setIdleTTL(options.idle ?? "1 minute")) as Atom.Atom<
     AsyncResult.AsyncResult<A, unknown>
   >;
 }
