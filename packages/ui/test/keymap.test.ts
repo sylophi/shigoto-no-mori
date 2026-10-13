@@ -16,9 +16,9 @@
 //   7. A ⌘ chord answers extra Shift, Alt or Ctrl unless another binding
 //      takes that press, and the menu's defaults read before a window
 //      sends its own.
-//   8. On macOS the palette's chord also answers Ctrl in place of ⌘,
-//      rebound too, unless another binding takes that press; no other
-//      chord does.
+//   8. On macOS the palette's, the commit's, the palette's changes' and
+//      an edit's save also answer Ctrl in place of ⌘, rebound too,
+//      unless another binding takes that press; no other chord does.
 import { expect, it } from "vitest";
 import {
   chordAccelerator,
@@ -80,7 +80,7 @@ it("matches Mod to ⌘ on macOS and to Ctrl elsewhere", () => {
   expect(mac.get("palette")?.matches(press("KeyK", { metaKey: true }))).toBe(
     true,
   );
-  expect(mac.get("commit")?.matches(press("Enter", { ctrlKey: true }))).toBe(
+  expect(mac.get("confirm")?.matches(press("Enter", { ctrlKey: true }))).toBe(
     false,
   );
   expect(other.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
@@ -259,11 +259,17 @@ it("takes a letter as typed on any key, the physical key with Alt held, and AltG
   expect(mac.get("palette")).toBeDefined();
 });
 
-it("answers the palette's Ctrl twin on macOS, and no other action's", () => {
+it("answers the Ctrl twins on macOS, and no other action's", () => {
   const mac = resolveKeymap(undefined, { mac: true, desktop: true });
   expect(mac.get("palette")?.matches(press("KeyK", { ctrlKey: true }))).toBe(
     true,
   );
+  for (const id of ["commit", "paletteChanges", "save"]) {
+    expect(
+      mac.get(id)?.matches(press("Enter", { key: "Enter", ctrlKey: true })),
+      id,
+    ).toBe(true);
+  }
   // Exactly Ctrl for ⌘: no extras, and not on a Ctrl chord's own.
   expect(
     mac
