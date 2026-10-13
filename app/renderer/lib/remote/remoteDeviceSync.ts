@@ -63,6 +63,7 @@ import {
 import {
   type RemoteDevice,
   type RemoteDeviceApi,
+  remoteDevicesAtom,
   setRemoteDevices,
 } from "./devices";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
@@ -443,7 +444,29 @@ function buildEntry(
   };
 }
 
+// The listed peers' command access from a snapshot as it comes, ahead
+// of the pass it queues, which waits on the device list's fetch and on
+// a pass already out: a peer that stopped taking commands from here is
+// refused as it says so. Read as buildEntry reads it.
+function applyCommandAccess(current: HubStatus): void {
+  const listed = registry().get(remoteDevicesAtom);
+  if (listed.length === 0) return;
+  setRemoteDevices(
+    registry(),
+    listed.map((device) =>
+      Object.assign({}, device, {
+        acceptsCommands:
+          current.peerAppVersions[device.deviceId] !== undefined &&
+          current.peerSharesData[device.deviceId] === false
+            ? false
+            : current.peerAcceptsCommands[device.deviceId],
+      }),
+    ),
+  );
+}
+
 function reconcile(pass: Pass): void {
+  if (pass.status !== undefined) applyCommandAccess(pass.status);
   queued = pass;
   if (inFlight) {
     dirty = true;

@@ -465,6 +465,63 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   registry.dispose();
 });
 
+it("remote devices: a peer that stops taking commands is refused before the device list's fetch lands", async () => {
+  const { registry, queryClient, hubPush } = page();
+  let latest = status();
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
+  // The list's next fetch doesn't land until the case lets it: the
+  // network it waits on is gone.
+  let fetching = false;
+  const lands: Array<(devices: DeviceInfo[]) => void> = [];
+  const landed = new Promise<DeviceInfo[]>((resolve) => lands.push(resolve));
+  // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account: {
+      status: () => Effect.never,
+      listDevices: () =>
+        Effect.suspend(() => {
+          fetching = true;
+          return Effect.promise(() => landed);
+        }),
+    },
+    hub: { status: () => Effect.sync(() => latest) },
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  const peer = () => registry.get(remoteDevicesAtom)[0];
+  const send = async (next: HubStatus) => {
+    latest = next;
+    await hubPush(next);
+  };
+  await send(
+    status({
+      onlineDeviceIds: [PEER],
+      peerAppVersions: { [PEER]: "3.0.0" },
+      peerAcceptsCommands: { [PEER]: true },
+    }),
+  );
+  await waitFor(() => peer()?.acceptsCommands === true, "the peer commandable");
+  void queryClient.invalidateQueries({ queryKey: queryKeys.accountDevices() });
+  await send(
+    status({
+      onlineDeviceIds: [PEER],
+      peerAppVersions: { [PEER]: "3.0.0" },
+      peerAcceptsCommands: { [PEER]: false },
+    }),
+  );
+  await waitFor(
+    () => peer()?.acceptsCommands === false,
+    "the refusal, with the list's fetch still out",
+  );
+  assert.ok(fetching, "the list's fetch was asked for");
+  // The pass it held ends, for the next case's sync.
+  for (const land of lands) land([studio]);
+  await waitFor(() => queryClient.isFetching() === 0, "the list landed");
+  registry.dispose();
+});
+
 it("hub status: a failed boot fetch falls back on the next pass's", async () => {
   const { registry, queryClient } = page();
   let asked = 0;
