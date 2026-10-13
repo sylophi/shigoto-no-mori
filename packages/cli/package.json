@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "$(effect-tsgo get-exe-path)",
     "build": "node build.mts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "under-load": "node test/under-load.mts"
   },
   "dependencies": {
     "@effect/platform-bun": "catalog:",

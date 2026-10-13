@@ -29,14 +29,50 @@ const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
+// What the import logs for each file or key it does without, which an
+// import's verification counts (Store.ts).
+export const SKIPPED = "Skipped what the store could not import";
+
+// What the import does without, logged and counted as a doubt by its
+// verification (Store.ts): a file, a key, or some entries of one.
+export const skip = (file: string, what: string) =>
+  Effect.logWarning(SKIPPED).pipe(Effect.annotateLogs({ path: file, what }));
+
+// The keys a 2.x registry.json and state.json may hold that v3 leaves
+// out on purpose: the files' version, the agent-working marks the agent
+// sessions replaced, and the sidebar view an older 2.x kept here before
+// the client config. Any other key the schemas don't name is a doubt.
+const LEFT_OUT = new Set([
+  "schemaVersion",
+  "agentWorkingWorktrees",
+  "sidebarView",
+]);
+// state.json's copy of the project list and the shelf, from before the
+// registry held them, which the import doesn't read.
+const STATE_BEFORE_REGISTRY = new Set(["projects", "shelvedWorktrees"]);
+
 // A file or key the import does without, logged.
 const skipped = <A>(file: string, what: string, fallback: A) =>
-  Effect.logWarning("Skipped what the store could not import").pipe(
+  Effect.logWarning(SKIPPED).pipe(
     Effect.annotateLogs({ path: file, what }),
     Effect.as(fallback),
   );
 
 // One key's value, `fallback` when absent or when it doesn't parse.
+// Whether `schema` decodes `value` only by leaving out a key it holds,
+// at any depth: what an import would drop without a word.
+export const dropsKeys = (
+  schema: Schema.Decoder<unknown>,
+  value: unknown,
+): boolean =>
+  Option.isNone(
+    Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(value),
+  );
+
+// The keys of `doc` that `known` doesn't name, by its own keys only.
+export const unknownKeys = (doc: object, known: object) =>
+  Object.keys(doc).filter((key) => !Object.hasOwn(known, key));
+
 const lenientKey = <S extends Schema.Decoder<unknown>>(
   file: string,
   key: string,
@@ -47,6 +83,9 @@ const lenientKey = <S extends Schema.Decoder<unknown>>(
   value === undefined
     ? Effect.succeed(fallback)
     : Schema.decodeUnknownEffect(schema)(value).pipe(
+        Effect.tap(() =>
+          dropsKeys(schema, value) ? skip(file, key) : Effect.void,
+        ),
         Effect.catchTags({ SchemaError: () => skipped(file, key, fallback) }),
       );
 
@@ -127,6 +166,17 @@ export const importFiles = (lenient: boolean) =>
     const state = yield* lenientDocument(stateFile);
     const stateDoc: JsonObject = Option.getOrElse(state, () => ({}));
     const registryDoc: JsonObject = Option.getOrElse(registry, () => ({}));
+    for (const key of unknownKeys(registryDoc, RegistryFileSchema.fields)) {
+      if (!LEFT_OUT.has(key)) yield* skip(registryFile, key);
+    }
+    for (const key of Object.keys(stateDoc)) {
+      if (
+        STATE_BEFORE_REGISTRY.has(key) ||
+        (!Object.hasOwn(StateFileSchema.fields, key) && !LEFT_OUT.has(key))
+      ) {
+        yield* skip(stateFile, key);
+      }
+    }
     const registryKey = <K extends keyof typeof RegistryFileSchema.fields>(
       key: K,
       fallback: (typeof RegistryFileSchema.fields)[K]["Type"],
@@ -150,10 +200,11 @@ export const importFiles = (lenient: boolean) =>
         fallback,
       );
 
-    const projects = Arr.dedupeWith(
-      (yield* Schema.decodeUnknownEffect(
-        Schema.UndefinedOr(RegistryFileSchema.fields.projects),
-      )(registryDoc.projects).pipe(
+    const projectList = Schema.UndefinedOr(RegistryFileSchema.fields.projects);
+    const listed =
+      (yield* Schema.decodeUnknownEffect(projectList)(
+        registryDoc.projects,
+      ).pipe(
         Effect.catchTags({
           SchemaError: (cause) =>
             lenient
@@ -162,9 +213,16 @@ export const importFiles = (lenient: boolean) =>
                   new StoreImportError({ path: registryFile, cause }),
                 ),
         }),
-      )) ?? [],
-      (a, b) => a.id === b.id,
-    );
+      )) ?? [];
+    const projects = Arr.dedupeWith(listed, (a, b) => a.id === b.id);
+    // A project's key the list doesn't model, or a second entry under
+    // one id, is left out.
+    if (
+      projects.length < listed.length ||
+      dropsKeys(projectList, registryDoc.projects)
+    ) {
+      yield* skip(registryFile, "projects");
+    }
     yield* insertAll(
       "projects",
       projects.map((project, position) => ({
@@ -187,24 +245,31 @@ export const importFiles = (lenient: boolean) =>
       );
     }
 
+    const order = yield* registryKey("projectOrder", []);
+    if (Arr.dedupe(order).length < order.length) {
+      yield* skip(registryFile, "projectOrder");
+    }
     yield* insertAll(
       "project_order",
-      Arr.dedupe(yield* registryKey("projectOrder", [])).map(
-        (projectPath, position) => ({ path: projectPath, position }),
-      ),
+      Arr.dedupe(order).map((projectPath, position) => ({
+        path: projectPath,
+        position,
+      })),
     );
-    yield* insertAll(
-      "shelf_snapshots",
-      Object.entries(yield* registryKey("shelfSnapshots", {})).flatMap(
-        ([worktree_id, entry]) =>
-          Option.match(Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry), {
-            onNone: () => [],
-            onSome: ({ at, head, changed }) => [
-              { worktree_id, at, head, changed },
-            ],
-          }),
-      ),
+    const snapshots = Object.entries(yield* registryKey("shelfSnapshots", {}));
+    const snapshotRows = snapshots.flatMap(([worktree_id, entry]) =>
+      Option.match(Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry), {
+        onNone: () => [],
+        onSome: ({ at, head, changed }) => [{ worktree_id, at, head, changed }],
+      }),
     );
+    if (
+      snapshotRows.length < snapshots.length ||
+      snapshots.some(([, entry]) => dropsKeys(ShelfSnapshotSchema, entry))
+    ) {
+      yield* skip(registryFile, "shelfSnapshots");
+    }
+    yield* insertAll("shelf_snapshots", snapshotRows);
     const deviceId = yield* registryKey("deviceId", "");
     yield* insertAll(
       "device",
@@ -301,6 +366,9 @@ export const importFiles = (lenient: boolean) =>
         const doc = yield* lenientDocument(filePath);
         if (Option.isNone(doc)) continue;
         const fields = ShigomoriWorktreeDataSchema.fields;
+        for (const key of unknownKeys(doc.value, fields)) {
+          if (!LEFT_OUT.has(key)) yield* skip(filePath, key);
+        }
         const dataKey = <K extends keyof typeof fields>(key: K) =>
           lenientKey(filePath, key, fields[key], doc.value[key], undefined);
         const ports = yield* dataKey("ports");

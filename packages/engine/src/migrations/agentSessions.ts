@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { registryHint } from "./importJson.ts";
+import { dropsKeys, registryHint, skip } from "./importJson.ts";
 
 // One session as a 2.x registry.json keeps it (the Go sm's agents.go).
 const V2SessionSchema = Schema.Struct({
@@ -44,17 +44,31 @@ export const agentSessions = Effect.gen(function* () {
   ) STRICT`;
   yield* sql`DELETE FROM worktree_marks WHERE mark = 'agentWorking'`;
   const bound = yield* registryHint("agentSessions", {});
+  const seen = new Set<string>();
   for (const [worktree_id, list] of Object.entries(bound)) {
     for (const entry of list) {
       const found = decodeSession(entry);
-      if (Option.isNone(found)) continue;
+      // One that doesn't parse, holds a key this doesn't model, or names
+      // a session already bound is left out.
+      const key = Option.map(found, (s) => `${s.harness}\0${s.session}`);
+      if (
+        Option.isNone(found) ||
+        Option.isNone(key) ||
+        seen.has(key.value) ||
+        dropsKeys(V2SessionSchema, entry) ||
+        !Number.isInteger(found.value.at)
+      ) {
+        yield* skip("registry.json", "agentSessions");
+        continue;
+      }
+      seen.add(key.value);
       const s = found.value;
       yield* sql`INSERT INTO agent_sessions ${sql.insert({
         harness: s.harness,
         session: s.session,
         worktree_id,
         state: s.state,
-        at: Math.trunc(s.at),
+        at: s.at,
         waits: JSON.stringify(s.waits ?? []),
         title: s.title ?? null,
         tool: s.tool ?? null,
