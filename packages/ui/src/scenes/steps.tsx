@@ -17,7 +17,7 @@ import { SceneWindowFrame } from "./frame.tsx";
 
 const noop = () => {};
 
-function migration(pose: MigrationPose) {
+function migration(pose: MigrationPose, retried = false) {
   return function MigrationScene() {
     return (
       <SceneWindowFrame sidebar={null}>
@@ -26,6 +26,9 @@ function migration(pose: MigrationPose) {
           signIn={MIGRATION_POSES[pose].signIn}
           onSignIn={noop}
           onContinue={noop}
+          onRetry={noop}
+          retrying={false}
+          retried={retried}
         />
       </SceneWindowFrame>
     );
@@ -35,6 +38,7 @@ function migration(pose: MigrationPose) {
 export const MigrationWaitingScene = migration("waiting");
 export const MigrationMovingScene = migration("moving");
 export const MigrationStuckScene = migration("stuck");
+export const MigrationStillStuckScene = migration("stuck", true);
 export const MigrationSignInScene = migration("signIn");
 export const MigrationDoneScene = migration("done");
 

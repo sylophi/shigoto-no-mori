@@ -9,7 +9,9 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
 import * as Doctor from "../src/Doctor.ts";
+import * as Migration from "../src/Migration.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import * as WtFolder from "../src/WtFolder.ts";
@@ -158,6 +160,70 @@ it("keeps a worktree something runs in where it is, naming what to close", async
   });
   assert.deepEqual(found(fixed), []);
   assert.ok(existsSync(join(wt, "b")));
+});
+
+it("tries a stuck move again from the page, moving it once nothing runs in it", async () => {
+  const { repo, v2, wt } = v2Project();
+  box.git(repo, "worktree", "unlock", join(v2, "c"));
+  const held = spawn("sleep", ["30"], { cwd: join(v2, "b"), stdio: "ignore" });
+  onTestFinished(() => {
+    held.kill();
+  });
+  const retried = () =>
+    box.engine(
+      Effect.gen(function* () {
+        yield* (yield* WtFolder.WtFolder).retryStuck;
+        return (yield* (yield* Migration.Migration).current).worktrees;
+      }),
+    ) as Promise<WorktreeMoveStep>;
+  const still = await retried();
+  assert.deepEqual(
+    { state: still.state, moved: still.moved, stuck: still.stuck },
+    {
+      state: "stuck",
+      moved: 2,
+      stuck: [
+        { name: "b", reason: `close sleep (${held.pid}), which runs in it` },
+      ],
+    },
+  );
+  // Two windows' Retry at once count each move once.
+  held.kill();
+  await once(held, "exit");
+  const [moved] = await Promise.all([retried(), retried()]);
+  assert.deepEqual(
+    { state: moved.state, moved: moved.moved, stuck: moved.stuck },
+    { state: "done", moved: 3, stuck: [] },
+  );
+  assert.ok(existsSync(join(wt, "b")));
+});
+
+it("reads the move's step from the store on a retry, after the doctor moved what was stuck", async () => {
+  const { repo, v2 } = v2Project();
+  box.git(repo, "worktree", "unlock", join(v2, "c"));
+  await state();
+  const fixed = await box.doctor({
+    version: "dev",
+    executable: "",
+    terminal: false,
+    fix: { approve: () => Effect.succeed(true), failed: () => Effect.void },
+  });
+  assert.deepEqual(found(fixed), []);
+  const step = (await box.engine(
+    Effect.gen(function* () {
+      yield* (yield* WtFolder.WtFolder).retryStuck;
+      return (yield* (yield* Migration.Migration).current).worktrees;
+    }),
+  )) as WorktreeMoveStep;
+  assert.deepEqual(
+    {
+      state: step.state,
+      moved: step.moved,
+      total: step.total,
+      stuck: step.stuck,
+    },
+    { state: "done", moved: 3, total: 3, stuck: [] },
+  );
 });
 
 it("keeps every worktree where it is when lsof can't say what runs in them", async () => {

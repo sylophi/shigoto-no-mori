@@ -64,6 +64,9 @@ export const sessionContract = defineContract(
   // Open the user's agent on a guide session the shell minted for one
   // of its windows.
   invoke("guideLaunch", GuideLaunchSchema, VoidSchema),
+  // The v3 migration's stuck moves tried again, from its page (the
+  // shell's migration:retry). Its progress comes as the move's did.
+  invoke("migrationRetry", VoidSchema, VoidSchema),
   // The hosts of this machine's projects' remotes, beside GitHub's, that
   // the window's images may load from (predicates/imageHosts.ts).
   invoke("imageHosts", VoidSchema, Schema.Array(Schema.String)),

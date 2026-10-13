@@ -873,6 +873,7 @@
       }
     }
   },
+  "migration:retry": {},
   "mirror:applyGitState": {
     "payload": {
       "projectId": "\ud800",
@@ -1933,6 +1934,7 @@
   "session:imageHosts": {
     "success": ["e%", "\ud800"]
   },
+  "session:migrationRetry": {},
   "session:quit": {
     "payload": {
       "hurried": false

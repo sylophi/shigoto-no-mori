@@ -198,15 +198,18 @@ export function StepStuckView({
 // The button a step waits on, or the page's own.
 export function StepActionView({
   label,
+  variant = "default",
   pending = false,
   onClick,
 }: {
   label: string;
+  // A second action beside the page's own takes the outline.
+  variant?: "default" | "outline";
   pending?: boolean;
   onClick: () => void;
 }) {
   return (
-    <Button size="sm" disabled={pending} onClick={onClick}>
+    <Button size="sm" variant={variant} disabled={pending} onClick={onClick}>
       {label}
     </Button>
   );
