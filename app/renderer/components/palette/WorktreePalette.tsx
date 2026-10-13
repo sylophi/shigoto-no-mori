@@ -380,8 +380,14 @@ function PaletteDialog({
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // cmdk spends ⌃K as its vim bindings' Up before the window's
-    // listener hears it, so the palette's Ctrl twin closes it here.
-    if (paletteKeys.matches(e)) {
+    // listener hears it, so the palette's Ctrl twin closes it here. As
+    // in any text field, only a `Mod` chord and its twin leave it.
+    if (
+      !e.repeat &&
+      !e.nativeEvent.isComposing &&
+      paletteKeys.chord.mod &&
+      paletteKeys.matches(e)
+    ) {
       e.preventDefault();
       onClose();
       return;
