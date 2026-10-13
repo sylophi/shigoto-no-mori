@@ -111,7 +111,7 @@ const crashes: number[] = [];
 let address = deferred<Reported>();
 // The hosts that exited unasked since one was last up, for the next to
 // stop what their scripts left (HostFacts.replacesHosts).
-let replaced: { pid: number; startedAt: number }[] = [];
+let replaced: { pid: number; startedAt: number; exitedAt: number }[] = [];
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 
@@ -204,7 +204,13 @@ function fork(): void {
   const facts: HostFacts =
     replaced.length === 0
       ? hostFacts()
-      : { ...hostFacts(), replacesHosts: [...replaced] };
+      : {
+          ...hostFacts(),
+          replacesHosts: replaced.map(({ pid, startedAt }) => ({
+            pid,
+            startedAt,
+          })),
+        };
   const forked = utilityProcess.fork(
     join(__dirname, "host.js"),
     [`${HOST_FACTS_FLAG}${JSON.stringify(facts)}`],
@@ -246,7 +252,12 @@ function fork(): void {
       });
       return;
     }
-    if (spawned !== undefined) replaced.push(spawned);
+    // Only hosts that died within the crash window are vouched for: one
+    // older may have left a group whose id is a stranger's by now.
+    replaced = replaced.filter(
+      (gone) => gone.exitedAt >= now - CRASH_WINDOW_MS,
+    );
+    if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
     fork();
   });
 }
