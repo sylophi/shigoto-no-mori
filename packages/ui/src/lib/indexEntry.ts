@@ -17,6 +17,8 @@ export interface IndexEntry {
   prevPath: string | null;
   mark: ChangeMark;
   stats: ChangeCounts | null;
+  // Gone from the worktree, so there's no file to open.
+  deleted: boolean;
   // The status row behind this file, absent on a read-only diff.
   row: ChangedFile | null;
 }

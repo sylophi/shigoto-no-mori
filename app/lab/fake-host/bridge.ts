@@ -805,6 +805,7 @@ function hostHandlersFor(
       }, 2_500);
     },
     "launchers:detect": () => [...FAKE_DETECTED],
+    "launchers:openFile": () => undefined,
     "launchers:forProject": () => ({
       entries: [...FAKE_LAUNCHERS],
       hiddenCount: 0,

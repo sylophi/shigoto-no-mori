@@ -1,9 +1,12 @@
 // Opening a worktree in one of its launchers: an installed app (a
 // terminal tool through the chosen terminal), the repo's GitHub page, or
-// a custom command line. Each open counts toward the row's order.
+// a custom command line. Each open counts toward the row's order. And
+// opening one of its files in the editor the device settings name.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -13,6 +16,7 @@ import * as Launchers from "./Launchers.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
+import { errnoText, isAbsent } from "./platformErrors.ts";
 import { CD_FILE_ENV } from "./shellHook.ts";
 import { scriptEnv, shellQuote } from "./Lifecycle.ts";
 import * as Usage from "./Usage.ts";
@@ -39,6 +43,29 @@ export class LaunchFailed extends Schema.TaggedError<LaunchFailed>()(
 ) {
   override get message(): string {
     return `Couldn't open ${this.label}: ${this.said}`;
+  }
+}
+
+// No file at the path `edit` was given.
+export class MissingFile extends Schema.TaggedError<MissingFile>()(
+  "MissingFile",
+  { path: Schema.String },
+) {
+  get documentCode(): string {
+    return "missing-file";
+  }
+
+  override get message(): string {
+    return `No file at ${this.path}.`;
+  }
+}
+
+// `edit` was given a folder.
+export class NotAFile extends Schema.TaggedError<NotAFile>()("NotAFile", {
+  path: Schema.String,
+}) {
+  override get message(): string {
+    return `${this.path} is a folder.`;
   }
 }
 
@@ -159,6 +186,13 @@ export class Open extends Context.Service<
       folder: string,
       command: string,
     ) => Effect.Effect<void, LaunchFailed>;
+    // Opens a worktree's file, absolute or relative to its root, in the
+    // editor the device settings name, or with its default app while
+    // that is unset or no longer installed. Answers the file's path.
+    readonly edit: (
+      located: Worktrees.Located,
+      file: string,
+    ) => Effect.Effect<string, MissingFile | NotAFile | LaunchFailed>;
     // Opens (or brings forward) the installed app.
     readonly app: Effect.Effect<void, AppNotOpened | NoDevApp>;
   }
@@ -166,6 +200,8 @@ export class Open extends Context.Service<
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const { flavor } = yield* Paths.Paths;
   const launchers = yield* Launchers.Launchers;
   const lifecycle = yield* Lifecycle.Lifecycle;
@@ -369,6 +405,77 @@ const make = Effect.gen(function* () {
     yield* inTerminal("the terminal", command, folder);
   });
 
+  // An executable's default app runs it, and a file no app claims (a
+  // Makefile, often a .ts) has none, so those open in the default text
+  // editor (open -t).
+  const withDefaultApp = (label: string, file: string, executable: boolean) =>
+    Effect.gen(function* () {
+      if (!executable && (yield* ran("open", [file])).code === 0) return;
+      const { code, output } = yield* ran("open", ["-t", file]);
+      if (code === 0) return;
+      return yield* new LaunchFailed({
+        label,
+        said: output === "" ? `exit status ${code}` : output,
+      });
+    });
+
+  const edit = Effect.fn("Open.edit")(function* (
+    located: Worktrees.Located,
+    file: string,
+  ) {
+    const where = located.worktree.path;
+    const absolute = path.resolve(where, file);
+    const label = path.basename(absolute);
+    const info = yield* fs.stat(absolute).pipe(
+      Effect.catchTags({
+        PlatformError: (error) =>
+          isAbsent(error)
+            ? Effect.fail(new MissingFile({ path: absolute }))
+            : Effect.fail(new LaunchFailed({ label, said: errnoText(error) })),
+      }),
+    );
+    if (info.type === "Directory") {
+      return yield* new NotAFile({ path: absolute });
+    }
+    const chosen = yield* config.get({ kind: "device" }, "editor").pipe(
+      Effect.map(({ value }) => (typeof value === "string" ? value : "")),
+      Effect.orElseSucceed(() => ""),
+    );
+    const entry = (yield* launchers.launchable(located.project)).find(
+      (candidate) =>
+        candidate.kind === "detected" &&
+        candidate.app.id === chosen &&
+        candidate.app.editor === true,
+    );
+    if (entry?.kind !== "detected") {
+      yield* withDefaultApp(label, absolute, (info.mode & 0o111) !== 0);
+      return absolute;
+    }
+    const { app } = entry;
+    if (app.inTerminal !== undefined) {
+      const program = app.inTerminal.trim().split(/\s+/)[0] ?? "";
+      yield* inTerminal(label, `${program} ${shellQuote(absolute)}`, where);
+      return absolute;
+    }
+    // The worktree goes along, so the file opens in the window that has
+    // it (or a new one for it) rather than the last one used.
+    if (app.cli !== undefined && entry.cliOnPath) {
+      if ((yield* ran(app.cli, [where, absolute])).code === 0) return absolute;
+    }
+    const bundle = entry.bundle;
+    if (bundle === undefined || bundle === "__finder__") {
+      return yield* new LaunchFailed({
+        label,
+        said: `No installed app found for ${app.label}.`,
+      });
+    }
+    const name = bundle
+      .slice(bundle.lastIndexOf("/") + 1)
+      .replace(/\.app$/, "");
+    yield* run(label, "open", ["-a", name, absolute]);
+    return absolute;
+  });
+
   // A cold launch gets this environment, which the app rebuilds at
   // startup, less the shell hook's directive file, as every launcher.
   const app = Effect.gen(function* () {
@@ -392,7 +499,7 @@ const make = Effect.gen(function* () {
     }
   }).pipe(Effect.withSpan("Open.app"));
 
-  return Open.of({ open, inTerminal: inTerminalAt, app });
+  return Open.of({ open, inTerminal: inTerminalAt, edit, app });
 });
 
 export const layer = Layer.effect(Open, make);

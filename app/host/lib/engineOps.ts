@@ -1343,6 +1343,22 @@ export const openLauncher = Effect.fnUntraced(function* (
   );
 });
 
+// A worktree's file, its path relative to the worktree's root, in the
+// editor the device settings name or its default app.
+export const openFile = Effect.fnUntraced(function* (
+  project: Project,
+  worktreeId: string,
+  path: string,
+) {
+  yield* asCall(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Open.Open).edit(located, path);
+    }),
+    { projectId: project.id, worktreeId },
+  );
+});
+
 // ---- A worktree's own data (host/lib/config/project.ts) ----
 
 // The document as the renderer has always read it: each field present

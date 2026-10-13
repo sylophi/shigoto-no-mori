@@ -34,7 +34,7 @@ import { changesCell, flagsCell, syncCell, titleCell } from "./cells.ts";
 import { adopt, create, move, rekey, rename, rm, setup } from "./changes.ts";
 import { describe } from "./describe.ts";
 import { done, land, merge, pr } from "./landing.ts";
-import { open } from "./open.ts";
+import { edit, open } from "./open.ts";
 import { dirty } from "./dirty.ts";
 import {
   bring,
@@ -368,6 +368,7 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     land,
     done,
     open,
+    edit,
     dirty,
     send,
     bring,

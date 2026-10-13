@@ -54,6 +54,7 @@ const WORKTREE_VERBS = new Set([
   "land",
   "done",
   "open",
+  "edit",
   "dirty",
   "send",
   "bring",
