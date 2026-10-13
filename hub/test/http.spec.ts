@@ -368,7 +368,7 @@ describe("DELETE /devices/:deviceId", () => {
       // oxlint-disable-next-line no-await-in-loop -- one route at a time reads better than a Promise.all of five
       const response = await call(request);
       expect(response.status).toBe(403);
-      // oxlint-disable-next-line no-await-in-loop -- the same one-route-at-a-time loop
+      // oxlint-disable-next-line no-await-in-loop -- read before the next route's call, so a failure names this route
       expect(await response.json()).toEqual({ _tag: "HubDeviceRevokedError" });
     }
     expect((await call(listRequest("smdc_garbage"))).status).toBe(401);
@@ -574,23 +574,23 @@ async function statusesFrom(
 describe("the version floor", () => {
   it("turns away a build below the floor, or one naming none, with the sentence a v2 build shows", async () => {
     const { credential } = await enroll("acct-floor", "dev-floor");
-    for (const version of ["", "3", "not a number"]) {
-      const request = new Request(`${BASE}/devices`, {
-        headers: {
-          Authorization: `Bearer ${credential}`,
-          [PROTOCOL_HEADER]: version,
-        },
-      });
-      // oxlint-disable-next-line no-await-in-loop -- three cases, order does not matter
-      const response = await call(request);
-      expect(response.status).toBe(403);
-      // oxlint-disable-next-line no-await-in-loop -- as above
-      expect(await response.json()).toMatchObject({
-        _tag: "HubUpdateRequiredError",
-        floor: HUB_PROTOCOL_FLOOR,
-        error: expect.stringContaining("Update it"),
-      });
-    }
+    await Promise.all(
+      ["", "3", "not a number"].map(async (version) => {
+        const request = new Request(`${BASE}/devices`, {
+          headers: {
+            Authorization: `Bearer ${credential}`,
+            [PROTOCOL_HEADER]: version,
+          },
+        });
+        const response = await call(request);
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({
+          _tag: "HubUpdateRequiredError",
+          floor: HUB_PROTOCOL_FLOOR,
+          error: expect.stringContaining("Update it"),
+        });
+      }),
+    );
   });
 
   it("refuses an old build's enroll before its login is checked", async () => {
@@ -612,29 +612,30 @@ describe("the version floor", () => {
     // in again, which would not help it.
     // Each with a body its route reads, so nothing but the order
     // decides the answer.
-    for (const [method, path, body] of [
+    const routes = [
       ["GET", "/devices", undefined],
       ["POST", "/tickets", { connectionId: "a".repeat(32) }],
       ["POST", "/tunnel", { port: 4000 }],
-    ] as const) {
-      // oxlint-disable-next-line no-await-in-loop -- three routes, order does not matter
-      const response = await call(
-        new Request(`${BASE}${path}`, {
-          method,
-          headers: {
-            Authorization: `Bearer smdc_${"a".repeat(43)}`,
-            "Content-Type": "application/json",
-            [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR - 1),
-          },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }),
-      );
-      expect(response.status, path).toBe(403);
-      // oxlint-disable-next-line no-await-in-loop -- as above
-      expect(await response.json(), path).toMatchObject({
-        _tag: "HubUpdateRequiredError",
-      });
-    }
+    ] as const;
+    await Promise.all(
+      routes.map(async ([method, path, body]) => {
+        const response = await call(
+          new Request(`${BASE}${path}`, {
+            method,
+            headers: {
+              Authorization: `Bearer smdc_${"a".repeat(43)}`,
+              "Content-Type": "application/json",
+              [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR - 1),
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+        );
+        expect(response.status, path).toBe(403);
+        expect(await response.json(), path).toMatchObject({
+          _tag: "HubUpdateRequiredError",
+        });
+      }),
+    );
   });
 
   it("refuses an old build whose device was revoked as old", async () => {
@@ -709,12 +710,12 @@ describe("rate limiting", () => {
   // A missing binding would fail open in rateLimited, so the cases below,
   // which stand in their own limiters, would never notice it.
   it("binds both budgets from wrangler.jsonc", async () => {
-    for (const limiter of [env.RATE_LIMIT, env.RATE_LIMIT_OPEN]) {
-      // oxlint-disable-next-line no-await-in-loop -- two calls, order does not matter
-      expect(await limiter.limit({ key: "203.0.113.30" })).toEqual({
-        success: true,
-      });
-    }
+    const limits = await Promise.all(
+      [env.RATE_LIMIT, env.RATE_LIMIT_OPEN].map((limiter) =>
+        limiter.limit({ key: "203.0.113.30" }),
+      ),
+    );
+    for (const limit of limits) expect(limit).toEqual({ success: true });
   });
 
   it("answers 429 with Retry-After once one address is over budget", async () => {

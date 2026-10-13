@@ -3,7 +3,6 @@
 // debugging port, killed, frozen and quit the ways a machine does, and
 // read back through its logs. The lab's host is one, and so are the
 // desktop device under test and the one that dials over the tunnel.
-/* oxlint-disable no-await-in-loop -- the harness steps through time on purpose: each wait, poll and scenario follows the one before */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, type WriteStream } from "node:fs";
 import { homedir } from "node:os";

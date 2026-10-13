@@ -369,10 +369,12 @@ const make = Effect.gen(function* () {
     setShelved,
     setAutoPull,
     description,
-    scriptContext: ({ project, worktree }) =>
-      scriptContext(project, worktree).pipe(
-        Effect.withSpan("Worktrees.scriptContext"),
-      ),
+    scriptContext: Effect.fn("Worktrees.scriptContext")(function* ({
+      project,
+      worktree,
+    }: Located) {
+      return yield* scriptContext(project, worktree);
+    }),
     describe,
     destination,
     create,
@@ -396,16 +398,24 @@ const make = Effect.gen(function* () {
       Effect.orDie,
       Effect.withSpan("Worktrees.unshelved"),
     ),
-    checkRemovable: (located, force) => removable(located.worktree, force),
-    primaryTarget: (project) =>
-      primaryRefOf(project).pipe(
-        Effect.map(({ remotes, primaryRef, primaryBranch }) => ({
-          remotes,
-          primaryRef,
-          remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
-          primaryBranch,
-        })),
-      ),
+    checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
+      located: Located,
+      force: boolean,
+    ) {
+      yield* removable(located.worktree, force);
+    }),
+    primaryTarget: Effect.fn("Worktrees.primaryTarget")(function* (
+      project: RegisteredProject,
+    ) {
+      const { remotes, primaryRef, primaryBranch } =
+        yield* primaryRefOf(project);
+      return {
+        remotes,
+        primaryRef,
+        remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
+        primaryBranch,
+      };
+    }),
   });
 });
 

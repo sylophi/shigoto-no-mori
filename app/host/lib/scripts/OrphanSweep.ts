@@ -91,7 +91,7 @@ function parseProcessTable(stdout: string): LiveProcess[] {
 // -ww so a long dev-server command line isn't truncated, LC_ALL so
 // lstart's month and day names stay parseable.
 const PS_COLUMNS = ["-ww", "-o", "pid=,pgid=,lstart=,command="];
-const PS_ENV = { env: { ...process.env, LC_ALL: "C" } };
+const PS_ENV = { env: { LC_ALL: "C" }, extendEnv: true };
 
 const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
   const table = new Map<number, LiveProcess>();

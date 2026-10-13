@@ -1,5 +1,4 @@
-// oxlint-disable-next-line no-restricted-imports -- React is used as a type-only namespace
-import type * as React from "react";
+import type { ComponentProps } from "react";
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
 import { cn } from "../lib/utils.ts";
@@ -8,7 +7,7 @@ import type { WithoutTitle } from "./tooltip.tsx";
 function Switch({
   className,
   ...props
-}: WithoutTitle<React.ComponentProps<typeof SwitchPrimitive.Root>>) {
+}: WithoutTitle<ComponentProps<typeof SwitchPrimitive.Root>>) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"

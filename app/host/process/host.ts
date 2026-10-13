@@ -99,9 +99,8 @@ function traceFile(logsPath: string): (line: string) => void {
 
 const facts = hostFacts();
 const flavor = facts.flavor;
-// oxlint-disable-next-line shigomori/no-double-cast -- Electron adds parentPort to a utility process, and its types are Electron's
-const parentPort = (process as unknown as { parentPort: ParentPort })
-  .parentPort;
+// Electron adds parentPort to a utility process, and its types are Electron's
+const parentPort = (process as { parentPort: ParentPort }).parentPort;
 
 let hurried = false;
 let runtime: { readonly dispose: () => Promise<void> } | null = null;

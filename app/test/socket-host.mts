@@ -344,8 +344,8 @@ async function rawLink(
     ws.on("close", (code) => resolve(code)),
   );
   // Sealed like the dialer's, with a ticket minted for DIALER.
-  // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
-  const sealed = sealDialer(ws as unknown as Socket.WebSocketLike, {
+  // ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
+  const sealed = sealDialer(ws as Socket.WebSocketLike, {
     ticket: opts.ticket ?? mintTicket(listener.tickets, DIALER),
     localKey: testDeviceKey(DIALER).pair,
     remoteKey: testDeviceKey(LISTENER).pair.publicKey,
@@ -699,8 +699,8 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
     send(data);
   }) as typeof recorder.send;
   const recorded = sealDialer(
-    // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
-    recorder as unknown as Socket.WebSocketLike,
+    // ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
+    recorder as Socket.WebSocketLike,
     {
       ticket,
       localKey: testDeviceKey(DIALER).pair,

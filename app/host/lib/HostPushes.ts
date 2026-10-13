@@ -35,7 +35,9 @@ export class HostPushes extends Context.Service<
 
 const over = (pubsub: PubSub.PubSub<Push>) =>
   HostPushes.of({
-    publish: (push) => PubSub.publish(pubsub, push).pipe(Effect.asVoid),
+    publish: Effect.fn("HostPushes.publish")(function* (push: Push) {
+      yield* PubSub.publish(pubsub, push);
+    }),
     subscribe: PubSub.subscribe(pubsub).pipe(
       Effect.map(Stream.fromSubscription),
     ),
