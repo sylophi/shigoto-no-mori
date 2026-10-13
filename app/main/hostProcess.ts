@@ -109,6 +109,9 @@ const crashes: number[] = [];
 // The current host's address, once it is up. Replaced as a host forks,
 // so a window redialing meanwhile waits for the next one.
 let address = deferred<Reported>();
+// The hosts that exited unasked since one was last up, for the next to
+// stop what their scripts left (HostFacts.replacesHosts).
+let replaced: { pid: number; startedAt: number; exitedAt: number }[] = [];
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 
@@ -146,6 +149,8 @@ function tell(said: Effect.Effect<unknown, unknown>): void {
 const registrar = createShellRegistrar();
 const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
+    // Up, its sweep has claimed what the hosts before it left.
+    replaced = [];
     // The device the host is rides along, which the shell's account
     // calls name.
     reportedDeviceId = reported.deviceId;
@@ -196,12 +201,29 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
 
 function fork(): void {
   const { port1, port2 } = new MessageChannelMain();
+  const facts: HostFacts =
+    replaced.length === 0
+      ? hostFacts()
+      : {
+          ...hostFacts(),
+          replacesHosts: replaced.map(({ pid, startedAt }) => ({
+            pid,
+            startedAt,
+          })),
+        };
   const forked = utilityProcess.fork(
     join(__dirname, "host.js"),
-    [`${HOST_FACTS_FLAG}${JSON.stringify(hostFacts())}`],
+    [`${HOST_FACTS_FLAG}${JSON.stringify(facts)}`],
     { serviceName: "Shigoto no Mori Host", stdio: "pipe" },
   );
   child = forked;
+  // Read at its spawn: an exited utility process's pid reads undefined.
+  let spawned: { pid: number; startedAt: number } | undefined;
+  forked.once("spawn", () => {
+    if (forked.pid !== undefined) {
+      spawned = { pid: forked.pid, startedAt: Date.now() };
+    }
+  });
   // The host's console, into the shell's (and so its log file).
   for (const stream of [forked.stdout, forked.stderr]) {
     stream?.on("data", (chunk: Buffer) => {
@@ -230,6 +252,12 @@ function fork(): void {
       });
       return;
     }
+    // Only hosts that died within the crash window are vouched for: one
+    // older may have left a group whose id is a stranger's by now.
+    replaced = replaced.filter(
+      (gone) => gone.exitedAt >= now - CRASH_WINDOW_MS,
+    );
+    if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
     fork();
   });
 }
