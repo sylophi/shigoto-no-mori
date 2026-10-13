@@ -295,7 +295,12 @@ it("stops what a v2 crash left running at the first v3 start, as its running-scr
   const first = await startSweep(scriptsAt(dataDir));
   assert.deepEqual(await Effect.runPromise(first.takeReport), { stopped: 1 });
   await waitFor(() => !processAlive(orphan.pid), "the v2 orphan to stop");
-  // Read once: the file stays, and the next start has nothing to sweep.
-  const second = await startSweep(scriptsAt(dataDir));
-  assert.deepEqual(await Effect.runPromise(second.takeReport), { stopped: 0 });
+  // Read once: the rows go with the sweep, though the file stays.
+  const left = await Effect.runPromise(
+    Effect.flatMap(
+      RunningScripts.RunningScripts,
+      (scripts) => scripts.list,
+    ).pipe(Effect.provide(scriptsAt(dataDir))),
+  );
+  assert.deepEqual(left, []);
 });
