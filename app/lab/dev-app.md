@@ -50,7 +50,7 @@ A device is made of two folders:
 
 - **Data dir.** Projects and worktrees: `store.db` (the SQLite store:
   projects, the device id, settings, marks and state), `wt/` (the
-  managed worktrees), `file-sync/`, `iconCache/`, and while the app
+  managed worktrees), `file-sync/`, and while the app
   runs `loopback.json` (how the terminal's cross-device verbs find
   it). The device id is created per data dir, so one data dir is one
   device. A v2 data dir's `registry.json`, `state.json`, `config.json`
