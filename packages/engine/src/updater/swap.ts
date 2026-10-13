@@ -4,8 +4,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import * as Paths from "../Paths.ts";
-import { updaterFiles } from "../updaterFiles.ts";
 import { UpdateInProgress } from "../stagingLock.ts";
 import {
   APP_QUIT_TIMEOUT,
@@ -31,8 +29,7 @@ export const makeSwap = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const paths = yield* Paths.Paths;
-    const stagedDir = updaterFiles(path, paths.dataDir).staged;
+    const stagedDir = files.at.staged;
     const { removeAll, run } = files;
     const { signerOf, verify } = signatures;
     const { lock, readManifest, clearStaged, bundleVersion } = staging;

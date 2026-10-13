@@ -7,7 +7,7 @@
 // land in the gap around a restart) and via a watch of the data dir
 // afterwards. Everything here is best-effort: a failed write or a
 // malformed request degrades `sm update`, never the updater itself.
-import { basename, join } from "node:path";
+import path from "node:path";
 import { app } from "electron";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -22,14 +22,13 @@ import type {
   UpdaterStatus,
 } from "@shigomori/contracts/schemas";
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
-import { updaterFiles } from "@shigomori/engine/updaterFiles";
+import { updaterFiles } from "@shigomori/engine/Updater";
 import { dataDir } from "@shared/paths";
 import { readJson, writeJson } from "../core/files/jsonFile";
 
 const REQUEST_STALE_MS = 2 * 60_000;
 
-const updaterStatePath = () => updaterFiles({ join }, dataDir()).status;
-const updateRequestPath = () => updaterFiles({ join }, dataDir()).request;
+const files = () => updaterFiles(path, dataDir());
 
 // One publish at a time: setState can fire twice in one tick (a
 // synchronous throw right after entering "checking"), and two racing
@@ -46,7 +45,7 @@ export const publishUpdaterState = (state: UpdaterState) => {
   };
   // The CLI treats a missing or stale file as "app not reachable".
   return publishing.withPermit(
-    Effect.ignore(writeJson(updaterStatePath(), status)),
+    Effect.ignore(writeJson(files().status, status)),
   );
 };
 
@@ -66,12 +65,12 @@ export const updaterBridge = (
 ): Effect.Effect<void, never, FileSystem.FileSystem | Scope.Scope> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const consumingPath = () => updateRequestPath() + ".consuming";
+    const consumingPath = () => files().request + ".consuming";
     // The boot's consume and the watch's share one claimed file, so they
     // take turns.
     const turns = yield* Semaphore.make(1);
     const consume = Effect.gen(function* () {
-      yield* fs.rename(updateRequestPath(), consumingPath());
+      yield* fs.rename(files().request, consumingPath());
       const request = yield* readJson(
         consumingPath(),
         UpdateRequestSchema,
@@ -91,10 +90,11 @@ export const updaterBridge = (
     // next launch watches afresh. Watched before the first consume, so
     // a request written meanwhile is either consumed or heard.
     watching = yield* FiberHandle.make();
+    const requestFile = path.basename(files().request);
     yield* FiberHandle.run(
       watching,
       fs.watch(dataDir()).pipe(
-        Stream.filter((event) => event.path === basename(updateRequestPath())),
+        Stream.filter((event) => event.path === requestFile),
         Stream.runForEach(() => consume),
         Effect.ignore,
       ),

@@ -20,7 +20,7 @@
 // the update server it falls back to (the engine's Updater).
 // updateEndpoints.ts moves both out of our environment and hands them
 // to the check alone.
-import { join } from "node:path";
+import path from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { app } from "electron";
@@ -43,7 +43,6 @@ import { publishUpdaterState, updaterBridge } from "./updaterBridge";
 import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
-import { updaterFiles } from "@shigomori/engine/updaterFiles";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
@@ -104,13 +103,13 @@ const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
 // actually on disk.
 const readStagedManifest = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const files = updaterFiles({ join }, dataDir());
+  const files = Updater.updaterFiles(path, dataDir());
   const manifest = yield* readJson(files.manifest, StagedManifestSchema).pipe(
     Effect.orElseSucceed(() => null),
   );
   if (manifest === null) return null;
   const there = yield* fs
-    .exists(join(files.staged, manifest.bundleName))
+    .exists(path.join(files.staged, manifest.bundleName))
     .pipe(Effect.orElseSucceed(() => false));
   return there ? manifest : null;
 });

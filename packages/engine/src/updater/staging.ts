@@ -10,8 +10,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Paths from "../Paths.ts";
-import { updaterFiles } from "../updaterFiles.ts";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
@@ -49,7 +47,6 @@ export const makeStaging = ({
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
-    const paths = yield* Paths.Paths;
     const {
       updates: updatesDir,
       staged: stagedDir,
@@ -57,7 +54,7 @@ export const makeStaging = ({
       stagingLock: lockPath,
       download: downloadPath,
       extract: extractDir,
-    } = updaterFiles(path, paths.dataDir);
+    } = files.at;
     const { removeAll, run, readShared, writeShared } = files;
     const { send, queryFeed } = feeds;
     const { verify } = signatures;

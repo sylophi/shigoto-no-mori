@@ -28,7 +28,7 @@ import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
 import * as Registry from "../Registry.ts";
 import { acquireStagingLock } from "../stagingLock.ts";
-import { updaterFiles } from "../updaterFiles.ts";
+import { updaterFiles } from "../Updater.ts";
 import type { ListedProject } from "../Registry.ts";
 import * as Terrier from "../Terrier.ts";
 import * as WorktreeData from "../WorktreeData.ts";
@@ -408,9 +408,6 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     });
 
     const updater = updaterFiles(path, dataDir);
-    const updatesDir = updater.updates;
-    const stagingLock = updater.stagingLock;
-    const stagedDir = updater.staged;
 
     // The stager holds its pidfile for a whole download, so a crashed one
     // is told by its pid being dead, not by the file's age.
@@ -423,15 +420,15 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         repairable(
           line.warn(
             `left behind by an update that stopped${pid !== 0 ? ` (pid ${pid} is gone)` : ""}; the next update takes it over`,
-            `Delete ${tildify(stagingLock, home)}.`,
+            `Delete ${tildify(updater.stagingLock, home)}.`,
           ),
           {
-            prompt: `Delete the stale update staging lock at ${tildify(stagingLock, home)}?`,
+            prompt: `Delete the stale update staging lock at ${tildify(updater.stagingLock, home)}?`,
             label: "deleted the stale update staging lock",
             destructive: true,
             // Through the lock, which breaks only a dead holder's: an
             // update that took it over meanwhile keeps it.
-            apply: Effect.scoped(acquireStagingLock(stagingLock)).pipe(
+            apply: Effect.scoped(acquireStagingLock(updater.stagingLock)).pipe(
               Effect.provideService(
                 ChildProcessSpawner.ChildProcessSpawner,
                 spawner,
@@ -470,7 +467,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           current !== undefined &&
           compareSemver(stagedVersion, current) <= 0
         ) {
-          found.push(stagedDir);
+          found.push(updater.staged);
         }
         return found;
       });
@@ -507,13 +504,13 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               "Delete them, or let the next update sweep them.",
             ),
             {
-              prompt: `Delete ${shown} of leftover update files in ${tildify(updatesDir, home)}?`,
+              prompt: `Delete ${shown} of leftover update files in ${tildify(updater.updates, home)}?`,
               label: `deleted ${shown} of leftover update files`,
               destructive: true,
               // Under the stager's own lock, and listed again once it is
               // held: a run that staged something newer since keeps it.
               apply: Effect.gen(function* () {
-                yield* acquireStagingLock(stagingLock).pipe(
+                yield* acquireStagingLock(updater.stagingLock).pipe(
                   Effect.provideService(
                     ChildProcessSpawner.ChildProcessSpawner,
                     spawner,
@@ -689,7 +686,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       registeredLine,
       checkRegistry,
       checkStaleLocks,
-      stagingLock,
+      stagingLock: updater.stagingLock,
       checkStagingLock,
       checkUpdateLeftovers,
       checkPortAllocations,

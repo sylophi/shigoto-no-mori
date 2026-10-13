@@ -494,12 +494,11 @@ const make = Effect.gen(function* () {
     // Where the attributes outside the tree live, as git looks for them,
     // and the config files that decide which one is the global one.
     const readAttributeFiles = Effect.gen(function* () {
-      const home = paths.configHome;
       let globalAttrs = (yield* git
         .run(source, ["config", "--path", "--get", "core.attributesFile"])
         .pipe(Effect.orElseSucceed(() => ""))).trim();
       if (globalAttrs === "")
-        globalAttrs = path.join(home, "git", "attributes");
+        globalAttrs = path.join(paths.configHome, "git", "attributes");
       else if (!path.isAbsolute(globalAttrs)) {
         globalAttrs = path.join(source, globalAttrs);
       }
@@ -519,7 +518,7 @@ const make = Effect.gen(function* () {
       }
       configFiles.push(
         path.join(paths.home, ".gitconfig"),
-        path.join(home, "git", "config"),
+        path.join(paths.configHome, "git", "config"),
       );
       return { globalAttrs, infoAttrs, configFiles };
     });

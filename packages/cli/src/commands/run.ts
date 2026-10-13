@@ -102,7 +102,7 @@ export const runCommand = Command.make(
       // or out of room must not keep the script from running.
       yield* scripts
         .recordRun(project.id, command.script)
-        .pipe(Effect.catchCause(() => Effect.void));
+        .pipe(Effect.ignoreCause);
       // From the worktree's root, not the cwd: a nested package.json must
       // not retarget the run.
       yield* handOver("exec", command.program, command.args, {
