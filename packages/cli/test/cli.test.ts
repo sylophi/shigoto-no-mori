@@ -1746,6 +1746,118 @@ describe("the Go sm's command line", () => {
   });
 });
 
+describe("describe with an open pull request", () => {
+  // A worktree fox of a project cloned from an upstream, and a gh that
+  // finds fox's open PR #7 unless `mode` says it fails: "remote" as for
+  // a repo off GitHub, "auth" signed out, "down" GitHub erroring.
+  const project = async () => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    box.git(box.home, "clone", "-q", upstream, repo);
+    box.write("registry.json", {
+      projects: [{ id: "R", name: "repo", path: repo }],
+    });
+    const fox = join(box.side("cli"), "wt", "repo", "fox");
+    box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
+    await box.migrate("cli");
+    const log = join(box.home, "gh.log");
+    const mode = join(box.home, "gh.mode");
+    box.fakeBin(
+      "gh",
+      `echo "$*" >> '${log}'
+case "$(cat '${mode}' 2>/dev/null)" in
+  remote) echo "none of the git remotes configured for this repository point to a known GitHub host" >&2; exit 1;;
+  auth) echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 1;;
+  down) echo "HTTP 502: Bad Gateway" >&2; exit 1;;
+esac
+case "$*" in
+  "pr list --state open --head fox "*) echo '[{"number":7,"url":"u7","title":"Fox","body":"","isCrossRepository":false}]';;
+  "pr edit "*) ;;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+    const described = (...args: string[]) =>
+      runAt(box.home, "describe", "-p", "repo", "fox", ...args);
+    const own = async () =>
+      (await runAt(box.home, "--json", "describe", "-p", "repo", "fox"))
+        .doc as { readonly title: string; readonly description: string };
+    const calls = () => readFileSync(log, "utf8").split("\n");
+    return { described, own, calls, mode };
+  };
+
+  it("edits the PR and leaves the worktree's own pair as it was", async () => {
+    const { described, own, calls, mode } = await project();
+    writeFileSync(mode, "remote");
+    assert.equal((await described("-t", "Before the PR")).code, 0);
+    writeFileSync(mode, "");
+
+    const edited = await described("-t", "Foxes", "-d", "- What they do.");
+    assert.equal(edited.code, 0, edited.stderr);
+    assert.equal(edited.stdout, "edited PR #7: Foxes\n");
+    assert.equal((await described("-d", "")).code, 0);
+    const json = await runAt(
+      box.home,
+      "--json",
+      "describe",
+      "-p",
+      "repo",
+      "fox",
+      "-t",
+      "Fox",
+    );
+    assert.equal(
+      (json.doc as { pullRequest: { number: number; title: string } })
+        .pullRequest.title,
+      "Fox",
+    );
+    for (const call of [
+      "pr edit 7 --title=Foxes --body=- What they do.",
+      "pr edit 7 --body=",
+    ]) {
+      assert.ok(calls().includes(call), calls().join("\n"));
+    }
+    assert.deepEqual(await own(), {
+      ok: true,
+      title: "Before the PR",
+      description: "",
+      pullRequest: {
+        number: 7,
+        url: "u7",
+        title: "Fox",
+        body: "",
+        isCrossRepository: false,
+      },
+    });
+
+    // A PR's title can't be cleared.
+    assert.equal((await described("-t", "")).code, 2);
+  });
+
+  it("changes nothing when gh can't tell, and writes its own when gh is signed out", async () => {
+    const { described, own, mode } = await project();
+    writeFileSync(mode, "down");
+    const down = await described("-t", "Lost");
+    assert.equal(down.code, 1);
+    assert.match(
+      down.stderr,
+      /Couldn't check for a pull request \(HTTP 502: Bad Gateway\), so nothing was changed\./,
+    );
+    writeFileSync(mode, "remote");
+    assert.equal((await own()).title, "");
+
+    // gh signed out can't show a PR anywhere, the app's included.
+    writeFileSync(mode, "auth");
+    const signedOut = await described("-t", "Signed out");
+    assert.equal(signedOut.code, 0, signedOut.stderr);
+    assert.match(
+      signedOut.stderr,
+      /Couldn't check for a pull request \(gh isn't authenticated\)\./,
+    );
+    writeFileSync(mode, "remote");
+    assert.equal((await own()).title, "Signed out");
+  });
+});
+
 describe("disk-usage", () => {
   it("measures a folder, stepping over what --exclude names", async () => {
     const dir = join(box.home, "measured");

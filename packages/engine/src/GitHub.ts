@@ -138,6 +138,13 @@ export type Lookup<A> = {
   readonly unavailable?: string;
 };
 
+// The owning pull request's lookup. A gh that isn't signed in can't
+// show the PR anywhere, so that failure is certain there is none to
+// mind; one that timed out or errored may have missed it.
+export type OwningLookup = Lookup<OwningPullRequest> & {
+  readonly uncertain?: true;
+};
+
 export class GitHub extends Context.Service<
   GitHub,
   {
@@ -154,11 +161,12 @@ export class GitHub extends Context.Service<
       branch: string,
     ) => Effect.Effect<Lookup<PullRequestCard>>;
     // The open pull request from this repository on the branch, which
-    // owns the worktree's title and description.
+    // owns the worktree's title and description. `uncertain` when the
+    // lookup failed in a way that could have missed one.
     readonly owningPullRequest: (
       repo: string,
       branch: string,
-    ) => Effect.Effect<Lookup<OwningPullRequest>>;
+    ) => Effect.Effect<OwningLookup>;
     // The branch's pull request, any state, newest first: the first that
     // isn't a fork's, or is the one the branch was checked out from.
     // `extraFields` are asked for beside the summary.
@@ -287,11 +295,11 @@ const lookupArgs = (
 // Which failure gh's stderr describes. The auth failure is the common
 // case, and its own message is four lines of instructions. A repo with no
 // GitHub remote gets an error that points at `gh auth login` too, so it
-// is told apart first.
+// is told apart first. GitHub Actions has gh ask for GH_TOKEN instead.
 const reasonOfStderr = (stderr: string): GitHubCliError["reason"] =>
   stderr.includes("none of the git remotes")
     ? "no-github-remote"
-    : stderr.includes("gh auth login")
+    : stderr.includes("gh auth login") || stderr.includes("GH_TOKEN")
       ? "unauthenticated"
       : "failed";
 
@@ -593,20 +601,28 @@ const make = Effect.gen(function* () {
   const owningPullRequest = Effect.fn("GitHub.owningPullRequest")(function* (
     repo: string,
     branch: string,
-  ): Effect.fn.Return<Lookup<OwningPullRequest>> {
+  ): Effect.fn.Return<OwningLookup> {
     const rows = yield* listed(
       repo,
       lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
     );
-    // Not worth a word, as Go's describe took them: no gh, a repository
-    // off GitHub, and output that can't be read.
+    // Not worth a word: no gh, and a repository off GitHub.
     if (Result.isFailure(rows)) {
       const failure = rows.failure;
-      return failure === undefined ||
-        failure.reason === "missing" ||
-        failure.reason === "no-github-remote"
-        ? { found: null }
-        : { found: null, unavailable: reasonOf(failure) };
+      if (failure === undefined) {
+        return {
+          found: null,
+          unavailable: "gh's answer didn't parse",
+          uncertain: true,
+        };
+      }
+      if (failure.reason === "missing" || failure.reason === "no-github-remote")
+        return { found: null };
+      return {
+        found: null,
+        unavailable: reasonOf(failure),
+        ...(failure.reason === "unauthenticated" ? {} : { uncertain: true }),
+      };
     }
     const own = rows.success.find((row) => !row.isCrossRepository);
     return {

@@ -1,16 +1,17 @@
 // The worktree page's header (WorktreeHeaderView): the title the work
-// goes by, or its branch alone when it has none. A title of the
-// worktree's own is edited in place (useOwnTitleEdit).
+// goes by, or its branch alone when it has none. The title is edited
+// in place (useTitleEdit), the PR's while it is open.
 import { useLayoutEffect, useRef, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
-import { useOwnTitleEdit } from "@/hooks/worktrees/useOwnTitleEdit";
+import { useTitleEdit } from "@/hooks/worktrees/useTitleEdit";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import type {
-  PullRequest,
-  PullRequestDetail,
-  Worktree,
+import {
+  hasWorktreeData,
+  type PullRequest,
+  type PullRequestDetail,
+  type Worktree,
 } from "@shigomori/contracts/schemas";
 import { BranchTitle } from "./branch/BranchTitle";
 import { PullRequestStateLabelView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestStateLabelView.tsx";
@@ -54,7 +55,13 @@ function TitledHeader({
   const branchRef = useRef<HTMLDivElement>(null);
   // The branch's buttons beside it come and go with control.
   const { canCommand } = useCommandAccess();
-  const titleEdit = useOwnTitleEdit(worktree, title);
+  // A merged or closed PR's title stays as GitHub has it, and an
+  // external checkout keeps no data file for one of its own.
+  const titleEdit = useTitleEdit(
+    worktree,
+    title,
+    hasWorktreeData(worktree) && (!pr || pr.state === "OPEN"),
+  );
   const showBase = useBaseFits(
     lineRef,
     branchRef,

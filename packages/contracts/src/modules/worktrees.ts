@@ -140,7 +140,9 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // The worktree's own title and description, edited on its page.
+  // A worktree's title and description, edited on its page: the branch's
+  // open pull request's on GitHub, through this device's gh, when it has
+  // one, and the worktree's own otherwise.
   invoke("describe", DescribeWorktreePayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,

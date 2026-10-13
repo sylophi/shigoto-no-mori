@@ -325,6 +325,7 @@ export const getWorktreePullRequest = Effect.fn("PullRequests.forBranch")(
     return {
       ...detail,
       body: detail.body && withSignedImages(detail.body, match.bodyHTML),
+      bodySource: detail.body,
       reviews: toReviews(match),
     } satisfies PullRequestDetail;
   },

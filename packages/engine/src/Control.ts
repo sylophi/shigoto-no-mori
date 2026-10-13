@@ -15,7 +15,7 @@ import {
   LinkRefusedError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
-import { LoopbackGroup } from "@shigomori/contracts/link";
+import { LINK_MAX_FRAME_BYTES, LoopbackGroup } from "@shigomori/contracts/link";
 import { isInvoke } from "@shigomori/contracts/contract";
 import {
   CONTROL_ERROR_CODES,
@@ -209,7 +209,11 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       retryPolicy: Schedule.recurs(0),
     }).pipe(
       Effect.provideService(Socket.Socket, socket),
-      Effect.provide(RpcSerialization.layerSchemaBinary()),
+      Effect.provide(
+        RpcSerialization.layerSchemaBinary({
+          maxFrameSize: LINK_MAX_FRAME_BYTES,
+        }),
+      ),
     );
     // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
     const client = (yield* RpcClient.make(LoopbackGroup, {

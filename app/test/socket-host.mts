@@ -97,7 +97,7 @@ import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
-import { LinkGroup } from "@shigomori/contracts/link";
+import { LINK_MAX_FRAME_BYTES, LinkGroup } from "@shigomori/contracts/link";
 import {
   CLOSE_HANDSHAKE_FAILED,
   CLOSE_TRY_AGAIN,
@@ -193,7 +193,11 @@ function serve(listener: DirectListener, seen: Seen): void {
   // was read for.
   binding.view("terminals:attach", (input) =>
     (input as { terminalId: string }).terminalId === "huge"
-      ? Stream.make({ kind: "output", data: "y".repeat(17 << 20), seq: 1 })
+      ? Stream.make({
+          kind: "output",
+          data: "y".repeat(LINK_MAX_FRAME_BYTES + (1 << 20)),
+          seq: 1,
+        })
       : (input as { terminalId: string }).terminalId === "endless"
         ? Stream.fromEffectRepeat(
             Effect.sync(() => ({

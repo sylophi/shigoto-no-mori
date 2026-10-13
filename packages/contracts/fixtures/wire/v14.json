@@ -3736,9 +3736,10 @@
       "path": "#"
     },
     "success": {
-      "kind": "text",
-      "contents": "\t",
-      "size": 2
+      "kind": "media",
+      "mime": "video/mp4",
+      "base64": "AAAAGGZ0eXA=",
+      "size": 8
     }
   },
   "worktrees:refreshChangeStatus": {

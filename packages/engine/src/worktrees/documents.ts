@@ -22,6 +22,7 @@ import * as Lifecycle from "../Lifecycle.ts";
 import { type PortInfo } from "../ports.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
+import type * as WorktreeData from "../WorktreeData.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // --- the documents --------------------------------------------------------
@@ -166,6 +167,20 @@ export type DescriptionView = {
   // word (a repository off GitHub isn't).
   readonly pullRequestUnavailable?: string;
 };
+
+// What a describe wrote: the worktree's own pair as stored, with why the
+// pull request couldn't be looked up when that is worth a word, or the
+// open pull request it edited instead, as it now reads.
+export type Described =
+  | {
+      readonly described: WorktreeData.Description;
+      readonly pullRequest: null;
+      readonly pullRequestUnavailable?: string;
+    }
+  | {
+      readonly described: null;
+      readonly pullRequest: GitHub.OwningPullRequest;
+    };
 
 // A listing over several projects: the rows of each that could be read,
 // in project order, and the projects that couldn't.
@@ -375,14 +390,30 @@ export class DescribeRefused extends Schema.TaggedError<DescribeRefused>()(
   }
 }
 
-// While the branch has an open pull request, its title and body are the
-// worktree's, and a change belongs on the PR.
-export class PullRequestOwnsDescription extends Schema.TaggedError<PullRequestOwnsDescription>()(
-  "PullRequestOwnsDescription",
-  { worktree: Schema.String, number: Schema.Int },
+// A describe that takes the open pull request's title away: GitHub
+// refuses a PR without one.
+export class PullRequestNeedsTitle extends Schema.TaggedError<PullRequestNeedsTitle>()(
+  "PullRequestNeedsTitle",
+  { number: Schema.Int },
+) {
+  // The command line was wrong, not the worktree.
+  get usage(): boolean {
+    return true;
+  }
+
+  override get message(): string {
+    return `PR #${this.number} needs a title.`;
+  }
+}
+
+// A describe while gh couldn't tell whether the branch has an open pull
+// request: a write it missed would sit hidden under the PR's text.
+export class PullRequestUnchecked extends Schema.TaggedError<PullRequestUnchecked>()(
+  "PullRequestUnchecked",
+  { reason: Schema.String },
 ) {
   override get message(): string {
-    return `${this.worktree} has open PR #${this.number}, which gives it its title and description. Edit the PR instead: gh pr edit ${this.number} --title … --body …`;
+    return `Couldn't check for a pull request (${this.reason}), so nothing was changed.`;
   }
 }
 

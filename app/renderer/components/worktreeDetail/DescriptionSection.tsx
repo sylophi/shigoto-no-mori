@@ -1,10 +1,12 @@
 // The work's description (DescriptionSectionView), measured whether a
 // long one is cut down and whether the pencil fits at the end of a
-// one-line one. While no open PR holds it (`editable`), it is edited
-// as its markdown in place (DescriptionEditorView).
+// one-line one. It is edited as its markdown in place
+// (DescriptionEditorView), the open PR's body while one holds it
+// (`pullRequestBody`), except on an external checkout, which keeps no
+// data file.
 import { useBinding } from "@/hooks/ui/useKeymap";
 import { type RefObject, useLayoutEffect, useState } from "react";
-import type { Worktree } from "@shigomori/contracts/schemas";
+import { hasWorktreeData, type Worktree } from "@shigomori/contracts/schemas";
 import { useIsTruncated } from "@shigomori/ui/hooks/useIsTruncated.ts";
 import {
   DescriptionEditorView,
@@ -20,11 +22,11 @@ const PENCIL_ROOM = 32;
 export function DescriptionSection({
   worktree,
   description,
-  editable,
+  pullRequestBody,
 }: {
   worktree: Worktree;
   description: string;
-  editable: boolean;
+  pullRequestBody: string | undefined;
 }) {
   // The edit in progress, or null while idle.
   const [draft, setDraft] = useState<string | null>(null);
@@ -32,8 +34,9 @@ export function DescriptionSection({
   const describe = useDescribeWorktree("Couldn't save the description");
   const { canCommand } = useCommandAccess();
   const imageHosts = useProjectImageHosts(worktree.projectId);
-  // The worktree's own text, or the merged PR's body it shows instead.
-  const current = worktree.description ?? description;
+  // The PR's body or the worktree's own text, else the merged PR's
+  // body it shows instead.
+  const current = pullRequestBody ?? worktree.description ?? description;
 
   const cancel = () => setDraft(null);
   const save = (next: string) => {
@@ -66,7 +69,11 @@ export function DescriptionSection({
       key={description}
       description={description}
       imageHosts={imageHosts}
-      onEdit={canCommand && editable ? () => setDraft(current) : undefined}
+      onEdit={
+        canCommand && hasWorktreeData(worktree)
+          ? () => setDraft(current)
+          : undefined
+      }
     />
   );
 }

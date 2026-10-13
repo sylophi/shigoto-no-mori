@@ -34,7 +34,10 @@ import {
   withDeleteInflight,
   withDeletesInflight,
 } from "@host/lib/scripts";
-import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import {
+  evictProjectPullRequests,
+  refreshProjectPullRequests,
+} from "@host/lib/githubCli/pullRequests";
 import {
   pullRequestStackFor,
   stackCleanupFor,
@@ -508,13 +511,21 @@ export const worktreesHandlers = {
       Ops.resumeAgent(project, worktreeId, harness, session),
     ),
 
+  // An edit made to the open PR leaves the cached PR map behind.
   describe: ({ projectId, worktreeId, title, description }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.describe(project, worktreeId, {
-        ...(title === undefined ? {} : { title }),
-        ...(description === undefined ? {} : { description }),
-      }),
-    ),
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const { worktree, editedPullRequest } = yield* Ops.describe(
+        project,
+        worktreeId,
+        {
+          ...(title === undefined ? {} : { title }),
+          ...(description === undefined ? {} : { description }),
+        },
+      );
+      if (editedPullRequest) evictProjectPullRequests(project.path);
+      return worktree;
+    }),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) =>
