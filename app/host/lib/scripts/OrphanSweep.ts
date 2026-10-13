@@ -62,22 +62,8 @@ interface LiveProcess {
 const PS_LINE =
   /^\s*(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+\d+:\d+:\d+\s+\d{4})\s+(.*)$/;
 
-const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
-  const table = new Map<number, LiveProcess>();
-  if (pids.length === 0) return table;
-  const listed = yield* Processes.exec(
-    "ps",
-    // -ww so a long dev-server command line isn't truncated, LC_ALL
-    // so lstart's month and day names stay parseable.
-    ["-ww", "-p", pids.join(","), "-o", "pid=,pgid=,lstart=,command="],
-    { env: { ...process.env, LC_ALL: "C" } },
-  ).pipe(Effect.option);
-  // `ps` exits non-zero when none of the pids are live, which is the
-  // ordinary "they all died with the app" case. A genuine failure to
-  // run it lands here too and leaves the table empty, so nothing gets
-  // signaled, which is the safe direction.
-  if (Option.isNone(listed)) return table;
-  const { stdout } = listed.value;
+function parseProcessTable(stdout: string): LiveProcess[] {
+  const rows: LiveProcess[] = [];
   for (const line of stdout.split("\n")) {
     const match = PS_LINE.exec(line);
     if (!match) continue;
@@ -92,16 +78,53 @@ const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
     }
     const startedAt = Date.parse(startedText);
     if (Number.isNaN(startedAt)) continue;
-    const pid = Number(pidText);
-    table.set(pid, {
-      pid,
+    rows.push({
+      pid: Number(pidText),
       pgid: Number(pgidText),
       startedAt,
       command: command.trim(),
     });
   }
+  return rows;
+}
+
+// -ww so a long dev-server command line isn't truncated, LC_ALL so
+// lstart's month and day names stay parseable.
+const PS_COLUMNS = ["-ww", "-o", "pid=,pgid=,lstart=,command="];
+const PS_ENV = { env: { ...process.env, LC_ALL: "C" } };
+
+const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
+  const table = new Map<number, LiveProcess>();
+  if (pids.length === 0) return table;
+  const listed = yield* Processes.exec(
+    "ps",
+    ["-p", pids.join(","), ...PS_COLUMNS],
+    PS_ENV,
+  ).pipe(Effect.option);
+  // `ps` exits non-zero when none of the pids are live, which is the
+  // ordinary "they all died with the app" case. A genuine failure to
+  // run it lands here too and leaves the table empty, so nothing gets
+  // signaled, which is the safe direction.
+  if (Option.isNone(listed)) return table;
+  for (const row of parseProcessTable(listed.value.stdout)) {
+    table.set(row.pid, row);
+  }
   return table;
 });
+
+// Every process, for the groups a script's dead leader left: null when
+// `ps` could not be run, which signals nothing.
+const readAllProcesses = Effect.fnUntraced(function* () {
+  const listed = yield* Processes.exec(
+    "ps",
+    ["-A", ...PS_COLUMNS],
+    PS_ENV,
+  ).pipe(Effect.option);
+  return Option.isNone(listed) ? null : parseProcessTable(listed.value.stdout);
+});
+
+const membersOf = (all: readonly LiveProcess[], pgid: number) =>
+  all.filter((row) => row.pgid === pgid);
 
 // The recorded command is what we handed the login shell, but a shell
 // running a single simple command execs into it, so the live command
@@ -137,10 +160,40 @@ function isSameProcess(
   return commandMatches(record.command, live.command);
 }
 
+// The proof for a group whose leader is gone, which only holds for a
+// script this app run started: the host died and its shell forked the
+// one sweeping now, seconds later. The system hands out no pid while a
+// group of that id lives, so the group under the recorded pid is the
+// script's, unless the script's group emptied and a stranger's took its
+// id since, which takes far longer than a respawn (a relaunch or a reboot
+// can be days later, so those records' groups are left alone). Every
+// member must have started after the script did.
+function isSameGroup(
+  record: RecordedScript,
+  members: readonly LiveProcess[],
+  shell: LiveProcess | undefined,
+): boolean {
+  return (
+    shell !== undefined &&
+    shell.startedAt <= record.startedAt &&
+    members.length > 0 &&
+    members.every(
+      (member) => member.startedAt >= record.startedAt - START_TOLERANCE_MS,
+    )
+  );
+}
+
+function isGroupAlive(pgid: number): boolean {
+  return isProcessAlive(-pgid);
+}
+
 // Polls instead of waiting on an exit event: these processes are not
 // our children any more, so there is nothing to listen to.
 const waitForExit = (pid: number, ms: number) =>
-  Effect.sync(() => isProcessAlive(pid)).pipe(
+  waitUntilGone(() => isProcessAlive(pid), ms);
+
+const waitUntilGone = (isAlive: () => boolean, ms: number) =>
+  Effect.sync(isAlive).pipe(
     Effect.repeat({
       schedule: Schedule.spaced(Duration.millis(EXIT_POLL_MS)),
       while: (alive) => alive,
@@ -149,6 +202,28 @@ const waitForExit = (pid: number, ms: number) =>
     Effect.timeoutOption(Duration.millis(ms)),
     Effect.map(Option.isSome),
   );
+
+// A group whose leader is gone, signaled as a group: SIGTERM, then
+// SIGKILL to what is still ours after the grace.
+const killStrays = Effect.fnUntraced(function* (record: RecordedScript) {
+  const pgid = record.pid;
+  yield* signalTree(pgid, "SIGTERM");
+  if (yield* waitUntilGone(() => isGroupAlive(pgid), ORPHAN_GRACE_MS)) {
+    return true;
+  }
+  const all = yield* readAllProcesses();
+  if (all === null) return true;
+  const shell = all.find((row) => row.pid === process.ppid);
+  if (!isSameGroup(record, membersOf(all, pgid), shell)) return true;
+  yield* signalTree(pgid, "SIGKILL");
+  const died = yield* waitUntilGone(() => isGroupAlive(pgid), ORPHAN_GRACE_MS);
+  if (!died) {
+    yield* Effect.logWarning(
+      `[scripts] the orphaned group ${pgid} survived SIGKILL, leaving it alone`,
+    );
+  }
+  return died;
+});
 
 const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
   yield* signalTree(record.pid, "SIGTERM");
@@ -179,15 +254,28 @@ const reapOrphans = Effect.fnUntraced(function* (
 ) {
   const none: OrphanScriptReport = { stopped: 0 };
   if (records.length === 0) return none;
-  const table = yield* readProcessTable(records.map((r) => r.pid));
+  const all = yield* readAllProcesses();
+  if (all === null) return none;
+  const table = new Map(all.map((row) => [row.pid, row]));
   const ours = records.filter((r) => isSameProcess(r, table.get(r.pid)));
-  if (ours.length === 0) return none;
-  const outcomes = yield* Effect.forEach(ours, killOrphan, {
-    concurrency: "unbounded",
-  });
-  const stopped = outcomes.filter(Boolean).length;
+  // A leader gone with its group still going. The shell is what forked
+  // this host.
+  const shell = table.get(process.ppid);
+  const strays = records.filter(
+    (r) => !table.has(r.pid) && isSameGroup(r, membersOf(all, r.pid), shell),
+  );
+  const found = ours.length + strays.length;
+  if (found === 0) return none;
+  const outcomes = yield* Effect.all(
+    [
+      Effect.forEach(ours, killOrphan, { concurrency: "unbounded" }),
+      Effect.forEach(strays, killStrays, { concurrency: "unbounded" }),
+    ],
+    { concurrency: "unbounded" },
+  );
+  const stopped = outcomes.flat().filter(Boolean).length;
   yield* Effect.logWarning(
-    `[scripts] stopped ${stopped} of ${ours.length} script(s) left running by a previous session`,
+    `[scripts] stopped ${stopped} of ${found} script(s) left running by a previous session`,
   );
   return { stopped } satisfies OrphanScriptReport;
 });

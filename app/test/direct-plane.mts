@@ -2240,6 +2240,7 @@ it("cloudflared deciders are pure and disciplined: the tunnel ladder caps throug
 type StubTunnelChild = {
   readonly args: readonly string[];
   readonly env: Record<string, string | undefined> | undefined;
+  readonly detached: boolean | undefined;
   killed: boolean;
   exit: () => void;
 };
@@ -2278,6 +2279,7 @@ async function tunnelHarness(deps: {
       const child: StubTunnelChild = {
         args: command.args,
         env: command.options.env,
+        detached: command.options.detached,
         killed: false,
         exit: () => Effect.runSync(Deferred.succeed(exit, 1)),
       };
@@ -2443,6 +2445,8 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
   assert.equal(spawned.length, 1);
   // The token rides the child's env, never its argv.
   assert.equal(entryAt(spawned, 0).env?.["TUNNEL_TOKEN"], token);
+  // In the host's process group: what stops the app's group stops it.
+  assert.equal(entryAt(spawned, 0).detached, false);
   assert.ok(entryAt(spawned, 0).args.every((arg) => !arg.includes(token)));
   // Probing: starting, NOT advertised yet.
   assert.equal(runner.status().state, "starting");
