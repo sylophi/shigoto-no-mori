@@ -1,11 +1,10 @@
 // The menu's screen, on ink: arrow keys or j/k, `/` to filter by name,
 // enter to select, esc or Ctrl-C to cancel, scrolling on long lists.
 // Loaded only when a menu shows, so other commands don't pay for React.
-import { fstatSync } from "node:fs";
-import * as Predicate from "effect/Predicate";
 import { Box, render, Text, useApp, useInput } from "ink";
 import { createElement as h, useEffect, useState } from "react";
 import type { Styles } from "./output.ts";
+import { attachStdin } from "./stdinFd.ts";
 
 export type MenuProps = {
   readonly title: string;
@@ -170,35 +169,10 @@ function Menu(
   );
 }
 
-// What fd 0 is just before ink reads it. The menu died twice on CI with
-// "EBADF: bad file descriptor, fstat" as ink first read stdin (V3.md,
-// Robustness), never here: with SM_FD0_TRACE=1 (the at-a-terminal
-// cases set it on CI) the menu says what it was handed, which a failing
-// case's screen then shows.
-const fd0State = () => {
-  try {
-    const stat = fstatSync(0);
-    const kind = stat.isCharacterDevice()
-      ? "character device"
-      : stat.isFIFO()
-        ? "pipe"
-        : stat.isSocket()
-          ? "socket"
-          : stat.isFile()
-            ? "file"
-            : "other";
-    return `fd 0: ${kind}, mode ${stat.mode.toString(8)}, tty ${process.stdin.isTTY === true}`;
-  } catch (error) {
-    return `fd 0: ${Predicate.hasProperty(error, "code") ? String(error.code) : String(error)}`;
-  }
-};
-
 // The index picked, or undefined for a cancel.
 export const showMenu = async (props: MenuProps) => {
   let choice: number | undefined;
-  if (process.env["SM_FD0_TRACE"] === "1") {
-    process.stderr.write(`${fd0State()}\n`);
-  }
+  attachStdin();
   const instance = render(
     h(Menu, {
       ...props,
