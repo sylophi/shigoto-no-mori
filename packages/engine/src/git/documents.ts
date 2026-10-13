@@ -2,7 +2,6 @@
 import type { CommitPicks } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // --- errors -----------------------------------------------------------
@@ -258,38 +257,6 @@ export const encoder = new TextEncoder();
 // A byte order mark git prints first is the content's own (a blob that
 // starts with one), so it stays.
 export const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
-
-// Reads a pipe to its end. Past `limit` bytes it fails with
-// `tooLarge`, or without one keeps the first `limit` bytes and drains
-// the rest (stderr, whose volume a hook decides).
-export const readAll = <E>(
-  stream: Stream.Stream<Uint8Array, E>,
-  limit: number,
-  tooLarge?: () => GitOutputTooLargeError,
-) =>
-  stream.pipe(
-    Stream.runFoldEffect(
-      () => ({ chunks: [] as Uint8Array[], size: 0 }),
-      (acc, chunk: Uint8Array) => {
-        if (acc.size + chunk.length > limit) {
-          if (tooLarge) return Effect.fail(tooLarge());
-          chunk = chunk.subarray(0, Math.max(0, limit - acc.size));
-        }
-        acc.size += chunk.length;
-        acc.chunks.push(chunk);
-        return Effect.succeed(acc);
-      },
-    ),
-    Effect.map(({ chunks, size }) => {
-      const all = new Uint8Array(size);
-      let at = 0;
-      for (const chunk of chunks) {
-        all.set(chunk, at);
-        at += chunk.length;
-      }
-      return decoder.decode(all);
-    }),
-  );
 
 // git names the URL it wanted a password for, userinfo and all, and a
 // pasted token sits there.

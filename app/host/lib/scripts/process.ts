@@ -8,7 +8,7 @@
 //   3. The caller escalates to SIGKILL through the same path after its
 //      grace period.
 import * as Effect from "effect/Effect";
-import * as Processes from "../util/processes";
+import * as Processes from "@shigomori/engine/processes";
 import { descendantsIn } from "./descendants";
 
 function safeKill(pid: number, signal: NodeJS.Signals): void {
