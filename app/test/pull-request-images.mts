@@ -10,12 +10,17 @@
 // answer the proof rewrites between reads to sign the URLs anew. Run:
 // pnpm test pull-request-images.
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import * as PullRequests from "@host/lib/githubCli/pullRequests";
 import { runHost } from "./lib/hostRuntime.mts";
 import { it } from "vitest";
-import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
+import {
+  installFakeGh,
+  sandboxGit,
+  scrubProcessGitEnv,
+  tempDir,
+} from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const track = trackTest;
@@ -93,13 +98,11 @@ const graphql = (jwt: string) =>
 scrubProcessGitEnv();
 it("an attached image takes its signed URL, and keeps it", async () => {
   const root = tempDir("sm-pr-images-", track);
-  const bin = join(root, "bin");
-  mkdirSync(bin);
   const answer = join(root, "graphql.json");
   const list = join(root, "list.json");
   writeFileSync(list, JSON.stringify([row]));
-  writeFileSync(
-    join(bin, "gh"),
+  installFakeGh(
+    root,
     `#!/bin/sh
 case "$*" in
 "auth token"*) ;;
@@ -108,17 +111,8 @@ case "$*" in
 *) echo "unexpected gh $*" >&2; exit 1;;
 esac
 `,
+    track,
   );
-  chmodSync(join(bin, "gh"), 0o755);
-  const path = process.env["PATH"];
-  const ghConfig = process.env["GH_CONFIG_DIR"];
-  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
-  process.env["GH_CONFIG_DIR"] = join(root, "gh-config");
-  track(() => {
-    process.env["PATH"] = path;
-    if (ghConfig === undefined) delete process.env["GH_CONFIG_DIR"];
-    else process.env["GH_CONFIG_DIR"] = ghConfig;
-  });
   const repo = join(root, "repo");
   mkdirSync(repo);
   const git = sandboxGit();
