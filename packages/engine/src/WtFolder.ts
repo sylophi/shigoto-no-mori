@@ -429,12 +429,16 @@ const make = Effect.gen(function* () {
         const stuck = (yield* migrationRows.pipe(Effect.orDie)).filter(
           (row) => row.moved === 0 && row.error !== null,
         );
-        yield* stepNow("running");
+        // Nothing to move reads the store and ends, without a running
+        // step that would call every window back to the page.
+        if (stuck.length > 0) yield* stepNow("running");
         for (const projectId of new Set(stuck.map((row) => row.project_id))) {
           yield* moveProject(projectId, true, report);
         }
-        yield* stepNow("done");
-      }),
+      }).pipe(
+        // A retry that failed still ends its step, read from the store.
+        Effect.ensuring(stepNow("done")),
+      ),
     )
     .pipe(Effect.withSpan("WtFolder.retryStuck"));
 
