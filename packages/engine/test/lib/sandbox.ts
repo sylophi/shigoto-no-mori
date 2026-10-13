@@ -2,16 +2,12 @@
 // directory holding a 2.x data dir, copied so each side (the engine, a
 // binary) gets its own, and the ways of asking it something.
 import { execFile, execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
-  readFileSync,
   realpathSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -48,6 +44,7 @@ import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
 import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import { macfs } from "./macfs.ts";
 
 // The services a harness case calls.
 export type Engine =
@@ -74,8 +71,6 @@ export type Engine =
 export const HOOK_BINARY =
   "/Applications/Shigoto no Mori.app/Contents/Resources/smd";
 
-const macfsDir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
-
 // git's variables point a child at the repository a hook runs in, and
 // the user's git config would reach the sandbox's repos. The engine's
 // Git service runs git under this process's environment, so the
@@ -97,46 +92,6 @@ Object.assign(process.env, {
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 
-// A Go program built from `dir` into a folder named for the hash of its
-// sources (the files `include` takes) and its -ldflags, so a build is
-// reused until they change.
-function buildGo(
-  dir: string,
-  name: string,
-  include: (file: string) => boolean,
-  ldflags: ReadonlyArray<string> = [],
-): string {
-  const hash = createHash("sha256");
-  if (ldflags.length > 0) hash.update(`${ldflags.join(" ")}\0`);
-  for (const rel of readdirSync(dir, { recursive: true })
-    .map(String)
-    .filter(include)
-    .toSorted()) {
-    hash.update(`${rel}\0`);
-    hash.update(readFileSync(join(dir, rel)));
-  }
-  const binary = join(
-    tmpdir(),
-    `${name}-sandbox-${hash.digest("hex").slice(0, 16)}`,
-    name,
-  );
-  if (existsSync(binary)) return binary;
-  mkdirSync(dirname(binary), { recursive: true });
-  const partial = `${binary}.${process.pid}`;
-  const flags = ldflags.length === 0 ? [] : ["-ldflags", ldflags.join(" ")];
-  execFileSync(
-    "go",
-    ["build", "-buildvcs=false", ...flags, "-o", partial, "."],
-    {
-      cwd: dir,
-      env: childEnv(),
-      stdio: ["ignore", "ignore", "inherit"],
-    },
-  );
-  renameSync(partial, binary);
-  return binary;
-}
-
 // What a binary did: its exit code, its last JSON document, its output.
 type Run = {
   readonly code: number;
@@ -145,24 +100,6 @@ type Run = {
   readonly stdout: string;
   readonly stderr: string;
 };
-
-// The darwin helper as macfs/ is now, built once per state of its
-// sources, for the Darwin service.
-let macfsBuilt: string | undefined;
-
-export function macfs(): string {
-  macfsBuilt ??= buildGo(
-    macfsDir,
-    "macfs",
-    (file) =>
-      file === "go.mod" ||
-      file === "go.sum" ||
-      (file.endsWith(".go") &&
-        !file.endsWith("_test.go") &&
-        !file.includes("/")),
-  );
-  return macfsBuilt;
-}
 
 export type Sandbox = {
   readonly home: string;

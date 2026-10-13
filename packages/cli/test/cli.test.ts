@@ -30,7 +30,8 @@ import {
   onTestFinished,
   vi,
 } from "vitest";
-import { macfs, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import { macfs } from "../../engine/test/lib/macfs.ts";
+import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
 import {
   type FakeApp,
   fakeApp,

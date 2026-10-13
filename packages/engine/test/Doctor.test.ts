@@ -43,7 +43,8 @@ import * as Migration from "../src/Migration.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { nodeStore } from "./lib/nodeStore.ts";
-import { macfs, type Sandbox, sandbox } from "./lib/sandbox.ts";
+import { macfs } from "./lib/macfs.ts";
+import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
 beforeEach(() => {

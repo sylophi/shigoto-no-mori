@@ -17,8 +17,8 @@
 //
 // Run: pnpm test fork-pull-requests.
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   ownBranchPullRequest,
   ownBranchPullRequests,
@@ -27,7 +27,12 @@ import * as PullRequests from "@host/lib/githubCli/pullRequests";
 import { it } from "vitest";
 import { hostEngine } from "./lib/smBinary.mts";
 import { runHost } from "./lib/hostRuntime.mts";
-import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
+import {
+  installFakeGh,
+  sandboxGit,
+  scrubProcessGitEnv,
+  tempDir,
+} from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const getWorktreePullRequest = (cwd: string, branch: string) =>
@@ -91,19 +96,7 @@ esac
 
 it("the host's reads skip a fork's PR of the same name", async () => {
   const root = tempDir("sm-fork-prs-", trackTest);
-  const bin = join(root, "bin");
-  mkdirSync(bin);
-  writeFileSync(join(bin, "gh"), GH);
-  chmodSync(join(bin, "gh"), 0o755);
-  const path = process.env["PATH"];
-  const ghConfig = process.env["GH_CONFIG_DIR"];
-  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
-  process.env["GH_CONFIG_DIR"] = join(root, "gh-config");
-  trackTest(() => {
-    process.env["PATH"] = path;
-    if (ghConfig === undefined) delete process.env["GH_CONFIG_DIR"];
-    else process.env["GH_CONFIG_DIR"] = ghConfig;
-  });
+  installFakeGh(root, GH, trackTest);
   // The integration toggle is the store's: a fresh one has it on.
   const engine = await hostEngine(join(root, "data"));
   trackTest(engine.close);

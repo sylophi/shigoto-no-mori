@@ -11,15 +11,18 @@ import {
   type Socket,
 } from "node:net";
 import {
+  chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -272,7 +275,9 @@ export function sandboxGit(
 // direct keeper, the supervisor): hand `context` to the loop, and
 // `advance` moves the clock, runs whatever was due, then lets promise
 // chains complete before assertions, as `settle` does on its own.
-async function settleTurns(): Promise<void> {
+// A few turns of the event loop, for a reader to take a line and a
+// writer to answer it.
+export async function settleTurns(): Promise<void> {
   for (let turn = 0; turn < 5; turn += 1) {
     await new Promise((resolve) => setImmediate(resolve));
   }
@@ -349,6 +354,29 @@ export function tempDir(prefix: string, track: Track): string {
   return dir;
 }
 
+// A fake `gh` (`script`) first on PATH, with gh's config read from
+// `config`, both put back as the test ends.
+export function installFakeGh(
+  root: string,
+  script: string,
+  track: Track,
+  config = join(root, "gh-config"),
+): void {
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "gh"), script);
+  chmodSync(join(bin, "gh"), 0o755);
+  const path = process.env["PATH"];
+  const ghConfig = process.env["GH_CONFIG_DIR"];
+  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
+  process.env["GH_CONFIG_DIR"] = config;
+  track(() => {
+    process.env["PATH"] = path;
+    if (ghConfig === undefined) delete process.env["GH_CONFIG_DIR"];
+    else process.env["GH_CONFIG_DIR"] = ghConfig;
+  });
+}
+
 // A file's text, or null when it is not there, so an assert on it
 // reports what was found instead of a bare false.
 function readOrNull(path: string): string | null {
@@ -384,83 +412,46 @@ export function cliFailureMessage(result: CliResult, fallback: string): string {
     : `${fallback} (CLI exit ${result.code})`;
 }
 
-// The kit runs under plain node as well as tsx, so the host's own
-// splitter is not importable here. This is its standalone twin.
-function lineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
-  let buffer = "";
-  return (chunk) => {
-    buffer += chunk.toString("utf8");
-    for (
-      let newline = buffer.indexOf("\n");
-      newline >= 0;
-      newline = buffer.indexOf("\n")
-    ) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      if (line !== "") onLine(line);
-    }
-  };
-}
-
-type RunCli = (
-  args: string[],
-  onDoc?: (doc: CliDoc) => void,
-  extraEnv?: Record<string, string>,
-  opts?: { readonly signal?: AbortSignal },
-) => Promise<CliResult>;
+type RunCli = (args: string[]) => Promise<CliResult>;
 
 export type CliRunner = {
   runCli: RunCli;
   sm(...args: string[]): Promise<CliResult>;
 };
 
-// The binary in its own process group, and a cancel (opts.signal) that
-// kills the group, so a proof can cut an `sm create` short mid-script.
+// The binary in its own process group, so a group it signals is its own.
 export function createCliRunner(
   binary: string,
   env: NodeJS.ProcessEnv,
 ): CliRunner {
-  const runCli: RunCli = (args, onDoc, _extraEnv, opts) => {
-    return new Promise((resolve, reject) => {
+  const runCli: RunCli = (args) =>
+    new Promise((resolve, reject) => {
       const child = spawn(binary, ["--json", ...args], {
         env,
         detached: true,
       });
-      const signal = opts?.signal;
-      const onCancel = () => {
-        if (child.pid === undefined) return;
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          // Already gone.
-        }
-      };
-      if (signal?.aborted) onCancel();
-      else signal?.addEventListener("abort", onCancel, { once: true });
-      const docs: CliDoc[] = [];
-      child.stdout.on(
-        "data",
-        lineSplitter((line) => {
-          try {
-            const doc: CliDoc = JSON.parse(line);
-            docs.push(doc);
-            onDoc?.(doc);
-          } catch {
-            // Non-JSON stdout line. The assertions read docs only.
-          }
-        }),
-      );
+      let stdout = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
       let stderrTail = "";
       child.stderr.on("data", (chunk) => {
         stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
       });
       child.on("error", reject);
       child.on("close", (code) => {
-        signal?.removeEventListener("abort", onCancel);
+        const docs: CliDoc[] = [];
+        for (const line of stdout.split("\n")) {
+          if (line.trim() === "") continue;
+          try {
+            docs.push(JSON.parse(line.trim()));
+          } catch {
+            // Non-JSON stdout line. The assertions read docs only.
+          }
+        }
         resolve({ code: code ?? -1, docs, stderrTail });
       });
     });
-  };
   async function sm(...args: string[]): Promise<CliResult> {
     const result = await runCli(args);
     if (result.code !== 0) {
