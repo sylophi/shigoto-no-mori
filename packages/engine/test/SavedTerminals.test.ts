@@ -1,23 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
-import { afterEach, beforeEach, it } from "vitest";
-import * as Paths from "../src/Paths.ts";
+import { it } from "vitest";
 import * as SavedTerminals from "../src/SavedTerminals.ts";
-import { nodeStore } from "./lib/nodeStore.ts";
+import { freshDataDir, onStoreAt } from "./lib/nodeStore.ts";
 
-let dataDir: string;
-beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), "engine-terminals-"));
-});
-afterEach(() => rmSync(dataDir, { recursive: true, force: true }));
+const dataDir = freshDataDir("engine-terminals-");
 
 const run = <A>(
   program: Effect.Effect<
@@ -27,20 +16,7 @@ const run = <A>(
   >,
 ) =>
   program.pipe(
-    Effect.provide(
-      SavedTerminals.layer.pipe(
-        Layer.provideMerge(nodeStore),
-        Layer.provide(Paths.layer("prod")),
-        Layer.provide(NodeServices.layer),
-        Layer.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: { HOME: dataDir, SHIGOMORI_DATA_DIR: dataDir },
-            }),
-          ),
-        ),
-      ),
-    ),
+    Effect.provide(SavedTerminals.layer.pipe(onStoreAt(dataDir()))),
     Effect.runPromise,
   );
 

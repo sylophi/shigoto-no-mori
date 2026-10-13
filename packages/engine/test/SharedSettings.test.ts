@@ -1,23 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
-import { afterEach, beforeEach, it } from "vitest";
-import * as Paths from "../src/Paths.ts";
+import { it } from "vitest";
 import * as SharedSettings from "../src/SharedSettings.ts";
-import { nodeStore } from "./lib/nodeStore.ts";
+import { freshDataDir, onStoreAt } from "./lib/nodeStore.ts";
 
-let dataDir: string;
-beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), "engine-shared-settings-"));
-});
-afterEach(() => rmSync(dataDir, { recursive: true, force: true }));
+const dataDir = freshDataDir("engine-shared-settings-");
 
 const run = <A>(
   program: Effect.Effect<
@@ -27,20 +18,7 @@ const run = <A>(
   >,
 ) =>
   program.pipe(
-    Effect.provide(
-      SharedSettings.layer.pipe(
-        Layer.provideMerge(nodeStore),
-        Layer.provide(Paths.layer("prod")),
-        Layer.provide(NodeServices.layer),
-        Layer.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: { HOME: dataDir, SHIGOMORI_DATA_DIR: dataDir },
-            }),
-          ),
-        ),
-      ),
-    ),
+    Effect.provide(SharedSettings.layer.pipe(onStoreAt(dataDir()))),
     Effect.runPromise,
   );
 
@@ -52,7 +30,7 @@ const entry = (value: string | null, at: number, by = "D") => ({
 
 it("reads the shared settings registry.json held, and leaves out an entry it can't read", async () => {
   writeFileSync(
-    join(dataDir, "registry.json"),
+    join(dataDir(), "registry.json"),
     JSON.stringify({
       sharedSettings: {
         entries: {
@@ -78,7 +56,7 @@ it("reads the shared settings registry.json held, and leaves out an entry it can
 
 it("stores what an update answers, and keeps a row it can't read", async () => {
   writeFileSync(
-    join(dataDir, "registry.json"),
+    join(dataDir(), "registry.json"),
     JSON.stringify({
       sharedSettings: {
         entries: {

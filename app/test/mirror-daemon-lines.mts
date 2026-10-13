@@ -45,6 +45,7 @@ import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
 import { it } from "vitest";
 import { rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { trackTest } from "./lib/vitestKit.mts";
+import { settleTurns } from "./lib/checkKit.mts";
 
 // One session the way mirrorSessionStateOf writes it.
 const session = (id: string) =>
@@ -61,15 +62,6 @@ const session = (id: string) =>
     statusText: "Watching for changes",
     successfulCycles: 3,
   });
-
-// Lets the supervisor read a line, and a request write its own: a few
-// turns of the event loop.
-const settle = () =>
-  [1, 2, 3, 4, 5].reduce<Promise<void>>(
-    (turns) =>
-      turns.then(() => new Promise((resolve) => setImmediate(resolve))),
-    Promise.resolve(),
-  );
 
 // A daemon on a fake child: `send` writes a line from the engine's
 // side, `requests` collects what the supervisor wrote to it.
@@ -156,28 +148,28 @@ async function harness() {
     resume: (id: string) =>
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
   };
-  await settle();
+  await settleTurns();
   const send = async (line: unknown) => {
     Queue.offerUnsafe(
       out,
       new TextEncoder().encode(JSON.stringify(line) + "\n"),
     );
-    await settle();
+    await settleTurns();
   };
   // Moves the daemon's clock on, then lets it act on the time.
   const adjust = async (ms: number) => {
     await runtime.runPromise(TestClock.adjust(ms));
-    await settle();
+    await settleTurns();
   };
   const say = async (line: string) => {
     Queue.offerUnsafe(err, new TextEncoder().encode(line + "\n"));
-    await settle();
+    await settleTurns();
   };
   const exit = async (index: number) => {
     const deferred = exits[index];
     assert.ok(deferred !== undefined, `no child ${index} was spawned`);
     Effect.runSync(Deferred.succeed(deferred, 1));
-    await settle();
+    await settleTurns();
   };
   return {
     daemon,
@@ -237,7 +229,7 @@ it("a repeated rejection logs once", async () => {
   const bad = { event: "state", sessions: [{ ...session("s1"), status: 7 }] };
   await send(bad);
   const paused = daemon.pause("s1");
-  await settle();
+  await settleTurns();
   await send({ id: requests.at(-1)?.["id"], ok: true, session: "s1" });
   await paused;
   await send(bad);
@@ -262,7 +254,7 @@ it("what the protocol does not name is stripped or ignored, not refused", async 
   );
   assert.equal("newField" in (daemon.sessions()[0] ?? {}), false);
   const paused = daemon.pause("s1");
-  await settle();
+  await settleTurns();
   await send({
     id: requests.at(-1)?.["id"],
     ok: true,
@@ -282,11 +274,11 @@ it("a response settles its request, a malformed one with an error", async () => 
   const { daemon, send, requests, logs } = await harness();
   await send({ event: "ready" });
   const good = daemon.pause("s1");
-  await settle();
+  await settleTurns();
   await send({ id: requests.at(-1)?.["id"], ok: true, session: "s1" });
   assert.equal(await good, "s1");
   const bad = assert.rejects(daemon.resume("s1"), /malformed/);
-  await settle();
+  await settleTurns();
   await send({ id: requests.at(-1)?.["id"], ok: true, session: 42 });
   await bad;
   assert.equal(logs.length, 1, logs.join("\n"));

@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -32,6 +33,7 @@ import {
 } from "@shigomori/contracts/schemas/project";
 import { createCliRunner, repoRoot, type CliRunner } from "./checkKit.mts";
 import { isOutsideGitVariable } from "../../../gitIsolation.ts";
+import { macfs as macfsBuild } from "../../../packages/engine/test/lib/macfs.ts";
 
 // What goes into the binary: the sources of the terminal, the engine
 // and the contracts, and the darwin helper's.
@@ -76,11 +78,7 @@ export function builtSm(): string {
     Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
   );
   const macfs = join(dir, `macfs.${process.pid}`);
-  execFileSync("go", ["build", "-buildvcs=false", "-o", macfs, "."], {
-    cwd: join(repoRoot, "macfs"),
-    env,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  copyFileSync(macfsBuild(), macfs);
   renameSync(macfs, join(dir, "macfs"));
   const partial = `${binary}.${process.pid}`;
   execFileSync("node", ["build.mts", partial, "--flavor=prod"], {

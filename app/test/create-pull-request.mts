@@ -24,7 +24,6 @@
 // pushes keep the remote-tracking refs. Run: pnpm test create-pull-request.
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -36,12 +35,17 @@ import {
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import * as NewPullRequest from "@host/lib/githubCli/newPullRequest";
 import { afterAll, beforeAll, it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
 import { hostEngine } from "./lib/smBinary.mts";
-import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
+import {
+  installFakeGh,
+  sandboxGit,
+  scrubProcessGitEnv,
+  tempDir,
+} from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const comparePullRequest = (
@@ -149,23 +153,11 @@ esac
 // bottom, so only its remote-tracking ref is below the top.
 function setup() {
   const root = tempDir("sm-create-pr-", trackTest);
-  const bin = join(root, "bin");
-  mkdirSync(bin);
-  writeFileSync(join(bin, "gh"), gh(root));
-  chmodSync(join(bin, "gh"), 0o755);
+  installFakeGh(root, gh(root), trackTest);
   writeFileSync(join(root, "pr-list.json"), JSON.stringify(PR_LIST));
   writeFileSync(join(root, "options.json"), JSON.stringify(OPTIONS));
   writeFileSync(join(root, "mode"), "ok");
   writeFileSync(join(root, "view.json"), JSON.stringify({ body: "" }));
-  const path = process.env["PATH"];
-  const ghConfig = process.env["GH_CONFIG_DIR"];
-  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
-  process.env["GH_CONFIG_DIR"] = join(root, "gh-config");
-  trackTest(() => {
-    process.env["PATH"] = path;
-    if (ghConfig === undefined) delete process.env["GH_CONFIG_DIR"];
-    else process.env["GH_CONFIG_DIR"] = ghConfig;
-  });
   const git = sandboxGit();
   const remote = join(root, "remote.git");
   const repo = join(root, "repo");
