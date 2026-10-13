@@ -252,6 +252,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       forProject: (projectId: string) =>
         launchersClient.forProject({ projectId }),
       launch: launchersClient.launch,
+      openFile: launchersClient.openFile,
     },
 
     menu: {

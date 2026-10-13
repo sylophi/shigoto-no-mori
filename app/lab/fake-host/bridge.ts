@@ -678,6 +678,7 @@ function hostHandlersFor(
       }, 2_500);
     },
     "launchers:detect": () => [...FAKE_DETECTED],
+    "launchers:openFile": () => undefined,
     "launchers:forProject": () => ({
       entries: [
         ...FAKE_DETECTED.filter((d) => d.available),
@@ -1445,7 +1446,13 @@ async function fakeSyncPull(
 }
 
 const FAKE_DETECTED = [
-  { kind: "detected", id: "app:vscode", label: "VS Code", available: true },
+  {
+    kind: "detected",
+    id: "app:vscode",
+    label: "VS Code",
+    available: true,
+    editor: true,
+  },
   { kind: "detected", id: "app:terminal", label: "Terminal", available: true },
   { kind: "detected", id: "app:ghostty", label: "Ghostty", available: true },
   { kind: "detected", id: "app:finder", label: "Finder", available: true },
@@ -1456,7 +1463,13 @@ const FAKE_DETECTED = [
     label: "Claude Code",
     available: true,
   },
-  { kind: "detected", id: "app:neovim", label: "Neovim", available: true },
+  {
+    kind: "detected",
+    id: "app:neovim",
+    label: "Neovim",
+    available: true,
+    editor: true,
+  },
   { kind: "detected", id: "app:lazygit", label: "lazygit", available: true },
   { kind: "detected", id: "app:gemini", label: "Gemini CLI", available: false },
   {
@@ -1465,8 +1478,20 @@ const FAKE_DETECTED = [
     label: "Copilot CLI",
     available: false,
   },
-  { kind: "detected", id: "app:vim", label: "Vim", available: false },
-  { kind: "detected", id: "app:helix", label: "Helix", available: false },
+  {
+    kind: "detected",
+    id: "app:vim",
+    label: "Vim",
+    available: false,
+    editor: true,
+  },
+  {
+    kind: "detected",
+    id: "app:helix",
+    label: "Helix",
+    available: false,
+    editor: true,
+  },
 ] as const;
 
 // ---- account and presence state the fake host can change ----

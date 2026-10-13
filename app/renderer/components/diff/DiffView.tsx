@@ -15,6 +15,7 @@ import { flushSync } from "react-dom";
 import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
+import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
@@ -172,6 +173,7 @@ export function DiffView({
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
+  const openInEditor = useOpenInEditor(worktree);
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
   const [wrapLines, setWrapLines] = useState(
     () => readStored(WRAP_STORAGE_KEY) === "true",
@@ -285,6 +287,7 @@ export function DiffView({
     onToggleAll: singleFile ? undefined : toggleAll,
     changes,
     footer,
+    onOpen: openInEditor,
   };
   // The list, framed by the page when it frames it.
   const sidebarWith = (index: ReactNode) =>

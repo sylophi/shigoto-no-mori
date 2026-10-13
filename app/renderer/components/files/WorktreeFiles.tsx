@@ -10,6 +10,7 @@ import { CenteredMessage } from "@/components/ui/centered-message";
 import { ChipButton } from "@/components/ui/chip-button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -69,6 +70,7 @@ function FilesView({
     setHideIgnored(next);
     writeStored(HIDE_IGNORED_STORAGE_KEY, String(next));
   };
+  const openInEditor = useOpenInEditor(worktree);
   const phone = usePhoneLayout();
   const backLabel = useWorktreeName(worktree);
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
@@ -98,6 +100,7 @@ function FilesView({
     hideIgnored,
     onToggleFolder: toggleFolder,
     onSelectFile: selectFile,
+    onOpenFile: openInEditor,
   };
   // Beside the tree: the sidebar's back row, or the header on a phone,
   // which has no sidebar.

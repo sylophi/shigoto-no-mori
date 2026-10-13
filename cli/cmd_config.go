@@ -117,6 +117,9 @@ var globalConfigKeys = []configKey{
 		desc: "Hidden launcher ids (via edit or the app)"},
 	{name: "terminal", kind: enumKind, enum: terminalIDs, def: defaultTerminal,
 		desc: "Terminal that terminal tools (Claude Code, Neovim, …) open in"},
+	// Unset opens a file with its default app.
+	{name: "editor", kind: enumKind, enum: editorIDs,
+		desc: "Editor files open in (`worktrees edit`, a double click in the app)"},
 }
 
 // Mirrors ShigomoriConfigSchema. defaultBranch is required there. A

@@ -4,6 +4,7 @@ import {
   DetectedLauncherSchema,
   LauncherEntrySchema,
   LaunchPayloadSchema,
+  OpenFilePayloadSchema,
   ProjectScopedPayloadSchema,
 } from "@shared/schemas";
 
@@ -38,6 +39,11 @@ export const launchersContract = defineContract("host", {
   // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.
   launch: invoke("launchers:launch", LaunchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
+    remote: false,
+  }),
+  // A worktree's file in this machine's editor, like launch: what
+  // opens is this machine's.
+  openFile: invoke("launchers:openFile", OpenFilePayloadSchema, z.void(), {
     remote: false,
   }),
 });

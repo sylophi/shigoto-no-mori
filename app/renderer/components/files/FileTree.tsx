@@ -1,5 +1,11 @@
-import { Fragment, type KeyboardEvent } from "react";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { Fragment, useState, type KeyboardEvent } from "react";
+import { ChevronRight, FilePen, Loader2 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { cn } from "@/lib/utils";
@@ -16,6 +22,9 @@ interface TreeCtx {
   hideIgnored: boolean;
   onToggleFolder: (path: string, open: boolean) => void;
   onSelectFile: (path: string) => void;
+  // Opens a file in the editor, on a double click or from its menu.
+  // Absent where the files aren't this machine's.
+  onOpenFile: ((path: string) => void) | undefined;
 }
 
 // The files page's list: the worktree as a folder tree, read one folder
@@ -25,7 +34,9 @@ interface TreeCtx {
 // git.
 //
 // Rows are one flat run of buttons in document order, whatever their
-// depth, which is what keeps the arrow keys a sibling query away.
+// depth, which is what keeps the arrow keys a sibling query away. Where
+// files open in the editor, a file's right click opens one menu the
+// whole tree shares, anchored at the pointer, like the diff's file list.
 export function FileTree({
   className,
   ...ctx
@@ -34,7 +45,12 @@ export function FileTree({
   // the page itself or its sheet on a phone.
   className?: string;
 }) {
-  const { expanded, onToggleFolder, selectedPath } = ctx;
+  const { expanded, onToggleFolder, selectedPath, onOpenFile } = ctx;
+  // The file whose menu is up. The path outlives `open` so the menu
+  // keeps its items while it closes.
+  const [menu, setMenu] = useState<{ path: string; open: boolean } | null>(
+    null,
+  );
   // The open file holds the tree's one tab stop while its row is on
   // screen. With its folder shut (or no file open) the first row takes
   // it, so Tab always has a way in.
@@ -85,17 +101,56 @@ export function FileTree({
   };
 
   return (
-    <div
-      data-slot="file-tree"
-      role="tree"
-      aria-label="Files"
-      // The rows take the tab stop (see tabIndex on the row).
-      tabIndex={-1}
-      onKeyDown={onKeyDown}
-      className={cn("flex flex-col overflow-y-auto p-1", className)}
+    <ContextMenu
+      disabled={!onOpenFile}
+      open={menu?.open ?? false}
+      onOpenChange={(open, details) => {
+        if (!open) {
+          setMenu((current) => current && { ...current, open: false });
+          return;
+        }
+        // Files have a menu. Folders and the empty space don't.
+        const target = details.event.target;
+        const file =
+          target instanceof Element
+            ? target.closest("[data-tree-path]:not([data-tree-folder])")
+            : null;
+        const path = file?.getAttribute("data-tree-path");
+        if (path) setMenu({ path, open: true });
+      }}
     >
-      <FolderRows ctx={{ ...ctx, tabStop }} relative="" depth={0} />
-    </div>
+      <ContextMenuTrigger
+        render={
+          <div
+            data-slot="file-tree"
+            role="tree"
+            aria-label="Files"
+            // The rows take the tab stop (see tabIndex on the row).
+            tabIndex={-1}
+            onKeyDown={onKeyDown}
+            className={cn("flex flex-col overflow-y-auto p-1", className)}
+          />
+        }
+      >
+        <FolderRows
+          ctx={{
+            ...ctx,
+            tabStop,
+            menuPath: menu?.open ? menu.path : null,
+          }}
+          relative=""
+          depth={0}
+        />
+      </ContextMenuTrigger>
+      {menu && onOpenFile && (
+        <ContextMenuContent>
+          <DropdownMenuItem onClick={() => onOpenFile(menu.path)}>
+            <FilePen />
+            Open in editor
+          </DropdownMenuItem>
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
   );
 }
 
@@ -104,7 +159,8 @@ function FolderRows({
   relative,
   depth,
 }: {
-  ctx: TreeCtx & { tabStop: string | null };
+  // menuPath is the file whose menu is up: its row stays lit while it is.
+  ctx: TreeCtx & { tabStop: string | null; menuPath: string | null };
   relative: string;
   depth: number;
 }) {
@@ -114,7 +170,9 @@ function FolderRows({
     hideIgnored,
     onToggleFolder,
     onSelectFile,
+    onOpenFile,
     tabStop,
+    menuPath,
   } = ctx;
   const { data, isPending, isError } = useWorktreeFolder(
     ctx.projectId,
@@ -172,12 +230,18 @@ function FolderRows({
           onClick={() =>
             entry.isDirectory ? onToggleFolder(path, !open) : onSelectFile(path)
           }
+          onDoubleClick={
+            entry.isDirectory || !onOpenFile
+              ? undefined
+              : () => onOpenFile(path)
+          }
           style={{ paddingLeft: `${depth * 12 + 4}px` }}
           className={cn(
             "flex w-full shrink-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors",
             selected
               ? "bg-accent text-accent-foreground"
               : "hover:bg-accent/50 hover:text-foreground",
+            path === menuPath && !selected && "bg-accent/50",
             entry.ignored && !selected && "opacity-55",
           )}
         >
