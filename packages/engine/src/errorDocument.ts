@@ -10,11 +10,7 @@ import { UnknownProject } from "./Registry.ts";
 import { NoScripts } from "./Scripts.ts";
 import { UpdateInProgress } from "./stagingLock.ts";
 import { storeErrorOf } from "./storeErrors.ts";
-import {
-  DirtyWorktree,
-  PullRequestOwnsDescription,
-  UnknownWorktree,
-} from "./Worktrees.ts";
+import { DirtyWorktree, UnknownWorktree } from "./Worktrees.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 export type ErrorDocument = {
@@ -57,7 +53,6 @@ export const codeOf = (error: unknown): string | undefined => {
   if (error instanceof UnknownProject) return "unknown-project";
   if (error instanceof UnknownWorktree) return "unknown-worktree";
   if (error instanceof NoScripts) return "no-scripts";
-  if (error instanceof PullRequestOwnsDescription) return "pull-request-open";
   if (error instanceof UpdateInProgress) return "update-in-progress";
   // A tag, not the class: Landing imports this module.
   if (

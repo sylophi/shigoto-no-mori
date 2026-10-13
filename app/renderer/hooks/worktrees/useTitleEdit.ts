@@ -1,15 +1,17 @@
-// The edit of the worktree's own title (OwnTitleView, in the page's
-// header), saved through the engine's describe.
+// The edit of the worktree's title (EditableTitleView, in the page's
+// header), its own or its open PR's, saved through the engine's
+// describe. `editable` is whether this title can be changed at all.
 import { useState } from "react";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import type { OwnTitleEdit } from "@shigomori/ui/views/worktreeDetail/OwnTitleView.tsx";
+import type { TitleEdit } from "@shigomori/ui/views/worktreeDetail/EditableTitleView.tsx";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDescribeWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 
-export function useOwnTitleEdit(
+export function useTitleEdit(
   worktree: Worktree,
   title: string,
-): OwnTitleEdit {
+  editable: boolean,
+): TitleEdit {
   const [draft, setDraft] = useState<string | null>(null);
   const describe = useDescribeWorktree("Couldn't save the title");
   const { canCommand } = useCommandAccess();
@@ -18,7 +20,7 @@ export function useOwnTitleEdit(
   return {
     draft,
     saving: describe.isPending,
-    ...(canCommand ? { onEdit: () => setDraft(title) } : {}),
+    ...(canCommand && editable ? { onEdit: () => setDraft(title) } : {}),
     onDraft: setDraft,
     onCommit: () => {
       const next = (draft ?? "").trim();

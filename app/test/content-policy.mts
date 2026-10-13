@@ -68,6 +68,7 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
     "https://git.uni.example",
     "https://*.git.uni.example",
   ]);
+  assert.deepEqual(policy.get("media-src"), ["'self'", "data:"]);
   assert.deepEqual(policy.get("object-src"), ["'none'"]);
   assert.deepEqual(policy.get("frame-ancestors"), ["'none'"]);
 });

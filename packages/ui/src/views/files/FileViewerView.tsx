@@ -1,15 +1,25 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { File } from "@pierre/diffs/react";
 import { FolderOpen, Loader2 } from "lucide-react";
 import { CODE_STYLE, CODE_THEME } from "../diff/codeTheme.ts";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { CopyButton } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
+import { Markdown } from "../../primitives/markdown.tsx";
+import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
 
 // Past this many lines a file shows as plain text: highlighting it
 // would hold the window for seconds, all at once on the main thread.
 const TOKENIZE_MAX_LINES = 10_000;
+
+// A file with a rendered form shows it, or its source.
+export type FileShown = "preview" | "source";
+
+const SHOWN_OPTIONS = [
+  { value: "preview", label: "Preview" },
+  { value: "source", label: "Source" },
+] as const;
 
 // The files page's pane: one file, read whole (FileViewer.tsx reads
 // it). Read-only by design (PRODUCT.md: the app doesn't own the
@@ -17,6 +27,7 @@ const TOKENIZE_MAX_LINES = 10_000;
 export function FileViewerView({
   path,
   size,
+  shown,
   onReveal,
   reading,
   message,
@@ -25,12 +36,15 @@ export function FileViewerView({
   path: string;
   // Unknown until read, and for a file that is gone.
   size: number | null;
+  // The Preview / Source switch, for a file with a rendered form.
+  shown: { value: FileShown; onChange: (next: FileShown) => void } | null;
   // Reveal in Finder, this machine's alone: null on a peer's page.
   onReveal: (() => void) | null;
   reading: boolean;
   // What stands in for a file with nothing to draw.
   message: string | null;
-  // The highlighted file (CodeFileView).
+  // The file: highlighted (CodeFileView), rendered (MarkdownFileView)
+  // or drawn (MediaFileView).
   children: ReactNode;
 }) {
   const cut = path.lastIndexOf("/");
@@ -46,6 +60,15 @@ export function FileViewerView({
           )}
           {name}
         </span>
+        {shown && (
+          <SegmentedControl
+            aria-label="Show"
+            optionClassName="px-2 py-0.5 text-2xs"
+            value={shown.value}
+            onChange={shown.onChange}
+            options={SHOWN_OPTIONS}
+          />
+        )}
         {size !== null && (
           <span className="tabular shrink-0 text-2xs text-muted-foreground">
             {formatBytes(size)}
@@ -102,6 +125,63 @@ export function CodeFileView({
           tokenizeMaxLength: TOKENIZE_MAX_LINES,
         }}
       />
+    </div>
+  );
+}
+
+// A Markdown file, rendered as GitHub shows it. Without a line break
+// for each one in the source, so prose wrapped there reflows.
+export function MarkdownFileView({
+  source,
+  imageHosts,
+}: {
+  source: string;
+  // The hosts beside GitHub's its images may load from: the project's
+  // remotes'.
+  imageHosts: readonly string[];
+}) {
+  return (
+    <Markdown
+      source={source}
+      imageHosts={imageHosts}
+      breaks={false}
+      className="mx-auto max-w-3xl px-6 py-4"
+    />
+  );
+}
+
+// An image, video or audio file, drawn by the browser itself. One it
+// can't decode (a codec it lacks, or bytes that aren't what the
+// extension says) gets a line instead of a broken frame.
+export function MediaFileView({ mime, src }: { mime: string; src: string }) {
+  // The source that failed, so another (another file, or this one
+  // saved again) gets its own try.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (failed === src) {
+    return <CenteredMessage>Can't show this file here.</CenteredMessage>;
+  }
+  const onError = () => setFailed(src);
+  return (
+    <div className="flex h-full items-center justify-center p-4">
+      {mime.startsWith("video/") ? (
+        // oxlint-disable-next-line jsx-a11y/media-has-caption -- a file in a worktree comes with no captions to offer
+        <video
+          src={src}
+          controls
+          onError={onError}
+          className="max-h-full max-w-full"
+        />
+      ) : mime.startsWith("audio/") ? (
+        // oxlint-disable-next-line jsx-a11y/media-has-caption -- a file in a worktree comes with no captions to offer
+        <audio src={src} controls onError={onError} />
+      ) : (
+        <img
+          src={src}
+          alt=""
+          onError={onError}
+          className="max-h-full max-w-full object-contain"
+        />
+      )}
     </div>
   );
 }
