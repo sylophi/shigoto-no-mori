@@ -403,7 +403,6 @@ it('the 33rd channel on one connection refuses with "too-many-conns"', async () 
   // live channel with "too-many-conns", and the capped set stands.
   const capped = [];
   for (let i = 0; i < 32; i++) {
-    // oxlint-disable-next-line no-await-in-loop -- sequential opens by design
     capped.push(await openChannel(toListener, forward, echo.port));
   }
   await assert.rejects(
@@ -584,7 +583,6 @@ it("engine: a forward to a dead port starts anyway and reaches a server that com
   const latePort = await freeLoopbackPort();
   let earlyLocalPort = await freeLoopbackPort();
   while (earlyLocalPort === latePort) {
-    // oxlint-disable-next-line no-await-in-loop -- redrawn until distinct.
     earlyLocalPort = await freeLoopbackPort();
   }
   const early = await engine.startForward({

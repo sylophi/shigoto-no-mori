@@ -148,7 +148,6 @@ describe("POST /devices/enroll", () => {
 
   it("rejects an enroll that names no public key, or a malformed one, with 400", async () => {
     for (const publicKey of [undefined, "too-short", "=".repeat(43)]) {
-      // oxlint-disable-next-line no-await-in-loop -- one request per case, in turn
       const response = await call(
         enrollRequest(`${TEST_TOKEN_PREFIX}acct-nokey`, {
           deviceId: "dev-nokey",
@@ -181,7 +180,6 @@ describe("POST /devices/enroll", () => {
   it("caps devices per account by dropping the stalest one, never by locking the account out", async () => {
     const enrolled = [];
     for (let i = 0; i < MAX_ACCOUNT_DEVICES; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- eviction order is enroll order, so these have to land one at a time
       enrolled.push(await enroll("acct-cap", `dev-cap-${i}`));
     }
     // Re-enrolling is a rotation, not a new device, so nothing is
@@ -365,10 +363,8 @@ describe("DELETE /devices/:deviceId", () => {
       updateRequest(victim.credential, "dev-tomb-victim", "Ghost"),
       revokeRequest(victim.credential, "dev-tomb-keeper"),
     ]) {
-      // oxlint-disable-next-line no-await-in-loop -- one route at a time reads better than a Promise.all of five
       const response = await call(request);
       expect(response.status).toBe(403);
-      // oxlint-disable-next-line no-await-in-loop -- read before the next route's call, so a failure names this route
       expect(await response.json()).toEqual({ _tag: "HubDeviceRevokedError" });
     }
     expect((await call(listRequest("smdc_garbage"))).status).toBe(401);
@@ -555,7 +551,6 @@ async function statusesFrom(
 ) {
   const statuses: number[] = [];
   for (let i = 0; i < count; i++) {
-    // oxlint-disable-next-line no-await-in-loop -- the limiter counts in arrival order, so these have to land one at a time
     const response = await call(
       new Request(`${BASE}${path}`, {
         headers: {

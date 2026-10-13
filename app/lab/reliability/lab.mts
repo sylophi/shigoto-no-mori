@@ -15,7 +15,6 @@
 // network going down is the browser's proxy, the hub front and B's
 // listener front going down together, while B itself stays online.
 // Everything a run starts it stops (Lab.close).
-/* oxlint-disable no-await-in-loop -- the harness steps through time on purpose: each wait, poll and scenario follows the one before */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import {
   createWriteStream,

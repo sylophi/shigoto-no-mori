@@ -596,7 +596,6 @@ it("direct dial: the handshake completes with the pinned identity and invokes fl
   assert.equal(await invokeListener(bridge, WHOAMI, echoOf("p")), DIALER);
   const baseline = stub.forwardedCount();
   for (let i = 0; i < 5; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- sequential invokes measure the device hub stays flat
     const result = await invokeListener(bridge, ECHO, echoOf(String(i)));
     assert.equal(result, String(i));
   }
@@ -757,7 +756,6 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
   // the loopback address, which is exactly the identity these
   // failures burn.)
   for (let i = 0; i < 5; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- lockout counts sequential failures
     await assert.rejects(
       () => dial(listener, { ticket: "smpt_wrong" }),
       refusedTicket,
@@ -1017,7 +1015,6 @@ it("loopback lockout identity: the ticket listener keys lockout on CF-Connecting
   const listener = await startDirectListener(trackTest);
   // Five bad tickets under one forwarded identity lock IT out.
   for (let i = 0; i < 5; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- lockout counts sequential failures
     const { error } = await rawHeaderDial(
       listener,
       "smpt_wrong",
@@ -2025,7 +2022,6 @@ it("dial now: the network coming back ends a peer's wait on the shared ladder, a
   await clock.settle();
   // Up the ladder to its top rung, the 16 s wait a long outage leaves.
   for (const delayMs of BACKOFF_LADDER_MS.slice(0, -1)) {
-    // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
     await clock.advance(delayMs);
   }
   const climbed = dials.length;
@@ -2088,10 +2084,8 @@ it("keeper discipline: eager dial on roster entry, the exact shared ladder on tr
   ];
   for (const [i, delayMs] of expected.entries()) {
     const before: number = dials.length;
-    // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
     await clock.advance(delayMs - 1);
     assert.equal(dials.length, before, `rung ${i} fired early`);
-    // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
     await clock.advance(1);
     assert.equal(dials.length, before + 1, `rung ${i} never fired`);
   }
@@ -2578,11 +2572,9 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   // the slow rung after, where the child is still alive and probed.
   const step = lastOf(TUNNEL_PROBE_DELAYS_MS);
   for (let walked = 0; walked <= TUNNEL_PROBE_WARN_MS; walked += step) {
-    // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially by design
     await notYetRoutable.advance(step);
   }
   for (let i = 0; i < 3; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- each slow probe follows the last
     await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
   }
   assert.equal(notYetRoutable.status().state, "starting");
@@ -2640,7 +2632,6 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
     neverRoutable.status().state === "starting";
     walked += 1_000
   ) {
-    // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially, to its deadline
     await neverRoutable.advance(1_000);
   }
   assert.ok(
