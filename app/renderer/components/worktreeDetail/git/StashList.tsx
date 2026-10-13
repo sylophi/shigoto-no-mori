@@ -17,20 +17,26 @@ export function StashList({
   selected: string | undefined;
 }) {
   const nav = useWorktreeNav();
-  const { data: stashes = [] } = useWorktreeStashes(worktree);
+  const { data: listed } = useWorktreeStashes(worktree);
+  const stashes = listed ?? [];
   const stashChanges = useStashChanges();
   const { canCommand } = useCommandAccess();
   const [message, setMessage] = useState("");
-  // The stashes there were as a stash was made, until the list shows
-  // the new one, which then opens.
-  const [before, setBefore] = useState<ReadonlySet<string> | null>(null);
-  const { projectId, id: worktreeId, changedCount } = worktree;
+  // The stashes the branch had as a stash was made, until the list
+  // shows the new one, which then opens. Another branch forgets it.
+  const [before, setBefore] = useState<{
+    readonly branch: string;
+    readonly hashes: ReadonlySet<string>;
+  } | null>(null);
+  const { projectId, id: worktreeId, changedCount, branch } = worktree;
   const newest = stashes[0]?.hash;
   useEffect(() => {
-    if (before === null || newest === undefined || before.has(newest)) return;
+    if (before === null) return;
+    if (before.branch !== branch) return setBefore(null);
+    if (newest === undefined || before.hashes.has(newest)) return;
     setBefore(null);
     nav.toStash(projectId, worktreeId, newest, true);
-  }, [before, newest, nav, projectId, worktreeId]);
+  }, [before, branch, newest, nav, projectId, worktreeId]);
   const submit = () => {
     if (changedCount === 0 || stashChanges.isPending) return;
     stashChanges.mutate(
@@ -38,7 +44,12 @@ export function StashList({
       {
         onSuccess: () => {
           setMessage("");
-          setBefore(new Set(stashes.map((stash) => stash.hash)));
+          if (listed !== undefined && !worktree.detached) {
+            setBefore({
+              branch,
+              hashes: new Set(listed.map((stash) => stash.hash)),
+            });
+          }
         },
       },
     );
