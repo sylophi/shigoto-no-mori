@@ -457,7 +457,18 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               prompt: `Delete ${label} (${held.map((file) => collapseHome(home, file)).join(", ")})?`,
               label: `deleted ${label}`,
               destructive: true,
-              apply: removeV2Files(held).pipe(Effect.provideContext(v2Context)),
+              // Read again as it runs: a file v2 rewrote since the check
+              // stays.
+              apply: Effect.gen(function* () {
+                const current = yield* hashesOf(held);
+                yield* removeV2Files(
+                  held.filter(
+                    (file) =>
+                      current[file] !== undefined &&
+                      current[file] === verified[file],
+                  ),
+                );
+              }).pipe(Effect.provideContext(v2Context)),
             },
           ),
         );

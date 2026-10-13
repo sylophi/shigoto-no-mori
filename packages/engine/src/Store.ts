@@ -29,7 +29,7 @@ import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
-import { hashesOf, removeV2Files, v2Files } from "./v2Files.ts";
+import { hashesOf, removeV2Files, sameHashes, v2Files } from "./v2Files.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   "StoreOpenError",
@@ -132,15 +132,19 @@ const importVerified = (open: OpenDatabase, platform: Platform) =>
 const removeImported = (open: OpenDatabase, platform: Platform) =>
   Effect.gen(function* () {
     const files = yield* v2Files;
-    if (!(yield* importVerified(open, platform))) {
+    // The files as they are on either side of the verification: one a
+    // v2 build wrote meanwhile isn't the one verified.
+    const before = yield* hashesOf(files);
+    const verified = yield* importVerified(open, platform);
+    const after = yield* hashesOf(yield* v2Files);
+    if (!verified || !sameHashes(before, after)) {
       return yield* Effect.logWarning(
         "Left the v2 files in place: the import couldn't be verified",
       );
     }
     const sql = yield* SqlClient.SqlClient;
-    const verified = JSON.stringify(yield* hashesOf(files));
     yield* sql`INSERT OR REPLACE INTO v2_import (id, files)
-      VALUES (1, ${verified})`;
+      VALUES (1, ${JSON.stringify(before)})`;
     yield* removeV2Files(files);
   }).pipe(
     Effect.provideContext(platform),

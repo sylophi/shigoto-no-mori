@@ -60,6 +60,14 @@ export const hashesOf = (files: ReadonlyArray<string>) =>
     return hashes;
   });
 
+// Whether two hash maps name the same files with the same content.
+export const sameHashes = (
+  a: Readonly<Record<string, string>>,
+  b: Readonly<Record<string, string>>,
+) =>
+  Object.keys(a).length === Object.keys(b).length &&
+  Object.entries(a).every(([file, hash]) => b[file] === hash);
+
 // `files` deleted, and the projects' folders they leave empty.
 export const removeV2Files = (files: ReadonlyArray<string>) =>
   Effect.gen(function* () {

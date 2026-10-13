@@ -245,11 +245,16 @@ export const importFiles = (lenient: boolean) =>
       );
     }
 
+    const order = yield* registryKey("projectOrder", []);
+    if (Arr.dedupe(order).length < order.length) {
+      yield* skip(registryFile, "projectOrder");
+    }
     yield* insertAll(
       "project_order",
-      Arr.dedupe(yield* registryKey("projectOrder", [])).map(
-        (projectPath, position) => ({ path: projectPath, position }),
-      ),
+      Arr.dedupe(order).map((projectPath, position) => ({
+        path: projectPath,
+        position,
+      })),
     );
     const snapshots = Object.entries(yield* registryKey("shelfSnapshots", {}));
     const snapshotRows = snapshots.flatMap(([worktree_id, entry]) =>

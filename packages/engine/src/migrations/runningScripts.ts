@@ -61,6 +61,11 @@ export const runningScripts = Effect.gen(function* () {
       Effect.option,
     );
   if (Option.isNone(snapshot)) return yield* skip(file, "the file");
+  // A key of the file besides the owner and the scripts is left out.
+  const whole = yield* fs.readFileString(file).pipe(Effect.option);
+  if (Option.isNone(whole) || dropsKeys(V2SnapshotText, whole.value)) {
+    yield* skip(file, "the file");
+  }
   const { ownerPid, scripts } = snapshot.value;
   const seen = new Set<string>();
   for (const entry of scripts) {

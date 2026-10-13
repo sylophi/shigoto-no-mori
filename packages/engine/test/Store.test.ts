@@ -301,6 +301,10 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
 
 it.each([
   ["a key it doesn't know", { projects: [], projectsSort: "name" }],
+  [
+    "a project named twice in the order",
+    { projects: [], projectOrder: ["/r", "/r"] },
+  ],
   ["a key inherited by every object", { projects: [], constructor: { a: 1 } }],
   [
     "a second project under one id",
@@ -368,6 +372,11 @@ it.each([
     "mirror invites that aren't a list",
     "file-sync/mirror-invites.json",
     { invites: { a: 1 } },
+  ],
+  [
+    "a running-scripts key it doesn't model",
+    "running-scripts.json",
+    { ownerPid: 99999, scripts: [], future: { saved: true } },
   ],
 ])(
   "leaves every v2 file in place when the import drops %s",
