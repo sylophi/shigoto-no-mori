@@ -12,6 +12,7 @@ import * as Config from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
 import * as Darwin from "../Darwin.ts";
 import * as Git from "../Git.ts";
+import type { CommandTimedOut } from "../processes.ts";
 import { decodedLaunchers } from "../Launchers.ts";
 import * as Layout from "../Layout.ts";
 import { StoreImportError } from "../migrations/importJson.ts";
@@ -105,6 +106,16 @@ export class MovedWorktreePending extends Schema.TaggedError<MovedWorktreePendin
 }
 
 // A v2 worktree the retried move still couldn't take.
+// port-pool refused to lease a worktree its ports.
+export class LeaseRefused extends Schema.TaggedError<LeaseRefused>()(
+  "LeaseRefused",
+  { worktree: Schema.String, code: Schema.Int },
+) {
+  override get message(): string {
+    return `port-pool ensure for ${this.worktree} exited with ${this.code}`;
+  }
+}
+
 export class WorktreesNotMoved extends Schema.TaggedError<WorktreesNotMoved>()(
   "WorktreesNotMoved",
   { why: Schema.String },
@@ -116,6 +127,8 @@ export class WorktreesNotMoved extends Schema.TaggedError<WorktreesNotMoved>()(
 
 export type RepairError =
   | WorktreesNotMoved
+  | LeaseRefused
+  | CommandTimedOut
   | Git.GitError
   | PlatformError.PlatformError
   | MovedWorktreePending
