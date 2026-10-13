@@ -63,9 +63,21 @@ export function notifierFor(ctx: HandlerContext) {
   };
 }
 
-// The changes page's view of one worktree, which a refresh names.
-const changeStatusView = (input: { projectId: string; worktreeId: string }) =>
-  `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`;
+// The changes page's views of one worktree share this key prefix, so
+// a refresh reads them all.
+const treeViews = (input: { projectId: string; worktreeId: string }) =>
+  `worktrees:tree:${input.projectId}:${input.worktreeId}:`;
+
+// What moves a worktree's tree: its project's git, an edit in its files
+// (or a window looking again), a mirror staging into it.
+const treeMoved = (input: { projectId: string; worktreeId: string }) =>
+  Views.either(
+    gitMoved(input.projectId),
+    filesChanged(input.projectId),
+    Views.pushed(mirrorContract, "gitChanged", (staged) => {
+      return staged.worktreeId === input.worktreeId;
+    }),
+  );
 
 const gitMoved = (projectId: string) =>
   Views.either(
@@ -187,16 +199,40 @@ export const worktreesViews: ViewHandlers<
   // edit no watch saw.
   watchChangeStatus: (input) =>
     Views.view(
-      changeStatusView(input),
+      `${treeViews(input)}changes`,
       () => atPath(input, (path) => withGit((git) => git.changes(path))),
-      Views.either(
-        gitMoved(input.projectId),
-        filesChanged(input.projectId),
-        Views.pushed(mirrorContract, "gitChanged", (staged) => {
-          return staged.worktreeId === input.worktreeId;
-        }),
-      ),
+      treeMoved(input),
       { every: "2 seconds" },
+    ),
+  watchFileDiff: (input) =>
+    Views.view(
+      `${treeViews(input)}diff:${JSON.stringify([input.paths, input.untracked])}`,
+      () =>
+        atPath(input, (path) =>
+          withGit((git) =>
+            git.fileDiff({
+              worktree: path,
+              paths: input.paths,
+              untracked: input.untracked,
+            }),
+          ),
+        ),
+      treeMoved(input),
+    ),
+  watchFileHunks: (input) =>
+    Views.view(
+      `${treeViews(input)}hunks:${input.path}`,
+      () =>
+        atPath(input, (path) =>
+          withGit((git) => git.readHunks(path, input.path)),
+        ),
+      treeMoved(input),
+    ),
+  watchOperation: (input) =>
+    Views.view(
+      `${treeViews(input)}operation`,
+      () => atPath(input, (path) => withGit((git) => git.readOperation(path))),
+      treeMoved(input),
     ),
 };
 
@@ -485,7 +521,7 @@ export const worktreesHandlers = {
 
   changeStatus: (input) =>
     atPath(input, (path) => withGit((git) => git.changes(path))),
-  refreshChangeStatus: (input) => Views.refresh(changeStatusView(input)),
+  refreshChangeStatus: (input) => Views.refresh(treeViews(input)),
 
   fileHunks: (input) =>
     atPath(input, (path) => withGit((git) => git.readHunks(path, input.path))),

@@ -79,10 +79,12 @@ export class ViewShares extends Context.Service<
     // scope's length: the asks, for it to read again, and its reads,
     // each saying as it lands which asks it answered.
     readonly hear: (key: string) => Effect.Effect<Heard, never, Scope.Scope>;
-    // A read of `key` now, done once one that started after the ask
-    // has landed, changed or not, or the read is gone. Done at once
-    // when nothing reads it.
-    readonly refresh: (key: string) => Effect.Effect<void>;
+    // A read now of every view whose key `matches`, done once each
+    // read that started after the ask has landed, changed or not, or
+    // the read is gone. Done at once when nothing reads them.
+    readonly refresh: (
+      matches: (key: string) => boolean,
+    ) => Effect.Effect<void>;
   }
 >()("sm/host/ViewShares") {}
 
@@ -133,18 +135,27 @@ const makeShares = Effect.gen(function* () {
           ),
       } satisfies Heard;
     }),
-    refresh: Effect.fn("ViewShares.refresh")(function* (key: string) {
-      const hearer = (yield* Ref.get(hearers)).get(key);
-      if (hearer === undefined) return;
-      const ask = yield* Ref.modify(hearer.asked, (asked) => [
-        asked + 1,
-        asked + 1,
-      ]);
-      yield* PubSub.publish(hearer.asks, undefined);
-      yield* SubscriptionRef.changes(hearer.landed).pipe(
-        Stream.filter((landed) => landed >= ask),
-        Stream.take(1),
-        Stream.runDrain,
+    refresh: Effect.fn("ViewShares.refresh")(function* (
+      matches: (key: string) => boolean,
+    ) {
+      const all = yield* Ref.get(hearers);
+      const matching = [...all].filter(([key]) => matches(key));
+      yield* Effect.forEach(
+        matching,
+        ([, hearer]) =>
+          Effect.gen(function* () {
+            const ask = yield* Ref.modify(hearer.asked, (asked) => [
+              asked + 1,
+              asked + 1,
+            ]);
+            yield* PubSub.publish(hearer.asks, undefined);
+            yield* SubscriptionRef.changes(hearer.landed).pipe(
+              Stream.filter((landed) => landed >= ask),
+              Stream.take(1),
+              Stream.runDrain,
+            );
+          }),
+        { concurrency: "unbounded", discard: true },
       );
     }),
   });
@@ -242,7 +253,9 @@ export const either =
   (signal: Signal): boolean =>
     whens.some((when) => when(signal));
 
-// A refresh of the view read under `key`: a read now, done once it
-// landed.
-export const refresh = (key: string) =>
-  Effect.flatMap(ViewShares, (shares) => shares.refresh(key));
+// A refresh of the views read under `prefix`: a read now of each, done
+// once they landed.
+export const refresh = (prefix: string) =>
+  Effect.flatMap(ViewShares, (shares) =>
+    shares.refresh((key) => key.startsWith(prefix)),
+  );

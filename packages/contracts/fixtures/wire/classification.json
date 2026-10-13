@@ -1870,5 +1870,23 @@
     "scope": "host",
     "remote": true,
     "gated": false
+  },
+  "worktrees:watchFileDiff": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchFileHunks": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchOperation": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
   }
 }

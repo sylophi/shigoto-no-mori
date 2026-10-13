@@ -109,7 +109,7 @@ export function DiffPage({
   sidebarActions,
 }: {
   // The patch's read, whichever of the three pages asked for it.
-  diff: UseQueryResult<string>;
+  diff: Pick<UseQueryResult<string>, "data" | "isLoading" | "error">;
   onBack: () => void;
   // The worktree the back button returns to, named as its page is.
   worktree: Worktree;

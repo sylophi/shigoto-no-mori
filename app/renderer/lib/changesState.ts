@@ -24,12 +24,3 @@ export function changesState<File>(
     list: failed ? [] : (files ?? []),
   };
 }
-
-// What moves on the worktree's row when its working tree does: its
-// count and its newest change, which the tree's watch reports. The
-// page reads its changes again when it moves, for an edit made while
-// the window keeps the focus.
-export const treeMovedKey = (row: {
-  changedCount: number;
-  lastChangeAt?: number | undefined;
-}) => `${row.changedCount}:${row.lastChangeAt ?? ""}`;
