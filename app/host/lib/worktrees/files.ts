@@ -3,13 +3,44 @@
 // which the page shares with the mirror dialog's picker.
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { errorCodeOf } from "@shared/errors";
-import { WORKTREE_FILE_MAX_BYTES, type WorktreeFile } from "@shared/schemas";
+import {
+  WORKTREE_FILE_MAX_BYTES,
+  WORKTREE_MEDIA_MAX_BYTES,
+  type WorktreeFile,
+} from "@shared/schemas";
 
 // How far in a NUL byte marks a file as binary. The same window git
 // uses for its own text/binary guess.
 const BINARY_SNIFF_BYTES = 8000;
+
+// The images, videos and audio the renderer's Chromium draws, by
+// extension. SVG stays out: it is text, and its source is what a code
+// viewer is for. A .mov goes as MP4, the container it shares: Chromium
+// turns away video/quicktime even when it can play what's inside.
+const MEDIA_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
+  ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".mov": "video/mp4",
+  ".webm": "video/webm",
+  ".ogv": "video/ogg",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".opus": "audio/ogg",
+};
 
 // Follows symlinks, and reads inside .git when asked: this rides the
 // command grant (the contract's note), and a peer holding it can
@@ -32,7 +63,9 @@ export async function readWorktreeFile(
     throw err;
   }
   if (!info.isFile()) return { kind: "missing" };
-  if (info.size > WORKTREE_FILE_MAX_BYTES) {
+  const mime = MEDIA_TYPES[extname(path).toLowerCase()];
+  const maxBytes = mime ? WORKTREE_MEDIA_MAX_BYTES : WORKTREE_FILE_MAX_BYTES;
+  if (info.size > maxBytes) {
     return { kind: "tooLarge", size: info.size };
   }
   let handle;
@@ -46,7 +79,7 @@ export async function readWorktreeFile(
   try {
     // One past the cap, so a file that grew since the stat shows up as
     // too large without being read (and held) whole.
-    const buffer = Buffer.allocUnsafe(WORKTREE_FILE_MAX_BYTES + 1);
+    const buffer = Buffer.allocUnsafe(maxBytes + 1);
     let length = 0;
     while (length < buffer.length) {
       // oxlint-disable-next-line no-await-in-loop -- each read continues the last
@@ -59,14 +92,27 @@ export async function readWorktreeFile(
       if (bytesRead === 0) break;
       length += bytesRead;
     }
-    if (length > WORKTREE_FILE_MAX_BYTES) {
+    if (length > maxBytes) {
       return { kind: "tooLarge", size: Math.max(length, info.size) };
     }
     const bytes = buffer.subarray(0, length);
-    if (bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)) {
-      return { kind: "binary", size: length };
+    // A media extension on text (a Git LFS pointer whose object was
+    // never pulled) shows the text, held to the text cap.
+    if (
+      length <= WORKTREE_FILE_MAX_BYTES &&
+      !bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)
+    ) {
+      return { kind: "text", contents: bytes.toString("utf8"), size: length };
     }
-    return { kind: "text", contents: bytes.toString("utf8"), size: length };
+    if (mime) {
+      return {
+        kind: "media",
+        mime,
+        base64: bytes.toString("base64"),
+        size: length,
+      };
+    }
+    return { kind: "binary", size: length };
   } finally {
     await handle.close();
   }

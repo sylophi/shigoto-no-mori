@@ -2,10 +2,13 @@ import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { File } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FolderOpen, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { CODE_STYLE, CODE_THEME } from "@/components/diff/codeTheme";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { CopyButton } from "@/components/ui/copy-button";
 import { IconButton } from "@/components/ui/icon-button";
+import { Markdown } from "@/components/ui/markdown";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeFile } from "@/hooks/worktrees/useWorktreeFile";
 import { formatBytes } from "@/lib/formatBytes";
@@ -16,6 +19,13 @@ import type { WorktreeFile } from "@shared/schemas";
 // Past this many lines a file shows as plain text: highlighting it
 // would hold the window for seconds, all at once on the main thread.
 const TOKENIZE_MAX_LINES = 10_000;
+
+type View = "preview" | "source";
+
+const VIEW_OPTIONS = [
+  { value: "preview", label: "Preview" },
+  { value: "source", label: "Source" },
+] as const;
 
 // The files page's pane: one file, read whole and highlighted by the
 // same renderer the diffs use. Read-only by design (PRODUCT.md: the
@@ -40,6 +50,11 @@ export function FileViewer({
   );
   const cut = path.lastIndexOf("/");
   const name = path.slice(cut + 1);
+  // Kept from file to file, like an editor's preview pane.
+  const [view, setView] = useState<View>("preview");
+  const text =
+    data?.kind === "text" && data.contents.length > 0 ? data.contents : null;
+  const preview = text === null ? null : previewOf(name);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -52,6 +67,15 @@ export function FileViewer({
           )}
           {name}
         </span>
+        {preview !== null && (
+          <SegmentedControl
+            aria-label="Show"
+            optionClassName="px-2 py-0.5 text-2xs"
+            value={view}
+            onChange={setView}
+            options={VIEW_OPTIONS}
+          />
+        )}
         {data && data.kind !== "missing" && (
           <span className="tabular shrink-0 text-2xs text-muted-foreground">
             {formatBytes(data.size)}
@@ -80,16 +104,44 @@ export function FileViewer({
             <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
             Reading file…
           </CenteredMessage>
-        ) : isError || data.kind !== "text" || data.contents.length === 0 ? (
-          <CenteredMessage className="px-6 text-center">
-            {isError ? "Couldn't read file." : placeholderFor(data)}
-          </CenteredMessage>
+        ) : isError ? (
+          <CenteredMessage>Couldn't read file.</CenteredMessage>
+        ) : text !== null && preview !== null && view === "preview" ? (
+          preview === "markdown" ? (
+            <Markdown
+              source={text}
+              breaks={false}
+              className="mx-auto max-w-3xl px-6 py-4"
+            />
+          ) : (
+            <MediaFile
+              mime="image/svg+xml"
+              src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`}
+            />
+          )
+        ) : text !== null ? (
+          <CodeFile name={name} contents={text} />
+        ) : data.kind === "media" ? (
+          <MediaFile
+            mime={data.mime}
+            src={`data:${data.mime};base64,${data.base64}`}
+          />
         ) : (
-          <CodeFile name={name} contents={data.contents} />
+          <CenteredMessage className="px-6 text-center">
+            {placeholderFor(data)}
+          </CenteredMessage>
         )}
       </div>
     </div>
   );
+}
+
+// The text files with a rendered form, which show it unless asked for
+// the source.
+function previewOf(name: string): "markdown" | "svg" | null {
+  if (/\.(md|markdown)$/i.test(name)) return "markdown";
+  if (/\.svg$/i.test(name)) return "svg";
+  return null;
 }
 
 // What the pane says in place of a file it has nothing to draw for.
@@ -102,8 +154,45 @@ function placeholderFor(file: WorktreeFile): string {
     case "tooLarge":
       return `Too large to show here (${formatBytes(file.size)}).`;
     case "text":
+    case "media":
       return "Empty file.";
   }
+}
+
+// An image, video or audio file, drawn by Chromium itself. One it
+// can't decode (a codec it lacks, or bytes that aren't what the
+// extension says) gets a line instead of a broken frame.
+function MediaFile({ mime, src }: { mime: string; src: string }) {
+  // The source that failed, so another (another file, or this one
+  // saved again) gets its own try.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (failed === src) {
+    return <CenteredMessage>Can't show this file here.</CenteredMessage>;
+  }
+  const onError = () => setFailed(src);
+  return (
+    <div className="flex h-full items-center justify-center p-4">
+      {mime.startsWith("video/") ? (
+        // oxlint-disable-next-line jsx-a11y/media-has-caption -- a file in a worktree comes with no captions to offer
+        <video
+          src={src}
+          controls
+          onError={onError}
+          className="max-h-full max-w-full"
+        />
+      ) : mime.startsWith("audio/") ? (
+        // oxlint-disable-next-line jsx-a11y/media-has-caption -- a file in a worktree comes with no captions to offer
+        <audio src={src} controls onError={onError} />
+      ) : (
+        <img
+          src={src}
+          alt=""
+          onError={onError}
+          className="max-h-full max-w-full object-contain"
+        />
+      )}
+    </div>
+  );
 }
 
 // The highlighted file. Mounted only once the shared highlighter holds
