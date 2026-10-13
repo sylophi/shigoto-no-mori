@@ -5,6 +5,7 @@
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
 import { changeKey } from "@shigomori/contracts/schemas";
 import type { ChangedFile, ChangeKind } from "@shigomori/contracts/schemas";
+import { mediaTypeOf } from "@shigomori/contracts/mediaTypes";
 import type { ChangeMark, IndexEntry } from "./indexEntry.ts";
 
 // Stable identity for one file inside one patch. `name` alone collides
@@ -13,6 +14,18 @@ import type { ChangeMark, IndexEntry } from "./indexEntry.ts";
 // the FileDiff list already used for its React key.
 export function fileKey(file: FileDiffMetadata): string {
   return `${file.prevName ?? ""} ${file.name}`;
+}
+
+// An image, video or audio file git only says differs: no hunks, so
+// pierre draws its header and nothing under it. A pure rename or a mode
+// change names no blobs (no `index` line), and its contents didn't
+// change, so the header says it all.
+export function isMediaBinary(file: FileDiffMetadata): boolean {
+  return (
+    file.hunks.length === 0 &&
+    file.newObjectId !== undefined &&
+    mediaTypeOf(file.name) !== undefined
+  );
 }
 
 // FileDiffMetadata carries no aggregate counts, so sum the hunks the way

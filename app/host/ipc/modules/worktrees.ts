@@ -47,7 +47,7 @@ import {
   isEntityGoneError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
-import { readWorktreeFile } from "@host/lib/worktrees/files";
+import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
 import { Terminals } from "@host/lib/terminals/Terminals";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import {
@@ -554,6 +554,9 @@ export const worktreesHandlers = {
 
   readFile: ({ path, ...input }) =>
     atPath(input, (root) => readWorktreeFile(root, path)),
+
+  readBlob: ({ oid, path, ...input }) =>
+    atPath(input, (root) => readGitBlob(root, oid, path)),
 
   changeStatus: (input) =>
     atPath(input, (path) => withGit((git) => git.changes(path))),

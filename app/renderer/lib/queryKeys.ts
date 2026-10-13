@@ -123,6 +123,13 @@ function buildQueryKeys(deviceId: string) {
       host("worktreeFile", projectId, worktreeId, path),
     worktreeFiles: (projectId: string, worktreeId: string) =>
       host("worktreeFile", projectId, worktreeId),
+    // One side of a media file in a diff (worktrees:readBlob).
+    gitBlob: (
+      projectId: string,
+      worktreeId: string,
+      oid: string,
+      path: string,
+    ) => host("gitBlob", projectId, worktreeId, oid, path),
     commitDiff: (
       projectId: string,
       worktreeId: string | undefined,

@@ -41,6 +41,7 @@ import {
   ResetHardResultSchema,
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
+  ReadBlobPayloadSchema,
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
   RestoreStashPayloadSchema,
@@ -196,6 +197,12 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "browseFiles",
+  }),
+  // One side of an image, video or audio file in a diff. Ungated like
+  // the diffs themselves, which already show any blob's text.
+  invoke("readBlob", ReadBlobPayloadSchema, WorktreeFileSchema, {
+    remote: true,
+    gated: false,
   }),
   // The changes page's list: every changed file, its index state and
   // its counts. The one read the page needs to draw the rail.

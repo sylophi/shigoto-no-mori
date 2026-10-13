@@ -22,8 +22,17 @@ export const ReadWorktreeFilePayloadSchema = Schema.Struct({
   path: RepoRelPathSchema,
 });
 
-// What the files page can show for a path. Text travels, and so does
-// media the renderer's Chromium can draw. Any other binary or oversized
+// One side of a binary file in a diff: the blob its patch's `index`
+// line names, abbreviated as git prints it, and the path it had, which
+// picks the media type and holds a blob git never stored.
+export const ReadBlobPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  oid: Schema.String.check(Schema.isPattern(/^[0-9a-f]{4,64}$/)),
+  path: RepoRelPathSchema,
+});
+
+// What the files page, or a side of a diff, can show for a path. Text
+// travels, and so does media the renderer's Chromium can draw. Any other binary or oversized
 // file answers with its size alone, and a path that went away between
 // the listing and the read (or is no longer a plain file) says so
 // rather than failing the query.

@@ -28,8 +28,10 @@ import {
 import {
   changeEntries,
   fileKey,
+  isMediaBinary,
   patchEntries,
 } from "@shigomori/ui/lib/patchFiles.ts";
+import { MediaDiff } from "./MediaDiff";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
@@ -339,6 +341,15 @@ export function DiffPage({
                 onToggle={singleFile ? undefined : setCollapsed}
                 hunks={changes?.readOnly ? undefined : changes?.hunks}
                 busy={changes?.busy ?? false}
+                media={
+                  isMediaBinary(fileDiff) && (
+                    <MediaDiff
+                      projectId={worktree.projectId}
+                      worktreeId={worktree.id}
+                      fileDiff={fileDiff}
+                    />
+                  )
+                }
               />
             );
           })}

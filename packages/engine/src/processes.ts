@@ -169,8 +169,9 @@ interface Read {
   size: number;
 }
 
-// Reads a pipe to its end. Past `limit` bytes it fails with `tooLarge`,
-// or without one keeps the first `limit` bytes and drains the rest.
+// Reads a pipe to its end as text. Past `limit` bytes it fails with
+// `tooLarge`, or without one keeps the first `limit` bytes and drains
+// the rest.
 export const readAll = <E, E2 = never>(
   stream: Stream.Stream<Uint8Array, E>,
   limit: number,
@@ -182,6 +183,16 @@ export const readAll = <E, E2 = never>(
     readonly decoder?: { readonly decode: (bytes: Uint8Array) => string };
   } = {},
 ): Effect.Effect<string, E | E2> =>
+  readAllBytes(stream, limit, tooLarge).pipe(
+    Effect.map((bytes) => decoder.decode(bytes)),
+  );
+
+// `readAll` for output that isn't text: a blob's contents.
+export const readAllBytes = <E, E2 = never>(
+  stream: Stream.Stream<Uint8Array, E>,
+  limit: number,
+  tooLarge?: () => E2,
+): Effect.Effect<Uint8Array, E | E2> =>
   stream.pipe(
     Stream.runFoldEffect(
       (): Read => ({ chunks: [], size: 0 }),
@@ -202,7 +213,7 @@ export const readAll = <E, E2 = never>(
         all.set(chunk, at);
         at += chunk.length;
       }
-      return decoder.decode(all);
+      return all;
     }),
   );
 
