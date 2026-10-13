@@ -218,6 +218,9 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   // boot's own fetch does: one that failed has these to fall back on.
   if (status === undefined) {
     seedFetched?.(current);
+    // Taken as the newest unchecked. The host builds its snapshots and
+    // sends its pushes in order from one process, so a fetched snapshot
+    // is at least as new as any push heard before it.
     newestStatus = current;
   }
   const phase = current.socket.phase;
