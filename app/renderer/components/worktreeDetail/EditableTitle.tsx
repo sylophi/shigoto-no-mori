@@ -7,15 +7,21 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDescribeWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import type { Worktree } from "@shared/schemas";
 
-// The worktree's own title (`sm describe`), edited in place like the
-// branch under it. The field is pulled back by its padding and border
-// so the text stays put. Cleared, the branch names the work again.
-export function OwnTitle({
+// The worktree's title (`sm describe`, its open PR's while one holds
+// it), edited in place like the branch under it. `children` follow the
+// title in its heading (the PR's number). The field is pulled back by
+// its padding and border so the text stays put. Cleared, the branch
+// names the work again (a PR's can't be).
+export function EditableTitle({
   worktree,
   title,
+  editable,
+  children,
 }: {
   worktree: Worktree;
   title: string;
+  editable: boolean;
+  children?: React.ReactNode;
 }) {
   // The edit in progress, or null while idle.
   const [draft, setDraft] = useState<string | null>(null);
@@ -75,12 +81,13 @@ export function OwnTitle({
 
   return (
     <div className="group/title flex min-w-0 items-center gap-1.5">
-      <h1 className="min-w-0 text-2xl font-medium tracking-tight select-text">
+      <h1 className="flex min-w-0 items-baseline gap-1.5 text-2xl font-medium tracking-tight select-text">
         <SimpleTooltip whenTruncated tip={title}>
-          <span className="block truncate">{title}</span>
+          <span className="min-w-0 truncate">{title}</span>
         </SimpleTooltip>
+        {children}
       </h1>
-      {canCommand && (
+      {canCommand && editable && (
         <IconButton
           onClick={() => setDraft(title)}
           aria-label="Edit title"

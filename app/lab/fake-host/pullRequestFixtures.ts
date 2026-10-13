@@ -178,17 +178,46 @@ function fakePrStatePose() {
   return key ? FAKE_PR_STATE_POSES[key] : undefined;
 }
 
+// The titles and bodies `sm describe` gave open PRs this session, by
+// head branch.
+const editedPullRequests: Record<string, { title?: string; body?: string }> =
+  {};
+
+// What `sm describe` does to the branch's open PR: answers whether
+// there was one to take the edit.
+export function fakeEditPullRequest(
+  projectId: string,
+  branch: string,
+  edit: { title?: string; body?: string },
+): boolean {
+  if (fakePullRequests(projectId)[branch]?.state !== "OPEN") return false;
+  if (edit.title === "") throw new Error("The pull request needs a title.");
+  editedPullRequests[branch] = {
+    ...editedPullRequests[branch],
+    ...(edit.title !== undefined && { title: edit.title }),
+    ...(edit.body !== undefined && { body: edit.body }),
+  };
+  return true;
+}
+
 function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
   const merged = new URLSearchParams(location.search).get("stack") === "merged";
-  const prs = {
+  const prs: Record<string, typeof FAKE_PR_SLIM> = {
     ...(merged ? FAKE_PRS_MERGED : FAKE_PRS),
     ...createdPullRequests,
   };
+  for (const [branch, { title }] of Object.entries(editedPullRequests)) {
+    const pr = prs[branch];
+    if (pr && title !== undefined) prs[branch] = { ...pr, title };
+  }
   const pose = fakePrStatePose();
   if (!pose) return prs;
   // The slim map carries no merge state.
   const { mergeState: _, ...slim } = pose;
-  return { ...prs, [FAKE_PR_BRANCH]: { ...FAKE_PR_SLIM, ...slim } };
+  return {
+    ...prs,
+    [FAKE_PR_BRANCH]: { ...FAKE_PR_SLIM, ...prs[FAKE_PR_BRANCH], ...slim },
+  };
 }
 
 export function fakePullRequests(projectId: string) {
@@ -200,11 +229,16 @@ export function fakePullRequests(projectId: string) {
 export function fakePullRequestDetail(branch: string) {
   const slim = fakePosedPullRequests()[branch];
   if (!slim) return null;
-  if (branch === FAKE_PR_BRANCH) return fakePosedDetail();
+  const edited = editedPullRequests[branch];
+  if (branch === FAKE_PR_BRANCH) return { ...fakePosedDetail(), ...edited };
   return {
     ...FAKE_PR_DETAIL,
     ...slim,
-    body: FAKE_STACK_BODIES[slim.number] ?? createdBodies[slim.number] ?? "",
+    body:
+      edited?.body ??
+      FAKE_STACK_BODIES[slim.number] ??
+      createdBodies[slim.number] ??
+      "",
     ...(slim.isDraft && { mergeState: "DRAFT" as const }),
     ...fakeChecks([]),
   };

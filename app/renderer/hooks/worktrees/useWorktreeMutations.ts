@@ -6,11 +6,13 @@ import {
 import type {
   CreateWorktreeResult,
   DeleteWorktreeResult,
+  PullRequestDetail,
   Worktree,
 } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
+import { mirrorIntoProjectMap } from "@/hooks/worktrees/useWorktreePullRequest";
 import {
   type QueryKeyRegistry,
   worktreeQueriesOn,
@@ -20,6 +22,7 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useWorktreeRemoving } from "@/store/worktreeLifecycle";
+import { pullRequestOwnsTitle } from "@/lib/worktreeTitle";
 import type { QueryClient } from "@tanstack/react-query";
 
 interface CreateWorktreeInput {
@@ -401,12 +404,17 @@ export function useIsDeletingWorktree(
 // the villager news reads those as moves (lib/villagers/moves.ts).
 type WorktreeVars = { projectId: string; worktreeId: string };
 type AgentSessionVars = WorktreeVars & { harness: string; session: string };
+type RowMutationScope = {
+  api: HostApi;
+  queryClient: QueryClient;
+  keys: QueryKeyRegistry;
+};
 
 function useWorktreeRowMutation<V extends WorktreeVars>(
   call: (api: HostApi, input: V) => Promise<Worktree>,
   patch: (worktree: Worktree, input: V) => Worktree,
   errorTitle: string,
-  onSettled?: (api: HostApi, input: V) => void,
+  onSettled?: (scope: RowMutationScope, input: V, worktree: Worktree) => void,
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
@@ -424,7 +432,7 @@ function useWorktreeRowMutation<V extends WorktreeVars>(
         keys.worktrees(vars.projectId),
         (current) => current?.map((w) => (w.id === data.id ? data : w)),
       );
-      onSettled?.(api, vars);
+      onSettled?.({ api, queryClient, keys }, vars, data);
     },
     onError: (_err, vars) => {
       void queryClient.invalidateQueries({
@@ -444,15 +452,38 @@ export function useSetShelved() {
   );
 }
 
-// The worktree's own title or description, as edited on its page. An
-// empty one clears it. Not optimistic: the editor stays open until the
-// save lands, so one `sm describe` refuses keeps its text.
+// The worktree's title or description, as edited on its page: its own,
+// or its open PR's while one holds them (`sm describe` edits the PR
+// then). An empty one clears it. Not optimistic: the editor stays open
+// until the save lands, so one `sm describe` refuses keeps its text.
+// A PR's edit is written into the cached PR as it lands, so the page
+// doesn't show the old text until the refetch answers.
 export function useDescribeWorktree(errorTitle: string) {
   return useWorktreeRowMutation(
     (api, input: WorktreeVars & { title?: string; description?: string }) =>
       api.worktrees.describe(input),
     (w) => w,
     errorTitle,
+    ({ queryClient, keys }, { projectId, title, description }, worktree) => {
+      const key = keys.worktreePullRequest(projectId, worktree.branch);
+      const pr = queryClient.getQueryData<PullRequestDetail | null>(key);
+      if (!pr || !pullRequestOwnsTitle(worktree, pr)) return;
+      const edited = {
+        ...pr,
+        title: title ?? pr.title,
+        body: description ?? pr.body,
+        bodySource: description ?? pr.bodySource,
+      };
+      queryClient.setQueryData(key, edited);
+      mirrorIntoProjectMap(
+        queryClient,
+        keys,
+        projectId,
+        worktree.branch,
+        edited,
+      );
+      void queryClient.invalidateQueries({ queryKey: key, exact: true });
+    },
   );
 }
 
@@ -511,7 +542,7 @@ export function useSetAutoPull() {
       api.worktrees.setAutoPull(input),
     (w, { autoPull }) => ({ ...w, autoPull }),
     "Couldn't update auto-pull",
-    (api, input) => {
+    ({ api }, input) => {
       if (input.autoPull) void api.git.refreshProject(input.projectId);
     },
   );

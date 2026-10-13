@@ -8,7 +8,6 @@ import {
   worktreeTitle,
 } from "@/lib/worktreeTitle";
 import {
-  hasWorktreeData,
   type PullRequest,
   type PullRequestDetail,
   type Worktree,
@@ -21,15 +20,14 @@ import {
 // rather than flash the local one it is about to replace.
 //
 // `pullRequest` is the PR when the title is its title, so the page can
-// lead with the PR itself instead of naming it twice. `editable` is
-// whether the worktree's own pair can be changed here: not while an
-// open PR holds them, and not on an external checkout, which keeps no
-// data file for them.
+// lead with the PR itself instead of naming it twice. `pullRequestBody`
+// is the open PR's body as written (bodySource), template comments
+// too, while it holds the description: what an edit of it starts from.
 export function useWorktreeTitle(worktree: Worktree): {
   title: string | null;
   description: string | null;
+  pullRequestBody: string | undefined;
   pullRequest: PullRequest | PullRequestDetail | null;
-  editable: boolean;
 } {
   const { data: detail } = useWorktreePullRequest(
     worktree.projectId,
@@ -41,14 +39,17 @@ export function useWorktreeTitle(worktree: Worktree): {
   // the fresher of the two.
   const pr = detail === undefined ? mapped : detail;
   const body = shownText(detail?.body);
+  const ownedByPr = pullRequestOwnsTitle(worktree, pr);
   return {
     title: worktreeTitle(worktree, pr),
-    description: pullRequestOwnsTitle(worktree, pr)
+    description: ownedByPr
       ? body
       : (shownText(worktree.description) ??
         (isOwnPullRequest(worktree, pr) ? body : null)),
+    pullRequestBody: ownedByPr
+      ? (detail?.bodySource ?? detail?.body)
+      : undefined,
     pullRequest: titledByPullRequest(worktree, pr) ? pr : null,
-    editable: hasWorktreeData(worktree) && !pullRequestOwnsTitle(worktree, pr),
   };
 }
 

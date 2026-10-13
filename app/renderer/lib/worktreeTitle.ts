@@ -27,7 +27,7 @@ export function isOwnPullRequest(
 }
 
 // Whether the worktree's PR holds its title and description: while it
-// is open (`sm describe` refuses changes then). A merged or closed one,
+// is open (`sm describe` edits the PR's then). A merged or closed one,
 // an old PR on a reused branch name too, lets the worktree's own come
 // back.
 export function pullRequestOwnsTitle(

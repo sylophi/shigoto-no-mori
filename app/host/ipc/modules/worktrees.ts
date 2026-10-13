@@ -39,6 +39,7 @@ import {
   resolveConflict,
 } from "@host/lib/git/operation";
 import { mergeBranch, readMergePreview } from "@host/lib/git/merge";
+import { evictProjectPullRequests } from "@host/lib/githubCli/pullRequests";
 import {
   mergePrimaryKeepingConflicts,
   mergeUpstreamKeepingConflicts,
@@ -301,11 +302,17 @@ export const worktreesHandlers: Handlers<
     }
   },
 
-  describe: async ({ projectId, worktreeId, title, description }) =>
-    describeViaCli(await findProjectOrThrow(projectId), worktreeId, {
-      title,
-      description,
-    }),
+  // An edit the CLI made to the open PR leaves the cached PR map behind.
+  describe: async ({ projectId, worktreeId, title, description }) => {
+    const project = await findProjectOrThrow(projectId);
+    const { worktree, editedPullRequest } = await describeViaCli(
+      project,
+      worktreeId,
+      { title, description },
+    );
+    if (editedPullRequest) evictProjectPullRequests(project.path);
+    return worktree;
+  },
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
     mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
