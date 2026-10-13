@@ -26,7 +26,7 @@ export const worktreeDataContract = defineContract(
     tracksProjectUsage: true,
     remote: true,
     gated: true,
-    grant: "changeApp",
+    grant: "changeCode",
   }),
   // A worktree's title and description, carried onto its copy here by
   // the device that sent it or runs its mirror

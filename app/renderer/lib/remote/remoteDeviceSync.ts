@@ -63,6 +63,7 @@ import {
 import {
   type RemoteDevice,
   type RemoteDeviceApi,
+  remoteDevicesAtom,
   setRemoteDevices,
 } from "./devices";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
@@ -156,6 +157,11 @@ let lastAccess: Readonly<Record<string, boolean>> = {};
 // Each session's sharing switch in the last snapshot seen, so the one
 // that just went off is dropped from the cache once (noteSessions).
 let lastSharing: Readonly<Record<string, boolean>> = {};
+// The newest status snapshot this page has heard or fetched, whose
+// command access every pass leaves the list with: a pass built from an
+// older one (out while a newer came) must not hand a peer back the
+// access it has since taken away.
+let newestStatus: HubStatus | undefined;
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -210,7 +216,13 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const current = status ?? (await pageApi().run(pageApi().hub.status()));
   // A fetched snapshot seeds the status while none has landed, as the
   // boot's own fetch does: one that failed has these to fall back on.
-  if (status === undefined) seedFetched?.(current);
+  if (status === undefined) {
+    seedFetched?.(current);
+    // Taken as the newest unchecked. The host builds its snapshots and
+    // sends its pushes in order from one process, so a fetched snapshot
+    // is at least as new as any push heard before it.
+    newestStatus = current;
+  }
   const phase = current.socket.phase;
   const localDeviceId = pageApi().deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -269,6 +281,9 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));
   setRemoteDevices(registry(), devices);
+  if (newestStatus !== undefined && newestStatus !== current) {
+    applyCommandAccess(newestStatus);
+  }
 }
 
 // Resync on every session LANDING. A device in phase "online" already
@@ -443,7 +458,36 @@ function buildEntry(
   };
 }
 
+// The listed peers' command access from a snapshot as it comes, ahead
+// of the pass it queues, which waits on the device list's fetch and on
+// a pass already out: a peer that stopped taking commands from here is
+// refused as it says so. Read as buildEntry reads it.
+function applyCommandAccess(current: HubStatus): void {
+  const listed = registry().get(remoteDevicesAtom);
+  if (listed.length === 0) return;
+  setRemoteDevices(
+    registry(),
+    listed.map((device) =>
+      Object.assign({}, device, {
+        // A peer the snapshot doesn't name keeps the access it had:
+        // "not known" would read as pending, which commands, on an entry
+        // whose api the pass hasn't retired yet.
+        acceptsCommands:
+          current.peerAppVersions[device.deviceId] !== undefined &&
+          current.peerSharesData[device.deviceId] === false
+            ? false
+            : (current.peerAcceptsCommands[device.deviceId] ??
+              device.acceptsCommands),
+      }),
+    ),
+  );
+}
+
 function reconcile(pass: Pass): void {
+  if (pass.status !== undefined) {
+    newestStatus = pass.status;
+    applyCommandAccess(pass.status);
+  }
   queued = pass;
   if (inFlight) {
     dirty = true;
