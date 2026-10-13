@@ -469,11 +469,15 @@ function applyCommandAccess(current: HubStatus): void {
     registry(),
     listed.map((device) =>
       Object.assign({}, device, {
+        // A peer the snapshot doesn't name keeps the access it had:
+        // "not known" would read as pending, which commands, on an entry
+        // whose api the pass hasn't retired yet.
         acceptsCommands:
           current.peerAppVersions[device.deviceId] !== undefined &&
           current.peerSharesData[device.deviceId] === false
             ? false
-            : current.peerAcceptsCommands[device.deviceId],
+            : (current.peerAcceptsCommands[device.deviceId] ??
+              device.acceptsCommands),
       }),
     ),
   );

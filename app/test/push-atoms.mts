@@ -516,6 +516,10 @@ it("remote devices: a peer that stops taking commands is refused before the devi
     "the refusal, with the list's fetch still out",
   );
   assert.ok(fetching, "the list's fetch was asked for");
+  // A snapshot that no longer names the peer (its session ended) leaves
+  // it refused, where "not known" would read as pending and command.
+  await send(status({ onlineDeviceIds: [] }));
+  assert.equal(peer()?.acceptsCommands, false);
   // The pass it held ends, for the next case's sync.
   for (const land of lands) land([studio]);
   await waitFor(() => queryClient.isFetching() === 0, "the list landed");
