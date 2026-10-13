@@ -5,7 +5,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
@@ -288,6 +294,92 @@ it("carries v2's agent sessions over, bound to their worktree's new id", async (
       ],
     ],
   ]);
+});
+
+const leasesOf = (doc: Doctor.DoctorDocument) =>
+  doc.checks.filter(({ id }) => id === "project-leases");
+
+// port-pool on, with a stand-in that keeps its leases in a file beside
+// the sandbox and refuses an ensure while a refuse file is there.
+const portPool = () => {
+  const leases = join(box.home, "pool");
+  const refuse = join(box.home, "pool.refuse");
+  writeFileSync(leases, "");
+  box.fakeBin(
+    "port-pool",
+    `case "$1" in
+  list) while read -r d; do echo "  3000 -> $d (2026-10-12)"; done < "${leases}" ;;
+  ensure) [ -f "${refuse}" ] && exit 1; grep -qxF "$2" "${leases}" || echo "$2" >> "${leases}" ;;
+  release) grep -vxF "$2" "${leases}" > "${leases}.tmp"; mv "${leases}.tmp" "${leases}" ;;
+esac`,
+  );
+  box.write("config.json", { portPool: true });
+  const leased = () =>
+    readFileSync(leases, "utf8")
+      .split("\n")
+      .filter((line) => line !== "");
+  return { leases, refuse, leased };
+};
+
+// A project whose worktrees port-pool covers, with worktree a under the
+// v2 root holding a lease there.
+const pooledV2 = () => {
+  const repo = box.repo("repo", {
+    "port-pool.config.json": JSON.stringify({
+      schemaVersion: 1,
+      portNames: ["web"],
+    }),
+  });
+  const dataDir = join(box.home, "engine");
+  const v2 = join(dataDir, "worktrees", "repo", "a");
+  const wt = join(dataDir, "wt", "repo", "a");
+  box.write("registry.json", {
+    projects: [{ id: "P1", name: "repo", path: repo }],
+  });
+  box.side("engine");
+  box.git(repo, "worktree", "add", "-q", "-b", "a", v2);
+  return { repo, v2, wt };
+};
+
+it("moves a worktree's port-pool lease with it", async () => {
+  const pool = portPool();
+  const { v2, wt } = pooledV2();
+  writeFileSync(pool.leases, `${v2}\n`);
+  await state();
+  assert.ok(existsSync(wt));
+  assert.deepEqual(pool.leased(), [wt]);
+});
+
+it("says when the move couldn't lease the worktree's ports again, and the fix leases them", async () => {
+  const pool = portPool();
+  const { v2, wt } = pooledV2();
+  writeFileSync(pool.leases, `${v2}\n`);
+  writeFileSync(pool.refuse, "");
+  await state();
+  assert.deepEqual(pool.leased(), []);
+  const run = (fix: boolean) =>
+    box.doctor({
+      version: "dev",
+      executable: "",
+      terminal: false,
+      ...(fix
+        ? {
+            fix: {
+              approve: () => Effect.succeed(true),
+              failed: () => Effect.void,
+            },
+          }
+        : {}),
+    });
+  const [lost] = leasesOf(await run(false));
+  assert.match(
+    lost?.detail ?? "",
+    /1 worktree port-pool covers holds no ports \(a\)/,
+  );
+  rmSync(pool.refuse);
+  const fixed = await run(true);
+  assert.deepEqual(leasesOf(fixed), []);
+  assert.deepEqual(pool.leased(), [wt]);
 });
 
 it("carries the id of a worktree git moved before a crash", async () => {
