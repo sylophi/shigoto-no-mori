@@ -20,8 +20,7 @@ import { callOf } from "@shigomori/contracts/contract";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Effect from "effect/Effect";
 import { useEffect } from "react";
-import type * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as AsyncResultValue from "effect/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import {
   useHostScope,
@@ -58,10 +57,11 @@ const treeViewAtom = Atom.family((key: string) => {
     deviceId,
     view: callOf(worktreesContract, view),
     input,
-    // A file's diff and hunks stop streaming soon after the page moves
-    // to another file, so a long review leaves no reads behind.
+    // A file's diff and hunks stream half a minute after the page moves
+    // to another file: a second look is instant, and a long review
+    // leaves no reads behind.
     ...(view === "watchFileDiff" || view === "watchFileHunks"
-      ? { idle: "5 seconds" }
+      ? { idle: "30 seconds" }
       : {}),
   });
 });
@@ -92,7 +92,8 @@ export function useTreeView<A>(
     () =>
       ended && atom !== null
         ? focusManager.subscribe((focused) => {
-            if (focused && AsyncResultValue.isFailure(registry.get(atom))) {
+            const result = registry.get(atom);
+            if (focused && AsyncResult.isFailure(result) && !result.waiting) {
               registry.refresh(atom);
             }
           })
