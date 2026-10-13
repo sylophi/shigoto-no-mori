@@ -191,9 +191,11 @@ export const CarryOverStatSchema = z.object({
 export type CarryOverStat = z.infer<typeof CarryOverStatSchema>;
 
 // A worktree's title and description: what its work is, set by `sm
-// describe` (cli/cmd_describe.go) until a pull request's title and
-// body take over. describedAt (epoch ms) is when they were last set,
-// so a mirror's two sides keep the newer pair. Only `sm describe` and
+// describe` (cli/cmd_describe.go) until a pull request takes over:
+// its title in any state, its body while it is open
+// (renderer/hooks/worktrees/useWorktreeTitle.ts). describedAt (epoch
+// ms) is when they were last set, so a mirror's two sides keep the
+// newer pair. Only `sm describe` and
 // the moves between devices write them (writeWorktreeDescription).
 export const WorktreeDescriptionSchema = z.object({
   title: z.string().optional(),
