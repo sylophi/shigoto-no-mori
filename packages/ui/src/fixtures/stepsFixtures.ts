@@ -1,6 +1,7 @@
 // The v3 migration's states, as the host's view gives them with the
 // window's sign-in beside them, for the scenes and the fake host's
-// `?migration=` pose: six worktrees on the move, one of them locked.
+// `?migration=` pose: six worktrees on the move, one of them locked and
+// one a shell and a dev server work in.
 import type {
   MigrationProgress,
   WorktreeMoveStep,
@@ -18,6 +19,11 @@ const MOVE: WorktreeMoveStep = {
 const LOCKED = {
   name: "gentle-gecko",
   reason: "cannot move a locked working tree",
+};
+
+const BUSY = {
+  name: "brave-badger",
+  reason: "close zsh (4123) and node (4410, 4411), which run in it",
 };
 
 const MOVED = { ...MOVE, state: "done", moved: 6, total: 6 } as const;
@@ -51,10 +57,10 @@ export const MIGRATION_POSES = {
       import: { state: "done" },
       worktrees: {
         state: "stuck",
-        moved: 5,
+        moved: 4,
         total: 6,
         current: null,
-        stuck: [LOCKED],
+        stuck: [LOCKED, BUSY],
       },
     },
     signIn: { state: "done", asks: false },

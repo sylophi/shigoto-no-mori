@@ -1,9 +1,10 @@
 // The v3 migration, on the page a window shows in place of the app
 // while it runs: the store's import, the move into `wt/` with its count
 // and the worktree on the move, and this device's sign-in for its key,
-// a button only once its session has lapsed. With every step done the
-// app opens by itself; past a stuck step or a sign-in left for later,
-// Continue opens it.
+// a button only once its session has lapsed. A stuck move can be tried
+// again once what held it is closed, and says when a retry left it
+// stuck. With every step done the app opens by itself; past a stuck
+// step or a sign-in left for later, Continue opens it.
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import { migrationEnded, type SignInStep } from "./migrationEnded.ts";
 import {
@@ -21,12 +22,20 @@ export function MigrationView({
   signIn,
   onSignIn,
   onContinue,
+  onRetry,
+  retrying,
+  retried,
 }: {
   migration: MigrationProgress;
   // The device key's enrollment, while it is due.
   signIn: SignInStep | null;
   onSignIn: () => void;
   onContinue: () => void;
+  // The stuck moves tried again, and whether that is under way.
+  onRetry: () => void;
+  retrying: boolean;
+  // Whether a retry has run, so a move still stuck says so.
+  retried: boolean;
 }) {
   const { import: imported, worktrees } = migration;
   const { canContinue } = migrationEnded(migration, signIn);
@@ -61,6 +70,21 @@ export function MigrationView({
           )}
           {worktrees.stuck.length > 0 && (
             <StepStuckView items={worktrees.stuck} />
+          )}
+          {worktrees.state === "stuck" && (
+            <div className="flex items-center justify-end gap-3">
+              {retried && (
+                <span className="text-xs text-muted-foreground">
+                  Still stuck after the retry.
+                </span>
+              )}
+              <StepActionView
+                label="Retry"
+                variant="outline"
+                pending={retrying}
+                onClick={onRetry}
+              />
+            </div>
           )}
         </StepRowView>
       )}

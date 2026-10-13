@@ -7,6 +7,7 @@ import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import { migrationEnded } from "@shigomori/ui/views/steps/migrationEnded.ts";
 import { useSignInStep } from "@/components/steps/useSignInStep";
 import { useApi } from "@/lib/runtime/pageApi";
+import { notifyError } from "@/lib/toast";
 
 // The v3 migration as this machine's shell serves it, in place of the app
 // (the /migration route), with this device's enrollment for its key
@@ -23,6 +24,21 @@ export function MigrationPage() {
   if (step.needsDeviceKey && !keyDue) setKeyDue(true);
   const signIn = keyDue ? step.signIn : null;
   const navigate = useNavigate();
+  // The stuck moves tried again: pending while the host tries them, and
+  // remembered once one has run, so a move still stuck says so. A retry
+  // that failed says that instead.
+  const [retrying, setRetrying] = useState(false);
+  const [retried, setRetried] = useState(false);
+  const retry = () => {
+    setRetrying(true);
+    void api
+      .run(api.migration.retry())
+      .then(
+        () => setRetried(true),
+        (error: unknown) => notifyError("Couldn't retry the move", error),
+      )
+      .finally(() => setRetrying(false));
+  };
   // Not before the account says whether the device key is due.
   const { data: account } = useAccountStatus();
   const { open } =
@@ -58,6 +74,9 @@ export function MigrationPage() {
       signIn={signIn}
       onSignIn={step.run}
       onContinue={goOn}
+      onRetry={retry}
+      retrying={retrying}
+      retried={retried}
     />
   );
 }

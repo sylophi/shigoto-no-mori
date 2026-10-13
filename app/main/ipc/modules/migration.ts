@@ -10,6 +10,8 @@ import {
 import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { noteMigrating } from "../../electron/windows";
+import * as Effect from "effect/Effect";
+import { host } from "../../hostProcess";
 import { broadcastAll } from "../register";
 
 let latest: MigrationProgress | null = null;
@@ -34,4 +36,5 @@ export const migrationHandlers: Handlers<
     continued = true;
     tell(null);
   },
+  retry: () => Effect.runPromise(host().migrationRetry()),
 };

@@ -1946,6 +1946,8 @@ export function installFakeHostBridge(
       migrationContinued = true;
       client.emit("migration:changed", null);
     },
+    // A pose holds still, so a retry leaves a stuck move stuck.
+    "migration:retry": () => {},
     "account:enroll": async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));
       keyDue = false;
