@@ -117,12 +117,13 @@ function WorktreeChanges({
     statusError,
     worktree.changedCount,
   );
-  // An edit made while this window keeps the focus (the app's own
-  // terminal, an agent working in the tree) is read again then, not
-  // only on the next focus: on this machine as the working trees' watch
-  // reports any edit in the project, and on a peer's page as the row
-  // moves (its count, its newest change), the peer's push not reaching
-  // here.
+  // The picked file's diff and the operation the tree may be stopped
+  // in, read again on an edit made while this window keeps the focus
+  // (the app's own terminal, an agent working in the tree): on this
+  // machine as the working trees' watch reports any edit in the
+  // project, and on a peer's page as the row moves (its count, its
+  // newest change), the peer's push not reaching here. The list is the
+  // host's view and follows on its own.
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   useEffect(

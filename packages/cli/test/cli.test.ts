@@ -1302,6 +1302,15 @@ describe("worktrees edit", () => {
       "lazygit",
     );
     assert.equal(refused.code, 2);
+    // Stored anyway (a v2 config.json, a catalog entry since dropped),
+    // the file opens with its default app.
+    const store = new DatabaseSync(join(box.side("cli"), "store.db"));
+    store
+      .prepare("INSERT INTO device_config (key, value) VALUES (?, ?)")
+      .run("editor", JSON.stringify("lazygit"));
+    store.close();
+    assert.equal((await runAt(alpha, "edit", "src/a.txt")).code, 0);
+    assert.equal(calledWith("open"), `-t\n${file}`);
 
     // An editor with a command takes the worktree along.
     assert.equal(
