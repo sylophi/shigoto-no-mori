@@ -254,6 +254,10 @@ export const worktreesViews: ViewHandlers<
         withGit((git) => git.readHunks(path, input.path)),
       ),
     ),
+  watchBranchHistory: (input) =>
+    treeView(input, "history", () => worktreesHandlers.branchHistory(input)),
+  watchStashes: (input) =>
+    treeView(input, "stashes", () => worktreesHandlers.stashes(input)),
   watchOperation: (input) =>
     treeView(input, "operation", () =>
       atPath(input, (path) => withGit((git) => git.readOperation(path))),

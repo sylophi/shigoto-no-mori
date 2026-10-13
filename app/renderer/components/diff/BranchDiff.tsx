@@ -13,11 +13,7 @@ import { BranchDiffSubtitleView } from "@shigomori/ui/views/diff/DiffTitlesView.
 export function BranchDiff() {
   const { projectId, worktree, goBack, missing } = useRouteWorktree();
   const diff = useBranchDiff(projectId, worktree?.id);
-  const { data: history } = useBranchHistory(
-    projectId,
-    worktree?.id,
-    worktree?.recentCommits[0]?.hash,
-  );
+  const { data: history } = useBranchHistory(projectId, worktree?.id);
 
   if (!worktree) {
     return <WorktreeMissingView {...missing} />;

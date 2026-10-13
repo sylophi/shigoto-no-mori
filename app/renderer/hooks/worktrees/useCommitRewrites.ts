@@ -16,11 +16,7 @@ export function useCommitRewrites(
   worktree: Worktree,
   commits: readonly CommitSummary[],
 ): (index: number) => CommitRewrite {
-  const { data: history } = useBranchHistory(
-    worktree.projectId,
-    worktree.id,
-    worktree.recentCommits[0]?.hash,
-  );
+  const { data: history } = useBranchHistory(worktree.projectId, worktree.id);
   const { data: operation } = useWorktreeOperation(worktree);
   const { canCommand } = useCommandAccess();
   const merges = new Map(history?.merges.map((m) => [m.hash, m.firstParent]));

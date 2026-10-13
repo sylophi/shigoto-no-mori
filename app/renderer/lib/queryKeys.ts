@@ -101,8 +101,6 @@ function buildQueryKeys(deviceId: string) {
       host("worktreeData", projectId, worktreeId),
     worktreeChanges: (projectId: string, worktreeId: string) =>
       host("worktreeChanges", projectId, worktreeId),
-    worktreeStashes: (projectId: string, worktreeId: string) =>
-      host("worktreeStashes", projectId, worktreeId),
     // The ignored files a transfer leaves behind on a source worktree
     // (sync:ignoredPaths), read by the transplant dialog.
     worktreeIgnored: (projectId: string, worktreeId: string) =>
@@ -163,11 +161,6 @@ function buildQueryKeys(deviceId: string) {
         opts.query ?? "",
         opts.from ?? "",
       ),
-    branchHistory: (
-      projectId: string,
-      worktreeId: string,
-      headHash: string | undefined,
-    ) => host("branchHistory", projectId, worktreeId, headHash),
     stashDiff: (projectId: string, worktreeId: string, hash: string) =>
       host("stashDiff", projectId, worktreeId, hash),
     // What a branch changes against the primary branch.

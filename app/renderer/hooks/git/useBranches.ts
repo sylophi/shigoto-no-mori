@@ -9,6 +9,7 @@ import type { BranchList } from "@shigomori/contracts/schemas";
 import type * as Effect from "effect/Effect";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { useRefreshTree } from "@/hooks/worktrees/useWorktreeChanges";
 
 export function useBranches(projectId: string | null) {
   const { api, keys } = useHostScope();
@@ -54,11 +55,17 @@ export function useBranchMutation<
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
+  const refreshTree = useRefreshTree();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => api.run(mutationFn(api, input)),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, keys, vars.projectId),
+    onSuccess: (_data, vars) => {
+      invalidateBranchState(queryClient, keys, vars.projectId);
+      // A checkout moves the worktree's tree, its history among it.
+      if ("worktreeId" in vars && typeof vars.worktreeId === "string") {
+        refreshTree({ projectId: vars.projectId, worktreeId: vars.worktreeId });
+      }
+    },
     meta,
   });
 }

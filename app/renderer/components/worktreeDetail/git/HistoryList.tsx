@@ -77,11 +77,7 @@ function BranchCommits({
   worktree: Worktree;
   actions: CommitActions;
 }) {
-  const { data: history } = useBranchHistory(
-    worktree.projectId,
-    worktree.id,
-    worktree.recentCommits[0]?.hash,
-  );
+  const { data: history } = useBranchHistory(worktree.projectId, worktree.id);
   const rewriteAt = useCommitRewrites(worktree, history?.commits ?? []);
   const [earlierOpen, setEarlierOpen] = useState(false);
   if (!history) {
