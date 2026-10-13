@@ -233,7 +233,7 @@ const make = Effect.gen(function* () {
       yield* writeHookFile(at, hook.path, withHook(at.names, kind, hook.text));
     }
     return at.collapse(hook.path);
-  });
+  }, Effect.provideContext(platform));
 
   const uninstallOne = (at: Place, kind: ShellKind) =>
     Effect.gen(function* () {
@@ -264,8 +264,7 @@ const make = Effect.gen(function* () {
     status: Effect.fn("ShellIntegration.status")((shell?: HookShell) =>
       status(shell).pipe(Effect.provideContext(platform)),
     ),
-    install: (kind, shell) =>
-      install(kind, shell).pipe(Effect.provideContext(platform)),
+    install,
     uninstall: Effect.fn("ShellIntegration.uninstall")(function* (
       shell?: HookShell,
     ) {
