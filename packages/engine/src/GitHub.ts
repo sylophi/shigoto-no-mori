@@ -10,6 +10,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "./Git.ts";
 import * as GoJson from "./goJson.ts";
@@ -20,7 +22,7 @@ import {
   type MergeProgress,
   parseMergeProgress,
 } from "./mergeProgress.ts";
-import * as Processes from "./processes.ts";
+import { isMissingProgram } from "./platformErrors.ts";
 
 // A gh that couldn't answer, sorted where it failed: not installed, not
 // signed in, no remote on a GitHub host it knows, any other failure (gh's
@@ -447,38 +449,56 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const git = yield* Git.Git;
 
-  // gh's stdout, its failure in gh's own terms.
   const run = Effect.fn("GitHub.run")(function* (
     cwd: string,
     args: ReadonlyArray<string>,
     options: { readonly timeout?: Duration.Input | undefined } = {},
   ) {
-    return yield* Processes.exec("gh", args, {
-      cwd,
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      maxOutputBytes: Infinity,
-    }).pipe(
-      Effect.map(({ stdout }) => stdout),
-      Effect.mapError((error) => {
-        if (error.reason === "not-found") {
-          return new GitHubCliError({ reason: "missing" });
+    const failed = (cause: unknown) =>
+      new GitHubCliError({ reason: "failed", cause });
+    const answer = Effect.scoped(
+      Effect.gen(function* () {
+        // In a process group of its own, so a deadline ends gh with the
+        // git and credential helper it started. No stdin: it never waits
+        // on a prompt.
+        const handle = yield* spawner
+          .spawn(ChildProcess.make("gh", [...args], { cwd, stdin: "ignore" }))
+          .pipe(
+            Effect.mapError((error) =>
+              isMissingProgram(error)
+                ? new GitHubCliError({ reason: "missing" })
+                : failed(error),
+            ),
+          );
+        const collect = (stream: Stream.Stream<Uint8Array, unknown>) =>
+          stream.pipe(
+            Stream.decodeText(),
+            Stream.mkString,
+            Effect.mapError(failed),
+          );
+        const [stdout, stderr] = yield* Effect.all(
+          [collect(handle.stdout), collect(handle.stderr)],
+          { concurrency: 2 },
+        );
+        const code = yield* handle.exitCode.pipe(Effect.mapError(failed));
+        if (code !== 0) {
+          return yield* new GitHubCliError({
+            reason: reasonOfStderr(stderr),
+            // Go's wording when gh said nothing.
+            cause: new Error(stderr.trim() || `exit status ${code}`),
+          });
         }
-        if (error.reason === "timed-out") {
-          return new GitHubCliError({ reason: "timeout" });
-        }
-        // A spawn or a pipe that failed, with no exit to read.
-        if (error.exitCode === null) {
-          return new GitHubCliError({ reason: "failed", cause: error.cause });
-        }
-        const stderr = Processes.stderrOf(error);
-        return new GitHubCliError({
-          reason: reasonOfStderr(stderr),
-          // Go's wording when gh said nothing.
-          cause: new Error(stderr || `exit status ${error.exitCode}`),
-        });
+        return stdout;
       }),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
+    const done = yield* Effect.timeoutOption(
+      answer,
+      options.timeout ?? DEFAULT_TIMEOUT,
+    );
+    if (Option.isNone(done)) {
+      return yield* new GitHubCliError({ reason: "timeout" });
+    }
+    return done.value;
   });
 
   // gh's rows for a lookup: the failure that kept them, or none when
