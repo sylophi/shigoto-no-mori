@@ -416,9 +416,10 @@ export async function refreshHubConnection(): Promise<void> {
           }),
         ),
     ).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("[hub] connection refresh failed", cause),
-      ),
+      Effect.ignoreCause({
+        log: "Warn",
+        message: "[hub] connection refresh failed",
+      }),
     ),
   ).catch(() => undefined);
   // The listener follows the same enrollment condition, so it
@@ -479,9 +480,10 @@ export async function refreshDirectHost(): Promise<void> {
         }),
       ),
     ).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("[direct] listener refresh failed", cause),
-      ),
+      Effect.ignoreCause({
+        log: "Warn",
+        message: "[direct] listener refresh failed",
+      }),
     ),
   ).catch(() => undefined);
   // The tunnel follows the listener: a running listener wants a tunnel
@@ -500,9 +502,7 @@ export async function refreshDirectHost(): Promise<void> {
       // A reconcile that fails is the tunnel's to report, as before.
       return onTunnel((tunnel) => tunnel.reconcile(wanted)).pipe(Effect.ignore);
     }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("[tunnel] reconcile failed", cause),
-      ),
+      Effect.ignoreCause({ log: "Warn", message: "[tunnel] reconcile failed" }),
     ),
   ).catch(() => undefined);
 }

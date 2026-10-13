@@ -4,6 +4,7 @@
 // the terminal's are its own environment's, and the app passes its
 // login shell's, which a Finder launch doesn't inherit. Needs the data
 // dir's names and the platform alone, never the store.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -16,7 +17,6 @@ import { envVar } from "./environment.ts";
 import * as Paths from "./Paths.ts";
 import {
   CD_FILE_ENV,
-  collapseHome,
   fishHookContent,
   type Hook,
   hookPlace,
@@ -131,7 +131,7 @@ const make = Effect.gen(function* () {
       return {
         ...at,
         configHome: shell.configHome || at.configHome,
-        collapse: (target: string) => collapseHome(paths.home, target),
+        collapse: (target: string) => tildify(target, paths.home),
       };
     });
 

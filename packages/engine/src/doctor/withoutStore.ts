@@ -1,10 +1,10 @@
 // The doctor's checks that need no state, for a data dir the store won't open.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Paths from "../Paths.ts";
-import { collapseHome } from "../shellHook.ts";
 import { stagingHolder } from "../stagingLock.ts";
 import { type RunInput, check } from "./documents.ts";
 import type { DataDirChecksArea } from "./dataDirChecks.ts";
@@ -58,8 +58,8 @@ export const makeWithoutStore = ({
           ...(failed && dir.entry.status !== "fail"
             ? [
                 check("Data dir", "store", "store").fail(
-                  `${collapseHome(home, paths.store)} can't be opened, so no command can run`,
-                  `Check the permissions on ${collapseHome(home, dataDir)}.`,
+                  `${tildify(paths.store, home)} can't be opened, so no command can run`,
+                  `Check the permissions on ${tildify(dataDir, home)}.`,
                 ),
               ]
             : []),

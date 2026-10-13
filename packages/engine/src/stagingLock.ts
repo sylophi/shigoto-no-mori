@@ -36,9 +36,6 @@ export class StagingLockUnavailable extends Schema.TaggedError<StagingLockUnavai
   }
 }
 
-export const stagingLockPath = (path: Path.Path, dataDir: string) =>
-  path.join(dataDir, "updates", "staging.pid");
-
 // How long ago `pid` started, in seconds, from ps's elapsed time
 // ([[dd-]hh:]mm:ss); none when ps can't say.
 const ageOf = (pid: number) =>

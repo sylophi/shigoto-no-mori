@@ -15,6 +15,7 @@ import {
   PullRequestOwnsDescription,
   UnknownWorktree,
 } from "./Worktrees.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 export type ErrorDocument = {
   readonly error: string;
@@ -42,7 +43,7 @@ export const messageOf = (error: unknown): string => {
   ) {
     return `${error.message} gh said: ${messageOf(error.cause)}`;
   }
-  return error instanceof Error ? error.message : String(error);
+  return errorMessageOf(error);
 };
 
 export const codeOf = (error: unknown): string | undefined => {
