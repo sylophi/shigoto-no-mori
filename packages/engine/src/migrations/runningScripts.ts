@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Paths from "../Paths.ts";
+import { dropsKeys, skip } from "./importJson.ts";
 
 // What a 2.x running-scripts.json holds: the app instance that wrote it,
 // and the scripts it started and had not seen exit.
@@ -15,16 +16,15 @@ const V2SnapshotText = Schema.fromJsonString(
     scripts: Schema.Array(Schema.Unknown),
   }),
 );
-const decodeScript = Schema.decodeUnknownOption(
-  Schema.Struct({
-    runId: Schema.NonEmptyString,
-    pid: V2_PID,
-    projectId: Schema.NonEmptyString,
-    worktreeId: Schema.NonEmptyString,
-    startedAt: Schema.Int.check(Schema.isGreaterThan(0)),
-    command: Schema.String,
-  }),
-);
+const V2ScriptSchema = Schema.Struct({
+  runId: Schema.NonEmptyString,
+  pid: V2_PID,
+  projectId: Schema.NonEmptyString,
+  worktreeId: Schema.NonEmptyString,
+  startedAt: Schema.Int.check(Schema.isGreaterThan(0)),
+  command: Schema.String,
+});
+const decodeScript = Schema.decodeUnknownOption(V2ScriptSchema);
 
 // The scripts the app started and has not seen exit (RunningScripts.ts),
 // each with the app instance that started it, so the next start can
@@ -51,17 +51,34 @@ export const runningScripts = Effect.gen(function* () {
   const path = yield* Path.Path;
   const { dataDir } = yield* Paths.Paths;
   const file = path.join(dataDir, "running-scripts.json");
+  if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
+    return;
+  }
   const snapshot = yield* fs
     .readFileString(file)
     .pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(V2SnapshotText)),
       Effect.option,
     );
-  if (Option.isNone(snapshot)) return;
+  if (Option.isNone(snapshot)) return yield* skip(file, "the file");
+  // A key of the file besides the owner and the scripts is left out.
+  const whole = yield* fs.readFileString(file).pipe(Effect.option);
+  if (Option.isNone(whole) || dropsKeys(V2SnapshotText, whole.value)) {
+    yield* skip(file, "the file");
+  }
   const { ownerPid, scripts } = snapshot.value;
+  const seen = new Set<string>();
   for (const entry of scripts) {
     const script = decodeScript(entry);
-    if (Option.isNone(script)) continue;
+    if (
+      Option.isNone(script) ||
+      seen.has(script.value.runId) ||
+      dropsKeys(V2ScriptSchema, entry)
+    ) {
+      yield* skip(file, "scripts");
+      continue;
+    }
+    seen.add(script.value.runId);
     const s = script.value;
     yield* sql`INSERT INTO running_scripts ${sql.insert({
       run_id: s.runId,
