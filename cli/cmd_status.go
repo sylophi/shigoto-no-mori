@@ -188,7 +188,8 @@ func ghProbeReason(stderr string) string {
 	if strings.Contains(stderr, "none of the git remotes") {
 		return ghNoGitHubRemote
 	}
-	if strings.Contains(stderr, "gh auth login") {
+	// GitHub Actions has gh ask for GH_TOKEN instead.
+	if strings.Contains(stderr, "gh auth login") || strings.Contains(stderr, "GH_TOKEN") {
 		return ghNotAuthenticated
 	}
 	for _, line := range strings.Split(stderr, "\n") {

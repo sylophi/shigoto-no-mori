@@ -64,7 +64,12 @@ func TestDescribeEditsTheOpenPullRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	wt := createViaCmd(t, proj, "otter")
-	describeVia(t, proj, "otter", "-t", "Before the PR")
+	// Written directly: this machine's own gh may not be signed in.
+	if _, err := updateWorktreeDescription(proj.ID, wt.ID, func(worktreeDescription) worktreeDescription {
+		return worktreeDescription{Title: "Before the PR"}
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	bin := t.TempDir()
 	log := filepath.Join(bin, "gh.log")
