@@ -14,14 +14,10 @@ import { CommitBylineView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 export function CommitDiff() {
   const { projectId, hash, worktree, goBack, missing } = useRouteWorktree();
   const diff = useCommitDiff(projectId, worktree?.id, hash);
-  // The commits the worktree's Git timeline shows (the same query, so
+  // The commits the worktree's Git timeline shows (the same view, so
   // it's cached), for the commit's place among them: what may be
   // rewritten from it.
-  const { data: history } = useBranchHistory(
-    projectId,
-    worktree?.id,
-    worktree?.recentCommits[0]?.hash,
-  );
+  const { data: history } = useBranchHistory(projectId, worktree?.id);
 
   if (!worktree) {
     return <WorktreeMissingView {...missing} />;

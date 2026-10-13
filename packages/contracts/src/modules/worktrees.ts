@@ -303,6 +303,10 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: false,
   }),
+  view("watchBranchHistory", WorktreeScopedPayloadSchema, BranchHistorySchema, {
+    remote: true,
+    gated: false,
+  }),
   // What the branch changes against the primary branch, as a pull
   // request would show it, pull request or not.
   invoke("branchDiff", WorktreeScopedPayloadSchema, Schema.String, {
@@ -318,6 +322,12 @@ export const worktreesContract = defineContract(
   // The stashes made on the worktree's branch (the engine's git/stash.ts).
   invoke(
     "stashes",
+    WorktreeScopedPayloadSchema,
+    Schema.Array(StashEntrySchema),
+    { remote: true, gated: false },
+  ),
+  view(
+    "watchStashes",
     WorktreeScopedPayloadSchema,
     Schema.Array(StashEntrySchema),
     { remote: true, gated: false },

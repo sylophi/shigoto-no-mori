@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useStashChanges,
@@ -17,21 +17,39 @@ export function StashList({
   selected: string | undefined;
 }) {
   const nav = useWorktreeNav();
-  const { data: stashes = [], refetch } = useWorktreeStashes(worktree);
+  const { data: listed } = useWorktreeStashes(worktree);
+  const stashes = listed ?? [];
   const stashChanges = useStashChanges();
   const { canCommand } = useCommandAccess();
   const [message, setMessage] = useState("");
-  const { projectId, id: worktreeId, changedCount } = worktree;
+  // The stashes the branch had as a stash was made, until the list
+  // shows the new one, which then opens. Another branch forgets it.
+  const [before, setBefore] = useState<{
+    readonly branch: string;
+    readonly hashes: ReadonlySet<string>;
+  } | null>(null);
+  const { projectId, id: worktreeId, changedCount, branch } = worktree;
+  const newest = stashes[0]?.hash;
+  useEffect(() => {
+    if (before === null) return;
+    if (before.branch !== branch) return setBefore(null);
+    if (newest === undefined || before.hashes.has(newest)) return;
+    setBefore(null);
+    nav.toStash(projectId, worktreeId, newest, true);
+  }, [before, branch, newest, nav, projectId, worktreeId]);
   const submit = () => {
     if (changedCount === 0 || stashChanges.isPending) return;
     stashChanges.mutate(
       { projectId, worktreeId, message: message.trim() || undefined },
       {
-        onSuccess: async () => {
+        onSuccess: () => {
           setMessage("");
-          const { data } = await refetch();
-          const newest = data?.[0]?.hash;
-          if (newest) nav.toStash(projectId, worktreeId, newest, true);
+          if (listed !== undefined && !worktree.detached) {
+            setBefore({
+              branch,
+              hashes: new Set(listed.map((stash) => stash.hash)),
+            });
+          }
         },
       },
     );
