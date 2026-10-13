@@ -37,6 +37,7 @@ import type { Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import { gitFetchingAtom } from "@/hooks/git/useProjectGitFetching";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
+import { readsRunsOf } from "@/hooks/live/useLiveActivity";
 import { activityOf, scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { worktreeLifecycleAtom } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { queryKeys } from "@/lib/queryKeys";
@@ -424,6 +425,12 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   assert.equal(device?.status.phase, "connected");
   assert.equal(device?.acceptsCommands, false);
   assert.equal(commandAccessOf(LOCAL, PEER, device).canCommand, false);
+  // Its runs aren't read (scripts:watch is gated): settled as none,
+  // where a refused view would be asked for good. This device's own,
+  // and a peer's before the registry says, are.
+  assert.equal(readsRunsOf(LOCAL, PEER, false), false);
+  assert.equal(readsRunsOf(LOCAL, PEER, undefined), true);
+  assert.equal(readsRunsOf(LOCAL, LOCAL, undefined), true);
   // The stale seed did not roll the status back.
   assert.deepEqual(valueOf(hub()).peerAppVersions, { [PEER]: "3.0.0" });
 
