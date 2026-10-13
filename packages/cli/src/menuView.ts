@@ -4,6 +4,7 @@
 import { Box, render, Text, useApp, useInput } from "ink";
 import { createElement as h, useEffect, useState } from "react";
 import type { Styles } from "./output.ts";
+import { attachStdin } from "./stdinFd.ts";
 
 export type MenuProps = {
   readonly title: string;
@@ -171,6 +172,7 @@ function Menu(
 // The index picked, or undefined for a cancel.
 export const showMenu = async (props: MenuProps) => {
   let choice: number | undefined;
+  attachStdin();
   const instance = render(
     h(Menu, {
       ...props,
