@@ -97,8 +97,11 @@ export async function readWorktreeFile(
     }
     const bytes = buffer.subarray(0, length);
     // A media extension on text (a Git LFS pointer whose object was
-    // never pulled) shows the text.
-    if (!bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)) {
+    // never pulled) shows the text, held to the text cap.
+    if (
+      length <= WORKTREE_FILE_MAX_BYTES &&
+      !bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)
+    ) {
       return { kind: "text", contents: bytes.toString("utf8"), size: length };
     }
     if (mime) {
