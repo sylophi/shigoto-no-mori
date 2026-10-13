@@ -126,7 +126,11 @@ const make = Effect.gen(function* () {
     return true;
   });
 
-  return Moves.of({ run, cancel });
+  return Moves.of({
+    // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the move it runs, which Effect.fn's signature would erase
+    run,
+    cancel,
+  });
 });
 
 export const layer = Layer.effect(Moves, make);

@@ -178,8 +178,8 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
   >;
   return {
     serve(module, handlers) {
-      // oxlint-disable-next-line shigomori/no-double-cast -- the group decodes every payload before a handler sees it
-      const byKey = handlers as unknown as ByKey;
+      // the group decodes every payload before a handler sees it
+      const byKey = handlers as ByKey;
       const calls = callsOf(module).filter(isInvoke);
       for (const call of calls) check(call, byKey[keyOf(call)]);
       for (const call of calls) {
@@ -190,15 +190,12 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     serveOne(module, key, handler) {
       const call = callOf(module, String(key));
       check(call, handler);
-      // oxlint-disable-next-line shigomori/no-double-cast -- the group decodes every payload before a handler sees it
-      mount(call, handler as unknown as (input: unknown, ctx: Ctx) => unknown);
+      // the group decodes every payload before a handler sees it
+      mount(call, handler as (input: unknown, ctx: Ctx) => unknown);
     },
     view(module, handlers) {
-      // oxlint-disable-next-line shigomori/no-double-cast -- typed per view above; read here by key
-      const byKey = handlers as unknown as Record<
-        string,
-        View<Services> | undefined
-      >;
+      // typed per view above; read here by key
+      const byKey = handlers as Record<string, View<Services> | undefined>;
       for (const call of callsOf(module)) {
         if (isPush(call) || isInvoke(call)) continue;
         // Every view is there on every wire: the device link's gates

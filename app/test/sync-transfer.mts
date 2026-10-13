@@ -541,7 +541,6 @@ it("granted transfer: a >2.5 MB bundle crosses as channel frames with its progre
     wantTips,
   );
   for (const [ref, tip] of Object.entries(wantTips)) {
-    // oxlint-disable-next-line no-await-in-loop -- a handful of git probes
     assert.equal(await gitOut(targetRepo, "rev-parse", "--verify", ref), tip);
   }
   let branchMaterialized = true;
@@ -922,7 +921,6 @@ it("pull round trip (dirty): no branch bundle for a locally-known tip, and the c
     `refs/shigomori/dirty/${dirtyPull.worktree.id}`,
     "refs/shigomori/incoming/scratch",
   ]) {
-    // oxlint-disable-next-line no-await-in-loop -- a handful of git probes
     const survived = await refExists(targetRepo, ref);
     assert.equal(survived, false, `${ref} survived the pull`);
   }

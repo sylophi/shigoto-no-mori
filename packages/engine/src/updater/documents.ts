@@ -4,6 +4,7 @@ import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
@@ -21,6 +22,7 @@ import {
 } from "@shigomori/contracts/semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
 import { APP_REPO, formatKitchen } from "../updateFeed.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // What failed underneath, with what failed under an HTTP request too.
 export const causeText = (cause: unknown): string => {
@@ -33,7 +35,7 @@ export const causeText = (cause: unknown): string => {
       : `${cause.message}: ${causeText(under)}`;
   }
   if (PlatformError.isPlatformError(cause)) return errnoText(cause);
-  return cause instanceof Error ? cause.message : String(cause);
+  return errorMessageOf(cause);
 };
 
 // --- errors ------------------------------------------------------------------
@@ -590,4 +592,27 @@ export type Ran = {
   readonly ok: boolean;
   readonly output: string;
   readonly cause: unknown;
+};
+
+// Where the updater's files live in a data dir, for its areas, the
+// doctor and the app's shell alike.
+export const updaterFiles = (
+  path: Pick<Path.Path, "join">,
+  dataDir: string,
+) => {
+  const updates = path.join(dataDir, "updates");
+  const staged = path.join(updates, "staged");
+  return {
+    updates,
+    staged,
+    manifest: path.join(staged, "manifest.json"),
+    stagingLock: path.join(updates, "staging.pid"),
+    download: path.join(updates, "download.zip"),
+    extract: path.join(updates, "extract"),
+    releaseList: path.join(updates, "release-list.json"),
+    installLog: path.join(updates, "install.log"),
+    // What the app publishes, and what the terminal asks of it.
+    status: path.join(dataDir, "updater.json"),
+    request: path.join(dataDir, "updater-request.json"),
+  };
 };

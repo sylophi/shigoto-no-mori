@@ -140,12 +140,11 @@ it("two tabs of one profile each link to the host, call it and hear its pushes",
   await linked(second);
   assert.equal(first.api.deviceId, second.api.deviceId);
   // Neither tab's hub socket ended the other's.
-  for (const each of [first, second]) {
-    assert.equal(
-      // oxlint-disable-next-line no-await-in-loop -- two tabs, order does not matter
-      (await each.api.run(each.api.hub.status())).socket.phase,
-      "connected",
-    );
+  const statuses = await Promise.all(
+    [first, second].map((each) => each.api.run(each.api.hub.status())),
+  );
+  for (const status of statuses) {
+    assert.equal(status.socket.phase, "connected");
   }
   assert.equal(await echo(first, "first"), "first");
   assert.equal(await echo(second, "second"), "second");

@@ -174,7 +174,6 @@ export function ProjectTileView({
       : null;
   const active = work !== undefined && work.lastActivity > 0;
   return (
-    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- hover only reveals the actions, which are buttons of their own
     <div
       onPointerEnter={() => onHover(true)}
       onPointerLeave={() => onHover(false)}

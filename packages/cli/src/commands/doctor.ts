@@ -1,5 +1,6 @@
 // sm doctor [--fix [--yes]]: the checklist of what is wrong with this
 // install, and the repairs that can put it right.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Doctor from "@shigomori/engine/Doctor";
 import { plural } from "@shigomori/engine/doctorParse";
 import * as Paths from "@shigomori/engine/Paths";
@@ -9,15 +10,7 @@ import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
 import { version } from "../build.ts";
 import { ExitCode, UsageError } from "../errors.ts";
-import {
-  alignRows,
-  collapseHome,
-  emit,
-  note,
-  out,
-  Output,
-  styles,
-} from "../output.ts";
+import { alignRows, emit, note, out, Output, styles } from "../output.ts";
 import { confirm, interactive } from "../prompt.ts";
 
 const GROUPS: ReadonlyArray<Doctor.Group> = [
@@ -66,7 +59,7 @@ const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
     const { bold, cyan, dim, green, red, yellow } = styles(stdoutColor);
     const glyph = (status: Doctor.Status) =>
       status === "ok" ? green("✓") : status === "warn" ? yellow("!") : red("✗");
-    const where = collapseHome(home, doc.dataDir);
+    const where = tildify(doc.dataDir, home);
     yield* out(
       `${bold(`${binaryName} doctor`)} ${dim(`${doc.version} (${doc.flavor})`)}  data dir ${cyan(where)}`,
     );

@@ -3,7 +3,6 @@ import type { UpdateRequest } from "@shigomori/contracts/schemas/runtime";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import { type Flavor, flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
 import { pidAlive } from "../processes.ts";
@@ -50,12 +49,11 @@ export const makeMethods = ({
   readonly restart: RestartArea;
 }) =>
   Effect.gen(function* () {
-    const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     // Which releases this build is offered, none for dev.
     const offered = flavorNames(flavor).updates;
 
-    const requestPath = path.join(paths.dataDir, "updater-request.json");
+    const requestPath = files.at.request;
 
     const { run, writeShared, appRunning, runningApp, installedBundle } = files;
     const { queryFeed } = feeds;

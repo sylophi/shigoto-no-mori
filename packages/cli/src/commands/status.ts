@@ -1,5 +1,6 @@
 // sm [worktrees] status [<worktree>] [--no-pr]: one worktree's card,
 // its git state, ports, scripts and pull request.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Clock from "effect/Clock";
@@ -10,7 +11,6 @@ import * as Flag from "effect/cli/Flag";
 import { resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import {
   alignRows,
-  collapseHome,
   emit,
   out,
   Output,
@@ -117,7 +117,7 @@ const card = (
   if (status.pr === null || status.pr.state !== "OPEN") {
     row("title", truncate(status.title ?? "", width));
   }
-  row("path", paint.dim(truncate(collapseHome(home, status.path), width)));
+  row("path", paint.dim(truncate(tildify(status.path, home), width)));
   const upstream = status.git.upstream;
   row(
     "branch",

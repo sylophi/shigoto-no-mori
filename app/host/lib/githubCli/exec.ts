@@ -1,6 +1,6 @@
 // Shared `gh` invocation chokepoint. Keep this thin: each caller picks
 // its own error policy (swallow vs. throw) and its own JSON projection.
-import * as Processes from "../util/processes";
+import * as Processes from "@shigomori/engine/processes";
 
 // A wedged gh (proxy auth, SSO browser prompt) must not hang forever:
 // the readiness probe gates every PR feature, so one stuck spawn would

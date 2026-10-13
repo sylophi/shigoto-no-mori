@@ -1,8 +1,10 @@
 // The repo's own oxlint rules, one per file in rules/, each with its
 // test beside it. README.md lists them.
 import disableNeedsReason from "./rules/disable-needs-reason.mts";
+import effectFnServiceMethods from "./rules/effect-fn-service-methods.mts";
 import effectNamespaceImports from "./rules/effect-namespace-imports.mts";
 import noDoubleCast from "./rules/no-double-cast.mts";
+import noEnvOrClockInService from "./rules/no-env-or-clock-in-service.mts";
 import noNativeTooltip from "./rules/no-native-tooltip.mts";
 import noNodeBuiltinsInService from "./rules/no-node-builtins-in-service.mts";
 import noRuntimeInService from "./rules/no-runtime-in-service.mts";
@@ -12,8 +14,10 @@ export default {
   meta: { name: "shigomori" },
   rules: {
     "disable-needs-reason": disableNeedsReason,
+    "effect-fn-service-methods": effectFnServiceMethods,
     "effect-namespace-imports": effectNamespaceImports,
     "no-double-cast": noDoubleCast,
+    "no-env-or-clock-in-service": noEnvOrClockInService,
     "no-native-tooltip": noNativeTooltip,
     "no-node-builtins-in-service": noNodeBuiltinsInService,
     "no-runtime-in-service": noRuntimeInService,

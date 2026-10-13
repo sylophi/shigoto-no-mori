@@ -1,4 +1,5 @@
 // The doctor's reads of the 2.x files, while the store can't import them.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -9,7 +10,6 @@ import type { ConfigDoc } from "../configDoc.ts";
 import * as Paths from "../Paths.ts";
 import { StoreImportError } from "../migrations/importJson.ts";
 import { errnoText, isAbsent } from "../platformErrors.ts";
-import { collapseHome } from "../shellHook.ts";
 import {
   type Entry,
   type FileReads,
@@ -72,12 +72,12 @@ export const makeFileReads = ({
         case "unreadable":
           return line.fail(
             `unreadable: ${found.why}`,
-            `Fix the permissions on ${collapseHome(home, configFile)}.`,
+            `Fix the permissions on ${tildify(configFile, home)}.`,
           );
         case "invalid":
           return line.fail(
             "isn't valid JSON, so every global preference is silently ignored",
-            `Repair the JSON in ${collapseHome(home, configFile)}, or delete it to fall back to defaults.`,
+            `Repair the JSON in ${tildify(configFile, home)}, or delete it to fall back to defaults.`,
           );
         case "parsed":
           return checkGlobalConfig(Option.some(found.doc));
@@ -94,7 +94,7 @@ export const makeFileReads = ({
         return {
           entry: registryLine.fail(
             "the projects list has the wrong shape, so no project resolves",
-            `Repair the projects array in ${collapseHome(home, file)}.`,
+            `Repair the projects array in ${tildify(file, home)}.`,
           ),
           projects: [],
         };
@@ -108,7 +108,7 @@ export const makeFileReads = ({
         return {
           entry: registryLine.warn(
             "the projectOrder list has the wrong shape, so projects list in their default order and can't be reordered",
-            `Repair or delete the projectOrder key in ${collapseHome(home, file)}.`,
+            `Repair or delete the projectOrder key in ${tildify(file, home)}.`,
           ),
           projects: listed,
         };
@@ -129,7 +129,7 @@ export const makeFileReads = ({
           return {
             entry: registryLine.fail(
               `unreadable: ${found.why}`,
-              `Fix the permissions on ${collapseHome(home, registryFile)}.`,
+              `Fix the permissions on ${tildify(registryFile, home)}.`,
             ),
             projects: [],
           };
@@ -137,7 +137,7 @@ export const makeFileReads = ({
           return {
             entry: registryLine.fail(
               "isn't valid JSON, so every registered project is invisible to sm and the app",
-              `Repair the JSON in ${collapseHome(home, registryFile)} (it holds the project registry).`,
+              `Repair the JSON in ${tildify(registryFile, home)} (it holds the project registry).`,
             ),
             projects: [],
           };
@@ -154,7 +154,7 @@ export const makeFileReads = ({
       const unusable = (why: string) => [
         line.warn(
           `can't be used (${why}), so use counts and view preferences are lost and nothing new is recorded`,
-          `Repair ${collapseHome(home, stateFile)}, or delete it. It holds only that history.`,
+          `Repair ${tildify(stateFile, home)}, or delete it. It holds only that history.`,
         ),
       ];
       switch (found.state) {
@@ -162,11 +162,11 @@ export const makeFileReads = ({
           return [];
         case "unreadable":
           return unusable(
-            `Couldn't read ${collapseHome(home, stateFile)}: ${found.why}`,
+            `Couldn't read ${tildify(stateFile, home)}: ${found.why}`,
           );
         case "invalid":
           return unusable(
-            `${collapseHome(home, stateFile)} is not valid JSON. Fix the file or move it aside, then retry.`,
+            `${tildify(stateFile, home)} is not valid JSON. Fix the file or move it aside, then retry.`,
           );
         case "parsed":
           return [line.ok("valid")];
@@ -185,14 +185,14 @@ export const makeFileReads = ({
             return Option.some(
               line.fail(
                 `project.json can't be read (${found.why}), so the store can't import it and no command can run`,
-                `Fix the permissions on ${collapseHome(home, file)}.`,
+                `Fix the permissions on ${tildify(file, home)}.`,
               ),
             );
           case "invalid":
             return Option.some(
               line.fail(
                 "project.json exists but is invalid (bad JSON), so the store can't import it and no command can run",
-                `Repair the JSON in ${collapseHome(home, file)}.`,
+                `Repair the JSON in ${tildify(file, home)}.`,
               ),
             );
         }
@@ -226,7 +226,7 @@ export const makeFileReads = ({
             ? []
             : [
                 check("Data dir", "store", "store").fail(
-                  `${collapseHome(home, refused.path)} can't be read into the store, so no command can run`,
+                  `${tildify(refused.path, home)} can't be read into the store, so no command can run`,
                   "Fix its permissions, or move it aside.",
                 ),
               ],

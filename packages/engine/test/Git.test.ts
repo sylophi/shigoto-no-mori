@@ -245,7 +245,6 @@ it("a checkout of a remote ref lands on a tracking branch, never a detached HEAD
   ] as const;
   for (const [i, [ref, branch, upstreamRef]] of cases.entries()) {
     const path = join(parent, `wt${i}`);
-    // oxlint-disable-next-line no-await-in-loop -- one worktree add at a time, as the repo's lock wants
     await withGit((g) => g.checkoutWorktree({ repo, path, ref }));
     assert.equal(
       git(path, "symbolic-ref", "--short", "HEAD").trim(),

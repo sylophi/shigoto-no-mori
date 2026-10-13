@@ -507,23 +507,27 @@ const make = (binary: string) =>
       };
     });
 
-    const autoBind = Effect.fn("Agents.autoBind")(function* (
-      at: Worktrees.Here,
-    ) {
-      const ref = yield* caller;
-      const current = at.current?.worktree;
-      if (
-        Option.isNone(ref) ||
-        current === undefined ||
-        !Worktrees.isShelfable(current)
-      ) {
-        return;
-      }
-      if (find(yield* registry.agentSessions, ref.value)?.id === current.id) {
-        return;
-      }
-      yield* registry.bindAgentSession(yield* starting(ref.value), current.id);
-    });
+    const autoBind = Effect.fn("Agents.autoBind")(
+      function* (at: Worktrees.Here) {
+        const ref = yield* caller;
+        const current = at.current?.worktree;
+        if (
+          Option.isNone(ref) ||
+          current === undefined ||
+          !Worktrees.isShelfable(current)
+        ) {
+          return;
+        }
+        if (find(yield* registry.agentSessions, ref.value)?.id === current.id) {
+          return;
+        }
+        yield* registry.bindAgentSession(
+          yield* starting(ref.value),
+          current.id,
+        );
+      },
+      Effect.ignoreCause({ log: "Debug", message: "agents: bind" }),
+    );
 
     const bind = Effect.fn("Agents.bind")(function* (
       worktree: Worktrees.WorktreeIdentity,
@@ -639,71 +643,68 @@ const make = (binary: string) =>
       );
     });
 
-    const onEvent = Effect.fn("Agents.event")(function* (
-      harnessId: string,
-      raw: string,
-      cwd: string,
-    ) {
-      const event = parseAgentEvent(raw);
-      if (event === undefined) {
-        return yield* Effect.logDebug("agents event: unreadable payload");
-      }
-      const harness = harnessById(harnessId);
-      let key = event.session;
-      if (harness?.subagentIds === true && event.agentId !== "") {
-        key = event.agentId;
-      } else if (event.name === "SubagentStop") {
-        // The parent's session id: its subagent ending isn't its end.
-        return;
-      }
-      const ref = { harness: harnessId, session: key };
-      const now = yield* Clock.currentTimeMillis;
-      const found = find(yield* registry.agentSessions, ref);
-      if (found === undefined) {
-        // An unbound session started in a managed worktree belongs to it.
-        const next = applyAgentEvent({ ...ref, state: "", at: 0 }, event, now);
-        if (next === undefined || next === "unbind") return;
-        const at = yield* worktrees.here(event.cwd === "" ? cwd : event.cwd);
-        const current = at.current?.worktree;
-        if (current === undefined || !Worktrees.isShelfable(current)) return;
-        const { at: _at, ...session } = next;
-        return yield* registry.bindAgentSession(session, current.id);
-      }
-      const session = found.list[found.index];
-      if (
-        session === undefined ||
-        applyAgentEvent(session, event, now) === undefined
-      ) {
-        return;
-      }
-      yield* registry.updateAgentSessions((bound) => {
-        const again = find(bound, ref);
-        const current = again?.list[again.index];
-        if (again === undefined || current === undefined) return false;
-        const next = applyAgentEvent(current, event, now);
-        if (next === undefined) return false;
-        if (next === "unbind") again.list.splice(again.index, 1);
-        else again.list[again.index] = next;
-        return true;
-      });
-    });
+    const onEvent = Effect.fn("Agents.event")(
+      function* (harnessId: string, raw: string, cwd: string) {
+        const event = parseAgentEvent(raw);
+        if (event === undefined) {
+          return yield* Effect.logDebug("agents event: unreadable payload");
+        }
+        const harness = harnessById(harnessId);
+        let key = event.session;
+        if (harness?.subagentIds === true && event.agentId !== "") {
+          key = event.agentId;
+        } else if (event.name === "SubagentStop") {
+          // The parent's session id: its subagent ending isn't its end.
+          return;
+        }
+        const ref = { harness: harnessId, session: key };
+        const now = yield* Clock.currentTimeMillis;
+        const found = find(yield* registry.agentSessions, ref);
+        if (found === undefined) {
+          // An unbound session started in a managed worktree belongs to it.
+          const next = applyAgentEvent(
+            { ...ref, state: "", at: 0 },
+            event,
+            now,
+          );
+          if (next === undefined || next === "unbind") return;
+          const at = yield* worktrees.here(event.cwd === "" ? cwd : event.cwd);
+          const current = at.current?.worktree;
+          if (current === undefined || !Worktrees.isShelfable(current)) return;
+          const { at: _at, ...session } = next;
+          return yield* registry.bindAgentSession(session, current.id);
+        }
+        const session = found.list[found.index];
+        if (
+          session === undefined ||
+          applyAgentEvent(session, event, now) === undefined
+        ) {
+          return;
+        }
+        yield* registry.updateAgentSessions((bound) => {
+          const again = find(bound, ref);
+          const current = again?.list[again.index];
+          if (again === undefined || current === undefined) return false;
+          const next = applyAgentEvent(current, event, now);
+          if (next === undefined) return false;
+          if (next === "unbind") again.list.splice(again.index, 1);
+          else again.list[again.index] = next;
+          return true;
+        });
+      },
+      Effect.ignoreCause({ log: "Debug", message: "agents event" }),
+    );
 
     return Agents.of({
       caller,
       starting,
-      autoBind: (at) =>
-        autoBind(at).pipe(
-          Effect.catchCause((cause) => Effect.logDebug("agents: bind", cause)),
-        ),
+      autoBind,
       bind,
       unbind,
       idle,
       resume,
       guide,
-      event: (harness, raw, cwd) =>
-        onEvent(harness, raw, cwd).pipe(
-          Effect.catchCause((cause) => Effect.logDebug("agents event", cause)),
-        ),
+      event: onEvent,
       statuses,
       setHooks,
     });

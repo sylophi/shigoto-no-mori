@@ -1,12 +1,17 @@
-// What the engine asks of the processes on this machine: whether one
-// is alive, and running a command to its end, keeping what it said.
+// What the engine and the host ask of the processes on this machine:
+// whether one is alive, and running a command to its end, keeping what
+// it said. Each command runs in a scope, so a timeout or an interrupted
+// caller ends it with its process group. The long-lived children
+// (cloudflared, the file-sync daemon, the scripts) hold their handles
+// themselves.
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
-import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { isMissingProgram } from "./platformErrors.ts";
 
 // Signal 0 delivers nothing but still checks that the process exists.
 // EPERM means it exists and isn't ours.
@@ -101,6 +106,178 @@ export const captureWithin = (
     }),
   );
 
+// A command that did not answer. `cause` holds what it said on stderr,
+// or the spawn failure. `command` is the binary's name, never its
+// arguments, which can carry a path or a query.
+export class CommandError extends Schema.TaggedError<CommandError>()(
+  "CommandError",
+  {
+    command: Schema.String,
+    reason: Schema.Literals(["not-found", "timed-out", "too-large", "failed"]),
+    exitCode: Schema.NullOr(Schema.Int),
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    switch (this.reason) {
+      case "not-found":
+        return `${this.command} is not installed.`;
+      case "timed-out":
+        return `${this.command} timed out.`;
+      case "too-large":
+        return `${this.command} printed more than the app reads.`;
+      case "failed":
+        return this.exitCode === null
+          ? `${this.command} did not finish.`
+          : `${this.command} exited with ${this.exitCode}.`;
+    }
+  }
+}
+
+export const isCommandError = Schema.is(CommandError);
+
+// A command's exit, its stderr the message and its stdout beside it.
+class ExitedError extends Error {
+  readonly stdout: string;
+  constructor(stderr: string, stdout: string) {
+    super(stderr);
+    this.stdout = stdout;
+  }
+}
+
+// What the command wrote to stderr, for a caller that relays it.
+// Only a command that exited carries it.
+export const stderrOf = (error: CommandError): string =>
+  error.exitCode !== null && error.cause instanceof Error
+    ? error.cause.message
+    : "";
+
+// What it wrote to stdout before it failed, for a caller that reads a
+// partial answer. Only a command that exited carries it.
+export const stdoutOf = (error: CommandError): string =>
+  error.exitCode !== null && error.cause instanceof ExitedError
+    ? error.cause.stdout
+    : "";
+
+const utf8 = new TextDecoder();
+
+// Node's execFile default, which every caller here grew up with.
+const DEFAULT_MAX_OUTPUT = 1024 * 1024;
+
+interface Read {
+  readonly chunks: Uint8Array[];
+  size: number;
+}
+
+// Reads a pipe to its end. Past `limit` bytes it fails with `tooLarge`,
+// or without one keeps the first `limit` bytes and drains the rest.
+export const readAll = <E, E2 = never>(
+  stream: Stream.Stream<Uint8Array, E>,
+  limit: number,
+  {
+    tooLarge,
+    decoder = utf8,
+  }: {
+    readonly tooLarge?: () => E2;
+    readonly decoder?: { readonly decode: (bytes: Uint8Array) => string };
+  } = {},
+): Effect.Effect<string, E | E2> =>
+  stream.pipe(
+    Stream.runFoldEffect(
+      (): Read => ({ chunks: [], size: 0 }),
+      (read: Read, chunk: Uint8Array): Effect.Effect<Read, E2> => {
+        if (read.size + chunk.length > limit) {
+          if (tooLarge) return Effect.fail(tooLarge());
+          chunk = chunk.subarray(0, Math.max(0, limit - read.size));
+        }
+        read.size += chunk.length;
+        read.chunks.push(chunk);
+        return Effect.succeed(read);
+      },
+    ),
+    Effect.map(({ chunks, size }) => {
+      const all = new Uint8Array(size);
+      let at = 0;
+      for (const chunk of chunks) {
+        all.set(chunk, at);
+        at += chunk.length;
+      }
+      return decoder.decode(all);
+    }),
+  );
+
+interface ExecOptions {
+  readonly cwd?: string | undefined;
+  // The whole environment of the command, or with `extendEnv` what it
+  // sets over the app's own. The app's own when absent.
+  readonly env?: Record<string, string | undefined> | undefined;
+  readonly extendEnv?: boolean | undefined;
+  readonly timeout?: Duration.Input | undefined;
+  // Past it stdout fails the command and stderr is cut short.
+  readonly maxOutputBytes?: number | undefined;
+}
+
+// Runs `command` to its exit. Anything but exit 0 fails, with what it
+// wrote as the cause (stderrOf, stdoutOf).
+export const exec = Effect.fn("exec")(function* (
+  command: string,
+  args: readonly string[],
+  options: ExecOptions = {},
+): Effect.fn.Return<
+  { readonly stdout: string; readonly stderr: string },
+  CommandError,
+  ChildProcessSpawner.ChildProcessSpawner
+> {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const name = command.slice(command.lastIndexOf("/") + 1);
+  yield* Effect.annotateCurrentSpan({ command: name });
+  const fail = (
+    reason: CommandError["reason"],
+    cause: unknown,
+    exitCode: number | null = null,
+  ) => new CommandError({ command: name, reason, exitCode, cause });
+  const limit = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
+  return yield* Effect.gen(function* () {
+    const handle = yield* spawner.spawn(
+      ChildProcess.make(command, [...args], {
+        cwd: options.cwd,
+        env: options.env,
+        extendEnv: options.extendEnv,
+        stdin: "ignore",
+      }),
+    );
+    const [stdout, stderr] = yield* Effect.all(
+      [
+        readAll(handle.stdout, limit, {
+          tooLarge: () => fail("too-large", undefined),
+        }),
+        readAll(handle.stderr, limit),
+      ],
+      { concurrency: 2 },
+    );
+    const code = yield* handle.exitCode;
+    if (code !== 0) {
+      return yield* fail(
+        "failed",
+        new ExitedError(stderr.trim(), stdout),
+        code,
+      );
+    }
+    return { stdout, stderr };
+  }).pipe(
+    Effect.scoped,
+    Effect.mapError((error) =>
+      isCommandError(error)
+        ? error
+        : fail(isMissingProgram(error) ? "not-found" : "failed", error),
+    ),
+    Effect.timeoutOrElse({
+      duration: options.timeout ?? Duration.infinity,
+      orElse: () => Effect.fail(fail("timed-out", undefined)),
+    }),
+  );
+});
+
 // A process and the folder it works in.
 export type Working = {
   readonly pid: number;
@@ -148,4 +325,13 @@ export const working = (
       }
       return Effect.succeed(found as ReadonlyArray<Working>);
     }),
+  );
+
+// The resolved path of a binary on PATH, or null. The packaged app's
+// PATH is the login shell's (shared/shellEnv.ts), so anything
+// installed for the user's terminal is found here too.
+export const resolveOnPath = (name: string) =>
+  exec("which", [name]).pipe(
+    Effect.map(({ stdout }) => stdout.trim() || null),
+    Effect.orElseSucceed(() => null),
   );

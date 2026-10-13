@@ -78,13 +78,3 @@ export function renderTable(
   const [head = "", ...body] = alignRows([header, ...rows]);
   return [styles(color).dim(head), ...body].join("\n");
 }
-
-// A path under the home folder, written from ~. Without a home, as is.
-export const collapseHome = (home: string, path: string) =>
-  home === ""
-    ? path
-    : path === home
-      ? "~"
-      : path.startsWith(`${home}/`)
-        ? `~${path.slice(home.length)}`
-        : path;

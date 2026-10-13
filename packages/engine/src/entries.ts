@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { capture } from "./processes.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // Whether anything is at a path: a file, a folder, or a symlink, a
 // dangling one included.
@@ -27,7 +28,7 @@ export class CopyFailed extends Schema.TaggedError<CopyFailed>()("CopyFailed", {
 
 // What cp said, for a report that carries it.
 export const copyFailure = (error: CopyFailed): string =>
-  error.cause instanceof Error ? error.cause.message : String(error.cause);
+  errorMessageOf(error.cause);
 
 // `cp -R -P` of a tree to a destination that isn't there, plus `flags`.
 export const copyTree = (

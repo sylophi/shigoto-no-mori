@@ -1,5 +1,4 @@
-// oxlint-disable-next-line no-restricted-imports -- React is used as a type-only namespace
-import type * as React from "react";
+import type { ComponentProps } from "react";
 import { createContext, use, type ReactNode } from "react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 
@@ -258,7 +257,7 @@ function DropdownMenuSubContent({
   sideOffset = 0,
   className,
   ...props
-}: React.ComponentProps<typeof DropdownMenuContent>) {
+}: ComponentProps<typeof DropdownMenuContent>) {
   if (use(StaticMenuContext)) return null;
   return (
     <DropdownMenuContent

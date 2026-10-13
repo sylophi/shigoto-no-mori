@@ -5,7 +5,7 @@ import { isAbsolute, resolve } from "node:path";
 import * as Agents from "@shigomori/engine/Agents";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
-import { isSameOrInside } from "@shigomori/engine/worktreeLayout";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

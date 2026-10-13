@@ -194,15 +194,6 @@ export const hookPlace = (
   zdotdir,
 });
 
-// A path under the home directory as ~/..., as the user reads it.
-export const collapseHome = (home: string, target: string) => {
-  if (home === "") return target;
-  if (target === home) return "~";
-  return target.startsWith(`${home}/`)
-    ? `~${target.slice(home.length)}`
-    : target;
-};
-
 // The file each shell reads, where install writes the hook.
 const hookPath = (place: HookPlace, kind: ShellKind) =>
   Effect.gen(function* () {

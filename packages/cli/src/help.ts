@@ -41,7 +41,7 @@ const catalog = (names: Names) => {
       [
         "update [--check]",
         "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v2.0.0-beta.N) and takes a full release that is ahead of it.",
+        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v3.0.0-rc.N) and takes a full release that is ahead of it; a v3 build (-v3.N) takes only the newest -v3.N.",
       ],
       [
         "doctor [--fix] [--yes]",
@@ -182,7 +182,7 @@ const catalog = (names: Names) => {
       [
         "worktrees rekey --project-id <id> --from-id <id> --to-path <path>",
         "Re-key a worktree ahead of a move",
-        "App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the bound agent sessions, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}.",
+        "App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the bound agent sessions, the worktree's stored data and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}.",
       ],
       [
         "worktrees open [<tool>] [<name>]",
@@ -238,7 +238,7 @@ const catalog = (names: Names) => {
       [
         "projects config [<command>] [args]",
         "Show or set per-project config",
-        "Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
+        "Bare: prints the project's settings. The global config's verbs work here too, scoped by -p: " +
           "list, get <key>, set <key> <value>, unset <key>, edit, read. Keys: `" +
           bin +
           " projects config list`. Structured lists get element verbs: launcher add " +
@@ -253,19 +253,19 @@ const catalog = (names: Names) => {
       [
         "config list",
         "Show every setting",
-        "Effective values, with (default) marking keys not present in config.json. --json prints {ok, settings: [{key, value, set}]}.",
+        "Effective values, with (default) marking keys that aren't set. --json prints {ok, settings: [{key, value, set}]}.",
       ],
       [
         "config read",
-        "Print config.json as stored (--json)",
-        "{ok, config: {...}}, unknown keys included and no defaults filled in ({} when there is no file). projects config read answers the same for project.json, with config null when the project has none.",
+        "Print the settings as stored (--json)",
+        "{ok, config: {...}}, unknown keys included and no defaults filled in ({} when none are set). projects config read answers the same for the project's settings, with config null when the project has none.",
       ],
       ["config get <key>", "Print one setting's effective value", ""],
       [
         "config set <key> <value>",
         "Change a setting",
         "Booleans accept true/false, on/off, yes/no, 1/0. Setting a key to its default removes " +
-          "it from the file, same as the app.",
+          "it from the stored settings, same as the app.",
       ],
       ["config unset <key>", "Reset a setting to its default", ""],
       [
@@ -402,7 +402,7 @@ const namespacesOf = (bin: string, items: Catalog) => [
     name: "config",
     desc: "Global settings",
     shortAlias: "",
-    blurb: `Global settings, stored in config.json in the data dir. Keys and current values: \`${bin} config list\`. Per-project settings live under \`${bin} projects config\`.`,
+    blurb: `Global settings, stored in the data dir. Keys and current values: \`${bin} config list\`. Per-project settings live under \`${bin} projects config\`.`,
     items: items.config,
     canon: (name: string) => name,
   },
@@ -540,7 +540,7 @@ function section(
 
 export type HelpLook = {
   readonly names: Names;
-  // The build that isn't prod (test, dev), which the title names.
+  // The build that isn't prod (v3, dev), which the title names.
   readonly unshipped: "v3" | "dev" | null;
   readonly color: boolean;
   // The terminal's width, clamped.

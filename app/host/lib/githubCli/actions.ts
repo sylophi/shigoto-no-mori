@@ -7,7 +7,11 @@ import {
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
-import { isCommandError, stderrOf, stdoutOf } from "../util/processes";
+import {
+  isCommandError,
+  stderrOf,
+  stdoutOf,
+} from "@shigomori/engine/processes";
 import { gh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { GithubCli } from "./GithubCli";

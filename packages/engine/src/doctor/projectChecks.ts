@@ -1,4 +1,5 @@
 // The doctor's project checks: each project's repo, worktrees, scripts, launchers and ports.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -22,7 +23,6 @@ import * as Layout from "../Layout.ts";
 import * as Paths from "../Paths.ts";
 import { errnoText, isNotFound } from "../platformErrors.ts";
 import * as Registry from "../Registry.ts";
-import { collapseHome } from "../shellHook.ts";
 import type { ListedProject, RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
 import { worktreeIdFromPath } from "../worktreeLayout.ts";
@@ -82,7 +82,7 @@ export const makeProjectChecks = ({
             // Not sm's entry to drop: terrier prune owns it.
             return Result.fail(
               line.warn(
-                `${collapseHome(home, project.path)} is gone, but ${project.source} still lists it`,
+                `${tildify(project.path, home)} is gone, but ${project.source} still lists it`,
                 "Restore the directory, or run `terrier prune`.",
               ),
             );
@@ -90,11 +90,11 @@ export const makeProjectChecks = ({
           return Result.fail(
             repairable(
               line.fail(
-                `${collapseHome(home, project.path)} is gone, so every command for this project fails`,
+                `${tildify(project.path, home)} is gone, so every command for this project fails`,
                 `If it moved, point the project at it (\`${binaryName} projects relocate ${project.name} <new-path>\`). Otherwise restore the directory, or unregister it (\`${binaryName} projects remove ${project.name}\`).`,
               ),
               {
-                prompt: `Unregister ${project.name} (${collapseHome(home, project.path)} is gone)? Its config under projects/ goes too.`,
+                prompt: `Unregister ${project.name} (${tildify(project.path, home)} is gone)? Its config under projects/ goes too.`,
                 label: `unregistered ${project.name}`,
                 destructive: true,
                 writesStore: true,
@@ -112,7 +112,7 @@ export const makeProjectChecks = ({
         if (Result.isFailure(info) || info.success.type !== "Directory") {
           return Result.fail(
             check("Projects", "project-path", project.name).fail(
-              `${collapseHome(home, project.path)} isn't a readable directory`,
+              `${tildify(project.path, home)} isn't a readable directory`,
               `Check its permissions, or unregister it (${unregisterHint(project)}).`,
             ),
           );
@@ -130,7 +130,7 @@ export const makeProjectChecks = ({
           if (bare) return Result.succeed(project.path);
           return Result.fail(
             check("Projects", "project-repo", project.name).fail(
-              `${collapseHome(home, project.path)} is no longer a git repository`,
+              `${tildify(project.path, home)} is no longer a git repository`,
               `Restore the repo, or unregister it (${unregisterHint(project)}).`,
             ),
           );
@@ -140,12 +140,12 @@ export const makeProjectChecks = ({
         // git answers with a symlink-free path, and everything in sm
         // matches against it, so both ways this can differ are breakage.
         const detail = (yield* sameDirectory(project.path, primaryPath))
-          ? `registered through a symlinked path; git calls the same directory ${collapseHome(home, primaryPath)}, so nothing run from inside the repo matches it`
-          : `registered at ${collapseHome(home, project.path)}, which is a worktree of ${collapseHome(home, primaryPath)}, not the repo's primary checkout`;
+          ? `registered through a symlinked path; git calls the same directory ${tildify(primaryPath, home)}, so nothing run from inside the repo matches it`
+          : `registered at ${tildify(project.path, home)}, which is a worktree of ${tildify(primaryPath, home)}, not the repo's primary checkout`;
         const readd =
           project.source === "terrier"
-            ? `\`terrier add ${collapseHome(home, primaryPath)}\``
-            : `\`${binaryName} projects add ${collapseHome(home, primaryPath)}\``;
+            ? `\`terrier add ${tildify(primaryPath, home)}\``
+            : `\`${binaryName} projects add ${tildify(primaryPath, home)}\``;
         return Result.fail(
           check("Projects", "project-primary", project.name).fail(
             detail,
@@ -304,7 +304,7 @@ export const makeProjectChecks = ({
           return [
             check("Projects", "project-worktrees", project.name).fail(
               `git can't list this project's worktrees: ${errorText(identities.failure)}`,
-              `Run \`git worktree list\` in ${collapseHome(home, project.path)} to see the failure.`,
+              `Run \`git worktree list\` in ${tildify(project.path, home)} to see the failure.`,
             ),
           ];
         }
@@ -315,7 +315,7 @@ export const makeProjectChecks = ({
           const shown = [...drift.moved]
             .map(
               ([oldPath, newPath]) =>
-                `${path.basename(oldPath)} → ${collapseHome(home, newPath)}`,
+                `${path.basename(oldPath)} → ${tildify(newPath, home)}`,
             )
             .toSorted();
           entries.push(
@@ -355,7 +355,7 @@ export const makeProjectChecks = ({
           );
         }
         if (drift.strays.length > 0) {
-          const shown = drift.strays.map((stray) => collapseHome(home, stray));
+          const shown = drift.strays.map((stray) => tildify(stray, home));
           entries.push(
             check("Projects", "project-strays", project.name).warn(
               `${shown.length} ${pluralize(shown.length, "directory", "directories")} in the managed layout that git doesn't know about (${shown.join(", ")})`,
@@ -378,7 +378,7 @@ export const makeProjectChecks = ({
         const n = unmoved.length;
         const shown = unmoved.map(
           ({ fromPath, error }) =>
-            `${collapseHome(home, fromPath)}${error === null ? "" : ` (${error})`}`,
+            `${tildify(fromPath, home)}${error === null ? "" : ` (${error})`}`,
         );
         return [
           repairable<StoreServices>(
@@ -398,7 +398,7 @@ export const makeProjectChecks = ({
                     why: left
                       .map(
                         ({ fromPath, error }) =>
-                          `${collapseHome(home, fromPath)}: ${error ?? "not moved"}`,
+                          `${tildify(fromPath, home)}: ${error ?? "not moved"}`,
                       )
                       .join(", "),
                   });
@@ -455,7 +455,7 @@ export const makeProjectChecks = ({
           return [
             line.warn(
               `${WORKTREE_INCLUDE} is a directory, so carry-over resolves nothing`,
-              `Remove or replace ${collapseHome(home, file)}.`,
+              `Remove or replace ${tildify(file, home)}.`,
             ),
           ];
         }
@@ -466,7 +466,7 @@ export const makeProjectChecks = ({
           return [
             line.warn(
               `${WORKTREE_INCLUDE} can't be read (open ${file}: ${errnoText(readable.failure)}), so nothing is carried into new worktrees`,
-              `Fix the permissions on ${collapseHome(home, file)}.`,
+              `Fix the permissions on ${tildify(file, home)}.`,
             ),
           ];
         }

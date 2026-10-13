@@ -15,9 +15,10 @@ import {
   SLOTTED_SUBCOMMANDS,
   SPAWN_SLOTS,
   encoder,
+  decoder,
   identity,
-  readAll,
 } from "./documents.ts";
+import { readAll } from "../processes.ts";
 
 // A transfer that stalls (a connection left half open by a sleep or a
 // network that changed) ends rather than waiting for good: http's own
@@ -87,14 +88,14 @@ export const makeRunning = Effect.gen(function* () {
           .pipe(Effect.mapError(failed(null)));
         const [stdout, stderr] = yield* Effect.all(
           [
-            readAll(
-              handle.stdout.pipe(Stream.mapError(failed(null))),
-              limit,
+            readAll(handle.stdout.pipe(Stream.mapError(failed(null))), limit, {
               tooLarge,
-            ),
+              decoder,
+            }),
             readAll(
               handle.stderr.pipe(Stream.mapError(failed(null))),
               DEFAULT_MAX_OUTPUT,
+              { decoder },
             ),
           ],
           { concurrency: 2 },

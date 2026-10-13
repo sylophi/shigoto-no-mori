@@ -67,7 +67,6 @@ const otherBuild = probeOn(Schema.String);
 const scopes: Scope.Closeable[] = [];
 afterEach(async () => {
   for (const scope of scopes.splice(0)) {
-    // oxlint-disable-next-line no-await-in-loop -- one link down at a time
     await Effect.runPromise(Scope.close(scope, Exit.void));
   }
 });

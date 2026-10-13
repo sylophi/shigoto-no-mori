@@ -21,7 +21,7 @@ import * as EngineConfig from "@shigomori/engine/Config";
 import * as Git from "@shigomori/engine/Git";
 import * as Ops from "../engineOps";
 import { answersFor } from "../util/cacheTtl";
-import * as Processes from "../util/processes";
+import * as Processes from "@shigomori/engine/processes";
 import { gh } from "./exec";
 import { ghHostsPath, type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
