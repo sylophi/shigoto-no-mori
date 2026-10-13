@@ -209,6 +209,12 @@ export const worktreesContract = defineContract(
     Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },
   ),
+  // The changes page's list read now (watchChangeStatus), answered once
+  // the read landed: a refresh, or a change this window just made.
+  invoke("refreshChangeStatus", WorktreeScopedPayloadSchema, Schema.Void, {
+    remote: true,
+    gated: false,
+  }),
   // One modified file's hunks (the engine's git/hunks.ts), to tick and
   // throw away one at a time.
   invoke("fileHunks", FileHunksPayloadSchema, FileHunksSchema, {

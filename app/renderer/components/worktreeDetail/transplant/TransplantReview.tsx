@@ -8,7 +8,7 @@
 // the pull at step 2, so the review says so here and keeps Start off.
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { changeEntries } from "@shigomori/ui/lib/patchFiles.ts";
-import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
+import { useWorktreeChangesOnce } from "@/hooks/worktrees/useWorktreeChanges";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useCarryOverRows } from "../flow/createPlan";
 import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
@@ -67,9 +67,7 @@ function ChangedFiles({
     data: changed,
     isPending,
     isError,
-  } = useWorktreeChanges(project.id, worktree.id, {
-    refetchOnWindowFocus: false,
-  });
+  } = useWorktreeChangesOnce(project.id, worktree.id);
   return (
     <ChangedFilesView
       files={changeEntries(changed ?? [])}
