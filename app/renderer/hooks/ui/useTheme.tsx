@@ -64,8 +64,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const resolved = applied === "system" ? systemTheme : applied;
 
+  // color-scheme too, which the boot script sets once: native controls
+  // (scrollbars, media players) follow it, not the class.
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", resolved === "dark");
+    const html = document.documentElement;
+    html.classList.toggle("dark", resolved === "dark");
+    html.style.colorScheme = resolved;
   }, [resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks
