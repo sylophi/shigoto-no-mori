@@ -489,7 +489,7 @@ describe("transfer", () => {
 // may fail it with the menu still up.
 type Key = string | (() => string);
 
-// `under-load.mts` repeats these, each case SM_TERMINAL_REPEATS more
+// `under-load.mts` beside this file repeats these, each case SM_TERMINAL_REPEATS more
 // times, with busy loops beside them.
 describe(
   "at a terminal",
