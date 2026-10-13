@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { RepoMergeConfig } from "@shared/schemas";
 import { ttlMapCache } from "../util/ttlCache";
 import { execGh } from "./exec";
-import { ghReadyForRepo } from "./remote";
+import { ghReadyForRepo } from "./readiness";
 
 // Repo-level merge-button settings. Stable across the session in
 // practice; cached for an hour so reopening the section is free.
