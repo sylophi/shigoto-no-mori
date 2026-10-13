@@ -29,4 +29,11 @@ export const launchersHandlers = {
     Effect.flatMap(findProject(projectId), (project) =>
       Ops.openLauncher(project, worktreeId, launcherId),
     ),
+
+  // `sm worktrees edit`'s Open.edit: the editor setting, or the file's
+  // default app.
+  openFile: ({ projectId, worktreeId, path }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      Ops.openFile(project, worktreeId, path),
+    ),
 } satisfies EffectHandlers<typeof launchersContract, unknown, Engine.Services>;

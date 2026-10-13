@@ -1,7 +1,8 @@
 // Durable proof for the Git section's commit menu, stashes and
 // conflicts (the engine's git/rewriting.ts, stash.ts, operation.ts, and the
 // sync from primary in its remote area) against a REAL
-// repository: revert and cherry-pick with their conflict abort, reword
+// repository: a commit's, a branch's and a stash's patch naming a
+// non-ASCII path as it is, revert and cherry-pick with their conflict abort, reword
 // and squash of local commits leaving the working tree alone with every
 // refusal (moved HEAD, a merge, a commit off the line), stashes listed
 // per branch, applied, popped and dropped by hash, and a sync that
@@ -117,6 +118,21 @@ function seedRepo(): string {
   commit(repo, "c.txt", "c\n", "Third");
   return repo;
 }
+
+it("a commit's, a branch's and a stash's patch name a non-ASCII path as it is, so the file list can open it", async () => {
+  const repo = seedRepo();
+  git(repo, "checkout", "-q", "-b", "side");
+  const added = commit(repo, "café.txt", "c\n", "Add café");
+  assert.match(await engineGit.commitDiff(repo, added), /b\/café\.txt$/m);
+  assert.match(
+    await engineGit.mergeBaseDiff({ repo, base: "main", head: "side" }),
+    /b\/café\.txt$/m,
+  );
+  write(repo, "café.txt", "stashed\n");
+  await stashChanges(repo, "Café");
+  const [stash] = await listStashes(repo, "side");
+  assert.match(await readStashDiff(repo, stash?.hash ?? ""), /b\/café\.txt$/m);
+});
 
 it("revert adds a commit undoing the one named", async () => {
   const repo = seedRepo();

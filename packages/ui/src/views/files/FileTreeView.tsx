@@ -1,5 +1,11 @@
-import { Fragment, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { Fragment, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ChevronRight, FilePen, Loader2 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "../../primitives/context-menu.tsx";
+import { DropdownMenuItem } from "../../primitives/dropdown-menu.tsx";
 import { MaterialIcon } from "../../primitives/material-icon.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
@@ -8,21 +14,33 @@ import { parentOf } from "./treePaths.ts";
 // The files page's list: the worktree as a folder tree (FileTree.tsx
 // reads it a folder at a time). Rows are one flat run of buttons in
 // document order, whatever their depth, which is what keeps the arrow
-// keys a sibling query away.
+// keys a sibling query away. Where files open in the editor, a file's
+// right click opens one menu the whole tree shares, anchored at the
+// pointer, like the diff's file list.
 export function FileTreeView({
   expanded,
   onToggleFolder,
+  onOpenFile,
   className,
   children,
 }: {
   expanded: ReadonlySet<string>;
   onToggleFolder: (path: string, open: boolean) => void;
+  // Opens a file in the editor. Absent where the files aren't this
+  // machine's.
+  onOpenFile?: (path: string) => void;
   // The box is the caller's: the app sidebar's slot on a wide viewport,
   // the page itself or its sheet on a phone.
   className?: string;
-  // The top folder's rows.
-  children: ReactNode;
+  // The top folder's rows, given the file whose menu is up (its row
+  // stays lit while it is).
+  children: (menuPath: string | null) => ReactNode;
 }) {
+  // The file whose menu is up. The path outlives `open` so the menu
+  // keeps its items while it closes.
+  const [menu, setMenu] = useState<{ path: string; open: boolean } | null>(
+    null,
+  );
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const rows = [
       ...e.currentTarget.querySelectorAll<HTMLElement>("[data-tree-path]"),
@@ -66,17 +84,48 @@ export function FileTreeView({
   };
 
   return (
-    <div
-      data-slot="file-tree"
-      role="tree"
-      aria-label="Files"
-      // The rows take the tab stop (see tabIndex on the row).
-      tabIndex={-1}
-      onKeyDown={onKeyDown}
-      className={cn("flex flex-col overflow-y-auto p-1", className)}
+    <ContextMenu
+      disabled={!onOpenFile}
+      open={menu?.open ?? false}
+      onOpenChange={(open, details) => {
+        if (!open) {
+          setMenu((current) => current && { ...current, open: false });
+          return;
+        }
+        // Files have a menu. Folders and the empty space don't.
+        const target = details.event.target;
+        const file =
+          target instanceof Element
+            ? target.closest("[data-tree-path]:not([data-tree-folder])")
+            : null;
+        const path = file?.getAttribute("data-tree-path");
+        if (path) setMenu({ path, open: true });
+      }}
     >
-      {children}
-    </div>
+      <ContextMenuTrigger
+        render={
+          <div
+            data-slot="file-tree"
+            role="tree"
+            aria-label="Files"
+            // The rows take the tab stop (see tabIndex on the row).
+            tabIndex={-1}
+            onKeyDown={onKeyDown}
+            className={cn("flex flex-col overflow-y-auto p-1", className)}
+          />
+        }
+      >
+        {children(menu?.open ? menu.path : null)}
+      </ContextMenuTrigger>
+      {menu && onOpenFile && (
+        <ContextMenuContent>
+          <DropdownMenuItem onClick={() => onOpenFile(menu.path)}>
+            <FilePen />
+            Open in editor
+          </DropdownMenuItem>
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
   );
 }
 
@@ -88,8 +137,10 @@ export function FileTreeRowsView({
   selectedPath,
   expanded,
   tabStop,
+  menuPath,
   onToggleFolder,
   onSelectFile,
+  onOpenFile,
   renderFolder,
 }: {
   // The folder they are in, "" for the top.
@@ -100,8 +151,12 @@ export function FileTreeRowsView({
   expanded: ReadonlySet<string>;
   // The row holding the tree's one tab stop, or null for the first.
   tabStop: string | null;
+  // The file whose menu is up.
+  menuPath?: string | null;
   onToggleFolder: (path: string, open: boolean) => void;
   onSelectFile: (path: string) => void;
+  // Opens a file in the editor, on a double click.
+  onOpenFile?: (path: string) => void;
   // An open folder's rows.
   renderFolder: (path: string) => ReactNode;
 }) {
@@ -132,12 +187,18 @@ export function FileTreeRowsView({
           onClick={() =>
             entry.isDirectory ? onToggleFolder(path, !open) : onSelectFile(path)
           }
+          onDoubleClick={
+            entry.isDirectory || !onOpenFile
+              ? undefined
+              : () => onOpenFile(path)
+          }
           style={{ paddingLeft: `${depth * 12 + 4}px` }}
           className={cn(
             "flex w-full shrink-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors",
             selected
               ? "bg-accent text-accent-foreground"
               : "hover:bg-accent/50 hover:text-foreground",
+            path === menuPath && !selected && "bg-accent/50",
             entry.ignored && !selected && "opacity-55",
           )}
         >

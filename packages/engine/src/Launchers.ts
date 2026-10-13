@@ -17,7 +17,8 @@ import * as Usage from "./Usage.ts";
 // its command line tool on PATH. A deep link with {path} opens it, and
 // openArgs are the launch arguments of one that takes the folder that
 // way. A terminal tool is the command line inTerminal runs in the
-// user's terminal, found by its first word on PATH.
+// user's terminal, found by its first word on PATH. editor marks the
+// tools the editor setting can name, which open a file (Open.edit).
 export type CatalogApp = {
   readonly id: string;
   readonly label: string;
@@ -26,6 +27,7 @@ export type CatalogApp = {
   readonly deepLink?: string;
   readonly openArgs?: ReadonlyArray<string>;
   readonly inTerminal?: string;
+  readonly editor?: boolean;
 };
 
 export type CatalogEntry = {
@@ -33,6 +35,7 @@ export type CatalogEntry = {
   readonly id: string;
   readonly label: string;
   readonly available: boolean;
+  readonly editor?: true;
 };
 
 // One launcher on a project's row: an installed app, the repo's GitHub
@@ -241,6 +244,7 @@ const make = Effect.gen(function* () {
           id: `app:${app.id}`,
           label: app.label,
           available: installed,
+          ...(app.editor === true ? { editor: true as const } : {}),
         }),
       ),
     { concurrency: "unbounded" },

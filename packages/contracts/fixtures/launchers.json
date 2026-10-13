@@ -12,6 +12,13 @@
         "id": "cursor",
         "label": "Cursor",
         "available": false
+      },
+      {
+        "kind": "detected",
+        "id": "zed",
+        "label": "Zed",
+        "available": true,
+        "editor": true
       }
     ],
     "normalizes": [
@@ -42,6 +49,13 @@
         "kind": "detected",
         "id": "vscode",
         "label": "VS Code"
+      },
+      {
+        "kind": "detected",
+        "id": "zed",
+        "label": "Zed",
+        "available": true,
+        "editor": "yes"
       }
     ]
   },
@@ -223,6 +237,26 @@
         "chords": {
           "settings": 1
         }
+      }
+    ]
+  },
+  "OpenFilePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "path": "src/café.ts"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "path": ""
       }
     ]
   }

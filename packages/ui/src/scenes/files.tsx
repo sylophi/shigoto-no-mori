@@ -79,7 +79,7 @@ function filesPage(body: ReactNode, tree: boolean) {
                   onToggleFolder={noop}
                   className="min-h-0 flex-1"
                 >
-                  {rows("", 0)}
+                  {() => rows("", 0)}
                 </FileTreeView>
               )}
             </SidebarTakeoverView>
@@ -182,7 +182,9 @@ export function FilesPartsScene() {
       </Part>
       <Part label="A folder that couldn't be read">
         <FileTreeView expanded={new Set()} onToggleFolder={noop}>
-          <FileTreeNoteView depth={0}>Couldn't read folder</FileTreeNoteView>
+          {() => (
+            <FileTreeNoteView depth={0}>Couldn't read folder</FileTreeNoteView>
+          )}
         </FileTreeView>
       </Part>
     </div>

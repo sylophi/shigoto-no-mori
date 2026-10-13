@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   lstatSync,
@@ -1251,6 +1252,69 @@ describe("app", () => {
       dev.stderr,
       "smd: This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.\n",
     );
+  });
+});
+
+describe("worktrees edit", () => {
+  it("opens the file in the chosen editor, or with its default app", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const file = join(alpha, "src", "a.txt");
+    mkdirSync(dirname(file));
+    writeFileSync(file, "a\n");
+    const calledWith = (name: string) =>
+      readFileSync(join(box.home, `${name}.args`), "utf8").trimEnd();
+    for (const name of ["open", "zed"]) {
+      box.fakeBin(name, `printf '%s\\n' "$@" > '${box.home}/${name}.args'`);
+    }
+
+    // Unset, the file's default app, a relative path read from cwd.
+    const fromCwd = await runAt(join(alpha, "src"), "--json", "edit", "a.txt");
+    assert.deepEqual(fromCwd.doc, { ok: true, path: file });
+    assert.equal(calledWith("open"), file);
+
+    // An executable's default app would run it. A named worktree reads
+    // the path from its root.
+    chmodSync(file, 0o755);
+    const named = await runAt(
+      box.home,
+      "--json",
+      "wt",
+      "edit",
+      "-p",
+      "alpha",
+      "src/a.txt",
+      "root",
+    );
+    assert.deepEqual(named.doc, { ok: true, path: file });
+    assert.equal(calledWith("open"), `-t\n${file}`);
+
+    // A tool that isn't an editor isn't one here either.
+    const refused = await runAt(
+      box.home,
+      "--json",
+      "config",
+      "set",
+      "editor",
+      "lazygit",
+    );
+    assert.equal(refused.code, 2);
+
+    // An editor with a command takes the worktree along.
+    assert.equal(
+      (await runAt(box.home, "config", "set", "editor", "zed")).code,
+      0,
+    );
+    assert.equal((await runAt(alpha, "edit", "src/a.txt")).code, 0);
+    assert.equal(calledWith("zed"), `${alpha}\n${file}`);
+
+    assert.equal((await runAt(alpha, "edit", "src")).code, 1);
+    const missing = await runAt(alpha, "--json", "edit", "src/gone.txt");
+    assert.equal(missing.code, 1);
+    assert.equal((missing.doc as { code?: string }).code, "missing-file");
   });
 });
 

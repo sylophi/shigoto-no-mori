@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   Copy,
   Ellipsis,
+  FilePen,
   Minus,
   Search,
   Undo2,
@@ -59,6 +60,8 @@ const FILTER_MIN_FILES = 8;
 // discard button on every row would cost each one width it can't
 // spare. Discards, one file's or many, confirm in a dialog.
 //
+// A double click on a row, or its menu, opens the file in the editor.
+//
 // Rows arrive built (patchFiles.ts). The caller decides whether they
 // come from the patch or from git status.
 export function DiffFileIndexView({
@@ -69,6 +72,7 @@ export function DiffFileIndexView({
   allCollapsed,
   onToggleAll,
   changes,
+  onOpen,
   footer,
   className,
 }: {
@@ -82,6 +86,9 @@ export function DiffFileIndexView({
   onToggleAll?: () => void;
   // Present on the changes page: makes this the changes list (above).
   changes?: DiffChangesControls;
+  // Opens a file in the editor. Absent where the files aren't this
+  // machine's.
+  onOpen?: (path: string) => void;
   footer?: ReactNode;
   // The box is the caller's too: the app sidebar's slot on a wide
   // viewport, the phone layout's bottom sheet otherwise.
@@ -292,6 +299,7 @@ export function DiffFileIndexView({
                   }
                   onSetTicked={editable?.onSetTicked}
                   onDiscard={editable && requestDiscard}
+                  onOpen={onOpen}
                 />
               ))}
         </ContextMenuTrigger>
@@ -299,6 +307,7 @@ export function DiffFileIndexView({
           <FileMenu
             entry={menuEntry}
             changes={editable}
+            onOpen={onOpen}
             onDiscard={() => setPendingDiscard({ key: menuEntry.key })}
           />
         ) : (
@@ -522,6 +531,7 @@ function IndexRow({
   ticked,
   onSetTicked,
   onDiscard,
+  onOpen,
 }: {
   entry: IndexEntry;
   active: boolean;
@@ -533,6 +543,7 @@ function IndexRow({
   ticked: Ticked | undefined;
   onSetTicked: DiffChangesControls["onSetTicked"] | undefined;
   onDiscard: ((key: string) => void) | undefined;
+  onOpen: ((path: string) => void) | undefined;
 }) {
   // The file's name leads and its folder trails, dimmed: in a narrow
   // list the name is what tells two rows apart, so the folder is what
@@ -607,6 +618,9 @@ function IndexRow({
         type="button"
         data-slot="diff-index-jump"
         onClick={select}
+        onDoubleClick={
+          onOpen && !entry.deleted ? () => onOpen(entry.path) : undefined
+        }
         className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
       >
         <span
@@ -666,14 +680,17 @@ function IndexRow({
 }
 
 // The list's context menu, for the row it opened on: tick or untick it
-// and discard it on the changes page, copy its path anywhere.
+// and discard it on the changes page, open it in the editor and copy its
+// path anywhere.
 function FileMenu({
   entry,
   changes,
+  onOpen,
   onDiscard,
 }: {
   entry: IndexEntry;
   changes: DiffChangesControls | undefined;
+  onOpen: ((path: string) => void) | undefined;
   onDiscard: () => void;
 }) {
   const { row } = entry;
@@ -717,6 +734,12 @@ function FileMenu({
             : ticked === "partial"
               ? "Include the whole file"
               : "Include in the commit"}
+        </DropdownMenuItem>
+      )}
+      {onOpen && !entry.deleted && (
+        <DropdownMenuItem onClick={() => onOpen(entry.path)}>
+          <FilePen />
+          Open in editor
         </DropdownMenuItem>
       )}
       <DropdownMenuItem
