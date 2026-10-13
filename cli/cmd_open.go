@@ -28,32 +28,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 	}
 	tool := parsed.positional(0)
 
-	var target located
-	switch {
-	case parsed.strings["worktree-id"] != "":
-		if len(parsed.positionals) > 1 {
-			return 2, usageErrf("Pass either a worktree name or --worktree-id, not both.")
-		}
-		target, err = resolveWorktreeByID(ctx, parsed.strings["project-id"], parsed.strings["worktree-id"])
-	case parsed.strings["project-id"] != "":
-		return 2, usageErrf("--project-id scopes --worktree-id; pass both (or -p <project> with a name).")
-	case len(parsed.positionals) > 1:
-		target, err = resolveWorktree(ctx, parsed.positionals[1], parsed.strings["project"], true)
-	case ctx.current != nil && parsed.strings["project"] == "":
-		target = *ctx.current
-	default:
-		if !interactiveStdio() {
-			return 2, usageErrf("Not inside a worktree; pass one: %s open <tool> <name>.", binaryName)
-		}
-		// resolveProject supplies the project menu when cwd isn't in
-		// one (or honors -p), then the worktree menu picks the target.
-		var proj project
-		proj, err = resolveProject(ctx, parsed.strings["project"])
-		if err != nil {
-			return exitCodeOf(err), err
-		}
-		target, err = pickWorktree(proj, pickOpts{primaryOK: true})
-	}
+	target, _, err := commandTarget(ctx, parsed, "open <tool>")
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -142,4 +117,39 @@ func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry,
 		return nil, err
 	}
 	return &visible[idx], nil
+}
+
+// The worktree `open` and `edit` act on, from their shared addressing:
+// --project-id and --worktree-id exactly (the app), a name after the
+// command's first positional, the worktree containing cwd, or menus.
+// fromCwd says it was cwd's, which is when a relative path argument
+// reads from cwd. usage is the command and its first positional, for
+// the error that asks for a name.
+func commandTarget(ctx cliContext, parsed parsedArgs, usage string) (target located, fromCwd bool, err error) {
+	switch {
+	case parsed.strings["worktree-id"] != "":
+		if len(parsed.positionals) > 1 {
+			return target, false, usageErrf("Pass either a worktree name or --worktree-id, not both.")
+		}
+		target, err = resolveWorktreeByID(ctx, parsed.strings["project-id"], parsed.strings["worktree-id"])
+	case parsed.strings["project-id"] != "":
+		return target, false, usageErrf("--project-id scopes --worktree-id; pass both (or -p <project> with a name).")
+	case len(parsed.positionals) > 1:
+		target, err = resolveWorktree(ctx, parsed.positionals[1], parsed.strings["project"], true)
+	case ctx.current != nil && parsed.strings["project"] == "":
+		return *ctx.current, true, nil
+	default:
+		if !interactiveStdio() {
+			return target, false, usageErrf("Not inside a worktree; pass one: %s %s <name>.", binaryName, usage)
+		}
+		// resolveProject supplies the project menu when cwd isn't in
+		// one (or honors -p), then the worktree menu picks the target.
+		var proj project
+		proj, err = resolveProject(ctx, parsed.strings["project"])
+		if err != nil {
+			return target, false, err
+		}
+		target, err = pickWorktree(proj, pickOpts{primaryOK: true})
+	}
+	return target, false, err
 }

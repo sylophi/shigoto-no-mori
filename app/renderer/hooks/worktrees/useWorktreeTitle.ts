@@ -3,8 +3,6 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import {
   isOwnPullRequest,
   mappedPullRequest,
-  pullRequestOwnsTitle,
-  titledByPullRequest,
   worktreeTitle,
 } from "@/lib/worktreeTitle";
 import {
@@ -13,16 +11,19 @@ import {
   type Worktree,
 } from "@shared/schemas";
 
-// The open worktree's title and description, its open PR's while it
-// has one (worktreeTitle). The project map knows a PR's title before
-// the page's own lookup answers, but only that lookup brings the body,
-// so a worktree with an open PR shows no description until it does
-// rather than flash the local one it is about to replace.
+// The open worktree's title and description: its own PR's title in
+// any state (worktreeTitle), and while that PR is open its body too
+// (`sm describe` edits the PR's then). Once it is merged or closed,
+// the worktree's own description comes back, or the PR's body when it
+// has none. The project map knows a PR's title before the page's own
+// lookup answers, but only that lookup brings the body, so a worktree
+// with an open PR shows no description until it does rather than
+// flash the local one it is about to replace.
 //
-// `pullRequest` is the PR when the title is its title, so the page can
-// lead with the PR itself instead of naming it twice. `pullRequestBody`
-// is the open PR's body as written (bodySource), template comments
-// too, while it holds the description: what an edit of it starts from.
+// `pullRequest` is the worktree's own PR, so the page can lead with
+// the PR itself instead of naming it twice. `pullRequestBody` is the
+// open PR's body as written (bodySource), template comments too: what
+// an edit of the description starts from.
 export function useWorktreeTitle(worktree: Worktree): {
   title: string | null;
   description: string | null;
@@ -39,17 +40,15 @@ export function useWorktreeTitle(worktree: Worktree): {
   // the fresher of the two.
   const pr = detail === undefined ? mapped : detail;
   const body = shownText(detail?.body);
-  const ownedByPr = pullRequestOwnsTitle(worktree, pr);
+  const own = isOwnPullRequest(worktree, pr) ? pr : null;
+  const open = own?.state === "OPEN";
   return {
     title: worktreeTitle(worktree, pr),
-    description: ownedByPr
+    description: open
       ? body
-      : (shownText(worktree.description) ??
-        (isOwnPullRequest(worktree, pr) ? body : null)),
-    pullRequestBody: ownedByPr
-      ? (detail?.bodySource ?? detail?.body)
-      : undefined,
-    pullRequest: titledByPullRequest(worktree, pr) ? pr : null,
+      : (shownText(worktree.description) ?? (own ? body : null)),
+    pullRequestBody: open ? (detail?.bodySource ?? detail?.body) : undefined,
+    pullRequest: own,
   };
 }
 

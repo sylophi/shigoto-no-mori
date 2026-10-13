@@ -143,7 +143,16 @@ export async function readStashDiff(
   const ref = await refOf(worktreePath, hash);
   return run(
     worktreePath,
-    ["stash", "show", "-p", "--include-untracked", "--no-color", ref],
+    [
+      "-c",
+      "core.quotePath=false",
+      "stash",
+      "show",
+      "-p",
+      "--include-untracked",
+      "--no-color",
+      ref,
+    ],
     { maxBuffer: PATCH_MAX_BUFFER },
   );
 }

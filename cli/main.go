@@ -109,7 +109,7 @@ var worktreeItems = []helpItem{
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`,
 		"A shelved worktree comes back off the shelf on its own once it is worked in: the next full listing (the app's sidebar, `worktrees list`) that finds an edit, a new or deleted file or a commit made since the shelve unshelves it."},
 	{"worktrees describe [<name>] [-t|--title <title>] [-d|--description <text> | --description-file <path|->]", "Set or show a worktree's title and description",
-		"What the work is, like a pull request's title and body: the app shows the title in place of the branch, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints the worktree's own, or its open pull request's. While the branch has an open pull request from this repository (not a fork's branch of the same name), its title and body are the worktree's, and describe edits the PR's instead (a PR's title can't be cleared). When gh can't tell whether there is one (other than for a repo with no GitHub remote, or a gh not signed in), it changes nothing. External worktrees have none (adopt one first). They travel with send, bring and mirror. --json prints {ok, worktree: <row>, pullRequest}, pullRequest the PR it edited (null when it wrote the worktree's own), or {ok, title, description, pullRequest} with no flags, where title and description are the worktree's own and pullRequest the open PR that overrides them."},
+		"What the work is, like a pull request's title and body: the app shows the title in place of the branch until the branch has a pull request from this repository, whose title it shows then in any state, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints the worktree's own, or its open pull request's. While the branch has an open pull request from this repository (not a fork's branch of the same name), its title and body are the worktree's, and describe edits the PR's instead (a PR's title can't be cleared). When gh can't tell whether there is one (other than for a repo with no GitHub remote, or a gh not signed in), it changes nothing. External worktrees have none (adopt one first). They travel with send, bring and mirror. --json prints {ok, worktree: <row>, pullRequest}, pullRequest the PR it edited (null when it wrote the worktree's own), or {ok, title, description, pullRequest} with no flags, where title and description are the worktree's own and pullRequest the open PR that overrides them."},
 	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
 		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
@@ -119,6 +119,9 @@ var worktreeItems = []helpItem{
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
 			"App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher."},
+	{"worktrees edit <file> [<name>]", "Open a worktree's file in your editor",
+		"The editor set in config (editor), or the file's default app while it's unset. A relative <file> reads from cwd in the worktree you're in, and from the root of one you name. " +
+			"App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly, with the file after --. --json prints {ok, path}, and a file that isn't there fails with code missing-file."},
 	{"worktrees link [<name>]", "Print a link that opens the worktree in the app",
 		"A " + deepLinkOrigin + "/devices/<id>/projects/<id>/worktrees/<id> URL, for a chat, a note or a script. It names this device, so it opens this machine's worktree wherever it's clicked. Add /diff, /files or /pr-diff for that page. `open` it to open it now (the installed app launches if it isn't running). --project-id <id> --worktree-id <id> address the worktree exactly. --json prints {ok, url, worktree}."},
 }
@@ -473,6 +476,7 @@ var commands = []command{
 	{name: "cd", aliases: []string{"c"}, worktree: true, run: cmdCd},
 	{name: "switch", worktree: true, run: cmdWorktree},
 	{name: "open", aliases: []string{"o"}, worktree: true, run: cmdOpen},
+	{name: "edit", worktree: true, run: cmdEdit},
 	{name: "link", worktree: true, run: cmdLink},
 	{name: "create", aliases: []string{"new", "n"}, worktree: true, run: cmdCreate},
 	{name: "rm", aliases: []string{"remove"}, worktree: true, run: cmdRm},

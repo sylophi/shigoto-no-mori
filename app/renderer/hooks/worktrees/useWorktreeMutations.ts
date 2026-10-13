@@ -22,7 +22,7 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useWorktreeRemoving } from "@/store/worktreeLifecycle";
-import { pullRequestOwnsTitle } from "@/lib/worktreeTitle";
+import { isOwnPullRequest } from "@/lib/worktreeTitle";
 import type { QueryClient } from "@tanstack/react-query";
 
 interface CreateWorktreeInput {
@@ -467,7 +467,7 @@ export function useDescribeWorktree(errorTitle: string) {
     ({ queryClient, keys }, { projectId, title, description }, worktree) => {
       const key = keys.worktreePullRequest(projectId, worktree.branch);
       const pr = queryClient.getQueryData<PullRequestDetail | null>(key);
-      if (!pr || !pullRequestOwnsTitle(worktree, pr)) return;
+      if (pr?.state !== "OPEN" || !isOwnPullRequest(worktree, pr)) return;
       const edited = {
         ...pr,
         title: title ?? pr.title,
