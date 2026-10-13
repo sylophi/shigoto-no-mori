@@ -108,8 +108,13 @@ const TERMINAL_ACTIONS = new Set(
   KEYMAP_ACTIONS.filter((action) => action.terminal).map((action) => action.id),
 );
 
+const CTRL_TWIN_ACTIONS = new Set(
+  KEYMAP_ACTIONS.filter((action) => action.ctrlTwin).map((action) => action.id),
+);
+
 // The window's listener, mounted once (AppShell). A text field keeps
-// every key but a `Mod` chord (Enter's, arrows' and the editing keys'
+// every key but a `Mod` chord and its Ctrl twin, which the action may
+// still leave to the field (Enter's, arrows' and the editing keys'
 // meanings are the field's), and a focused terminal every key a shell
 // can be sent: it gives up ⌘, which never reaches one, and the
 // terminal's own toggle. Those two are claimed in the capture phase,
@@ -146,7 +151,10 @@ export function useKeymapListener(): void {
       const mod = isMac ? e.metaKey : e.ctrlKey;
       const found = pressedActions(keymap, e).filter(
         ({ id }) =>
-          mod || TERMINAL_ACTIONS.has(id) || !isEditableTarget(e.target),
+          mod ||
+          TERMINAL_ACTIONS.has(id) ||
+          (isMac && e.ctrlKey && CTRL_TWIN_ACTIONS.has(id)) ||
+          !isEditableTarget(e.target),
       );
       run(e, found);
     };
