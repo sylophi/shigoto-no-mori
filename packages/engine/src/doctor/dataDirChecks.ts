@@ -27,7 +27,7 @@ import { flavorNames } from "../flavor.ts";
 import * as Darwin from "../Darwin.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
-import { removeV2Files, v2Files } from "../v2Files.ts";
+import { hashesOf, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
 import { collapseHome } from "../shellHook.ts";
 import { acquireStagingLock, stagingLockPath } from "../stagingLock.ts";
@@ -417,40 +417,52 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     );
     const checkV2Files = Effect.gen(function* () {
       const files = yield* v2Files.pipe(Effect.provideContext(v2Context));
-      const [first] = files;
-      if (first === undefined) return [];
+      if (files.length === 0) return [];
       const sql = yield* SqlClient.SqlClient;
-      const [row] = yield* sql<{ verified: number }>`
-        SELECT verified FROM v2_import`.pipe(
-        Effect.orElseSucceed((): ReadonlyArray<{ verified: number }> => []),
+      const [row] = yield* sql<{ files: string }>`
+        SELECT files FROM v2_import`.pipe(
+        Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
       );
-      const label = `${files.length} v2 file${plural(files.length)}`;
-      const extra = files.length - 1;
-      const shown = `${collapseHome(home, first)}${extra > 0 ? ` and ${extra} more` : ""}`;
+      const verified: Record<string, unknown> =
+        row === undefined
+          ? {}
+          : (JSON.parse(row.files) as Record<string, unknown>);
+      const now = yield* hashesOf(files).pipe(Effect.provideContext(v2Context));
+      // Only a file as the import verified it is the store's to replace.
+      const held = files.filter(
+        (file) => now[file] !== undefined && now[file] === verified[file],
+      );
+      const kept = files.filter((file) => !held.includes(file));
+      const shownOf = (list: ReadonlyArray<string>) =>
+        `${collapseHome(home, list[0] ?? "")}${list.length > 1 ? ` and ${list.length - 1} more` : ""}`;
       const line = check("Data dir", "v2-files", "v2 files");
-      // Only what a verified import held is the store's to replace.
-      if (row?.verified !== 1) {
-        return [
+      const entries: Entry[] = [];
+      if (kept.length > 0) {
+        entries.push(
           line.warn(
-            `${shown} left from v2, which the import couldn't verify the store holds`,
+            `${shownOf(kept)} left from v2, which the store may not hold: the import couldn't verify them, or v2 wrote them since`,
             "Check what they hold, then delete them by hand.",
           ),
-        ];
+        );
       }
-      return [
-        repairable(
-          line.warn(
-            `${shown} left from v2, which the store holds now`,
-            "Delete them. Nothing reads them since the import.",
+      if (held.length > 0) {
+        const label = `${held.length} v2 file${plural(held.length)}`;
+        entries.push(
+          repairable(
+            line.warn(
+              `${shownOf(held)} left from v2, which the store holds now`,
+              "Delete them. Nothing reads them since the import.",
+            ),
+            {
+              prompt: `Delete ${label} (${held.map((file) => collapseHome(home, file)).join(", ")})?`,
+              label: `deleted ${label}`,
+              destructive: true,
+              apply: removeV2Files(held).pipe(Effect.provideContext(v2Context)),
+            },
           ),
-          {
-            prompt: `Delete ${label} (${files.map((file) => collapseHome(home, file)).join(", ")})?`,
-            label: `deleted ${label}`,
-            destructive: true,
-            apply: removeV2Files(files).pipe(Effect.provideContext(v2Context)),
-          },
-        ),
-      ];
+        );
+      }
+      return entries;
     });
 
     const updatesDir = path.join(dataDir, "updates");

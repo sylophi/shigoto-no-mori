@@ -3,16 +3,14 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { fileSyncDocument } from "./fileSyncFile.ts";
-import { skip } from "./importJson.ts";
+import { countDropped, fileSyncDocument } from "./fileSyncFile.ts";
 
 // Each mirror's thread of events (MirrorHistory.ts), by the local
 // worktree it is keyed by, as the JSON array of its events, newest
 // first. A 2.x data dir keeps them in file-sync/mirror-history.json,
 // taken from it here: a thread that doesn't parse is skipped.
-const decodeThread = Schema.decodeUnknownOption(
-  Schema.Array(MirrorEventSchema),
-);
+const ThreadSchema = Schema.Array(MirrorEventSchema);
+const decodeThread = Schema.decodeUnknownOption(ThreadSchema);
 
 export const mirrorHistory = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -34,9 +32,14 @@ export const mirrorHistory = Effect.gen(function* () {
       onSome: (decoded) => [{ worktree_id, events: JSON.stringify(decoded) }],
     }),
   );
-  if (rows.length < threads.length) {
-    yield* skip("file-sync/mirror-history.json", "events");
-  }
+  yield* countDropped(
+    "mirror-history.json",
+    doc,
+    "events",
+    "object",
+    threads.map(([, thread]) => thread),
+    ThreadSchema,
+  );
   if (rows.length > 0) {
     yield* sql`INSERT INTO mirror_history ${sql.insert(rows)}`;
   }

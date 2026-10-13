@@ -29,7 +29,7 @@ import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
-import { removeV2Files, v2Files } from "./v2Files.ts";
+import { hashesOf, removeV2Files, v2Files } from "./v2Files.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   "StoreOpenError",
@@ -138,7 +138,9 @@ const removeImported = (open: OpenDatabase, platform: Platform) =>
       );
     }
     const sql = yield* SqlClient.SqlClient;
-    yield* sql`INSERT OR REPLACE INTO v2_import (id, verified) VALUES (1, 1)`;
+    const verified = JSON.stringify(yield* hashesOf(files));
+    yield* sql`INSERT OR REPLACE INTO v2_import (id, files)
+      VALUES (1, ${verified})`;
     yield* removeV2Files(files);
   }).pipe(
     Effect.provideContext(platform),

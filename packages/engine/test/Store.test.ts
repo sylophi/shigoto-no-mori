@@ -261,7 +261,11 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
   write("config.json", { portPool: true });
   write("state.json", { launcherUseLog: { "app:zed": [1, 2] } });
   write("projects/A/project.json", { defaultBranch: "main" });
-  write("projects/A/worktrees/aaaaaaaaaaaa.json", { title: "Fox" });
+  // Each file names its version, as v2 wrote them.
+  write("projects/A/worktrees/aaaaaaaaaaaa.json", {
+    schemaVersion: 1,
+    title: "Fox",
+  });
   write("running-scripts.json", { ownerPid: 99999, scripts: [] });
   write("updater.json", { channel: "stable" });
   const listing = async () => ({
@@ -297,6 +301,41 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
 
 it.each([
   ["a key it doesn't know", { projects: [], projectsSort: "name" }],
+  ["a key inherited by every object", { projects: [], constructor: { a: 1 } }],
+  [
+    "a second project under one id",
+    {
+      projects: [
+        { id: "A", name: "a", path: "/a" },
+        { id: "A", name: "b", path: "/b" },
+      ],
+    },
+  ],
+  [
+    "a key of a project it doesn't model",
+    { projects: [{ id: "A", name: "a", path: "/a", color: "red" }] },
+  ],
+  [
+    "a shelf snapshot's key it doesn't model",
+    {
+      projects: [],
+      shelfSnapshots: { aaaaaaaaaaaa: { at: 1, head: null, changed: 0, x: 1 } },
+    },
+  ],
+  [
+    "a session bound twice",
+    {
+      projects: [],
+      agentSessions: {
+        aaaaaaaaaaaa: [
+          { harness: "claude", session: "s", state: "idle", at: 1 },
+        ],
+        bbbbbbbbbbbb: [
+          { harness: "claude", session: "s", state: "working", at: 2 },
+        ],
+      },
+    },
+  ],
   [
     "an agent session that doesn't parse",
     { projects: [], agentSessions: { aaaaaaaaaaaa: [{ harness: "claude" }] } },
@@ -304,11 +343,40 @@ it.each([
 ])(
   "leaves every v2 file in place when the import drops %s",
   async (_, registry) => {
-    write("registry.json", registry);
+    // Written as it is: JSON.stringify would leave the own key
+    // "constructor" in, which the case needs.
+    write("registry.json", JSON.stringify(registry));
     write("config.json", { portPool: true });
     await rows("projects");
     assert.ok(existsSync(join(dataDir, "registry.json")));
     assert.ok(existsSync(join(dataDir, "config.json")));
+  },
+);
+
+it.each([
+  [
+    "a worktree file's key it doesn't model",
+    "projects/A/worktrees/aaaaaaaaaaaa.json",
+    { title: "t", note: "n" },
+  ],
+  [
+    "a mirror history that isn't an object",
+    "file-sync/mirror-history.json",
+    { events: "unreadable" },
+  ],
+  [
+    "mirror invites that aren't a list",
+    "file-sync/mirror-invites.json",
+    { invites: { a: 1 } },
+  ],
+])(
+  "leaves every v2 file in place when the import drops %s",
+  async (_, file, doc) => {
+    write("registry.json", { projects: [{ id: "A", name: "a", path: "/a" }] });
+    write(file, doc);
+    await rows("projects");
+    assert.ok(existsSync(join(dataDir, "registry.json")));
+    assert.ok(existsSync(join(dataDir, file)));
   },
 );
 

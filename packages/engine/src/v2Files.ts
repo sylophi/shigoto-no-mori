@@ -2,6 +2,7 @@
 // reads (migrations/importJson.ts and the migrations after it). Once an
 // import is verified the migration deletes them (Store.ts), and the
 // doctor offers to delete any left over.
+import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -41,6 +42,23 @@ export const v2Files = Effect.gen(function* () {
     fs.exists(file).pipe(Effect.orElseSucceed(() => false)),
   );
 });
+
+// Each of `files` by its content's hash, for telling a file the import
+// verified from one written since. One that can't be read has none.
+export const hashesOf = (files: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const hashes: Record<string, string> = {};
+    for (const file of files) {
+      const bytes = yield* fs
+        .readFile(file)
+        .pipe(Effect.orElseSucceed(() => undefined));
+      if (bytes !== undefined) {
+        hashes[file] = createHash("sha256").update(bytes).digest("hex");
+      }
+    }
+    return hashes;
+  });
 
 // `files` deleted, and the projects' folders they leave empty.
 export const removeV2Files = (files: ReadonlyArray<string>) =>

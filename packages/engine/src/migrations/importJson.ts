@@ -59,6 +59,20 @@ const skipped = <A>(file: string, what: string, fallback: A) =>
   );
 
 // One key's value, `fallback` when absent or when it doesn't parse.
+// Whether `schema` decodes `value` only by leaving out a key it holds,
+// at any depth: what an import would drop without a word.
+export const dropsKeys = (
+  schema: Schema.Decoder<unknown>,
+  value: unknown,
+): boolean =>
+  Option.isNone(
+    Schema.decodeUnknownOption(schema, { onExcessProperty: "error" })(value),
+  );
+
+// The keys of `doc` that `known` doesn't name, by its own keys only.
+export const unknownKeys = (doc: object, known: object) =>
+  Object.keys(doc).filter((key) => !Object.hasOwn(known, key));
+
 const lenientKey = <S extends Schema.Decoder<unknown>>(
   file: string,
   key: string,
@@ -69,6 +83,9 @@ const lenientKey = <S extends Schema.Decoder<unknown>>(
   value === undefined
     ? Effect.succeed(fallback)
     : Schema.decodeUnknownEffect(schema)(value).pipe(
+        Effect.tap(() =>
+          dropsKeys(schema, value) ? skip(file, key) : Effect.void,
+        ),
         Effect.catchTags({ SchemaError: () => skipped(file, key, fallback) }),
       );
 
@@ -149,15 +166,13 @@ export const importFiles = (lenient: boolean) =>
     const state = yield* lenientDocument(stateFile);
     const stateDoc: JsonObject = Option.getOrElse(state, () => ({}));
     const registryDoc: JsonObject = Option.getOrElse(registry, () => ({}));
-    for (const key of Object.keys(registryDoc)) {
-      if (!(key in RegistryFileSchema.fields) && !LEFT_OUT.has(key)) {
-        yield* skip(registryFile, key);
-      }
+    for (const key of unknownKeys(registryDoc, RegistryFileSchema.fields)) {
+      if (!LEFT_OUT.has(key)) yield* skip(registryFile, key);
     }
     for (const key of Object.keys(stateDoc)) {
       if (
         STATE_BEFORE_REGISTRY.has(key) ||
-        (!(key in StateFileSchema.fields) && !LEFT_OUT.has(key))
+        (!Object.hasOwn(StateFileSchema.fields, key) && !LEFT_OUT.has(key))
       ) {
         yield* skip(stateFile, key);
       }
@@ -185,10 +200,11 @@ export const importFiles = (lenient: boolean) =>
         fallback,
       );
 
-    const projects = Arr.dedupeWith(
-      (yield* Schema.decodeUnknownEffect(
-        Schema.UndefinedOr(RegistryFileSchema.fields.projects),
-      )(registryDoc.projects).pipe(
+    const projectList = Schema.UndefinedOr(RegistryFileSchema.fields.projects);
+    const listed =
+      (yield* Schema.decodeUnknownEffect(projectList)(
+        registryDoc.projects,
+      ).pipe(
         Effect.catchTags({
           SchemaError: (cause) =>
             lenient
@@ -197,9 +213,16 @@ export const importFiles = (lenient: boolean) =>
                   new StoreImportError({ path: registryFile, cause }),
                 ),
         }),
-      )) ?? [],
-      (a, b) => a.id === b.id,
-    );
+      )) ?? [];
+    const projects = Arr.dedupeWith(listed, (a, b) => a.id === b.id);
+    // A project's key the list doesn't model, or a second entry under
+    // one id, is left out.
+    if (
+      projects.length < listed.length ||
+      dropsKeys(projectList, registryDoc.projects)
+    ) {
+      yield* skip(registryFile, "projects");
+    }
     yield* insertAll(
       "projects",
       projects.map((project, position) => ({
@@ -235,7 +258,10 @@ export const importFiles = (lenient: boolean) =>
         onSome: ({ at, head, changed }) => [{ worktree_id, at, head, changed }],
       }),
     );
-    if (snapshotRows.length < snapshots.length) {
+    if (
+      snapshotRows.length < snapshots.length ||
+      snapshots.some(([, entry]) => dropsKeys(ShelfSnapshotSchema, entry))
+    ) {
       yield* skip(registryFile, "shelfSnapshots");
     }
     yield* insertAll("shelf_snapshots", snapshotRows);
@@ -335,6 +361,9 @@ export const importFiles = (lenient: boolean) =>
         const doc = yield* lenientDocument(filePath);
         if (Option.isNone(doc)) continue;
         const fields = ShigomoriWorktreeDataSchema.fields;
+        for (const key of unknownKeys(doc.value, fields)) {
+          if (!LEFT_OUT.has(key)) yield* skip(filePath, key);
+        }
         const dataKey = <K extends keyof typeof fields>(key: K) =>
           lenientKey(filePath, key, fields[key], doc.value[key], undefined);
         const ports = yield* dataKey("ports");
