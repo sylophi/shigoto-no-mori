@@ -54,6 +54,15 @@ type Platform = Context.Context<
   Paths.Paths | FileSystem.FileSystem | Path.Path
 >;
 
+// The services the migrations that read files run on, and nothing else
+// of where the store is opened: a process may open it under another
+// store's SqlClient (a proof's engine), which a migration must not
+// write to.
+const platformOnly = Effect.map(
+  Effect.context<Paths.Paths | FileSystem.FileSystem | Path.Path>(),
+  Context.pick(Paths.Paths, FileSystem.FileSystem, Path.Path),
+);
+
 // The schema's history, in order, its imports of a 2.x data dir's files
 // `lenient` or not (importJson.ts). A released migration is never
 // edited. A change is a new one.
@@ -65,7 +74,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
   "6_terminals": terminals,
   "7_wt_folder": wtFolder,
-  "8_running_scripts": runningScripts,
+  "8_running_scripts": Effect.provideContext(runningScripts, platform),
   "9_mirror_agreements": Effect.provideContext(mirrorAgreements, platform),
   "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
@@ -121,9 +130,7 @@ export const layer = (
       const { dataDir, store } = yield* Paths.Paths;
       const fs = yield* FileSystem.FileSystem;
       const migration = yield* Migration.Migration;
-      const platform = yield* Effect.context<
-        Paths.Paths | FileSystem.FileSystem | Path.Path
-      >();
+      const platform = yield* platformOnly;
       const importing = (state: "running" | "done" | "stuck") =>
         migration.update((current) =>
           current.import === null ? current : { ...current, import: { state } },
@@ -210,9 +217,7 @@ export const fromFiles = (
 > =>
   Layer.effectContext(
     Effect.gen(function* () {
-      const platform = yield* Effect.context<
-        Paths.Paths | FileSystem.FileSystem | Path.Path
-      >();
+      const platform = yield* platformOnly;
       const client = yield* open(":memory:");
       yield* migrate({
         loader: Migrator.fromRecord(history(platform, lenient)),

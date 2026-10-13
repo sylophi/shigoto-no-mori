@@ -6,11 +6,22 @@
 //     is stopped, and the report says so once,
 //   - one whose pid now runs something else is left alone,
 //   - a live instance's records are neither swept nor claimed,
-//   - a script this instance records leaves the record at its exit.
+//   - a script this instance records leaves the record at its exit,
+//   - a script a v2 crash left, named by its running-scripts.json, is
+//     stopped by the first v3 start, once.
 //
 // Run: pnpm test orphan-sweep.
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
+import * as Migration from "@shigomori/engine/Migration";
+import * as Paths from "@shigomori/engine/Paths";
+import * as Store from "@shigomori/engine/Store";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -85,18 +96,41 @@ const recorded = () =>
     Effect.flatMap(RunningScripts.RunningScripts, (scripts) => scripts.list),
   );
 
-// The sweep as a start brings it up, in a scope of the proof's.
-async function startSweep() {
+// The sweep as a start brings it up, in a scope of the proof's, over
+// the file's store or `scripts`.
+async function startSweep(
+  scripts?: Layer.Layer<RunningScripts.RunningScripts, unknown>,
+) {
   const scope = Scope.makeUnsafe();
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const sweep = Layer.fresh(OrphanSweep.layer);
   const context = await Effect.runPromise(
     // Fresh: the proof file's runtime holds one built at its start.
-    Layer.buildWithScope(Layer.fresh(OrphanSweep.layer), scope).pipe(
-      Effect.provide(await hostContext()),
-    ),
+    Layer.buildWithScope(
+      scripts === undefined ? sweep : sweep.pipe(Layer.provide(scripts)),
+      scope,
+    ).pipe(Effect.provide(await hostContext())),
   );
   return Context.get(context, OrphanSweep.OrphanSweep);
 }
+
+// The running scripts over the store of a data dir of its own, opened
+// as a start opens it.
+const scriptsAt = (dataDir: string) =>
+  RunningScripts.layer.pipe(
+    Layer.provide(Store.layer((filename) => SqliteClient.make({ filename }))),
+    Layer.provide(Migration.layer),
+    Layer.provide(Paths.layer("dev")),
+    Layer.provide(NodeServices.layer),
+    Layer.provide(
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          env: { HOME: join(dataDir, ".."), SHIGOMORI_DATA_DIR: dataDir },
+        }),
+      ),
+    ),
+    Layer.fresh,
+  );
 
 it("stops what a dead instance left running as it started, leaves a recycled pid and a live instance's scripts alone, and reports once", async () => {
   const crashed = await deadPid();
@@ -229,4 +263,44 @@ it("records a script until its exit", async () => {
     async () => !(await recorded()).some((script) => script.runId === "mine"),
     "the record to go with the exit",
   );
+});
+
+it("stops what a v2 crash left running at the first v3 start, as its running-scripts.json named it, once", async () => {
+  const crashed = await deadPid();
+  const orphan = leader("620");
+  const dataDir = join(
+    realpathSync(mkdtempSync(join(tmpdir(), "sm-proof-v2-"))),
+    "data",
+  );
+  track(() => execFileSync("rm", ["-rf", join(dataDir, "..")]));
+  mkdirSync(dataDir);
+  writeFileSync(join(dataDir, "registry.json"), JSON.stringify({}));
+  writeFileSync(
+    join(dataDir, "running-scripts.json"),
+    JSON.stringify({
+      ownerPid: crashed,
+      scripts: [
+        {
+          runId: "v2-dev",
+          pid: orphan.pid,
+          projectId: "p",
+          worktreeId: "wt",
+          startedAt: Date.now(),
+          command: "sleep 620",
+        },
+        { runId: "unreadable", pid: 1 },
+      ],
+    }),
+  );
+  const first = await startSweep(scriptsAt(dataDir));
+  assert.deepEqual(await Effect.runPromise(first.takeReport), { stopped: 1 });
+  await waitFor(() => !processAlive(orphan.pid), "the v2 orphan to stop");
+  // Read once: the rows go with the sweep, though the file stays.
+  const left = await Effect.runPromise(
+    Effect.flatMap(
+      RunningScripts.RunningScripts,
+      (scripts) => scripts.list,
+    ).pipe(Effect.provide(scriptsAt(dataDir))),
+  );
+  assert.deepEqual(left, []);
 });
