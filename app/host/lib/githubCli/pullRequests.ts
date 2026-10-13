@@ -292,6 +292,7 @@ export async function getWorktreePullRequest(
   return {
     ...detail,
     body: detail.body && withSignedImages(detail.body, match.bodyHTML),
+    bodySource: detail.body,
     reviews: toReviews(match),
   };
 }

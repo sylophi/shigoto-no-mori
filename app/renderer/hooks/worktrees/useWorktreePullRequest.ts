@@ -99,7 +99,7 @@ export function useWorktreePullRequest(
   });
 }
 
-function mirrorIntoProjectMap(
+export function mirrorIntoProjectMap(
   queryClient: QueryClient,
   keys: QueryKeyRegistry,
   projectId: string,
