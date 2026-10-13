@@ -87,6 +87,8 @@ func TestAgentSessionLifecycle(t *testing.T) {
 		{"PostToolUseFailure", "", agentWorking},
 		{"Notification", `,"notification_type":"permission_prompt"`, agentWorking},
 		{"Notification", `,"notification_type":"idle_prompt"`, agentIdle},
+		{"UserPromptSubmit", "", agentWorking},
+		{"SessionEnd", "", agentIdle}, // a host unloading the session keeps it bound
 	}
 	for _, step := range steps {
 		sendEvent(t, ctx, step.event, "s1", step.extra)
@@ -110,12 +112,6 @@ func TestAgentSessionLifecycle(t *testing.T) {
 	}
 	if got := sessionsOf(t, fox.ID); len(got) != 0 {
 		t.Fatalf("unbind left the binding: %+v", got)
-	}
-	autoBindAgentSession(resolveContext(fox.Path, []project{proj}))
-
-	sendEvent(t, ctx, "SessionEnd", "s1", "")
-	if got := sessionsOf(t, fox.ID); len(got) != 0 {
-		t.Fatalf("SessionEnd left the binding: %+v", got)
 	}
 }
 
