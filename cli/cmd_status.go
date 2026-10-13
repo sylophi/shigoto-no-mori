@@ -452,9 +452,9 @@ func statusCard(status statusJSON, accent string) string {
 		}
 	}
 
-	// The worktree's own title until an open PR takes it over, whose
-	// row below carries the PR's.
-	if status.PR == nil || status.PR.State != "OPEN" {
+	// The worktree's own title until a PR takes it over, whose row
+	// below carries the PR's.
+	if status.PR == nil {
 		row("title", truncateRunes(status.Title, valueWidth))
 	}
 	row("path", dimOut(truncateRunes(collapseHome(status.Path), valueWidth)))
