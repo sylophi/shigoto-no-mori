@@ -742,6 +742,30 @@ export class Git extends Context.Service<
       readonly paths: readonly string[];
       readonly untracked: boolean;
     }) => Effect.Effect<string, GitError>;
+    // A blob by the id a patch names, up to `maxBytes`, past which its
+    // size alone. None when the repository holds no such blob (a pull
+    // request's head nobody fetched, a working-tree side git never
+    // stored).
+    readonly readBlob: (input: {
+      readonly repo: string;
+      readonly oid: string;
+      readonly maxBytes: number;
+    }) => Effect.Effect<
+      Option.Option<{
+        readonly size: number;
+        readonly bytes: Uint8Array | undefined;
+      }>,
+      GitError
+    >;
+    // Whether `path` in the worktree is the blob `oid` names, up to
+    // `maxBytes`: a working-tree patch's new side, which git names by the
+    // id it would have.
+    readonly isWorkingTreeBlob: (input: {
+      readonly worktree: string;
+      readonly oid: string;
+      readonly path: string;
+      readonly maxBytes: number;
+    }) => Effect.Effect<boolean>;
     // A commit's patch without its header.
     readonly commitDiff: (
       worktree: string,
@@ -836,7 +860,7 @@ const make = Effect.gen(function* () {
   const hunks = yield* makeHunks({ running, gitIndex });
   const { commitPicks } = yield* makeCommit({ running, hunks });
   const stash = yield* makeStash({ running, operation });
-  const { fileDiff } = diffs;
+  const { fileDiff, readBlob, isWorkingTreeBlob } = diffs;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   return Git.of({
@@ -1028,6 +1052,8 @@ const make = Effect.gen(function* () {
     discard,
     restoreDiscard,
     fileDiff,
+    readBlob,
+    isWorkingTreeBlob,
     // --format= drops the commit header, so the patch parses as is. A
     // merge's is against its first parent, what it brought in, as a
     // plain patch rather than git's combined one. Empty for a commit git

@@ -268,6 +268,7 @@ export function DiffFileRowView({
   onToggle,
   hunks,
   busy,
+  media,
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
@@ -285,6 +286,9 @@ export function DiffFileRowView({
   // The changes page's hunk ticks for this file, when it has them.
   hunks: HunkControls | undefined;
   busy: boolean;
+  // An image, video or audio file's sides (MediaDiffView), which its
+  // patch has no lines for.
+  media?: ReactNode;
 }) {
   return (
     <div data-diff-file={fileId}>
@@ -338,6 +342,7 @@ export function DiffFileRowView({
             : undefined
         }
       />
+      {!collapsed && media}
     </div>
   );
 }

@@ -1,12 +1,16 @@
 // The files page's read: one file of one worktree, whole, for a
 // read-only viewer. The folder side is listWorktreeFolder (carryOver.ts),
-// which the page shares with the mirror dialog's picker.
+// which the page shares with the mirror dialog's picker. The diffs read
+// a binary file's two sides the same way, by their blob ids.
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { errorCodeOf } from "@shigomori/contracts/errors";
+import { mediaTypeOf } from "@shigomori/contracts/mediaTypes";
+import * as Git from "@shigomori/engine/Git";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   WORKTREE_FILE_MAX_BYTES,
@@ -17,33 +21,6 @@ import {
 // How far in a NUL byte marks a file as binary. The same window git
 // uses for its own text/binary guess.
 const BINARY_SNIFF_BYTES = 8000;
-
-// The images, videos and audio the renderer's Chromium draws, by
-// extension. SVG stays out: it is text, and its source is what a code
-// viewer is for. A .mov goes as MP4, the container it shares: Chromium
-// turns away video/quicktime even when it can play what's inside.
-const MEDIA_TYPES: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".bmp": "image/bmp",
-  ".ico": "image/x-icon",
-  ".mp4": "video/mp4",
-  ".m4v": "video/mp4",
-  ".mov": "video/mp4",
-  ".webm": "video/webm",
-  ".ogv": "video/ogg",
-  ".mp3": "audio/mpeg",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".wav": "audio/wav",
-  ".flac": "audio/flac",
-  ".ogg": "audio/ogg",
-  ".opus": "audio/ogg",
-};
 
 // Follows symlinks, and reads inside .git when asked: this rides the
 // command grant (the contract's note), and a peer holding it can
@@ -82,7 +59,7 @@ async function readFileAt(
     throw err;
   }
   if (!info.isFile()) return { kind: "missing" };
-  const mime = MEDIA_TYPES[extname(path).toLowerCase()];
+  const mime = mediaTypeOf(path);
   const maxBytes = mime ? WORKTREE_MEDIA_MAX_BYTES : WORKTREE_FILE_MAX_BYTES;
   if (info.size > maxBytes) {
     return { kind: "tooLarge", size: info.size };
@@ -114,27 +91,65 @@ async function readFileAt(
     if (length > maxBytes) {
       return { kind: "tooLarge", size: Math.max(length, info.size) };
     }
-    const bytes = buffer.subarray(0, length);
-    // A media extension on text (a Git LFS pointer whose object was
-    // never pulled) shows the text, held to the text cap.
-    if (
-      length <= WORKTREE_FILE_MAX_BYTES &&
-      !bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)
-    ) {
-      return { kind: "text", contents: bytes.toString("utf8"), size: length };
-    }
-    if (mime) {
-      return {
-        kind: "media",
-        mime,
-        base64: bytes.toString("base64"),
-        size: length,
-      };
-    }
-    return { kind: "binary", size: length };
+    return classify(buffer.subarray(0, length), mime);
   } finally {
     await handle.close();
   }
+}
+
+// One side of a binary file in a diff, by the blob id the patch names.
+// `path` picks the media type, and stands in for a blob git never
+// stored: a patch against the working tree names the file on disk by
+// the id it would have. Missing when neither holds it (a pull request's
+// head nobody fetched, a file saved again since).
+export const readGitBlob = Effect.fn("readGitBlob")(function* (
+  worktreePath: string,
+  oid: string,
+  path: string,
+) {
+  const git = yield* Git.Git;
+  const mime = mediaTypeOf(path);
+  const maxBytes = mime ? WORKTREE_MEDIA_MAX_BYTES : WORKTREE_FILE_MAX_BYTES;
+  const blob = yield* git.readBlob({ repo: worktreePath, oid, maxBytes });
+  if (Option.isSome(blob)) {
+    const { size, bytes } = blob.value;
+    return bytes === undefined
+      ? ({ kind: "tooLarge", size } satisfies WorktreeFile)
+      : classify(Buffer.from(bytes), mime);
+  }
+  const onDisk = yield* git.isWorkingTreeBlob({
+    worktree: worktreePath,
+    oid,
+    path,
+    maxBytes: WORKTREE_MEDIA_MAX_BYTES,
+  });
+  if (!onDisk) return { kind: "missing" } satisfies WorktreeFile;
+  return yield* readWorktreeFile(worktreePath, path);
+});
+
+// What a file's bytes, already held to the media cap, can show as.
+function classify(bytes: Buffer, mime: string | undefined): WorktreeFile {
+  // A media extension on text (a Git LFS pointer whose object was
+  // never pulled) shows the text, held to the text cap.
+  if (
+    bytes.length <= WORKTREE_FILE_MAX_BYTES &&
+    !bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)
+  ) {
+    return {
+      kind: "text",
+      contents: bytes.toString("utf8"),
+      size: bytes.length,
+    };
+  }
+  if (mime) {
+    return {
+      kind: "media",
+      mime,
+      base64: bytes.toString("base64"),
+      size: bytes.length,
+    };
+  }
+  return { kind: "binary", size: bytes.length };
 }
 
 function isGoneError(err: unknown): boolean {

@@ -1695,6 +1695,12 @@
     "grant": "changeCode",
     "tracksProjectUsage": true
   },
+  "worktrees:readBlob": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "worktrees:readFile": {
     "kind": "invoke",
     "scope": "host",

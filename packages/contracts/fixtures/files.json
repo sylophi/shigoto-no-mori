@@ -39,6 +39,47 @@
       }
     ]
   },
+  "ReadBlobPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "1a2b3c4",
+        "path": "public/icon.png"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0",
+        "path": "docs/demo.mp4"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "HEAD",
+        "path": "public/icon.png"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "1a2",
+        "path": "public/icon.png"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "1a2b3c4",
+        "path": "../../.ssh/id_ed25519"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "path": "public/icon.png"
+      }
+    ]
+  },
   "WorktreeFileSchema": {
     "accepts": [
       {

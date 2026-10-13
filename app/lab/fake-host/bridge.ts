@@ -85,7 +85,11 @@ import {
   fakePullRequests,
 } from "@shigomori/ui/fixtures/pullRequestFixtures.ts";
 import { createFakeChanges } from "@shigomori/ui/fixtures/changesFixtures.ts";
-import { FAKE_TREE, fakeFile } from "@shigomori/ui/fixtures/filesFixtures.ts";
+import {
+  FAKE_TREE,
+  fakeBlob,
+  fakeFile,
+} from "@shigomori/ui/fixtures/filesFixtures.ts";
 import { invokeIndexFor } from "../../web/ipc/localRegistrar";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../../web/ipc/stubDefaults";
 import {
@@ -675,6 +679,7 @@ function hostHandlersFor(
     "worktrees:fileDiff": ({ worktreeId, paths }) =>
       changes.fileDiff(worktreeId, paths),
     "worktrees:readFile": ({ path }) => fakeFile(path),
+    "worktrees:readBlob": ({ oid }) => fakeBlob(oid),
     // The working tree is kept per worktree (changesFixtures.ts), so
     // committing and discarding show their outcome, and a commit leaves
     // something to push.

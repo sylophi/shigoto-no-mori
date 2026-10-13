@@ -3729,6 +3729,20 @@
       "autoPull": false
     }
   },
+  "worktrees:readBlob": {
+    "payload": {
+      "projectId": "\udc00",
+      "worktreeId": "\u0000",
+      "oid": "0b5f",
+      "path": "😀"
+    },
+    "success": {
+      "kind": "media",
+      "mime": "\n",
+      "base64": "~",
+      "size": 0
+    }
+  },
   "worktrees:readFile": {
     "payload": {
       "projectId": "$L",

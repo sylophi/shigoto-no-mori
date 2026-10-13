@@ -30,6 +30,10 @@ import {
 import { HunkBarView } from "../views/diff/HunkBarView.tsx";
 import { LastCommitStripView } from "../views/diff/LastCommitStripView.tsx";
 import {
+  MediaDiffSideView,
+  MediaDiffView,
+} from "../views/diff/MediaDiffView.tsx";
+import {
   ChangesFooterView,
   CleanTreeMessageView,
 } from "../views/diff/WorktreeDiffView.tsx";
@@ -37,10 +41,16 @@ import { ModalBox } from "../primitives/modal-shell.tsx";
 import { SidebarTakeoverView } from "../views/sidebar/SidebarTakeoverView.tsx";
 import { SyncActionButtonView } from "../views/worktreeDetail/SyncActionButtonView.tsx";
 import { peerReadOnlyNote } from "../lib/commandAccessCopy.ts";
-import { changeEntries, fileKey, patchEntries } from "../lib/patchFiles.ts";
+import {
+  changeEntries,
+  fileKey,
+  isMediaBinary,
+  patchEntries,
+} from "../lib/patchFiles.ts";
 import { changeKey } from "@shigomori/contracts/schemas";
 import { createFakeChanges } from "../fixtures/changesFixtures.ts";
 import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
+import { fakeBlob } from "../fixtures/filesFixtures.ts";
 import { FAKE_DIFF } from "../fixtures/pullRequestFixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
@@ -124,6 +134,11 @@ function diffPage({
                 onToggle={singleFile ? undefined : noop}
                 hunks={singleFile ? HUNKS : undefined}
                 busy={false}
+                media={
+                  isMediaBinary(fileDiff) && (
+                    <SceneMediaDiff fileDiff={fileDiff} />
+                  )
+                }
               />
             ))}
           </DiffPaneView>
@@ -131,6 +146,26 @@ function diffPage({
         sheet={null}
       />
     </SceneWindowFrame>
+  );
+}
+
+// A changed image's two sides, as its blobs read.
+function SceneMediaDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
+  const sides = [
+    ["old", fileDiff.prevObjectId],
+    ["new", fileDiff.newObjectId],
+  ] as const;
+  return (
+    <MediaDiffView>
+      {sides.map(([side, oid]) => (
+        <MediaDiffSideView
+          key={side}
+          side={side}
+          file={oid === undefined ? undefined : fakeBlob(oid)}
+          reading={false}
+        />
+      ))}
+    </MediaDiffView>
   );
 }
 
