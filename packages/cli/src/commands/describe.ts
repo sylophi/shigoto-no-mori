@@ -1,9 +1,9 @@
 // sm [worktrees] describe [<worktree>] [-t <title>] [-d <text> |
 // --description-file <path|->]: a worktree's title and description,
 // set or shown. While the branch has an open pull request, its title
-// and body take their place and describe refuses a change; a merged or
-// closed one still names the worktree in the app, and describe takes
-// changes again.
+// and body take their place and describe edits the PR's; a merged or
+// closed one still names the worktree in the app, and describe writes
+// the worktree's own again.
 import { errnoText } from "@shigomori/engine/platformErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { trimGoSpace } from "@shigomori/engine/Worktrees";
@@ -118,24 +118,30 @@ export const describe = Command.make(
         return;
       }
 
-      const { described, pullRequestUnavailable } = yield* worktrees.describe(
-        located,
-        {
-          ...(Option.isSome(input.title) ? { title: input.title.value } : {}),
-          ...(Option.isSome(description)
-            ? { description: description.value }
-            : {}),
-        },
-      );
-      if (pullRequestUnavailable !== undefined) {
-        yield* unavailable(pullRequestUnavailable);
+      const result = yield* worktrees.describe(located, {
+        ...(Option.isSome(input.title) ? { title: input.title.value } : {}),
+        ...(Option.isSome(description)
+          ? { description: description.value }
+          : {}),
+      });
+      if (
+        result.pullRequest === null &&
+        result.pullRequestUnavailable !== undefined
+      ) {
+        yield* unavailable(result.pullRequestUnavailable);
       }
       // The row only for the document: its probes are the slow part.
       yield* json
-        ? emit({ ok: true, worktree: yield* worktrees.row(located) })
+        ? emit({
+            ok: true,
+            worktree: yield* worktrees.row(located),
+            pullRequest: result.pullRequest,
+          })
         : out(
             styles(stdoutColor).green(
-              `described ${located.worktree.name}: ${described.title === "" ? "(no title)" : described.title}`,
+              result.pullRequest === null
+                ? `described ${located.worktree.name}: ${result.described.title === "" ? "(no title)" : result.described.title}`
+                : `edited PR #${result.pullRequest.number}: ${result.pullRequest.title}`,
             ),
           );
     }),

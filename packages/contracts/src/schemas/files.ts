@@ -8,6 +8,14 @@ import { strict } from "./strict.ts";
 // holding in memory on both ends of the wire (and highlighting).
 export const WORKTREE_FILE_MAX_BYTES = 1024 * 1024;
 
+// Largest image, video or audio file the files page reads whole. Larger
+// than the text cap, since a short screen recording is already a few
+// megabytes, and drawing it costs nothing like highlighting does. It
+// crosses as base64 in one frame, which the link's decoder takes up to
+// 16 MiB of (effect's schema-binary maxFrameSize): 11 MiB is 14.7 MiB
+// of base64, with room for the rest of the frame.
+export const WORKTREE_MEDIA_MAX_BYTES = 11 * 1024 * 1024;
+
 // One file of a worktree, by its path inside it, held to the worktree
 // like every other path a peer sends.
 export const ReadWorktreeFilePayloadSchema = Schema.Struct({
@@ -15,15 +23,24 @@ export const ReadWorktreeFilePayloadSchema = Schema.Struct({
   path: RepoRelPathSchema,
 });
 
-// What the files page can show for a path. Only text travels: a
-// binary or oversized file answers with its size alone, and a path
-// that went away between the listing and the read (or is no longer a
-// plain file) says so rather than failing the query.
+// What the files page can show for a path. Text travels, and so does
+// media the renderer's Chromium can draw. Any other binary or oversized
+// file answers with its size alone, and a path that went away between
+// the listing and the read (or is no longer a plain file) says so
+// rather than failing the query.
 export const WorktreeFileSchema = Schema.Union([
   strict(
     Schema.Struct({
       kind: Schema.Literal("text"),
       contents: Schema.String,
+      size: Schema.Natural,
+    }),
+  ),
+  strict(
+    Schema.Struct({
+      kind: Schema.Literal("media"),
+      mime: Schema.String,
+      base64: Schema.String,
       size: Schema.Natural,
     }),
   ),

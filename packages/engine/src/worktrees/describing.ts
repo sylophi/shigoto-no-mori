@@ -1,5 +1,14 @@
 // Worktrees' marks and descriptions: shelved and auto-pull, and the
-// title and description the app and agents set.
+// title and description the app and agents set. While the branch has an
+// open pull request, its title and body are the worktree's, and
+// describe edits the PR's instead (gh pr edit). A merged or closed one
+// (an old PR on a reused branch name, too) still names the worktree in
+// the app, but no longer holds its description, and describe writes the
+// worktree's own again. A lookup that can't be made (no gh, no GitHub
+// remote, gh not signed in) writes the worktree's own, since the app
+// can't find the PR then either and shows the local text. One that fails
+// otherwise (gh timing out, GitHub erroring) changes nothing: an open PR
+// it missed would hide the write.
 import * as Effect from "effect/Effect";
 import * as GitHub from "../GitHub.ts";
 import * as Paths from "../Paths.ts";
@@ -12,7 +21,8 @@ import {
   MAX_DESCRIPTION,
   MAX_TITLE,
   MarkRefused,
-  PullRequestOwnsDescription,
+  PullRequestNeedsTitle,
+  PullRequestUnchecked,
   UNKNOWN_BRANCH,
   type WorktreeIdentity,
   hasWorktreeData,
@@ -74,6 +84,35 @@ export const makeDescribing = ({
       return yield* github.owningPullRequest(project.path, worktree.branch);
     });
 
+    // The change written to the open pull request that holds the
+    // worktree's title and description, and the PR as it now reads.
+    const editPullRequest = Effect.fn(function* (
+      located: Located,
+      pr: GitHub.OwningPullRequest,
+      change: { readonly title?: string; readonly description?: string },
+    ) {
+      if (change.title === "") {
+        return yield* new PullRequestNeedsTitle({ number: pr.number });
+      }
+      yield* github.run(located.project.path, [
+        "pr",
+        "edit",
+        String(pr.number),
+        // Inline values, so text that starts with a dash isn't a flag.
+        ...(change.title === undefined ? [] : [`--title=${change.title}`]),
+        ...(change.description === undefined
+          ? []
+          : [`--body=${change.description}`]),
+      ]);
+      return {
+        ...pr,
+        ...(change.title === undefined ? {} : { title: change.title }),
+        ...(change.description === undefined
+          ? {}
+          : { body: change.description }),
+      };
+    });
+
     const description = Effect.fn("Worktrees.description")(function* (
       located: Located,
     ) {
@@ -128,11 +167,19 @@ export const makeDescribing = ({
       }
       // Last, once the input is known good: it asks GitHub.
       const pr = yield* owningPullRequest(located);
-      if (pr.found !== null) {
-        return yield* new PullRequestOwnsDescription({
-          worktree: located.worktree.name,
-          number: pr.found.number,
+      if (pr.uncertain) {
+        return yield* new PullRequestUnchecked({
+          reason: pr.unavailable ?? "gh failed",
         });
+      }
+      if (pr.found !== null) {
+        return {
+          described: null,
+          pullRequest: yield* editPullRequest(located, pr.found, {
+            ...(title === undefined ? {} : { title }),
+            ...(text === undefined ? {} : { description: text }),
+          }),
+        };
       }
       const described = yield* data.describe(
         located.project.id,
@@ -144,6 +191,7 @@ export const makeDescribing = ({
       );
       return {
         described,
+        pullRequest: null,
         ...(pr.unavailable === undefined
           ? {}
           : { pullRequestUnavailable: pr.unavailable }),

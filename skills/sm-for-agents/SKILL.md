@@ -18,7 +18,7 @@ EOF_DESC
 
 Write them like a PR's title and body: short, what and why, and what's
 left to do. Run it again whenever they stop being true. Once there's a
-PR, edit the PR instead.
+PR, it edits the PR's title and body.
 
 ## Agent sessions
 

@@ -10,6 +10,8 @@ import {
 import {
   CodeFileView,
   FileViewerView,
+  MarkdownFileView,
+  MediaFileView,
 } from "../views/files/FileViewerView.tsx";
 import {
   FilesHeaderView,
@@ -33,6 +35,8 @@ const HUM = worktreeNamed(
 );
 const PICKED = "src/index.ts";
 const EXPANDED = new Set(["src"]);
+const LEAF =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#3a9a5b" d="M5 19C5 9 11 4 20 4c0 9-5 15-15 15Z"/></svg>';
 
 // One folder's rows, the open ones' under them, ignored files left out.
 function rows(parent: string, depth: number): ReactNode {
@@ -119,6 +123,7 @@ export function FilesPageScene() {
     <FileViewerView
       path={PICKED}
       size={file.kind === "text" ? file.size : null}
+      shown={null}
       onReveal={noop}
       reading={false}
       message={null}
@@ -147,9 +152,11 @@ function Part({ label, children }: { label: string; children: ReactNode }) {
 }
 
 // The page's other states: nothing picked, a peer that shows no files,
-// a file being read, one the pane has no drawing for, and a folder
-// that couldn't be read.
+// a file being read, a Markdown file rendered, an image, one the pane
+// has no drawing for, and a folder that couldn't be read.
 export function FilesPartsScene() {
+  const file = fakeFile("README.md");
+  const readme = file.kind === "text" ? file.contents : "";
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <Part label="Nothing picked">
@@ -162,6 +169,7 @@ export function FilesPartsScene() {
         <FileViewerView
           path="src/index.ts"
           size={null}
+          shown={null}
           onReveal={null}
           reading
           message={null}
@@ -169,10 +177,38 @@ export function FilesPartsScene() {
           {null}
         </FileViewerView>
       </Part>
+      <Part label="Markdown, rendered">
+        <FileViewerView
+          path="README.md"
+          size={readme.length}
+          shown={{ value: "preview", onChange: noop }}
+          onReveal={null}
+          reading={false}
+          message={null}
+        >
+          <MarkdownFileView source={readme} imageHosts={[]} />
+        </FileViewerView>
+      </Part>
+      <Part label="An image">
+        <FileViewerView
+          path="assets/leaf.svg"
+          size={LEAF.length}
+          shown={{ value: "preview", onChange: noop }}
+          onReveal={null}
+          reading={false}
+          message={null}
+        >
+          <MediaFileView
+            mime="image/svg+xml"
+            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(LEAF)}`}
+          />
+        </FileViewerView>
+      </Part>
       <Part label="Binary">
         <FileViewerView
-          path="assets/logo.png"
+          path="assets/logo.psd"
           size={48_213}
+          shown={null}
           onReveal={null}
           reading={false}
           message="Binary file, not shown."

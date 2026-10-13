@@ -111,7 +111,7 @@ export function WorktreeDetailInner({
   const { data: runtime } = useRuntimeInfo();
   const resident = useResident(worktree);
   const mirrorCopies = useMirrorCopies(worktree);
-  const { title, description, pullRequest, editable } =
+  const { title, description, pullRequestBody, pullRequest } =
     useWorktreeTitle(worktree);
   const {
     deleteMutation,
@@ -261,7 +261,7 @@ export function WorktreeDetailInner({
             key={worktree.id}
             worktree={worktree}
             description={description}
-            editable={editable}
+            pullRequestBody={pullRequestBody}
           />
         )
       }

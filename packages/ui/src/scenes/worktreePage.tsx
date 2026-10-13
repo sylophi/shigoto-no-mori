@@ -25,7 +25,7 @@ import { TransferActionsView } from "../views/worktreeDetail/TransferActionsView
 import { LaunchSectionView } from "../views/worktreeDetail/LaunchSectionView.tsx";
 import { LauncherRowView } from "../views/worktreeDetail/LauncherRowView.tsx";
 import { NoIdentityNoteView } from "../views/worktreeDetail/NoIdentityNoteView.tsx";
-import { OwnTitleView } from "../views/worktreeDetail/OwnTitleView.tsx";
+import { EditableTitleView } from "../views/worktreeDetail/EditableTitleView.tsx";
 import { PullRequestTitleLinkView } from "../views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
 import { PullRequestStateLabelView } from "../views/worktreeDetail/pullRequests/PullRequestStateLabelView.tsx";
 import {
@@ -324,7 +324,7 @@ export function WorktreePagePartsScene() {
           />
         </Part>
         <Part label="Editing the title and description">
-          <OwnTitleView
+          <EditableTitleView
             title="Retry port-pool leases"
             edit={{
               draft: "Retry port-pool leases twice",

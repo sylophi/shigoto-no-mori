@@ -111,20 +111,27 @@ const PROSE = cn(
   "[&_table]:my-2 [&_table]:block [&_table]:overflow-x-auto [&_:is(th,td)]:px-2 [&_:is(th,td)]:py-1 [&_:is(th,td):first-child]:pl-0 [&_th]:text-left [&_th]:font-semibold [&_th]:text-foreground",
 );
 
-// Sanitized HTML by source. The sources are release notes, which don't
-// change and number in the tens (the full changelog renders every one
-// each time it opens), and worktree and PR descriptions, where every
-// edit is a new source: so a cap, the oldest going first.
+// Sanitized HTML by source, one cache per way of breaking lines. The
+// sources are release notes, which don't change and number in the tens
+// (the full changelog renders every one each time it opens), and
+// worktree and PR descriptions and files, where every edit is a new
+// source: so a cap, the oldest going first.
 const RENDERED_CAP = 100;
-const rendered = new Map<string, string>();
+const withBreaks = new Map<string, string>();
+const withoutBreaks = new Map<string, string>();
 
-function htmlOf(source: string, hosts: readonly string[]): string {
+function htmlOf(
+  source: string,
+  hosts: readonly string[],
+  breaks: boolean,
+): string {
+  const rendered = breaks ? withBreaks : withoutBreaks;
   const key = `${hosts.join(" ")}\n${source}`;
   let html = rendered.get(key);
   if (html === undefined) {
     imageHosts = [...GITHUB_IMAGE_HOSTS, ...hosts];
     html = purify.sanitize(
-      marked.parse(source, { async: false, gfm: true, breaks: true }),
+      marked.parse(source, { async: false, gfm: true, breaks }),
       { FORBID_TAGS: ["style", "form", "button"] },
     );
     rendered.set(key, html);
@@ -136,9 +143,9 @@ function htmlOf(source: string, hosts: readonly string[]): string {
 }
 
 // GitHub-flavored markdown from outside the app (release notes, a
-// worktree's description or its pull request's),
-// rendered the way GitHub shows it, line breaks included, and
-// sanitized before it reaches the DOM. Renderer windows never
+// worktree's description or its pull request's, a file in a worktree),
+// rendered the way GitHub shows it, and sanitized before it reaches
+// the DOM. Renderer windows never
 // navigate, so a click on a link opens it in the browser instead,
 // through the same web-URL-only door as every other link.
 export function Markdown({
@@ -146,19 +153,23 @@ export function Markdown({
   imageHosts: hosts = NO_HOSTS,
   className,
   images,
+  breaks = true,
 }: {
   source: string;
   // The hosts beside GitHub's its images may load from: the remotes'
   // of the project it belongs to.
   imageHosts?: readonly string[];
   className?: string;
+  // Each line break a line break, as GitHub shows a comment. A file
+  // is shown without, so prose wrapped in the source reflows.
+  breaks?: boolean;
   // Images the source refers to by a local name (`./shot.png`), and
   // where each is shown from, set on the rendered <img> rather than
   // written into the source, which would cache the bytes with it.
   images?: Readonly<Record<string, string>>;
 }) {
   const { openUrl } = useOutside();
-  const html = purify.isSupported ? htmlOf(source, hosts) : "";
+  const html = purify.isSupported ? htmlOf(source, hosts, breaks) : "";
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!images) return;

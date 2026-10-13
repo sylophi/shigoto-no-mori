@@ -215,6 +215,10 @@ export const PullRequestDetailSchema = Schema.Struct({
   // page shows it in place of the worktree's own (useWorktreeTitle).
   // Absent from a host on an older build.
   body: Schema.optional(Schema.String),
+  // The body exactly as written, while `body` has its attached images
+  // swapped for signed URLs that expire (the host's withSignedImages):
+  // what an edit starts from, so it doesn't write those back.
+  bodySource: Schema.optional(Schema.String),
   mergeState: PullRequestMergeStateSchema,
   // The method auto-merge is armed with, or null when it isn't:
   // GitHub merges the PR with it once the base branch's rules are met.

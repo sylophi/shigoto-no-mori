@@ -47,6 +47,12 @@
         "size": 42
       },
       {
+        "kind": "media",
+        "mime": "image/png",
+        "base64": "iVBORw0KGgo=",
+        "size": 8
+      },
+      {
         "kind": "binary",
         "size": 18734
       },
@@ -77,6 +83,11 @@
       {
         "kind": "text",
         "size": 42
+      },
+      {
+        "kind": "media",
+        "base64": "iVBORw0KGgo=",
+        "size": 8
       }
     ]
   }

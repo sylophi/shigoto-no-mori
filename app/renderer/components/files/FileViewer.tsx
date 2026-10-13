@@ -1,5 +1,6 @@
 import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeFile } from "@/hooks/worktrees/useWorktreeFile";
@@ -9,12 +10,17 @@ import { notifyError } from "@/lib/toast";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
 import {
   CodeFileView,
+  type FileShown,
   FileViewerView,
+  MarkdownFileView,
+  MediaFileView,
 } from "@shigomori/ui/views/files/FileViewerView.tsx";
+import { useProjectImageHosts } from "@/hooks/projects/useProjectImageHosts";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // The files page's pane: one file, read whole and highlighted by the
-// same renderer the diffs use.
+// same renderer the diffs use, a Markdown or SVG file rendered unless
+// asked for its source, and an image, video or audio file drawn.
 export function FileViewer({
   projectId,
   worktreeId,
@@ -34,11 +40,18 @@ export function FileViewer({
     worktreeId,
     path,
   );
+  const imageHosts = useProjectImageHosts(projectId);
   const name = path.slice(path.lastIndexOf("/") + 1);
+  // Kept from file to file, like an editor's preview pane.
+  const [shown, setShown] = useState<FileShown>("preview");
+  const text =
+    data?.kind === "text" && data.contents.length > 0 ? data.contents : null;
+  const preview = text === null ? null : previewOf(name);
   return (
     <FileViewerView
       path={path}
       size={data && data.kind !== "missing" ? data.size : null}
+      shown={preview === null ? null : { value: shown, onChange: setShown }}
       onReveal={
         revealRoot === null
           ? null
@@ -58,16 +71,41 @@ export function FileViewer({
           ? null
           : isError
             ? "Couldn't read file."
-            : data.kind !== "text" || data.contents.length === 0
+            : text === null && data.kind !== "media"
               ? placeholderFor(data)
               : null
       }
     >
-      {data?.kind === "text" && (
-        <CodeFile name={name} contents={data.contents} />
+      {text !== null && preview !== null && shown === "preview" ? (
+        preview === "markdown" ? (
+          <MarkdownFileView source={text} imageHosts={imageHosts} />
+        ) : (
+          // As an image, which runs none of the scripts an SVG can hold.
+          <MediaFileView
+            mime="image/svg+xml"
+            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`}
+          />
+        )
+      ) : text !== null ? (
+        <CodeFile name={name} contents={text} />
+      ) : (
+        data?.kind === "media" && (
+          <MediaFileView
+            mime={data.mime}
+            src={`data:${data.mime};base64,${data.base64}`}
+          />
+        )
       )}
     </FileViewerView>
   );
+}
+
+// The text files with a rendered form, which show it unless asked for
+// the source.
+function previewOf(name: string): "markdown" | "svg" | null {
+  if (/\.(md|markdown)$/i.test(name)) return "markdown";
+  if (/\.svg$/i.test(name)) return "svg";
+  return null;
 }
 
 // What the pane says in place of a file it has nothing to draw for.
@@ -80,6 +118,7 @@ function placeholderFor(file: WorktreeFile): string {
     case "tooLarge":
       return `Too large to show here (${formatBytes(file.size)}).`;
     case "text":
+    case "media":
       return "Empty file.";
   }
 }
