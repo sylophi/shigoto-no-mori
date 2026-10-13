@@ -18,8 +18,9 @@
 // (`KeyboardEvent.code`), as macOS's own ⌘ shortcuts fall back. Every
 // other key is the physical one: the terminal's Ctrl+` names the key
 // left of 1, which many layouts type no backtick on. A ⌘ chord also
-// answers extra modifiers (bindingOf), and the palette's also answers
-// Ctrl in place of ⌘ on macOS, as it always did (⌃K is ⌘K); no other
+// answers extra modifiers (bindingOf). On macOS the palette's, the
+// commit's, the palette's changes' and an edit's save also answer Ctrl
+// in place of ⌘, as they always did (⌃K is ⌘K, ⌃↩ is ⌘↩); no other
 // chord has a Ctrl twin.
 
 // Where an action acts. The window is every page; a page or a dialog
@@ -111,12 +112,14 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     label: "Commit, or push with nothing to commit",
     chord: "Mod+Enter",
     scope: "changes",
+    ctrlTwin: true,
   },
   {
     id: "paletteChanges",
     label: "Open the worktree's changes",
     chord: "Mod+Enter",
     scope: "palette",
+    ctrlTwin: true,
   },
   // Past the highlighted row: the folder typed, or the repos picked.
   {
@@ -130,6 +133,7 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     label: "Save what is being edited",
     chord: "Mod+Enter",
     scope: "editing",
+    ctrlTwin: true,
   },
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(launchTool),
 ];
