@@ -22,7 +22,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import { StoreImportError } from "../src/migrations/importJson.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
-import { nodeStore } from "./lib/nodeStore.ts";
+import { nodeStore, openNode } from "./lib/nodeStore.ts";
 
 const execFileP = promisify(execFile);
 
@@ -49,6 +49,16 @@ const storeLayer = (dir: string) =>
         ConfigProvider.fromEnv({
           env: { HOME: dir, SHIGOMORI_DATA_DIR: dir },
         }),
+      ),
+    ),
+  );
+
+const platformAt = (dir: string) =>
+  Paths.layer("prod").pipe(
+    Layer.provideMerge(NodeServices.layer),
+    Layer.provide(
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({ env: { HOME: dir, SHIGOMORI_DATA_DIR: dir } }),
       ),
     ),
   );
@@ -133,7 +143,7 @@ it("fails with the path when the data dir can't be made", async () => {
   );
 });
 
-it("imports what the JSON files hold, and leaves them in place", async () => {
+it("imports what the JSON files hold, and leaves every one in place when it skipped something", async () => {
   const registry = {
     projects: [
       { id: "A", name: "alpha", path: "/r/alpha" },
@@ -241,6 +251,48 @@ it("imports what the JSON files hold, and leaves them in place", async () => {
     JSON.parse(readFileSync(join(dataDir, "registry.json"), "utf8")),
     registry,
   );
+});
+
+it("deletes the v2 files once the store is verified to hold what they said, and finds nothing to import after", async () => {
+  write("registry.json", {
+    projects: [{ id: "A", name: "alpha", path: "/r/alpha" }],
+    autoPullWorktrees: { aaaaaaaaaaaa: true },
+  });
+  write("config.json", { portPool: true });
+  write("state.json", { launchers: { "app:zed": [1, 2] } });
+  write("projects/A/project.json", { defaultBranch: "main" });
+  write("projects/A/worktrees/aaaaaaaaaaaa.json", { title: "Fox" });
+  write("running-scripts.json", { ownerPid: 99999, scripts: [] });
+  write("updater.json", { channel: "stable" });
+  const listing = async () => ({
+    projects: await rows("projects"),
+    config: await rows("device_config"),
+    project: await rows("project_config"),
+    data: await rows("worktree_data"),
+    marks: await rows("worktree_marks"),
+  });
+  const first = await listing();
+  assert.deepEqual(first.projects, [
+    { id: "A", name: "alpha", path: "/r/alpha", position: 0 },
+  ]);
+  for (const file of [
+    "registry.json",
+    "config.json",
+    "state.json",
+    "running-scripts.json",
+    "projects",
+  ]) {
+    assert.ok(!existsSync(join(dataDir, file)), file);
+  }
+  // Not a file the import reads.
+  assert.ok(existsSync(join(dataDir, "updater.json")));
+  assert.equal(
+    await Effect.runPromise(
+      Store.importOwed(openNode).pipe(Effect.provide(platformAt(dataDir))),
+    ),
+    false,
+  );
+  assert.deepEqual(await listing(), first);
 });
 
 it("starts a data dir nothing has used with a fresh install's settings", async () => {

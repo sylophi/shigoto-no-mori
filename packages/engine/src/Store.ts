@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Schema from "effect/Schema";
@@ -9,7 +10,11 @@ import type * as Scope from "effect/Scope";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
-import { importFiles, StoreImportError } from "./migrations/importJson.ts";
+import {
+  importFiles,
+  SKIPPED,
+  StoreImportError,
+} from "./migrations/importJson.ts";
 import { agentSessions } from "./migrations/agentSessions.ts";
 import { changes } from "./migrations/changes.ts";
 import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
@@ -23,6 +28,7 @@ import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
+import { removeV2Files, v2Files } from "./v2Files.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   "StoreOpenError",
@@ -79,6 +85,63 @@ const history = (platform: Platform, lenient: boolean) => ({
   "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
 });
+
+// Whether the store holds what a 2.x data dir's files said: the files
+// imported again, into memory, skip nothing, and give every table the
+// rows the store has. What the import couldn't read, or anything else
+// it can't tell, is a doubt.
+const importVerified = (open: OpenDatabase, platform: Platform) =>
+  Effect.gen(function* () {
+    const store = yield* SqlClient.SqlClient;
+    let skips = 0;
+    const counting = Logger.make((options) => {
+      if (JSON.stringify(options.message).includes(SKIPPED)) skips += 1;
+    });
+    const memory = yield* open(":memory:");
+    yield* migrate({
+      loader: Migrator.fromRecord(history(platform, false)),
+    }).pipe(
+      Effect.provideService(SqlClient.SqlClient, memory),
+      Effect.provide(Logger.layer([counting], { mergeWithExisting: true })),
+    );
+    if (skips > 0) return false;
+    const held = yield* store<{ name: string }>`SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      AND name <> 'effect_sql_migrations' ORDER BY name`;
+    for (const { name } of held) {
+      const rows = (client: SqlClient.SqlClient) =>
+        Effect.map(client.unsafe(`SELECT * FROM "${name}"`), (found) =>
+          found.map((row) => JSON.stringify(row)).toSorted(),
+        );
+      const [kept, said] = [yield* rows(store), yield* rows(memory)];
+      if (
+        kept.length !== said.length ||
+        kept.some((row, i) => row !== said[i])
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }).pipe(Effect.scoped);
+
+// After an import, the 2.x files it read deleted, once the store is
+// verified to hold what they said; on any doubt every one stays, and the
+// doctor reports them.
+const removeImported = (open: OpenDatabase, platform: Platform) =>
+  Effect.gen(function* () {
+    const files = yield* v2Files;
+    if (!(yield* importVerified(open, platform))) {
+      return yield* Effect.logWarning(
+        "Left the v2 files in place: the import couldn't be verified",
+      );
+    }
+    yield* removeV2Files(files);
+  }).pipe(
+    Effect.provideContext(platform),
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Left the v2 files in place", cause),
+    ),
+  );
 
 // The newest migration a store applied, 0 for a new one.
 const latestApplied = Effect.gen(function* () {
@@ -173,8 +236,15 @@ export const layer = (
           (yield* latestApplied.pipe(
             Effect.provideService(SqlClient.SqlClient, client),
           )) < newest;
-        if (due) {
-          yield* migrate({ loader: Migrator.fromRecord(migrations) }).pipe(
+        const ran = due
+          ? yield* migrate({ loader: Migrator.fromRecord(migrations) }).pipe(
+              Effect.provideService(SqlClient.SqlClient, client),
+            )
+          : [];
+        // This process's import, not one another process made as this
+        // one waited for the lock.
+        if (ran.some(([id]) => id === 2)) {
+          yield* removeImported(open, platform).pipe(
             Effect.provideService(SqlClient.SqlClient, client),
           );
         }

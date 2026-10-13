@@ -29,9 +29,13 @@ const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
+// What the import logs for each file or key it does without, which an
+// import's verification counts (Store.ts).
+export const SKIPPED = "Skipped what the store could not import";
+
 // A file or key the import does without, logged.
 const skipped = <A>(file: string, what: string, fallback: A) =>
-  Effect.logWarning("Skipped what the store could not import").pipe(
+  Effect.logWarning(SKIPPED).pipe(
     Effect.annotateLogs({ path: file, what }),
     Effect.as(fallback),
   );

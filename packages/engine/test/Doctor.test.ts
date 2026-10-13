@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   mkdirSync,
+  existsSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -176,6 +177,18 @@ describe("the data dir", () => {
       ),
     );
     assert.equal(only(await run(), "config", "ok").detail, "valid, 1 key");
+  });
+
+  it("offers to delete the v2 files an import left, and the fix deletes them", async () => {
+    // A key the import skips, so it can't verify the import and leaves
+    // the files.
+    box.write("registry.json", { projects: [], unshelvedAt: { a: "x" } });
+    const found = only(await run(), "v2-files", "warn");
+    assert.match(found.detail, /registry\.json left from v2/);
+    const fixed = await run({ fix: true });
+    assert.deepEqual(fixed.repaired, ["deleted 1 v2 file"]);
+    assert.deepEqual(findingsFor(fixed, "v2-files"), []);
+    assert.ok(!existsSync(join(box.side("engine"), "registry.json")));
   });
 
   it("warns about a stored value of the wrong type", async () => {

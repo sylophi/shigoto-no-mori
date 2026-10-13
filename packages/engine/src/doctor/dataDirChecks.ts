@@ -1,6 +1,7 @@
 // The doctor's data dir checks: where it is, its settings and registry, the store, the updater's leftovers.
 import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
@@ -25,6 +26,7 @@ import { flavorNames } from "../flavor.ts";
 import * as Darwin from "../Darwin.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
+import { removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
 import { collapseHome } from "../shellHook.ts";
 import { acquireStagingLock, stagingLockPath } from "../stagingLock.ts";
@@ -406,6 +408,34 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       );
     });
 
+    // The files a 2.x data dir kept its state in, which the store holds
+    // since its import: what the migration left, when it couldn't verify
+    // the import, or what a v2 build started since wrote.
+    const v2Context = Context.make(Paths.Paths, paths).pipe(
+      Context.merge(platform),
+    );
+    const checkV2Files = Effect.gen(function* () {
+      const files = yield* v2Files.pipe(Effect.provideContext(v2Context));
+      const [first] = files;
+      if (first === undefined) return [];
+      const label = `${files.length} v2 file${plural(files.length)}`;
+      const extra = files.length - 1;
+      return [
+        repairable(
+          check("Data dir", "v2-files", "v2 files").warn(
+            `${collapseHome(home, first)}${extra > 0 ? ` and ${extra} more` : ""} left from v2, which the store holds now`,
+            "Delete them. Nothing reads them since the import.",
+          ),
+          {
+            prompt: `Delete ${label} (${files.map((file) => collapseHome(home, file)).join(", ")})?`,
+            label: `deleted ${label}`,
+            destructive: true,
+            apply: removeV2Files(files).pipe(Effect.provideContext(v2Context)),
+          },
+        ),
+      ];
+    });
+
     const updatesDir = path.join(dataDir, "updates");
     const stagingLock = stagingLockPath(path, dataDir);
     const stagedDir = path.join(updatesDir, "staged");
@@ -690,6 +720,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       registeredLine,
       checkRegistry,
       checkStaleLocks,
+      checkV2Files,
       stagingLock,
       checkStagingLock,
       checkUpdateLeftovers,

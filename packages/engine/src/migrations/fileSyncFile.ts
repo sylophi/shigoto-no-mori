@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Paths from "../Paths.ts";
 import { isAbsent } from "../platformErrors.ts";
+import { SKIPPED } from "./importJson.ts";
 
 const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
@@ -20,9 +21,7 @@ export const fileSyncDocument = (name: string) =>
     const path = yield* Path.Path;
     const { dataDir } = yield* Paths.Paths;
     const file = path.join(dataDir, "file-sync", name);
-    const skipped = Effect.logWarning(
-      "Skipped what the store could not import",
-    ).pipe(
+    const skipped = Effect.logWarning(SKIPPED).pipe(
       Effect.annotateLogs({ path: file, what: "the file" }),
       Effect.as(Option.none<{ readonly [key: string]: unknown }>()),
     );

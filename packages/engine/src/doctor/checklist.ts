@@ -43,6 +43,7 @@ export const makeChecklist = ({
       checkGlobalConfig,
       checkRegistry,
       checkStaleLocks,
+      checkV2Files,
       stagingLock,
       checkStagingLock,
       checkUpdateLeftovers,
@@ -122,6 +123,9 @@ export const makeChecklist = ({
                     yield* checkRegistry,
                   ]),
               yield* checkStaleLocks,
+              // The files the store reads around an import it refused
+              // are no leftovers.
+              ...(Option.isSome(files) ? [] : yield* checkV2Files),
               ...checkStagingLock(holder),
               ...(yield* checkUpdateLeftovers(input.version, holder)),
               ...(yield* checkPortAllocations(device)),
