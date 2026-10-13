@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -61,6 +62,10 @@ func runGhContext(ctx context.Context, cwd string, args ...string) (string, erro
 	// Only ever reached after the context is already done.
 	cmd.WaitDelay = time.Second
 	cmd.Dir = cwd
+	// A repo's run goes to its own GitHub host (ghhost.go).
+	if host := ghHostFor(cwd); host != "" {
+		cmd.Env = append(os.Environ(), "GH_HOST="+host)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

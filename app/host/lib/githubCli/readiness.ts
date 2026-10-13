@@ -3,6 +3,7 @@ import { readGlobalConfig } from "../config/global";
 import { binaryOnPath } from "../util/binaries";
 import { ttlValueCache } from "../util/ttlCache";
 import { execGh } from "./exec";
+import { getGithubRepoInfo } from "./remote";
 
 const READINESS_CACHE_TTL_MS = 30_000;
 
@@ -48,4 +49,12 @@ export async function ghUnavailableReason(): Promise<GhUnavailableReason | null>
   if (!installed) return "gh-missing";
   if (!authed) return "gh-signed-out";
   return null;
+}
+
+// Combined gate for read paths: gh itself ready, AND this specific repo
+// has a remote gh can resolve. Mutations keep ghReady() so their error
+// messages can stay specific.
+export async function ghReadyForRepo(cwd: string): Promise<boolean> {
+  if (!(await ghReady())) return false;
+  return (await getGithubRepoInfo(cwd)) !== null;
 }
