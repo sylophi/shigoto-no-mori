@@ -1,15 +1,14 @@
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
-import { isNotFound } from "./platformErrors.ts";
+import { exec } from "./processes.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
 // Terrier (github.com/dittofleet/terrier) is an external registry of
@@ -110,12 +109,6 @@ const baseName = (path: string) => {
   return trimmed === "" ? "/" : trimmed.slice(trimmed.lastIndexOf("/") + 1);
 };
 
-// terrier answered with a failure.
-class TerrierCommandFailed extends Schema.TaggedError<TerrierCommandFailed>()(
-  "TerrierCommandFailed",
-  { args: Schema.Array(Schema.String), code: Schema.Int },
-) {}
-
 // Code-unit order, as Go compares strings.
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -153,57 +146,33 @@ const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const { expandHome, binaryName } = yield* Paths.Paths;
 
-  // terrier's stdout, failing on a spawn error, a nonzero exit or a
-  // wedge: the listing runs before every command. stderr is drained so
-  // a chatty terrier can't stall on a full pipe.
-  const output = (args: ReadonlyArray<string>) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const handle = yield* spawner.spawn(
-          ChildProcess.make("terrier", [...args], { stdin: "ignore" }),
-        );
-        const [stdout, , code] = yield* Effect.all(
-          [
-            handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
-            Stream.runDrain(handle.stderr),
-            handle.exitCode,
-          ],
-          { concurrency: 3 },
-        );
-        if (code !== 0) {
-          return yield* new TerrierCommandFailed({ args: [...args], code });
-        }
-        return stdout;
-      }),
-    ).pipe(Effect.timeout("10 seconds"));
-
   const read = Effect.gen(function* () {
-    const listed = yield* output(["ls", "--json"]).pipe(
-      Effect.flatMap(parseListing),
+    // The listing runs before every command, so a wedged terrier is
+    // ended. Its whole answer is read, however long.
+    const listed = yield* exec("terrier", ["ls", "--json"], {
+      timeout: "10 seconds",
+      maxOutputBytes: Infinity,
+    }).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.flatMap(({ stdout }) => parseListing(stdout)),
       Effect.map((paths) => ({ kind: "listed" as const, paths })),
-      Effect.catchIf(
-        (error) =>
-          Predicate.isTagged(error, "PlatformError") && isNotFound(error),
-        () => Effect.succeed({ kind: "missing" as const }),
-      ),
       Effect.catchTags({
-        TerrierCommandFailed: ({ code }) =>
-          Effect.succeed({
-            kind: "unreadable" as const,
-            reason: `exit status ${code}`,
-          }),
+        CommandError: (error) =>
+          Effect.succeed(
+            error.reason === "not-found"
+              ? { kind: "missing" as const }
+              : {
+                  kind: "unreadable" as const,
+                  reason:
+                    error.reason === "timed-out"
+                      ? "signal: killed"
+                      : error.exitCode !== null
+                        ? `exit status ${error.exitCode}`
+                        : errorMessageOf(error.cause),
+                },
+          ),
         TerrierUnreadable: ({ reason }) =>
           Effect.succeed({ kind: "unreadable" as const, reason }),
-        TimeoutError: () =>
-          Effect.succeed({
-            kind: "unreadable" as const,
-            reason: "signal: killed",
-          }),
-        PlatformError: (error) =>
-          Effect.succeed({
-            kind: "unreadable" as const,
-            reason: error.message,
-          }),
       }),
     );
     if (listed.kind === "missing") {
