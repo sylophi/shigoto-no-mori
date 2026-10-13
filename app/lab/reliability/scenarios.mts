@@ -20,6 +20,7 @@ import {
   type TraceLine,
 } from "./lab.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";
+import { waitFor } from "./util.mts";
 
 export type Scenario = {
   readonly name: string;
@@ -441,7 +442,7 @@ export async function terminalRoundTrip(lab: Lab): Promise<void> {
 // host and learns it from the heartbeat, so its time is only noted.
 async function outageShown(lab: Lab, boundMs: number): Promise<number> {
   const since = Date.now();
-  await waitUntil(
+  await waitFor(
     "every tab to stop showing the host as Connected while offline",
     async () => {
       for (const tab of lab.tabs) {
@@ -542,7 +543,7 @@ const hubRedeploy: Scenario = {
     // A socket of an object that hibernated rides through a deploy, so
     // when none drops, the flows are cut, and every client dials the
     // new version, which is what a deploy has to survive.
-    const dropped = await waitUntil(
+    const dropped = await waitFor(
       "a client to see the redeploy drop its hub socket",
       async () =>
         [
@@ -635,7 +636,7 @@ const hostSleep: Scenario = {
     lab.note(`the host asleep for ${ms} ms`);
     const asleep = Date.now();
     const pids = lab.hostApp.freeze();
-    const shown = waitUntil(
+    const shown = waitFor(
       "every page to stop showing the host as Connected",
       async () => {
         for (const tab of lab.pages()) {
@@ -846,7 +847,7 @@ const signOutWithSibling: Scenario = {
     );
     await withPageApi(first.page, (api) => api.run(api.account.signOut()));
     const pressed = Date.now();
-    await waitUntil(
+    await waitFor(
       "both tabs to read signed out",
       async () => (await signedOut(first)) && (await signedOut(second)),
       this.boundMs,
@@ -876,18 +877,6 @@ const signOutWithSibling: Scenario = {
 async function signedOut(tab: Tab): Promise<boolean> {
   return !(await withPageApi(tab.page, (api) => api.run(api.account.status())))
     .signedIn;
-}
-
-async function waitUntil(
-  what: string,
-  check: () => Promise<boolean>,
-  ms: number,
-) {
-  const until = Date.now() + ms;
-  while (!(await check().catch(() => false))) {
-    if (Date.now() > until) throw new Error(`timed out waiting for ${what}`);
-    await sleep(250);
-  }
 }
 
 export const SOAK_SCENARIOS: readonly Scenario[] = [

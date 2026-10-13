@@ -1,39 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
-import { afterEach, beforeEach, it } from "vitest";
-import * as Paths from "../src/Paths.ts";
+import { it } from "vitest";
 import * as Usage from "../src/Usage.ts";
-import { nodeStore } from "./lib/nodeStore.ts";
+import { freshDataDir, onStoreAt } from "./lib/nodeStore.ts";
 
-let dataDir: string;
-beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), "engine-usage-"));
-});
-afterEach(() => rmSync(dataDir, { recursive: true, force: true }));
+const dataDir = freshDataDir("engine-usage-");
 
 const run = <A>(program: Effect.Effect<A, never, Usage.Usage>) =>
   program.pipe(
     Effect.provide(
-      Usage.layer.pipe(
-        Layer.provide(nodeStore),
-        Layer.provide(Paths.layer("prod")),
-        Layer.provide(NodeServices.layer),
-        Layer.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: { HOME: dataDir, SHIGOMORI_DATA_DIR: dataDir },
-            }),
-          ),
-        ),
-        Layer.merge(TestClock.layer()),
-      ),
+      Usage.layer.pipe(onStoreAt(dataDir()), Layer.merge(TestClock.layer())),
     ),
     Effect.runPromise,
   );
