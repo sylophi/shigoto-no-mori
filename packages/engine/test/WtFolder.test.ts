@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -328,6 +329,7 @@ const pooledV2 = () => {
     "port-pool.config.json": JSON.stringify({
       schemaVersion: 1,
       portNames: ["web"],
+      envFiles: { ".env.ports": { WEB_PORT: "{web}" } },
     }),
   });
   const dataDir = join(box.home, "engine");
@@ -376,10 +378,33 @@ it("says when the move couldn't lease the worktree's ports again, and the fix le
     lost?.detail ?? "",
     /1 worktree port-pool covers holds no ports \(a\)/,
   );
+  // A fix port-pool still refuses says so, and leaves the finding.
+  const refused = await run(true);
+  assert.match(
+    refused.repairFailed.join("\n"),
+    /port-pool ensure for a exited with 1/,
+  );
+  assert.equal(leasesOf(refused).length, 1);
   rmSync(pool.refuse);
   const fixed = await run(true);
   assert.deepEqual(leasesOf(fixed), []);
   assert.deepEqual(pool.leased(), [wt]);
+});
+
+it("counts a lease held under another spelling of the worktree's folder", async () => {
+  const pool = portPool();
+  const { wt } = pooledV2();
+  await state();
+  // The lease names the folder through a symlinked parent.
+  const alias = join(box.home, "alias");
+  symlinkSync(join(wt, ".."), alias);
+  writeFileSync(pool.leases, `${join(alias, "a")}\n`);
+  const doc = await box.doctor({
+    version: "dev",
+    executable: "",
+    terminal: false,
+  });
+  assert.deepEqual(leasesOf(doc), []);
 });
 
 it("carries the id of a worktree git moved before a crash", async () => {

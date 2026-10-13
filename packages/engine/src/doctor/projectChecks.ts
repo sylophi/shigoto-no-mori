@@ -380,15 +380,35 @@ export const makeProjectChecks = ({
     // The worktrees port-pool covers (managed, with a port-pool config)
     // that hold no lease: one a move's re-lease failed for, or whose
     // provision did. The fix asks port-pool for one, at its path.
+    // The folders port-pool holds a lease for, symlinks resolved, read
+    // once a run; none when port-pool is off, missing or can't say (the
+    // ports check reports that).
+    const listAllocations = Effect.gen(function* () {
+      const device =
+        (yield* (yield* Config.Config).read({ kind: "device" })) ?? {};
+      if (device["portPool"] !== true) return Option.none();
+      if (Option.isNone(yield* findExecutable("port-pool"))) {
+        return Option.none();
+      }
+      const listed = yield* capture("port-pool", ["list"]).pipe(Effect.result);
+      if (Result.isFailure(listed) || listed.success.code !== 0) {
+        return Option.none();
+      }
+      const leased = new Set<string>();
+      for (const dir of parsePortPoolDirs(listed.success.stdout)) {
+        leased.add(dir);
+        const real = yield* realPath(dir);
+        if (Option.isSome(real)) leased.add(real.value);
+      }
+      return Option.some(leased as ReadonlySet<string>);
+    });
+
     const checkLeases = (
       project: ListedProject,
       identities: ReadonlyArray<WorktreeIdentity>,
+      allocations: typeof listAllocations,
     ) =>
       Effect.gen(function* () {
-        const device =
-          (yield* (yield* Config.Config).read({ kind: "device" })) ?? {};
-        if (device["portPool"] !== true) return [];
-        if (Option.isNone(yield* findExecutable("port-pool"))) return [];
         const covered: WorktreeIdentity[] = [];
         for (const worktree of identities) {
           if (worktree.isPrimary || worktree.isExternal) continue;
@@ -400,15 +420,18 @@ export const makeProjectChecks = ({
           }
         }
         if (covered.length === 0) return [];
-        const listed = yield* capture("port-pool", ["list"]).pipe(
-          Effect.result,
-        );
-        // What the list can't say is the ports check's to report.
-        if (Result.isFailure(listed) || listed.success.code !== 0) return [];
-        const leased = new Set(parsePortPoolDirs(listed.success.stdout));
-        const missing = covered.filter(
-          (worktree) => !leased.has(worktree.path),
-        );
+        const allocated = yield* allocations;
+        if (Option.isNone(allocated)) return [];
+        // A lease held under another spelling of the folder (a symlinked
+        // parent) is the worktree's all the same.
+        const missing: WorktreeIdentity[] = [];
+        for (const worktree of covered) {
+          const real = yield* realPath(worktree.path);
+          const held =
+            allocated.value.has(worktree.path) ||
+            (Option.isSome(real) && allocated.value.has(real.value));
+          if (!held) missing.push(worktree);
+        }
         if (missing.length === 0) return [];
         const names = missing.map((worktree) => path.basename(worktree.path));
         const label = `${missing.length} worktree${plural(missing.length)}`;
@@ -668,6 +691,7 @@ export const makeProjectChecks = ({
     const checkOneProject = (
       project: ListedProject,
       fileLine: Option.Option<Entry>,
+      allocations: typeof listAllocations,
     ) =>
       Effect.gen(function* () {
         const repo = yield* checkProjectRepo(project);
@@ -726,7 +750,7 @@ export const makeProjectChecks = ({
           ...(yield* checkProjectWorktrees(project, identities, bases)),
           ...(yield* checkWtMoves(project)),
           ...(Result.isSuccess(identities)
-            ? yield* checkLeases(project, identities.success)
+            ? yield* checkLeases(project, identities.success, allocations)
             : []),
           ...(yield* checkProjectScripts(project, settings)),
           ...(yield* checkWorktreeInclude(project, settings)),
@@ -754,31 +778,36 @@ export const makeProjectChecks = ({
       projects: ReadonlyArray<ListedProject>,
       projectFiles: ReadonlyMap<string, Entry>,
     ) =>
-      Effect.forEach(
-        projects,
-        (project) =>
-          Effect.map(
-            checkOneProject(
-              project,
-              Option.fromUndefinedOr(projectFiles.get(project.id)),
+      Effect.gen(function* () {
+        // port-pool's leases, listed once for every project's check.
+        const allocations = yield* Effect.cached(listAllocations);
+        return yield* Effect.forEach(
+          projects,
+          (project) =>
+            Effect.map(
+              checkOneProject(
+                project,
+                Option.fromUndefinedOr(projectFiles.get(project.id)),
+                allocations,
+              ),
+              ({ entries, identities }) => ({
+                project,
+                identities,
+                entries:
+                  entries.length > 0
+                    ? entries
+                    : [
+                        check("Projects", "project", project.name).ok(
+                          project.source === undefined
+                            ? "ok"
+                            : `ok (via ${project.source})`,
+                        ),
+                      ],
+              }),
             ),
-            ({ entries, identities }) => ({
-              project,
-              identities,
-              entries:
-                entries.length > 0
-                  ? entries
-                  : [
-                      check("Projects", "project", project.name).ok(
-                        project.source === undefined
-                          ? "ok"
-                          : `ok (via ${project.source})`,
-                      ),
-                    ],
-            }),
-          ),
-        { concurrency: "unbounded" },
-      );
+          { concurrency: "unbounded" },
+        );
+      });
 
     return { checkProjects };
   });
