@@ -157,6 +157,11 @@ let lastAccess: Readonly<Record<string, boolean>> = {};
 // Each session's sharing switch in the last snapshot seen, so the one
 // that just went off is dropped from the cache once (noteSessions).
 let lastSharing: Readonly<Record<string, boolean>> = {};
+// The newest status snapshot this page has heard or fetched, whose
+// command access every pass leaves the list with: a pass built from an
+// older one (out while a newer came) must not hand a peer back the
+// access it has since taken away.
+let newestStatus: HubStatus | undefined;
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -211,7 +216,10 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const current = status ?? (await pageApi().run(pageApi().hub.status()));
   // A fetched snapshot seeds the status while none has landed, as the
   // boot's own fetch does: one that failed has these to fall back on.
-  if (status === undefined) seedFetched?.(current);
+  if (status === undefined) {
+    seedFetched?.(current);
+    newestStatus = current;
+  }
   const phase = current.socket.phase;
   const localDeviceId = pageApi().deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -270,6 +278,9 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));
   setRemoteDevices(registry(), devices);
+  if (newestStatus !== undefined && newestStatus !== current) {
+    applyCommandAccess(newestStatus);
+  }
 }
 
 // Resync on every session LANDING. A device in phase "online" already
@@ -466,7 +477,10 @@ function applyCommandAccess(current: HubStatus): void {
 }
 
 function reconcile(pass: Pass): void {
-  if (pass.status !== undefined) applyCommandAccess(pass.status);
+  if (pass.status !== undefined) {
+    newestStatus = pass.status;
+    applyCommandAccess(pass.status);
+  }
   queued = pass;
   if (inFlight) {
     dirty = true;

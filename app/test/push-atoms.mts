@@ -522,6 +522,68 @@ it("remote devices: a peer that stops taking commands is refused before the devi
   registry.dispose();
 });
 
+it("remote devices: a pass out since before a refusal doesn't hand the peer its commands back", async () => {
+  const { registry, queryClient, hubPush } = page();
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
+  let latest = status();
+  // Each fetch of the list waits on the case: the first is made to
+  // fail (the network timed out), the next one holds.
+  const fetches: Array<{
+    resolve: (devices: DeviceInfo[]) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account: {
+      status: () => Effect.never,
+      listDevices: () =>
+        Effect.promise(
+          () =>
+            new Promise<DeviceInfo[]>((resolve, reject) =>
+              fetches.push({ resolve, reject }),
+            ),
+        ),
+    },
+    hub: { status: () => Effect.sync(() => latest) },
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  const peer = () => registry.get(remoteDevicesAtom)[0];
+  const send = async (next: HubStatus) => {
+    latest = next;
+    await hubPush(next);
+  };
+  const accepting = status({
+    onlineDeviceIds: [PEER],
+    peerAppVersions: { [PEER]: "3.0.0" },
+    peerAcceptsCommands: { [PEER]: true },
+  });
+  await send(accepting);
+  await waitFor(() => peer()?.acceptsCommands === true, "the peer commandable");
+  // A pass that heard "accepts" goes out for the list, and holds.
+  void queryClient.invalidateQueries({ queryKey: queryKeys.accountDevices() });
+  await send(accepting);
+  await waitFor(() => fetches.length === 1, "the held fetch");
+  await send(
+    status({
+      onlineDeviceIds: [PEER],
+      peerAppVersions: { [PEER]: "3.0.0" },
+      peerAcceptsCommands: { [PEER]: false },
+    }),
+  );
+  await waitFor(() => peer()?.acceptsCommands === false, "the refusal");
+  // The held fetch fails, so its pass lands on the cached list, and the
+  // refusal's pass goes out for the list again.
+  fetches[0]?.reject(new Error("the network timed out"));
+  await waitFor(() => fetches.length === 2, "the refusal's own fetch");
+  assert.equal(peer()?.acceptsCommands, false);
+  for (const fetch of fetches) fetch.resolve([studio]);
+  await waitFor(() => queryClient.isFetching() === 0, "the list landed");
+  registry.dispose();
+});
+
 it("hub status: a failed boot fetch falls back on the next pass's", async () => {
   const { registry, queryClient } = page();
   let asked = 0;
