@@ -79,7 +79,7 @@ import {
   trunkOf,
 } from "@shared/pullRequestStack";
 import { unknownWorktreeError } from "@shared/errors";
-import { readWorktreeFile } from "@host/lib/worktrees/files";
+import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
 import {
   moveMirrorsOfWorktree,
   stopMirrorsForWorktree,
@@ -362,6 +362,9 @@ export const worktreesHandlers: Handlers<
 
   readFile: async ({ path, ...input }) =>
     readWorktreeFile(await findWorktreePathOrThrow(input), path),
+
+  readBlob: async ({ oid, path, ...input }) =>
+    readGitBlob(await findWorktreePathOrThrow(input), oid, path),
 
   changeStatus: async (input) =>
     listChangesForPage(await findWorktreePathOrThrow(input)),

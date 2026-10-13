@@ -52,6 +52,7 @@
   "worktrees:listCommits",
   "worktrees:mergePreview",
   "worktrees:operation",
+  "worktrees:readBlob",
   "worktrees:stashDiff",
   "worktrees:stashes"
 ]

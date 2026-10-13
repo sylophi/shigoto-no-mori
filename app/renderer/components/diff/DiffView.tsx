@@ -35,6 +35,7 @@ import {
 } from "./codeTheme";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { HunkBar, hunkAnnotations, type HunkControls } from "./HunkBar";
+import { isMediaBinary, MediaDiff } from "./MediaDiff";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
@@ -409,6 +410,8 @@ export function DiffView({
                     key={key}
                     fileDiff={fileDiff}
                     fileId={key}
+                    projectId={worktree.projectId}
+                    worktreeId={worktree.id}
                     collapsed={!singleFile && collapsedKeys.has(key)}
                     diffStyle={diffStyle}
                     wrapLines={wrapLines}
@@ -471,6 +474,8 @@ export function DiffView({
 function DiffFileRow({
   fileDiff,
   fileId,
+  projectId,
+  worktreeId,
   collapsed,
   diffStyle,
   wrapLines,
@@ -481,6 +486,8 @@ function DiffFileRow({
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
+  projectId: string;
+  worktreeId: string;
   collapsed: boolean;
   diffStyle: DiffStyle;
   // Wrapped rows run past CODE_LINE_HEIGHT, so DIFF_METRICS no longer
@@ -550,6 +557,13 @@ function DiffFileRow({
             : undefined
         }
       />
+      {!collapsed && isMediaBinary(fileDiff) && (
+        <MediaDiff
+          projectId={projectId}
+          worktreeId={worktreeId}
+          fileDiff={fileDiff}
+        />
+      )}
     </div>
   );
 }

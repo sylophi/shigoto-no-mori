@@ -26,3 +26,24 @@ export function useWorktreeFile(
     meta: gatedHostReadMeta(remote, "Couldn't read file"),
   });
 }
+
+// One side of an image, video or audio file in a diff, by the blob id
+// its patch names. A blob never changes, so it is kept while in use.
+export function useGitBlob(
+  projectId: string,
+  worktreeId: string,
+  oid: string,
+  path: string,
+  enabled: boolean,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<WorktreeFile>({
+    queryKey: keys.gitBlob(projectId, worktreeId, oid, path),
+    queryFn: () => api.worktrees.readBlob({ projectId, worktreeId, oid, path }),
+    enabled,
+    staleTime: Infinity,
+    gcTime: 60_000,
+    // The side says so itself, and a diff can hold dozens of them.
+    meta: { silentError: true },
+  });
+}
