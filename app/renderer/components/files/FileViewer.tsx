@@ -2,6 +2,7 @@ import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { File } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FolderOpen, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { CODE_STYLE, CODE_THEME } from "@/components/diff/codeTheme";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -80,12 +81,16 @@ export function FileViewer({
             <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
             Reading file…
           </CenteredMessage>
-        ) : isError || data.kind !== "text" || data.contents.length === 0 ? (
-          <CenteredMessage className="px-6 text-center">
-            {isError ? "Couldn't read file." : placeholderFor(data)}
-          </CenteredMessage>
-        ) : (
+        ) : isError ? (
+          <CenteredMessage>Couldn't read file.</CenteredMessage>
+        ) : data.kind === "text" && data.contents.length > 0 ? (
           <CodeFile name={name} contents={data.contents} />
+        ) : data.kind === "media" && data.size > 0 ? (
+          <MediaFile mime={data.mime} base64={data.base64} />
+        ) : (
+          <CenteredMessage className="px-6 text-center">
+            {placeholderFor(data)}
+          </CenteredMessage>
         )}
       </div>
     </div>
@@ -102,8 +107,46 @@ function placeholderFor(file: WorktreeFile): string {
     case "tooLarge":
       return `Too large to show here (${formatBytes(file.size)}).`;
     case "text":
+    case "media":
       return "Empty file.";
   }
+}
+
+// An image, video or audio file, drawn by Chromium itself. One it
+// can't decode (a codec it lacks, or bytes that aren't what the
+// extension says) gets a line instead of a broken frame.
+function MediaFile({ mime, base64 }: { mime: string; base64: string }) {
+  // The bytes that failed, so other bytes (another file, or this one
+  // saved again) get their own try.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (failed === base64) {
+    return <CenteredMessage>Can't show this file here.</CenteredMessage>;
+  }
+  const src = `data:${mime};base64,${base64}`;
+  const onError = () => setFailed(base64);
+  return (
+    <div className="flex h-full items-center justify-center p-4">
+      {mime.startsWith("video/") ? (
+        // oxlint-disable-next-line jsx-a11y/media-has-caption -- a file in a worktree comes with no captions to offer
+        <video
+          src={src}
+          controls
+          onError={onError}
+          className="max-h-full max-w-full"
+        />
+      ) : mime.startsWith("audio/") ? (
+        // oxlint-disable-next-line jsx-a11y/media-has-caption -- a file in a worktree comes with no captions to offer
+        <audio src={src} controls onError={onError} />
+      ) : (
+        <img
+          src={src}
+          alt=""
+          onError={onError}
+          className="max-h-full max-w-full object-contain"
+        />
+      )}
+    </div>
+  );
 }
 
 // The highlighted file. Mounted only once the shared highlighter holds
