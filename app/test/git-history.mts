@@ -36,6 +36,8 @@ scrubProcessGitEnv({
 
 const { cherryPickCommit, revertCommit, rewordCommit, squashIntoParent } =
   await import("../host/lib/git/history.ts");
+const { getCommitDiff, getMergeBaseDiff } =
+  await import("../host/lib/git/diff.ts");
 const {
   applyStash,
   dropStash,
@@ -88,6 +90,27 @@ function seedRepo(track: Track): string {
 }
 
 async function main() {
+  await check(
+    "a commit's, a branch's and a stash's patch name a non-ASCII path as it is, so the file list can open it",
+    async (track) => {
+      const repo = seedRepo(track);
+      git(repo, "checkout", "-q", "-b", "side");
+      const added = commit(repo, "café.txt", "c\n", "Add café");
+      assert.match(await getCommitDiff(repo, added), /b\/café\.txt$/m);
+      assert.match(
+        await getMergeBaseDiff(repo, "main", "side"),
+        /b\/café\.txt$/m,
+      );
+      write(repo, "café.txt", "stashed\n");
+      await stashChanges(repo, "Café");
+      const [stash] = await listStashes(repo, "side");
+      assert.match(
+        await readStashDiff(repo, stash?.hash ?? ""),
+        /b\/café\.txt$/m,
+      );
+    },
+  );
+
   await check("revert adds a commit undoing the one named", async (track) => {
     const repo = seedRepo(track);
     await revertCommit(repo, rev(repo, "HEAD~1"));

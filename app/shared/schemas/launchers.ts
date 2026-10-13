@@ -9,6 +9,8 @@ export const DetectedLauncherSchema = z.object({
   id: z.string(),
   label: z.string(),
   available: z.boolean(),
+  // A tool the editor setting can name (catalog entries only).
+  editor: z.boolean().optional(),
 });
 export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
 
@@ -65,6 +67,11 @@ export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 
 export const LaunchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   launcherId: z.string().min(1),
+});
+
+// A file to open in the editor, relative to the worktree's root.
+export const OpenFilePayloadSchema = WorktreeScopedPayloadSchema.extend({
+  path: z.string().min(1),
 });
 
 export const LaunchToolMenuEntrySchema = z.object({

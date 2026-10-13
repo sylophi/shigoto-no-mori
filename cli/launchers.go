@@ -32,6 +32,7 @@ type launcherApp struct {
 	deepLink    string
 	openArgs    []string
 	inTerminal  string
+	editor      bool
 }
 
 // The tool catalog is embedded from embed/launcher-catalog.json.
@@ -43,7 +44,8 @@ type launcherApp struct {
 // document: they're passed with {path} replaced by the worktree path.
 // inTerminal is for terminal tools: the command line to run in the
 // worktree in the user's terminal (terminals.go), detected by its first
-// word on PATH.
+// word on PATH. editor marks the tools config.json's editor can name,
+// which open a file (cmd_edit.go).
 //
 //go:embed embed/launcher-catalog.json
 var launcherCatalogJSON []byte
@@ -57,13 +59,14 @@ var launcherCatalog = func() []launcherApp {
 		DeepLink    string   `json:"deepLink"`
 		OpenArgs    []string `json:"openArgs"`
 		InTerminal  string   `json:"inTerminal"`
+		Editor      bool     `json:"editor"`
 	}
 	if err := json.Unmarshal(launcherCatalogJSON, &entries); err != nil {
 		panic("embedded launcher-catalog.json is invalid: " + err.Error())
 	}
 	catalog := make([]launcherApp, len(entries))
 	for i, e := range entries {
-		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI, deepLink: e.DeepLink, openArgs: e.OpenArgs, inTerminal: e.InTerminal}
+		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI, deepLink: e.DeepLink, openArgs: e.OpenArgs, inTerminal: e.InTerminal, editor: e.Editor}
 	}
 	return catalog
 }()
@@ -313,8 +316,12 @@ func launchDetectedApp(a launcherApp, worktreePath string) error {
 			}
 			return exec.Command("open", args...).Run()
 		}
-		appName := strings.TrimSuffix(filepath.Base(bundle), ".app")
-		return exec.Command("open", "-a", appName, worktreePath).Run()
+		return openWithBundle(bundle, worktreePath)
 	}
 	return errf("No installed app found for %s.", a.label)
+}
+
+func openWithBundle(bundle, path string) error {
+	appName := strings.TrimSuffix(filepath.Base(bundle), ".app")
+	return exec.Command("open", "-a", appName, path).Run()
 }

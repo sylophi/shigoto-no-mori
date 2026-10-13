@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Plus } from "lucide-react";
 import {
   launcherIdFor,
+  parseLauncherId,
   TERMINAL_IDS,
   type DetectedLauncher,
 } from "@shared/schemas";
@@ -18,9 +19,13 @@ import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 
+// The editor setting's value for no editor: a file opens with its
+// default app.
+const DEFAULT_APP = "default";
+
 // The Launch tools tab: what the Launch section on THIS machine offers.
 // The keys it edits (launchers, hiddenLaunchers, launchScripts,
-// terminal) live in this device's config like the per-device toggles
+// terminal, editor) live in this device's config like the per-device toggles
 // do, but launching is local by nature (a tool is detected here and
 // opens here), so the page files them under "Client" and never offers
 // them for a peer.
@@ -41,18 +46,20 @@ export function LaunchToolsPanel({
   const terminals = TERMINAL_IDS.flatMap((id) => {
     const d = availableTools.find((t) => t.id === launcherIdFor("app", id));
     if (d === undefined) return [];
-    return [
-      {
-        value: id,
-        label: (
-          <>
-            <LauncherIcon entry={d} className="size-3.5" />
-            {d.label}
-          </>
-        ),
-      },
-    ];
+    return [{ value: id, label: <ToolLabel entry={d} /> }];
   });
+
+  // The installed editors, after the default app that opens a file
+  // while none is picked.
+  const editors = [
+    { value: DEFAULT_APP, label: "Default app" },
+    ...availableTools
+      .filter((t) => t.editor)
+      .map((d) => ({
+        value: parseLauncherId(d.id)?.id ?? d.id,
+        label: <ToolLabel entry={d} />,
+      })),
+  ];
 
   const toggleToolHidden = (id: string) => {
     setForm((prev) => ({
@@ -84,6 +91,31 @@ export function LaunchToolsPanel({
             value={form.terminal}
             onChange={(terminal) => setForm((prev) => ({ ...prev, terminal }))}
             options={terminals}
+            optionClassName="px-3 py-1.5 text-xs"
+          />
+        </section>
+      )}
+
+      {editors.length > 1 && (
+        <section className="space-y-3">
+          <SectionIntro title="Editor">
+            Where files open when you double click them in a file list.
+          </SectionIntro>
+          <SegmentedControl
+            aria-label="Editor"
+            // A picked editor since uninstalled opens files with
+            // the default app, so that's what reads as picked.
+            value={
+              editors.find((e) => e.value === form.editor)?.value ?? DEFAULT_APP
+            }
+            onChange={(editor) =>
+              setForm((prev) => ({
+                ...prev,
+                editor: editor === DEFAULT_APP ? null : editor,
+              }))
+            }
+            options={editors}
+            className="flex-wrap"
             optionClassName="px-3 py-1.5 text-xs"
           />
         </section>
@@ -144,6 +176,16 @@ export function LaunchToolsPanel({
           description="Adds a row of the worktree's scripts under the launch tools. Shows as many as fit on one line, ordered the same way the Scripts section sorts them. Under a manual order, pinned scripts are the only ones shown, and all of them are."
         />
       </section>
+    </>
+  );
+}
+
+// A tool's icon and name, as a picker option.
+function ToolLabel({ entry }: { entry: DetectedLauncher }) {
+  return (
+    <>
+      <LauncherIcon entry={entry} className="size-3.5" />
+      {entry.label}
     </>
   );
 }

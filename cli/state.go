@@ -323,6 +323,7 @@ type globalConfig struct {
 	Launchers             []launcherCommand `json:"launchers"`
 	HiddenLaunchers       []string          `json:"hiddenLaunchers"`
 	Terminal              string            `json:"terminal"`
+	Editor                string            `json:"editor"`
 }
 
 type launcherCommand struct {

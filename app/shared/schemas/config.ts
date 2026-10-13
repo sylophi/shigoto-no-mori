@@ -244,6 +244,11 @@ export const GlobalConfigSchema = z.object({
   // open in, a launcher catalog id. Absent = Terminal. Mirrors the
   // CLI's terminalIDs (cli/terminals.go), which launches them.
   terminal: z.enum(TERMINAL_IDS).optional(),
+  // The editor a worktree's files open in (a double click on one, `sm
+  // worktrees edit`), a catalog id of a tool marked editor. Absent opens
+  // a file with its default app, and a patch goes back to that with
+  // null.
+  editor: z.string().min(1).nullable().optional(),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default. Unset means delete
@@ -347,6 +352,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     hiddenLaunchers: true,
     launchScripts: true,
     terminal: true,
+    editor: true,
     deleteBranchOnRemove: true,
     autoPopulateInstall: true,
     autoPullNew: true,
@@ -379,6 +385,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   hiddenLaunchers: [],
   launchScripts: true,
   terminal: "terminal",
+  editor: null,
   deleteBranchOnRemove: true,
   autoPopulateInstall: false,
   autoPullNew: false,

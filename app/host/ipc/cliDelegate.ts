@@ -1006,6 +1006,19 @@ export async function openLauncherViaCli(
   finalOkDoc(result, "sm open failed", { worktreeId });
 }
 
+export async function openFileViaCli(
+  project: Project,
+  worktreeId: string,
+  path: string,
+): Promise<void> {
+  const result = await runner().runCli([
+    ...worktreeArgv(["edit"], project, worktreeId),
+    "--",
+    path,
+  ]);
+  finalOkDoc(result, "sm edit failed", { worktreeId });
+}
+
 // ---- Reads ----
 
 // One read: the CLI spawned as a reader (runCli's readOnly, so it
