@@ -463,6 +463,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       checkoutBranch: worktreesClient.checkoutBranch,
       fileDiff: worktreesClient.fileDiff,
       readFile: worktreesClient.readFile,
+      readBlob: worktreesClient.readBlob,
       changeStatus: worktreesClient.changeStatus,
       fileHunks: worktreesClient.fileHunks,
       discardHunks: worktreesClient.discardHunks,

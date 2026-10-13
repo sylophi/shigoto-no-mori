@@ -546,6 +546,7 @@ function hostHandlersFor(
     "worktrees:fileDiff": ({ worktreeId, paths }) =>
       changes.fileDiff(worktreeId, paths),
     "worktrees:readFile": ({ path }) => fakeFile(path),
+    "worktrees:readBlob": ({ oid }) => fakeBlob(oid),
     // The working tree is kept per worktree (changesFixtures.ts), so
     // committing and discarding show their outcome, and a commit leaves
     // something to push.
@@ -1044,6 +1045,24 @@ function fakeFile(path: string) {
   if (contents === undefined) return { kind: "missing" as const };
   return { kind: "text" as const, contents, size: contents.length };
 }
+
+// The two sides of FAKE_DIFF's icon.png, by the blob ids its patch
+// names. SVG drawn as an image, which is all the diff's preview sees.
+function fakeBlob(oid: string) {
+  const svg = FAKE_BLOBS[oid];
+  if (svg === undefined) return { kind: "missing" as const };
+  return {
+    kind: "media" as const,
+    mime: "image/svg+xml",
+    base64: btoa(svg),
+    size: svg.length,
+  };
+}
+
+const FAKE_BLOBS: Record<string, string> = {
+  "1a2b3c4": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="56" fill="#9ca3af"/></svg>`,
+  "5d6e7f8": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect x="8" y="8" width="112" height="112" rx="28" fill="#16a34a"/><path d="M40 84c0-28 20-44 48-44 0 28-16 48-44 48" fill="#bbf7d0"/></svg>`,
+};
 
 const FAKE_FILES: Record<string, string> = {
   ".env": "DATABASE_URL=postgres://localhost:5432/lab\n",
