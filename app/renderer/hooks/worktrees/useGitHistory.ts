@@ -82,28 +82,23 @@ export function useWorktreeStashes(worktree: Worktree | undefined) {
   );
 }
 
-// Stash and apply move the working tree as well as the list, which
-// the working tree's refresh reads with it.
-const useStashTreeMutation = <Input extends Scope>(
-  call: Parameters<typeof useWorkingTreeMutation<Input, Worktree>>[0],
-  errorTitle: string,
-) =>
-  useWorkingTreeMutation<Input, Worktree>(
-    call,
-    (worktree) => worktree,
-    errorTitle,
-  );
-
 export function useStashChanges() {
-  return useStashTreeMutation<Scope & { message?: string }>(
+  // Stash and apply move the working tree and the list, which the
+  // working tree's refresh reads with it.
+  return useWorkingTreeMutation<Scope & { message?: string }, Worktree>(
     (api, input) => api.worktrees.stashChanges(input),
+    (worktree) => worktree,
     "Couldn't stash the changes",
   );
 }
 
 export function useApplyStash() {
-  return useStashTreeMutation<Scope & { hash: string; drop: boolean }>(
+  return useWorkingTreeMutation<
+    Scope & { hash: string; drop: boolean },
+    Worktree
+  >(
     (api, input) => api.worktrees.applyStash(input),
+    (worktree) => worktree,
     "Couldn't apply the stash",
   );
 }
