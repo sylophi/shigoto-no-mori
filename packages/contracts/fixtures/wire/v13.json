@@ -4525,6 +4525,45 @@
       }
     ]
   },
+  "worktrees:watchBranchHistory": {
+    "payload": {
+      "projectId": "\t",
+      "worktreeId": "\ud800"
+    },
+    "success": {
+      "commits": [],
+      "more": false,
+      "base": null,
+      "upstream": null,
+      "unpushed": ["0db5", "73a9"],
+      "incoming": [
+        {
+          "hash": "1317",
+          "subject": "!(",
+          "author": "",
+          "date": " ",
+          "additions": 1,
+          "deletions": 4
+        },
+        {
+          "hash": "75c0",
+          "subject": " ",
+          "author": "cR",
+          "date": "0",
+          "additions": 2,
+          "deletions": 0
+        }
+      ],
+      "incomingMore": false,
+      "upstreamFork": "6b2f",
+      "merges": [
+        {
+          "hash": "4d70",
+          "firstParent": "60a0"
+        }
+      ]
+    }
+  },
   "worktrees:watchChangeStatus": {
     "payload": {
       "projectId": "\u0000",
@@ -4576,5 +4615,25 @@
       "conflicted": 1,
       "rebasing": "xT"
     }
+  },
+  "worktrees:watchStashes": {
+    "payload": {
+      "projectId": "\udc00",
+      "worktreeId": "\n"
+    },
+    "success": [
+      {
+        "hash": "7f83",
+        "message": "\ud800",
+        "named": true,
+        "date": "\n"
+      },
+      {
+        "hash": "842f",
+        "message": "\t",
+        "named": true,
+        "date": ""
+      }
+    ]
   }
 }

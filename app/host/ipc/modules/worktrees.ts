@@ -83,7 +83,11 @@ const treeView = <A, R>(
   input: { projectId: string; worktreeId: string },
   part: string,
   read: () => Effect.Effect<A, unknown, R>,
-  options?: { readonly every?: Duration.Input },
+  options: {
+    readonly every?: Duration.Input;
+    // Only git moving it, for what no edit of a file can change.
+    readonly gitOnly?: boolean;
+  } = {},
 ) =>
   Views.view(
     `${treeViews(input)}${part}`,
@@ -95,13 +99,15 @@ const treeView = <A, R>(
           while: (error) => !isEntityGoneError(error),
         }),
       ),
-    Views.either(
-      gitMoved(input.projectId),
-      filesChanged(input.projectId),
-      Views.pushed(mirrorContract, "gitChanged", (staged) => {
-        return staged.worktreeId === input.worktreeId;
-      }),
-    ),
+    options.gitOnly === true
+      ? gitMoved(input.projectId)
+      : Views.either(
+          gitMoved(input.projectId),
+          filesChanged(input.projectId),
+          Views.pushed(mirrorContract, "gitChanged", (staged) => {
+            return staged.worktreeId === input.worktreeId;
+          }),
+        ),
     options,
   );
 
@@ -251,6 +257,14 @@ export const worktreesViews: ViewHandlers<
         withGit((git) => git.readHunks(path, input.path)),
       ),
     ),
+  watchBranchHistory: (input) =>
+    treeView(input, "history", () => worktreesHandlers.branchHistory(input), {
+      gitOnly: true,
+    }),
+  watchStashes: (input) =>
+    treeView(input, "stashes", () => worktreesHandlers.stashes(input), {
+      gitOnly: true,
+    }),
   watchOperation: (input) =>
     treeView(input, "operation", () =>
       atPath(input, (path) => withGit((git) => git.readOperation(path))),

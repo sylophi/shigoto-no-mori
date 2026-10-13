@@ -21,11 +21,7 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
   const { projectId, id: worktreeId } = worktree;
   const { data: files = [] } = useWorktreeChanges(projectId, worktreeId);
   const { data: stashes = [] } = useWorktreeStashes(worktree);
-  const { data: history } = useBranchHistory(
-    projectId,
-    worktreeId,
-    worktree.recentCommits[0]?.hash,
-  );
+  const { data: history } = useBranchHistory(projectId, worktreeId);
   return (
     <GitSectionView
       worktree={worktree}

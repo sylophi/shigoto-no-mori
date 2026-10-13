@@ -1,33 +1,23 @@
-import { skipToken, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type {
   BranchHistory,
   CommitSummary,
 } from "@shigomori/contracts/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useTreeView } from "@/hooks/worktrees/useWorktreeChanges";
 
 const BRANCH_COMMITS_PAGE_SIZE = 30;
 
 // What the Git timeline draws: the branch's own commits back to where
-// it left the primary branch, and its upstream. Refetched with the
-// project's git state (the host watcher's ping), and keyed on HEAD so a
-// commit made here drops the old answer at once.
-export function useBranchHistory(
-  projectId: string,
-  worktreeId: string | undefined,
-  headHash: string | undefined,
-) {
-  const { api, keys } = useHostScope();
-  return useQuery<BranchHistory>({
-    queryKey: keys.branchHistory(projectId, worktreeId ?? "", headHash),
-    queryFn: worktreeId
-      ? ({ signal }) =>
-          api.run(api.worktrees.branchHistory({ projectId, worktreeId }), {
-            signal,
-          })
-      : skipToken,
-    meta: { errorTitle: "Couldn't read the branch's commits" },
-  });
+// it left the primary branch, and its upstream. The host's view, read
+// again as the project's git moves.
+export function useBranchHistory(projectId: string, worktreeId?: string) {
+  return useTreeView<BranchHistory>(
+    "watchBranchHistory",
+    worktreeId === undefined ? null : { projectId, worktreeId },
+    "Couldn't read the branch's commits",
+  );
 }
 
 // Pages through `git log` in PAGE_SIZE chunks, from `from` (a commit,

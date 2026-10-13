@@ -260,6 +260,27 @@ it("a worktree's tree: one refresh reads the file's diff and hunks and the opera
   );
 });
 
+it("a worktree's stashes: a stash made outside the app shows on the project's git ping", async () => {
+  const input = { projectId, worktreeId: await primaryId() };
+  await watch(worktreesViews.watchStashes(input), ({ first, next }) =>
+    Effect.gen(function* () {
+      assert.deepEqual(first, []);
+      writeFileSync(join(repo, "a.txt"), "a\nstashed\n");
+      git(repo, "stash", "push", "-m", "kept");
+      yield* Effect.flatMap(HostPushes.HostPushes, (pushes) =>
+        pushes.publish({
+          channel: "git:projectChanged",
+          payload: { projectId },
+          remote: true,
+        }),
+      );
+      const [stash] = yield* next;
+      assert.equal(stash?.message, "kept");
+      git(repo, "stash", "drop");
+    }),
+  );
+});
+
 it("a refresh waiting on a read ends when the view's last reader goes", async () => {
   await runHost(
     Effect.gen(function* () {

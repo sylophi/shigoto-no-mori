@@ -17,11 +17,7 @@ export function CommitDiff() {
   // The commits the worktree's Git timeline shows (the same query, so
   // it's cached), for the commit's place among them: what may be
   // rewritten from it.
-  const { data: history } = useBranchHistory(
-    projectId,
-    worktree?.id,
-    worktree?.recentCommits[0]?.hash,
-  );
+  const { data: history } = useBranchHistory(projectId, worktree?.id);
 
   if (!worktree) {
     return <WorktreeMissingView {...missing} />;

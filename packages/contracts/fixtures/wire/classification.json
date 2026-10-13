@@ -1870,6 +1870,12 @@
     "remote": true,
     "gated": false
   },
+  "worktrees:watchBranchHistory": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "worktrees:watchChangeStatus": {
     "kind": "view",
     "scope": "host",
@@ -1889,6 +1895,12 @@
     "gated": false
   },
   "worktrees:watchOperation": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
+  "worktrees:watchStashes": {
     "kind": "view",
     "scope": "host",
     "remote": true,

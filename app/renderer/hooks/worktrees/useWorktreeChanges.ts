@@ -43,7 +43,9 @@ type TreeView =
   | "watchChangeStatus"
   | "watchFileDiff"
   | "watchFileHunks"
-  | "watchOperation";
+  | "watchOperation"
+  | "watchBranchHistory"
+  | "watchStashes";
 
 // One of the changes page's views of a worktree, keyed by the device
 // and the view's input.
@@ -174,6 +176,12 @@ export function useDiscardHunks() {
 
 // The working tree moved by a call this window made: the changes
 // page's views read now, and the transplant preview's list asked again.
+export function useRefreshTree() {
+  const { api } = useHostScope();
+  return (scope: { projectId: string; worktreeId: string }) =>
+    refreshChanges(api, scope);
+}
+
 export function refreshTree(
   queryClient: ReturnType<typeof useQueryClient>,
   { api, keys }: { api: HostApi; keys: QueryKeyRegistry },

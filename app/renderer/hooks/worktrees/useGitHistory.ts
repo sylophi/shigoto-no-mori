@@ -16,6 +16,7 @@ import type {
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   refreshTree,
+  useRefreshTree,
   useTreeView,
   useWorkingTreeWriteBack,
   useWorkingTreeMutation,
@@ -69,59 +70,29 @@ export function useSquashCommit() {
   );
 }
 
-// The stashes made on the worktree's branch. Refetched with the rest of
-// the project's git state when the host's watcher sees refs move.
+// The stashes made on the worktree's branch: the host's view, read
+// again as the project's git moves.
 export function useWorktreeStashes(worktree: Worktree | undefined) {
-  const { api, keys } = useHostScope();
-  return useQuery<readonly StashEntry[]>({
-    queryKey: keys.worktreeStashes(
-      worktree?.projectId ?? "",
-      worktree?.id ?? "",
-    ),
-    queryFn: worktree
-      ? ({ signal }) =>
-          api.run(
-            api.worktrees.stashes({
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-            }),
-            { signal },
-          )
-      : skipToken,
-    meta: { errorTitle: "Couldn't read the stashes" },
-  });
+  return useTreeView<readonly StashEntry[]>(
+    "watchStashes",
+    worktree
+      ? { projectId: worktree.projectId, worktreeId: worktree.id }
+      : null,
+    "Couldn't read the stashes",
+  );
 }
 
-function useInvalidateStashes() {
-  const queryClient = useQueryClient();
-  const { keys } = useHostScope();
-  return ({ projectId, worktreeId }: Scope) =>
-    void queryClient.invalidateQueries({
-      queryKey: keys.worktreeStashes(projectId, worktreeId),
-    });
-}
-
-// Stash and apply move the working tree as well as the list.
-function useStashTreeMutation<Input extends Scope>(
+// Stash and apply move the working tree as well as the list, which
+// the working tree's refresh reads with it.
+const useStashTreeMutation = <Input extends Scope>(
   call: Parameters<typeof useWorkingTreeMutation<Input, Worktree>>[0],
   errorTitle: string,
-) {
-  const invalidateStashes = useInvalidateStashes();
-  const mutation = useWorkingTreeMutation<Input, Worktree>(
+) =>
+  useWorkingTreeMutation<Input, Worktree>(
     call,
     (worktree) => worktree,
     errorTitle,
   );
-  const mutate: typeof mutation.mutate = (input, options) =>
-    mutation.mutate(input, {
-      ...options,
-      onSettled: (...args) => {
-        invalidateStashes(input);
-        options?.onSettled?.(...args);
-      },
-    });
-  return { ...mutation, mutate };
-}
 
 export function useStashChanges() {
   return useStashTreeMutation<Scope & { message?: string }>(
@@ -139,24 +110,24 @@ export function useApplyStash() {
 
 export function useDropStash() {
   const { api } = useHostScope();
-  const invalidateStashes = useInvalidateStashes();
+  const refresh = useRefreshTree();
   return useMutation<void, Error, Scope & { hash: string }>({
     mutationFn: (input) => api.run(api.worktrees.dropStash(input)),
-    onSettled: (_data, _err, input) => invalidateStashes(input),
+    onSettled: (_data, _err, input) => refresh(input),
     meta: { errorTitle: "Couldn't drop the stash" },
   });
 }
 
 export function useRestoreStash() {
   const { api } = useHostScope();
-  const invalidateStashes = useInvalidateStashes();
+  const refresh = useRefreshTree();
   return useMutation<
     void,
     Error,
     Scope & { hash: string; message: string; named: boolean }
   >({
     mutationFn: (input) => api.run(api.worktrees.restoreStash(input)),
-    onSettled: (_data, _err, input) => invalidateStashes(input),
+    onSettled: (_data, _err, input) => refresh(input),
     meta: { errorTitle: "Couldn't bring the stash back" },
   });
 }
