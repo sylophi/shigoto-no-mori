@@ -46,6 +46,10 @@ import * as WtFolder from "../../src/WtFolder.ts";
 import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
 import { macfs } from "./macfs.ts";
 
+// The darwin helper, for the tests that take it with the sandbox's
+// environment.
+export { macfs };
+
 // The services a harness case calls.
 export type Engine =
   | Agents.Agents

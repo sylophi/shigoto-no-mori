@@ -271,10 +271,6 @@ export function sandboxGit(
     );
 }
 
-// A TestClock for checks that drive supervised loops headlessly (the
-// direct keeper, the supervisor): hand `context` to the loop, and
-// `advance` moves the clock, runs whatever was due, then lets promise
-// chains complete before assertions, as `settle` does on its own.
 // A few turns of the event loop, for a reader to take a line and a
 // writer to answer it.
 export async function settleTurns(): Promise<void> {
@@ -283,6 +279,10 @@ export async function settleTurns(): Promise<void> {
   }
 }
 
+// A TestClock for checks that drive supervised loops headlessly (the
+// direct keeper, the supervisor): hand `context` to the loop, and
+// `advance` moves the clock, runs whatever was due, then lets promise
+// chains complete before assertions, as `settle` does on its own.
 export function testClock() {
   const runtime = ManagedRuntime.make(TestClock.layer());
   const settle = settleTurns;
@@ -441,7 +441,10 @@ export function createCliRunner(
       child.on("error", reject);
       child.on("close", (code) => {
         const docs: CliDoc[] = [];
-        for (const line of stdout.split("\n")) {
+        // An unterminated last line is no line.
+        const lines = stdout.split("\n");
+        lines.pop();
+        for (const line of lines) {
           if (line.trim() === "") continue;
           try {
             docs.push(JSON.parse(line.trim()));

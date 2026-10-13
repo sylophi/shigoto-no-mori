@@ -25,7 +25,7 @@ import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
 import * as Paths from "../../src/Paths.ts";
 import { nodeStore } from "./nodeStore.ts";
-import { macfs } from "./macfs.ts";
+import { macfs } from "./sandbox.ts";
 
 // Commits need an identity and fixed dates. The sandbox module this
 // imports has already kept git's variables and the user's config out.

@@ -27,7 +27,6 @@ import * as FiberSet from "effect/FiberSet";
 import { shellLink } from "@shared/ipc/shell";
 import { linkTransport } from "@shared/remote/rpcTransport";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { waitFor } from "./lib/checkKit.mts";
 
 const ADDRESS = {
   port: 62_814,
@@ -52,6 +51,14 @@ const asMainPort = (port: MessagePort) => ({
       : port.on("close", fn),
   start: () => port.start(),
 });
+
+async function until(done: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!done()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 async function serve(registrar: ShellRegistrar) {
   const scope = Scope.makeUnsafe();
@@ -137,14 +144,14 @@ it("a push to every window reaches each, and one to a window that one alone", as
 
   // Each window subscribes as its link opens, in a fiber of its own: a
   // push that goes before that is lost, so it is sent until heard.
-  await waitFor(() => {
+  await until(() => {
     PubSub.publishUnsafe(registrar.pushes, {
       channel: "window:focused",
       payload: undefined,
     });
     return heard.first.has("all") && heard.second.has("all");
-  }, "both windows to hear the focus push");
-  await waitFor(() => {
+  });
+  await until(() => {
     Effect.runSync(
       link.pushTo(firstContents as never, {
         channel: "window:blurred",
@@ -152,7 +159,7 @@ it("a push to every window reaches each, and one to a window that one alone", as
       }),
     );
     return heard.first.has("own");
-  }, "the first window to hear its own blur");
+  });
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(heard.second.has("own"), false);
 });

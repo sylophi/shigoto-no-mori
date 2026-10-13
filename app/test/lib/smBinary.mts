@@ -77,7 +77,9 @@ export function builtSm(): string {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
   );
-  copyFileSync(macfsBuild(), join(dir, "macfs"));
+  const macfs = join(dir, `macfs.${process.pid}`);
+  copyFileSync(macfsBuild(), macfs);
+  renameSync(macfs, join(dir, "macfs"));
   const partial = `${binary}.${process.pid}`;
   execFileSync("node", ["build.mts", partial, "--flavor=prod"], {
     cwd: join(repoRoot, "packages", "cli"),
