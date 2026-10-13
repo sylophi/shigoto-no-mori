@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import type { ContractCall } from "@shigomori/contracts/contract";
+import { LINK_MAX_FRAME_BYTES } from "@shigomori/contracts/link";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type { Link } from "@shared/ipc/transport";
 import { type PortEnds, portSocket } from "./portSocket";
@@ -34,7 +35,11 @@ export const portLink = Effect.fnUntraced(function* (
       Socket.Socket,
       yield* Socket.fromWebSocket(Effect.succeed(socket)),
     ),
-    Effect.provide(RpcSerialization.layerSchemaBinary()),
+    Effect.provide(
+      RpcSerialization.layerSchemaBinary({
+        maxFrameSize: LINK_MAX_FRAME_BYTES,
+      }),
+    ),
   );
   // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
   const client = (yield* RpcClient.make(group as never, {

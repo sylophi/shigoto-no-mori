@@ -11,10 +11,9 @@ export const WORKTREE_FILE_MAX_BYTES = 1024 * 1024;
 // Largest image, video or audio file the files page reads whole. Larger
 // than the text cap, since a short screen recording is already a few
 // megabytes, and drawing it costs nothing like highlighting does. It
-// crosses as base64 in one frame, which the link's decoder takes up to
-// 16 MiB of (effect's schema-binary maxFrameSize): 11 MiB is 14.7 MiB
-// of base64, with room for the rest of the frame.
-export const WORKTREE_MEDIA_MAX_BYTES = 11 * 1024 * 1024;
+// crosses as base64 in one frame, which LINK_MAX_FRAME_BYTES (link.ts)
+// is sized for.
+export const WORKTREE_MEDIA_MAX_BYTES = 16 * 1024 * 1024;
 
 // One file of a worktree, by its path inside it, held to the worktree
 // like every other path a peer sends.

@@ -86,6 +86,7 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {
   CommandGate,
+  LINK_MAX_FRAME_BYTES,
   LinkGroup,
   LinkPeer,
   type LoopbackGroup,
@@ -509,7 +510,11 @@ export const make = (options: {
         // Effect's binary layout (shared/remote/link.ts), so a channel's
         // bytes cross as bytes.
         const serialization = yield* RpcSerialization.RpcSerialization.pipe(
-          Effect.provide(RpcSerialization.layerSchemaBinary()),
+          Effect.provide(
+            RpcSerialization.layerSchemaBinary({
+              maxFrameSize: LINK_MAX_FRAME_BYTES,
+            }),
+          ),
         );
         const disconnects = yield* Queue.unbounded<number>();
         let writeRequest!: (
