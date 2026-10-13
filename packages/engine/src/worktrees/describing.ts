@@ -105,7 +105,6 @@ export const makeDescribing = ({
       let { title, description: text } = change;
       if (title !== undefined) {
         title = trimGoSpace(title);
-        // oxlint-disable-next-line no-control-regex -- the control characters are the point
         if (/[\p{Cc}]/u.test(title)) {
           return yield* new DescribeRefused({
             reason: "title-control",

@@ -113,8 +113,10 @@ const readAll = <E, E2 = never>(
 
 export interface ExecOptions {
   readonly cwd?: string | undefined;
-  // The whole environment of the command. The app's own when absent.
+  // The whole environment of the command, or with `extendEnv` what it
+  // sets over the app's own. The app's own when absent.
   readonly env?: Record<string, string | undefined> | undefined;
+  readonly extendEnv?: boolean | undefined;
   readonly timeout?: Duration.Input | undefined;
   // Past it stdout fails the command and stderr is cut short.
   readonly maxOutputBytes?: number | undefined;
@@ -145,6 +147,7 @@ export const exec = Effect.fn("exec")(function* (
       ChildProcess.make(command, [...args], {
         cwd: options.cwd,
         env: options.env,
+        extendEnv: options.extendEnv,
         stdin: "ignore",
       }),
     );

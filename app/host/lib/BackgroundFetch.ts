@@ -12,6 +12,7 @@ import { messageOf } from "@shigomori/engine/errorDocument";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Git from "@shigomori/engine/Git";
 import * as Deferred from "effect/Deferred";
@@ -91,6 +92,7 @@ export interface Options {
 
 const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
   Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
     // What a pass reaches, as the layer finds it.
     const context = yield* Effect.context<FetchServices>();
     const runs = yield* FiberSet.make();
@@ -161,7 +163,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
             const git = yield* Git.Git;
             const before = yield* git.snapshotRemoteRefs(projectPath);
             yield* git.fetchAll(projectPath);
-            lastFetchedAt.set(projectId, Date.now());
+            lastFetchedAt.set(projectId, clock.currentTimeMillisUnsafe());
             failingProjects.delete(projectId);
             const after = yield* git.snapshotRemoteRefs(projectPath);
             if (before !== after) {
@@ -203,7 +205,8 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     ) =>
       Effect.suspend(() => {
         const ts = lastFetchedAt.get(projectId) ?? 0;
-        if (Date.now() - ts < maxAgeMs) return Effect.succeed(false);
+        if (clock.currentTimeMillisUnsafe() - ts < maxAgeMs)
+          return Effect.succeed(false);
         const running = fetchInFlight.get(projectId);
         if (running) return Deferred.await(running);
         const fetching = Deferred.makeUnsafe<boolean>();
@@ -221,8 +224,9 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     const sweepProjectPullRequests = (projectId: string, projectPath: string) =>
       Effect.suspend(() => {
         const ts = lastPullRequestSweepAt.get(projectId) ?? 0;
-        if (Date.now() - ts < SWEEP_INTERVAL_MS) return Effect.void;
-        lastPullRequestSweepAt.set(projectId, Date.now());
+        if (clock.currentTimeMillisUnsafe() - ts < SWEEP_INTERVAL_MS)
+          return Effect.void;
+        lastPullRequestSweepAt.set(projectId, clock.currentTimeMillisUnsafe());
         const before = readCachedProjectPullRequests(projectPath);
         return refreshProjectPullRequests(projectPath).pipe(
           Effect.tap((after) =>
@@ -282,7 +286,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         Effect.andThen(
           Effect.sleep(SWEEP_INTERVAL_MS),
           Effect.suspend(() =>
-            windowFocused || Date.now() < attendedUntil
+            windowFocused || clock.currentTimeMillisUnsafe() < attendedUntil
               ? sweepProjects()
               : Effect.void,
           ),
@@ -309,18 +313,21 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     };
 
     return BackgroundFetch.of({
-      refreshProject: (projectId, projectPath) =>
-        Effect.flatMap(maybeFetchProject(projectId, projectPath), (fetched) =>
-          fetched ? Effect.void : autoPullProject(projectId, projectPath),
-        ).pipe(Effect.provide(context)),
-      sweepForPeer: (renewal) =>
-        Effect.suspend(() => {
-          if (!renewal) rereadRows();
-          attendedUntil = Date.now() + ATTENTION_LEASE_MS;
-          return Effect.as(sweepProjects(SWEEP_INTERVAL_MS), {
-            leaseMs: ATTENTION_LEASE_MS,
-          });
-        }).pipe(Effect.provide(context)),
+      refreshProject: Effect.fn("BackgroundFetch.refreshProject")(function* (
+        projectId: string,
+        projectPath: string,
+      ) {
+        const fetched = yield* maybeFetchProject(projectId, projectPath);
+        if (!fetched) yield* autoPullProject(projectId, projectPath);
+      }, Effect.provide(context)),
+      sweepForPeer: Effect.fn("BackgroundFetch.sweepForPeer")(function* (
+        renewal: boolean,
+      ) {
+        if (!renewal) rereadRows();
+        attendedUntil = clock.currentTimeMillisUnsafe() + ATTENTION_LEASE_MS;
+        yield* sweepProjects(SWEEP_INTERVAL_MS);
+        return { leaseMs: ATTENTION_LEASE_MS };
+      }, Effect.provide(context)),
       setWindowFocused: (focused) => {
         const wasFocused = windowFocused;
         windowFocused = focused;

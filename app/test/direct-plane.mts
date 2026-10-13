@@ -2582,7 +2582,7 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
     await notYetRoutable.advance(step);
   }
   for (let i = 0; i < 3; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- see above
+    // oxlint-disable-next-line no-await-in-loop -- each slow probe follows the last
     await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
   }
   assert.equal(notYetRoutable.status().state, "starting");
@@ -2640,7 +2640,7 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
     neverRoutable.status().state === "starting";
     walked += 1_000
   ) {
-    // oxlint-disable-next-line no-await-in-loop -- see above
+    // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially, to its deadline
     await neverRoutable.advance(1_000);
   }
   assert.ok(

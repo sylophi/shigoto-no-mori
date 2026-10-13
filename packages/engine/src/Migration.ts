@@ -50,7 +50,11 @@ const make = Effect.gen(function* () {
   return Migration.of({
     current: SubscriptionRef.get(ref),
     changes: SubscriptionRef.changes(ref),
-    update: (f) => SubscriptionRef.update(ref, f),
+    update: Effect.fn("Migration.update")(function* (
+      f: (migration: MigrationProgress) => MigrationProgress,
+    ) {
+      yield* SubscriptionRef.update(ref, f);
+    }),
   });
 });
 

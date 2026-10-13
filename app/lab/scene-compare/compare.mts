@@ -91,7 +91,7 @@ async function serve(checkout: string): Promise<string> {
       () => false,
     );
     if (ready) return origin;
-    // oxlint-disable-next-line no-await-in-loop -- see above
+    // oxlint-disable-next-line no-await-in-loop -- the pause between polls
     await new Promise((wait) => setTimeout(wait, 500));
   }
   throw new Error(`the fake host in ${checkout} did not start`);
@@ -313,7 +313,7 @@ try {
       }
       const before = baseShot.value;
       const after = headShot.value;
-      // oxlint-disable-next-line no-await-in-loop -- see above
+      // oxlint-disable-next-line no-await-in-loop -- one diff page, so the pairs compare one after another
       const { pixels, diff } = await compare(diffPage, before, after);
       if (pixels <= threshold) continue;
       differing.push({ shot, pixels });

@@ -35,7 +35,7 @@ export const layer = Layer.effect(
   Effect.map(Ref.make<Account>({ facts: null, service: null }), (account) =>
     HostAccount.of({
       current: Ref.get(account),
-      set: (next) =>
+      set: Effect.fn("HostAccount.set")((next: AccountFacts | null) =>
         Ref.modify(account, (previous) => [
           previous.facts,
           {
@@ -49,6 +49,7 @@ export const layer = Layer.effect(
                   : createAccountService({ baseUrl: next.hubUrl }),
           },
         ]),
+      ),
     }),
   ),
 );

@@ -691,19 +691,20 @@ const make = (binary: string) =>
     return Agents.of({
       caller,
       starting,
-      autoBind: (at) =>
-        autoBind(at).pipe(
-          Effect.catchCause((cause) => Effect.logDebug("agents: bind", cause)),
-        ),
+      autoBind: Effect.fn("Agents.autoBind")(
+        (at: Worktrees.Here) => autoBind(at),
+        Effect.catchCause((cause) => Effect.logDebug("agents: bind", cause)),
+      ),
       bind,
       unbind,
       idle,
       resume,
       guide,
-      event: (harness, raw, cwd) =>
-        onEvent(harness, raw, cwd).pipe(
-          Effect.catchCause((cause) => Effect.logDebug("agents event", cause)),
-        ),
+      event: Effect.fn("Agents.event")(
+        (harness: string, raw: string, cwd: string) =>
+          onEvent(harness, raw, cwd),
+        Effect.catchCause((cause) => Effect.logDebug("agents event", cause)),
+      ),
       statuses,
       setHooks,
     });

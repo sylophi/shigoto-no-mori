@@ -30,6 +30,8 @@
     "shigomori/effect-namespace-imports": "error",
     "shigomori/no-runtime-in-service": "error",
     "shigomori/no-node-builtins-in-service": "error",
+    "shigomori/no-env-or-clock-in-service": "error",
+    "shigomori/effect-fn-service-methods": "error",
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "no-restricted-imports": [
       "error",

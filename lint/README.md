@@ -12,12 +12,14 @@ its cases through oxlint's `RuleTester`.
 | `effect-namespace-imports` | Effect modules come in as namespaces from their subpath, `import * as Effect from "effect/Effect"`. |
 | `no-runtime-in-service` | A service module never builds a `ManagedRuntime` or calls `run*`. |
 | `no-node-builtins-in-service` | A service module never imports `node:fs`, `node:child_process`, `node:os` or `node:path`. |
+| `no-env-or-clock-in-service` | A service module reads the environment through `Config` and the time through `Clock`, never `process.env` or `Date.now()`. |
+| `effect-fn-service-methods` | A method a service module's tag types as returning an `Effect.Effect` is `Effect.fn("Service.method")`, not a plain function. |
 
 ## Service modules
 
 A service module is a `.ts` or `.mts` file named for its service in
 PascalCase, as `EFFECT.md` names them: `Registry.ts`, `GitWatcher.mts`.
-Wherever it lives, that name is what makes the two service rules apply
+Wherever it lives, that name is what makes the service rules apply
 (`serviceModule.mts`). A test (`Registry.test.ts`), a declaration file,
 and every lowercase module (a helper, a layer graph, an adapter at the
 edge) are not service modules, so they may run effects and touch the

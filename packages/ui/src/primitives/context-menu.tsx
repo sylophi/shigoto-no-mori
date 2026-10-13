@@ -1,5 +1,4 @@
-// oxlint-disable-next-line no-restricted-imports -- React is used as a type-only namespace
-import type * as React from "react";
+import type { ComponentProps } from "react";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 
 import { MenuPopupSurface } from "./dropdown-menu.tsx";
@@ -27,9 +26,7 @@ function ContextMenuTrigger({
 
 // No placement props: left unset, Base UI puts the first item under the
 // pointer, the way native context menus land.
-function ContextMenuContent(
-  props: React.ComponentProps<typeof MenuPopupSurface>,
-) {
+function ContextMenuContent(props: ComponentProps<typeof MenuPopupSurface>) {
   return <MenuPopupSurface {...props} />;
 }
 

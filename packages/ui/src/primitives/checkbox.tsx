@@ -1,5 +1,4 @@
-// oxlint-disable-next-line no-restricted-imports -- React is used as a type-only namespace
-import type * as React from "react";
+import type { ComponentProps } from "react";
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { Check, Minus } from "lucide-react";
 
@@ -29,7 +28,7 @@ export function Checkbox({
   className,
   variant = "default",
   ...props
-}: WithoutTitle<React.ComponentProps<typeof CheckboxPrimitive.Root>> & {
+}: WithoutTitle<ComponentProps<typeof CheckboxPrimitive.Root>> & {
   variant?: "default" | "destructive";
 }) {
   const destructive = variant === "destructive";

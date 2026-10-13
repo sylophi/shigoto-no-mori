@@ -560,12 +560,11 @@ const make = Effect.gen(function* () {
     write,
     change,
     storedProjectIds,
-    forgetProject: (projectId) =>
-      sql`DELETE FROM project_config WHERE project_id = ${projectId}`.pipe(
-        Effect.asVoid,
-        Effect.orDie,
-        Effect.withSpan("Config.forgetProject"),
-      ),
+    forgetProject: Effect.fn("Config.forgetProject")(function* (
+      projectId: string,
+    ) {
+      yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
+    }, Effect.orDie),
   });
 });
 

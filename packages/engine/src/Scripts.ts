@@ -286,12 +286,14 @@ const make = Effect.gen(function* () {
     );
 
   // The manager, none without a package.json.
-  const packageManagerOf = (dir: string) =>
-    present(path.join(dir, "package.json")).pipe(
-      Effect.flatMap((found) =>
-        found ? Effect.asSome(packageManager(dir)) : Effect.succeedNone,
-      ),
-    );
+  const packageManagerOf = Effect.fn("Scripts.packageManager")(function* (
+    dir: string,
+  ) {
+    const found = yield* present(path.join(dir, "package.json"));
+    return found
+      ? Option.some(yield* packageManager(dir))
+      : Option.none<PackageManager>();
+  });
 
   const storedList = (projectId: string, listName: "order" | "launchRow") =>
     sql<{ name: string }>`SELECT name FROM script_lists
@@ -406,13 +408,10 @@ const make = Effect.gen(function* () {
     };
   });
 
-  const readScripts = (dir: string) =>
-    readFound(dir).pipe(
-      Effect.map(({ scripts, files }) => ({
-        scripts: scripts.map(publicScript),
-        files,
-      })),
-    );
+  const readScripts = Effect.fn("Scripts.readScripts")(function* (dir: string) {
+    const { scripts, files } = yield* readFound(dir);
+    return { scripts: scripts.map(publicScript), files };
+  });
 
   // A mode a newer build stored is passed on, and an empty one is the
   // default.
@@ -506,7 +505,7 @@ const make = Effect.gen(function* () {
           : [script.label, ...extra],
       script: script.name,
     };
-  });
+  }, Effect.provideContext(platform));
 
   const recordRun = Effect.fn("Scripts.recordRun")(function* (
     projectId: string,
@@ -569,7 +568,7 @@ const make = Effect.gen(function* () {
     list,
     arrangement,
     packageManager: packageManagerOf,
-    command: (input) => command(input).pipe(Effect.provideContext(platform)),
+    command,
     readScripts,
     recordRun,
     setSort,
