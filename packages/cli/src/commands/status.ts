@@ -113,8 +113,8 @@ const card = (
   const row = (label: string, value: string) => {
     if (value !== "") rows.push([paint.dim(label), value]);
   };
-  // The worktree's own title, until an open pull request takes it over.
-  if (status.pr === null || status.pr.state !== "OPEN") {
+  // The worktree's own title, until a pull request takes it over.
+  if (status.pr === null) {
     row("title", truncate(status.title ?? "", width));
   }
   row("path", paint.dim(truncate(tildify(status.path, home), width)));

@@ -1,5 +1,5 @@
 // Durable proof for the two reads behind the worktree page's PR
-// header: which PR, if any, names the page (titledByPullRequest,
+// header: which PR, if any, names the page (isOwnPullRequest,
 // ui's lib/worktreeTitle.ts), and the merge box's one status
 // (describeMergeVerdict, ui's lib/pullRequest.ts), which says what most
 // stands between the PR and landing instead of a verdict beside its
@@ -12,7 +12,7 @@ import {
   describeMergeVerdict,
 } from "@shigomori/ui/lib/pullRequest.ts";
 import {
-  titledByPullRequest,
+  isOwnPullRequest,
   worktreeTitle,
 } from "@shigomori/ui/lib/worktreeTitle.ts";
 import {
@@ -80,34 +80,27 @@ const requiredReview: PullRequestReviews = {
   reviewers: [],
 };
 
-it("an open PR names the page over the worktree's own title", () => {
-  const pr = slim();
-  assert.equal(titledByPullRequest(worktree("Mine"), pr), true);
-  assert.equal(worktreeTitle(worktree("Mine"), pr), "The PR's title");
-});
-
-it("a merged or closed PR names the page only with no title of its own", () => {
-  for (const state of ["MERGED", "CLOSED"] as const) {
+it("the worktree's own PR names the page over its own title, in any state", () => {
+  for (const state of ["OPEN", "MERGED", "CLOSED"] as const) {
     const pr = slim({ state });
-    assert.equal(titledByPullRequest(worktree(), pr), true, state);
-    assert.equal(titledByPullRequest(worktree("Mine"), pr), false, state);
-    assert.equal(worktreeTitle(worktree("Mine"), pr), "Mine", state);
+    assert.equal(isOwnPullRequest(worktree("Mine"), pr), true, state);
+    assert.equal(worktreeTitle(worktree("Mine"), pr), "The PR's title", state);
   }
 });
 
 it("a fork's PR, one on the primary branch, or none never names it", () => {
   assert.equal(
-    titledByPullRequest(worktree(), slim({ isCrossRepository: true })),
+    isOwnPullRequest(worktree(), slim({ isCrossRepository: true })),
     false,
   );
   assert.equal(
-    titledByPullRequest(
+    isOwnPullRequest(
       { branch: "main", primaryBranch: "main", title: undefined },
       slim(),
     ),
     false,
   );
-  assert.equal(titledByPullRequest(worktree(), null), false);
+  assert.equal(isOwnPullRequest(worktree(), null), false);
   assert.equal(worktreeTitle(worktree(), undefined), null);
 });
 
