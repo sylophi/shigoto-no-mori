@@ -1,4 +1,5 @@
 import {
+  focusManager,
   queryOptions,
   useMutation,
   useQuery,
@@ -19,6 +20,7 @@ import type {
 import { callOf } from "@shigomori/contracts/contract";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Effect from "effect/Effect";
+import { useEffect, useRef } from "react";
 import * as Atom from "effect/reactivity/Atom";
 import {
   useHostScope,
@@ -54,9 +56,24 @@ export function useWorktreeChanges(
   worktreeId: string,
 ): LiveViewState<readonly ChangedFile[]> {
   const { deviceId, hasHost } = useHostScope();
-  return useView(
+  const state = useView(
     hasHost ? changesAtom(`${deviceId}\n${projectId}\n${worktreeId}`) : null,
   );
+  // A read that failed (git held a lock) ends the view: the window
+  // coming back asks again, as the list's focus refetch did.
+  const retry = useRef(state.refetch);
+  retry.current = state.refetch;
+  const failed = state.error !== null;
+  useEffect(
+    () =>
+      failed
+        ? focusManager.subscribe((focused) => {
+            if (focused) retry.current();
+          })
+        : undefined,
+    [failed],
+  );
+  return state;
 }
 
 // The list read once, for a preview (the transplant review's file

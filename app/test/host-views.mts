@@ -13,11 +13,13 @@ import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { callOf, channelOf } from "@shigomori/contracts/contract";
 import type { Project } from "@shigomori/contracts/schemas";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -228,6 +230,43 @@ it("a worktree's changes: a refresh reads now and answers once that read landed,
         yield* worktreesHandlers.refreshChangeStatus(input);
         assert.deepEqual(yield* next, []);
       }),
+  );
+});
+
+it("a refresh waiting on a read ends when the view's last reader goes", async () => {
+  await runHost(
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>();
+      let reads = 0;
+      // The first read answers, every later one waits on the gate.
+      const view = Views.view(
+        "test:refresh-gone",
+        () =>
+          Effect.suspend(() =>
+            (reads += 1) === 1 ? Effect.succeed(0) : Deferred.await(gate),
+          ),
+        () => false,
+      );
+      const scope = yield* Scope.make();
+      const values = yield* Stream.toQueue(view, {
+        capacity: "unbounded",
+      }).pipe(Scope.provide(scope));
+      yield* Queue.take(values);
+      const waiting = yield* Effect.forkChild(
+        Views.refresh("test:refresh-gone"),
+      );
+      yield* Effect.yieldNow;
+      yield* Scope.close(scope, Exit.void);
+      yield* Fiber.join(waiting);
+      // With no reader left there is nothing to wait on.
+      yield* Views.refresh("test:refresh-gone");
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer).pipe(
+          Layer.provideMerge(Layer.effectContext(Effect.promise(hostContext))),
+        ),
+      ),
+    ),
   );
 });
 

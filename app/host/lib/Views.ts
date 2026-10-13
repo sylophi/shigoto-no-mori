@@ -20,6 +20,7 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as RcMap from "effect/RcMap";
 import * as Ref from "effect/Ref";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as HostPushes from "./HostPushes";
@@ -47,9 +48,14 @@ class Shared implements Equal.Equal {
   }
 }
 
-// A read of a view that landed, and the last refresh asked before it
-// started, which it answers.
-type Landed = { readonly key: string; readonly answers: number };
+// The read of one view hearing its refreshes: the asks, how many there
+// were, and the last ask a landed read answered (all of them once the
+// read is gone, so no refresh waits on it).
+type Hearer = {
+  readonly asks: PubSub.PubSub<void>;
+  readonly asked: Ref.Ref<number>;
+  readonly landed: SubscriptionRef.SubscriptionRef<number>;
+};
 
 type Heard = {
   readonly asked: Stream.Stream<void>;
@@ -74,7 +80,8 @@ export class ViewShares extends Context.Service<
     // each saying as it lands which asks it answered.
     readonly hear: (key: string) => Effect.Effect<Heard, never, Scope.Scope>;
     // A read of `key` now, done once one that started after the ask
-    // has landed, changed or not. Done at once when nothing watches it.
+    // has landed, changed or not, or the read is gone. Done at once
+    // when nothing reads it.
     readonly refresh: (key: string) => Effect.Effect<void>;
   }
 >()("sm/host/ViewShares") {}
@@ -88,49 +95,58 @@ const makeShares = Effect.gen(function* () {
         replay: 1,
       }),
   });
-  const asks = yield* PubSub.unbounded<string>();
-  const landings = yield* PubSub.unbounded<Landed>();
-  // How many refreshes each key was asked so far, and how many reads
-  // hear its asks.
-  const counted = yield* Ref.make(new Map<string, number>());
-  const hearing = yield* Ref.make(new Map<string, number>());
-  const countOf = (key: string) =>
-    Effect.map(Ref.get(counted), (counts) => counts.get(key) ?? 0);
-  const add = (key: string, by: number) =>
-    Ref.update(hearing, (heard) =>
-      new Map(heard).set(key, (heard.get(key) ?? 0) + by),
-    );
+  const hearers = yield* Ref.make(new Map<string, Hearer>());
   return ViewShares.of({
     join: (key, read) => Stream.unwrap(RcMap.get(reads, new Shared(key, read))),
     hear: Effect.fn("ViewShares.hear")(function* (key: string) {
-      const heard = yield* PubSub.subscribe(asks);
-      yield* Effect.acquireRelease(add(key, 1), () => add(key, -1));
+      const hearer: Hearer = {
+        asks: yield* PubSub.unbounded<void>(),
+        asked: yield* Ref.make(0),
+        landed: yield* SubscriptionRef.make(0),
+      };
+      const asks = yield* PubSub.subscribe(hearer.asks);
+      yield* Effect.acquireRelease(
+        Ref.update(hearers, (all) => new Map(all).set(key, hearer)),
+        () =>
+          SubscriptionRef.set(hearer.landed, Number.POSITIVE_INFINITY).pipe(
+            Effect.andThen(
+              Ref.update(hearers, (all) => {
+                if (all.get(key) !== hearer) return all;
+                const left = new Map(all);
+                left.delete(key);
+                return left;
+              }),
+            ),
+          ),
+      );
       return {
-        asked: Stream.fromSubscription(heard).pipe(
-          Stream.filter((asked) => asked === key),
-          Stream.as(undefined),
-        ),
+        asked: Stream.fromSubscription(asks),
         landing: (read) =>
-          Effect.flatMap(countOf(key), (answers) =>
+          Effect.flatMap(Ref.get(hearer.asked), (answers) =>
             read.pipe(
-              Effect.ensuring(PubSub.publish(landings, { key, answers })),
+              Effect.ensuring(
+                SubscriptionRef.update(hearer.landed, (landed) =>
+                  Math.max(landed, answers),
+                ),
+              ),
             ),
           ),
       } satisfies Heard;
     }),
     refresh: Effect.fn("ViewShares.refresh")(function* (key: string) {
-      const heard = yield* Ref.get(hearing);
-      if ((heard.get(key) ?? 0) === 0) return;
-      const landed = yield* PubSub.subscribe(landings);
-      const ask = (yield* countOf(key)) + 1;
-      yield* Ref.update(counted, (counts) => new Map(counts).set(key, ask));
-      yield* PubSub.publish(asks, key);
-      yield* Stream.fromSubscription(landed).pipe(
-        Stream.filter((read) => read.key === key && read.answers >= ask),
+      const hearer = (yield* Ref.get(hearers)).get(key);
+      if (hearer === undefined) return;
+      const ask = yield* Ref.modify(hearer.asked, (asked) => [
+        asked + 1,
+        asked + 1,
+      ]);
+      yield* PubSub.publish(hearer.asks, undefined);
+      yield* SubscriptionRef.changes(hearer.landed).pipe(
+        Stream.filter((landed) => landed >= ask),
         Stream.take(1),
         Stream.runDrain,
       );
-    }, Effect.scoped),
+    }),
   });
 });
 
