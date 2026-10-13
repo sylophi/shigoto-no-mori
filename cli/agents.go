@@ -517,12 +517,15 @@ func (s *agentSession) apply(event agentEvent) (changed, unbind bool) {
 			return false, false
 		}
 		next.State, next.Waits = agentIdle, nil
-	case "Stop", "StopFailure", "Interrupt":
+	case "Stop", "StopFailure", "Interrupt", "SessionEnd":
+		// A session's end keeps its binding: a host that unloads an idle
+		// session (T3 Code, Codex's app server) ends it the same way an
+		// exit does, and either can be resumed.
 		next.State, next.Waits = agentIdle, nil
 		if event.LastMessage != "" {
 			next.Message = clipLine(event.LastMessage, agentMessageMax)
 		}
-	case "SessionEnd", "SubagentStop":
+	case "SubagentStop":
 		return true, true
 	default:
 		return false, false
