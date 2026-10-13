@@ -515,9 +515,6 @@ describe("at a terminal", () => {
       env: {
         ...box.env("cli"),
         TERM: "xterm-256color",
-        // On CI, the menu says what fd 0 was before ink read it, which a
-        // failure's screen then shows (menuView.ts, fd0State).
-        ...(process.env["CI"] === undefined ? {} : { SM_FD0_TRACE: "1" }),
         ...env,
       },
       stdio: ["pipe", "pipe", "ignore"],
@@ -637,9 +634,8 @@ describe("at a terminal", () => {
         ["Select a worktree in beta:", DOWN],
         ["▸ fox", "\r"],
       ],
-      { CI: "true", SM_FD0_TRACE: "1" },
+      { CI: "true" },
     );
-    assert.match(shown, /fd 0: [a-z ]+, mode \d+, tty true/);
     assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
   });
 

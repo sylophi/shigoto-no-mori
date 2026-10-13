@@ -58,6 +58,7 @@ import { doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
 import { goArgs } from "./argv.ts";
+import { startStdinReader } from "./stdinReader.ts";
 import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -77,6 +78,9 @@ function globalFlags(args: ReadonlyArray<string>) {
     ],
   };
 }
+
+// Before any command runs a child (stdinReader.ts).
+startStdinReader();
 
 const {
   version: askedVersion,
