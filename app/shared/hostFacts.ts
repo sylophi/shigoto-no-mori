@@ -20,6 +20,15 @@ export const HostFactsSchema = Schema.Struct({
   // The build's flavor (main/flavor.ts), which names the data dir and
   // the binaries.
   flavor: Schema.Literals(["prod", "v3", "dev"]),
+  // The hosts that exited unasked since one was last up, each with when
+  // the shell started it, the last a moment before this one: what their
+  // scripts left running is this one's to stop (lib/scripts/
+  // OrphanSweep.ts). Absent at the app's start.
+  replacesHosts: Schema.optional(
+    Schema.Array(
+      Schema.Struct({ pid: Schema.Number, startedAt: Schema.Number }),
+    ),
+  ),
 });
 
 // The command-line flag the facts ride, as JSON, into the host's
