@@ -48,17 +48,22 @@ the profiles in its userData alone.
 
 A device is made of two folders:
 
-- **Data dir.** Projects and worktrees: `registry.json` (projects
-  and the device id), `state.json`, `config.json`, `projects/`,
-  `worktrees/`, and while the app runs `loopback.json` (how the
-  terminal's cross-device verbs find it). The device id is created per data dir,
-  so one data dir is one device. A pre-2.0 `~/shigomori` (`~/shigomori-dev`) that still
-  holds state is adopted in place until `~/.sm` (`~/.smd`) holds state;
-  Settings > Data location offers to rename it, and `sm doctor` warns.
+- **Data dir.** Projects and worktrees: `store.db` (the SQLite store:
+  projects, the device id, settings, marks and state), `wt/` (the
+  managed worktrees), `file-sync/`, `iconCache/`, and while the app
+  runs `loopback.json` (how the terminal's cross-device verbs find
+  it). The device id is created per data dir, so one data dir is one
+  device. A v2 data dir's `registry.json`, `state.json`, `config.json`
+  and `projects/` are imported into the store once and left as they
+  were, and its `worktrees/` move to `wt/`. A pre-2.0 `~/shigomori`
+  (`~/shigomori-dev`) that still holds state is adopted in place until
+  `~/.sm` (`~/.smd`) holds state; Settings > Data location offers to
+  rename it, and `sm doctor` warns.
 - **userData.** The app instance: `account.json` (hub credential and
   the accept-commands switch), `clientConfig.json` (theme,
-  keep reachable), `clerk-tokens.json` (Clerk session),
-  `cloudflared.pid`. Sign-in state lives here, not in the data dir. It
+  keep reachable, keybindings), `clerk-tokens.json` (Clerk session),
+  `windows.json` (the windows to reopen), `direct-port` (the
+  listener's port, kept across restarts), `cloudflared.pid`. Sign-in state lives here, not in the data dir. It
   also holds the single-instance lock, so only one app can run per
   userData.
 

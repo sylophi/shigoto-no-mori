@@ -41,7 +41,7 @@ const catalog = (names: Names) => {
       [
         "update [--check]",
         "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v2.0.0-beta.N) and takes a full release that is ahead of it.",
+        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v3.0.0-rc.N) and takes a full release that is ahead of it.",
       ],
       [
         "doctor [--fix] [--yes]",
@@ -238,7 +238,7 @@ const catalog = (names: Names) => {
       [
         "projects config [<command>] [args]",
         "Show or set per-project config",
-        "Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
+        "Bare: prints the project's settings. The global config's verbs work here too, scoped by -p: " +
           "list, get <key>, set <key> <value>, unset <key>, edit, read. Keys: `" +
           bin +
           " projects config list`. Structured lists get element verbs: launcher add " +
@@ -253,12 +253,12 @@ const catalog = (names: Names) => {
       [
         "config list",
         "Show every setting",
-        "Effective values, with (default) marking keys not present in config.json. --json prints {ok, settings: [{key, value, set}]}.",
+        "Effective values, with (default) marking keys that aren't set. --json prints {ok, settings: [{key, value, set}]}.",
       ],
       [
         "config read",
-        "Print config.json as stored (--json)",
-        "{ok, config: {...}}, unknown keys included and no defaults filled in ({} when there is no file). projects config read answers the same for project.json, with config null when the project has none.",
+        "Print the settings as stored (--json)",
+        "{ok, config: {...}}, unknown keys included and no defaults filled in ({} when none are set). projects config read answers the same for the project's settings, with config null when the project has none.",
       ],
       ["config get <key>", "Print one setting's effective value", ""],
       [
@@ -402,7 +402,7 @@ const namespacesOf = (bin: string, items: Catalog) => [
     name: "config",
     desc: "Global settings",
     shortAlias: "",
-    blurb: `Global settings, stored in config.json in the data dir. Keys and current values: \`${bin} config list\`. Per-project settings live under \`${bin} projects config\`.`,
+    blurb: `Global settings, stored in the data dir. Keys and current values: \`${bin} config list\`. Per-project settings live under \`${bin} projects config\`.`,
     items: items.config,
     canon: (name: string) => name,
   },
