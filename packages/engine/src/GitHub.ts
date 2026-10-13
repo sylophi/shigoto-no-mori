@@ -6,13 +6,17 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { envVar } from "./environment.ts";
+import { ghHostFor, ghKnownHosts } from "./ghHost.ts";
 import * as Git from "./Git.ts";
 import * as GoJson from "./goJson.ts";
 import {
@@ -22,6 +26,7 @@ import {
   type MergeProgress,
   parseMergeProgress,
 } from "./mergeProgress.ts";
+import * as Paths from "./Paths.ts";
 import { isMissingProgram } from "./platformErrors.ts";
 
 // A gh that couldn't answer, sorted where it failed: not installed, not
@@ -148,12 +153,17 @@ export type OwningLookup = Lookup<OwningPullRequest> & {
 export class GitHub extends Context.Service<
   GitHub,
   {
-    // gh with `args` in `cwd`, failing past `timeout` when one is given.
+    // gh with `args` in `cwd`, pinned to its GitHub host (hostOf),
+    // failing past `timeout` when one is given.
     readonly run: (
       cwd: string,
       args: ReadonlyArray<string>,
       options?: { readonly timeout?: Duration.Input | undefined },
     ) => Effect.Effect<string, GitHubCliError>;
+    // The GitHub host of the remote gh resolves `cwd`'s repo from, or
+    // null for none. Every gh run in a repo, the engine's and the
+    // app's, goes there: `gh api` asks github.com otherwise.
+    readonly hostOf: (cwd: string) => Effect.Effect<string | null>;
     // The branch's pull request with its checks, as the status card
     // shows it: the newest that is the branch's own.
     readonly cardFor: (
@@ -456,6 +466,30 @@ const AsyncTicket = Schema.fromJsonString(
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const git = yield* Git.Git;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const paths = yield* Paths.Paths;
+
+  // gh's own precedence for its hosts.yml: GH_CONFIG_DIR, then the XDG
+  // config directory.
+  const knownHosts = Effect.gen(function* () {
+    const dir = yield* envVar("GH_CONFIG_DIR");
+    const file = path.join(
+      dir !== "" ? dir : path.join(paths.configHome, "gh"),
+      "hosts.yml",
+    );
+    return ghKnownHosts(
+      yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => "")),
+    );
+  });
+
+  const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
+    const [remotes, known] = yield* Effect.all(
+      [git.listRemoteEntries(cwd), knownHosts],
+      { concurrency: 2 },
+    );
+    return ghHostFor(remotes, known);
+  });
 
   const run = Effect.fn("GitHub.run")(function* (
     cwd: string,
@@ -464,13 +498,22 @@ const make = Effect.gen(function* () {
   ) {
     const failed = (cause: unknown) =>
       new GitHubCliError({ reason: "failed", cause });
+    const host = yield* hostOf(cwd);
     const answer = Effect.scoped(
       Effect.gen(function* () {
         // In a process group of its own, so a deadline ends gh with the
         // git and credential helper it started. No stdin: it never waits
         // on a prompt.
         const handle = yield* spawner
-          .spawn(ChildProcess.make("gh", [...args], { cwd, stdin: "ignore" }))
+          .spawn(
+            ChildProcess.make("gh", [...args], {
+              cwd,
+              stdin: "ignore",
+              ...(host === null
+                ? {}
+                : { env: { GH_HOST: host }, extendEnv: true }),
+            }),
+          )
           .pipe(
             Effect.mapError((error) =>
               isMissingProgram(error)
@@ -908,6 +951,7 @@ const make = Effect.gen(function* () {
 
   return GitHub.of({
     run,
+    hostOf,
     cardFor,
     owningPullRequest,
     find,

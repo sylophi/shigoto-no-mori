@@ -26,6 +26,7 @@ import * as Config from "../../src/Config.ts";
 import * as Control from "../../src/Control.ts";
 import * as Doctor from "../../src/Doctor.ts";
 import { errorDocument } from "../../src/errorDocument.ts";
+import * as GitHub from "../../src/GitHub.ts";
 import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
 import * as Landing from "../../src/Landing.ts";
@@ -54,6 +55,7 @@ export { macfs };
 export type Engine =
   | Agents.Agents
   | Config.Config
+  | GitHub.GitHub
   | Icons.Icons
   | Launchers.Launchers
   | Layout.Layout
