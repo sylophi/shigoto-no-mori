@@ -37,6 +37,7 @@ import type { Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import { gitFetchingAtom } from "@/hooks/git/useProjectGitFetching";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
+import { readsRunsOf } from "@/hooks/live/useLiveActivity";
 import { activityOf, scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { worktreeLifecycleAtom } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { queryKeys } from "@/lib/queryKeys";
@@ -424,6 +425,12 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   assert.equal(device?.status.phase, "connected");
   assert.equal(device?.acceptsCommands, false);
   assert.equal(commandAccessOf(LOCAL, PEER, device).canCommand, false);
+  // Its runs aren't read (scripts:watch is gated): settled as none,
+  // where a refused view would be asked for good. This device's own,
+  // and a peer's before the registry says, are.
+  assert.equal(readsRunsOf(LOCAL, PEER, false), false);
+  assert.equal(readsRunsOf(LOCAL, PEER, undefined), true);
+  assert.equal(readsRunsOf(LOCAL, LOCAL, undefined), true);
   // The stale seed did not roll the status back.
   assert.deepEqual(valueOf(hub()).peerAppVersions, { [PEER]: "3.0.0" });
 
@@ -455,6 +462,129 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
     () => registry.get(remoteDevicesAtom).length === 0,
     "no peers signed out",
   );
+  registry.dispose();
+});
+
+it("remote devices: a peer that stops taking commands is refused before the device list's fetch lands", async () => {
+  const { registry, queryClient, hubPush } = page();
+  let latest = status();
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
+  // The list's next fetch doesn't land until the case lets it: the
+  // network it waits on is gone.
+  let fetching = false;
+  const lands: Array<(devices: DeviceInfo[]) => void> = [];
+  const landed = new Promise<DeviceInfo[]>((resolve) => lands.push(resolve));
+  // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account: {
+      status: () => Effect.never,
+      listDevices: () =>
+        Effect.suspend(() => {
+          fetching = true;
+          return Effect.promise(() => landed);
+        }),
+    },
+    hub: { status: () => Effect.sync(() => latest) },
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  const peer = () => registry.get(remoteDevicesAtom)[0];
+  const send = async (next: HubStatus) => {
+    latest = next;
+    await hubPush(next);
+  };
+  await send(
+    status({
+      onlineDeviceIds: [PEER],
+      peerAppVersions: { [PEER]: "3.0.0" },
+      peerAcceptsCommands: { [PEER]: true },
+    }),
+  );
+  await waitFor(() => peer()?.acceptsCommands === true, "the peer commandable");
+  void queryClient.invalidateQueries({ queryKey: queryKeys.accountDevices() });
+  await send(
+    status({
+      onlineDeviceIds: [PEER],
+      peerAppVersions: { [PEER]: "3.0.0" },
+      peerAcceptsCommands: { [PEER]: false },
+    }),
+  );
+  await waitFor(
+    () => peer()?.acceptsCommands === false,
+    "the refusal, with the list's fetch still out",
+  );
+  assert.ok(fetching, "the list's fetch was asked for");
+  // A snapshot that no longer names the peer (its session ended) leaves
+  // it refused, where "not known" would read as pending and command.
+  await send(status({ onlineDeviceIds: [] }));
+  assert.equal(peer()?.acceptsCommands, false);
+  // The pass it held ends, for the next case's sync.
+  for (const land of lands) land([studio]);
+  await waitFor(() => queryClient.isFetching() === 0, "the list landed");
+  registry.dispose();
+});
+
+it("remote devices: a pass out since before a refusal doesn't hand the peer its commands back", async () => {
+  const { registry, queryClient, hubPush } = page();
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
+  let latest = status();
+  // Each fetch of the list waits on the case: the first is made to
+  // fail (the network timed out), the next one holds.
+  const fetches: Array<{
+    resolve: (devices: DeviceInfo[]) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account: {
+      status: () => Effect.never,
+      listDevices: () =>
+        Effect.promise(
+          () =>
+            new Promise<DeviceInfo[]>((resolve, reject) =>
+              fetches.push({ resolve, reject }),
+            ),
+        ),
+    },
+    hub: { status: () => Effect.sync(() => latest) },
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  const peer = () => registry.get(remoteDevicesAtom)[0];
+  const send = async (next: HubStatus) => {
+    latest = next;
+    await hubPush(next);
+  };
+  const accepting = status({
+    onlineDeviceIds: [PEER],
+    peerAppVersions: { [PEER]: "3.0.0" },
+    peerAcceptsCommands: { [PEER]: true },
+  });
+  await send(accepting);
+  await waitFor(() => peer()?.acceptsCommands === true, "the peer commandable");
+  // A pass that heard "accepts" goes out for the list, and holds.
+  void queryClient.invalidateQueries({ queryKey: queryKeys.accountDevices() });
+  await send(accepting);
+  await waitFor(() => fetches.length === 1, "the held fetch");
+  await send(
+    status({
+      onlineDeviceIds: [PEER],
+      peerAppVersions: { [PEER]: "3.0.0" },
+      peerAcceptsCommands: { [PEER]: false },
+    }),
+  );
+  await waitFor(() => peer()?.acceptsCommands === false, "the refusal");
+  // The held fetch fails, so its pass lands on the cached list, and the
+  // refusal's pass goes out for the list again.
+  fetches[0]?.reject(new Error("the network timed out"));
+  await waitFor(() => fetches.length === 2, "the refusal's own fetch");
+  assert.equal(peer()?.acceptsCommands, false);
+  for (const fetch of fetches) fetch.resolve([studio]);
+  await waitFor(() => queryClient.isFetching() === 0, "the list landed");
   registry.dispose();
 });
 
