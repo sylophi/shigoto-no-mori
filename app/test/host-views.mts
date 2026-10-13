@@ -4,7 +4,7 @@
 // value stays the same. The store's backstop and the views' polls run
 // on a TestClock.
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
@@ -13,11 +13,13 @@ import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { callOf, channelOf } from "@shigomori/contracts/contract";
 import type { Project } from "@shigomori/contracts/schemas";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -28,7 +30,10 @@ import { portsViews } from "../host/ipc/modules/ports.ts";
 import { projectsViews } from "../host/ipc/modules/projects.ts";
 import { scriptsViews } from "../host/ipc/modules/scripts.ts";
 import { sharedSettingsViews } from "../host/ipc/modules/sharedSettings.ts";
-import { worktreesViews } from "../host/ipc/modules/worktrees.ts";
+import {
+  worktreesHandlers,
+  worktreesViews,
+} from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
 import * as Views from "../host/lib/Views.ts";
@@ -194,6 +199,74 @@ it("a worktree's changes: an edit shows on the next poll, a commit on the projec
         );
         assert.deepEqual(yield* next, []);
       }),
+  );
+});
+
+it("a worktree's changes: a refresh reads now and answers once that read landed, changed or not, and at once with nothing watching", async () => {
+  const input = { projectId, worktreeId: await primaryId() };
+  // Nothing watches the list: there is no read to ask for.
+  await runHost(
+    worktreesHandlers
+      .refreshChangeStatus(input)
+      .pipe(Effect.provide(Views.layer)),
+  );
+  await watch(
+    worktreesViews.watchChangeStatus(input),
+    ({ first, next, quiet }) =>
+      Effect.gen(function* () {
+        assert.deepEqual(first, []);
+        // An edit no watch reported and no poll has read yet (the clock
+        // stands still): the refresh reads it.
+        writeFileSync(join(repo, "c.txt"), "c\n");
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        assert.deepEqual(
+          (yield* next).map((file) => file.path),
+          ["c.txt"],
+        );
+        // Nothing moved: the refresh still answers, and says nothing.
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        yield* quiet;
+        rmSync(join(repo, "c.txt"));
+        yield* worktreesHandlers.refreshChangeStatus(input);
+        assert.deepEqual(yield* next, []);
+      }),
+  );
+});
+
+it("a refresh waiting on a read ends when the view's last reader goes", async () => {
+  await runHost(
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>();
+      let reads = 0;
+      // The first read answers, every later one waits on the gate.
+      const view = Views.view(
+        "test:refresh-gone",
+        () =>
+          Effect.suspend(() =>
+            (reads += 1) === 1 ? Effect.succeed(0) : Deferred.await(gate),
+          ),
+        () => false,
+      );
+      const scope = yield* Scope.make();
+      const values = yield* Stream.toQueue(view, {
+        capacity: "unbounded",
+      }).pipe(Scope.provide(scope));
+      yield* Queue.take(values);
+      const waiting = yield* Effect.forkChild(
+        Views.refresh("test:refresh-gone"),
+      );
+      yield* Effect.yieldNow;
+      yield* Scope.close(scope, Exit.void);
+      yield* Fiber.join(waiting);
+      // With no reader left there is nothing to wait on.
+      yield* Views.refresh("test:refresh-gone");
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer).pipe(
+          Layer.provideMerge(Layer.effectContext(Effect.promise(hostContext))),
+        ),
+      ),
+    ),
   );
 });
 

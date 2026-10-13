@@ -112,7 +112,7 @@ function buildQueryKeys(deviceId: string) {
       paths: readonly string[],
       untracked: boolean,
     ) => host("worktreeDiff", projectId, worktreeId, [...paths], untracked),
-    worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
+    worktreeChanges: (projectId: string, worktreeId: string) =>
       host("worktreeChanges", projectId, worktreeId),
     // One file's hunks and which are staged, under the diff prefix so
     // the working-tree invalidation drops it with the file's diff.

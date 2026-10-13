@@ -63,6 +63,10 @@ export function notifierFor(ctx: HandlerContext) {
   };
 }
 
+// The changes page's view of one worktree, which a refresh names.
+const changeStatusView = (input: { projectId: string; worktreeId: string }) =>
+  `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`;
+
 const gitMoved = (projectId: string) =>
   Views.either(
     Views.pushed(gitContract, "projectChanged", (moved) => {
@@ -183,7 +187,7 @@ export const worktreesViews: ViewHandlers<
   // edit no watch saw.
   watchChangeStatus: (input) =>
     Views.view(
-      `worktrees:watchChangeStatus:${input.projectId}:${input.worktreeId}`,
+      changeStatusView(input),
       () => atPath(input, (path) => withGit((git) => git.changes(path))),
       Views.either(
         gitMoved(input.projectId),
@@ -481,6 +485,7 @@ export const worktreesHandlers = {
 
   changeStatus: (input) =>
     atPath(input, (path) => withGit((git) => git.changes(path))),
+  refreshChangeStatus: (input) => Views.refresh(changeStatusView(input)),
 
   fileHunks: (input) =>
     atPath(input, (path) => withGit((git) => git.readHunks(path, input.path))),
@@ -771,6 +776,7 @@ export const worktreesHandlers = {
   | ScriptChanges
   | ChildProcessSpawner.ChildProcessSpawner
   | Engine.Services
+  | Views.ViewShares
 >;
 
 // How many of a branch's own commits the Git timeline is handed. A
