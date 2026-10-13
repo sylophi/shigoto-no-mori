@@ -23,6 +23,7 @@ import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { expandHome } from "@shared/paths";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
 
@@ -75,7 +76,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
     try: () => mkdir(dest),
     catch: (error) =>
       new Git.GitRefusedError({
-        reason: `Couldn't make ${dest}: ${errnoWords(error, error instanceof Error ? error.message : String(error))}.`,
+        reason: `Couldn't make ${dest}: ${errnoWords(error, errorMessageOf(error))}.`,
       }),
   });
   yield* Effect.gen(function* () {

@@ -214,9 +214,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           }),
         )
         .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("[hub] connection refresh failed", cause),
-          ),
+          Effect.ignoreCause({
+            log: "Warn",
+            message: "[hub] connection refresh failed",
+          }),
         ),
     );
   }

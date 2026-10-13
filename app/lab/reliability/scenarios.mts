@@ -9,7 +9,6 @@
 // host as connected and `list --remote` lists what the host says, both
 // exiting 0. Each scenario changes the host's worktrees while the
 // clients are cut off, so a view that did not catch up shows as stale.
-/* oxlint-disable no-await-in-loop -- the harness steps through time on purpose: each wait, poll and scenario follows the one before */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import {

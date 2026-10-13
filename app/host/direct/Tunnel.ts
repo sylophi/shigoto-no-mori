@@ -46,7 +46,7 @@ import {
   restartSchedule,
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
-import * as Processes from "@host/lib/util/processes";
+import * as Processes from "@shigomori/engine/processes";
 
 // ---- pure deciders, exported for the direct-plane check ----
 
@@ -714,18 +714,20 @@ const make = (options: Options) =>
     return Tunnel.of({
       reconcile,
       status: SubscriptionRef.get(status),
-      startingThenUp: (within) =>
-        SubscriptionRef.changes(status).pipe(
-          Stream.takeUntil((current) => current.state !== "starting"),
-          Stream.runLast,
-          Effect.map(
-            (last) => Option.isSome(last) && last.value.state === "up",
+      startingThenUp: Effect.fn("Tunnel.startingThenUp")(
+        (within: Duration.Duration) =>
+          SubscriptionRef.changes(status).pipe(
+            Stream.takeUntil((current) => current.state !== "starting"),
+            Stream.runLast,
+            Effect.map(
+              (last) => Option.isSome(last) && last.value.state === "up",
+            ),
+            Effect.timeoutOrElse({
+              duration: within,
+              orElse: () => Effect.succeed(false),
+            }),
           ),
-          Effect.timeoutOrElse({
-            duration: within,
-            orElse: () => Effect.succeed(false),
-          }),
-        ),
+      ),
       tunnelUrl: SubscriptionRef.get(status).pipe(
         Effect.map((current) =>
           current.state === "up" && current.hostname !== null

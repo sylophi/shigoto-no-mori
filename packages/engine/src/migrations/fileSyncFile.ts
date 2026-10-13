@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Paths from "../Paths.ts";
 import { isAbsent } from "../platformErrors.ts";
+import { dropsKeys, SKIPPED, skip, unknownKeys } from "./importJson.ts";
 
 const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
@@ -20,9 +21,7 @@ export const fileSyncDocument = (name: string) =>
     const path = yield* Path.Path;
     const { dataDir } = yield* Paths.Paths;
     const file = path.join(dataDir, "file-sync", name);
-    const skipped = Effect.logWarning(
-      "Skipped what the store could not import",
-    ).pipe(
+    const skipped = Effect.logWarning(SKIPPED).pipe(
       Effect.annotateLogs({ path: file, what: "the file" }),
       Effect.as(Option.none<{ readonly [key: string]: unknown }>()),
     );
@@ -38,4 +37,38 @@ export const fileSyncDocument = (name: string) =>
       Effect.map(Option.some),
       Effect.catchTags({ SchemaError: () => skipped }),
     );
+  });
+
+// What a mirror file's migration leaves out, counted as a doubt for the
+// import's verification: a key of the document but its version and
+// `container`, a `container` of the wrong shape, and an entry `schema`
+// refuses or decodes only by dropping a key.
+export const countDropped = (
+  name: string,
+  doc: Option.Option<{ readonly [key: string]: unknown }>,
+  container: string,
+  shape: "object" | "array",
+  entries: ReadonlyArray<unknown>,
+  schema: Schema.Decoder<unknown>,
+) =>
+  Effect.gen(function* () {
+    if (Option.isNone(doc)) return;
+    const value = doc.value[container];
+    const shaped =
+      value === undefined ||
+      (shape === "array"
+        ? Array.isArray(value)
+        : typeof value === "object" && value !== null && !Array.isArray(value));
+    const extra = unknownKeys(doc.value, { schemaVersion: 0, [container]: 0 });
+    if (
+      !shaped ||
+      extra.length > 0 ||
+      entries.some(
+        (entry) =>
+          Option.isNone(Schema.decodeUnknownOption(schema)(entry)) ||
+          dropsKeys(schema, entry),
+      )
+    ) {
+      yield* skip(`file-sync/${name}`, container);
+    }
   });

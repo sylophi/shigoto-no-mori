@@ -17,7 +17,7 @@ import type {
   TerrierReadiness,
   TerrierRepos,
 } from "@shigomori/contracts/schemas";
-import * as Processes from "./util/processes";
+import * as Processes from "@shigomori/engine/processes";
 
 // terrier refused the add, in its words.
 class TerrierAddError extends Schema.TaggedError<TerrierAddError>()(

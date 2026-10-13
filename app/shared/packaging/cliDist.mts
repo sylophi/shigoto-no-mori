@@ -14,10 +14,6 @@ import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
 // Repo-relative directory compiled binaries land in (gitignored).
 export const CLI_DIST_DIR = "dist-cli";
 
-// The update feed's repo, from its import-free home so the renderer
-// can read it too.
-export { UPDATE_FEED_NAME, UPDATE_FEED_OWNER } from "./updateFeed.mts";
-
 export function cliBinaryName(flavor: Flavor): string {
   return flavorNames(flavor).binaryName;
 }

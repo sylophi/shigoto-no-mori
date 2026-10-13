@@ -58,6 +58,7 @@ import { sessionContract } from "@shigomori/contracts/modules/session";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { boundedMessages } from "./boundedMessages";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -449,6 +450,7 @@ export const make = (options: {
   readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
     const { registrar, auth, sharing, services } = options;
     const group = (options.group ?? LinkGroup) as typeof LinkGroup;
     const local = options.local === true;
@@ -476,7 +478,7 @@ export const make = (options: {
     const isLockedOut = (ip: string): boolean => {
       const entry = failedAuth.get(ip);
       if (entry === undefined) return false;
-      if (entry.until <= Date.now()) {
+      if (entry.until <= clock.currentTimeMillisUnsafe()) {
         failedAuth.delete(ip);
         return false;
       }
@@ -484,7 +486,7 @@ export const make = (options: {
     };
 
     const recordAuthFailure = (ip: string): void => {
-      const now = Date.now();
+      const now = clock.currentTimeMillisUnsafe();
       for (const [key, entry] of failedAuth) {
         if (entry.until <= now) failedAuth.delete(key);
       }
@@ -1000,7 +1002,7 @@ export const make = (options: {
             const { pull } = yield* socket.reader;
             while (true) {
               const frames = yield* pull;
-              connection.lastInboundAt = Date.now();
+              connection.lastInboundAt = clock.currentTimeMillisUnsafe();
               for (const frame of frames) {
                 if (connection.dead) return;
                 const messages = decodeFrame(connection.parser, frame);
@@ -1037,7 +1039,7 @@ export const make = (options: {
           verifyClient: (info: { req: IncomingMessage }) => {
             const origin = info.req.headers.origin;
             const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
-            const at = Date.now();
+            const at = clock.currentTimeMillisUnsafe();
             if (
               !allowed &&
               at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS
@@ -1153,7 +1155,7 @@ export const make = (options: {
                 deviceId: null,
                 connectionId: null,
                 inFlight: 0,
-                lastInboundAt: Date.now(),
+                lastInboundAt: clock.currentTimeMillisUnsafe(),
                 dead: false,
                 kill(code, reason) {
                   if (connection.dead) return;
@@ -1202,7 +1204,7 @@ export const make = (options: {
         // dropped it.
         const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
         yield* Effect.sync(() => {
-          const now = Date.now();
+          const now = clock.currentTimeMillisUnsafe();
           for (const connection of connections.values()) {
             if (now - connection.lastInboundAt > livenessMs) {
               connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
@@ -1312,32 +1314,34 @@ export const make = (options: {
     yield* Effect.addFinalizer(() => lifecycle.withPermits(1)(stopNow));
 
     return DeviceLink.of({
-      reconcile: (wanted) =>
-        lifecycle.withPermits(1)(
-          Effect.gen(function* () {
-            const opts = yield* wanted;
-            if (opts !== null && sameListener(opts)) return;
-            yield* stopNow;
-            if (opts !== null) yield* startNow(opts);
-          }),
-        ),
+      reconcile: Effect.fn("DeviceLink.reconcile")(function* (
+        wanted: Effect.Effect<WsServerStartOpts | null>,
+      ) {
+        const opts = yield* wanted;
+        if (opts !== null && sameListener(opts)) return;
+        yield* stopNow;
+        if (opts !== null) yield* startNow(opts);
+      }, lifecycle.withPermits(1)),
       status: Effect.sync(() => ({ ...status })),
-      closePeersNotIn: (online) =>
-        Effect.sync(() => {
-          const live = new Set(online);
-          // A device the roster dropped spends nothing it was handed.
-          if (!("token" in auth.opens)) auth.opens.keepDevices(online);
-          // Linked or still to say hello: a socket whose handshake proved
-          // a device the roster dropped goes too.
-          for (const connection of current?.connections.values() ?? []) {
-            const deviceId = connection.deviceId ?? connection.opened?.deviceId;
-            if (deviceId === undefined || live.has(deviceId)) continue;
-            connection.kill(
-              CLOSE_GOING_AWAY,
-              "no longer in the account roster",
-            );
-          }
-        }),
+      closePeersNotIn: Effect.fn("DeviceLink.closePeersNotIn")(
+        (online: readonly string[]) =>
+          Effect.sync(() => {
+            const live = new Set(online);
+            // A device the roster dropped spends nothing it was handed.
+            if (!("token" in auth.opens)) auth.opens.keepDevices(online);
+            // Linked or still to say hello: a socket whose handshake proved
+            // a device the roster dropped goes too.
+            for (const connection of current?.connections.values() ?? []) {
+              const deviceId =
+                connection.deviceId ?? connection.opened?.deviceId;
+              if (deviceId === undefined || live.has(deviceId)) continue;
+              connection.kill(
+                CLOSE_GOING_AWAY,
+                "no longer in the account roster",
+              );
+            }
+          }),
+      ),
     });
   });
 

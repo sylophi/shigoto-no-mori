@@ -344,8 +344,8 @@ async function rawLink(
     ws.on("close", (code) => resolve(code)),
   );
   // Sealed like the dialer's, with a ticket minted for DIALER.
-  // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
-  const sealed = sealDialer(ws as unknown as Socket.WebSocketLike, {
+  // ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
+  const sealed = sealDialer(ws as Socket.WebSocketLike, {
     ticket: opts.ticket ?? mintTicket(listener.tickets, DIALER),
     localKey: testDeviceKey(DIALER).pair,
     remoteKey: testDeviceKey(LISTENER).pair.publicKey,
@@ -470,7 +470,6 @@ it("refusal: a ticket the host never minted is a blocked verdict, and five of th
   const track = trackTest;
   const { listener } = await listen(track);
   for (let attempt = 0; attempt < 5; attempt++) {
-    // oxlint-disable-next-line no-await-in-loop -- one refusal at a time
     const refused = await dialFails(listener, { ticket: "smpt_never_minted" });
     assert.equal(refused.blocked, true);
     assert.ok(refused.refusal instanceof LinkRefusedError);
@@ -485,7 +484,6 @@ it("lockout: a device on another version, refused past the threshold, leaves a c
   const { listener } = await listen(track);
   // A build before sealed links opens with a clear frame of its own.
   for (let attempt = 0; attempt < 6; attempt++) {
-    // oxlint-disable-next-line no-await-in-loop -- one refusal at a time
     const code = await new Promise<number>((resolve) => {
       const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
       ws.on("open", () => ws.send(Buffer.from("link:challenge, in the clear")));
@@ -496,7 +494,6 @@ it("lockout: a device on another version, refused past the threshold, leaves a c
   }
   // A sealed build on another protocol version.
   for (let attempt = 0; attempt < 6; attempt++) {
-    // oxlint-disable-next-line no-await-in-loop -- one refusal at a time
     const refused = await dialFails(listener, {
       protocolVersion: PROTOCOL_VERSION + 1,
     });
@@ -570,7 +567,6 @@ it("Origin gate: origin-less, loopback and the configured web origin link, while
     "http://127.0.0.1:5173",
     "https://web.example",
   ]) {
-    // oxlint-disable-next-line no-await-in-loop -- one dial at a time
     await dialListener(track, listener, {
       openSocket: withHeaders(origin === undefined ? {} : { origin }),
     });
@@ -580,7 +576,6 @@ it("Origin gate: origin-less, loopback and the configured web origin link, while
     rendererSchemeOrigin("dev"),
     "https://evil.example",
   ]) {
-    // oxlint-disable-next-line no-await-in-loop -- one dial at a time
     const refused = await dialFails(listener, {
       openSocket: withHeaders({ origin }),
     });
@@ -592,14 +587,11 @@ it("frame cap: a call's frame of 1 MiB crosses the real listener, sealed, whethe
   const track = trackTest;
   const { listener } = await listen(track);
   for (const deflate of [false, true]) {
-    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
     const raw = await rawLink(track, listener, { deflate });
-    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
     assert.ok(Exit.isSuccess(await raw.hello()));
     // A served call with nearly a mebibyte in its payload: the frame
     // sits just under the cap, where compression would have pushed the
     // sealed frame over it, and the answer arrives on the same link.
-    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
     const answer = await Effect.runPromiseExit(
       raw.call("projects:defaultBranch", {
         projectId: "p".repeat((1 << 20) - 128),
@@ -613,7 +605,6 @@ it("frame cap: a call's frame of 1 MiB crosses the real listener, sealed, whethe
       `the frame closed the socket (compression ${deflate ? "offered" : "off"})`,
     );
     const swept = raw.call("git:sweep", { renewal: true });
-    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
     assert.deepEqual(await Effect.runPromise(swept), { leaseMs: 5 });
   }
 });
@@ -656,18 +647,14 @@ it("hub outage: a hello or a dial the listener cannot check against the roster c
   // went, past the lockout's threshold.
   for (let n = 0; n < 6; n++) {
     listener.rosterUnavailable(false);
-    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
     const raw = await rawLink(track, listener);
     listener.rosterUnavailable(true);
-    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
     const refusal = failureOf(await raw.hello());
     assert.ok(refusal instanceof RemoteCallError, String(refusal));
-    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
     assert.equal(await raw.closed, CLOSE_TRY_AGAIN);
   }
   // Dials while it is gone: refused at the socket, not blocked.
   for (let n = 0; n < 6; n++) {
-    // oxlint-disable-next-line no-await-in-loop -- one dial at a time
     const refused = await dialFails(listener);
     assert.equal(refused.blocked, false);
     assert.equal(refused.code, CLOSE_TRY_AGAIN);
@@ -699,8 +686,8 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
     send(data);
   }) as typeof recorder.send;
   const recorded = sealDialer(
-    // oxlint-disable-next-line shigomori/no-double-cast -- ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
-    recorder as unknown as Socket.WebSocketLike,
+    // ws's socket is a WebSocketLike at runtime, as the dialer hands it over, but its event types differ
+    recorder as Socket.WebSocketLike,
     {
       ticket,
       localKey: testDeviceKey(DIALER).pair,
@@ -1100,7 +1087,6 @@ it("byte channels: a reader that holds its pieces holds back its own channel alo
   for (let turn = 0; got.join("") !== want; turn++) {
     assert.ok(turn < 500, "the held pieces to come through once taken");
     for (const consumed of held.splice(0)) consumed();
-    // oxlint-disable-next-line no-await-in-loop -- the reader takes in turn
     await delay(10);
   }
 });
@@ -1125,7 +1111,6 @@ it("byte channels: the reads idle channels hold take no place under the in-fligh
       },
       onWritable: () => {},
     });
-    // oxlint-disable-next-line no-await-in-loop -- one open at a time
     await invoke(connection, "forward:open", { port: 2, channelId: id });
   }
   assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {

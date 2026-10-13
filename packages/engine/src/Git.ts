@@ -857,7 +857,7 @@ const make = Effect.gen(function* () {
     mergePrimaryKeepingConflicts: remote.mergePrimaryKeepingConflicts,
     hasUncommittedOrUntracked: remote.hasUncommittedOrUntracked,
     readBranchHistory,
-    adminDirOf: (worktreePath) =>
+    adminDirOf: Effect.fn("Git.adminDirOf")((worktreePath: string) =>
       fs.readFileString(path.join(worktreePath, ".git")).pipe(
         Effect.map((text) => {
           const trimmed = text.trim();
@@ -869,10 +869,11 @@ const make = Effect.gen(function* () {
         }),
         Effect.orElseSucceed(() => Option.none<string>()),
       ),
+    ),
     isRepo: Effect.fn("Git.isRepo")(function* (repo) {
       return yield* succeeds(repo, ["rev-parse", "--git-dir"]);
     }),
-    locate: (dir) =>
+    locate: Effect.fn("Git.locate")((dir: string) =>
       run(dir, [
         "rev-parse",
         "--path-format=absolute",
@@ -894,6 +895,7 @@ const make = Effect.gen(function* () {
         }),
         Effect.orElseSucceed(() => Option.none()),
       ),
+    ),
     listWorktrees,
     addWorktree,
     checkoutWorktree,

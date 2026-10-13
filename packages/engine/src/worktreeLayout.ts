@@ -3,6 +3,7 @@
 // project's own external drive.
 import { createHash } from "node:crypto";
 import { basename, join, normalize } from "node:path";
+import { externalVolumeRoot } from "@shigomori/contracts/git/worktreeLayout";
 
 // A worktree's id: a hash of its path, an on-disk format fixed for good
 // (marks and the per-worktree files are keyed by it).
@@ -27,18 +28,6 @@ export type DataDirPlace = {
   readonly dataDir: string;
   readonly dataDirName: string;
 };
-
-// The external drive a path sits on: /Volumes/<name> for anything below
-// a mounted volume (every drive but the boot one, on macOS), none for
-// the mount point itself.
-export function externalVolumeRoot(path: string): string | undefined {
-  const mounts = "/Volumes/";
-  if (!path.startsWith(mounts)) return undefined;
-  const rest = path.slice(mounts.length);
-  const cut = rest.indexOf("/");
-  if (cut <= 0 || rest.slice(cut).replaceAll("/", "") === "") return undefined;
-  return mounts + rest.slice(0, cut);
-}
 
 // The managed root's place on the project's own external drive. Always
 // managed, so worktrees placed there stay ours whatever happens to the
@@ -150,10 +139,3 @@ export function worktreeBase(
       return managedRoot;
   }
 }
-
-// Whether `path` is `root` or anything below it, trailing slashes aside.
-export const isSameOrInside = (path: string, root: string) => {
-  const inner = trimTrailingSlashes(path);
-  const outer = trimTrailingSlashes(root);
-  return inner === outer || inner.startsWith(`${outer}/`);
-};

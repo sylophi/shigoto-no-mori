@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   mkdirSync,
+  existsSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -176,6 +177,43 @@ describe("the data dir", () => {
       ),
     );
     assert.equal(only(await run(), "config", "ok").detail, "valid, 1 key");
+  });
+
+  it("reports the v2 files an unverified import left, and its fix leaves them", async () => {
+    // A key the import skips: it can't verify the import, so the files
+    // hold what the store doesn't.
+    box.write("registry.json", { projects: [], unshelvedAt: { a: "x" } });
+    const found = only(await run({ fix: true }), "v2-files", "warn");
+    assert.match(found.detail, /may not hold/);
+    assert.equal(found.repairable, undefined);
+    assert.ok(existsSync(join(box.side("engine"), "registry.json")));
+  });
+
+  it("offers to delete a v2 file left as the import verified it, and leaves one written since to the person", async () => {
+    box.write("registry.json", { projects: [] });
+    box.write("config.json", { portPool: true });
+    assert.deepEqual(findingsFor(await run(), "v2-files"), []);
+    const side = box.side("engine");
+    // A deletion that failed leaves the registry as it was verified; a
+    // v2 build started since writes a config of its own.
+    writeFileSync(
+      join(side, "registry.json"),
+      JSON.stringify({ projects: [] }),
+    );
+    writeFileSync(
+      join(side, "config.json"),
+      JSON.stringify({ portPool: false }),
+    );
+    const found = findingsFor(await run(), "v2-files");
+    assert.equal(found.length, 2);
+    const fixed = await run({ fix: true });
+    assert.deepEqual(fixed.repaired, ["deleted 1 v2 file"]);
+    assert.ok(!existsSync(join(side, "registry.json")));
+    assert.ok(existsSync(join(side, "config.json")));
+    assert.match(
+      only(fixed, "v2-files", "warn").detail,
+      /config\.json left from v2, which the store may not hold/,
+    );
   });
 
   it("warns about a stored value of the wrong type", async () => {

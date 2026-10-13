@@ -20,6 +20,7 @@ import {
 } from "../schemas/index.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
+import { errorMessageOf } from "../errors.ts";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,
@@ -546,7 +547,7 @@ const MIRROR_STOP_UNCONFIRMED =
   "The copy is not confirmed in step with the other device";
 
 export function isMirrorStopUnconfirmed(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessageOf(error);
   return message.includes(MIRROR_STOP_UNCONFIRMED);
 }
 
@@ -560,7 +561,7 @@ export function mirrorStopRefusal(blocker: string): string {
 }
 
 export function mirrorStopRefusalReason(error: unknown): string | undefined {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessageOf(error);
   const start = message.indexOf(`${MIRROR_STOP_UNCONFIRMED}: `);
   const end = message.indexOf(STOP_REFUSAL_TAIL);
   if (start === -1 || end === -1) return undefined;
@@ -574,7 +575,7 @@ export function mirrorStopRefusalReason(error: unknown): string | undefined {
 export const MIRROR_COPY_STAYED = "The mirror stopped, but the copy";
 
 export function isMirrorCopyStayed(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessageOf(error);
   return message.includes(MIRROR_COPY_STAYED);
 }
 

@@ -22,15 +22,15 @@ import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Git from "./Git.ts";
+import {
+  externalVolumeRoot,
+  isSameOrInside,
+} from "@shigomori/contracts/git/worktreeLayout";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import { working, type Working } from "./processes.ts";
-import {
-  externalVolumeRoot,
-  isSameOrInside,
-  worktreeIdFromPath,
-} from "./worktreeLayout.ts";
+import { worktreeIdFromPath } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 
 // A worktree still in its v2 folder, and why when a move failed.

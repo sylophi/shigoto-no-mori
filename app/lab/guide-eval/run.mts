@@ -6,7 +6,6 @@
 // the question. Before them, the agent started on the app's own opening
 // should say what it can do and ask, touching nothing in the window.
 // README.md has what it reports.
-/* oxlint-disable no-await-in-loop -- one tour at a time, each on the window the last one left */
 import { execFileSync, spawn } from "node:child_process";
 import {
   closeSync,

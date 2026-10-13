@@ -253,7 +253,6 @@ describe("a command line", () => {
       "SHIGOMORI_UPDATE_FEED_URL",
       "SHIGOMORI_UPDATE_RELEASES_URL",
     ]) {
-      // oxlint-disable-next-line no-await-in-loop -- one sandbox, one variable at a time
       const ended = await start(box.home, ["update"], {
         [name]: "http://127.0.0.1:1",
       }).ended;
@@ -1035,7 +1034,6 @@ describe("cd", () => {
     ]) {
       const cdFile = join(box.home, "cd");
       writeFileSync(cdFile, "");
-      // oxlint-disable-next-line no-await-in-loop -- one directive file, one run at a time
       const ended = await start(repo, args, {
         SHIGOMORI_CD_FILE: cdFile,
       }).ended;
@@ -1614,7 +1612,6 @@ describe("the Go sm's command line", () => {
       ["wt", "fox", "extra"],
     ]) {
       writeFileSync(cdFile, "");
-      // oxlint-disable-next-line no-await-in-loop -- one directive file, one run at a time
       const ended = await start(alpha, args, {
         SHIGOMORI_CD_FILE: cdFile,
       }).ended;
@@ -1629,7 +1626,6 @@ describe("the Go sm's command line", () => {
       ["projects", "add", gamma, "extra"],
       ["projects", "remove", "beta", "extra", "--yes"],
     ]) {
-      // oxlint-disable-next-line no-await-in-loop -- each changes what the next reads
       const run = await runAt(alpha, ...args);
       assert.equal(run.code, 0, `${args.join(" ")}: ${run.stderr}`);
     }
@@ -1662,9 +1658,7 @@ describe("the Go sm's command line", () => {
     const { fox } = await fixture();
     for (const verb of ["mirrors", "bundle"]) {
       const session = `session-${verb}`;
-      // oxlint-disable-next-line no-await-in-loop -- one store, one run at a time
       await start(fox, [verb], { CLAUDE_CODE_SESSION_ID: session }).ended;
-      // oxlint-disable-next-line no-await-in-loop -- one store, one run at a time
       const unbound = await start(fox, [
         "--json",
         "agents",

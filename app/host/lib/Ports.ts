@@ -32,7 +32,7 @@ import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreePath } from "./projects";
 import { answersFor } from "./util/cacheTtl";
-import * as Processes from "./util/processes";
+import * as Processes from "@shigomori/engine/processes";
 
 interface Worktree {
   readonly projectId: string;

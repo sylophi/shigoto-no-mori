@@ -38,11 +38,10 @@ function joinPath(base: string, ...segments: string[]): string {
 }
 
 // The external drive a path sits on: /Volumes/<name> for anything below
-// a mounted volume, null otherwise. Mirrors externalVolumeRoot in
-// the engine's worktreeLayout.ts.
-function externalVolumeRoot(path: string): string | null {
-  const match = /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path);
-  return match?.[1] ?? null;
+// a mounted volume (every drive but the boot one, on macOS), none for
+// the mount point itself.
+export function externalVolumeRoot(path: string): string | undefined {
+  return /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path)?.[1];
 }
 
 // What the layouts need to know of the device: where its data dir is,
@@ -68,7 +67,7 @@ export function projectDriveBaseFor(
   }: Pick<DeviceLayoutInputs, "dataDir" | "canonicalDataDirName">,
 ): string | null {
   const volume = externalVolumeRoot(projectPath);
-  if (volume === null || dataDir.startsWith(`${volume}/`)) return null;
+  if (volume === undefined || dataDir.startsWith(`${volume}/`)) return null;
   return joinPath(volume, canonicalDataDirName, "wt", lastSegment(projectPath));
 }
 

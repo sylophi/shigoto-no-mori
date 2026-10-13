@@ -4,9 +4,11 @@ import * as Arbitrary from "effect/Arbitrary";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import {
-  cleanPath,
   externalVolumeRoot,
   isSameOrInside,
+} from "@shigomori/contracts/git/worktreeLayout";
+import {
+  cleanPath,
   isManagedPath,
   managedBases,
   projectDriveBase,

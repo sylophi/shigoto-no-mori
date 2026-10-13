@@ -269,7 +269,6 @@ export class TestSocket {
     const want = JSON.stringify(expected.toSorted());
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- envelopes arrive one at a time, waiting is the point
       const envelope = await this.next(Math.max(1, deadline - Date.now()));
       if (
         envelope.t === "presence" &&
@@ -286,7 +285,6 @@ export class TestSocket {
   async untilRelay(frame: string, timeoutMs = 2000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- envelopes arrive one at a time, waiting is the point
       const envelope = await this.next(Math.max(1, deadline - Date.now()));
       if (envelope.t === "relay" && envelope.frame === frame) return;
     }

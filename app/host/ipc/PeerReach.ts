@@ -84,8 +84,8 @@ export const make = (reach: {
             }),
           );
       }
-      // oxlint-disable-next-line shigomori/no-double-cast -- built from the contract's own calls, each answering as its call
-      return calls as unknown as PeerCalls<M>;
+      // built from the contract's own calls, each answering as its call
+      return calls as PeerCalls<M>;
     },
     onPush: (contract, key, deviceId, handler) =>
       reach

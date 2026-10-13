@@ -433,7 +433,7 @@ it("in the page, a dev build checks each answer against its output schema, and a
   const malformed = { port: "not a port", token: 1, deviceId: null };
   const answer = (validateOutputs: boolean) => {
     const tab = createLocalRegistrar({ validateOutputs });
-    // oxlint-disable-next-line shigomori/no-double-cast -- the malformed answer is the point
+    // The malformed answer is the point.
     tab.served.serveOne(
       windowContract,
       "hostAddress",

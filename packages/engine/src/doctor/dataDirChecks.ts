@@ -1,6 +1,8 @@
 // The doctor's data dir checks: where it is, its settings and registry, the store, the updater's leftovers.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
@@ -8,6 +10,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as Config from "../Config.ts";
 import { storedProblem } from "../Config.ts";
@@ -25,9 +28,10 @@ import { flavorNames } from "../flavor.ts";
 import * as Darwin from "../Darwin.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
+import { hashesOf, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
-import { collapseHome } from "../shellHook.ts";
-import { acquireStagingLock, stagingLockPath } from "../stagingLock.ts";
+import { acquireStagingLock } from "../stagingLock.ts";
+import { updaterFiles } from "../Updater.ts";
 import type { ListedProject } from "../Registry.ts";
 import * as Terrier from "../Terrier.ts";
 import * as WorktreeData from "../WorktreeData.ts";
@@ -179,7 +183,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         }
         return Option.some(
           dataDirLine.warn(
-            `${collapseHome(home, dataDir)} (${sourceText}); ${collapseHome(home, other)} also holds state and is ignored`,
+            `${tildify(dataDir, home)} (${sourceText}); ${tildify(other, home)} also holds state and is ignored`,
             fix,
           ),
         );
@@ -188,7 +192,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     // The data dir's line, and whether there is a data dir the other
     // checks can read.
     const checkDataDir = Effect.gen(function* () {
-      const shown = `${collapseHome(home, dataDir)} (${sourceText})`;
+      const shown = `${tildify(dataDir, home)} (${sourceText})`;
       // A pointer that fails the guard is skipped without a word, which
       // reads as every project vanishing.
       if (paths.dataDirSource === "default" && Option.isSome(paths.pointer)) {
@@ -197,7 +201,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           return {
             entry: dataDirLine.warn(
               `the pointer file names ${target}, which was ignored because ${problem}, so sm is using ${shown}`,
-              `Fix ${collapseHome(home, file)} to name a data dir, or delete it.`,
+              `Fix ${tildify(file, home)} to name a data dir, or delete it.`,
             ),
             usable: yield* isDirectory(dataDir),
           };
@@ -209,18 +213,18 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         if (paths.dataDirSource !== "pointer") {
           return {
             entry: dataDirLine.warn(
-              `${collapseHome(home, dataDir)} doesn't exist yet (${sourceText}), so nothing is registered`,
+              `${tildify(dataDir, home)} doesn't exist yet (${sourceText}), so nothing is registered`,
               `Add a project (${addProject}) and it will be created.`,
             ),
             usable: false,
           };
         }
-        const file = collapseHome(
-          home,
+        const file = tildify(
           Option.match(paths.pointer, {
             onNone: () => "",
             onSome: (pointer) => pointer.file,
           }),
+          home,
         );
         const volume = yield* unmountedVolume(dataDir);
         return {
@@ -231,7 +235,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
                   `Connect the drive. To start over on this Mac instead, delete ${file}.`,
                 )
               : dataDirLine.warn(
-                  `${collapseHome(home, dataDir)} doesn't exist yet (${sourceText}), so nothing is registered`,
+                  `${tildify(dataDir, home)} doesn't exist yet (${sourceText}), so nothing is registered`,
                   `If the data was moved or deleted, fix or delete ${file}. Otherwise add a project (${addProject}) and it will be created.`,
                 ),
           usable: false,
@@ -240,8 +244,8 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (Result.isFailure(info)) {
         return {
           entry: dataDirLine.fail(
-            `${collapseHome(home, dataDir)} can't be read: ${info.failure.message}`,
-            `Check the permissions on ${collapseHome(home, dataDir)}.`,
+            `${tildify(dataDir, home)} can't be read: ${info.failure.message}`,
+            `Check the permissions on ${tildify(dataDir, home)}.`,
           ),
           usable: false,
         };
@@ -249,7 +253,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (info.success.type !== "Directory") {
         return {
           entry: dataDirLine.fail(
-            `${collapseHome(home, dataDir)} is a file, not a directory (${sourceText})`,
+            `${tildify(dataDir, home)} is a file, not a directory (${sourceText})`,
             "Move it aside, or point SHIGOMORI_DATA_DIR somewhere else.",
           ),
           usable: false,
@@ -262,7 +266,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (!writable) {
         return {
           entry: dataDirLine.fail(
-            `${collapseHome(home, dataDir)} isn't writable, so no command that changes state can work`,
+            `${tildify(dataDir, home)} isn't writable, so no command that changes state can work`,
             "Fix its ownership or permissions.",
           ),
           usable: true,
@@ -312,7 +316,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (storedProblem({ kind: "device" }, device) !== undefined) {
         return line.warn(
           "parses, but a field has the wrong type and is being dropped",
-          `Check ${collapseHome(home, configFile)} against the app's Settings.`,
+          `Check ${tildify(configFile, home)} against the app's Settings.`,
         );
       }
       return line.ok(`valid, ${keys} key${plural(keys)}`);
@@ -334,7 +338,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (malformed > 0) {
         return registryLine.warn(
           `${malformed} registry ${pluralize(malformed, "entry is", "entries are")} missing an id or path`,
-          `Remove the incomplete entries from ${collapseHome(home, file)}.`,
+          `Remove the incomplete entries from ${tildify(file, home)}.`,
         );
       }
       return registryLine.ok(
@@ -394,11 +398,11 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const extra = locks.length - 1;
       return repairable(
         line.warn(
-          `${collapseHome(home, first)} has been held for longer than a write can take${extra > 0 ? ` (and ${extra} more)` : ""}`,
+          `${tildify(first, home)} has been held for longer than a write can take${extra > 0 ? ` (and ${extra} more)` : ""}`,
           "Delete it. The process that took it is gone.",
         ),
         {
-          prompt: `Delete ${label} (${locks.map((lock) => collapseHome(home, lock)).join(", ")})?`,
+          prompt: `Delete ${label} (${locks.map((lock) => tildify(lock, home)).join(", ")})?`,
           label: `deleted ${label}`,
           destructive: true,
           apply: Effect.forEach(locks, removeIfPresent, { discard: true }),
@@ -406,9 +410,74 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       );
     });
 
-    const updatesDir = path.join(dataDir, "updates");
-    const stagingLock = stagingLockPath(path, dataDir);
-    const stagedDir = path.join(updatesDir, "staged");
+    // The files a 2.x data dir kept its state in, which the store holds
+    // since its import: what the migration left, when it couldn't verify
+    // the import, or what a v2 build started since wrote.
+    const v2Context = Context.make(Paths.Paths, paths).pipe(
+      Context.merge(platform),
+    );
+    const checkV2Files = Effect.gen(function* () {
+      const files = yield* v2Files.pipe(Effect.provideContext(v2Context));
+      if (files.length === 0) return [];
+      const sql = yield* SqlClient.SqlClient;
+      const [row] = yield* sql<{ files: string }>`
+        SELECT files FROM v2_import`.pipe(
+        Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
+      );
+      const verified: Record<string, unknown> =
+        row === undefined
+          ? {}
+          : (JSON.parse(row.files) as Record<string, unknown>);
+      const now = yield* hashesOf(files).pipe(Effect.provideContext(v2Context));
+      // Only a file as the import verified it is the store's to replace.
+      const held = files.filter(
+        (file) => now[file] !== undefined && now[file] === verified[file],
+      );
+      const kept = files.filter((file) => !held.includes(file));
+      const shownOf = (list: ReadonlyArray<string>) =>
+        `${tildify(list[0] ?? "", home)}${list.length > 1 ? ` and ${list.length - 1} more` : ""}`;
+      const line = check("Data dir", "v2-files", "v2 files");
+      const entries: Entry[] = [];
+      if (kept.length > 0) {
+        entries.push(
+          line.warn(
+            `${shownOf(kept)} left from v2, which the store may not hold: the import couldn't verify them, or v2 wrote them since`,
+            "Check what they hold, then delete them by hand.",
+          ),
+        );
+      }
+      if (held.length > 0) {
+        const label = `${held.length} v2 file${plural(held.length)}`;
+        entries.push(
+          repairable(
+            line.warn(
+              `${shownOf(held)} left from v2, which the store holds now`,
+              "Delete them. Nothing reads them since the import.",
+            ),
+            {
+              prompt: `Delete ${label} (${held.map((file) => tildify(file, home)).join(", ")})?`,
+              label: `deleted ${label}`,
+              destructive: true,
+              // Read again as it runs: a file v2 rewrote since the check
+              // stays.
+              apply: Effect.gen(function* () {
+                const current = yield* hashesOf(held);
+                yield* removeV2Files(
+                  held.filter(
+                    (file) =>
+                      current[file] !== undefined &&
+                      current[file] === verified[file],
+                  ),
+                );
+              }).pipe(Effect.provideContext(v2Context)),
+            },
+          ),
+        );
+      }
+      return entries;
+    });
+
+    const updater = updaterFiles(path, dataDir);
 
     // The stager holds its pidfile for a whole download, so a crashed one
     // is told by its pid being dead, not by the file's age.
@@ -421,15 +490,15 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         repairable(
           line.warn(
             `left behind by an update that stopped${pid !== 0 ? ` (pid ${pid} is gone)` : ""}; the next update takes it over`,
-            `Delete ${collapseHome(home, stagingLock)}.`,
+            `Delete ${tildify(updater.stagingLock, home)}.`,
           ),
           {
-            prompt: `Delete the stale update staging lock at ${collapseHome(home, stagingLock)}?`,
+            prompt: `Delete the stale update staging lock at ${tildify(updater.stagingLock, home)}?`,
             label: "deleted the stale update staging lock",
             destructive: true,
             // Through the lock, which breaks only a dead holder's: an
             // update that took it over meanwhile keeps it.
-            apply: Effect.scoped(acquireStagingLock(stagingLock)).pipe(
+            apply: Effect.scoped(acquireStagingLock(updater.stagingLock)).pipe(
               Effect.provideService(
                 ChildProcessSpawner.ChildProcessSpawner,
                 spawner,
@@ -448,10 +517,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const updateLeftovers = (version: string) =>
       Effect.gen(function* () {
         const found: string[] = [];
-        for (const scratch of [
-          path.join(updatesDir, "download.zip"),
-          path.join(updatesDir, "extract"),
-        ]) {
+        for (const scratch of [updater.download, updater.extract]) {
           if (
             yield* fs.exists(scratch).pipe(Effect.orElseSucceed(() => false))
           ) {
@@ -459,7 +525,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           }
         }
         const staged = Option.flatMap(
-          yield* readText(path.join(stagedDir, "manifest.json")),
+          yield* readText(updater.manifest),
           Schema.decodeOption(StagedManifest),
         );
         const stagedVersion = Option.isSome(staged)
@@ -471,7 +537,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           current !== undefined &&
           compareSemver(stagedVersion, current) <= 0
         ) {
-          found.push(stagedDir);
+          found.push(updater.staged);
         }
         return found;
       });
@@ -508,13 +574,13 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               "Delete them, or let the next update sweep them.",
             ),
             {
-              prompt: `Delete ${shown} of leftover update files in ${collapseHome(home, updatesDir)}?`,
+              prompt: `Delete ${shown} of leftover update files in ${tildify(updater.updates, home)}?`,
               label: `deleted ${shown} of leftover update files`,
               destructive: true,
               // Under the stager's own lock, and listed again once it is
               // held: a run that staged something newer since keeps it.
               apply: Effect.gen(function* () {
-                yield* acquireStagingLock(stagingLock).pipe(
+                yield* acquireStagingLock(updater.stagingLock).pipe(
                   Effect.provideService(
                     ChildProcessSpawner.ChildProcessSpawner,
                     spawner,
@@ -690,7 +756,8 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       registeredLine,
       checkRegistry,
       checkStaleLocks,
-      stagingLock,
+      checkV2Files,
+      stagingLock: updater.stagingLock,
       checkStagingLock,
       checkUpdateLeftovers,
       checkPortAllocations,

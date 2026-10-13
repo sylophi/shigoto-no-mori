@@ -1,4 +1,5 @@
 // The doctor's environment checks: git, gh, the shell hook and its wrapper, the programs `sm` runs.
+import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -11,7 +12,6 @@ import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
 import {
   CD_FILE_ENV,
-  collapseHome,
   hookPlace,
   inspectHook,
   SHELL_KINDS,
@@ -161,14 +161,14 @@ export const makeEnvironmentChecks = ({
           const found = yield* findInstalledBundle;
           if (Option.isSome(found)) {
             return line.warn(
-              `this binary isn't the one inside ${collapseHome(home, found.value)}, so \`${binaryName} update\` can't reach it`,
-              `Re-link the CLI from the app's Settings, or run ${collapseHome(home, path.join(found.value, "Contents", "Resources", binaryName))}.`,
+              `this binary isn't the one inside ${tildify(found.value, home)}, so \`${binaryName} update\` can't reach it`,
+              `Re-link the CLI from the app's Settings, or run ${tildify(path.join(found.value, "Contents", "Resources", binaryName), home)}.`,
             );
           }
           const aside = yield* findAsideBundle;
           if (Option.isSome(aside)) {
             return line.fail(
-              `the app is missing, but ${collapseHome(home, aside.value)} is the copy an interrupted update set aside`,
+              `the app is missing, but ${tildify(aside.value, home)} is the copy an interrupted update set aside`,
               `Rename it back to ${names.appName}.app.`,
             );
           }
@@ -180,7 +180,7 @@ export const makeEnvironmentChecks = ({
         const appVersion = yield* bundleVersion(bundle.value);
         if (appVersion === "") {
           return line.warn(
-            `${collapseHome(home, bundle.value)} has no readable version in Info.plist`,
+            `${tildify(bundle.value, home)} has no readable version in Info.plist`,
             "Reinstall the app.",
           );
         }
@@ -190,7 +190,7 @@ export const makeEnvironmentChecks = ({
             `Run \`${binaryName} update\`, or re-link the CLI from the app's Settings.`,
           );
         }
-        return line.ok(`${appVersion} at ${collapseHome(home, bundle.value)}`);
+        return line.ok(`${appVersion} at ${tildify(bundle.value, home)}`);
       });
 
     // The binary in PATH order, deduped by the file each entry resolves
@@ -215,7 +215,7 @@ export const makeEnvironmentChecks = ({
         );
         if (seen.has(resolved)) continue;
         seen.add(resolved);
-        found.push(collapseHome(home, candidate));
+        found.push(tildify(candidate, home));
       }
       return found;
     });

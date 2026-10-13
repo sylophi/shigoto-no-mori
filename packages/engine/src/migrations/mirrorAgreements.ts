@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { fileSyncDocument } from "./fileSyncFile.ts";
+import { countDropped, fileSyncDocument } from "./fileSyncFile.ts";
 
 // The git state each mirror session's two sides last agreed on
 // (MirrorAgreements.ts), by session id, as the JSON of a GitStateCore.
@@ -22,13 +22,22 @@ export const mirrorAgreements = Effect.gen(function* () {
     onNone: () => undefined,
     onSome: (fields) => fields["agreed"],
   });
-  const rows = Object.entries(
+  const entries = Object.entries(
     typeof agreed === "object" && agreed !== null ? agreed : {},
-  ).flatMap(([session, state]) =>
+  );
+  const rows = entries.flatMap(([session, state]) =>
     Option.match(decodeAgreed(state), {
       onNone: () => [],
       onSome: (core) => [{ session, state: JSON.stringify(core) }],
     }),
+  );
+  yield* countDropped(
+    "git-follow.json",
+    doc,
+    "agreed",
+    "object",
+    entries.map(([, state]) => state),
+    GitStateCoreSchema,
   );
   if (rows.length > 0) {
     yield* sql`INSERT INTO mirror_agreements ${sql.insert(rows)}`;

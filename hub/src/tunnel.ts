@@ -199,7 +199,7 @@ async function writeIngress(
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     // oxlint-disable-next-line no-await-in-loop -- a write is read back before the next
     const written = await api.call<CfTunnelConfig | null>("PUT", path, body);
-    // oxlint-disable-next-line no-await-in-loop -- see above
+    // oxlint-disable-next-line no-await-in-loop -- the read back of the write before it
     const held = await api.call<CfTunnelConfig | null>("GET", path);
     const holds = ingressServiceOf(held, hostname);
     if (holds === service) return;

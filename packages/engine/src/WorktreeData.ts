@@ -119,11 +119,12 @@ const make = Effect.gen(function* () {
       Effect.map(([row]) => descriptionOf(row)),
     );
 
-  const description = (projectId: string, worktreeId: string) =>
-    read(projectId, worktreeId).pipe(
-      Effect.orDie,
-      Effect.withSpan("WorktreeData.description"),
-    );
+  const description = Effect.fn("WorktreeData.description")(function* (
+    projectId: string,
+    worktreeId: string,
+  ) {
+    return yield* read(projectId, worktreeId);
+  }, Effect.orDie);
 
   const describe = Effect.fn("WorktreeData.describe")(function* (
     projectId: string,

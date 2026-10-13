@@ -60,6 +60,7 @@ export {
   StagingFailed,
   SwapFailed,
   UpdatesUnavailable,
+  updaterFiles,
 } from "./updater/documents.ts";
 export type {
   Progress,
