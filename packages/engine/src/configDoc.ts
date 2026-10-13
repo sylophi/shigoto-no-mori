@@ -8,7 +8,7 @@ export type ConfigDoc = { [key: string]: unknown };
 export type ConfigKey = {
   readonly name: string;
   readonly kind: "boolean" | "string" | "enum" | "int" | "list";
-  // An enum's members.
+  // An enum's members, or the values `set` takes for a string.
   readonly choices: ReadonlyArray<string>;
   // The effective value while the key is absent, undefined when the key
   // is genuinely unset.

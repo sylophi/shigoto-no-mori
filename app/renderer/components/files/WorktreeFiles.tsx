@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
+import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -69,6 +70,7 @@ function WorktreeFilesPage({
     setHideIgnored(next);
     writeStored(HIDE_IGNORED_STORAGE_KEY, String(next));
   };
+  const openInEditor = useOpenInEditor(worktree);
   const phone = usePhoneLayout();
   const backLabel = useWorktreeName(worktree);
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
@@ -98,6 +100,7 @@ function WorktreeFilesPage({
     hideIgnored,
     onToggleFolder: toggleFolder,
     onSelectFile: selectFile,
+    onOpenFile: openInEditor,
   };
   const hideIgnoredToggle = (
     <HideIgnoredToggleView hidden={hideIgnored} onToggle={toggleHideIgnored} />

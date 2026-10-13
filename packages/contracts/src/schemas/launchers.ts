@@ -9,6 +9,8 @@ export const DetectedLauncherSchema = Schema.Struct({
   id: Schema.String,
   label: Schema.String,
   available: Schema.Boolean,
+  // A tool the editor setting can name (catalog entries only).
+  editor: Schema.optional(Schema.Boolean),
 });
 export type DetectedLauncher = typeof DetectedLauncherSchema.Type;
 
@@ -63,6 +65,12 @@ export type LauncherEntry = typeof LauncherEntrySchema.Type;
 export const LaunchPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   launcherId: Schema.NonEmptyString,
+});
+
+// A file to open in the editor, relative to the worktree's root.
+export const OpenFilePayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  path: Schema.NonEmptyString,
 });
 
 const LaunchToolMenuEntrySchema = Schema.Struct({

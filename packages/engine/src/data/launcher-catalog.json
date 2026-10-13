@@ -3,43 +3,50 @@
     "id": "cursor",
     "label": "Cursor",
     "bundleNames": ["Cursor.app"],
-    "cli": "cursor"
+    "cli": "cursor",
+    "editor": true
   },
   {
     "id": "windsurf",
     "label": "Windsurf",
     "bundleNames": ["Windsurf.app"],
-    "cli": "windsurf"
+    "cli": "windsurf",
+    "editor": true
   },
   {
     "id": "vscode",
     "label": "VS Code",
     "bundleNames": ["Visual Studio Code.app"],
-    "cli": "code"
+    "cli": "code",
+    "editor": true
   },
   {
     "id": "vscode-insiders",
     "label": "VS Code Insiders",
     "bundleNames": ["Visual Studio Code - Insiders.app"],
-    "cli": "code-insiders"
+    "cli": "code-insiders",
+    "editor": true
   },
   {
     "id": "vscodium",
     "label": "VSCodium",
     "bundleNames": ["VSCodium.app"],
-    "cli": "codium"
+    "cli": "codium",
+    "editor": true
   },
   {
     "id": "zed",
     "label": "Zed",
     "bundleNames": ["Zed.app", "Zed Preview.app"],
-    "cli": "zed"
+    "cli": "zed",
+    "editor": true
   },
   {
     "id": "antigravity",
     "label": "Antigravity",
     "bundleNames": ["Antigravity.app"],
-    "cli": "agy"
+    "cli": "agy",
+    "editor": true
   },
   {
     "id": "codex",
@@ -57,80 +64,99 @@
     "id": "sublime",
     "label": "Sublime Text",
     "bundleNames": ["Sublime Text.app"],
-    "cli": "subl"
+    "cli": "subl",
+    "editor": true
   },
   {
     "id": "intellij",
     "label": "IntelliJ IDEA",
     "bundleNames": ["IntelliJ IDEA.app", "IntelliJ IDEA CE.app"],
-    "cli": "idea"
+    "cli": "idea",
+    "editor": true
   },
-  { "id": "aqua", "label": "Aqua", "bundleNames": ["Aqua.app"], "cli": "aqua" },
+  {
+    "id": "aqua",
+    "label": "Aqua",
+    "bundleNames": ["Aqua.app"],
+    "cli": "aqua",
+    "editor": true
+  },
   {
     "id": "clion",
     "label": "CLion",
     "bundleNames": ["CLion.app"],
-    "cli": "clion"
+    "cli": "clion",
+    "editor": true
   },
   {
     "id": "datagrip",
     "label": "DataGrip",
     "bundleNames": ["DataGrip.app"],
-    "cli": "datagrip"
+    "cli": "datagrip",
+    "editor": true
   },
   {
     "id": "dataspell",
     "label": "DataSpell",
     "bundleNames": ["DataSpell.app"],
-    "cli": "dataspell"
+    "cli": "dataspell",
+    "editor": true
   },
   {
     "id": "goland",
     "label": "GoLand",
     "bundleNames": ["GoLand.app"],
-    "cli": "goland"
+    "cli": "goland",
+    "editor": true
   },
   {
     "id": "phpstorm",
     "label": "PhpStorm",
     "bundleNames": ["PhpStorm.app"],
-    "cli": "phpstorm"
+    "cli": "phpstorm",
+    "editor": true
   },
   {
     "id": "pycharm",
     "label": "PyCharm",
     "bundleNames": ["PyCharm.app", "PyCharm CE.app"],
-    "cli": "pycharm"
+    "cli": "pycharm",
+    "editor": true
   },
   {
     "id": "rider",
     "label": "Rider",
     "bundleNames": ["Rider.app"],
-    "cli": "rider"
+    "cli": "rider",
+    "editor": true
   },
   {
     "id": "rubymine",
     "label": "RubyMine",
     "bundleNames": ["RubyMine.app"],
-    "cli": "rubymine"
+    "cli": "rubymine",
+    "editor": true
   },
   {
     "id": "rustrover",
     "label": "RustRover",
     "bundleNames": ["RustRover.app"],
-    "cli": "rustrover"
+    "cli": "rustrover",
+    "editor": true
   },
   {
     "id": "webstorm",
     "label": "WebStorm",
     "bundleNames": ["WebStorm.app"],
-    "cli": "webstorm"
+    "cli": "webstorm",
+    "editor": true
   },
   {
     "id": "xcode",
     "label": "Xcode",
     "bundleNames": ["Xcode.app"],
-    "cli": "xed"
+    "cli": "xed",
+    "editor": true
   },
   { "id": "cmux", "label": "cmux", "bundleNames": ["cmux.app"], "cli": "cmux" },
   { "id": "ghostty", "label": "Ghostty", "bundleNames": ["Ghostty.app"] },
@@ -180,9 +206,9 @@
   { "id": "copilot", "label": "Copilot CLI", "inTerminal": "copilot" },
   { "id": "aider", "label": "Aider", "inTerminal": "aider" },
   { "id": "pi", "label": "Pi", "inTerminal": "pi" },
-  { "id": "neovim", "label": "Neovim", "inTerminal": "nvim ." },
-  { "id": "vim", "label": "Vim", "inTerminal": "vim ." },
-  { "id": "helix", "label": "Helix", "inTerminal": "hx ." },
+  { "id": "neovim", "label": "Neovim", "inTerminal": "nvim .", "editor": true },
+  { "id": "vim", "label": "Vim", "inTerminal": "vim .", "editor": true },
+  { "id": "helix", "label": "Helix", "inTerminal": "hx .", "editor": true },
   { "id": "lazygit", "label": "lazygit", "inTerminal": "lazygit" },
   { "id": "gitui", "label": "GitUI", "inTerminal": "gitui" },
   { "id": "tig", "label": "tig", "inTerminal": "tig" },

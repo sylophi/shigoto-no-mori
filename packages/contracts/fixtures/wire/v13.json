@@ -797,6 +797,13 @@
       "launcherId": "-1"
     }
   },
+  "launchers:openFile": {
+    "payload": {
+      "projectId": "zH",
+      "worktreeId": " ",
+      "path": "x"
+    }
+  },
   "link:end": {
     "payload": {
       "channelId": "eb5947651a11954b34b554dfaec19d20"

@@ -11,6 +11,7 @@ import {
 import { flushSync } from "react-dom";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
+import { useOpenInEditor } from "@/hooks/launchers/useLaunchers";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -134,6 +135,7 @@ export function DiffPage({
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
+  const openInEditor = useOpenInEditor(worktree);
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
   const [wrapLines, setWrapLines] = useState(
     () => readStored(WRAP_STORAGE_KEY) === "true",
@@ -247,6 +249,7 @@ export function DiffPage({
     onToggleAll: singleFile ? undefined : toggleAll,
     changes,
     footer,
+    onOpen: openInEditor,
   };
   // The list, framed by the page when it frames it.
   const sidebarWith = (index: ReactNode) =>

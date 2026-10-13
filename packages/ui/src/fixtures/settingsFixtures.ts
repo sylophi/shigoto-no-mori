@@ -10,7 +10,13 @@ import type {
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
 
 export const FAKE_DETECTED = [
-  { kind: "detected", id: "app:vscode", label: "VS Code", available: true },
+  {
+    kind: "detected",
+    id: "app:vscode",
+    label: "VS Code",
+    available: true,
+    editor: true,
+  },
   { kind: "detected", id: "app:terminal", label: "Terminal", available: true },
   { kind: "detected", id: "app:ghostty", label: "Ghostty", available: true },
   { kind: "detected", id: "app:finder", label: "Finder", available: true },
@@ -21,7 +27,13 @@ export const FAKE_DETECTED = [
     label: "Claude Code",
     available: true,
   },
-  { kind: "detected", id: "app:neovim", label: "Neovim", available: true },
+  {
+    kind: "detected",
+    id: "app:neovim",
+    label: "Neovim",
+    available: true,
+    editor: true,
+  },
   { kind: "detected", id: "app:lazygit", label: "lazygit", available: true },
   { kind: "detected", id: "app:gemini", label: "Gemini CLI", available: false },
   {
@@ -30,8 +42,20 @@ export const FAKE_DETECTED = [
     label: "Copilot CLI",
     available: false,
   },
-  { kind: "detected", id: "app:vim", label: "Vim", available: false },
-  { kind: "detected", id: "app:helix", label: "Helix", available: false },
+  {
+    kind: "detected",
+    id: "app:vim",
+    label: "Vim",
+    available: false,
+    editor: true,
+  },
+  {
+    kind: "detected",
+    id: "app:helix",
+    label: "Helix",
+    available: false,
+    editor: true,
+  },
 ] as const;
 
 // A project's launch row: the tools found on the machine, a command of

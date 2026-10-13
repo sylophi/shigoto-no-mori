@@ -493,6 +493,11 @@
     "remote": false,
     "tracksProjectUsage": true
   },
+  "launchers:openFile": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": false
+  },
   "link:end": {
     "kind": "invoke",
     "scope": "host",

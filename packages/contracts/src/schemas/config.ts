@@ -331,6 +331,11 @@ const GlobalConfigSchema = Schema.Struct({
   // open in, a launcher catalog id. Absent = Terminal. The
   // engine's Open.ts launches them.
   terminal: Schema.optional(Schema.Literals(TERMINAL_IDS)),
+  // The editor a worktree's files open in (a double click on one, `sm
+  // worktrees edit`), a catalog id of a tool marked editor, which the
+  // engine's Config checks. Absent opens a file with its default app,
+  // and a patch goes back to that with null.
+  editor: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default. Unset means delete
@@ -451,6 +456,10 @@ export const DeviceSettingsPatchSchema = strict(
       description:
         "Terminal that terminal tools (Claude Code, Neovim, …) open in",
     }),
+    editor: GlobalConfigSchema.fields.editor.annotateKey({
+      description:
+        "Editor files open in (`worktrees edit`, a double click in the app)",
+    }),
     deleteBranchOnRemove:
       GlobalConfigSchema.fields.deleteBranchOnRemove.annotateKey({
         description: "Delete the branch when removing its worktree",
@@ -513,6 +522,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   hiddenLaunchers: [],
   launchScripts: true,
   terminal: "terminal",
+  editor: null,
   deleteBranchOnRemove: true,
   autoPopulateInstall: false,
   autoPullNew: false,

@@ -58,3 +58,25 @@ export function useLaunch() {
     meta: { errorTitle: "Couldn't launch" },
   });
 }
+
+// Opens a worktree's file in this machine's editor (the editor
+// setting, or the file's default app), or undefined on a peer's page,
+// whose files are on the peer.
+export function useOpenInEditor(worktree: {
+  projectId: string;
+  id: string;
+}): ((path: string) => void) | undefined {
+  const { api, remote } = useHostScope();
+  const { mutate } = useMutation<void, Error, string>({
+    mutationFn: (path) =>
+      api.run(
+        api.launchers.openFile({
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          path,
+        }),
+      ),
+    meta: { errorTitle: "Couldn't open the file" },
+  });
+  return remote ? undefined : mutate;
+}

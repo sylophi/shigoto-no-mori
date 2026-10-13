@@ -24,6 +24,7 @@ import {
   mergeConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
+import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
 
@@ -232,6 +233,7 @@ const deviceKeys = settingKeys(
     "launchers",
     "hiddenLaunchers",
     "terminal",
+    "editor",
   ],
   {
     launchers: {
@@ -242,10 +244,21 @@ const deviceKeys = settingKeys(
   },
 );
 // The Go sm named the terminals by id (terminalIDs), where Settings
-// lists them in its own order.
+// lists them in its own order. The editor names a catalog tool marked
+// editor, which the contract's string can't say. `set` holds it to
+// those, and a stored id the catalog no longer lists still reads and
+// writes back.
 for (const key of deviceKeys) {
   if (key.name === "terminal") {
     Object.assign(key, { choices: key.choices.toSorted() });
+  }
+  if (key.name === "editor") {
+    Object.assign(key, {
+      choices: catalog
+        .filter((app) => app.editor === true)
+        .map((app) => app.id)
+        .toSorted(),
+    });
   }
 }
 
@@ -343,6 +356,8 @@ const parseValue = (
         : invalid("positiveInt");
     }
     case "string": {
+      if (key.choices.length > 0 && !key.choices.includes(raw))
+        return invalid("enum");
       if (key.name !== "customWorktreePath") return Effect.succeed(raw);
       const absolute = expandHome(raw);
       return absolute.startsWith("/")

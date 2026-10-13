@@ -40,6 +40,8 @@ export interface SettingsFormState {
   hiddenLaunchers: string[];
   launchScripts: boolean;
   terminal: TerminalId;
+  // Null opens a file with its default app.
+  editor: string | null;
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   autoPullNew: boolean;
@@ -85,6 +87,7 @@ export function fromConfig(
     hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
     launchScripts: config.launchScripts ?? DEFAULTS.launchScripts,
     terminal: config.terminal ?? DEFAULTS.terminal,
+    editor: config.editor ?? DEFAULTS.editor,
     deleteBranchOnRemove:
       config.deleteBranchOnRemove ?? DEFAULTS.deleteBranchOnRemove,
     autoPopulateInstall:

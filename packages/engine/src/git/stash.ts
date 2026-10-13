@@ -184,7 +184,16 @@ export const makeStash = ({
       const ref = yield* refOf(worktree, hash);
       return yield* run(
         worktree,
-        ["stash", "show", "-p", "--include-untracked", "--no-color", ref],
+        [
+          "-c",
+          "core.quotePath=false",
+          "stash",
+          "show",
+          "-p",
+          "--include-untracked",
+          "--no-color",
+          ref,
+        ],
         { maxOutputBytes: PATCH_MAX_OUTPUT },
       );
     });

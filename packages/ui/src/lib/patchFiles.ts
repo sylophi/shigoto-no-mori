@@ -97,6 +97,7 @@ export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
     prevPath: file.prevName ?? null,
     mark: PATCH_MARKS[file.type],
     stats: fileStats(file),
+    deleted: file.type === "deleted",
     row: null,
   }));
 }
@@ -115,6 +116,7 @@ export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
       prevPath: row.prevPath ?? null,
       mark: row.conflicted ? CONFLICTED : STATUS_MARKS[row.kind],
       stats: row.counts ?? null,
+      deleted: row.kind === "deleted",
       row,
     }),
   );
