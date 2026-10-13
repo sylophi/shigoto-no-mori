@@ -1435,7 +1435,6 @@ it("the hub out of reach says so with its cause, and a revoked credential reads 
       ["devices"],
       ["worktrees", "send", "wt-mirror", "-p", "source"],
     ]) {
-      // oxlint-disable-next-line no-await-in-loop -- one verb at a time
       await refused(
         args,
         undefined,

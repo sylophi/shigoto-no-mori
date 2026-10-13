@@ -396,7 +396,6 @@ it("burst: 300 calls on the link all answer, never more than the gate's at once 
   // lets out, or all that are left. Then they are let go together.
   const unanswered = () => settled < total;
   while (unanswered()) {
-    // oxlint-disable-next-line no-await-in-loop -- one round at a time
     await waitFor(
       () =>
         held.running >= LINK_CALLS_IN_FLIGHT ||
@@ -405,7 +404,6 @@ it("burst: 300 calls on the link all answer, never more than the gate's at once 
     );
     const answered = settled + held.releases.length;
     releaseHeld();
-    // oxlint-disable-next-line no-await-in-loop -- one round at a time
     await waitFor(() => settled >= answered, "the round to answer");
   }
   await Promise.all(calls);
