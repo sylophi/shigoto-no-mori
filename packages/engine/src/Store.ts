@@ -137,7 +137,10 @@ const removeImported = (open: OpenDatabase, platform: Platform) =>
     const before = yield* hashesOf(files);
     const verified = yield* importVerified(open, platform);
     const after = yield* hashesOf(yield* v2Files);
-    if (!verified || !sameHashes(before, after)) {
+    // Every file hashed on both sides: one that couldn't be read is a
+    // doubt too.
+    const read = Object.keys(before).length === files.length;
+    if (!verified || !read || !sameHashes(before, after)) {
       return yield* Effect.logWarning(
         "Left the v2 files in place: the import couldn't be verified",
       );
