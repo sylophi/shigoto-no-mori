@@ -88,17 +88,14 @@ export const makeRunning = Effect.gen(function* () {
           .pipe(Effect.mapError(failed(null)));
         const [stdout, stderr] = yield* Effect.all(
           [
-            readAll(
-              handle.stdout.pipe(Stream.mapError(failed(null))),
-              limit,
+            readAll(handle.stdout.pipe(Stream.mapError(failed(null))), limit, {
               tooLarge,
               decoder,
-            ),
+            }),
             readAll(
               handle.stderr.pipe(Stream.mapError(failed(null))),
               DEFAULT_MAX_OUTPUT,
-              undefined,
-              decoder,
+              { decoder },
             ),
           ],
           { concurrency: 2 },

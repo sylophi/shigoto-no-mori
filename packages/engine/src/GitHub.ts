@@ -447,9 +447,7 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const git = yield* Git.Git;
 
-  // In a process group of its own, so a deadline ends gh with the git
-  // and credential helper it started. No stdin: it never waits on a
-  // prompt.
+  // gh's stdout, its failure in gh's own terms.
   const run = Effect.fn("GitHub.run")(function* (
     cwd: string,
     args: ReadonlyArray<string>,
@@ -468,6 +466,7 @@ const make = Effect.gen(function* () {
         if (error.reason === "timed-out") {
           return new GitHubCliError({ reason: "timeout" });
         }
+        // A spawn or a pipe that failed, with no exit to read.
         if (error.exitCode === null) {
           return new GitHubCliError({ reason: "failed", cause: error.cause });
         }

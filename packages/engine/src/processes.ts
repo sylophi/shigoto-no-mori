@@ -174,8 +174,13 @@ interface Read {
 export const readAll = <E, E2 = never>(
   stream: Stream.Stream<Uint8Array, E>,
   limit: number,
-  tooLarge?: () => E2,
-  decoder: { readonly decode: (bytes: Uint8Array) => string } = utf8,
+  {
+    tooLarge,
+    decoder = utf8,
+  }: {
+    readonly tooLarge?: () => E2;
+    readonly decoder?: { readonly decode: (bytes: Uint8Array) => string };
+  } = {},
 ): Effect.Effect<string, E | E2> =>
   stream.pipe(
     Stream.runFoldEffect(
@@ -201,7 +206,7 @@ export const readAll = <E, E2 = never>(
     }),
   );
 
-export interface ExecOptions {
+interface ExecOptions {
   readonly cwd?: string | undefined;
   // The whole environment of the command, or with `extendEnv` what it
   // sets over the app's own. The app's own when absent.
@@ -243,7 +248,9 @@ export const exec = Effect.fn("exec")(function* (
     );
     const [stdout, stderr] = yield* Effect.all(
       [
-        readAll(handle.stdout, limit, () => fail("too-large", undefined)),
+        readAll(handle.stdout, limit, {
+          tooLarge: () => fail("too-large", undefined),
+        }),
         readAll(handle.stderr, limit),
       ],
       { concurrency: 2 },

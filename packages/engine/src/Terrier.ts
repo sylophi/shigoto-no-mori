@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
-import { exec } from "./processes.ts";
+import { type CommandError, exec } from "./processes.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
 // Terrier (github.com/dittofleet/terrier) is an external registry of
@@ -141,6 +141,13 @@ export function terrierProjects(
   );
 }
 
+// Why `terrier ls` gave no listing, in Go's words.
+const failureOf = (error: CommandError) => {
+  if (error.reason === "timed-out") return "signal: killed";
+  if (error.exitCode !== null) return `exit status ${error.exitCode}`;
+  return errorMessageOf(error.cause);
+};
+
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const config = yield* Config.Config;
@@ -161,15 +168,7 @@ const make = Effect.gen(function* () {
           Effect.succeed(
             error.reason === "not-found"
               ? { kind: "missing" as const }
-              : {
-                  kind: "unreadable" as const,
-                  reason:
-                    error.reason === "timed-out"
-                      ? "signal: killed"
-                      : error.exitCode !== null
-                        ? `exit status ${error.exitCode}`
-                        : errorMessageOf(error.cause),
-                },
+              : { kind: "unreadable" as const, reason: failureOf(error) },
           ),
         TerrierUnreadable: ({ reason }) =>
           Effect.succeed({ kind: "unreadable" as const, reason }),
