@@ -1409,7 +1409,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeApp",
+    "grant": "changeCode",
     "tracksProjectUsage": true
   },
   "worktrees:abortOperation": {

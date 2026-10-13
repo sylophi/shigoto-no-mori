@@ -53,6 +53,7 @@ export const GRANTS = {
       "sync:receiveBundle",
       "sync:receiveWorktree",
       "worktreeData:describe",
+      "worktreeData:write",
       "worktrees:abortOperation",
       "worktrees:applyStash",
       "worktrees:checkoutBranch",
@@ -149,7 +150,6 @@ export const GRANTS = {
       "updater:check",
       "updater:install",
       "updater:update",
-      "worktreeData:write",
     ],
   },
 } as const;
