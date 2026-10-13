@@ -26,7 +26,7 @@ import * as Schedule from "effect/Schedule";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as HostFacts from "@host/lib/HostFacts";
-import * as Processes from "../util/processes";
+import * as Processes from "@shigomori/engine/processes";
 import { signalTree } from "./process";
 
 // `ps` reports a start time to the second and we stamp startedAt just

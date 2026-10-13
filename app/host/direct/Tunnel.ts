@@ -46,7 +46,7 @@ import {
   restartSchedule,
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
-import * as Processes from "@host/lib/util/processes";
+import * as Processes from "@shigomori/engine/processes";
 
 // ---- pure deciders, exported for the direct-plane check ----
 

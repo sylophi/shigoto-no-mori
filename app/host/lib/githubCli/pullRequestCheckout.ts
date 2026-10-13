@@ -16,7 +16,7 @@ import {
 import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Git from "@shigomori/engine/Git";
-import { stderrOf } from "../util/processes";
+import { stderrOf } from "@shigomori/engine/processes";
 import { gh, trimGhError } from "./exec";
 import { GithubCli } from "./GithubCli";
 import { remoteNameForUrl } from "./remote";
