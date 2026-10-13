@@ -489,235 +489,281 @@ describe("transfer", () => {
 // may fail it with the menu still up.
 type Key = string | (() => string);
 
-describe("at a terminal", () => {
-  // What the menu's help line says in either mode. The menu draws it
-  // once its keys reach it, so a key typed after it lands in the menu.
-  const HELP = "enter select";
-  const STEP_DEADLINE = 10_000;
+// `under-load.mts` beside this file repeats these, each case SM_TERMINAL_REPEATS more
+// times, with busy loops beside them.
+describe(
+  "at a terminal",
+  { repeats: Number(process.env["SM_TERMINAL_REPEATS"] ?? 0) },
+  () => {
+    // What the menu's help line says in either mode. The menu draws it
+    // once its keys reach it, so a key typed after it lands in the menu.
+    const HELP = "enter select";
+    const STEP_DEADLINE = 10_000;
 
-  // The built binary in a terminal of its own (BSD script's pty), each
-  // key typed once the screen shows the text paired with it, and after
-  // it the help line of a menu ready for the key: what it showed,
-  // stdout and stderr together, escapes and all.
-  const inTerminal = async (
-    args: ReadonlyArray<string>,
-    keys: ReadonlyArray<readonly [shown: string, key: Key]>,
-    env: NodeJS.ProcessEnv = {},
-  ) => {
-    // script takes no socket for its input, which node's pipes are, so
-    // cat hands it a pipe.
-    const command = 'cat | script -q /dev/null "$@"';
-    // In a process group of its own, so ending it ends cat and script
-    // with sh, and script's end hangs the binary up.
-    const child = spawn("sh", ["-c", command, "sh", built, ...args], {
-      cwd: box.home,
-      env: {
-        ...box.env("cli"),
-        TERM: "xterm-256color",
-        // On CI, the menu says what fd 0 was before ink read it, which a
-        // failure's screen then shows (menuView.ts, fd0State).
-        ...(process.env["CI"] === undefined ? {} : { SM_FD0_TRACE: "1" }),
-        ...env,
-      },
-      stdio: ["pipe", "pipe", "ignore"],
-      detached: true,
-    });
-    const stop = () => {
-      // No pid is a spawn that failed, and -0 would be this process's
-      // own group.
-      if (child.pid === undefined) return;
+    // The built binary in a terminal of its own (BSD script's pty), each
+    // key typed once the screen shows the text paired with it, and after
+    // it the help line of a menu ready for the key: what it showed,
+    // stdout and stderr together, escapes and all.
+    const inTerminal = async (
+      args: ReadonlyArray<string>,
+      keys: ReadonlyArray<readonly [shown: string, key: Key]>,
+      env: NodeJS.ProcessEnv = {},
+    ) => {
+      // script takes no socket for its input, which node's pipes are, so
+      // cat hands it a pipe.
+      const command = 'cat | script -q /dev/null "$@"';
+      // In a process group of its own, so ending it ends cat and script
+      // with sh, and script's end hangs the binary up.
+      const child = spawn("sh", ["-c", command, "sh", built, ...args], {
+        cwd: box.home,
+        env: {
+          ...box.env("cli"),
+          TERM: "xterm-256color",
+          ...env,
+        },
+        stdio: ["pipe", "pipe", "ignore"],
+        detached: true,
+      });
+      const stop = () => {
+        // No pid is a spawn that failed, and -0 would be this process's
+        // own group.
+        if (child.pid === undefined) return;
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          // The group has ended already.
+        }
+      };
+      // A case that times out never reaches the finally below.
+      onTestFinished(stop);
+      let shown = "";
+      let closed = false;
+      // Each check runs again on every chunk the screen gets and once the
+      // binary ends.
+      const checks = new Set<() => void>();
+      const recheck = () => {
+        for (const check of checks) check();
+      };
+      child.stdout.on("data", (chunk: Buffer) => {
+        shown += chunk;
+        recheck();
+      });
+      const ended = new Promise((resolve) =>
+        child.on("close", () => {
+          closed = true;
+          recheck();
+          resolve(undefined);
+        }),
+      );
+      // Where `text` shows from `from` on, once it does. A step shows in
+      // well under a second; one that hasn't in STEP_DEADLINE fails naming
+      // what it waited for and the screen, where the case's own timeout
+      // would say neither.
+      const showing = (text: string, from: number) =>
+        new Promise<number>((resolve, reject) => {
+          const deadline = setTimeout(() => {
+            checks.delete(check);
+            reject(
+              new Error(`Waited ${STEP_DEADLINE} ms for ${text}:\n${shown}`),
+            );
+          }, STEP_DEADLINE);
+          const check = () => {
+            const at = shown.indexOf(text, from);
+            if (at !== -1) resolve(at);
+            else if (closed)
+              reject(new Error(`Never showed ${text}:\n${shown}`));
+            else return;
+            clearTimeout(deadline);
+            checks.delete(check);
+          };
+          checks.add(check);
+          check();
+        });
+      const type = async (
+        steps: ReadonlyArray<readonly [string, Key]>,
+      ): Promise<void> => {
+        const [step, ...rest] = steps;
+        if (step === undefined) return;
+        await showing(HELP, await showing(step[0], shown.length));
+        const [, key] = step;
+        child.stdin.write(typeof key === "string" ? key : key());
+        return type(rest);
+      };
       try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        // The group has ended already.
+        await type(keys);
+        child.stdin.end();
+        await ended;
+        return shown;
+      } finally {
+        stop();
       }
     };
-    // A case that times out never reaches the finally below.
-    onTestFinished(stop);
-    let shown = "";
-    let closed = false;
-    // Each check runs again on every chunk the screen gets and once the
-    // binary ends.
-    const checks = new Set<() => void>();
-    const recheck = () => {
-      for (const check of checks) check();
-    };
-    child.stdout.on("data", (chunk: Buffer) => {
-      shown += chunk;
-      recheck();
-    });
-    const ended = new Promise((resolve) =>
-      child.on("close", () => {
-        closed = true;
-        recheck();
-        resolve(undefined);
-      }),
-    );
-    // Where `text` shows from `from` on, once it does. A step shows in
-    // well under a second; one that hasn't in STEP_DEADLINE fails naming
-    // what it waited for and the screen, where the case's own timeout
-    // would say neither.
-    const showing = (text: string, from: number) =>
-      new Promise<number>((resolve, reject) => {
-        const deadline = setTimeout(() => {
-          checks.delete(check);
-          reject(
-            new Error(`Waited ${STEP_DEADLINE} ms for ${text}:\n${shown}`),
-          );
-        }, STEP_DEADLINE);
-        const check = () => {
-          const at = shown.indexOf(text, from);
-          if (at !== -1) resolve(at);
-          else if (closed) reject(new Error(`Never showed ${text}:\n${shown}`));
-          else return;
-          clearTimeout(deadline);
-          checks.delete(check);
-        };
-        checks.add(check);
-        check();
+    const DOWN = "\u001b[B";
+
+    // Two projects, beta with a worktree "fox".
+    const projects = async () => {
+      const alpha = box.repo("alpha");
+      const beta = box.repo("beta");
+      box.git(beta, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+      box.write("registry.json", {
+        projects: [
+          { id: "A", name: "alpha", path: alpha },
+          { id: "B", name: "beta", path: beta },
+        ],
       });
-    const type = async (
-      steps: ReadonlyArray<readonly [string, Key]>,
-    ): Promise<void> => {
-      const [step, ...rest] = steps;
-      if (step === undefined) return;
-      await showing(HELP, await showing(step[0], shown.length));
-      const [, key] = step;
-      child.stdin.write(typeof key === "string" ? key : key());
-      return type(rest);
+      await box.migrate("cli");
     };
-    try {
-      await type(keys);
-      child.stdin.end();
-      await ended;
-      return shown;
-    } finally {
-      stop();
-    }
-  };
-  const DOWN = "\u001b[B";
 
-  // Two projects, beta with a worktree "fox".
-  const projects = async () => {
-    const alpha = box.repo("alpha");
-    const beta = box.repo("beta");
-    box.git(beta, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
-    box.write("registry.json", {
-      projects: [
-        { id: "A", name: "alpha", path: alpha },
-        { id: "B", name: "beta", path: beta },
-      ],
-    });
-    await box.migrate("cli");
-  };
-
-  it("picks a project, then one of its worktrees", async () => {
-    await projects();
-    const shown = await inTerminal(
-      ["path"],
-      [
-        ["Select a project:", DOWN],
-        ["▸ beta", "\r"],
-        ["Select a worktree in beta:", DOWN],
-        ["▸ fox", "\r"],
-      ],
-    );
-    assert.match(shown, /NAME +BRANCH +SYNC +CHANGES/);
-    assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
-  });
-
-  it("draws the menu with CI set in the environment", async () => {
-    await projects();
-    const shown = await inTerminal(
-      ["path"],
-      [
-        ["Select a project:", DOWN],
-        ["▸ beta", "\r"],
-        ["Select a worktree in beta:", DOWN],
-        ["▸ fox", "\r"],
-      ],
-      { CI: "true", SM_FD0_TRACE: "1" },
-    );
-    assert.match(shown, /fd 0: [a-z ]+, mode \d+, tty true/);
-    assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
-  });
-
-  it("writes stderr as it is, with no color of Bun's", async () => {
-    const shown = await inTerminal(["path", "nosuch"], []);
-    // After script's echo of the end of input.
-    assert.ok(
-      shown.endsWith('\u001b[31msmd:\u001b[0m No worktree named "nosuch".\r\n'),
-      JSON.stringify(shown),
-    );
-  });
-
-  it("colors a terminal's lines with NO_COLOR set but empty, as Go did", async () => {
-    const shown = await inTerminal(["path", "nosuch"], [], { NO_COLOR: "" });
-    assert.ok(
-      shown.endsWith('\u001b[31msmd:\u001b[0m No worktree named "nosuch".\r\n'),
-      JSON.stringify(shown),
-    );
-  });
-
-  it("enters a worktree in the account's login shell when $SHELL is empty", async () => {
-    const { worktree } = await scripted();
-    const entered = join(box.home, "entered");
-    box.fakeBin("account-shell", `pwd > '${entered}'`);
-    box.fakeBin("dscl", 'echo "UserShell: $(command -v account-shell)"');
-    await inTerminal(["cd", "-p", "repo", "w"], [], { SHELL: "" });
-    assert.equal(readFileSync(entered, "utf8"), `${worktree}\n`);
-  });
-
-  it("edits the settings in $EDITOR and saves what it left", async () => {
-    box.write("registry.json", { projects: [] });
-    await box.migrate("cli");
-    box.fakeBin(
-      "fake-editor",
-      `grep -q '"launchScripts"' "$1" && exit 9; printf '{"launchScripts": false}' > "$1"`,
-    );
-    await inTerminal(["config", "edit"], [], { EDITOR: "fake-editor" });
-    const got = await runAt(box.home, "config", "get", "launchScripts");
-    assert.equal(got.stdout, "false\n");
-    // Without a terminal there is no editor to wait on.
-    assert.equal((await runAt(box.home, "--json", "config", "edit")).code, 2);
-  });
-
-  it("leaves no process behind when a case fails with the menu up", async () => {
-    await projects();
-    await assert.rejects(
-      inTerminal(
+    it("picks a project, then one of its worktrees", async () => {
+      await projects();
+      const shown = await inTerminal(
         ["path"],
         [
-          [
-            "Select a project:",
-            () => {
-              throw new Error("the case failed");
-            },
-          ],
+          ["Select a project:", DOWN],
+          ["▸ beta", "\r"],
+          ["Select a worktree in beta:", DOWN],
+          ["▸ fox", "\r"],
         ],
-      ),
-      /the case failed/,
-    );
-    // pgrep exits 1 once nothing runs the binary.
-    await vi.waitFor(() =>
-      assert.throws(() => execFileSync("pgrep", ["-f", built])),
-    );
-  });
+      );
+      assert.match(shown, /NAME +BRANCH +SYNC +CHANGES/);
+      assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
+    });
 
-  it("filters by name, and esc cancels", async () => {
-    await projects();
-    const shown = await inTerminal(
-      ["path"],
-      [
-        [HELP, "/"],
-        ["type to filter", "be"],
-        ["/be", "\r"],
-        ["Select a worktree in beta:", "\u001b"],
-      ],
-    );
-    assert.match(shown, /Cancelled\./);
-  });
-});
+    it("draws the menu with CI set in the environment", async () => {
+      await projects();
+      const shown = await inTerminal(
+        ["path"],
+        [
+          ["Select a project:", DOWN],
+          ["▸ beta", "\r"],
+          ["Select a worktree in beta:", DOWN],
+          ["▸ fox", "\r"],
+        ],
+        { CI: "true" },
+      );
+      assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
+    });
+
+    it("writes stderr as it is, with no color of Bun's", async () => {
+      const shown = await inTerminal(["path", "nosuch"], []);
+      // After script's echo of the end of input.
+      assert.ok(
+        shown.endsWith(
+          '\u001b[31msmd:\u001b[0m No worktree named "nosuch".\r\n',
+        ),
+        JSON.stringify(shown),
+      );
+    });
+
+    it("colors a terminal's lines with NO_COLOR set but empty, as Go did", async () => {
+      const shown = await inTerminal(["path", "nosuch"], [], { NO_COLOR: "" });
+      assert.ok(
+        shown.endsWith(
+          '\u001b[31msmd:\u001b[0m No worktree named "nosuch".\r\n',
+        ),
+        JSON.stringify(shown),
+      );
+    });
+
+    it("enters a worktree in the account's login shell when $SHELL is empty", async () => {
+      const { worktree } = await scripted();
+      const entered = join(box.home, "entered");
+      box.fakeBin("account-shell", `pwd > '${entered}'`);
+      box.fakeBin("dscl", 'echo "UserShell: $(command -v account-shell)"');
+      await inTerminal(["cd", "-p", "repo", "w"], [], { SHELL: "" });
+      assert.equal(readFileSync(entered, "utf8"), `${worktree}\n`);
+    });
+
+    it("edits the settings in $EDITOR and saves what it left", async () => {
+      box.write("registry.json", { projects: [] });
+      await box.migrate("cli");
+      box.fakeBin(
+        "fake-editor",
+        `grep -q '"launchScripts"' "$1" && exit 9; printf '{"launchScripts": false}' > "$1"`,
+      );
+      await inTerminal(["config", "edit"], [], { EDITOR: "fake-editor" });
+      const got = await runAt(box.home, "config", "get", "launchScripts");
+      assert.equal(got.stdout, "false\n");
+      // Without a terminal there is no editor to wait on.
+      assert.equal((await runAt(box.home, "--json", "config", "edit")).code, 2);
+    });
+
+    it("leaves no process behind when a case fails with the menu up", async () => {
+      await projects();
+      await assert.rejects(
+        inTerminal(
+          ["path"],
+          [
+            [
+              "Select a project:",
+              () => {
+                throw new Error("the case failed");
+              },
+            ],
+          ],
+        ),
+        /the case failed/,
+      );
+      // pgrep exits 1 once nothing runs the binary.
+      await vi.waitFor(() =>
+        assert.throws(() => execFileSync("pgrep", ["-f", built])),
+      );
+    });
+
+    it("filters by name, and esc cancels", async () => {
+      await projects();
+      const shown = await inTerminal(
+        ["path"],
+        [
+          [HELP, "/"],
+          ["type to filter", "be"],
+          ["/be", "\r"],
+          ["Select a worktree in beta:", "\u001b"],
+        ],
+      );
+      assert.match(shown, /Cancelled\./);
+    });
+    it("leaves what was typed before it to the shell", async () => {
+      // A line typed while sm runs, before anything asks for one: the
+      // shell's next read gets it (stdinFd.ts reads nothing early).
+      const script = '"$0" path nosuch; read line; echo "after: $line"';
+      const child = spawn(
+        "sh",
+        [
+          "-c",
+          'cat | script -q /dev/null "$@"',
+          "sh",
+          "sh",
+          "-c",
+          script,
+          built,
+        ],
+        {
+          cwd: box.home,
+          env: { ...box.env("cli"), TERM: "xterm-256color" },
+          stdio: ["pipe", "pipe", "ignore"],
+          detached: true,
+        },
+      );
+      onTestFinished(() => {
+        if (child.pid === undefined) return;
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          // The group has ended already.
+        }
+      });
+      let shown = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        shown += chunk;
+        if (shown.includes("after: ")) child.stdin.end();
+      });
+      child.stdin.write("early-line\n");
+      await new Promise((resolve) => child.on("close", resolve));
+      assert.match(shown, /after: early-line/);
+    });
+  },
+);
 
 describe("the v3 migration", () => {
   // A 2.x data dir: a project with worktrees a and b in its v2 folder.
