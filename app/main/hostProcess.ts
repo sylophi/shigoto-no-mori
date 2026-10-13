@@ -194,14 +194,24 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     onGuide((guide) => guide.drive(token, action)),
 };
 
-function fork(): void {
+// `replaces`: the host that just exited unasked, which this one follows.
+function fork(replaces?: number): void {
   const { port1, port2 } = new MessageChannelMain();
+  const facts: HostFacts =
+    replaces === undefined
+      ? hostFacts()
+      : { ...hostFacts(), replacesHostPid: replaces };
   const forked = utilityProcess.fork(
     join(__dirname, "host.js"),
-    [`${HOST_FACTS_FLAG}${JSON.stringify(hostFacts())}`],
+    [`${HOST_FACTS_FLAG}${JSON.stringify(facts)}`],
     { serviceName: "Shigoto no Mori Host", stdio: "pipe" },
   );
   child = forked;
+  // Read at its spawn: an exited utility process's pid reads undefined.
+  let pid: number | undefined;
+  forked.once("spawn", () => {
+    pid = forked.pid;
+  });
   // The host's console, into the shell's (and so its log file).
   for (const stream of [forked.stdout, forked.stderr]) {
     stream?.on("data", (chunk: Buffer) => {
@@ -230,7 +240,7 @@ function fork(): void {
       });
       return;
     }
-    fork();
+    fork(pid);
   });
 }
 

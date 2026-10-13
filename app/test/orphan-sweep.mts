@@ -23,6 +23,7 @@ import * as Paths from "@shigomori/engine/Paths";
 import * as Store from "@shigomori/engine/Store";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
+import * as HostFacts from "../host/lib/HostFacts.ts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -98,18 +99,29 @@ const recorded = () =>
 
 // The sweep as a start brings it up, in a scope of the proof's, over
 // the file's store or `scripts`.
+// `replaces`: the host this one was forked to replace (HostFacts).
 async function startSweep(
   scripts?: Layer.Layer<RunningScripts.RunningScripts, unknown>,
+  replaces?: number,
 ) {
   const scope = Scope.makeUnsafe();
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  const sweep = Layer.fresh(OrphanSweep.layer);
+  const host = await hostContext();
+  const facts = Context.get(host, HostFacts.HostFacts);
+  const fresh = Layer.fresh(OrphanSweep.layer).pipe(
+    Layer.provide(
+      Layer.succeed(HostFacts.HostFacts, {
+        ...facts,
+        ...(replaces === undefined ? {} : { replacesHostPid: replaces }),
+      }),
+    ),
+  );
   const context = await Effect.runPromise(
     // Fresh: the proof file's runtime holds one built at its start.
     Layer.buildWithScope(
-      scripts === undefined ? sweep : sweep.pipe(Layer.provide(scripts)),
+      scripts === undefined ? fresh : fresh.pipe(Layer.provide(scripts)),
       scope,
-    ).pipe(Effect.provide(await hostContext())),
+    ).pipe(Effect.provide(host)),
   );
   return Context.get(context, OrphanSweep.OrphanSweep);
 }
@@ -184,12 +196,12 @@ it("stops what a dead instance left running as it started, leaves a recycled pid
   );
 });
 
-it("stops what a script whose leader died left in its group, as a package script or a nohup'd command leaves when the host is killed, and leaves alone a group older than its record and one recorded before this app run", async () => {
+it("stops what a script whose leader died left in its group, as a package script or a nohup'd command leaves when the host is killed, and leaves alone a group older than its record and one another host recorded", async () => {
   const crashed = await deadPid();
   const startedAt = Date.now();
   const left = await headlessGroup("610");
   const older = await headlessGroup("611");
-  const relaunched = await headlessGroup("612");
+  const another = await headlessGroup("612");
   await runHost(
     Effect.gen(function* () {
       const scripts = yield* RunningScripts.RunningScripts;
@@ -211,23 +223,24 @@ it("stops what a script whose leader died left in its group, as a package script
       });
     }),
   );
-  // Recorded before the app this host runs under started: a relaunch's
-  // or a reboot's sweep, which can be days after the script's group
-  // emptied and its id went to a stranger's.
+  // Another host's: an instance on the same data dir, or a host from
+  // before a relaunch or a reboot, which can be days before, after the
+  // script's group emptied and its id went to a stranger's.
+  const elsewhere = await deadPid();
   await runHost(
     Effect.flatMap(RunningScripts.RunningScripts, (scripts) =>
       scripts.add({
         projectId: "p",
         worktreeId: "wt",
-        ownerPid: crashed,
-        runId: "relaunched",
-        startedAt: startedAt - 30 * 24 * 60 * 60 * 1000,
-        pid: relaunched.leader,
+        ownerPid: elsewhere,
+        runId: "elsewhere",
+        startedAt,
+        pid: another.leader,
         command: "pnpm run dev",
       }),
     ),
   );
-  const sweep = await startSweep();
+  const sweep = await startSweep(undefined, crashed);
   assert.deepEqual(await Effect.runPromise(sweep.takeReport), { stopped: 1 });
   await waitFor(() => !processAlive(left.stray), "the stray to stop");
   assert.ok(
@@ -235,8 +248,8 @@ it("stops what a script whose leader died left in its group, as a package script
     "a group older than its record was signaled",
   );
   assert.ok(
-    processAlive(relaunched.stray),
-    "a group recorded before this app run was signaled",
+    processAlive(another.stray),
+    "a group another host recorded was signaled",
   );
 });
 
