@@ -1,42 +1,25 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
-import { afterEach, beforeEach, it } from "vitest";
-import * as Paths from "../src/Paths.ts";
+import { it } from "vitest";
 import * as WorktreeData from "../src/WorktreeData.ts";
-import { nodeStore } from "./lib/nodeStore.ts";
+import { freshDataDir, onStoreAt } from "./lib/nodeStore.ts";
 
-let dataDir: string;
-beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), "engine-worktree-data-"));
-});
-afterEach(() => rmSync(dataDir, { recursive: true, force: true }));
+const dataDir = freshDataDir("engine-worktree-data-");
 
 const write = (file: string, value: unknown) => {
-  mkdirSync(dirname(join(dataDir, file)), { recursive: true });
-  writeFileSync(join(dataDir, file), JSON.stringify(value));
+  mkdirSync(dirname(join(dataDir(), file)), { recursive: true });
+  writeFileSync(join(dataDir(), file), JSON.stringify(value));
 };
 
 const run = <A>(program: Effect.Effect<A, never, WorktreeData.WorktreeData>) =>
   program.pipe(
     Effect.provide(
       WorktreeData.layer.pipe(
-        Layer.provide(nodeStore),
-        Layer.provide(Paths.layer("prod")),
-        Layer.provide(NodeServices.layer),
-        Layer.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: { HOME: dataDir, SHIGOMORI_DATA_DIR: dataDir },
-            }),
-          ),
-        ),
+        onStoreAt(dataDir()),
         Layer.merge(TestClock.layer()),
       ),
     ),

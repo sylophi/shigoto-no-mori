@@ -46,8 +46,8 @@ function TitledHeader({
     enabled: pr !== null,
   });
   const projectStack = usePullRequestStack(worktree.projectId, worktree.branch);
-  // Only the PR that names the work: a merged one the worktree has its
-  // own title over keeps to its section further down.
+  // Only the PR that names the work: one it doesn't own (a fork's)
+  // keeps to its section further down.
   const detail = pr ? data : undefined;
   const stack = pr ? projectStack : null;
   const lineRef = useRef<HTMLDivElement>(null);

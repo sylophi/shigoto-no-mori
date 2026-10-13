@@ -5,12 +5,12 @@
 // list on stdout stands, in gh's words. Drives the real host code
 // against a fake gh on PATH. Run: pnpm test github-repos.
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { listGithubRepos } from "@host/lib/githubCli/actions";
 import { it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
-import { tempDir } from "./lib/checkKit.mts";
+import { installFakeGh, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const track = trackTest;
@@ -30,12 +30,10 @@ const repos = (names: readonly (string | null)[]) =>
 
 it("a partial answer's repositories are offered, and a bare failure stands", async () => {
   const root = tempDir("sm-gh-repos-", track);
-  const bin = join(root, "bin");
-  mkdirSync(bin);
   const answer = join(root, "answer.json");
   const failing = join(root, "failing");
-  writeFileSync(
-    join(bin, "gh"),
+  installFakeGh(
+    root,
     `#!/bin/sh
 case "$*" in
 "auth token"*) ;;
@@ -45,17 +43,8 @@ case "$*" in
 *) echo "unexpected gh $*" >&2; exit 1;;
 esac
 `,
+    track,
   );
-  chmodSync(join(bin, "gh"), 0o755);
-  const path = process.env["PATH"];
-  const ghConfig = process.env["GH_CONFIG_DIR"];
-  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
-  process.env["GH_CONFIG_DIR"] = join(root, "gh-config");
-  track(() => {
-    process.env["PATH"] = path;
-    if (ghConfig === undefined) delete process.env["GH_CONFIG_DIR"];
-    else process.env["GH_CONFIG_DIR"] = ghConfig;
-  });
   writeFileSync(answer, repos(["me/a", null, "org/b"]));
   writeFileSync(failing, "");
   assert.deepEqual(await runHost(listGithubRepos()), ["me/a", "org/b"]);

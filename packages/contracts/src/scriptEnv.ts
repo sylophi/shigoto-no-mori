@@ -47,7 +47,7 @@ export const SCRIPT_ENV_DOCS: ReadonlyArray<ScriptEnvDoc> = [
   },
   {
     name: SCRIPT_ENV_KEYS.WORKTREE_TITLE,
-    desc: "Title set with sm describe, empty until one is. Not an open pull request's.",
+    desc: "Title set with sm describe, empty until one is. Not a pull request's.",
   },
   {
     name: SCRIPT_ENV_KEYS.WORKTREE_DESCRIPTION,

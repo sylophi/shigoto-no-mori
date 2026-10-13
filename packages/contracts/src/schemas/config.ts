@@ -276,10 +276,11 @@ export const CarryOverStatSchema = Schema.Struct({
 export type CarryOverStat = typeof CarryOverStatSchema.Type;
 
 // A worktree's title and description: what its work is, set by `sm
-// describe` until a pull request's title and
-// body take over. describedAt (epoch ms) is when they were last set,
-// so a mirror's two sides keep the newer pair. Only `sm describe` and
-// the moves between devices write them (writeWorktreeDescription).
+// describe` until a pull request takes over: its title in any state,
+// its body while it is open (the app's useWorktreeTitle). describedAt
+// (epoch ms) is when they were last set, so a mirror's two sides keep
+// the newer pair. Only `sm describe` and the moves between devices
+// write them (writeWorktreeDescription).
 const WorktreeDescriptionSchema = Schema.Struct({
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
