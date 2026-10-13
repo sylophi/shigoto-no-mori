@@ -79,12 +79,10 @@ export class ViewShares extends Context.Service<
     // scope's length: the asks, for it to read again, and its reads,
     // each saying as it lands which asks it answered.
     readonly hear: (key: string) => Effect.Effect<Heard, never, Scope.Scope>;
-    // A read now of every view whose key `matches`, done once each
-    // read that started after the ask has landed, changed or not, or
-    // the read is gone. Done at once when nothing reads them.
-    readonly refresh: (
-      matches: (key: string) => boolean,
-    ) => Effect.Effect<void>;
+    // A read now of every view whose key starts with `prefix`, done
+    // once each read that started after the ask has landed, changed or
+    // not, or the read is gone. Done at once when nothing reads them.
+    readonly refresh: (prefix: string) => Effect.Effect<void>;
   }
 >()("sm/host/ViewShares") {}
 
@@ -135,11 +133,9 @@ const makeShares = Effect.gen(function* () {
           ),
       } satisfies Heard;
     }),
-    refresh: Effect.fn("ViewShares.refresh")(function* (
-      matches: (key: string) => boolean,
-    ) {
+    refresh: Effect.fn("ViewShares.refresh")(function* (prefix: string) {
       const all = yield* Ref.get(hearers);
-      const matching = [...all].filter(([key]) => matches(key));
+      const matching = [...all].filter(([key]) => key.startsWith(prefix));
       yield* Effect.forEach(
         matching,
         ([, hearer]) =>
@@ -256,6 +252,4 @@ export const either =
 // A refresh of the views read under `prefix`: a read now of each, done
 // once they landed.
 export const refresh = (prefix: string) =>
-  Effect.flatMap(ViewShares, (shares) =>
-    shares.refresh((key) => key.startsWith(prefix)),
-  );
+  Effect.flatMap(ViewShares, (shares) => shares.refresh(prefix));

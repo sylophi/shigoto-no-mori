@@ -1,9 +1,11 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HostPushes from "@host/lib/HostPushes";
 import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -38,7 +40,10 @@ import {
   stackCleanupFor,
   trunkOf,
 } from "@shigomori/contracts/pullRequestStack";
-import { UnknownWorktreeError } from "@shigomori/contracts/errors";
+import {
+  isEntityGoneError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { Terminals } from "@host/lib/terminals/Terminals";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -68,15 +73,36 @@ export function notifierFor(ctx: HandlerContext) {
 const treeViews = (input: { projectId: string; worktreeId: string }) =>
   `worktrees:tree:${input.projectId}:${input.worktreeId}:`;
 
-// What moves a worktree's tree: its project's git, an edit in its files
-// (or a window looking again), a mirror staging into it.
-const treeMoved = (input: { projectId: string; worktreeId: string }) =>
-  Views.either(
-    gitMoved(input.projectId),
-    filesChanged(input.projectId),
-    Views.pushed(mirrorContract, "gitChanged", (staged) => {
-      return staged.worktreeId === input.worktreeId;
-    }),
+// One of the changes page's views of a worktree (`part` its name and
+// input), read again as the tree moves: its project's git, an edit in
+// its files (or a window looking again), a mirror staging into it. A
+// read git refuses for a moment (a lock held) is tried again three
+// times, a second apart and doubling, as a request was, before the
+// view fails.
+const treeView = <A, R>(
+  input: { projectId: string; worktreeId: string },
+  part: string,
+  read: () => Effect.Effect<A, unknown, R>,
+  options?: { readonly every?: Duration.Input },
+) =>
+  Views.view(
+    `${treeViews(input)}${part}`,
+    () =>
+      read().pipe(
+        Effect.retry({
+          times: 3,
+          schedule: Schedule.exponential("1 second"),
+          while: (error) => !isEntityGoneError(error),
+        }),
+      ),
+    Views.either(
+      gitMoved(input.projectId),
+      filesChanged(input.projectId),
+      Views.pushed(mirrorContract, "gitChanged", (staged) => {
+        return staged.worktreeId === input.worktreeId;
+      }),
+    ),
+    options,
   );
 
 const gitMoved = (projectId: string) =>
@@ -198,15 +224,16 @@ export const worktreesViews: ViewHandlers<
   // The open page's changes: also read again every few seconds, for an
   // edit no watch saw.
   watchChangeStatus: (input) =>
-    Views.view(
-      `${treeViews(input)}changes`,
+    treeView(
+      input,
+      "changes",
       () => atPath(input, (path) => withGit((git) => git.changes(path))),
-      treeMoved(input),
       { every: "2 seconds" },
     ),
   watchFileDiff: (input) =>
-    Views.view(
-      `${treeViews(input)}diff:${JSON.stringify([input.paths, input.untracked])}`,
+    treeView(
+      input,
+      `diff:${JSON.stringify([input.paths, input.untracked])}`,
       () =>
         atPath(input, (path) =>
           withGit((git) =>
@@ -217,22 +244,16 @@ export const worktreesViews: ViewHandlers<
             }),
           ),
         ),
-      treeMoved(input),
     ),
   watchFileHunks: (input) =>
-    Views.view(
-      `${treeViews(input)}hunks:${input.path}`,
-      () =>
-        atPath(input, (path) =>
-          withGit((git) => git.readHunks(path, input.path)),
-        ),
-      treeMoved(input),
+    treeView(input, `hunks:${input.path}`, () =>
+      atPath(input, (path) =>
+        withGit((git) => git.readHunks(path, input.path)),
+      ),
     ),
   watchOperation: (input) =>
-    Views.view(
-      `${treeViews(input)}operation`,
-      () => atPath(input, (path) => withGit((git) => git.readOperation(path))),
-      treeMoved(input),
+    treeView(input, "operation", () =>
+      atPath(input, (path) => withGit((git) => git.readOperation(path))),
     ),
 };
 

@@ -19,8 +19,9 @@ import type {
 import { callOf } from "@shigomori/contracts/contract";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Effect from "effect/Effect";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as AsyncResultValue from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import {
   useHostScope,
@@ -38,22 +39,30 @@ import { hostViewAtom } from "@/lib/runtime/atoms";
 import { writeBackWorktree } from "@/hooks/worktrees/useWorktrees";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
+// The changes page's views of a worktree.
+type TreeView =
+  | "watchChangeStatus"
+  | "watchFileDiff"
+  | "watchFileHunks"
+  | "watchOperation";
+
 // One of the changes page's views of a worktree, keyed by the device
 // and the view's input.
 const treeViewAtom = Atom.family((key: string) => {
   const { deviceId, view, input } = JSON.parse(key) as {
     deviceId: string;
-    view:
-      | "watchChangeStatus"
-      | "watchFileDiff"
-      | "watchFileHunks"
-      | "watchOperation";
+    view: TreeView;
     input: never;
   };
   return hostViewAtom({
     deviceId,
     view: callOf(worktreesContract, view),
     input,
+    // A file's diff and hunks stop streaming soon after the page moves
+    // to another file, so a long review leaves no reads behind.
+    ...(view === "watchFileDiff" || view === "watchFileHunks"
+      ? { idle: "5 seconds" }
+      : {}),
   });
 });
 
@@ -61,36 +70,34 @@ const treeViewAtom = Atom.family((key: string) => {
 // (null while there is nothing to read), its failure a toast titled
 // `failed`.
 export function useTreeView<A>(
-  view:
-    | "watchChangeStatus"
-    | "watchFileDiff"
-    | "watchFileHunks"
-    | "watchOperation",
+  view: TreeView,
   input: object | null,
   failed: string,
 ): LiveViewState<A> {
   const { deviceId, hasHost } = useHostScope();
-  const state = useView(
+  const registry = useRegistry();
+  const atom =
     hasHost && input !== null
       ? (treeViewAtom(JSON.stringify({ deviceId, view, input })) as Atom.Atom<
           AsyncResult.AsyncResult<A, unknown>
         >)
-      : null,
-  );
+      : null;
+  const state = useView(atom);
   useViewErrorToast(state, failed);
-  // A read that failed (git held a lock) ends the view: the window
-  // coming back asks again, as a query's focus refetch did.
-  const retry = useRef(state.refetch);
-  retry.current = state.refetch;
+  // A view whose reads kept failing ends: the window coming back asks
+  // again, as a query's focus refetch did, once however many readers
+  // the view has.
   const ended = state.error !== null;
   useEffect(
     () =>
-      ended
+      ended && atom !== null
         ? focusManager.subscribe((focused) => {
-            if (focused) retry.current();
+            if (focused && AsyncResultValue.isFailure(registry.get(atom))) {
+              registry.refresh(atom);
+            }
           })
         : undefined,
-    [ended],
+    [ended, atom, registry],
   );
   return state;
 }
