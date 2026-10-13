@@ -4,11 +4,13 @@
 // returning an `Effect.Effect` that the module hands `of` as a plain
 // function, inline or bound to a name, is reported. A method returning
 // a stream or a plain value is no Effect.fn, and one built some other
-// way (a forwarder, a sub-maker's) is left alone.
+// way (a forwarder, a sub-maker's) is left alone, as is a tag whose
+// interface is a named type.
 import { isServiceModule } from "../serviceModule.mts";
 import type { Node, Rule } from "../types.mts";
 
 type Expression = Node<"VariableDeclarator">["init"];
+type Pattern = Node<"VariableDeclarator">["id"];
 type TypeNode = Node<"TSTypeAnnotation">["typeAnnotation"];
 
 const isFunction = (node: Expression | undefined): boolean =>
@@ -22,6 +24,32 @@ const isEffectType = (node: TypeNode | undefined): boolean =>
   node.typeName.left.type === "Identifier" &&
   node.typeName.left.name === "Effect" &&
   node.typeName.right.name === "Effect";
+
+// The names a destructuring pattern binds.
+function boundNames(pattern: Pattern): string[] {
+  switch (pattern.type) {
+    case "Identifier":
+      return [pattern.name];
+    case "ObjectPattern":
+      return pattern.properties.flatMap((property) =>
+        boundNames(
+          property.type === "RestElement" ? property.argument : property.value,
+        ),
+      );
+    case "ArrayPattern":
+      return pattern.elements.flatMap((element) =>
+        element === null
+          ? []
+          : boundNames(
+              element.type === "RestElement" ? element.argument : element,
+            ),
+      );
+    case "AssignmentPattern":
+      return boundNames(pattern.left);
+    default:
+      return [];
+  }
+}
 
 // The names of the members `shape` types as functions returning an effect.
 function effectMethods(shape: TypeNode): Set<string> {
@@ -39,7 +67,7 @@ function effectMethods(shape: TypeNode): Set<string> {
       if (isEffectType(member.returnType?.typeAnnotation)) {
         names.add(member.key.name);
       }
-    } else if (member.type === "TSPropertySignature") {
+    } else {
       const type = member.typeAnnotation?.typeAnnotation;
       if (
         type?.type === "TSFunctionType" &&
@@ -68,12 +96,46 @@ export default {
     // left alone.
     const functions = new Set<string>();
     const others = new Set<string>();
-    const named: { name: string; node: Node<"Property">; tag: string }[] = [];
-    const report = (node: Node<"Property">, tag: string, method: string) =>
-      context.report({
-        node,
-        message: `A service method is \`Effect.fn("${tag}.${method}")\`, not a plain function (EFFECT.md, section 7).`,
-      });
+    const calls: Node<"CallExpression">[] = [];
+    const check = (node: Node<"CallExpression">) => {
+      const { callee } = node;
+      const [shape] = node.arguments;
+      if (
+        callee.type !== "MemberExpression" ||
+        callee.computed ||
+        callee.property.type !== "Identifier" ||
+        callee.property.name !== "of" ||
+        callee.object.type !== "Identifier" ||
+        shape?.type !== "ObjectExpression"
+      ) {
+        return;
+      }
+      const tag = callee.object.name;
+      const methods = tags.get(tag);
+      if (!methods) return;
+      for (const property of shape.properties) {
+        if (
+          property.type !== "Property" ||
+          property.computed ||
+          property.key.type !== "Identifier" ||
+          !methods.has(property.key.name)
+        ) {
+          continue;
+        }
+        const { value } = property;
+        const plain =
+          property.method ||
+          isFunction(value) ||
+          (value.type === "Identifier" &&
+            functions.has(value.name) &&
+            !others.has(value.name));
+        if (!plain) continue;
+        context.report({
+          node: property,
+          message: `A service method is \`Effect.fn("${tag}.${property.key.name}")\`, not a plain function (EFFECT.md, section 7).`,
+        });
+      }
+    };
     return {
       // class Tag extends Context.Service<Tag, { ... }>()("sm/...") {}
       ClassDeclaration(node) {
@@ -94,55 +156,27 @@ export default {
         }
       },
       VariableDeclarator(node) {
-        if (node.id.type !== "Identifier") return;
-        (isFunction(node.init) ? functions : others).add(node.id.name);
+        if (node.id.type === "Identifier") {
+          (isFunction(node.init) ? functions : others).add(node.id.name);
+        } else {
+          for (const name of boundNames(node.id)) others.add(name);
+        }
+      },
+      ImportDeclaration(node) {
+        for (const specifier of node.specifiers) {
+          others.add(specifier.local.name);
+        }
       },
       FunctionDeclaration(node) {
         if (node.id) functions.add(node.id.name);
       },
       CallExpression(node) {
-        const { callee } = node;
-        const [shape] = node.arguments;
-        if (
-          callee.type !== "MemberExpression" ||
-          callee.computed ||
-          callee.property.type !== "Identifier" ||
-          callee.property.name !== "of" ||
-          callee.object.type !== "Identifier" ||
-          shape?.type !== "ObjectExpression"
-        ) {
-          return;
-        }
-        const tag = callee.object.name;
-        const methods = tags.get(tag);
-        if (!methods) return;
-        for (const property of shape.properties) {
-          if (
-            property.type !== "Property" ||
-            property.computed ||
-            property.key.type !== "Identifier" ||
-            !methods.has(property.key.name)
-          ) {
-            continue;
-          }
-          const { value } = property;
-          if (property.method || isFunction(value)) {
-            report(property, tag, property.key.name);
-          } else if (value.type === "Identifier") {
-            named.push({ name: value.name, node: property, tag });
-          }
-        }
+        calls.push(node);
       },
+      // At the end, since a tag's interface and the names `of` is handed
+      // may come after the call in the module.
       "Program:exit"() {
-        for (const { name, node, tag } of named) {
-          if (
-            functions.has(name) &&
-            !others.has(name) &&
-            node.key.type === "Identifier"
-          ) {
-            report(node, tag, node.key.name);
-          }
-        }
+        for (const node of calls) check(node);
       },
     };
   },

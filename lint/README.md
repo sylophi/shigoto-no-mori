@@ -12,7 +12,7 @@ its cases through oxlint's `RuleTester`.
 | `effect-namespace-imports` | Effect modules come in as namespaces from their subpath, `import * as Effect from "effect/Effect"`. |
 | `no-runtime-in-service` | A service module never builds a `ManagedRuntime` or calls `run*`. |
 | `no-node-builtins-in-service` | A service module never imports `node:fs`, `node:child_process`, `node:os` or `node:path`. |
-| `no-env-or-clock-in-service` | A service module reads the environment through `Config` and the time through `Clock`, never `process.env` or `Date.now()`. |
+| `no-env-or-clock-in-service` | A service module reads the environment through `Config` and the time through `Clock`, never `process.env`, `Date.now()` or `new Date()`. |
 | `effect-fn-service-methods` | A method a service module's tag types as returning an `Effect.Effect` is `Effect.fn("Service.method")`, not a plain function. |
 
 ## Service modules

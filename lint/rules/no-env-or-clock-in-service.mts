@@ -1,7 +1,7 @@
 // A service module (../serviceModule.mts) reads the environment through
-// `Config` and the time through `Clock`, never `process.env` or
-// `Date.now()` (EFFECT.md, section 7). A test then sets either with a
-// layer, and `TestClock` moves the time.
+// `Config` and the time through `Clock`, never `process.env`,
+// `Date.now()` or `new Date()` (EFFECT.md, section 7). A test then sets
+// either with a layer, and `TestClock` moves the time.
 import { isServiceModule } from "../serviceModule.mts";
 import type { Rule } from "../types.mts";
 
@@ -15,6 +15,20 @@ export default {
   create(context) {
     if (!isServiceModule(context.filename)) return {};
     return {
+      // The current time; `new Date(at)` only formats one.
+      NewExpression(node) {
+        if (
+          node.callee.type === "Identifier" &&
+          node.callee.name === "Date" &&
+          node.arguments.length === 0
+        ) {
+          context.report({
+            node,
+            message:
+              "A service module reads the time through Clock, not `new Date()` (EFFECT.md, section 7).",
+          });
+        }
+      },
       MemberExpression(node) {
         const { object, property } = node;
         if (

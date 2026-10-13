@@ -32,6 +32,7 @@
 // its own: a failure stops the download, and trying again resumes it.
 import { createHash } from "node:crypto";
 import * as Context from "effect/Context";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FileSystem from "effect/FileSystem";
@@ -474,7 +475,7 @@ const make = ({
       }
 
       const meta: Meta = {
-        downloadedAt: new Date().toISOString(),
+        downloadedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         manifest: manifest.source.retrieved,
         villagers: total,
       };

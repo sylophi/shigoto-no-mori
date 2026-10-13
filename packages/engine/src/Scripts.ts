@@ -347,7 +347,7 @@ const make = Effect.gen(function* () {
   // they came from. A file that doesn't read or parse (a package.json
   // caught mid-edit) is left out rather than hiding the others, and
   // fails the read only when no other file is there.
-  const readFound = Effect.fn("Scripts.readScripts")(function* (dir: string) {
+  const readFound = Effect.fn("Scripts.readFound")(function* (dir: string) {
     const entries = yield* fs
       .readDirectory(dir)
       .pipe(

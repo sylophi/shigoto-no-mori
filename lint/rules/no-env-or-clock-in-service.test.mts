@@ -18,6 +18,7 @@ testRule("no-env-or-clock-in-service", rule, {
     { code: "const env = { ...process.env };", filename: service, errors: 1 },
     { code: "const at = Date.now();", filename: service, errors: 1 },
     { code: "const now = Date.now;", filename: service, errors: 1 },
+    { code: "new Date().toISOString();", filename: service, errors: 1 },
     {
       code: "Date.now() - started;",
       filename: "host/GitWatcher.mts",

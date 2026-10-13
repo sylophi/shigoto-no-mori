@@ -45,6 +45,21 @@ const read = Effect.fn("Registry.read")(function* (id: string) { return id; });
 Registry.of({ read });`,
       filename: service,
     },
+    // A destructured or imported name is no plain function's.
+    {
+      code: `${tag}
+const helper = () => { const read = (id: string) => Effect.succeed(id); };
+const { read } = yield* makeReads;
+Registry.of({ read });`,
+      filename: service,
+    },
+    {
+      code: `import { write } from "./writes.ts";
+${tag}
+const other = () => { const write = (id: string) => Effect.log(id); };
+Registry.of({ write });`,
+      filename: service,
+    },
     // Not a service module, or a tag this module doesn't declare.
     {
       code: `${tag}
@@ -57,6 +72,13 @@ Registry.of({ read: (id) => Effect.succeed(id) });`,
     },
   ],
   invalid: [
+    // The tag declared after the module builds it.
+    {
+      code: `const make = () => Registry.of({ read: (id) => Effect.succeed(id) });
+${tag}`,
+      filename: service,
+      errors: 1,
+    },
     {
       code: `${tag}
 Registry.of({ read: (id) => Effect.succeed(id) });`,
