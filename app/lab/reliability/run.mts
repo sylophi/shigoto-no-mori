@@ -5,7 +5,6 @@
 // The clients' reliability scenarios against the dev hub, once each
 // or looped for a soak, with a report of every recovery and failure and
 // the trace each one left (README.md beside this file).
-/* oxlint-disable no-await-in-loop -- the harness steps through time on purpose: each wait, poll and scenario follows the one before */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";

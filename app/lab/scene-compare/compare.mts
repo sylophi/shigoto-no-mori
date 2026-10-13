@@ -85,13 +85,11 @@ async function serve(checkout: string): Promise<string> {
   );
   const origin = `http://localhost:${port}`;
   for (let tries = 0; tries < 120; tries += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- polls until the server answers
     const ready = await fetch(`${origin}/scenes.html`).then(
       (response) => response.ok,
       () => false,
     );
     if (ready) return origin;
-    // oxlint-disable-next-line no-await-in-loop -- the pause between polls
     await new Promise((wait) => setTimeout(wait, 500));
   }
   throw new Error(`the fake host in ${checkout} did not start`);
@@ -291,7 +289,6 @@ try {
   for (const scene of scenes) {
     for (const theme of THEMES) {
       const shot = `${theme}-${scene}`;
-      // oxlint-disable-next-line no-await-in-loop -- one page a side, so the shots go one after another
       const [baseShot, headShot] = await Promise.allSettled([
         shoot(basePage, baseOrigin, scene, theme),
         shoot(headPage, headOrigin, scene, theme),
@@ -313,7 +310,6 @@ try {
       }
       const before = baseShot.value;
       const after = headShot.value;
-      // oxlint-disable-next-line no-await-in-loop -- one diff page, so the pairs compare one after another
       const { pixels, diff } = await compare(diffPage, before, after);
       if (pixels <= threshold) continue;
       differing.push({ shot, pixels });

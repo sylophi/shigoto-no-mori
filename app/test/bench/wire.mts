@@ -319,14 +319,12 @@ async function main() {
   if (viaTunnel) {
     for (let attempt = 0; ; attempt++) {
       try {
-        // oxlint-disable-next-line no-await-in-loop -- a retry is sequential
         (await connect()).close();
         break;
       } catch (error) {
         if (attempt === 60) {
           throw new Error(`could not reach ${link.url}`, { cause: error });
         }
-        // oxlint-disable-next-line no-await-in-loop -- a retry is sequential
         await delay(1_500);
       }
     }
@@ -342,7 +340,6 @@ async function main() {
   );
   await measure("20 small invokes, sequential", async () => {
     for (let i = 0; i < 20; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- the waterfall is the point
       await transport.invoke(READ, { projectId: "small" });
     }
   });
@@ -430,10 +427,8 @@ async function main() {
     // oxlint-disable-next-line no-unmodified-loop-condition -- the bundle's end clears it
     while (transferring) {
       const started = performance.now();
-      // oxlint-disable-next-line no-await-in-loop -- one call at a time
       await transport.invoke(READ, { projectId: "small" });
       calls.push(performance.now() - started);
-      // oxlint-disable-next-line no-await-in-loop -- paced
       await delay(100);
     }
   })();
