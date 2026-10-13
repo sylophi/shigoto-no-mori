@@ -184,22 +184,24 @@ function isSameProcess(
 }
 
 // The proof for a group whose leader is gone. It holds only for a
-// script of the host this one replaces, which exited a moment before
-// (HostFacts.replacesHostPid): the system hands out no pid while a group
-// of that id lives, so the group under the recorded pid is the script's,
-// unless the script's group emptied and a stranger's took its id since,
-// which takes far longer than a respawn. Another instance's records, and
-// those left before a relaunch or a reboot, can be days old, so their
-// groups are left alone. Every member must have started after the
-// script did.
+// script one of the hosts this one replaces wrote while it ran
+// (HostFacts.replacesHosts), which exited moments before: the system
+// hands out no pid while a group of that id lives, so the group under the
+// recorded pid is the script's, unless the script's group emptied and a
+// stranger's took its id since, which takes far longer than a respawn.
+// Another instance's records on the same data dir, those from before a
+// relaunch or a reboot, and one an earlier host of a recycled pid wrote,
+// can be days old, so their groups are left alone. Every member must
+// have started after the script did.
+type Replaced = readonly { readonly pid: number; readonly startedAt: number }[];
+
 function isSameGroup(
   record: RecordedScript,
   members: readonly GroupMember[],
-  replaces: number | undefined,
+  replaced: Replaced,
 ): boolean {
   return (
-    replaces !== undefined &&
-    record.ownerPid === replaces &&
+    isReplacedHosts(record, replaced) &&
     !members.some((member) => member.pid === record.pid) &&
     members.length > 0 &&
     members.every(
@@ -207,6 +209,13 @@ function isSameGroup(
     )
   );
 }
+
+const isReplacedHosts = (record: RecordedScript, replaced: Replaced) =>
+  replaced.some(
+    (host) =>
+      host.pid === record.ownerPid &&
+      record.startedAt >= host.startedAt - START_TOLERANCE_MS,
+  );
 
 const membersOf = (all: readonly GroupMember[], pgid: number) =>
   all.filter((row) => row.pgid === pgid);
@@ -235,7 +244,7 @@ const waitUntilGone = (isAlive: () => boolean, ms: number) =>
 // SIGKILL to what is still ours after the grace.
 const killStrays = Effect.fnUntraced(function* (
   record: RecordedScript,
-  replaces: number | undefined,
+  replaced: Replaced,
 ) {
   const pgid = record.pid;
   yield* signalTree(pgid, "SIGTERM");
@@ -243,7 +252,7 @@ const killStrays = Effect.fnUntraced(function* (
     return true;
   }
   const all = yield* readAllGroups();
-  if (all === null || !isSameGroup(record, membersOf(all, pgid), replaces)) {
+  if (all === null || !isSameGroup(record, membersOf(all, pgid), replaced)) {
     return true;
   }
   yield* signalTree(pgid, "SIGKILL");
@@ -282,26 +291,26 @@ const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
 // run of the same script needs.
 const reapOrphans = Effect.fnUntraced(function* (
   records: readonly RecordedScript[],
-  replaces: number | undefined,
+  replaced: Replaced,
 ) {
   const none: OrphanScriptReport = { stopped: 0 };
   if (records.length === 0) return none;
   const table = yield* readProcessTable(records.map((r) => r.pid));
   const ours = records.filter((r) => isSameProcess(r, table.get(r.pid)));
-  // A leader gone with its group still going, for the replaced host's
+  // A leader gone with its group still going, for the replaced hosts'
   // scripts alone.
-  const replaced = records.filter((r) => r.ownerPid === replaces);
-  const all = replaced.length === 0 ? [] : yield* readAllGroups();
+  const theirs = records.filter((r) => isReplacedHosts(r, replaced));
+  const all = theirs.length === 0 ? [] : yield* readAllGroups();
   const strays =
     all === null
       ? []
-      : replaced.filter((r) => isSameGroup(r, membersOf(all, r.pid), replaces));
+      : theirs.filter((r) => isSameGroup(r, membersOf(all, r.pid), replaced));
   const found = ours.length + strays.length;
   if (found === 0) return none;
   const outcomes = yield* Effect.all(
     [
       Effect.forEach(ours, killOrphan, { concurrency: "unbounded" }),
-      Effect.forEach(strays, (record) => killStrays(record, replaces), {
+      Effect.forEach(strays, (record) => killStrays(record, replaced), {
         concurrency: "unbounded",
       }),
     ],
@@ -371,7 +380,7 @@ export const layer = Layer.effect(
       ),
     );
     const done = yield* Deferred.make<OrphanScriptReport>();
-    yield* reapOrphans(left, facts.replacesHostPid).pipe(
+    yield* reapOrphans(left, facts.replacesHosts ?? []).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("[scripts] orphan sweep failed", cause).pipe(
           Effect.as({ stopped: 0 }),

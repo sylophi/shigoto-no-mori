@@ -99,10 +99,10 @@ const recorded = () =>
 
 // The sweep as a start brings it up, in a scope of the proof's, over
 // the file's store or `scripts`.
-// `replaces`: the host this one was forked to replace (HostFacts).
+// `replaces`: the hosts this one was forked to replace (HostFacts).
 async function startSweep(
   scripts?: Layer.Layer<RunningScripts.RunningScripts, unknown>,
-  replaces?: number,
+  replaces?: { pid: number; startedAt: number }[],
 ) {
   const scope = Scope.makeUnsafe();
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
@@ -112,7 +112,7 @@ async function startSweep(
     Layer.provide(
       Layer.succeed(HostFacts.HostFacts, {
         ...facts,
-        ...(replaces === undefined ? {} : { replacesHostPid: replaces }),
+        ...(replaces === undefined ? {} : { replacesHosts: replaces }),
       }),
     ),
   );
@@ -196,53 +196,74 @@ it("stops what a dead instance left running as it started, leaves a recycled pid
   );
 });
 
-it("stops what a script whose leader died left in its group, as a package script or a nohup'd command leaves when the host is killed, and leaves alone a group older than its record and one another host recorded", async () => {
+it("stops what a script of a host this one replaces left in its group when its leader died, as a package script or a nohup'd command leaves when the host is killed, and leaves alone a group older than its record, another host's, and one a past host of a recycled pid recorded", async () => {
+  // Two hosts died since one was last up: `first`, then `crashed`, this
+  // one's predecessor.
+  const first = await deadPid();
   const crashed = await deadPid();
+  const elsewhere = await deadPid();
   const startedAt = Date.now();
+  const hostsStarted = startedAt - 1_000;
   const left = await headlessGroup("610");
-  const older = await headlessGroup("611");
-  const another = await headlessGroup("612");
+  const chain = await headlessGroup("611");
+  const older = await headlessGroup("612");
+  const another = await headlessGroup("613");
+  const recycled = await headlessGroup("614");
+  const script = { projectId: "p", worktreeId: "wt", command: "pnpm run dev" };
   await runHost(
     Effect.gen(function* () {
       const scripts = yield* RunningScripts.RunningScripts;
-      const script = { projectId: "p", worktreeId: "wt", ownerPid: crashed };
       yield* scripts.add({
         ...script,
         runId: "left",
+        ownerPid: crashed,
         startedAt,
         pid: left.leader,
-        command: "pnpm run dev",
+      });
+      // The host before, which died before it was up to claim it.
+      yield* scripts.add({
+        ...script,
+        runId: "chain",
+        ownerPid: first,
+        startedAt,
+        pid: chain.leader,
       });
       // Recorded as started a minute after what is in the group did.
       yield* scripts.add({
         ...script,
         runId: "older",
+        ownerPid: crashed,
         startedAt: Date.now() + 60_000,
         pid: older.leader,
-        command: "pnpm run dev",
+      });
+      // Another instance's on the same data dir, or a host's from before a
+      // relaunch or a reboot.
+      yield* scripts.add({
+        ...script,
+        runId: "elsewhere",
+        ownerPid: elsewhere,
+        startedAt,
+        pid: another.leader,
+      });
+      // Written days ago by a host whose pid the crashed one got again.
+      yield* scripts.add({
+        ...script,
+        runId: "recycled",
+        ownerPid: crashed,
+        startedAt: startedAt - 10 * 24 * 60 * 60 * 1000,
+        pid: recycled.leader,
       });
     }),
   );
-  // Another host's: an instance on the same data dir, or a host from
-  // before a relaunch or a reboot, which can be days before, after the
-  // script's group emptied and its id went to a stranger's.
-  const elsewhere = await deadPid();
-  await runHost(
-    Effect.flatMap(RunningScripts.RunningScripts, (scripts) =>
-      scripts.add({
-        projectId: "p",
-        worktreeId: "wt",
-        ownerPid: elsewhere,
-        runId: "elsewhere",
-        startedAt,
-        pid: another.leader,
-        command: "pnpm run dev",
-      }),
-    ),
+  const sweep = await startSweep(undefined, [
+    { pid: first, startedAt: hostsStarted },
+    { pid: crashed, startedAt: hostsStarted },
+  ]);
+  assert.deepEqual(await Effect.runPromise(sweep.takeReport), { stopped: 2 });
+  await waitFor(
+    () => !processAlive(left.stray) && !processAlive(chain.stray),
+    "the strays to stop",
   );
-  const sweep = await startSweep(undefined, crashed);
-  assert.deepEqual(await Effect.runPromise(sweep.takeReport), { stopped: 1 });
-  await waitFor(() => !processAlive(left.stray), "the stray to stop");
   assert.ok(
     processAlive(older.stray),
     "a group older than its record was signaled",
@@ -250,6 +271,10 @@ it("stops what a script whose leader died left in its group, as a package script
   assert.ok(
     processAlive(another.stray),
     "a group another host recorded was signaled",
+  );
+  assert.ok(
+    processAlive(recycled.stray),
+    "a group a past host of a recycled pid recorded was signaled",
   );
 });
 

@@ -109,6 +109,9 @@ const crashes: number[] = [];
 // The current host's address, once it is up. Replaced as a host forks,
 // so a window redialing meanwhile waits for the next one.
 let address = deferred<Reported>();
+// The hosts that exited unasked since one was last up, for the next to
+// stop what their scripts left (HostFacts.replacesHosts).
+let replaced: { pid: number; startedAt: number }[] = [];
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 
@@ -146,6 +149,8 @@ function tell(said: Effect.Effect<unknown, unknown>): void {
 const registrar = createShellRegistrar();
 const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
+    // Up, its sweep has claimed what the hosts before it left.
+    replaced = [];
     // The device the host is rides along, which the shell's account
     // calls name.
     reportedDeviceId = reported.deviceId;
@@ -194,13 +199,12 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     onGuide((guide) => guide.drive(token, action)),
 };
 
-// `replaces`: the host that just exited unasked, which this one follows.
-function fork(replaces?: number): void {
+function fork(): void {
   const { port1, port2 } = new MessageChannelMain();
   const facts: HostFacts =
-    replaces === undefined
+    replaced.length === 0
       ? hostFacts()
-      : { ...hostFacts(), replacesHostPid: replaces };
+      : { ...hostFacts(), replacesHosts: [...replaced] };
   const forked = utilityProcess.fork(
     join(__dirname, "host.js"),
     [`${HOST_FACTS_FLAG}${JSON.stringify(facts)}`],
@@ -208,9 +212,11 @@ function fork(replaces?: number): void {
   );
   child = forked;
   // Read at its spawn: an exited utility process's pid reads undefined.
-  let pid: number | undefined;
+  let spawned: { pid: number; startedAt: number } | undefined;
   forked.once("spawn", () => {
-    pid = forked.pid;
+    if (forked.pid !== undefined) {
+      spawned = { pid: forked.pid, startedAt: Date.now() };
+    }
   });
   // The host's console, into the shell's (and so its log file).
   for (const stream of [forked.stdout, forked.stderr]) {
@@ -240,7 +246,8 @@ function fork(replaces?: number): void {
       });
       return;
     }
-    fork(pid);
+    if (spawned !== undefined) replaced.push(spawned);
+    fork();
   });
 }
 
