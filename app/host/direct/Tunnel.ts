@@ -570,6 +570,12 @@ const make = (options: Options) =>
                   stdin: "ignore",
                   stdout: "ignore",
                   stderr: "ignore",
+                  // In the host's process group, not one of its own, so
+                  // what stops the app's group (a terminal's Ctrl-C, a
+                  // launcher stopping it) stops the connector too. One
+                  // the host's crash leaves is reaped through the pid
+                  // file at the next start.
+                  detached: false,
                   forceKillAfter: KILL_GRACE_MS,
                 }),
               )
