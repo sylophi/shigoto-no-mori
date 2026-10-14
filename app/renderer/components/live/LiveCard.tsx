@@ -3,14 +3,16 @@
 // so its runner and the dialogs it opens drive that device as the
 // worktree's page would.
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { useThisDeviceStatus } from "@/lib/runtime/hostAnswering";
-import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
+import {
+  pullRequestsKey,
+  somePullRequestsAtom,
+} from "@/hooks/projects/useProjectPullRequests";
 import { useDeviceProjects } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
@@ -49,6 +51,7 @@ import {
 } from "@shigomori/ui/views/live/LiveCardView.tsx";
 import type { LiveCard as LiveCardModel } from "./liveModel";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useViews } from "@/lib/runtime/viewHooks";
 
 // A device's heading over its cards: its mark in its connection tone,
 // its name, where it stands, and how much runs there.
@@ -233,12 +236,11 @@ function WorktreeHeader({
   ).data?.find((entry) => entry.id === projectId);
   // What the work is called, as its sidebar row names it: its PR's
   // title, the one `sm describe` gave it, else the branch.
-  const prs = useQuery({
-    ...projectPullRequestsQueryOptions(projectId, scope),
-    meta: { silentError: true },
-  }).data;
+  const [prs] = useViews(somePullRequestsAtom, [
+    scope.api === undefined ? null : pullRequestsKey(deviceId, projectId),
+  ]);
   const workTitle = worktree
-    ? worktreeTitle(worktree, mappedPullRequest(prs, worktree))
+    ? worktreeTitle(worktree, mappedPullRequest(prs?.data, worktree))
     : null;
   // Held as placeholders until the lists are in, rather than read as
   // a worktree that is gone.

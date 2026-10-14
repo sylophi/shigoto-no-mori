@@ -641,6 +641,12 @@
       "type": ".f"
     }
   },
+  "githubCli:watchProjectPullRequests": {
+    "payload": {
+      "projectId": "v"
+    },
+    "success": {}
+  },
   "githubCli:worktreePullRequest": {
     "payload": {
       "projectId": "[)",

@@ -1,5 +1,7 @@
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as HostPushes from "@host/lib/HostPushes";
+import * as Views from "@host/lib/Views";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -15,6 +17,7 @@ import {
   evictProjectPullRequests,
   getWorktreePullRequest,
   listProjectPullRequests,
+  noteBranchPullRequest,
 } from "@host/lib/githubCli/pullRequests";
 import {
   listPullRequestCandidates,
@@ -42,6 +45,39 @@ import { findWorktreeIdentity } from "@host/lib/projects";
 const projectPath = (projectId: string) =>
   Effect.map(findProject(projectId), (project) => project.path);
 
+// The project's PR map moved (a merge, an edit, a page's fresher read):
+// its view reads it again.
+const pullRequestsMoved = (projectId: string) =>
+  HostPushes.push(githubCliContract, "projectPullRequestsRefreshed", {
+    projectId,
+  });
+
+// The project's PR map as a view: the sweep's, read again as it or a
+// call here moves it, and as the GitHub integration is switched.
+export const githubCliViews: ViewHandlers<
+  typeof githubCliContract,
+  | Views.Services
+  | GithubCli
+  | Engine.Services
+  | ChildProcessSpawner.ChildProcessSpawner
+> = {
+  watchProjectPullRequests: ({ projectId }) =>
+    Views.view(
+      `githubCli:pullRequests:${projectId}`,
+      () => githubCliHandlers.projectPullRequests({ projectId }),
+      Views.either(
+        Views.pushed(
+          githubCliContract,
+          "projectPullRequestsRefreshed",
+          (moved) => {
+            return moved.projectId === projectId;
+          },
+        ),
+        Views.wrote("device_config"),
+      ),
+    ),
+};
+
 export const githubCliHandlers = {
   readiness: () => Effect.flatMap(GithubCli, (cli) => cli.readiness),
 
@@ -52,7 +88,7 @@ export const githubCliHandlers = {
   publish: ({ projectId, owner, visibility }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
       publishRepo({ cwd, owner, visibility }),
-    ),
+    ).pipe(Effect.andThen(pullRequestsMoved(projectId))),
 
   // Maps don't survive structured clone across IPC, so ship a record.
   projectPullRequests: ({ projectId }) =>
@@ -60,9 +96,17 @@ export const githubCliHandlers = {
       Effect.map((map) => Object.fromEntries(map)),
     ),
 
+  // A page's read of its branch's PR, which moves the project's map when
+  // it learned something newer than the sweep.
   worktreePullRequest: ({ projectId, branch }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
-      getWorktreePullRequest(cwd, branch),
+      getWorktreePullRequest(cwd, branch).pipe(
+        Effect.tap((pr) =>
+          noteBranchPullRequest(cwd, branch, pr)
+            ? pullRequestsMoved(projectId)
+            : Effect.void,
+        ),
+      ),
     ),
 
   pullRequestCandidates: ({ projectId }) =>
@@ -94,7 +138,10 @@ export const githubCliHandlers = {
       // evict so the next read sees the merged state. An armed or queued
       // PR is still open, and the slim map doesn't carry either flag, so
       // the (slow, project-wide) sweep isn't repeated for it.
-      if (result.outcome === "merged") evictProjectPullRequests(project.path);
+      if (result.outcome === "merged") {
+        evictProjectPullRequests(project.path);
+        yield* pullRequestsMoved(projectId);
+      }
       return result;
     }),
 
@@ -106,7 +153,7 @@ export const githubCliHandlers = {
   setPullRequestDraft: ({ projectId, number, draft }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
       setPullRequestDraft({ cwd, number, draft }),
-    ),
+    ).pipe(Effect.ensuring(pullRequestsMoved(projectId))),
 
   pullRequestDraft: ({ projectId, worktreeId }) =>
     Effect.gen(function* () {
@@ -145,12 +192,12 @@ export const githubCliHandlers = {
           projectPath: project.path,
           ...pr,
         }),
-    ),
+    ).pipe(Effect.ensuring(pullRequestsMoved(projectId))),
 
   disablePullRequestAutoMerge: ({ projectId, number }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
       disablePullRequestAutoMerge({ cwd, number }),
-    ),
+    ).pipe(Effect.ensuring(pullRequestsMoved(projectId))),
 } satisfies EffectHandlers<
   typeof githubCliContract,
   unknown,
@@ -158,4 +205,5 @@ export const githubCliHandlers = {
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
   | Engine.Services
+  | HostPushes.HostPushes
 >;

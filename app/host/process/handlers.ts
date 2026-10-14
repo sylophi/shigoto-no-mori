@@ -57,7 +57,7 @@ import { branchesHandlers } from "@host/ipc/modules/branches";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import { fsHandlers } from "@host/ipc/modules/fs";
 import { gitHandlers } from "@host/ipc/modules/git";
-import { githubCliHandlers } from "@host/ipc/modules/githubCli";
+import { githubCliHandlers, githubCliViews } from "@host/ipc/modules/githubCli";
 import {
   globalConfigHandlers,
   globalConfigViews,
@@ -792,6 +792,7 @@ export function registerHostHandlers(): void {
   registerContract(fsContract, fsHandlers);
   registerContract(gitContract, gitHandlers);
   registerContract(githubCliContract, githubCliHandlers);
+  registerViews(githubCliContract, githubCliViews);
   registerContract(worktreesContract, worktreesHandlers);
   registerViews(worktreesContract, worktreesViews);
   registerContract(hygieneContract, hygieneHandlers);

@@ -18,7 +18,6 @@ import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackClean
 import type * as Effect from "effect/Effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { type QueryKeyRegistry, worktreeQueriesOn } from "@/lib/queryKeys";
-import { mirrorIntoProjectMap } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import {
   changeWorktreeRow,
@@ -449,8 +448,9 @@ export function useSetShelved() {
 // or its open PR's while one holds them (`sm describe` edits the PR
 // then). An empty one clears it. Not optimistic: the editor stays open
 // until the save lands, so one the engine refuses keeps its text.
-// A PR's edit is written into the cached PR as it lands, so the page
-// doesn't show the old text until the refetch answers.
+// A PR's edit is written into the page's PR as it lands, so the page
+// doesn't show the old text until the refetch answers (the host moves
+// the project's map itself).
 export function useDescribeWorktree(errorTitle: string) {
   return useWorktreeRowMutation(
     (api, input: WorktreeVars & { title?: string; description?: string }) =>
@@ -468,13 +468,6 @@ export function useDescribeWorktree(errorTitle: string) {
         bodySource: description ?? pr.bodySource,
       };
       queryClient.setQueryData(key, edited);
-      mirrorIntoProjectMap(
-        queryClient,
-        keys,
-        projectId,
-        worktree.branch,
-        edited,
-      );
       void queryClient.invalidateQueries({ queryKey: key, exact: true });
     },
   );
