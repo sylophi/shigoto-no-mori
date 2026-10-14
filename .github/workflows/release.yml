@@ -244,6 +244,13 @@ jobs:
             exit 1
           fi
 
+      # The app as the release signed it, opening its store, which only
+      # its own host does (node:sqlite in Electron): on a data folder that
+      # does not exist and on one an earlier launch left an empty store.db
+      # in (scripts/smoke-app.mts).
+      - name: Launch the signed app
+        run: node scripts/smoke-app.mts "out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app"
+
       - name: Upload assets to release
         env:
           GITHUB_TOKEN: ${{ github.token }}

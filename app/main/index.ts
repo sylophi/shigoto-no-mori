@@ -362,6 +362,9 @@ app.on("window-all-closed", () => {
 // A host that could not start: the store it could not open, with what
 // the engine's doctor found, or why it kept stopping.
 function showHostFailure(failure: HostFailure): void {
+  // The log has it too: the dialog below holds the process until it is
+  // dismissed, and nothing else says why.
+  log.error("[host] could not start:", failure.storeReport ?? failure.message);
   // A host that kept stopping, on a machine kept reachable for other
   // devices: relaunched within the fatal-relaunch budget rather than
   // left on a dialog nobody may be there to dismiss. A store that won't
