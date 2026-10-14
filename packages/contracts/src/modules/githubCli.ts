@@ -56,12 +56,6 @@ export const githubCliContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  invoke(
-    "projectPullRequests",
-    ProjectScopedPayloadSchema,
-    Schema.Record(Schema.String, PullRequestSchema),
-    { remote: true, gated: false },
-  ),
   // The project's branch to PR map, as the background fetch's sweep and
   // the pages' own reads of a branch's PR leave it.
   view(

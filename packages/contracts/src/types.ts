@@ -137,9 +137,14 @@ export type PushProducerPayload<
 
 // The invokes of M keyed by channel instead of call name, as one table:
 // for something that answers channels straight off the wire. Same
-// shapes as Handlers, minus the context.
+// shapes as Handlers, minus the context. A view is answered with its
+// value as it reads now.
 export type ChannelHandlers<M extends ContractModule> = {
   [R in InvokesOf<M> as R["_tag"]]: (
     input: Decoded<InputOf<R>>,
   ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
+} & {
+  [V in ViewsOf<M> as V["_tag"]]: (
+    input: Decoded<InputOf<V>>,
+  ) => Promise<Decoded<PayloadOf<V>>> | Decoded<PayloadOf<V>>;
 };
