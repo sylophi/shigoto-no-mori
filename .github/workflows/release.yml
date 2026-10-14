@@ -72,12 +72,35 @@ jobs:
         with:
           bun-version: "1.4.0"
 
+      # The shipped .app's Info.plist (CFBundleShortVersionString,
+      # CFBundleVersion) and Electron's app.getVersion() both come from
+      # package.json at packaging time. Patch it from the release tag so
+      # the displayed version always matches the tag, without anyone
+      # having to remember to bump package.json before tagging. A
+      # non-semver tag (e.g. "v0.17", "latest") fails the run: building
+      # with the placeholder 0.0.0 version makes the publisher create a
+      # v0.0.0 release instead of populating the tagged one. Before the
+      # install: a manifest changed after it makes the next `pnpm exec`
+      # install the workspace again, which met the hoisted tree it had
+      # already laid ("Directory not empty") on alpha.2's and alpha.3's
+      # first attempts.
+      - name: Sync package.json version with tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0); refusing to build with the placeholder 0.0.0 version."
+            exit 1
+          fi
+          npm pkg set version="$VERSION"
+
       - name: Install dependencies
         working-directory: .
         run: pnpm install --frozen-lockfile
 
-      # The flavor (packages/engine/src/flavor.ts): a v3.0.0-alpha.N or
-      # v3.0.0-beta.N tag builds the v3 app, which installs beside the prod one under its own
+      # The flavor (packages/engine/src/flavor.ts): a v3.0.0-alpha.N,
+      # -beta.N or -rc.N tag builds the v3 app, which installs beside the prod one under its own
       # name, folders and `smv3`, and points at the dev hub (the SM_V3_
       # variables) until v3 merges into main; anything else builds prod. The
       # later steps read SM_FLAVOR, the app's name and the account
@@ -117,25 +140,6 @@ jobs:
       # so refuse here, naming the fix, rather than build it.
       - name: Require up-to-date third-party notices
         run: pnpm run licenses:check
-
-      # The shipped .app's Info.plist (CFBundleShortVersionString,
-      # CFBundleVersion) and Electron's app.getVersion() both come from
-      # package.json at packaging time. Patch it from the release tag so
-      # the displayed version always matches the tag, without anyone
-      # having to remember to bump package.json before tagging. A
-      # non-semver tag (e.g. "v0.17", "latest") fails the run: building
-      # with the placeholder 0.0.0 version makes the publisher create a
-      # v0.0.0 release instead of populating the tagged one.
-      - name: Sync package.json version with tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          VERSION="${TAG#v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0); refusing to build with the placeholder 0.0.0 version."
-            exit 1
-          fi
-          npm pkg set version="$VERSION"
 
       - name: Import Developer ID certificate
         env:

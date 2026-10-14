@@ -259,8 +259,8 @@ export const makeFeeds = ({
     // version (the release workflow stamps the tag into the build, so
     // v2.0.0-beta.2 runs as "2.0.0-beta.2"). When GitHub can't answer,
     // the update server compares instead, but its "nothing newer" can't
-    // speak for a prerelease build's channel, so for one it is
-    // unconfirmed too. When both fail, the release list's error is the
+    // speak for a prerelease build, since it hides prereleases, so for
+    // one it is unconfirmed too. When both fail, the release list's error is the
     // one reported.
     const queryFeed = Effect.fn("Updater.queryFeed")(function* (
       input: UpdateInput,

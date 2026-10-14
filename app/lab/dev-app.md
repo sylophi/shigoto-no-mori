@@ -7,7 +7,7 @@ profiles make several devices of one machine. The reference behind
 ## Builds and data folders
 
 The app has three builds, its flavors: prod is what ships, v3 is an
-alpha or beta of 3.0.0 (`v3.0.0-alpha.N`, `v3.0.0-beta.N`) the owner
+alpha, beta or rc of 3.0.0 (`v3.0.0-alpha.N`, `-beta.N`, `-rc.N`) the owner
 runs beside prod until v3 merges into main, and dev is `pnpm dev`.
 Each keeps its own state and never reads another's, so all three run on
 one machine at once as three devices. Every name below comes from one

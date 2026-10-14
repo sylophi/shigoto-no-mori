@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { SemVer } from "semver";
 import { describe, it } from "vitest";
-import { compareVersions, releaseChannel } from "../src/releaseVersions.ts";
+import { compareVersions } from "../src/releaseVersions.ts";
 
 describe("compareVersions", () => {
   it("orders the spec's example and the shapes this repo tags", () => {
@@ -32,24 +31,5 @@ describe("compareVersions", () => {
   it("ranks what doesn't parse below everything", () => {
     assert.equal(compareVersions("dev", "0.0.1"), -1);
     assert.equal(compareVersions("1.02.0", "dev"), 0);
-  });
-});
-
-describe("releaseChannel", () => {
-  it("names the line a prerelease belongs to", () => {
-    const cases: Record<string, string> = {
-      "1.7.1": "",
-      "2.0.0-beta.1": "2.0.0-beta",
-      "2.0.0-beta.7": "2.0.0-beta",
-      "2.0.0-beta": "2.0.0-beta",
-      "2.0.0-test.keychain-prompts.1": "2.0.0-test.keychain-prompts",
-      "2.1.0-beta.1": "2.1.0-beta",
-      "2.0.0-1": "2.0.0-1",
-      "3.0.0-alpha.2": "3.0.0-alpha",
-      "2.0.0-beta.9007199254740993": "2.0.0-beta",
-    };
-    for (const [raw, want] of Object.entries(cases)) {
-      assert.equal(releaseChannel(new SemVer(raw)), want, raw);
-    }
   });
 });

@@ -489,7 +489,7 @@ describe("the update server", () => {
   });
 
   // It hides prereleases, so its 204 can't vouch for a prerelease
-  // build's channel.
+  // build.
   it("leaves a prerelease build's up to date unconfirmed", async () => {
     const box = newBox("2.0.0-beta.2");
     seedStaged(box, "2.0.0-beta.2");
@@ -597,7 +597,7 @@ describe("the update server", () => {
 describe("the release list", () => {
   const prerelease = (box: Box) => running(box, "2.0.0-beta.2");
 
-  it("is what a prerelease build follows, in its own channel", async () => {
+  it("is what a prerelease build follows", async () => {
     const box = newBox("2.0.0-beta.2");
     const { client, seen } = network((url) =>
       url.toString() === LIST
@@ -653,11 +653,11 @@ describe("the release list", () => {
 
   // A full release is the prod app, another flavor's bundle, and the
   // update server only knows full releases.
-  it("is all a v3 build follows, the 3.0.0 alphas and betas alone", async () => {
+  it("is all a v3 build follows, the 3.0.0 prereleases alone", async () => {
     const box = newBox("3.0.0-alpha.1");
     const listing = [
       listed("v3.0.0"),
-      listed("v3.0.0-rc.1"),
+      listed("v3.1.0-rc.1"),
       listed("v3.0.0-alpha.2"),
       listed("v3.0.0-alpha.1"),
     ];
