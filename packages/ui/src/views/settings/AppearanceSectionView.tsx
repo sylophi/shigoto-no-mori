@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Moon, Sun, SunMoon } from "lucide-react";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
-import type { Theme } from "@shigomori/contracts/schemas";
+import type { Theme, ThemeRotation } from "@shigomori/contracts/schemas";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import { cn } from "../../lib/utils.ts";
 
@@ -12,11 +12,22 @@ const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "system", label: "System", Icon: SunMoon },
 ];
 
+const ROTATIONS: { value: ThemeRotation; label: string }[] = [
+  { value: "launch", label: "Each launch" },
+  { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+];
+
 export interface AppearanceSectionViewProps {
   theme: Theme;
   onPick: (theme: Theme) => void;
   doubutsu: boolean;
   onDoubutsuChange: (next: boolean) => void;
+  themeRotation: boolean;
+  onThemeRotationChange: (next: boolean) => void;
+  themeRotationEvery: ThemeRotation;
+  onThemeRotationEveryChange: (next: ThemeRotation) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   // A browser without the Battery Status API has nothing to pause on.
@@ -36,6 +47,10 @@ export function AppearanceSectionView({
   onPick,
   doubutsu,
   onDoubutsuChange,
+  themeRotation,
+  onThemeRotationChange,
+  themeRotationEvery,
+  onThemeRotationEveryChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
   battery,
@@ -84,6 +99,22 @@ export function AppearanceSectionView({
         <PaletteRow label="Dark palette" disabled={!doubutsu}>
           {darkPalette}
         </PaletteRow>
+        <ToggleRowView
+          checked={themeRotation}
+          onCheckedChange={onThemeRotationChange}
+          disabled={!doubutsu}
+          label="Rotate palettes"
+        />
+        <div className="pl-11">
+          <SegmentedControl
+            aria-label="Rotate palettes"
+            value={themeRotationEvery}
+            onChange={onThemeRotationEveryChange}
+            options={ROTATIONS}
+            disabled={!doubutsu || !themeRotation}
+            optionClassName="px-3 py-1.5 text-xs"
+          />
+        </div>
       </div>
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}

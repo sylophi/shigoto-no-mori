@@ -267,13 +267,16 @@ export function applyAgentEvent(
     case "Stop":
     case "StopFailure":
     case "Interrupt":
+    // A session's end keeps its binding: a host that unloads an idle
+    // session (T3 Code, Codex's app server) ends it the same way an
+    // exit does, and either can be resumed.
+    case "SessionEnd":
       state = "idle";
       nextWaits = [];
       if (event.lastMessage !== "") {
         message = clipLine(event.lastMessage, AGENT_MESSAGE_MAX);
       }
       break;
-    case "SessionEnd":
     case "SubagentStop":
       return "unbind";
     default:

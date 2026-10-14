@@ -5,6 +5,7 @@ import {
   type LauncherCommand,
   type TerminalId,
   type Theme,
+  type ThemeRotation,
 } from "@shigomori/contracts/schemas";
 import {
   type DarkTheme,
@@ -14,13 +15,16 @@ import {
 import { villageNewsEnabled } from "./villageLife.ts";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first fifteen fields are client config (appearance, the keymap),
+// the first seventeen fields are client config (appearance, the keymap),
 // the rest are device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
   lightTheme: LightTheme;
   darkTheme: DarkTheme;
+  // The interval stays while rotation is off, for when it comes back.
+  themeRotation: boolean;
+  themeRotationEvery: ThemeRotation;
   pauseAnimationsOnBattery: boolean;
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
@@ -68,6 +72,8 @@ export function fromConfig(
     doubutsu: picks.doubutsu,
     lightTheme: picks.light,
     darkTheme: picks.dark,
+    themeRotation: clientConfig.themeRotation !== undefined,
+    themeRotationEvery: clientConfig.themeRotation ?? "launch",
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
     villageNews: villageNewsEnabled(clientConfig),

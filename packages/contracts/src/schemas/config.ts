@@ -42,6 +42,13 @@ const LightThemeSchema = Schema.Literals(LIGHT_THEME_IDS);
 const DarkThemeSchema = Schema.Literals(DARK_THEME_IDS);
 export type LightTheme = typeof LightThemeSchema.Type;
 export type DarkTheme = typeof DarkThemeSchema.Type;
+const ThemeRotationSchema = Schema.Literals([
+  "launch",
+  "hourly",
+  "daily",
+  "weekly",
+]);
+export type ThemeRotation = typeof ThemeRotationSchema.Type;
 
 const LauncherCommandSchema = Schema.Struct({
   id: Schema.NonEmptyString,
@@ -558,6 +565,12 @@ export const ClientConfigSchema = Schema.Struct({
   // the picks. Mirrored to localStorage with the switch.
   lightTheme: Schema.optional(LightThemeSchema),
   darkTheme: Schema.optional(DarkThemeSchema),
+  // Rotation: how often the picks move on to the next light and dark
+  // pair (packages/ui/src/lib/themes.ts), which holds them together.
+  // Absent is off. The stamp is when the picks last changed by a
+  // rotation or a Settings save, which the timed rotations count from.
+  themeRotation: Schema.optional(ThemeRotationSchema),
+  themeRotatedAt: Schema.optional(Schema.Finite),
   // Past the first run's page (renderer/components/welcome): a project
   // was added there, or this install moved from v2 or had projects
   // before. Absent = not yet, which the shell's first window opens on.

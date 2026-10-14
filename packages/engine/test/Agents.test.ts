@@ -232,6 +232,9 @@ describe("sessions", () => {
       ["PostToolUseFailure", {}, "working"],
       ["Notification", { notification_type: "permission_prompt" }, "working"],
       ["Notification", { notification_type: "idle_prompt" }, "idle"],
+      ["UserPromptSubmit", {}, "working"],
+      // A host unloading the session keeps it bound.
+      ["SessionEnd", {}, "idle"],
     ] as const) {
       assert.deepEqual(
         (await after(fox.id, "s1", event, extra)).map(({ state }) => state),
@@ -264,10 +267,6 @@ describe("sessions", () => {
     assert.equal(await unbind(), true);
     assert.deepEqual(await sessionsOf(fox.id), []);
     assert.equal(await unbind(), false);
-
-    await autoBind(fox.path);
-    await send("claude", "SessionEnd", "s1");
-    assert.deepEqual(await sessionsOf(fox.id), []);
   });
 
   it("binds a session that starts inside a worktree", async () => {

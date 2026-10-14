@@ -58,6 +58,7 @@ import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { openExternalUrl, revealInFolder } from "./lib/openExternal";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
+import { startThemeRotation } from "./lib/themeRotation";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
 import { gitFetchingAtom } from "./hooks/git/useProjectGitFetching";
@@ -75,6 +76,8 @@ export interface AppClient {
   api: RendererApi;
   registry: AtomRegistry.AtomRegistry;
   queryClient: QueryClient;
+  // Settles once the launch's palette rotation has landed.
+  paletteTurned: Promise<void>;
 }
 
 export function startApp({
@@ -156,7 +159,9 @@ export function startApp({
   // and on the desktop the notifications.
   startAgentWatch(api, registry);
 
-  return { api, registry, queryClient };
+  const paletteTurned = startThemeRotation(api, registry);
+
+  return { api, registry, queryClient, paletteTurned };
 }
 
 // A window over the page's client, drawn into `element`, its theme
@@ -164,7 +169,7 @@ export function startApp({
 // (a frame on the marketing site); otherwise the window wears its
 // settings'.
 export function mountWindow(
-  { api, registry, queryClient }: AppClient,
+  { api, registry, queryClient, paletteTurned }: AppClient,
   {
     element,
     ClerkProvider,
@@ -218,25 +223,29 @@ export function mountWindow(
       revealInFolder(api, path, errorTitle),
   };
 
-  createRoot(element).render(
-    <StrictMode>
-      <ApiProvider api={api}>
-        <RegistryContext value={registry}>
-          <QueryClientProvider client={queryClient}>
-            <ThemeRootProvider value={element}>
-              <OutsideProvider value={outside}>
-                <ClerkGate Provider={ClerkProvider}>
-                  <App router={router} themeFromRoot={themeFromRoot} />
-                </ClerkGate>
-                <AppToaster />
-                <UpdateNews />
-                <ErrorDetailsHost />
-              </OutsideProvider>
-            </ThemeRootProvider>
-          </QueryClientProvider>
-        </RegistryContext>
-      </ApiProvider>
-    </StrictMode>,
+  // Rendered once the launch's palette rotation has landed, so the
+  // first frame wears the palette it moved to.
+  void paletteTurned.then(() =>
+    createRoot(element).render(
+      <StrictMode>
+        <ApiProvider api={api}>
+          <RegistryContext value={registry}>
+            <QueryClientProvider client={queryClient}>
+              <ThemeRootProvider value={element}>
+                <OutsideProvider value={outside}>
+                  <ClerkGate Provider={ClerkProvider}>
+                    <App router={router} themeFromRoot={themeFromRoot} />
+                  </ClerkGate>
+                  <AppToaster />
+                  <UpdateNews />
+                  <ErrorDetailsHost />
+                </OutsideProvider>
+              </ThemeRootProvider>
+            </QueryClientProvider>
+          </RegistryContext>
+        </ApiProvider>
+      </StrictMode>,
+    ),
   );
 
   return router;
