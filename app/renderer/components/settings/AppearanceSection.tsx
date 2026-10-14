@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Moon, Sun, SunMoon } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -18,10 +17,11 @@ import { cn } from "@/lib/utils";
 import { ThemePicker } from "./ThemePicker";
 import { VillageLifeSetting } from "./VillageLifeSetting";
 
-const ROTATIONS: { value: ThemeRotation | "off"; label: string }[] = [
-  { value: "off", label: "Off" },
+const ROTATIONS: { value: ThemeRotation; label: string }[] = [
   { value: "launch", label: "Each launch" },
   { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
 ];
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
@@ -39,8 +39,10 @@ interface AppearanceSectionProps {
   onLightThemeChange: (next: LightTheme) => void;
   darkTheme: DarkTheme;
   onDarkThemeChange: (next: DarkTheme) => void;
-  themeRotation: ThemeRotation | "off";
-  onThemeRotationChange: (next: ThemeRotation | "off") => void;
+  themeRotation: boolean;
+  onThemeRotationChange: (next: boolean) => void;
+  themeRotationEvery: ThemeRotation;
+  onThemeRotationEveryChange: (next: ThemeRotation) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   villageLife: boolean;
@@ -63,6 +65,8 @@ export function AppearanceSection({
   onDarkThemeChange,
   themeRotation,
   onThemeRotationChange,
+  themeRotationEvery,
+  onThemeRotationEveryChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
   villageLife,
@@ -121,16 +125,22 @@ export function AppearanceSection({
           onChange={onDarkThemeChange}
           disabled={!doubutsu}
         />
-        <LabelledRow label="Rotate palettes" disabled={!doubutsu}>
-          <SegmentedControl
-            aria-label="Rotate palettes"
-            value={themeRotation}
-            onChange={onThemeRotationChange}
-            options={ROTATIONS}
-            disabled={!doubutsu}
-            optionClassName="px-3 py-1.5 text-xs"
-          />
-        </LabelledRow>
+        <ToggleRow
+          checked={themeRotation}
+          onCheckedChange={onThemeRotationChange}
+          disabled={!doubutsu}
+          label="Rotate palettes"
+          description="Moves on to the next light and dark pair, keeping the two matched."
+        />
+        <SegmentedControl
+          aria-label="Rotate palettes"
+          value={themeRotationEvery}
+          onChange={onThemeRotationEveryChange}
+          options={ROTATIONS}
+          disabled={!doubutsu || !themeRotation}
+          className="ml-11"
+          optionClassName="px-3 py-1.5 text-xs"
+        />
       </div>
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}
@@ -157,7 +167,7 @@ export function AppearanceSection({
   );
 }
 
-// A palette row under the switch.
+// A labelled palette row under the switch, greyed with it.
 function PaletteRow<Id extends LightTheme | DarkTheme>({
   label,
   disabled,
@@ -171,23 +181,6 @@ function PaletteRow<Id extends LightTheme | DarkTheme>({
   disabled: boolean;
 }) {
   return (
-    <LabelledRow label={label} disabled={disabled}>
-      <ThemePicker disabled={disabled} {...picker} />
-    </LabelledRow>
-  );
-}
-
-// A row under the switch with its label above, greyed with it.
-function LabelledRow({
-  label,
-  disabled,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  children: ReactNode;
-}) {
-  return (
     <div className="space-y-1">
       <p
         className={cn(
@@ -197,7 +190,7 @@ function LabelledRow({
       >
         {label}
       </p>
-      {children}
+      <ThemePicker disabled={disabled} {...picker} />
     </div>
   );
 }

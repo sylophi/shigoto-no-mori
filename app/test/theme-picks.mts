@@ -17,6 +17,8 @@ import {
   nextVariant,
   resolveDoubutsuPicks,
   rotationTurn,
+  darkTwin,
+  lightTwin,
   type DoubutsuPicks,
   type ThemeOption,
 } from "@shared/themes";
@@ -95,35 +97,31 @@ try {
   });
 
   await proof.check(
-    "a rotation moves both picks a swatch along, round the list",
+    "a rotation moves to the pair after the light pick's, round the list",
     () => {
       assert.deepEqual(rotationTurn({ themeRotation: "launch" }, 7, true), {
         lightTheme: "latte",
-        darkTheme: "forest",
+        darkTheme: "cocoa",
         themeRotatedAt: 7,
       });
+      // An unmatched dark pick falls in with the light one.
       assert.deepEqual(
         rotationTurn(
-          { themeRotation: "launch", lightTheme: "sakura", darkTheme: "wood" },
+          { themeRotation: "launch", lightTheme: "sky", darkTheme: "wood" },
           7,
           true,
         ),
-        { lightTheme: "snow", darkTheme: "cocoa", themeRotatedAt: 7 },
+        { lightTheme: "sakura", darkTheme: "yozakura", themeRotatedAt: 7 },
       );
-      // A variant is its swatch's place, and the defaults store by
-      // omission.
       assert.deepEqual(
         rotationTurn(
-          {
-            themeRotation: "launch",
-            lightTheme: "meadow",
-            darkTheme: "yozakura",
-          },
+          { themeRotation: "launch", lightTheme: "sakura" },
           7,
           true,
         ),
-        { lightTheme: undefined, darkTheme: undefined, themeRotatedAt: 7 },
+        { lightTheme: "snow", darkTheme: undefined, themeRotatedAt: 7 },
       );
+      // A variant is its swatch's place.
       assert.equal(
         rotationTurn(
           { themeRotation: "launch", lightTheme: "latte-sage" },
@@ -135,17 +133,30 @@ try {
     },
   );
 
+  await proof.check("a pick's twin is the other half of its pair", () => {
+    assert.equal(darkTwin("snow"), "charcoal");
+    assert.equal(darkTwin("latte-mocha"), "cocoa");
+    assert.equal(lightTwin("yozakura"), "sakura");
+  });
+
   await proof.check("a rotation turns only when it is due", () => {
     const hour = 60 * 60 * 1000;
+    const day = 24 * hour;
     assert.equal(rotationTurn({}, hour, true), null);
     assert.equal(rotationTurn({ themeRotation: "launch" }, hour, false), null);
     assert.equal(
       rotationTurn({ themeRotation: "launch", doubutsu: false }, hour, true),
       null,
     );
-    const hourly = { themeRotation: "hourly", themeRotatedAt: hour } as const;
-    assert.equal(rotationTurn(hourly, 2 * hour - 1, true), null);
-    assert.notEqual(rotationTurn(hourly, 2 * hour, false), null);
+    for (const [every, span] of [
+      ["hourly", hour],
+      ["daily", day],
+      ["weekly", 7 * day],
+    ] as const) {
+      const config = { themeRotation: every, themeRotatedAt: day } as const;
+      assert.equal(rotationTurn(config, day + span - 1, true), null, every);
+      assert.notEqual(rotationTurn(config, day + span, false), null, every);
+    }
   });
 
   await proof.check("the hidden hotkey cycles a swatch's variants", () => {

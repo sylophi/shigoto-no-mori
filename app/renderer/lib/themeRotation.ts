@@ -1,7 +1,7 @@
 // The palette rotation (Settings > Appearance, shared/themes.ts
 // rotationTurn): a turn at launch, before the first render so the
 // window opens in the new palette, then a check each minute for the
-// hourly one. A turn saves the picks the way Settings would, so the
+// timed ones. A turn saves the picks the way Settings would, so the
 // next launch's boot mirror paints them.
 import type { QueryClient } from "@tanstack/react-query";
 import type { ClientConfig } from "@shared/schemas";

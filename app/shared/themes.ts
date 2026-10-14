@@ -114,38 +114,55 @@ export function activeTheme(
   return resolved === "dark" ? picks.dark : picks.light;
 }
 
-const HOUR_MS = 60 * 60 * 1000;
-
-// The swatch after the one holding this pick, round to the first after
-// the last. A variant counts as its swatch, and a rotation never lands
-// on one.
-function nextOption<Id extends string>(
+// The pair a pick sits in: its swatch's column, where the light list
+// stacks over the dark one. An unknown pick (a newer build's) is the
+// first pair.
+function pairOf<Id extends string>(
   options: readonly ThemeOption<Id>[],
   id: Id,
-): Id {
-  const at = options.findIndex((o) => optionHolds(o, id));
-  return options[(at + 1) % options.length]?.id ?? id;
+): number {
+  return Math.max(
+    0,
+    options.findIndex((o) => optionHolds(o, id)),
+  );
 }
 
-// The rotation's next turn, if one is due: both picks a swatch along,
-// so a light pick and its dark twin move together, stamped `now`. Null
-// with rotation or the switch off, and at a launch the hourly rotation
-// counts as any other moment.
+// The other half of a pick's pair, for the pickers while rotation
+// holds the two together.
+export function darkTwin(light: LightTheme): DarkTheme {
+  return DARK_THEMES[pairOf(LIGHT_THEMES, light)]?.id ?? DEFAULT_DARK_THEME;
+}
+export function lightTwin(dark: DarkTheme): LightTheme {
+  return LIGHT_THEMES[pairOf(DARK_THEMES, dark)]?.id ?? DEFAULT_LIGHT_THEME;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const ROTATION_MS: Record<Exclude<ThemeRotation, "launch">, number> = {
+  hourly: HOUR_MS,
+  daily: 24 * HOUR_MS,
+  weekly: 7 * 24 * HOUR_MS,
+};
+
+// The rotation's next turn, if one is due: the pair after the light
+// pick's, round to the first after the last, stamped `now`. Null with
+// rotation or the switch off. A launch is a moment like any other to
+// the timed rotations.
 export function rotationTurn(
   config: ClientConfig,
   now: number,
   launching: boolean,
 ): Pick<ClientConfig, "lightTheme" | "darkTheme" | "themeRotatedAt"> | null {
   const picks = resolveDoubutsuPicks(config);
-  if (!picks.doubutsu) return null;
+  const every = config.themeRotation;
+  if (!picks.doubutsu || !every) return null;
   const due =
-    config.themeRotation === "launch"
+    every === "launch"
       ? launching
-      : config.themeRotation === "hourly" &&
-        now - (config.themeRotatedAt ?? 0) >= HOUR_MS;
+      : now - (config.themeRotatedAt ?? 0) >= ROTATION_MS[every];
   if (!due) return null;
-  const light = nextOption(LIGHT_THEMES, picks.light);
-  const dark = nextOption(DARK_THEMES, picks.dark);
+  const next = (pairOf(LIGHT_THEMES, picks.light) + 1) % LIGHT_THEMES.length;
+  const light = LIGHT_THEMES[next]?.id ?? DEFAULT_LIGHT_THEME;
+  const dark = DARK_THEMES[next]?.id ?? DEFAULT_DARK_THEME;
   return {
     lightTheme: light === DEFAULT_LIGHT_THEME ? undefined : light,
     darkTheme: dark === DEFAULT_DARK_THEME ? undefined : dark,
