@@ -73,6 +73,9 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       entries: ["index.html", "../packages/ui/src/**/*.{ts,tsx}"],
       exclude: ["@shigomori/contracts", "effect"],
+      // Served as source, contracts brings its CommonJS dependencies
+      // unbundled, which a browser can't run.
+      include: ["@shigomori/contracts > semver"],
     },
     // The web client's public files, for the boot script the window's
     // page loads too (index.html). The material icons come in through
