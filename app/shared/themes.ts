@@ -9,10 +9,11 @@ import {
   DARK_THEME_IDS,
   type LightTheme,
   LIGHT_THEME_IDS,
+  type ThemeRotation,
 } from "./schemas/config";
 
 export { DARK_THEME_IDS, LIGHT_THEME_IDS };
-export type { DarkTheme, LightTheme };
+export type { DarkTheme, LightTheme, ThemeRotation };
 
 export const DEFAULT_LIGHT_THEME: LightTheme = "cream";
 export const DEFAULT_DARK_THEME: DarkTheme = "charcoal";
@@ -111,4 +112,43 @@ export function activeTheme(
 ): LightTheme | DarkTheme | null {
   if (!picks.doubutsu) return null;
   return resolved === "dark" ? picks.dark : picks.light;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+// The swatch after the one holding this pick, round to the first after
+// the last. A variant counts as its swatch, and a rotation never lands
+// on one.
+function nextOption<Id extends string>(
+  options: readonly ThemeOption<Id>[],
+  id: Id,
+): Id {
+  const at = options.findIndex((o) => optionHolds(o, id));
+  return options[(at + 1) % options.length]?.id ?? id;
+}
+
+// The rotation's next turn, if one is due: both picks a swatch along,
+// so a light pick and its dark twin move together, stamped `now`. Null
+// with rotation or the switch off, and at a launch the hourly rotation
+// counts as any other moment.
+export function rotationTurn(
+  config: ClientConfig,
+  now: number,
+  launching: boolean,
+): Pick<ClientConfig, "lightTheme" | "darkTheme" | "themeRotatedAt"> | null {
+  const picks = resolveDoubutsuPicks(config);
+  if (!picks.doubutsu) return null;
+  const due =
+    config.themeRotation === "launch"
+      ? launching
+      : config.themeRotation === "hourly" &&
+        now - (config.themeRotatedAt ?? 0) >= HOUR_MS;
+  if (!due) return null;
+  const light = nextOption(LIGHT_THEMES, picks.light);
+  const dark = nextOption(DARK_THEMES, picks.dark);
+  return {
+    lightTheme: light === DEFAULT_LIGHT_THEME ? undefined : light,
+    darkTheme: dark === DEFAULT_DARK_THEME ? undefined : dark,
+    themeRotatedAt: now,
+  };
 }

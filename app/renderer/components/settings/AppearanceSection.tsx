@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Moon, Sun, SunMoon } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -8,6 +9,7 @@ import {
   LIGHT_THEMES,
   type LightTheme,
   type ThemeOption,
+  type ThemeRotation,
 } from "@shared/themes";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
@@ -15,6 +17,12 @@ import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 import { ThemePicker } from "./ThemePicker";
 import { VillageLifeSetting } from "./VillageLifeSetting";
+
+const ROTATIONS: { value: ThemeRotation | "off"; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "launch", label: "Each launch" },
+  { value: "hourly", label: "Hourly" },
+];
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Light", Icon: Sun },
@@ -31,6 +39,8 @@ interface AppearanceSectionProps {
   onLightThemeChange: (next: LightTheme) => void;
   darkTheme: DarkTheme;
   onDarkThemeChange: (next: DarkTheme) => void;
+  themeRotation: ThemeRotation | "off";
+  onThemeRotationChange: (next: ThemeRotation | "off") => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   villageLife: boolean;
@@ -51,6 +61,8 @@ export function AppearanceSection({
   onLightThemeChange,
   darkTheme,
   onDarkThemeChange,
+  themeRotation,
+  onThemeRotationChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
   villageLife,
@@ -109,6 +121,16 @@ export function AppearanceSection({
           onChange={onDarkThemeChange}
           disabled={!doubutsu}
         />
+        <LabelledRow label="Rotate palettes" disabled={!doubutsu}>
+          <SegmentedControl
+            aria-label="Rotate palettes"
+            value={themeRotation}
+            onChange={onThemeRotationChange}
+            options={ROTATIONS}
+            disabled={!doubutsu}
+            optionClassName="px-3 py-1.5 text-xs"
+          />
+        </LabelledRow>
       </div>
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}
@@ -135,7 +157,7 @@ export function AppearanceSection({
   );
 }
 
-// A labelled palette row under the switch, greyed with it.
+// A palette row under the switch.
 function PaletteRow<Id extends LightTheme | DarkTheme>({
   label,
   disabled,
@@ -149,6 +171,23 @@ function PaletteRow<Id extends LightTheme | DarkTheme>({
   disabled: boolean;
 }) {
   return (
+    <LabelledRow label={label} disabled={disabled}>
+      <ThemePicker disabled={disabled} {...picker} />
+    </LabelledRow>
+  );
+}
+
+// A row under the switch with its label above, greyed with it.
+function LabelledRow({
+  label,
+  disabled,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  children: ReactNode;
+}) {
+  return (
     <div className="space-y-1">
       <p
         className={cn(
@@ -158,7 +197,7 @@ function PaletteRow<Id extends LightTheme | DarkTheme>({
       >
         {label}
       </p>
-      <ThemePicker disabled={disabled} {...picker} />
+      {children}
     </div>
   );
 }

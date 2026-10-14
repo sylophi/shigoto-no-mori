@@ -142,6 +142,7 @@ export function SettingsForm({
           doubutsu: prev.doubutsu,
           lightTheme: prev.lightTheme,
           darkTheme: prev.darkTheme,
+          themeRotation: prev.themeRotation,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
           villageNews: prev.villageNews,
@@ -265,6 +266,8 @@ export function SettingsForm({
               onLightThemeChange={pickLightTheme}
               darkTheme={form.darkTheme}
               onDarkThemeChange={pickDarkTheme}
+              themeRotation={form.themeRotation}
+              onThemeRotationChange={setField("themeRotation")}
               pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
               onPauseAnimationsOnBatteryChange={setField(
                 "pauseAnimationsOnBattery",

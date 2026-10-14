@@ -1,4 +1,11 @@
-import { createContext, use, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   activeTheme,
   type DarkTheme,
@@ -89,7 +96,9 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
     setOverrideState(null);
   }
 
-  useEffect(() => {
+  // Before paint, so a launch's rotated palette (lib/themeRotation.ts)
+  // replaces the boot mirror's in the first frame.
+  useLayoutEffect(() => {
     const html = document.documentElement;
     html.classList.toggle("doubutsu", applied.doubutsu);
     if (active) html.dataset.palette = active;

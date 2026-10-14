@@ -11,6 +11,7 @@ import {
   type LauncherCommand,
   type TerminalId,
   type Theme,
+  type ThemeRotation,
 } from "@shared/schemas";
 import {
   type DarkTheme,
@@ -25,13 +26,14 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first thirteen fields are client config (appearance), the rest
+// the first fifteen fields are client config (appearance), the rest
 // are device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
   lightTheme: LightTheme;
   darkTheme: DarkTheme;
+  themeRotation: ThemeRotation | "off";
   pauseAnimationsOnBattery: boolean;
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
@@ -77,6 +79,7 @@ export function fromConfig(
     doubutsu: picks.doubutsu,
     lightTheme: picks.light,
     darkTheme: picks.dark,
+    themeRotation: clientConfig.themeRotation ?? "off",
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
     villageNews: villageNewsEnabled(clientConfig),
@@ -183,6 +186,8 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
       state.lightTheme === DEFAULT_LIGHT_THEME ? undefined : state.lightTheme,
     darkTheme:
       state.darkTheme === DEFAULT_DARK_THEME ? undefined : state.darkTheme,
+    themeRotation:
+      state.themeRotation === "off" ? undefined : state.themeRotation,
     // Default is on, with the same opt-out serialization as doubutsu.
     pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
       ? undefined
@@ -341,9 +346,17 @@ export function useSettingsSave({
       let persistedClientConfig: ClientConfig = clientConfig;
       if (clientPersisted) {
         try {
+          // A pick or a rotation saved here starts the hourly
+          // rotation's hour over.
+          const restartsRotation =
+            state.lightTheme !== initialState.lightTheme ||
+            state.darkTheme !== initialState.darkTheme ||
+            state.themeRotation !== initialState.themeRotation;
           persistedClientConfig = await mergeClientConfigWrite(
             queryClient,
-            clientConfig,
+            restartsRotation
+              ? { ...clientConfig, themeRotatedAt: Date.now() }
+              : clientConfig,
           );
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);
