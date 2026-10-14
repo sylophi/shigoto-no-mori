@@ -757,19 +757,19 @@ const rowAfter = Effect.fnUntraced(function* (
 });
 
 // The worktree's title, description or both (`sm describe`): the open
-// pull request's while one holds them, else its own. Says whether it
-// edited the PR.
+// pull request's while one holds them, else its own. Gives the PR it
+// edited, as it now reads.
 export const describe = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
   change: { readonly title?: string; readonly description?: string },
 ) {
-  let editedPullRequest = false;
+  let editedPullRequest = null as { readonly title: string } | null;
   const worktree = yield* rowAfter(project, worktreeId, (located) =>
     Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
       worktrees.describe(located, change).pipe(
         Effect.map((result) => {
-          editedPullRequest = result.pullRequest !== null;
+          editedPullRequest = result.pullRequest;
         }),
       ),
     ),

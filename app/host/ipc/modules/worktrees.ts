@@ -526,8 +526,11 @@ export const worktreesHandlers = {
       );
       if (
         editedPullRequest &&
-        title !== undefined &&
-        retitleBranchPullRequest(project.path, worktree.branch, title)
+        retitleBranchPullRequest(
+          project.path,
+          worktree.branch,
+          editedPullRequest.title,
+        )
       ) {
         yield* HostPushes.push(
           githubCliContract,
