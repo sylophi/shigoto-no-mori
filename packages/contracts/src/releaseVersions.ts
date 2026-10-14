@@ -2,19 +2,29 @@
 // build's version in the list's spelling, and which releases a
 // device's changelog shows. Pure, so the views, the app's update checks
 // and the changelog's reader (the app's shared/releases.ts) share it.
+import * as semver from "semver";
 import type { Release } from "./schemas/index.ts";
-import { compareSemver, isPrerelease, parseSemver } from "./semver.ts";
 
 // Precedence between two version strings. Anything that doesn't parse
-// (parseSemver) sorts below everything, so a stray tag can't pass for
-// newest.
+// sorts below everything, so a stray tag can't pass for newest.
 export function compareVersions(a: string, b: string): number {
-  const left = parseSemver(a);
-  const right = parseSemver(b);
-  if (left === undefined || right === undefined) {
-    return (left === undefined ? 0 : 1) - (right === undefined ? 0 : 1);
+  const left = semver.parse(a);
+  const right = semver.parse(b);
+  if (left === null || right === null) {
+    return (left === null ? 0 : 1) - (right === null ? 0 : 1);
   }
-  return compareSemver(left, right);
+  return left.compare(right);
+}
+
+// The release line a prerelease belongs to: its core version and its
+// identifiers less a trailing counter, so 2.0.0-beta.1 and 2.0.0-beta.7
+// share "2.0.0-beta". "" for a full release.
+export function releaseChannel(version: semver.SemVer): string {
+  const pre = version.prerelease;
+  if (pre.length === 0) return "";
+  const line =
+    pre.length > 1 && typeof pre.at(-1) === "number" ? pre.slice(0, -1) : pre;
+  return `${version.major}.${version.minor}.${version.patch}-${line.join(".")}`;
 }
 
 // A build's version as the release list spells it: a production
@@ -22,7 +32,7 @@ export function compareVersions(a: string, b: string): number {
 // number ("2.15.0"). A build that isn't a release ("dev", "unknown")
 // has none, "".
 export function releaseVersionOf(raw: string): string {
-  return parseSemver(raw) === undefined ? "" : raw.replace(/^v/, "");
+  return semver.valid(raw) === null ? "" : raw.replace(/^v/, "");
 }
 
 // Precedence between two builds' versions, when both are releases:
@@ -35,8 +45,7 @@ export function compareAppVersions(a: string, b: string): number | null {
 }
 
 export function isPrereleaseVersion(version: string): boolean {
-  const parsed = parseSemver(version);
-  return parsed !== undefined && isPrerelease(parsed);
+  return semver.prerelease(version) !== null;
 }
 
 // A device's changelog, newest first. `build` is its version in

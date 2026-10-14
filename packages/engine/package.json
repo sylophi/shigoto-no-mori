@@ -12,13 +12,15 @@
   },
   "dependencies": {
     "@shigomori/contracts": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "semver": "7.8.5"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
     "@effect/tsgo": "catalog:",
     "@types/node": "catalog:",
+    "@types/semver": "7.7.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
