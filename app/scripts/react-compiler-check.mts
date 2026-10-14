@@ -52,14 +52,15 @@ type Bailout = {
 
 const keyOf = (b: Bailout) => `${b.file} ${b.function} ${b.category}`;
 
+const isSource = (path: string) =>
+  /\.(tsx?|mts)$/.test(path) && !path.endsWith(".d.ts");
+
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory())
       return entry.name === "node_modules" ? [] : sources(path);
-    return /\.(tsx?|mts)$/.test(entry.name) && !entry.name.endsWith(".d.ts")
-      ? [path]
-      : [];
+    return isSource(path) ? [path] : [];
   });
 }
 
@@ -124,19 +125,26 @@ function bailoutsIn(path: string): Bailout[] {
 
 const args = process.argv.slice(2);
 const write = args.includes("--write");
-const only = args
+const named = args
   .filter((a) => !a.startsWith("--"))
-  .map((a) => resolve(repoRoot, a))
-  .filter((p) => ROOTS.some((r) => p.startsWith(join(repoRoot, r) + "/")));
-const files =
-  only.length > 0 ? only : ROOTS.flatMap((r) => sources(join(repoRoot, r)));
+  .map((a) => resolve(repoRoot, a));
+// A change to the check or its list is checked against every file.
+const full =
+  named.length === 0 ||
+  named.some((p) => p.includes("/app/scripts/react-compiler-"));
+const files = full
+  ? ROOTS.flatMap((r) => sources(join(repoRoot, r)))
+  : named.filter(
+      (p) =>
+        isSource(p) && ROOTS.some((r) => p.startsWith(join(repoRoot, r) + "/")),
+    );
 const checked = new Set(files.map((f) => relative(repoRoot, f)));
 
 const found = files.flatMap(bailoutsIn);
 const listed: Bailout[] = JSON.parse(readFileSync(LIST, "utf8"));
 
 if (write) {
-  if (only.length > 0)
+  if (named.length > 0)
     throw new Error("--write rewrites the whole list: give no files");
   const sorted = found.toSorted((a, b) => keyOf(a).localeCompare(keyOf(b)));
   writeFileSync(LIST, `${JSON.stringify(sorted, null, 2)}\n`);

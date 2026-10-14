@@ -107,18 +107,29 @@ async function startFakeHost(): Promise<string> {
   return url;
 }
 
-// The first load after an install can answer 504 while vite bundles its
-// dependencies, and reload once they're bundled.
-async function openFakeHost(page: Page, url: string): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    await page.goto(`${url}/?theme=dark`);
+// A cold vite transforms the whole renderer on the first load, which
+// takes a CI runner a minute or more, can answer 504 while it bundles
+// dependencies, and reloads the page once they're bundled. Only the
+// load that opens keeps its errors.
+async function openFakeHost(
+  page: Page,
+  url: string,
+  errors: string[],
+): Promise<void> {
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    errors.length = 0;
     try {
+      await page.goto(`${url}/?theme=dark`, {
+        waitUntil: "commit",
+        timeout: 60_000,
+      });
       await page.waitForFunction(() => window.fakeHost?.navigate, null, {
-        timeout: 30_000,
+        timeout: Math.max(1, deadline - Date.now()),
       });
       return;
     } catch (error) {
-      if (attempt === 3) throw error;
+      if (Date.now() >= deadline) throw error;
     }
   }
 }
@@ -184,9 +195,11 @@ it("draws every row of a real commit's diff at every scroll", async () => {
 
   const [url, browser] = await Promise.all([
     startFakeHost(),
-    chromium.launch({ channel: "chrome" }),
+    chromium.launch({ channel: "chrome" }).then((launched) => {
+      trackTest(() => launched.close());
+      return launched;
+    }),
   ]);
-  trackTest(() => browser.close());
   const page = await browser.newPage({
     viewport: { width: 1000, height: 700 },
   });
@@ -196,7 +209,7 @@ it("draws every row of a real commit's diff at every scroll", async () => {
   });
   page.on("pageerror", (e) => errors.push(e.message));
 
-  await openFakeHost(page, url);
+  await openFakeHost(page, url, errors);
   await page.evaluate(
     ([commitPatch, to]) => {
       window.fakeHost?.setPatch(commitPatch);
@@ -208,7 +221,7 @@ it("draws every row of a real commit's diff at every scroll", async () => {
   await waitFor(
     async () => (await rows.count()) === 4,
     "the four rows",
-    30_000,
+    120_000,
   );
 
   const scroller = page.locator('[data-slot="diff-view"] >> xpath=..');
@@ -224,7 +237,7 @@ it("draws every row of a real commit's diff at every scroll", async () => {
       return scrollHeight > 2 * clientHeight;
     },
     "the patch to run past two screens",
-    10_000,
+    60_000,
   );
   const { scrollHeight, clientHeight } = await size();
   // Down in steps under a screen, so every part of every row is on
@@ -245,7 +258,8 @@ it("draws every row of a real commit's diff at every scroll", async () => {
         return faults.length === 0;
       },
       `every row in view drawn at scrollTop ${top}`,
-      5_000,
+      // The first stop waits on the highlighter's first load.
+      top === 0 ? 60_000 : 5_000,
     ).catch((error: Error) => {
       throw new Error(
         `${error.message}:\n${faults.map((f) => `  ${f.file}: ${f.fault}`).join("\n")}`,
