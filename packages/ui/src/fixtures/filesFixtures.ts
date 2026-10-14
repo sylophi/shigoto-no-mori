@@ -26,8 +26,8 @@ export function fakeBlob(oid: string) {
 }
 
 const FAKE_BLOBS: Record<string, string> = {
-  "1a2b3c4": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="56" fill="#9ca3af"/></svg>`,
-  "5d6e7f8": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect x="8" y="8" width="112" height="112" rx="28" fill="#16a34a"/><path d="M40 84c0-28 20-44 48-44 0 28-16 48-44 48" fill="#bbf7d0"/></svg>`,
+  "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="56" fill="#9ca3af"/></svg>`,
+  "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect x="8" y="8" width="112" height="112" rx="28" fill="#16a34a"/><path d="M40 84c0-28 20-44 48-44 0 28-16 48-44 48" fill="#bbf7d0"/></svg>`,
 };
 
 const FAKE_FILES: Record<string, string> = {

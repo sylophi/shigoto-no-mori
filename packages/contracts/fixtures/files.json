@@ -44,14 +44,14 @@
       {
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a",
-        "oid": "1a2b3c4",
-        "path": "public/icon.png"
+        "oid": "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0",
+        "path": "docs/demo.mp4"
       },
       {
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a",
-        "oid": "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0",
-        "path": "docs/demo.mp4"
+        "oid": "8f14e45fceea167a5a36dedd4bea2543c6bd0a3b1d4e5f60718293a4b5c6d7e8",
+        "path": "public/icon.png"
       }
     ],
     "rejects": [
@@ -71,6 +71,18 @@
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a",
         "oid": "1a2b3c4",
+        "path": "public/icon.png"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0aa",
+        "path": "public/icon.png"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "oid": "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0",
         "path": "../../.ssh/id_ed25519"
       },
       {

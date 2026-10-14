@@ -86,6 +86,31 @@ it("an image's patch has no hunks and names both blobs, which read back", async 
   assert.deepEqual(sides, [media(OLD), media(NEW)]);
 });
 
+// The blob read takes a full id only (ReadBlobPayloadSchema), so every
+// patch a diff page reads names its blobs in full.
+it("every diff page's patch names its blobs by full id", async () => {
+  const { repo, head } = seedRepo();
+  const root = git(repo, "rev-list", "--max-parents=0", "HEAD").trim();
+  writeFileSync(join(repo, "board.png"), OLD);
+  const working = await fileDiff(repo, ["board.png"], false);
+  git(repo, "stash", "-q");
+  const patches = {
+    working,
+    commit: await engineGit.commitDiff(repo, head),
+    branch: await engineGit.mergeBaseDiff({ repo, base: root, head }),
+    stash: await engineGit.readStashDiff(
+      repo,
+      git(repo, "rev-parse", "--short", "stash@{0}").trim(),
+    ),
+  };
+  for (const [page, patch] of Object.entries(patches)) {
+    const file = onlyFile(patch);
+    for (const oid of [file.prevObjectId, file.newObjectId]) {
+      assert.match(oid ?? "", /^[0-9a-f]{40}$/, page);
+    }
+  }
+});
+
 it("an added image's patch is new, and so is an untracked one's", async () => {
   const { repo } = seedRepo();
   const root = git(repo, "rev-list", "--max-parents=0", "HEAD").trim();

@@ -653,13 +653,13 @@ describe("the release list", () => {
 
   // A full release is the prod app, another flavor's bundle, and the
   // update server only knows full releases.
-  it("is all a v3 build follows, its v3 prereleases alone", async () => {
-    const box = newBox("3.0.0-v3.1");
+  it("is all a v3 build follows, the 3.0.0 alphas and betas alone", async () => {
+    const box = newBox("3.0.0-alpha.1");
     const listing = [
       listed("v3.0.0"),
       listed("v3.0.0-rc.1"),
-      listed("v3.0.0-v3.2"),
-      listed("v3.0.0-v3.1"),
+      listed("v3.0.0-alpha.2"),
+      listed("v3.0.0-alpha.1"),
     ];
     const { client, seen } = network((url) =>
       url.toString() === LIST ? json(listing) : undefined,
@@ -667,20 +667,20 @@ describe("the release list", () => {
     const setup = { box, http: client, flavor: "v3" as const };
     assert.deepEqual(
       await using(setup, (u) =>
-        u.check({ running: running(box, "3.0.0-v3.1") }),
+        u.check({ running: running(box, "3.0.0-alpha.1") }),
       ),
       {
         ok: true,
         status: "update-available",
-        version: "3.0.0-v3.2",
-        installed: "3.0.0-v3.1",
+        version: "3.0.0-alpha.2",
+        installed: "3.0.0-alpha.1",
       },
     );
     // With GitHub down, the update server's full release isn't asked.
-    const fresh = newBox("3.0.0-v3.1");
+    const fresh = newBox("3.0.0-alpha.1");
     const down = network(listDown(serverFor("3.0.0")));
     await failure({ box: fresh, http: down.client, flavor: "v3" }, (u) =>
-      u.check({ running: running(fresh, "3.0.0-v3.1") }),
+      u.check({ running: running(fresh, "3.0.0-alpha.1") }),
     );
     assert.deepEqual(
       [...seen, ...down.seen].map(({ url }) => url),

@@ -115,7 +115,10 @@ export const readGitBlob = Effect.fn("readGitBlob")(function* (
     const { size, bytes } = blob.value;
     return bytes === undefined
       ? ({ kind: "tooLarge", size } satisfies WorktreeFile)
-      : classify(Buffer.from(bytes), mime);
+      : classify(
+          Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length),
+          mime,
+        );
   }
   const onDisk = yield* git.isWorkingTreeBlob({
     worktree: worktreePath,

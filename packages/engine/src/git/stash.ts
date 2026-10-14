@@ -192,6 +192,7 @@ export const makeStash = ({
           "-p",
           "--include-untracked",
           "--no-color",
+          "--full-index",
           ref,
         ],
         { maxOutputBytes: PATCH_MAX_OUTPUT },

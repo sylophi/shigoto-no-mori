@@ -269,15 +269,21 @@ function createFixtureWire(
           );
         }),
       // A host view (host/lib/Views.ts) re-reads the query beside it on
-      // what moved: here, the module's list (or its settings' read) on
-      // any push or call on the wire, sent on when it changed.
+      // what moved: here, its request form (`worktrees:watchStashes`
+      // reads `worktrees:stashes`), else the module's list (or its
+      // settings' read), on any push or call on the wire, sent on when
+      // it changed.
       view: (channel, input) => {
         const own = ownView?.(channel, input);
         if (own !== undefined) return own;
-        const module = channel.slice(0, channel.indexOf(":"));
-        const query = [`${module}:list`, `${module}:read`].find(
-          (candidate) => candidate !== channel && index.has(candidate),
-        );
+        const colon = channel.indexOf(":");
+        const module = channel.slice(0, colon);
+        const watched = channel.slice(colon + 1).replace(/^watch/, "");
+        const query = [
+          `${module}:${watched.charAt(0).toLowerCase()}${watched.slice(1)}`,
+          `${module}:list`,
+          `${module}:read`,
+        ].find((candidate) => candidate !== channel && index.has(candidate));
         if (query === undefined) {
           return Stream.die(
             new Error(`[fake-host] no fixture serves ${channel}`),
