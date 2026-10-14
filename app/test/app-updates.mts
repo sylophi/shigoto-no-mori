@@ -2,7 +2,7 @@
 // all act on (renderer/lib/updates.ts).
 //
 // Asserts: app versions order the way release semver does
-// (contracts/semver.ts), prereleases below their release and an unparseable
+// (the semver package), prereleases below their release and an unparseable
 // version unknown. The newest release any device found, staged or
 // downloading, is the one the rest are measured against: a device
 // running an older build counts as behind before its own check finds

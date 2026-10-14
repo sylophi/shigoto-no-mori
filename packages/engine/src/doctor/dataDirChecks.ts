@@ -1,6 +1,6 @@
 // The doctor's data dir checks: where it is, its settings and registry, the store, the updater's leftovers.
 import { tildify } from "@shigomori/contracts/projectPaths";
-import { compareSemver, parseSemver } from "@shigomori/contracts/semver";
+import { parse } from "semver";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -529,13 +529,13 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           Schema.decodeOption(StagedManifest),
         );
         const stagedVersion = Option.isSome(staged)
-          ? parseSemver(staged.value.version ?? "")
-          : undefined;
-        const current = parseSemver(version);
+          ? parse(staged.value.version ?? "")
+          : null;
+        const current = parse(version);
         if (
-          stagedVersion !== undefined &&
-          current !== undefined &&
-          compareSemver(stagedVersion, current) <= 0
+          stagedVersion !== null &&
+          current !== null &&
+          stagedVersion.compare(current) <= 0
         ) {
           found.push(updater.staged);
         }

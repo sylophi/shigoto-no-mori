@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
-import { parseSemver, type Semver } from "@shigomori/contracts/semver";
+import { SemVer } from "semver";
 import {
   formatKitchen,
   isRateLimited,
@@ -17,11 +17,7 @@ import {
 
 type Release = NonNullable<NonNullable<typeof ReleaseList.Type>[number]>;
 
-const semver = (raw: string): Semver => {
-  const version = parseSemver(raw);
-  assert.ok(version);
-  return version;
-};
+const semver = (raw: string) => new SemVer(raw);
 
 // A release the way GitHub lists it, with the dmg and the zip the makers
 // upload for `arch`.

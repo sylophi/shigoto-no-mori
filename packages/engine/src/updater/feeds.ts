@@ -8,7 +8,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { type Flavor, flavorNames } from "../flavor.ts";
-import { isPrerelease, parseSemver } from "@shigomori/contracts/semver";
+import { parse } from "semver";
 import {
   FeedAnswer,
   isRateLimited,
@@ -265,7 +265,7 @@ export const makeFeeds = ({
     const queryFeed = Effect.fn("Updater.queryFeed")(function* (
       input: UpdateInput,
     ) {
-      const current = parseSemver(input.running.version) ?? ZERO_VERSION;
+      const current = parse(input.running.version) ?? ZERO_VERSION;
       const fromList = Effect.map(
         fetchReleaseList(input),
         ({ releases, confirmed }) => ({
@@ -280,7 +280,7 @@ export const makeFeeds = ({
       );
       const fromServer = Effect.map(queryUpdateServer(input), (release) => ({
         release,
-        confirmed: !isPrerelease(current),
+        confirmed: current.prerelease.length === 0,
       }));
       // The update server knows no v3 line: a v3 build asks GitHub
       // alone.

@@ -3,13 +3,8 @@
 // carry, and GitHub's rate limit.
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import {
-  compareSemver,
-  isPrerelease,
-  parseSemver,
-  releaseChannel,
-  type Semver,
-} from "@shigomori/contracts/semver";
+import { releaseChannel } from "@shigomori/contracts/releaseVersions";
+import { parse, type SemVer } from "semver";
 import { isV3Release } from "./flavor.ts";
 
 // The app's repo on GitHub, which the feeds and the guide's source come
@@ -98,27 +93,25 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
 // workflow uploads assets minutes after the tag) is skipped, as the
 // update server skips it.
 export const pickRelease = (
-  current: Semver,
+  current: SemVer,
   releases: ReadonlyArray<GitHubRelease>,
   arch: string,
   line: "releases" | "v3" = "releases",
 ): ReleaseInfo | undefined => {
   const channel = releaseChannel(current);
   const marker = `-darwin-${arch}-`;
-  let best: { release: GitHubRelease; version: Semver; url: string } | null =
+  let best: { release: GitHubRelease; version: SemVer; url: string } | null =
     null;
   for (const release of releases) {
     const tag = release?.tag_name ?? "";
-    const version = parseSemver(tag);
-    if (version === undefined || compareSemver(version, current) <= 0) {
-      continue;
-    }
-    if (best !== null && compareSemver(version, best.version) <= 0) continue;
+    const version = parse(tag);
+    if (version === null || version.compare(current) <= 0) continue;
+    if (best !== null && version.compare(best.version) <= 0) continue;
     if (line === "v3") {
       if (!isV3Release(tag)) continue;
     } else if (isV3Release(tag)) {
       continue;
-    } else if (isPrerelease(version)) {
+    } else if (version.prerelease.length > 0) {
       if (releaseChannel(version) !== channel) continue;
     } else if (release?.prerelease === true) {
       continue;

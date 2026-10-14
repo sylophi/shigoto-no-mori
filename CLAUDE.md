@@ -21,8 +21,12 @@ item works like this. Remove this section when `release/v3` merges into
    the report, not the PR, unless the brief says otherwise. The
    terminal `sm` keeps the Go `sm`'s verbs, flags and JSON (decision
    13); a new verb or flag is the owner's call.
-   Comments describe how a thing is used and move with the code; the
-   ordering and cleanup prose that the structure now enforces goes.
+   Cut down on unnecessary comments: one stays only when it says what
+   the code cannot (a quirk, a workaround and what it works around, an
+   invariant or ordering a reader could break, a why that isn't
+   obvious), and a doc comment on exported API keeps the one line
+   that says what the thing is for when its name doesn't; the READMEs
+   and `V3.md` are not comments.
    Run the targeted checks (lefthook on commit, `pnpm test <name>` for
    the proofs touched) and leave the repo-wide suite to CI. A UI
    change comes with before and after shots from the lab

@@ -1,45 +1,31 @@
-// Stacked pull requests, read off the project-wide branch -> PR map.
 // A PR is stacked on another when its base is that PR's head, so the
-// map alone says which PRs form a stack, without gh's stack extension
-// or GitHub's stack object. GitHub's own stacks (`gh stack`) are chains
-// like this too, so they are found the same way.
-//
-// A stack is linear: the chain from the trunk up. Where a PR has two
-// PRs based on it, each of those heads its own stack over the shared
-// ancestry, and walking up stops at the fork.
+// branch -> PR map alone says which PRs form a stack (`gh stack`'s too).
+// A stack is linear: where a PR has two PRs based on it, walking up stops
+// at the fork.
 import { only } from "./util/only.ts";
 import type { PullRequest } from "./schemas/pullRequest.ts";
 import type { Worktree } from "./schemas/worktree.ts";
 
 export interface PullRequestStackEntry {
-  // The PR's head branch, the key it sits under in the map.
   branch: string;
   pr: PullRequest;
 }
 
 export interface PullRequestStack {
-  // Bottom first: entries[0] is the PR that merges into `base`, and
-  // each later PR merges into the one before it.
+  // Bottom first.
   entries: PullRequestStackEntry[];
-  // The branch the whole stack lands on.
   base: string;
-  // Where the asked-for branch sits in `entries`.
   index: number;
 }
 
-// Cycles are impossible on GitHub, but the map is a snapshot of
-// possibly-stale rows, so the walks are bounded rather than trusted.
-// The engine's Landing.ts walks down the same stacks for `sm merge
-// --stack` and `sm land --stack` under the same bound
-// (MAX_STACK_DEPTH): change both.
+// The map may be stale, so the walks are bounded rather than trusted.
+// The engine's Landing.ts walks the same stacks under its own
+// MAX_STACK_DEPTH: change both.
 const MAX_DEPTH = 64;
 
-// The stack `branch` is part of, or null when its PR stands alone.
-// `trunk` (the project's primary branch) is never a stack member: a
-// long-lived "main -> production" PR would otherwise make every PR
-// based on main look stacked on it. Merged and closed PRs stay in the
-// chain: a stack whose bottom has landed, with the next PR still based
-// on the landed branch, is still that stack.
+// `trunk` is never a member: a long-lived "main -> production" PR would
+// otherwise make every PR based on main look stacked on it. Merged and
+// closed PRs stay in the chain.
 export function pullRequestStackFor(
   prs: Record<string, PullRequest>,
   branch: string,
@@ -87,10 +73,8 @@ function childrenOf(
   return children;
 }
 
-// The PRs a stack merge from `entry` lands: every PR from the bottom
-// up to and including it that hasn't merged yet. A closed PR in that
-// range breaks the stack (its changes would ride up with the PR above
-// it), so the set is null then, and the UI says why.
+// Null when a closed PR in range breaks the stack: its changes would
+// ride up with the PR above it.
 export function stackMergeSet(
   stack: PullRequestStack,
   index: number,
@@ -100,16 +84,10 @@ export function stackMergeSet(
   return range.filter((entry) => entry.pr.state === "OPEN");
 }
 
-// What a stack cleanup removes once layers have landed: every worktree
-// on a merged layer's branch, and the one to run it from. The CLI's
-// `sm land --stack` on an already-merged PR removes the worktree it is
-// run in and those of the merged layers under it, so the target is the
-// highest of them, and the worktrees are what the button counts. The
-// primary checkout is never among them (the merged-primary box lands
-// it back on the trunk). Null when no merged layer has a worktree.
+// `sm land --stack` removes the worktree it runs in and the merged layers
+// under it, so the target is the highest. Never the primary checkout.
 export interface StackCleanup<T> {
   target: T;
-  // Bottom first.
   worktrees: T[];
 }
 
@@ -128,8 +106,6 @@ export function stackCleanupFor<
   return target ? { target, worktrees: landed } : null;
 }
 
-// The same for a worktree by id, from a device's own PR map and rows:
-// what the host's stack removal (and the fake host's stand-in) resolve.
 export function stackCleanupForWorktree<
   T extends {
     id: string;
@@ -147,17 +123,11 @@ export function stackCleanupForWorktree<
   return stack ? stackCleanupFor(stack, rows) : null;
 }
 
-// Where a branch's PR sits in its stack: `index` from the bottom, of
-// `size` layers.
+// `index` from the bottom.
 export type StackPosition = { index: number; size: number };
 
-// A row's stop on its stack's rail when the stack's rows sit together.
 export interface StackRail {
-  // The bottom stop, where the rail ends.
   last: boolean;
-  // Whether the rail shows every layer of the stack. One that skips a
-  // layer (shelved, or on a device the filter hides) joins the layers
-  // on either side of the gap with nothing to mark it.
   whole: boolean;
 }
 
@@ -167,16 +137,9 @@ export interface StackPlacement<T> {
   rail?: StackRail;
 }
 
-// One repo's rows with every stack's members brought together, top
-// layer first, the way the branches sit on each other (the sidebar
-// draws a stack as a rail through its layers, like the stack list on
-// the worktree page), at the place the first member held, each carrying
-// its position and its stop on the rail. Rows outside a stack keep
-// their order. Two rows on one branch (a peer's copy beside the local
-// one) stay adjacent in their own order. A stack with one layer showing
-// (its other layers shelved, or on a device the filter hides) gets no
-// rail, even with a peer's copy beside it: a rail through one layer
-// joins nothing.
+// Each stack's members together, top layer first, where the first
+// member was. A stack with one layer showing gets no rail, even with a
+// peer's copy beside it: a rail through one layer joins nothing.
 export function placeByStack<T>(
   items: readonly T[],
   branchOf: (item: T) => string,
@@ -224,8 +187,6 @@ export function placeByStack<T>(
   return out;
 }
 
-// Where a branch's PR sits in its stack, for the sidebar's pill: null
-// for a PR that stands alone.
 export function pullRequestStackPosition(
   prs: Record<string, PullRequest> | undefined,
   branch: string,
@@ -236,11 +197,8 @@ export function pullRequestStackPosition(
   return stack ? { index: stack.index, size: stack.entries.length } : null;
 }
 
-// The project's primary branch, off the listing it already carries:
-// the engine resolves it once per listing (Worktree.primaryBranch) and
-// leaves it out when it cannot. A listing without it falls back to the
-// primary checkout's branch, which is right whenever that checkout is
-// on the primary branch.
+// Without Worktree.primaryBranch, the primary checkout's branch: right
+// whenever that checkout is on it.
 export function trunkOf(
   worktrees:
     | readonly Pick<Worktree, "branch" | "isPrimary" | "primaryBranch">[]

@@ -1,37 +1,11 @@
-// Wire contract between the app and the hub Worker: the bodies the
-// HTTP API carries (hubApi.ts), the socket envelopes between a device
-// and its account's Durable Object, the connectInfo ask and answer the
-// devices relay through it, and the constants both sides must agree
-// on. Imported by the app and by hub/, so it runs in the Worker too:
-// Effect Schema only, no node builtins, no electron.
+// Runs in the Worker too: Effect Schema only, no node builtins.
 //
-// The device hub never reads what devices say to each other. The
-// `frame` of a relay envelope is a string the Worker forwards without
-// parsing: the connectInfo ask or its answer, sealed as a Noise
-// handshake message to the device it is addressed to
-// (app/shared/hub/link.ts), so the hub sees only the addressing.
-// Contract data never rides this wire: the device hub is orchestration
-// only, and data flows over the direct sockets it brokers.
-//
-// TRUST MODEL: the device hub is our own managed service, and the
-// roster of which devices exist and what key each holds. Enrollment
-// requires a Clerk-verified login, each device holds a long-lived
-// credential it exchanges for short-lived single-use connect tickets,
-// and the DO authenticates the account when it burns the ticket, so
-// every deliverable peer is by construction a device of the same
-// account. Each device enrolls with a static public key, which the
-// presence roster hands every other device of the account; a peer
-// proves it holds the matching private key in the Noise handshake
-// itself, so the relay and the direct sockets carry nothing a party
-// in the middle can read. Authorization stays host-local: mutating
-// calls ride the direct sockets only, where dispatch gates them on the
-// host's command-access switch. The size and count bounds in this file
-// are sanity bounds that keep a bug or a runaway client from
-// ballooning allocations.
-//
-// Ticket and credential string mechanics live in hub/src/ticket.ts.
-// To the app both are opaque strings: the credential rides in the
-// Authorization header and the ticket in the connect URL, unchanged.
+// The hub never reads what devices say to each other: a relay frame is
+// sealed as a Noise handshake message to its addressee, and contract data
+// rides only the direct sockets the hub brokers. Every peer the hub
+// delivers to is a device of the same account (a ticket is burned against
+// it), and a peer proves its enrolled key in the handshake. The bounds in
+// this file keep a bug or a hostile party from ballooning allocations.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
@@ -42,126 +16,66 @@ import {
 } from "./deviceIcon.ts";
 import { PortNumberSchema } from "./schemas/ports.ts";
 
-// Largest hub envelope the DO will forward, in bytes of the serialized
-// JSON. The device hub carries orchestration only: the sealed
-// connectInfo ask and answer, and presence, all small control frames, so this is a
-// control-frame budget rather than a data budget. Contract data rides
-// the device links and never this wire. An oversize forward is
-// answered with a `too-large` nack to the sender. The worst legitimate
-// frame is a connectInfo answer (a handful of URLs and tickets), far
-// under this, and the worst-case presence roster fits too (asserted in
-// hub/test/hub.spec.ts against MAX_ONLINE_DEVICES).
+// A control-frame budget, in bytes of serialized JSON. The worst-case
+// presence roster must fit (hub.spec.ts asserts it).
 export const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
 
-// Whether a serialized envelope fits under MAX_HUB_MESSAGE_BYTES.
-// The one owner of what counts against the limit: the DO measures the
-// serialized DELIVER envelope (`{t:"relay",from,frame}` with the
-// sender's deviceId as `from`), so the sender-side guard must measure
-// exactly that, not the bare frame. The fast paths avoid a full
-// encode: a UTF-16 code unit becomes at least one and at most three
-// UTF-8 bytes, so only the band in between needs a real count.
+// The DO measures the deliver envelope, which differs from the send
+// envelope the sender encodes by a fixed routing delta (`extraBytes`).
+// A UTF-16 unit is one to three UTF-8 bytes, so only the band between
+// needs a real count.
 const utf8 = new TextEncoder();
 export function hubTextWithinLimit(text: string, extraBytes = 0): boolean {
-  // extraBytes lets the sender measure a shape it does not literally
-  // encode. The DO measures the DELIVER envelope (from = our id) while
-  // the sender only encodes the SEND envelope (to = the target), and the
-  // two differ by a fixed routing-field delta, so one encode plus the
-  // delta serves both without a second full stringify on the hot path.
   const budget = MAX_HUB_MESSAGE_BYTES - extraBytes;
   if (text.length > budget) return false;
   if (text.length * 3 <= budget) return true;
   return utf8.encode(text).byteLength <= budget;
 }
 
-// Byte length of a string under UTF-8, for the small routing-field delta
-// the hub link measures with. Not on the large-payload hot path, so a
-// direct encode is fine here.
 export function utf8ByteLength(text: string): number {
   return utf8.encode(text).byteLength;
 }
 
-// The most online devices a presence roster may name, enforced as the
-// CLIENT's presence schema cap (the DO deliberately runs no admission
-// gate against it, see hubObject.ts). One-user scale: an account's
-// device count is a handful in practice, so this still sits far above
-// any real roster while bounding what a hostile DO can force a client
-// to allocate from one presence envelope. It also keeps the worst-case
-// roster envelope (64 ids of 200 chars each, each with its key) well under
-// MAX_HUB_MESSAGE_BYTES, so a full roster can never kill the socket
-// that carries it (asserted in hub/test/hub.spec.ts).
+// The client's cap on a presence roster (the DO runs no admission gate
+// against it), bounding what a hostile DO can make it allocate.
 export const MAX_ONLINE_DEVICES = 64;
 
-// How many devices one account may have enrolled at once. Sign-up is
-// public and every device can provision a real tunnel and DNS record
-// on the owner's Cloudflare account, so an unbounded registry would let
-// one stranger spend the quota everyone shares. Each browser profile
-// that opens the web client counts as a device.
+// Sign-up is public and each device can provision a tunnel and DNS
+// record on the shared Cloudflare account. A browser profile counts.
 export const MAX_ACCOUNT_DEVICES = 16;
 
-// Application close codes for the hub socket. Deliberately disjoint
-// from the device link's 4002-4003 (host/socket/DeviceLink.ts) so a log line's code
-// names its transport. TICKET_REJECTED covers unknown, expired and
-// replayed tickets alike: every case means "mint a fresh ticket and
-// reconnect", and distinguishing them would only tell an attacker
-// which guesses were close. DEVICE_REVOKED is terminal, the client
-// must not retry without re-enrolling. SUPERSEDED means a newer socket
-// for the same deviceId took over, the losing side must not fight it.
-// CREDENTIAL_ROTATED closes a device's sockets when it enrolls again,
-// and RATE_LIMITED a socket sending faster than any real use does: the
-// client redials on both, the first with its new credential.
+// Disjoint from the device link's codes, so a log line's code names its
+// transport. TICKET_REJECTED covers unknown, expired and replayed alike,
+// so an attacker can't tell which guesses were close. DEVICE_REVOKED is
+// terminal. SUPERSEDED: a newer socket took over; don't fight it.
 export const CLOSE_TICKET_REJECTED = 4101;
 export const CLOSE_DEVICE_REVOKED = 4102;
 export const CLOSE_SUPERSEDED = 4103;
 export const CLOSE_CREDENTIAL_ROTATED = 4104;
 export const CLOSE_RATE_LIMITED = 4105;
 
-// How many sockets one device may hold on the hub at once. A desktop
-// holds one (its host process carries the window's and the terminal's
-// hub traffic), and a browser profile one per tab, so this sits far
-// above any real count while bounding what a device claiming to be a
-// web client can make the object fan presence out to. Past it, the
-// device's oldest socket gives way to the new one.
+// A browser profile holds one per tab. Past it, the oldest gives way.
 export const MAX_DEVICE_CONNECTIONS = 32;
 
-// A hub device id, the enrollment UUID, bounded to the DO accept-tag
-// limit (workerd hard-caps a websocket accept tag at 256 chars, so this
-// stays well under it). The single source for the several wire and IPC
-// sites that route or grant against a device id.
+// Under workerd's 256-char cap on a websocket accept tag, which throws
+// past it.
 export const DeviceIdSchema = Schema.NonEmptyString.check(
   Schema.isMaxLength(200),
 );
 
-// A device's static X25519 public key: 32 bytes as unpadded base64url.
-// Sent with every enrollment, stored on the device's row and handed to
-// the account's other devices in the presence roster.
+// X25519, 32 bytes as unpadded base64url.
 const DevicePublicKeySchema = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{43}$/),
 );
 
-// The hub socket's liveness pair: the device sends the bare text
-// HUB_PING on the hub connection's pings (shared/hub/connection.ts)
-// and the Durable Object answers HUB_PONG through the
-// hibernation runtime's auto-response, so a ping never wakes the
-// object and never costs a request. Bare text rather than an envelope
-// on purpose: the auto-response matches an exact string, and neither
-// side ever parses the pair. An old Worker drops the ping as a
-// malformed envelope, so a device redials it once a minute until the
-// Worker is redeployed: deploy the Worker before the devices.
+// Bare text, answered by the hibernation runtime's auto-response (an
+// exact-string match), so a ping never wakes the object.
 export const HUB_PING = "ping";
 export const HUB_PONG = "pong";
 
 // ---- HTTP bodies (hubApi.ts) ----
 
-// POST /devices/enroll request, under a Clerk session token. deviceId
-// is the app's per-data-dir UUID, so re-enrolling the same data dir rotates
-// the credential instead of growing the device list. The bounds are
-// load-bearing, not cosmetic. deviceId becomes a Durable Object
-// websocket accept tag, which workerd hard-caps at 256 characters and
-// throws past it, so it stays well under that. name and platform are
-// bounded so an enroll cannot store unbounded strings under a Clerk
-// token.
-// The icon as it rides the wire: any short string. The catalog check
-// happens on read (DeviceInfoSchema below).
+// Any short string: the catalog check happens on read.
 const DeviceIconWireSchema = Schema.NonEmptyString.check(
   Schema.isMaxLength(64),
 );
@@ -172,22 +86,12 @@ export const EnrollRequestSchema = Schema.Struct({
   deviceId: DeviceIdSchema,
   name: DeviceNameSchema,
   platform: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
-  // What the device looks like (deviceIcon.ts), sent
-  // with every enrollment and stored as given: the device resolved its
-  // own detection and its owner's pick before sending, so the hub
-  // never has to know which is which. Bounded, not checked against the
-  // catalog: a client whose catalog grew ahead of the Worker must still
-  // sign in, so the Worker stores what it is sent and each reader
-  // sanitizes to the catalog it knows.
+  // Not checked against the catalog: a client whose catalog grew ahead
+  // of the Worker must still sign in.
   icon: DeviceIconWireSchema,
-  // The public half of the key pair the device made for this
-  // enrollment. Enrolling again replaces it.
   publicKey: DevicePublicKeySchema,
 });
 
-// PATCH /devices/:id: the fields a device may change after enrolling,
-// each optional so a rename and an icon pick ride the same route
-// without restating the other. At least one must be present.
 export const DevicePatchRequestSchema = Schema.Struct({
   name: Schema.optional(DeviceNameSchema),
   icon: Schema.optional(DeviceIconWireSchema),
@@ -201,13 +105,7 @@ export const DevicePatchRequestSchema = Schema.Struct({
 );
 export type DevicePatch = typeof DevicePatchRequestSchema.Type;
 
-// One device as the HTTP API reports it. Timestamps are epoch
-// milliseconds. lastSeenAt is null until the device first connects.
-// Every device has an icon (its enrollment sent one), but the string
-// on the wire may be one this build's catalog lacks (a newer device's
-// pick, read through an older app), which reads as the shape its
-// platform is drawn as, so nothing past the parse ever holds an icon it
-// cannot draw.
+// An icon this build's catalog lacks reads as its platform's.
 const DeviceInfoWireSchema = Schema.Struct({
   deviceId: Schema.String,
   name: Schema.String,
@@ -235,119 +133,75 @@ export const DeviceInfoSchema = DeviceInfoWireSchema.pipe(
   ),
 );
 export type DeviceInfo = typeof DeviceInfoSchema.Type;
-// The same device as the Worker writes it: the icon still the string
-// it stored, before the reader's catalog check above.
 export type DeviceInfoWire = typeof DeviceInfoSchema.Encoded;
 
-// POST /devices/enroll response. `credential` is the only time the
-// raw credential ever leaves the Worker.
+// The only time the raw credential leaves the Worker.
 export const EnrollResponseSchema = Schema.Struct({
   credential: Schema.String,
   device: DeviceInfoSchema,
 });
 export type EnrollResponse = typeof EnrollResponseSchema.Type;
 
-// GET /devices response, scoped to the calling credential's account.
 export const DeviceListResponseSchema = Schema.Struct({
   devices: Schema.Array(DeviceInfoSchema),
 });
 
-// POST /tickets response. The ticket string is opaque to clients: the
-// app puts it in the connect URL unchanged, only the worker mints and
-// parses it (hub/src/ticket.ts). expiresInMs is relative so the
-// client does not need a synchronized clock.
+// Relative, so the client needs no synchronized clock.
 export const TicketResponseSchema = Schema.Struct({
   ticket: Schema.String,
   expiresInMs: Schema.Int,
 });
 export type TicketResponse = typeof TicketResponseSchema.Type;
 
-// POST /tunnel request: the direct listener's currently bound loopback
-// port the tunnel ingress should front. Re-provisioning with a new
-// port only rewrites the ingress config.
 export const TunnelProvisionRequestSchema = Schema.Struct({
   port: PortNumberSchema,
 });
 
-// POST /tunnel response. `hostname` is the public tunnel hostname
-// (`<name>.<TUNNEL_DOMAIN>`) peers derive the wss dial URL from.
-// `connectorToken` is the tunnel run token for cloudflared: a bearer
-// secret. The app keeps it in memory and passes it to the cloudflared
-// child via env, never argv, and it must never reach logs, status
-// objects or the renderer.
+// `connectorToken` is a bearer secret: memory and the child's env only,
+// never argv, logs or the renderer.
 export const TunnelProvisionResponseSchema = Schema.Struct({
   hostname: Schema.NonEmptyString,
   connectorToken: Schema.NonEmptyString,
-  // True when this call created the tunnel and wrote its DNS record,
-  // so the hostname may take a while to resolve (the runner probes it
-  // patiently). A reused tunnel resolved before and is repaired by
-  // re-provisioning instead. Additive: an older Worker omits it.
+  // A new DNS record can take a while to resolve.
   dnsCreated: Schema.optional(Schema.Boolean),
 });
 export type TunnelProvisionResponse = typeof TunnelProvisionResponseSchema.Type;
 
 // ---- Hub socket envelopes ----
 
-// Device to DO: ask the device hub to forward the opaque frame to
-// another device of the same account. There is no hello on this socket,
-// the consumed ticket already binds the connection to a deviceId. `to`
-// is bounded to match a deviceId, since it is fed straight to
-// getWebSockets on the device hub hot path. The frame is a string the
-// hub copies and never reads (RelayFrame below).
+// No hello: the burned ticket already binds the socket to a device.
 const HubSendEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("relay"),
   to: DeviceIdSchema,
   frame: Schema.String,
 });
 
-// The union of everything a device may send. A one-armed union today,
-// kept as a union so later client envelopes are an addition, not a
-// reshape.
 export const DeviceEnvelopeSchema = Schema.Union([HubSendEnvelopeSchema]);
 export type DeviceEnvelope = typeof DeviceEnvelopeSchema.Type;
 
-// DO to device: a frame forwarded from another device. The device hub
-// copies `frame` verbatim, it never parses or rewrites it.
 const HubDeliverEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("relay"),
-  // Bounded like HubSendEnvelopeSchema.to: a hostile DO can forge this,
-  // and it is fed straight into per-peer routing and log lines, so it is
-  // never left unbounded.
   from: DeviceIdSchema,
   frame: Schema.String,
 });
 
-// One online device in the roster: its id and the public key it
-// enrolled with, which is how its peers know who they are talking to.
 const OnlineDeviceSchema = Schema.Struct({
   deviceId: DeviceIdSchema,
   publicKey: DevicePublicKeySchema,
 });
 export type OnlineDevice = typeof OnlineDeviceSchema.Type;
 
-// DO to device: the full list of the account's online devices
-// (including the receiver). Sent to a socket right after it is
-// accepted and rebroadcast to everyone on every join and leave, so a
-// client only ever replaces its copy, never merges deltas.
+// The whole roster, the receiver included, on every change: a client
+// replaces its copy, never merges.
 const PresenceEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("presence"),
-  // Each id is bounded like HubSendEnvelopeSchema.to, and the roster
-  // length is capped so a hostile DO cannot force an unbounded
-  // allocation from one presence envelope. The DO always names real
-  // account devices, so both bounds are additive tightenings it
-  // already satisfies.
   online: Schema.Array(OnlineDeviceSchema).check(
     Schema.isMaxLength(MAX_ONLINE_DEVICES),
   ),
 });
 
-// DO to device: a send could not be delivered. `offline` means no
-// socket is connected for `to`. `too-large` means the serialized
-// forward exceeded MAX_HUB_MESSAGE_BYTES.
 const NackEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("nack"),
-  // Echoes the `to` the sender used, already bounded on send, so the
-  // same bound applies coming back.
   to: DeviceIdSchema,
   reason: Schema.Literals(["offline", "too-large"]),
 });
@@ -359,17 +213,13 @@ export const ServerEnvelopeSchema = Schema.Union([
 ]);
 export type ServerEnvelope = typeof ServerEnvelopeSchema.Type;
 
-// The one sanctioned serializer: undefined
-// fields are omitted and come back as undefined, so an opaque frame
-// value survives the device hub hop unchanged.
 export function encodeEnvelope(
   envelope: DeviceEnvelope | ServerEnvelope,
 ): string {
   return JSON.stringify(envelope);
 }
 
-// The one sanctioned reader: invalid JSON or a schema miss returns
-// null, and callers treat that as a dropped message, never as fatal.
+// Null for anything that doesn't read: a dropped message, never fatal.
 export function decodeEnvelope<S extends Schema.Decoder<unknown>>(
   text: string,
   schema: S,
@@ -385,12 +235,8 @@ export function decodeEnvelope<S extends Schema.Decoder<unknown>>(
 
 // ---- The connectInfo ask and answer ----
 
-// What one device relays to another as the envelope's frame: the
-// direct dialer's "how do I dial you?" (app/shared/hub/link.ts) or its
-// answer, keyed by an id so the answer finds its ask. `sealed` is a
-// Noise IK handshake message in unpadded base64url: the ask is the
-// first message, sealed to the addressed device's key, and the answer
-// the second, readable only by the asker. In text, `<kind>:<id>:<sealed>`.
+// `sealed` is a Noise IK handshake message (unpadded base64url): the ask
+// the first, sealed to the addressee's key, the answer the second.
 export type RelayFrame = {
   readonly kind: "ask" | "answer";
   readonly id: number;
@@ -403,7 +249,6 @@ export function encodeRelayFrame(frame: RelayFrame): string {
   return `${frame.kind}:${frame.id}:${frame.sealed}`;
 }
 
-// Null for anything else, which the reader drops.
 export function decodeRelayFrame(text: string): RelayFrame | null {
   const match = RELAY_FRAME.exec(text);
   if (match === null) return null;
@@ -414,15 +259,8 @@ export function decodeRelayFrame(text: string): RelayFrame | null {
   };
 }
 
-// What the sealed messages carry, as JSON. An undefined input or result
-// rides as an absent field. An IK first message can be replayed, so the
-// answering device turns away one it has read before (link.ts,
-// SEEN_ASK_RETENTION_MS).
-//
-//   ask:    { ask, input? }
-//   answer: { ok: true, result? } | { ok: false, message, code? }
-//
-// Bounded like every string a hostile peer could inflate.
+// What the sealed messages carry. An IK first message can be replayed,
+// so the answering device turns away one it has read before.
 const AskNameSchema = Schema.String.check(Schema.isMaxLength(64));
 
 export const AskPayloadSchema = Schema.Struct({
