@@ -132,15 +132,16 @@ export function AppearanceSection({
           label="Rotate palettes"
           description="Moves on to the next light and dark pair, keeping the two matched."
         />
-        <SegmentedControl
-          aria-label="Rotate palettes"
-          value={themeRotationEvery}
-          onChange={onThemeRotationEveryChange}
-          options={ROTATIONS}
-          disabled={!doubutsu || !themeRotation}
-          className="ml-11"
-          optionClassName="px-3 py-1.5 text-xs"
-        />
+        <div className="pl-11">
+          <SegmentedControl
+            aria-label="Rotate palettes"
+            value={themeRotationEvery}
+            onChange={onThemeRotationEveryChange}
+            options={ROTATIONS}
+            disabled={!doubutsu || !themeRotation}
+            optionClassName="px-3 py-1.5 text-xs"
+          />
+        </div>
       </div>
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}

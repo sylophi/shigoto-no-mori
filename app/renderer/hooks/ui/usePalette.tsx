@@ -96,8 +96,9 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
     setOverrideState(null);
   }
 
-  // Before paint, so a launch's rotated palette (lib/themeRotation.ts)
-  // replaces the boot mirror's in the first frame.
+  // Before paint, so a saved look that differs from the boot mirror's
+  // (a launch's palette rotation, lib/themeRotation.ts) never shows a
+  // frame of the mirror's.
   useLayoutEffect(() => {
     const html = document.documentElement;
     html.classList.toggle("doubutsu", applied.doubutsu);

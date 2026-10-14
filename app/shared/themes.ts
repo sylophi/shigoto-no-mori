@@ -104,6 +104,18 @@ export function resolveDoubutsuPicks(
   };
 }
 
+// The picks as the client config stores them: each omitted at its
+// list's default.
+export function storedPicks(
+  light: LightTheme,
+  dark: DarkTheme,
+): Pick<ClientConfig, "lightTheme" | "darkTheme"> {
+  return {
+    lightTheme: light === DEFAULT_LIGHT_THEME ? undefined : light,
+    darkTheme: dark === DEFAULT_DARK_THEME ? undefined : dark,
+  };
+}
+
 // The palette the current appearance wears, or null with the switch
 // off.
 export function activeTheme(
@@ -162,10 +174,5 @@ export function rotationTurn(
   if (!due) return null;
   const next = (pairOf(LIGHT_THEMES, picks.light) + 1) % LIGHT_THEMES.length;
   const light = LIGHT_THEMES[next]?.id ?? DEFAULT_LIGHT_THEME;
-  const dark = DARK_THEMES[next]?.id ?? DEFAULT_DARK_THEME;
-  return {
-    lightTheme: light === DEFAULT_LIGHT_THEME ? undefined : light,
-    darkTheme: dark === DEFAULT_DARK_THEME ? undefined : dark,
-    themeRotatedAt: now,
-  };
+  return { ...storedPicks(light, darkTwin(light)), themeRotatedAt: now };
 }

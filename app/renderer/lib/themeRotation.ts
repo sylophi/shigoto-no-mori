@@ -14,14 +14,17 @@ const CHECK_MS = 60 * 1000;
 
 const warn = (error: unknown) => console.warn("[themeRotation]", error);
 
+// The cache takes the turn before the write lands, so the launch's
+// render waits on a read alone.
 async function turn(queryClient: QueryClient, launching: boolean) {
   const config = await queryClient.fetchQuery(clientConfigQueryOptions);
   const patch = rotationTurn(config, Date.now(), launching);
   if (!patch) return;
-  queryClient.setQueryData<ClientConfig>(
-    queryKeys.clientConfig(),
-    await mergeClientConfigWrite(queryClient, patch),
-  );
+  queryClient.setQueryData<ClientConfig>(queryKeys.clientConfig(), {
+    ...config,
+    ...patch,
+  });
+  void mergeClientConfigWrite(queryClient, patch).catch(warn);
 }
 
 export async function startThemeRotation(

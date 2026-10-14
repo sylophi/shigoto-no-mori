@@ -5,9 +5,9 @@
 // full client config or it wipes the keys it omits. Both callers, the
 // appearance Save (useSettingsSave) and the keepReachable toggle
 // (useKeepReachableUpdate), only know their own keys, so each goes
-// through here: read the live cached doc (the persisted one, since the
-// client store has a single writer per key and useClientConfig holds it
-// with staleTime Infinity), merge the caller's partial patch over it, and
+// through here: read the live cached doc (the persisted one, since
+// every writer sets what it writes into the cache and useClientConfig
+// holds it with staleTime Infinity), merge the caller's partial patch over it, and
 // write the full result. Returns the merged doc so the caller can set it
 // back into the cache. An undefined patch value omits its key, matching
 // the store's omit-on-default serialization.

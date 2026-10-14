@@ -15,10 +15,9 @@ import {
 } from "@shared/schemas";
 import {
   type DarkTheme,
-  DEFAULT_DARK_THEME,
-  DEFAULT_LIGHT_THEME,
   type LightTheme,
   resolveDoubutsuPicks,
+  storedPicks,
 } from "@shared/themes";
 import { errorMessageOf } from "@shared/errors";
 import { villageNewsEnabled } from "@shared/villageLife";
@@ -183,12 +182,8 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
     // Default is on; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
-    // Each pick is omitted at its list's default, and kept while the
-    // switch is off so it comes back with it.
-    lightTheme:
-      state.lightTheme === DEFAULT_LIGHT_THEME ? undefined : state.lightTheme,
-    darkTheme:
-      state.darkTheme === DEFAULT_DARK_THEME ? undefined : state.darkTheme,
+    // Kept while the switch is off, so they come back with it.
+    ...storedPicks(state.lightTheme, state.darkTheme),
     themeRotation: state.themeRotation ? state.themeRotationEvery : undefined,
     // Default is on, with the same opt-out serialization as doubutsu.
     pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
