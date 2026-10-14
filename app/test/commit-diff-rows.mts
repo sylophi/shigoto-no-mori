@@ -109,23 +109,17 @@ async function startFakeHost(): Promise<string> {
 
 // A cold vite transforms the whole renderer on the first load, which
 // takes a CI runner a minute or more, can answer 504 while it bundles
-// dependencies, and reloads the page once they're bundled. Only the
-// load that opens keeps its errors.
-async function openFakeHost(
-  page: Page,
-  url: string,
-  errors: string[],
-): Promise<void> {
+// dependencies, and reloads the page once they're bundled.
+async function openFakeHost(page: Page, url: string): Promise<void> {
   const deadline = Date.now() + 180_000;
   for (;;) {
-    errors.length = 0;
     try {
       await page.goto(`${url}/?theme=dark`, {
         waitUntil: "commit",
         timeout: 60_000,
       });
       await page.waitForFunction(() => window.fakeHost?.navigate, null, {
-        timeout: Math.max(1, deadline - Date.now()),
+        timeout: Math.max(1, Math.min(60_000, deadline - Date.now())),
       });
       return;
     } catch (error) {
@@ -187,88 +181,99 @@ function faultsInView(page: Page): Promise<RowFault[]> {
   });
 }
 
-it("draws every row of a real commit's diff at every scroll", async () => {
-  const { repo, head } = seedRepo();
-  const patch = await engineGit.commitDiff(repo, head);
-  assert.equal(patch.match(/^diff --git /gm)?.length, 4);
-  assert.match(patch, /^index [0-9a-f]{40}\.\.[0-9a-f]{40}/m);
+// The waits fit a cold vite and highlighter on a CI runner, which can
+// run past vitest's 5 min.
+it(
+  "draws every row of a real commit's diff at every scroll",
+  async () => {
+    const { repo, head } = seedRepo();
+    const patch = await engineGit.commitDiff(repo, head);
+    assert.equal(patch.match(/^diff --git /gm)?.length, 4);
+    assert.match(patch, /^index [0-9a-f]{40}\.\.[0-9a-f]{40}/m);
 
-  const [url, browser] = await Promise.all([
-    startFakeHost(),
-    chromium.launch({ channel: "chrome" }).then((launched) => {
-      trackTest(() => launched.close());
-      return launched;
-    }),
-  ]);
-  const page = await browser.newPage({
-    viewport: { width: 1000, height: 700 },
-  });
-  const errors: string[] = [];
-  page.on("console", (m) => {
-    // A cold vite bundles a dependency it meets late (a grammar the
-    // highlighter loads) and answers the requests it raced with 504.
-    if (m.type() === "error" && !m.text().includes("Outdated Optimize Dep"))
-      errors.push(m.text());
-  });
-  page.on("pageerror", (e) => errors.push(e.message));
+    const [url, browser] = await Promise.all([
+      startFakeHost(),
+      chromium.launch({ channel: "chrome" }).then((launched) => {
+        trackTest(() => launched.close());
+        return launched;
+      }),
+    ]);
+    const page = await browser.newPage({
+      viewport: { width: 1000, height: 700 },
+    });
+    const errors: string[] = [];
+    page.on("console", (m) => {
+      // A cold vite bundles a dependency it meets late (a grammar the
+      // highlighter loads) and answers the requests it raced with 504.
+      if (m.type() === "error" && !m.text().includes("Outdated Optimize Dep"))
+        errors.push(m.text());
+    });
+    page.on("pageerror", (e) => errors.push(e.message));
+    // Only the document that opens keeps its errors, not a load vite
+    // reloaded or one the retry left.
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) errors.length = 0;
+    });
 
-  await openFakeHost(page, url, errors);
-  await page.evaluate(
-    ([commitPatch, to]) => {
-      window.fakeHost?.setPatch(commitPatch);
-      window.fakeHost?.navigate?.(to);
-    },
-    [patch, `${COMMIT_PAGE}${head}`] as const,
-  );
-  const rows = page.locator("[data-diff-file]");
-  await waitFor(
-    async () => (await rows.count()) === 4,
-    "the four rows",
-    120_000,
-  );
+    await openFakeHost(page, url);
+    await page.evaluate(
+      ([commitPatch, to]) => {
+        window.fakeHost?.setPatch(commitPatch);
+        window.fakeHost?.navigate?.(to);
+      },
+      [patch, `${COMMIT_PAGE}${head}`] as const,
+    );
+    const rows = page.locator("[data-diff-file]");
+    await waitFor(
+      async () => (await rows.count()) === 4,
+      "the four rows",
+      120_000,
+    );
 
-  const scroller = page.locator('[data-slot="diff-view"] >> xpath=..');
-  const size = () =>
-    scroller.evaluate((el) => ({
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-    }));
-  // Each row takes its height from pierre's metrics once it is laid out.
-  await waitFor(
-    async () => {
-      const { scrollHeight, clientHeight } = await size();
-      return scrollHeight > 2 * clientHeight;
-    },
-    "the patch to run past two screens",
-    60_000,
-  );
-  const { scrollHeight, clientHeight } = await size();
-  // Down in steps under a screen, so every part of every row is on
-  // screen at some stop, then back to the top.
-  const stops = [];
-  for (let top = 0; top < scrollHeight; top += clientHeight / 2) {
-    stops.push(Math.round(top));
-  }
-  stops.push(scrollHeight, 0);
-  for (const top of stops) {
-    await scroller.evaluate((el, scrollTop) => {
-      el.scrollTop = scrollTop;
-    }, top);
-    let faults: RowFault[] = [];
+    const scroller = page.locator('[data-slot="diff-view"] >> xpath=..');
+    const size = () =>
+      scroller.evaluate((el) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }));
+    // Each row takes its height from pierre's metrics once it is laid out.
     await waitFor(
       async () => {
-        faults = await faultsInView(page);
-        return faults.length === 0;
+        const { scrollHeight, clientHeight } = await size();
+        return scrollHeight > 2 * clientHeight;
       },
-      `every row in view drawn at scrollTop ${top}`,
-      // The first stop waits on the highlighter's first load.
-      top === 0 ? 60_000 : 5_000,
-    ).catch((error: Error) => {
-      throw new Error(
-        `${error.message}:\n${faults.map((f) => `  ${f.file}: ${f.fault}`).join("\n")}`,
-      );
-    });
-  }
+      "the patch to run past two screens",
+      60_000,
+    );
+    const { scrollHeight, clientHeight } = await size();
+    // Down in steps under a screen, so every part of every row is on
+    // screen at some stop, then back to the top.
+    const stops = [];
+    for (let top = 0; top < scrollHeight; top += clientHeight / 2) {
+      stops.push(Math.round(top));
+    }
+    stops.push(scrollHeight, 0);
+    for (const top of stops) {
+      await scroller.evaluate((el, scrollTop) => {
+        el.scrollTop = scrollTop;
+      }, top);
+      let faults: RowFault[] = [];
+      await waitFor(
+        async () => {
+          faults = await faultsInView(page);
+          return faults.length === 0;
+        },
+        `every row in view drawn at scrollTop ${top}`,
+        // The first stop waits on the highlighter's first load.
+        top === 0 ? 60_000 : 5_000,
+      ).catch((error: Error) => {
+        throw new Error(
+          `${error.message}:\n${faults.map((f) => `  ${f.file}: ${f.fault}`).join("\n")}`,
+        );
+      });
+    }
 
-  assert.deepEqual(errors, []);
-});
+    assert.deepEqual(errors, []);
+  },
+  10 * 60_000,
+);
