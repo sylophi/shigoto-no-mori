@@ -40,6 +40,7 @@ import {
   Gated,
   inputOf,
   isInvoke,
+  isPush,
   outputOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
@@ -113,15 +114,18 @@ export type LocalRegistrar = {
 // built from (renderer/lib/runtime/Api.ts), so the inventory cannot
 // drift from the api surface. Exported for the
 // fake host's fixture wire (lab/fake-host/bridge.ts), which stubs the
-// same way.
+// same way and answers a view's fixture as it does an invoke's (`views`).
 export function invokeIndexFor(
   scope?: ContractScope,
+  views = false,
 ): Map<string, ContractCall> {
   const index = new Map<string, ContractCall>();
   for (const module of allContractModules) {
     if (scope !== undefined && scopeOf(module) !== scope) continue;
     for (const call of callsOf(module)) {
-      if (isInvoke(call)) index.set(channelOf(call), call);
+      if (isInvoke(call) || (views && !isPush(call))) {
+        index.set(channelOf(call), call);
+      }
     }
   }
   return index;

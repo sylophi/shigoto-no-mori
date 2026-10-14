@@ -209,7 +209,7 @@ function createFixtureWire(
   ) => Stream.Stream<unknown, unknown> | undefined,
 ): FixtureWire {
   const fanOut = pushFanOut();
-  const index = invokeIndexFor(scope);
+  const index = invokeIndexFor(scope, true);
   // Every push on the wire, whatever its channel, for the views.
   const moved = new Set<() => void>();
   const emit: FixtureWire["emit"] = (channel, payload) => {
@@ -279,18 +279,17 @@ function createFixtureWire(
         const colon = channel.indexOf(":");
         const module = channel.slice(0, colon);
         const watched = channel.slice(colon + 1).replace(/^watch/, "");
-        const fixture = handlers[channel];
-        const read =
-          fixture === undefined
+        const query =
+          handlers[channel] === undefined
             ? [
                 `${module}:${watched.charAt(0).toLowerCase()}${watched.slice(1)}`,
                 `${module}:list`,
                 `${module}:read`,
-              ]
-                .filter((candidate) => index.has(candidate))
-                .map((query) => () => answer(query, input))[0]
-            : async () => structuredClone(await fixture(input));
-        if (read === undefined) {
+              ].find(
+                (candidate) => candidate !== channel && index.has(candidate),
+              )
+            : channel;
+        if (query === undefined) {
           return Stream.die(
             new Error(`[fake-host] no fixture serves ${channel}`),
           );
@@ -308,7 +307,7 @@ function createFixtureWire(
           ),
         );
         return Stream.concat(Stream.make(undefined), pushes).pipe(
-          Stream.mapEffect(() => Effect.promise(read)),
+          Stream.mapEffect(() => Effect.promise(() => answer(query, input))),
           Stream.changesWith((a, b) => JSON.stringify(a) === JSON.stringify(b)),
         );
       },
