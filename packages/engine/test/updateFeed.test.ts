@@ -59,40 +59,97 @@ describe("pickRelease", () => {
   ];
   const withAlso = (...extra: Release[]) => [...extra, ...releases];
 
-  it("finds nothing ahead in the channel", () => {
-    assert.equal(pickRelease(current, releases, "arm64"), undefined);
+  it("finds nothing ahead", () => {
+    assert.equal(
+      pickRelease(semver("2.1.0-beta.1"), releases, "arm64"),
+      undefined,
+    );
   });
 
-  it("takes the highest prerelease of the channel, whatever the order", () => {
+  it("takes the highest release ahead, whatever the order", () => {
     assert.deepEqual(
       pickRelease(
         current,
-        withAlso(labRelease("v2.0.0-beta.3"), labRelease("v2.0.0-beta.4")),
+        withAlso(labRelease("v2.1.0-beta.3"), labRelease("v2.1.0-beta.2")),
         "arm64",
       ),
       {
-        url: "https://example.test/v2.0.0-beta.4.zip",
-        version: "2.0.0-beta.4",
-        notes: "notes for v2.0.0-beta.4",
+        url: "https://example.test/v2.1.0-beta.3.zip",
+        version: "2.1.0-beta.3",
+        notes: "notes for v2.1.0-beta.3",
         releaseDate: "2026-09-15T12:00:00Z",
       },
     );
   });
 
-  it("lets a full release ahead end the beta", () => {
-    const picked = pickRelease(
-      current,
-      withAlso(labRelease("v2.0.0-beta.4"), labRelease("v2.0.0")),
-      "arm64",
+  // Only a release above the build in semver's order: alpha, then beta,
+  // then rc, then the full release, and never back a stage.
+  it("moves a prerelease build up the stages, never down", () => {
+    const stages = [
+      "v2.5.0-alpha.1",
+      "v2.5.0-alpha.2",
+      "v2.5.0-alpha.9",
+      "v2.5.0-beta.1",
+      "v2.5.0-beta.2",
+      "v2.5.0-beta.3",
+      "v2.5.0-rc.1",
+      "v2.5.0",
+    ].map((tag) => labRelease(tag));
+    const offered = (build: string, ...tags: string[]) =>
+      tags.map(
+        (tag) =>
+          pickRelease(
+            semver(build),
+            stages.filter((release) => release.tag_name === tag),
+            "arm64",
+          )?.version ?? null,
+      );
+    assert.deepEqual(
+      offered(
+        "2.5.0-alpha.1",
+        "v2.5.0-alpha.2",
+        "v2.5.0-beta.1",
+        "v2.5.0-rc.1",
+        "v2.5.0",
+      ),
+      ["2.5.0-alpha.2", "2.5.0-beta.1", "2.5.0-rc.1", "2.5.0"],
     );
-    assert.equal(picked?.version, "2.0.0");
+    assert.deepEqual(
+      offered(
+        "2.5.0-beta.1",
+        "v2.5.0-alpha.9",
+        "v2.5.0-beta.2",
+        "v2.5.0-rc.1",
+        "v2.5.0",
+      ),
+      [null, "2.5.0-beta.2", "2.5.0-rc.1", "2.5.0"],
+    );
+    assert.deepEqual(offered("2.5.0-rc.1", "v2.5.0-beta.3", "v2.5.0"), [
+      null,
+      "2.5.0",
+    ]);
+    // The highest of them all, from anywhere below.
     assert.equal(
-      pickRelease(current, withAlso(labRelease("v2.3.1")), "arm64")?.version,
-      "2.3.1",
+      pickRelease(semver("2.5.0-alpha.1"), stages, "arm64")?.version,
+      "2.5.0",
     );
   });
 
-  // The alphas and betas of 3.0.0 are the v3 flavor's bundle, which
+  it("moves a full build only to full releases", () => {
+    const later = [
+      labRelease("v2.6.0-alpha.1"),
+      labRelease("v2.6.0-beta.1"),
+      labRelease("v2.6.0-rc.1"),
+    ];
+    assert.equal(pickRelease(semver("2.5.0"), later, "arm64"), undefined);
+    assert.equal(
+      pickRelease(semver("2.5.0"), [...later, labRelease("v2.5.1")], "arm64")
+        ?.version,
+      "2.5.1",
+    );
+  });
+
+  // The prereleases of 3.0.0 are the v3 flavor's bundle, which
   // installs beside prod under its own name and data folder.
   const v3Releases = [
     labRelease("v3.0.0-alpha.1"),
@@ -100,17 +157,11 @@ describe("pickRelease", () => {
     labRelease("v3.0.0-beta.1"),
   ];
 
-  it("never offers a prod build an alpha or beta of 3.0.0", () => {
-    // A full build, and builds on their own prerelease lines, even one
-    // on the channel of a 3.0.0 alpha ahead of it.
-    for (const build of [
-      "2.34.1",
-      "2.0.0-beta.2",
-      "3.0.0-rc.1",
-      "3.0.0-alpha.1",
-    ]) {
+  it("never offers a prod build a prerelease of 3.0.0", () => {
+    // A full build, and prerelease builds below them.
+    for (const build of ["2.34.1", "2.9.0-beta.2", "2.99.0-rc.1"]) {
       assert.equal(
-        pickRelease(semver(build), withAlso(...v3Releases), "arm64"),
+        pickRelease(semver(build), v3Releases, "arm64"),
         undefined,
         build,
       );
@@ -118,14 +169,14 @@ describe("pickRelease", () => {
     assert.equal(
       pickRelease(
         semver("2.34.1"),
-        withAlso(...v3Releases, labRelease("v3.0.0")),
+        [...v3Releases, labRelease("v3.0.0")],
         "arm64",
       )?.version,
       "3.0.0",
     );
   });
 
-  it("offers a v3 build the 3.0.0 alphas and betas alone", () => {
+  it("offers a v3 build the 3.0.0 prereleases alone", () => {
     const all = withAlso(
       ...v3Releases,
       labRelease("v3.0.0-rc.1"),
@@ -135,8 +186,9 @@ describe("pickRelease", () => {
     );
     const v3 = (build: string) =>
       pickRelease(semver(build), all, "arm64", "v3")?.version;
-    assert.equal(v3("3.0.0-alpha.1"), "3.0.0-beta.1");
-    assert.equal(v3("3.0.0-beta.1"), undefined);
+    assert.equal(v3("3.0.0-alpha.1"), "3.0.0-rc.1");
+    assert.equal(v3("3.0.0-beta.1"), "3.0.0-rc.1");
+    assert.equal(v3("3.0.0-rc.1"), undefined);
     assert.equal(
       pickRelease(
         semver("3.0.0-alpha.1"),
@@ -195,15 +247,6 @@ describe("pickRelease", () => {
       tag_name: "untagged-4f2a9c",
     };
     assert.equal(pickRelease(current, [untagged], "arm64"), undefined);
-  });
-
-  it("moves a full release build only to full releases", () => {
-    const full = semver("1.8.0");
-    assert.equal(pickRelease(full, releases, "arm64"), undefined);
-    assert.equal(
-      pickRelease(full, withAlso(labRelease("v1.9.1")), "arm64")?.version,
-      "1.9.1",
-    );
   });
 
   it("reads what is null or missing as Go's zero values", () => {
