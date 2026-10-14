@@ -8,6 +8,7 @@ import {
   LIGHT_THEMES,
   type LightTheme,
   type ThemeOption,
+  type ThemeRotation,
 } from "@shared/themes";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
@@ -15,6 +16,13 @@ import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 import { ThemePicker } from "./ThemePicker";
 import { VillageLifeSetting } from "./VillageLifeSetting";
+
+const ROTATIONS: { value: ThemeRotation; label: string }[] = [
+  { value: "launch", label: "Each launch" },
+  { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+];
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Light", Icon: Sun },
@@ -31,6 +39,10 @@ interface AppearanceSectionProps {
   onLightThemeChange: (next: LightTheme) => void;
   darkTheme: DarkTheme;
   onDarkThemeChange: (next: DarkTheme) => void;
+  themeRotation: boolean;
+  onThemeRotationChange: (next: boolean) => void;
+  themeRotationEvery: ThemeRotation;
+  onThemeRotationEveryChange: (next: ThemeRotation) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   villageLife: boolean;
@@ -51,6 +63,10 @@ export function AppearanceSection({
   onLightThemeChange,
   darkTheme,
   onDarkThemeChange,
+  themeRotation,
+  onThemeRotationChange,
+  themeRotationEvery,
+  onThemeRotationEveryChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
   villageLife,
@@ -109,6 +125,22 @@ export function AppearanceSection({
           onChange={onDarkThemeChange}
           disabled={!doubutsu}
         />
+        <ToggleRow
+          checked={themeRotation}
+          onCheckedChange={onThemeRotationChange}
+          disabled={!doubutsu}
+          label="Rotate palettes"
+        />
+        <div className="pl-11">
+          <SegmentedControl
+            aria-label="Rotate palettes"
+            value={themeRotationEvery}
+            onChange={onThemeRotationEveryChange}
+            options={ROTATIONS}
+            disabled={!doubutsu || !themeRotation}
+            optionClassName="px-3 py-1.5 text-xs"
+          />
+        </div>
       </div>
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}

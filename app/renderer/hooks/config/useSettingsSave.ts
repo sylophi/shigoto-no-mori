@@ -11,13 +11,13 @@ import {
   type LauncherCommand,
   type TerminalId,
   type Theme,
+  type ThemeRotation,
 } from "@shared/schemas";
 import {
   type DarkTheme,
-  DEFAULT_DARK_THEME,
-  DEFAULT_LIGHT_THEME,
   type LightTheme,
   resolveDoubutsuPicks,
+  storedPicks,
 } from "@shared/themes";
 import { errorMessageOf } from "@shared/errors";
 import { villageNewsEnabled } from "@shared/villageLife";
@@ -25,13 +25,16 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first thirteen fields are client config (appearance), the rest
+// the first sixteen fields are client config (appearance), the rest
 // are device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
   lightTheme: LightTheme;
   darkTheme: DarkTheme;
+  // The interval stays while rotation is off, for when it comes back.
+  themeRotation: boolean;
+  themeRotationEvery: ThemeRotation;
   pauseAnimationsOnBattery: boolean;
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
@@ -77,6 +80,8 @@ export function fromConfig(
     doubutsu: picks.doubutsu,
     lightTheme: picks.light,
     darkTheme: picks.dark,
+    themeRotation: clientConfig.themeRotation !== undefined,
+    themeRotationEvery: clientConfig.themeRotation ?? "launch",
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
     villageNews: villageNewsEnabled(clientConfig),
@@ -177,12 +182,9 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
     // Default is on; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
-    // Each pick is omitted at its list's default, and kept while the
-    // switch is off so it comes back with it.
-    lightTheme:
-      state.lightTheme === DEFAULT_LIGHT_THEME ? undefined : state.lightTheme,
-    darkTheme:
-      state.darkTheme === DEFAULT_DARK_THEME ? undefined : state.darkTheme,
+    // Kept while the switch is off, so they come back with it.
+    ...storedPicks(state.lightTheme, state.darkTheme),
+    themeRotation: state.themeRotation ? state.themeRotationEvery : undefined,
     // Default is on, with the same opt-out serialization as doubutsu.
     pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
       ? undefined
@@ -341,9 +343,18 @@ export function useSettingsSave({
       let persistedClientConfig: ClientConfig = clientConfig;
       if (clientPersisted) {
         try {
+          // A pick or a rotation saved here starts a timed rotation's
+          // period over.
+          const restartsRotation =
+            state.lightTheme !== initialState.lightTheme ||
+            state.darkTheme !== initialState.darkTheme ||
+            state.themeRotation !== initialState.themeRotation ||
+            state.themeRotationEvery !== initialState.themeRotationEvery;
           persistedClientConfig = await mergeClientConfigWrite(
             queryClient,
-            clientConfig,
+            restartsRotation
+              ? { ...clientConfig, themeRotatedAt: Date.now() }
+              : clientConfig,
           );
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);

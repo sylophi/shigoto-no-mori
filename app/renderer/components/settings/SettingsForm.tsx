@@ -28,8 +28,14 @@ import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
+import { holdThemeRotation } from "@/lib/themeRotation";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
-import type { DarkTheme, LightTheme } from "@shared/themes";
+import {
+  type DarkTheme,
+  darkTwin,
+  type LightTheme,
+  lightTwin,
+} from "@shared/themes";
 import { AppearanceSection } from "./AppearanceSection";
 import { WorktreePrefixesSection } from "./WorktreePrefixesSection";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
@@ -114,6 +120,9 @@ export function SettingsForm({
     );
   const setField = fieldSetter(setForm);
 
+  // No palette rotation turns behind the form's back.
+  useEffect(() => holdThemeRotation(), []);
+
   // Drop any staged previews when leaving the settings page so the rest
   // of the app falls back to the saved values.
   useEffect(
@@ -142,6 +151,8 @@ export function SettingsForm({
           doubutsu: prev.doubutsu,
           lightTheme: prev.lightTheme,
           darkTheme: prev.darkTheme,
+          themeRotation: prev.themeRotation,
+          themeRotationEvery: prev.themeRotationEvery,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
           villageNews: prev.villageNews,
@@ -177,14 +188,26 @@ export function SettingsForm({
 
   // A pick previews at once, like the appearance: the light one shows
   // while the window is light, the dark one while it is dark, and
-  // the other waits for its appearance.
+  // the other waits for its appearance. While rotation is on the picks
+  // are one pair: either brings its twin along, and turning rotation
+  // on pairs the dark pick with the light one.
+  const pickPair = (lightTheme: LightTheme, darkTheme: DarkTheme) => {
+    setForm((prev) => ({ ...prev, lightTheme, darkTheme }));
+    setPaletteOverride({ light: lightTheme, dark: darkTheme });
+  };
   const pickLightTheme = (lightTheme: LightTheme) => {
+    if (form.themeRotation) return pickPair(lightTheme, darkTwin(lightTheme));
     setForm((prev) => ({ ...prev, lightTheme }));
     setPaletteOverride({ light: lightTheme });
   };
   const pickDarkTheme = (darkTheme: DarkTheme) => {
+    if (form.themeRotation) return pickPair(lightTwin(darkTheme), darkTheme);
     setForm((prev) => ({ ...prev, darkTheme }));
     setPaletteOverride({ dark: darkTheme });
+  };
+  const setThemeRotation = (next: boolean) => {
+    setForm((prev) => ({ ...prev, themeRotation: next }));
+    if (next) pickPair(form.lightTheme, darkTwin(form.lightTheme));
   };
 
   // The peer forms, as the footer sees them.
@@ -265,6 +288,10 @@ export function SettingsForm({
               onLightThemeChange={pickLightTheme}
               darkTheme={form.darkTheme}
               onDarkThemeChange={pickDarkTheme}
+              themeRotation={form.themeRotation}
+              onThemeRotationChange={setThemeRotation}
+              themeRotationEvery={form.themeRotationEvery}
+              onThemeRotationEveryChange={setField("themeRotationEvery")}
               pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
               onPauseAnimationsOnBatteryChange={setField(
                 "pauseAnimationsOnBattery",
