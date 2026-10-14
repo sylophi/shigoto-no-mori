@@ -291,12 +291,6 @@
     "remote": true,
     "gated": false
   },
-  "githubCli:projectPullRequests": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
   "githubCli:projectPullRequestsRefreshed": {
     "kind": "push",
     "scope": "host",
@@ -1447,12 +1441,6 @@
     "remote": true,
     "gated": false
   },
-  "worktrees:branchHistory": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
   "worktrees:carryOverComplete": {
     "kind": "push",
     "scope": "host",
@@ -1573,18 +1561,6 @@
     "gated": true,
     "grant": "changeCode"
   },
-  "worktrees:fileDiff": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
-  "worktrees:fileHunks": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
   "worktrees:filesChanged": {
     "kind": "push",
     "scope": "host",
@@ -1646,12 +1622,6 @@
     "gated": true,
     "grant": "changeCode",
     "tracksProjectUsage": true
-  },
-  "worktrees:operation": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
   },
   "worktrees:overwrite": {
     "kind": "invoke",
@@ -1843,12 +1813,6 @@
     "tracksProjectUsage": true
   },
   "worktrees:stashDiff": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
-  "worktrees:stashes": {
     "kind": "invoke",
     "scope": "host",
     "remote": true,
