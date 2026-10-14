@@ -63,11 +63,6 @@ import {
   MigrationStillStuckScene,
   MigrationStuckScene,
   MigrationWaitingScene,
-  OnboardingCliScene,
-  OnboardingDoneScene,
-  OnboardingProjectScene,
-  OnboardingNoAccountScene,
-  OnboardingSignInScene,
 } from "./steps.tsx";
 import { LivePageScene, LiveQuietScene } from "./live.tsx";
 import {
@@ -110,11 +105,6 @@ export const scenes = {
   migrationStillStuck: { Scene: MigrationStillStuckScene, ...DESKTOP },
   migrationSignIn: { Scene: MigrationSignInScene, ...DESKTOP },
   migrationDone: { Scene: MigrationDoneScene, ...DESKTOP },
-  onboardingSignIn: { Scene: OnboardingSignInScene, ...DESKTOP },
-  onboardingNoAccount: { Scene: OnboardingNoAccountScene, ...DESKTOP },
-  onboardingCli: { Scene: OnboardingCliScene, ...DESKTOP },
-  onboardingProject: { Scene: OnboardingProjectScene, ...DESKTOP },
-  onboardingDone: { Scene: OnboardingDoneScene, ...DESKTOP },
   forestPage: { Scene: ForestPageScene, ...DESKTOP },
   phoneNotFound: { Scene: PhoneNotFoundScene, ...PHONE },
   phoneInbox: { Scene: PhoneInboxScene, ...PHONE },

@@ -94,8 +94,8 @@ export function AddExistingFormView({
       shouldFilter={false}
       value={highlighted}
       onValueChange={onHighlight}
-      // Fills what holds it (the welcome page's card), so its footer sits
-      // at the bottom however few folders the list has.
+      // Fills what holds it, so its footer sits at the bottom however few
+      // folders the list has.
       className={cn(MODAL_COMMAND_CLASS, "flex-1")}
     >
       <div
