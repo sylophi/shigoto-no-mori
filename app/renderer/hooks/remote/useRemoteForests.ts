@@ -152,9 +152,7 @@ export function useRemoteForests(
   const pullRequestQueries = useViews(
     somePullRequestsAtom,
     pairs.map(({ device, project }) =>
-      device.api === undefined
-        ? null
-        : pullRequestsKey(device.deviceId, project.id),
+      wanted(device) ? pullRequestsKey(device.deviceId, project.id) : null,
     ),
   );
   const configQueries = useQueries({

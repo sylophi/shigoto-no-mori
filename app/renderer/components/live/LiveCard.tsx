@@ -26,6 +26,7 @@ import {
   useDeviceProperName,
   useRemoteDevice,
 } from "@/hooks/remote/useRemoteDevices";
+import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { useDeviceWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHasLocalHost } from "@/lib/localHost";
 import {
@@ -236,8 +237,9 @@ function WorktreeHeader({
   ).data?.find((entry) => entry.id === projectId);
   // What the work is called, as its sidebar row names it: its PR's
   // title, the one `sm describe` gave it, else the branch.
+  const peer = { deviceId, api: scope.api };
   const [prs] = useViews(somePullRequestsAtom, [
-    scope.api === undefined ? null : pullRequestsKey(deviceId, projectId),
+    useViewsWanted([peer])(peer) ? pullRequestsKey(deviceId, projectId) : null,
   ]);
   const workTitle = worktree
     ? worktreeTitle(worktree, mappedPullRequest(prs?.data, worktree))

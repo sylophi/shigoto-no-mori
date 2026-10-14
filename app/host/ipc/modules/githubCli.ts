@@ -99,15 +99,15 @@ export const githubCliHandlers = {
   // A page's read of its branch's PR, which moves the project's map when
   // it learned something newer than the sweep.
   worktreePullRequest: ({ projectId, branch }) =>
-    Effect.flatMap(projectPath(projectId), (cwd) =>
-      getWorktreePullRequest(cwd, branch).pipe(
-        Effect.tap((pr) =>
-          noteBranchPullRequest(cwd, branch, pr)
-            ? pullRequestsMoved(projectId)
-            : Effect.void,
-        ),
-      ),
-    ),
+    Effect.gen(function* () {
+      const cwd = yield* projectPath(projectId);
+      if (!(yield* (yield* GithubCli).readyForRepo(cwd))) return null;
+      const pr = yield* getWorktreePullRequest(cwd, branch);
+      if (noteBranchPullRequest(cwd, branch, pr)) {
+        yield* pullRequestsMoved(projectId);
+      }
+      return pr;
+    }),
 
   pullRequestCandidates: ({ projectId }) =>
     Effect.flatMap(projectPath(projectId), listPullRequestCandidates),

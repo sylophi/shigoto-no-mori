@@ -344,11 +344,10 @@ function autoMergeMethod(
 // state) since the only consumer is the worktree detail page. The slim
 // PullRequest projection is used by the sidebar list path. Throws on
 // transient gh / network / parse failure so callers can distinguish
-// "no PR" (null) from "we don't know". The renderer uses that to
-// avoid clobbering the sidebar's project-wide PR map.
+// "no PR" (null) from "we don't know", and asks gh whether or not the
+// repo is ready (the caller checks), so its null is GitHub's answer.
 export const getWorktreePullRequest = Effect.fn("PullRequests.forBranch")(
   function* (cwd: string, branch: string) {
-    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) return null;
     const [detail, extras] = yield* Effect.all(
       [runGhPrListDetail(cwd, branch), fetchGraphqlExtras(cwd, branch)],
       { concurrency: 2 },
