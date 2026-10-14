@@ -23,11 +23,13 @@ export const ReadWorktreeFilePayloadSchema = Schema.Struct({
 });
 
 // One side of a binary file in a diff: the blob its patch's `index`
-// line names, abbreviated as git prints it, and the path it had, which
-// picks the media type and holds a blob git never stored.
+// line names, a full SHA-1 or SHA-256 id (every patch the host makes
+// carries `--full-index`), and the path it had, which picks the media
+// type and holds a blob git never stored. Only a full id, so a read
+// names the exact blob a patch showed.
 export const ReadBlobPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
-  oid: Schema.String.check(Schema.isPattern(/^[0-9a-f]{4,64}$/)),
+  oid: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)),
   path: RepoRelPathSchema,
 });
 

@@ -1059,7 +1059,9 @@ const make = Effect.gen(function* () {
     // plain patch rather than git's combined one. Empty for a commit git
     // can't show one for. Paths come out as they are (core.quotePath),
     // not octal-escaped, here and in mergeBaseDiff and readStashDiff,
-    // since the file list shows them and opens them.
+    // since the file list shows them and opens them, and blob ids in
+    // full (--full-index), since a binary file's sides are read back by
+    // them (readBlob).
     commitDiff: Effect.fn("Git.commitDiff")(function* (worktree, hash) {
       return yield* run(
         worktree,
@@ -1069,6 +1071,7 @@ const make = Effect.gen(function* () {
           "show",
           "--format=",
           "--no-color",
+          "--full-index",
           "--diff-merges=first-parent",
           "--end-of-options",
           hash,
@@ -1086,6 +1089,7 @@ const make = Effect.gen(function* () {
           "core.quotePath=false",
           "diff",
           "--no-color",
+          "--full-index",
           "--end-of-options",
           `${input.base}...${input.head}`,
         ],

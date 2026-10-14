@@ -41,7 +41,7 @@ const catalog = (names: Names) => {
       [
         "update [--check]",
         "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v3.0.0-rc.N) and takes a full release that is ahead of it; a v3 build (-v3.N) takes only the newest -v3.N.",
+        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v3.0.0-rc.N) and takes a full release that is ahead of it; a v3 build takes only the newest alpha or beta of 3.0.0.",
       ],
       [
         "doctor [--fix] [--yes]",

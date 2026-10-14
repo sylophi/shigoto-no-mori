@@ -10,6 +10,7 @@ import {
   releaseChannel,
   type Semver,
 } from "@shigomori/contracts/semver";
+import { isV3Release } from "./flavor.ts";
 
 // The app's repo on GitHub, which the feeds and the guide's source come
 // from (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
@@ -85,16 +86,13 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
     return name.endsWith(".zip") && name.includes(marker);
   })?.browser_download_url ?? "";
 
-// A `-v3.N` prerelease, which only a v3 build moves to.
-const isV3Release = (version: Semver) =>
-  isPrerelease(version) && version.pre[0] === "v3";
-
 // The release a build moves to, or undefined when none is ahead. A prod
 // build (`releases`) takes the highest of the full releases and of the
 // prereleases in its own channel, so a full 2.0.0 beats every
-// 2.0.0-beta.N, which ends the beta, and never a v3 prerelease. A
-// v3 build (`v3`) takes the highest v3 prerelease alone: a full
-// release is another flavor's bundle. Either way a release flagged
+// 2.0.0-beta.N, which ends the beta, and never an alpha or beta of
+// 3.0.0 (flavor.ts isV3Release). A v3 build (`v3`) takes the highest of
+// those alone: a full release, 3.0.0 included, is another flavor's
+// bundle. Either way a release flagged
 // prerelease under a full release's tag stays hidden, as the update
 // server hides it, and one without its zip for this arch yet (the
 // workflow uploads assets minutes after the tag) is skipped, as the
@@ -110,14 +108,15 @@ export const pickRelease = (
   let best: { release: GitHubRelease; version: Semver; url: string } | null =
     null;
   for (const release of releases) {
-    const version = parseSemver(release?.tag_name ?? "");
+    const tag = release?.tag_name ?? "";
+    const version = parseSemver(tag);
     if (version === undefined || compareSemver(version, current) <= 0) {
       continue;
     }
     if (best !== null && compareSemver(version, best.version) <= 0) continue;
     if (line === "v3") {
-      if (!isV3Release(version)) continue;
-    } else if (isV3Release(version)) {
+      if (!isV3Release(tag)) continue;
+    } else if (isV3Release(tag)) {
       continue;
     } else if (isPrerelease(version)) {
       if (releaseChannel(version) !== channel) continue;

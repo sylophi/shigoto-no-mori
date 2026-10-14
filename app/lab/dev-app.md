@@ -6,9 +6,9 @@ profiles make several devices of one machine. The reference behind
 
 ## Builds and data folders
 
-The app has three builds, its flavors: prod is what ships, v3 is a
-`v*-v3.N` prerelease the owner runs beside prod until v3 merges into
-main, and dev is `pnpm dev`.
+The app has three builds, its flavors: prod is what ships, v3 is an
+alpha or beta of 3.0.0 (`v3.0.0-alpha.N`, `v3.0.0-beta.N`) the owner
+runs beside prod until v3 merges into main, and dev is `pnpm dev`.
 Each keeps its own state and never reads another's, so all three run on
 one machine at once as three devices. Every name below comes from one
 table, `packages/engine/src/flavor.ts`. A packaged build's flavor is
