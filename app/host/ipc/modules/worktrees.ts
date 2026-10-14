@@ -1,3 +1,4 @@
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -35,7 +36,7 @@ import {
   withDeletesInflight,
 } from "@host/lib/scripts";
 import {
-  evictProjectPullRequests,
+  retitleBranchPullRequest,
   refreshProjectPullRequests,
 } from "@host/lib/githubCli/pullRequests";
 import {
@@ -511,7 +512,7 @@ export const worktreesHandlers = {
       Ops.resumeAgent(project, worktreeId, harness, session),
     ),
 
-  // An edit made to the open PR leaves the cached PR map behind.
+  // An edit made to the open PR's title moves the project's PR map.
   describe: ({ projectId, worktreeId, title, description }) =>
     Effect.gen(function* () {
       const project = yield* findProject(projectId);
@@ -523,7 +524,20 @@ export const worktreesHandlers = {
           ...(description === undefined ? {} : { description }),
         },
       );
-      if (editedPullRequest) evictProjectPullRequests(project.path);
+      if (
+        editedPullRequest &&
+        retitleBranchPullRequest(
+          project.path,
+          worktree.branch,
+          editedPullRequest.title,
+        )
+      ) {
+        yield* HostPushes.push(
+          githubCliContract,
+          "projectPullRequestsRefreshed",
+          { projectId },
+        );
+      }
       return worktree;
     }),
 

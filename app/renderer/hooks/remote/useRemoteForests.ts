@@ -15,7 +15,10 @@ import { useQueries } from "@tanstack/react-query";
 import type { Project } from "@shigomori/contracts/schemas";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { showPrimaryInInbox } from "@shigomori/ui/lib/showPrimaryInInbox.ts";
-import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
+import {
+  pullRequestsKey,
+  somePullRequestsAtom,
+} from "@/hooks/projects/useProjectPullRequests";
 import { projectsAtom } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -143,22 +146,15 @@ export function useRemoteForests(
       wanted(device) ? worktreeListKey(device.deviceId, project.id) : null,
     ),
   );
-  // Both served from the peer's own caches (the PR sweep's map, the
-  // project.json read), so neither costs it a git or gh call. Neither
-  // refetches on its own: the PR map refreshes off the peer's
-  // projectPullRequestsRefreshed push (lib/hostWatch.ts), the way the
-  // local map does off the local wire, and the config only ever changes
-  // through a Configure save, which invalidates it.
-  const pullRequestQueries = useQueries({
-    queries: pairs.map(({ device, project }) => ({
-      ...projectPullRequestsQueryOptions(project.id, {
-        deviceId: device.deviceId,
-        api: device.api,
-      }),
-      meta: { silentError: true },
-    })),
-    combine: combineFanOut,
-  });
+  // The PR maps are the peers' views of their sweeps, and the config
+  // their project.json read, which costs a peer no git or gh call and
+  // only ever changes through a Configure save, which invalidates it.
+  const pullRequestQueries = useViews(
+    somePullRequestsAtom,
+    pairs.map(({ device, project }) =>
+      wanted(device) ? pullRequestsKey(device.deviceId, project.id) : null,
+    ),
+  );
   const configQueries = useQueries({
     queries: pairs.map(({ device, project }) => ({
       ...shigomoriConfigQueryOptions(project.id, {

@@ -394,6 +394,12 @@
     "gated": true,
     "grant": "changeCode"
   },
+  "githubCli:watchProjectPullRequests": {
+    "kind": "view",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "githubCli:worktreePullRequest": {
     "kind": "invoke",
     "scope": "host",

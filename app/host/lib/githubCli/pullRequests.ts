@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   isFromThisRepository,
+  matchesMapEntry,
   type MergeMethod,
   MergeMethodSchema,
   type PullRequest,
@@ -18,6 +19,7 @@ import {
   PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
+  toSlimPullRequest,
 } from "@shigomori/contracts/schemas";
 import { gh } from "./exec";
 import {
@@ -152,6 +154,38 @@ export function readCachedProjectPullRequests(
   cwd: string,
 ): Map<string, PullRequest> | null {
   return prCache.get(cwd)?.value ?? null;
+}
+
+// What a page's own read of one branch's PR learned, written into the
+// project's map (the sweep's) so its view moves as soon as the page
+// does: true when the map changed.
+export function noteBranchPullRequest(
+  cwd: string,
+  branch: string,
+  pr: PullRequestDetail | null,
+): boolean {
+  const cached = prCache.get(cwd);
+  if (!cached || matchesMapEntry(pr, cached.value.get(branch))) return false;
+  const value = new Map(cached.value);
+  if (pr === null) value.delete(branch);
+  else value.set(branch, toSlimPullRequest(pr));
+  prCache.set(cwd, { value, expires: cached.expires });
+  return true;
+}
+
+// A PR's title as `sm describe` just set it, written into the project's
+// map so its view shows it before the next sweep: true when it did.
+export function retitleBranchPullRequest(
+  cwd: string,
+  branch: string,
+  title: string,
+): boolean {
+  const cached = prCache.get(cwd);
+  const pr = cached?.value.get(branch);
+  if (!cached || !pr || pr.title === title) return false;
+  const value = new Map(cached.value).set(branch, { ...pr, title });
+  prCache.set(cwd, { value, expires: cached.expires });
+  return true;
 }
 
 export function pullRequestMapsEqual(
@@ -310,11 +344,10 @@ function autoMergeMethod(
 // state) since the only consumer is the worktree detail page. The slim
 // PullRequest projection is used by the sidebar list path. Throws on
 // transient gh / network / parse failure so callers can distinguish
-// "no PR" (null) from "we don't know". The renderer uses that to
-// avoid clobbering the sidebar's project-wide PR map.
+// "no PR" (null) from "we don't know", and asks gh whether or not the
+// repo is ready (the caller checks), so its null is GitHub's answer.
 export const getWorktreePullRequest = Effect.fn("PullRequests.forBranch")(
   function* (cwd: string, branch: string) {
-    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) return null;
     const [detail, extras] = yield* Effect.all(
       [runGhPrListDetail(cwd, branch), fetchGraphqlExtras(cwd, branch)],
       { concurrency: 2 },

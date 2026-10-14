@@ -24,11 +24,9 @@
 // lib/remote/sharedSettingsSync.ts), and the pushes that are atoms of
 // their own (the script runs, the worktree lifecycle, the git fetches).
 import { gitContract } from "@shigomori/contracts/modules/git";
-import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
-import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { writeUpdaterState } from "@/hooks/system/useUpdater";
 import { invalidateWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
@@ -73,16 +71,6 @@ export function watchHost(
       invalidateBranchState(queryClient, keys, projectId);
       invalidateWorktreePullRequests(queryClient, keys, projectId);
     }),
-    // Its PR sweep moved one project's map. The githubCli domain sits
-    // outside the git-state sweeps (a PR is not git state), so the
-    // rows, inbox entries and any open page of its PRs refresh off this
-    // alone.
-    listen(
-      pushes(githubCliContract, "projectPullRequestsRefreshed"),
-      ({ projectId }) => {
-        void syncProjectPullRequests(queryClient, keys, projectId);
-      },
-    ),
     // Its updater moved. The state rides the push whole, so it is
     // written rather than re-asked, and always on, so the update flags
     // (the sidebar's Settings dot, Settings' device tabs) follow a
