@@ -64,7 +64,11 @@ export const githubCliViews: ViewHandlers<
   watchProjectPullRequests: ({ projectId }) =>
     Views.view(
       `githubCli:pullRequests:${projectId}`,
-      () => githubCliHandlers.projectPullRequests({ projectId }),
+      // Maps don't survive structured clone across IPC, so ship a record.
+      () =>
+        Effect.flatMap(projectPath(projectId), listProjectPullRequests).pipe(
+          Effect.map((map) => Object.fromEntries(map)),
+        ),
       Views.either(
         Views.pushed(
           githubCliContract,
@@ -89,12 +93,6 @@ export const githubCliHandlers = {
     Effect.flatMap(projectPath(projectId), (cwd) =>
       publishRepo({ cwd, owner, visibility }),
     ).pipe(Effect.andThen(pullRequestsMoved(projectId))),
-
-  // Maps don't survive structured clone across IPC, so ship a record.
-  projectPullRequests: ({ projectId }) =>
-    Effect.flatMap(projectPath(projectId), listProjectPullRequests).pipe(
-      Effect.map((map) => Object.fromEntries(map)),
-    ),
 
   // A page's read of its branch's PR, which moves the project's map when
   // it learned something newer than the sweep.

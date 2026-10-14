@@ -182,13 +182,6 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // One file's working-tree diff, which is what the changes page reads
-  // as you pick files. Per file rather than per worktree so the pane
-  // can't be describing a different moment than the list beside it.
-  invoke("fileDiff", FileDiffPayloadSchema, Schema.String, {
-    remote: true,
-    gated: false,
-  }),
   // One file of the worktree, whole, for the files page. A read, but
   // it discloses any file in the checkout (an ignored .env included),
   // so it rides the command grant like the folder listing the page
@@ -236,12 +229,6 @@ export const worktreesContract = defineContract(
   // file's diff and hunks, the operation) read now, answered once each
   // read landed: a refresh, or a change this window just made.
   invoke("refreshChangeStatus", WorktreeScopedPayloadSchema, Schema.Void, {
-    remote: true,
-    gated: false,
-  }),
-  // One modified file's hunks (the engine's git/hunks.ts), to tick and
-  // throw away one at a time.
-  invoke("fileHunks", FileHunksPayloadSchema, FileHunksSchema, {
     remote: true,
     gated: false,
   }),
@@ -306,10 +293,6 @@ export const worktreesContract = defineContract(
   ),
   // The Git timeline: the branch's own commits back to where it left
   // the primary branch, and its upstream.
-  invoke("branchHistory", WorktreeScopedPayloadSchema, BranchHistorySchema, {
-    remote: true,
-    gated: false,
-  }),
   view("watchBranchHistory", WorktreeScopedPayloadSchema, BranchHistorySchema, {
     remote: true,
     gated: false,
@@ -327,12 +310,6 @@ export const worktreesContract = defineContract(
   worktreeMutationOf("rewordCommit", RewordCommitPayloadSchema),
   worktreeMutationOf("squashCommit", SquashCommitPayloadSchema),
   // The stashes made on the worktree's branch (the engine's git/stash.ts).
-  invoke(
-    "stashes",
-    WorktreeScopedPayloadSchema,
-    Schema.Array(StashEntrySchema),
-    { remote: true, gated: false },
-  ),
   view(
     "watchStashes",
     WorktreeScopedPayloadSchema,
@@ -359,10 +336,6 @@ export const worktreesContract = defineContract(
   }),
   // A merge, rebase, cherry-pick or revert stopped on conflicts
   // (the engine's git/operation.ts), and the moves that see it through.
-  invoke("operation", WorktreeScopedPayloadSchema, GitOperationStateSchema, {
-    remote: true,
-    gated: false,
-  }),
   worktreeMutationOf("resolveConflict", ResolveConflictPayloadSchema),
   // Another branch brought into the worktree's (the engine's git/merging.ts):
   // first how the two stand, then the move.

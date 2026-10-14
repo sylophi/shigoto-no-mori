@@ -256,9 +256,33 @@ export const worktreesViews: ViewHandlers<
       ),
     ),
   watchBranchHistory: (input) =>
-    treeView(input, "history", () => worktreesHandlers.branchHistory(input)),
+    treeView(input, "history", () =>
+      Effect.gen(function* () {
+        const identity = yield* findWorktreeIdentity(
+          input.projectId,
+          input.worktreeId,
+          { primaryRef: true },
+        );
+        return yield* (yield* Git.Git).readBranchHistory(identity.path, {
+          base: branchBaseOf(identity),
+          count: BRANCH_HISTORY_COUNT,
+        });
+      }),
+    ),
   watchStashes: (input) =>
-    treeView(input, "stashes", () => worktreesHandlers.stashes(input)),
+    treeView(input, "stashes", () =>
+      Effect.gen(function* () {
+        const { worktree } = yield* findProjectAndWorktree(
+          input.projectId,
+          input.worktreeId,
+        );
+        if (worktree.detached) return [];
+        return yield* (yield* Git.Git).listStashes(
+          worktree.path,
+          worktree.branch,
+        );
+      }),
+    ),
   watchOperation: (input) =>
     treeView(input, "operation", () =>
       atPath(input, (path) => withGit((git) => git.readOperation(path))),
@@ -555,17 +579,6 @@ export const worktreesHandlers = {
       ),
     ),
 
-  fileDiff: (input) =>
-    atPath(input, (path) =>
-      withGit((git) =>
-        git.fileDiff({
-          worktree: path,
-          paths: input.paths,
-          untracked: input.untracked,
-        }),
-      ),
-    ),
-
   readFile: ({ path, ...input }) =>
     atPath(input, (root) => readWorktreeFile(root, path)),
 
@@ -576,8 +589,6 @@ export const worktreesHandlers = {
     atPath(input, (path) => withGit((git) => git.changes(path))),
   refreshChangeStatus: (input) => Views.refresh(treeViews(input)),
 
-  fileHunks: (input) =>
-    atPath(input, (path) => withGit((git) => git.readHunks(path, input.path))),
   discardHunks: (input) =>
     mutateAndDescribeWith(input, (wt) =>
       withGit((git) =>
@@ -651,19 +662,6 @@ export const worktreesHandlers = {
       withGit((git) => git.listCommits(path, { skip, count, query, from })),
     ),
 
-  branchHistory: (input) =>
-    Effect.gen(function* () {
-      const identity = yield* findWorktreeIdentity(
-        input.projectId,
-        input.worktreeId,
-        { primaryRef: true },
-      );
-      return yield* (yield* Git.Git).readBranchHistory(identity.path, {
-        base: branchBaseOf(identity),
-        count: BRANCH_HISTORY_COUNT,
-      });
-    }),
-
   branchDiff: (input) =>
     Effect.gen(function* () {
       const identity = yield* findWorktreeIdentity(
@@ -711,18 +709,6 @@ export const worktreesHandlers = {
       ),
     ),
 
-  stashes: (input) =>
-    Effect.gen(function* () {
-      const { worktree } = yield* findProjectAndWorktree(
-        input.projectId,
-        input.worktreeId,
-      );
-      if (worktree.detached) return [];
-      return yield* (yield* Git.Git).listStashes(
-        worktree.path,
-        worktree.branch,
-      );
-    }),
   stashDiff: (input) =>
     atPath(input, (path) =>
       withGit((git) => git.readStashDiff(path, input.hash)),
@@ -814,8 +800,6 @@ export const worktreesHandlers = {
       Effect.map(({ result, worktree }) => ({ worktree, stopped: result })),
     ),
 
-  operation: (input) =>
-    atPath(input, (path) => withGit((git) => git.readOperation(path))),
   resolveConflict: (input) =>
     mutateAndDescribe(input, (wt) =>
       withGit((git) =>

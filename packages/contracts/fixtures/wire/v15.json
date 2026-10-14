@@ -503,12 +503,6 @@
   "githubCli:owners": {
     "success": ["\n", "zW"]
   },
-  "githubCli:projectPullRequests": {
-    "payload": {
-      "projectId": "3"
-    },
-    "success": {}
-  },
   "githubCli:projectPullRequestsRefreshed": {
     "payload": {
       "projectId": "@"
@@ -2645,62 +2639,6 @@
     },
     "success": ""
   },
-  "worktrees:branchHistory": {
-    "payload": {
-      "projectId": " ",
-      "worktreeId": "\udc00"
-    },
-    "success": {
-      "commits": [
-        {
-          "hash": "87b4",
-          "subject": " ",
-          "author": "-1",
-          "date": "\n",
-          "additions": 0,
-          "deletions": 4
-        },
-        {
-          "hash": "3481",
-          "subject": "\ud800",
-          "author": "",
-          "date": "pc",
-          "additions": 1,
-          "deletions": 3
-        }
-      ],
-      "more": true,
-      "base": null,
-      "upstream": "",
-      "unpushed": [],
-      "incoming": [
-        {
-          "hash": "f2df",
-          "subject": "",
-          "author": "\udc00",
-          "date": "",
-          "additions": 1,
-          "deletions": 2
-        },
-        {
-          "hash": "2387",
-          "subject": "😀",
-          "author": "",
-          "date": "",
-          "additions": 1,
-          "deletions": 4
-        }
-      ],
-      "incomingMore": false,
-      "upstreamFork": null,
-      "merges": [
-        {
-          "hash": "d68d",
-          "firstParent": "4306"
-        }
-      ]
-    }
-  },
   "worktrees:carryOverComplete": {
     "payload": {
       "projectId": "\u0000",
@@ -3175,39 +3113,6 @@
       "hash": "17e5"
     }
   },
-  "worktrees:fileDiff": {
-    "payload": {
-      "projectId": "F",
-      "worktreeId": "(",
-      "paths": ["3", "\udc00"],
-      "untracked": false
-    },
-    "success": "\"O"
-  },
-  "worktrees:fileHunks": {
-    "payload": {
-      "projectId": "\n",
-      "worktreeId": "\ud800",
-      "path": "zG"
-    },
-    "success": {
-      "head": "7e87",
-      "changes": [
-        {
-          "oldStart": 3,
-          "oldCount": 4,
-          "newStart": 2,
-          "newCount": 2
-        },
-        {
-          "oldStart": 3,
-          "oldCount": 4,
-          "newStart": 0,
-          "newCount": 3
-        }
-      ]
-    }
-  },
   "worktrees:filesChanged": {
     "payload": {
       "projectId": "\udc00"
@@ -3510,18 +3415,6 @@
         "autoPull": true
       },
       "stopped": true
-    }
-  },
-  "worktrees:operation": {
-    "payload": {
-      "projectId": "\n",
-      "worktreeId": "}"
-    },
-    "success": {
-      "operation": null,
-      "continuable": true,
-      "conflicted": 3,
-      "rebasing": "-1"
     }
   },
   "worktrees:overwrite": {
@@ -4324,13 +4217,6 @@
       "hash": "7a55"
     },
     "success": "I_"
-  },
-  "worktrees:stashes": {
-    "payload": {
-      "projectId": "\u0000",
-      "worktreeId": "😀"
-    },
-    "success": []
   },
   "worktrees:switchToPrimaryAndDeleteBranch": {
     "payload": {

@@ -209,7 +209,7 @@ function createFixtureWire(
   ) => Stream.Stream<unknown, unknown> | undefined,
 ): FixtureWire {
   const fanOut = pushFanOut();
-  const index = invokeIndexFor(scope);
+  const index = invokeIndexFor(scope, true);
   // Every push on the wire, whatever its channel, for the views.
   const moved = new Set<() => void>();
   const emit: FixtureWire["emit"] = (channel, payload) => {
@@ -268,9 +268,9 @@ function createFixtureWire(
             (error: unknown) => resume(Effect.fail(error)),
           );
         }),
-      // A host view (host/lib/Views.ts) re-reads the query beside it on
-      // what moved: here, its request form (`worktrees:watchStashes`
-      // reads `worktrees:stashes`), else the module's list (or its
+      // A host view (host/lib/Views.ts) reads again on what moved: its
+      // own fixture, else its request form (`worktrees:watchChangeStatus`
+      // reads `worktrees:changeStatus`), else the module's list (or its
       // settings' read), on any push or call on the wire, sent on when
       // it changed.
       view: (channel, input) => {
@@ -279,11 +279,16 @@ function createFixtureWire(
         const colon = channel.indexOf(":");
         const module = channel.slice(0, colon);
         const watched = channel.slice(colon + 1).replace(/^watch/, "");
-        const query = [
-          `${module}:${watched.charAt(0).toLowerCase()}${watched.slice(1)}`,
-          `${module}:list`,
-          `${module}:read`,
-        ].find((candidate) => candidate !== channel && index.has(candidate));
+        const query =
+          handlers[channel] === undefined
+            ? [
+                `${module}:${watched.charAt(0).toLowerCase()}${watched.slice(1)}`,
+                `${module}:list`,
+                `${module}:read`,
+              ].find(
+                (candidate) => candidate !== channel && index.has(candidate),
+              )
+            : channel;
         if (query === undefined) {
           return Stream.die(
             new Error(`[fake-host] no fixture serves ${channel}`),
@@ -682,7 +687,7 @@ function hostHandlersFor(
     },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
-    "worktrees:fileDiff": ({ worktreeId, paths }) =>
+    "worktrees:watchFileDiff": ({ worktreeId, paths }) =>
       changes.fileDiff(worktreeId, paths),
     "worktrees:readFile": ({ path }) => fakeFile(path),
     "worktrees:readBlob": ({ oid }) => fakeBlob(oid),
@@ -716,7 +721,7 @@ function hostHandlersFor(
     // The Git timeline's reads: the row's own commits, from a fork on
     // the primary branch for any worktree but the primary, one stash on
     // happy-hummingbird, nothing stopped, and a hunk per picked file.
-    "worktrees:branchHistory": ({ worktreeId }) => {
+    "worktrees:watchBranchHistory": ({ worktreeId }) => {
       const w = findWorktree(worktreeId);
       return {
         commits: w?.recentCommits ?? [],
@@ -735,15 +740,15 @@ function hostHandlersFor(
         merges: [],
       };
     },
-    "worktrees:stashes": ({ worktreeId }) => fakeStashes[worktreeId] ?? [],
+    "worktrees:watchStashes": ({ worktreeId }) => fakeStashes[worktreeId] ?? [],
     "worktrees:stashDiff": () => FAKE_DIFF,
-    "worktrees:operation": () => ({
+    "worktrees:watchOperation": () => ({
       operation: null,
       continuable: false,
       conflicted: 0,
       rebasing: null,
     }),
-    "worktrees:fileHunks": ({ worktreeId, path }) =>
+    "worktrees:watchFileHunks": ({ worktreeId, path }) =>
       changes.hunks(worktreeId, path),
     // For an amend's prefill: the subject the row carries, no body.
     "worktrees:commitMessage": ({ worktreeId, hash }) => ({
@@ -886,7 +891,7 @@ function hostHandlersFor(
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
-    "githubCli:projectPullRequests": ({ projectId }) =>
+    "githubCli:watchProjectPullRequests": ({ projectId }) =>
       fakePullRequests(projectId),
     "githubCli:worktreePullRequest": ({ branch }) =>
       fakePullRequestDetail(branch),
