@@ -5,24 +5,17 @@ import { ProjectScopedPayloadSchema, VoidSchema } from "../schemas/index.ts";
 export const gitContract = defineContract(
   "git",
   "host",
-  // gated: beyond the fetch (a cache refresh, read-class on its
-  // own) it always ends in an auto-pull pass, which fast-forwards the
-  // project's marked worktrees, and it does so on every call.
+  // Gated: it always ends in an auto-pull pass, which fast-forwards the
+  // marked worktrees.
   invoke("refreshProject", ProjectScopedPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "changeCode",
   }),
-  // A peer saying it is looking at this host: runs the host's
-  // background sweep (refs and PRs, every project) if it is stale, and
-  // keeps the host's sweep timer ticking for the returned lease. The
-  // peer renews within that lease while its window stays focused. An
-  // ask that is no renewal (the window regained focus, or a session
-  // landed) also reads every project's rows again, for an edit no watch
-  // saw, as this machine's own windows do on their focus.
-  // Read-class: the sweep is the host's own scheduled pass, including
-  // the auto-pulls the host's user marked for it, and a request only
-  // decides when it runs, never more often than its interval.
+  // A peer looking at this host: runs the background sweep if stale and
+  // keeps it ticking for the returned lease. Read-class: a request only
+  // decides when the host's own pass runs, never more often than its
+  // interval.
   invoke(
     "sweep",
     Schema.Struct({ renewal: Schema.Boolean }),
@@ -40,17 +33,11 @@ export const gitContract = defineContract(
     }),
     { remote: true },
   ),
-  // A store write, the terminal's or the app's own. The renderer
-  // invalidates its requests. Refetch-on-focus
-  // can't cover this, since the window may already be focused while an
-  // agent works in a terminal beside it.
+  // Refetch-on-focus can't cover this: an agent may work in a terminal
+  // beside a focused window.
   push("externalChange", VoidSchema, { remote: true }),
-  // One project's git state moved (a commit, checkout, branch or ref
-  // change made by any tool, observed by the host's git-directory
-  // watcher, host/lib/GitWatcher.ts). Narrower than
-  // externalChange on purpose: the viewer invalidates that project's
-  // rows only, on every device, so the ping stays cheap enough to be
-  // redundant beside an app-driven mutation's own invalidation.
+  // Narrower than externalChange on purpose, so it stays cheap enough to
+  // be redundant beside a mutation's own invalidation.
   push("projectChanged", ProjectScopedPayloadSchema, {
     remote: true,
   }),

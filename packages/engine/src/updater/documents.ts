@@ -15,11 +15,7 @@ import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { errnoText } from "../platformErrors.ts";
-import {
-  compareSemver,
-  parseSemver,
-  type Semver,
-} from "@shigomori/contracts/semver";
+import { parse, SemVer } from "semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
 import { APP_REPO, formatKitchen } from "../updateFeed.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -471,18 +467,16 @@ export const upToDate = (running: Running): UpToDate => ({
 
 // Whether `version` is a version newer than `than`.
 export const isNewer = (version: string, than: string) => {
-  const a = parseSemver(version);
-  const b = parseSemver(than);
-  return a !== undefined && b !== undefined && compareSemver(a, b) > 0;
+  const a = parse(version);
+  const b = parse(than);
+  return a !== null && b !== null && a.compare(b) > 0;
 };
 
 export const newerThan = (running: Running, version: string) => {
-  const current = parseSemver(running.version);
-  const candidate = parseSemver(version);
+  const current = parse(running.version);
+  const candidate = parse(version);
   return (
-    current !== undefined &&
-    candidate !== undefined &&
-    compareSemver(candidate, current) > 0
+    current !== null && candidate !== null && candidate.compare(current) > 0
   );
 };
 
@@ -522,7 +516,7 @@ export const discard = (
   );
 
 // A version that doesn't parse ranks the release list as the lowest.
-export const ZERO_VERSION = parseSemver("0.0.0") as Semver;
+export const ZERO_VERSION = new SemVer("0.0.0");
 
 // The two endpoints, either a stand-in's, or "" for one with none while
 // the other has one.

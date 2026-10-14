@@ -1,33 +1,21 @@
-// Pure path math for worktree layouts, for the renderer: the Worktree
-// Location page's previews and the destinations it asks relocate for,
-// the New Worktree form's destination label, the convert-external
-// preview. A display-side mirror of worktreeBase in the engine's
-// worktreeLayout.ts, which decides where a worktree actually lands.
-//
-// Kept dependency-free so it can run in either environment.
+// The renderer's mirror of the engine's worktreeBase, which decides
+// where a worktree actually lands. Dependency-free, for either side.
 
 import type { RuntimeInfo, WorktreeLayout } from "../schemas/index.ts";
 import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 
-// Project-relative directory used by the "in-project" layout. Top-level
-// component (`.shigomori`) is also the path appended to the primary's
-// `.git/info/exclude` so it stays out of `git status`.
+// Also appended to the primary's `.git/info/exclude`.
 const IN_PROJECT_ROOT_DIR = ".shigomori";
 const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/wt`;
 
-// Containment test: true when `path` IS `ancestor` or sits anywhere
-// beneath it. Prefix matching by intent. Callers guarding destructive
-// flows (nuke, data dir move) want the whole subtree. Contrast the
-// engine's isManagedPath (worktreeLayout.ts), which deliberately uses parent
-// equality instead.
+// The whole subtree, as destructive flows guarding against it want.
+// The engine's isManagedPath uses parent equality instead.
 export function isSameOrInside(path: string, ancestor: string): boolean {
   const folded = path.replace(/\/+$/, "");
   const base = ancestor.replace(/\/+$/, "");
   return folded === base || folded.startsWith(`${base}/`);
 }
 
-// Dependency-free join that works in both the host and the renderer (no
-// node:path).
 function joinPath(base: string, ...segments: string[]): string {
   let out = base.replace(/\/+$/, "");
   for (const seg of segments) {
@@ -37,16 +25,11 @@ function joinPath(base: string, ...segments: string[]): string {
   return out;
 }
 
-// The external drive a path sits on: /Volumes/<name> for anything below
-// a mounted volume (every drive but the boot one, on macOS), none for
-// the mount point itself.
+// None for the mount point itself.
 export function externalVolumeRoot(path: string): string | undefined {
   return /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path)?.[1];
 }
 
-// What the layouts need to know of the device: where its data dir is,
-// the flavor's own name for it (".sm" / ".smd"), and whether its
-// managedOnProjectDrive setting is on.
 export interface DeviceLayoutInputs extends Pick<
   RuntimeInfo,
   "dataDir" | "canonicalDataDirName"
@@ -54,11 +37,8 @@ export interface DeviceLayoutInputs extends Pick<
   onProjectDrive: boolean;
 }
 
-// The managed root's shape on the project's own external drive, which
-// the managed layout uses while the device's setting is on. Null when there is
-// no such place: the project is on the internal drive, or the data dir
-// sits on the project's drive and the managed root is on it already.
-// Mirrors projectDriveBase in the engine's worktreeLayout.ts.
+// Null on the internal drive, or when the data dir already sits on the
+// project's drive. Mirrors the engine's projectDriveBase.
 export function projectDriveBaseFor(
   projectPath: string,
   {
@@ -71,9 +51,6 @@ export function projectDriveBaseFor(
   return joinPath(volume, canonicalDataDirName, "wt", lastSegment(projectPath));
 }
 
-// Where the device keeps this project's managed worktrees when its
-// managedOnProjectDrive setting moves them onto the project's drive.
-// Null while the setting is off, or with no such drive.
 export function managedDriveBaseFor(
   projectPath: string,
   device: DeviceLayoutInputs,
@@ -93,12 +70,7 @@ interface LayoutInputs extends DeviceLayoutInputs {
   customPath: string | null;
 }
 
-// Directory new worktrees should live under for the given layout. Custom
-// without a path falls back to the managed root rather than producing an
-// invalid path; the UI prevents saving an empty custom path.
-// The layout inputs a project's config resolves to, told once for the
-// host and the renderer alike (a trailing space in a custom path is
-// noise, never a different folder).
+// A trailing space in a custom path is noise, never another folder.
 export function layoutInputsFor(
   config: {
     worktreeLayout?: WorktreeLayout;
@@ -126,9 +98,8 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
     const trimmed = customPath?.trim();
     if (trimmed) {
       const stripped = trimmed.replace(/\/+$/, "");
-      // A bare root ("/") is nothing but separators; return it as-is
-      // rather than an empty string that would later join as a relative
-      // path and prefix-match everything.
+      // A bare root: an empty string would join as relative and
+      // prefix-match everything.
       if (!stripped) return trimmed;
       return stripped;
     }
@@ -140,7 +111,6 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   return joinPath(dataDir, "wt", lastSegment(projectPath));
 }
 
-// Full destination path for a single worktree under the given layout.
 export function worktreePathFor(
   inputs: LayoutInputs,
   worktreeName: string,

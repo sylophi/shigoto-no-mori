@@ -61,8 +61,7 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
-// Every worktree-scoped git mutation shares this contract; naming it
-// once means a new one can't silently miss tracksProjectUsage.
+// So a new mutation can't silently miss tracksProjectUsage.
 const worktreeMutationOf = <const Key extends string, P extends ContractSchema>(
   key: Key,
   payload: P,
@@ -79,8 +78,7 @@ const worktreeMutation = <const Key extends string>(key: Key) =>
 export const worktreesContract = defineContract(
   "worktrees",
   "host",
-  // A mirror into this device looks its copy up here (whether it is
-  // gone), invited past the sharing switch.
+  // A mirror into this device looks its copy up here.
   invoke("list", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
     remote: true,
     gated: false,
@@ -119,8 +117,7 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // A mirror's stop removes the copy on the copy's device, so a mirror
-  // asked for there may delete that one worktree (invitable).
+  // A mirror's stop removes the copy on the copy's device.
   invoke("delete", DeleteWorktreePayloadSchema, DeleteWorktreeResultSchema, {
     tracksProjectUsage: true,
     remote: true,
@@ -128,7 +125,6 @@ export const worktreesContract = defineContract(
     grant: "changeCode",
     invitable: "copy",
   }),
-  // The merged layers of a stack, removed together (sm land --stack).
   invoke("deleteStack", DeleteStackPayloadSchema, DeleteStackResultSchema, {
     tracksProjectUsage: true,
     remote: true,
@@ -141,9 +137,7 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // A worktree's title and description, edited on its page: the branch's
-  // open pull request's on GitHub, through this device's gh, when it has
-  // one, and the worktree's own otherwise.
+  // The open pull request's, through this device's gh, when there is one.
   invoke("describe", DescribeWorktreePayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
@@ -156,22 +150,16 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // A flag flip. The renderer follows a mark with git:refreshProject,
-  // whose auto-pull pass answers the "Pull N commits" pill right away.
   invoke("setAutoPull", SetAutoPullPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
     grant: "changeCode",
   }),
-  // Every agent session bound to the worktree goes idle, for a turn
-  // whose end no hook reported.
+  // For a turn whose end no hook reported.
   worktreeMutation("idleAgents"),
-  // One agent session stops being bound to the worktree.
   worktreeMutationOf("unbindAgent", AgentSessionPayloadSchema),
-  // One agent session picks up again in its harness's CLI, in a
-  // terminal on this machine, so like a launch it isn't served to
-  // other devices.
+  // In a terminal on this machine, so like a launch not served to peers.
   invoke("resumeAgent", AgentSessionPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: false,
@@ -182,23 +170,17 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // One file of the worktree, whole, for the files page. A read, but
-  // it discloses any file in the checkout (an ignored .env included),
-  // so it rides the command grant like the folder listing the page
-  // browses with (sync:worktreeFolder).
+  // A read, but it discloses any file (an ignored .env included).
   invoke("readFile", ReadWorktreeFilePayloadSchema, WorktreeFileSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
   }),
-  // One side of an image, video or audio file in a diff. Ungated like
-  // the diffs themselves, which already show any blob's text.
+  // Ungated like the diffs, which already show any blob's text.
   invoke("readBlob", ReadBlobPayloadSchema, WorktreeFileSchema, {
     remote: true,
     gated: false,
   }),
-  // The changes page's list: every changed file, its index state and
-  // its counts. The one read the page needs to draw the rail.
   invoke(
     "changeStatus",
     WorktreeScopedPayloadSchema,
@@ -211,8 +193,6 @@ export const worktreesContract = defineContract(
     Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },
   ),
-  // The picked file's diff and hunks, and the operation the tree is
-  // stopped in, as the changes page shows them.
   view("watchFileDiff", FileDiffPayloadSchema, Schema.String, {
     remote: true,
     gated: false,
@@ -225,9 +205,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: false,
   }),
-  // The changes page's views of one worktree (its list, the picked
-  // file's diff and hunks, the operation) read now, answered once each
-  // read landed: a refresh, or a change this window just made.
+  // Answers once each read landed.
   invoke("refreshChangeStatus", WorktreeScopedPayloadSchema, Schema.Void, {
     remote: true,
     gated: false,
@@ -291,32 +269,26 @@ export const worktreesContract = defineContract(
     Schema.Array(CommitSummarySchema),
     { remote: true, gated: false },
   ),
-  // The Git timeline: the branch's own commits back to where it left
-  // the primary branch, and its upstream.
   view("watchBranchHistory", WorktreeScopedPayloadSchema, BranchHistorySchema, {
     remote: true,
     gated: false,
   }),
-  // What the branch changes against the primary branch, as a pull
-  // request would show it, pull request or not.
+  // As a pull request would show it.
   invoke("branchDiff", WorktreeScopedPayloadSchema, Schema.String, {
     remote: true,
     gated: false,
   }),
-  // The commit menu's history moves (the engine's git/rewriting.ts). A
-  // cherry-pick's worktree is the one the commit lands on.
+  // A cherry-pick's worktree is the one the commit lands on.
   worktreeMutationOf("revertCommit", CommitDiffPayloadSchema),
   worktreeMutationOf("cherryPick", CommitDiffPayloadSchema),
   worktreeMutationOf("rewordCommit", RewordCommitPayloadSchema),
   worktreeMutationOf("squashCommit", SquashCommitPayloadSchema),
-  // The stashes made on the worktree's branch (the engine's git/stash.ts).
   view(
     "watchStashes",
     WorktreeScopedPayloadSchema,
     Schema.Array(StashEntrySchema),
     { remote: true, gated: false },
   ),
-  // One stash's contents, as a patch.
   invoke("stashDiff", DropStashPayloadSchema, Schema.String, {
     remote: true,
     gated: false,
@@ -328,17 +300,12 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // A drop's undo.
   invoke("restoreStash", RestoreStashPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "changeCode",
   }),
-  // A merge, rebase, cherry-pick or revert stopped on conflicts
-  // (the engine's git/operation.ts), and the moves that see it through.
   worktreeMutationOf("resolveConflict", ResolveConflictPayloadSchema),
-  // Another branch brought into the worktree's (the engine's git/merging.ts):
-  // first how the two stand, then the move.
   invoke("mergePreview", MergePreviewPayloadSchema, MergePreviewSchema, {
     remote: true,
     gated: false,
@@ -351,16 +318,14 @@ export const worktreesContract = defineContract(
   }),
   worktreeMutation("continueOperation"),
   worktreeMutation("abortOperation"),
-  // The way on from a sync from primary that conflicts: merge anyway
-  // and stop on the conflicts.
+  // After a sync from primary conflicts: merge anyway and stop on them.
   invoke("mergePrimary", WorktreeScopedPayloadSchema, MergeBranchResultSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
     grant: "changeCode",
   }),
-  // The way on from a split with the upstream that conflicts: merge it
-  // and stop on the conflicts.
+  // After a split with the upstream conflicts.
   invoke(
     "mergeUpstream",
     WorktreeScopedPayloadSchema,
@@ -387,8 +352,6 @@ export const worktreesContract = defineContract(
   push("removal", WorktreeRemovalSchema, {
     remote: true,
   }),
-  // A file changed in one of the project's working trees (the host's
-  // watch on them, host/lib/GitWatcher.ts): its rows are read again.
-  // The host's own signal to its views; a viewer reads the rows.
+  // The host's own signal to its views.
   push("filesChanged", ProjectScopedPayloadSchema),
 );

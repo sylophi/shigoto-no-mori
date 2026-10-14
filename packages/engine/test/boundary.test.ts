@@ -1,6 +1,6 @@
 // The engine runs in the host under Node and in the terminal binary
-// under Bun, so it may reach Node's APIs, Effect and the contracts, and
-// nothing else: no Electron, nothing from the app, no Bun global. The
+// under Bun, so it may reach Node's APIs, Effect, the contracts and
+// `semver`, and nothing else: no Electron, nothing from the app, no Bun global. The
 // package graph holds most of it, since a dependency the engine does
 // not declare cannot resolve, and this proof holds what its sources
 // may name.
@@ -19,6 +19,7 @@ const isAllowed = (specifier: string, fileDir: string) =>
       specifier === "effect" ||
       specifier.startsWith("effect/") ||
       specifier.startsWith("@effect/") ||
+      specifier === "semver" ||
       specifier.startsWith("@shigomori/contracts/");
 
 // Comments go first, so prose may name anything.
@@ -35,7 +36,7 @@ const specifiersOf = (code: string) =>
   [...code.matchAll(IMPORT_SPECIFIER)].map(([, specifier = ""]) => specifier);
 const BUN_GLOBAL = /\bBun\b/;
 
-it("imports only Node, Effect and the contracts, and no Bun global", () => {
+it("imports only Node, Effect, the contracts and semver, and no Bun global", () => {
   const failures: string[] = [];
   const entries = existsSync(src)
     ? readdirSync(src, { recursive: true, withFileTypes: true })

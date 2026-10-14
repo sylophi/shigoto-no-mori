@@ -1,34 +1,22 @@
-// Shared settings: the handful of preferences that belong to the
-// account's devices as a group rather than to any one of them (which
-// device a project's + creates on). No server holds them. Every device
-// keeps its own full copy, and the copies converge by exchanging
-// entries over the device links (sharedSettings.ts has the
-// merge, renderer/lib/remote/sharedSettingsSync.ts the exchange).
-//
-// One entry per setting, each carrying the stamp of the write that set
-// it, so two copies merge entry by entry with no coordinator: the later
-// stamp wins. The document is deliberately open (string keys, scalar
-// values) rather than one field per setting, because devices run
-// different builds: a copy must carry and forward an entry its build
-// has never heard of, or an older device in the middle would strip a
-// newer one's settings on the way through.
+// No server holds them: every device keeps a full copy, and the copies
+// converge by exchanging entries. Open (string keys, scalar values) on
+// purpose: a copy must forward an entry its build has never heard of, or
+// an older device in the middle would strip a newer one's settings.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
-// Bounds that keep a whole document under the device link's frame cap
-// (MAX_INBOUND_FRAME_BYTES in host/socket/DeviceLink.ts, 1 MiB),
-// since it rides pushes whole: 512 entries of at most 512 + 256
-// characters and a stamp come to well under half of it.
+// A whole document rides pushes, so it stays well under the link's 1 MiB
+// frame cap.
 const MAX_SHARED_SETTING_KEY_LENGTH = 512;
 const MAX_SHARED_SETTING_STRING_LENGTH = 256;
 export const MAX_SHARED_SETTING_ENTRIES = 512;
-// The last millisecond a Date can name. Far enough under the largest
-// safe integer that a stamp can always be outranked by the next one.
+// Far enough under the largest safe integer that a stamp can always be
+// outranked.
 const MAX_SHARED_SETTING_STAMP = 8.64e15;
 
-// Null is a cleared setting. The entry stays as a tombstone: dropping
-// it would let a copy that still holds the old value hand it back.
+// Null is a cleared setting, kept as a tombstone: dropping it would let
+// a copy still holding the old value hand it back.
 export const SharedSettingValueSchema = Schema.Union([
   Schema.String.check(Schema.isMaxLength(MAX_SHARED_SETTING_STRING_LENGTH)),
   Schema.Finite,
@@ -39,14 +27,12 @@ export type SharedSettingValue = typeof SharedSettingValueSchema.Type;
 
 const SharedSettingEntrySchema = Schema.Struct({
   value: SharedSettingValueSchema,
-  // The write's stamp: milliseconds, never below the writing copy's
-  // highest stamp plus one (withSharedSetting), so a device with a slow
-  // clock still outranks what it has already seen.
+  // Never below the writer's highest stamp plus one, so a slow clock still
+  // outranks what it has seen.
   at: Schema.Natural.check(
     Schema.isLessThanOrEqualTo(MAX_SHARED_SETTING_STAMP),
   ),
-  // The writing device, which breaks a tie between equal stamps the
-  // same way on every copy.
+  // Breaks a tie the same way on every copy.
   by: Schema.String.check(Schema.isBetweenLength(1, 128)),
 });
 export type SharedSettingEntry = typeof SharedSettingEntrySchema.Type;
@@ -62,12 +48,9 @@ const decodeSharedSettingEntry = Schema.decodeUnknownOption(
 
 type SharedSettingEntries = Record<string, SharedSettingEntry>;
 
-// Read entry by entry: one this build cannot hold (a newer build's
-// longer value, a hand-mangled stamp) is left out and the rest still
-// merge. Failing the whole document over it would cut this device off
-// from every setting a newer peer holds, not just the one it cannot
-// read. Writing applies the same rule, so a document this build holds
-// always encodes.
+// An entry this build can't hold is left out and the rest still merge:
+// failing the document would cut this device off from every setting a
+// newer peer holds.
 function readableEntries(raw: {
   readonly [key: string]: unknown;
 }): SharedSettingEntries {

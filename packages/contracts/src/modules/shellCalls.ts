@@ -6,19 +6,14 @@ import { strict } from "../schemas/strict.ts";
 import { GuideDrivePayloadSchema, GuideReplySchema } from "./guide.ts";
 import { HostAddressSchema } from "./window.ts";
 
-// What the host asks of the shell that started it (the updater and the
-// app's own lifetime stay in Electron's process), over the port the
-// shell hands its utility process. Served by the
-// shell alone, so kept out of allContractModules.
+// Served by the shell alone, so kept out of allContractModules.
 
 const UnattendedSchema = strict(Schema.Struct({ unattended: Schema.Boolean }));
 
 export const shellCallsContract = defineContract(
   "shellCalls",
   "client",
-  // The host is up: where its loopback listens, for the shell to dial
-  // and to hand its windows, and the token that opens the shell's own
-  // session calls, which the shell keeps.
+  // The token opens the shell's own session calls.
   invoke(
     "ready",
     strict(
@@ -29,8 +24,6 @@ export const shellCallsContract = defineContract(
     ),
     VoidSchema,
   ),
-  // The host could not start: why, with what the engine's doctor found
-  // when it was the store.
   invoke(
     "failed",
     strict(
@@ -41,29 +34,21 @@ export const shellCallsContract = defineContract(
     ),
     VoidSchema,
   ),
-  // The v3 migration as it goes, which the shell serves its windows
-  // (modules/migration.ts) and routes them to the page of while it runs.
   invoke("migration", MigrationSchema, VoidSchema),
-  // Restart the app with nobody at it to answer a prompt: after a
-  // data-folder move a peer asked for.
+  // With nobody at it: after a move a peer asked for.
   invoke("relaunch", VoidSchema, VoidSchema),
-  // A data-folder move here failed after the host let go of the folder:
-  // the shell says why and offers a restart, the app not running on
-  // without its watchers.
+  // The app doesn't run on without its watchers.
   invoke(
     "moveFailed",
     strict(Schema.Struct({ reason: Schema.String })),
     VoidSchema,
   ),
   invoke("updaterCheck", VoidSchema, VoidSchema),
-  // `unattended` marks a call another device made: a busy host refuses
-  // it instead of prompting a screen nobody watches.
+  // `unattended`: another device asked, so a busy host refuses instead of
+  // prompting a screen nobody watches.
   invoke("updaterInstall", UnattendedSchema, VoidSchema),
   invoke("updaterUpdate", UnattendedSchema, VoidSchema),
-  // Stop the bridge `sm update` asks the updater through, before a wipe
-  // of the data folder it lives in.
+  // Before a wipe of the data folder it lives in.
   invoke("stopUpdaterBridge", VoidSchema, VoidSchema),
-  // An action of `sm guide mcp`'s, which the shell runs in the window
-  // its session is bound to.
   invoke("guide", GuideDrivePayloadSchema, GuideReplySchema),
 );

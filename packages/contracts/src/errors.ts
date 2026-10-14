@@ -1,17 +1,12 @@
-// The failures a caller branches on, as tagged error classes. Each one
-// crosses every wire as its tag and fields (CallFailureSchema) and
-// decodes back into the same class on the other side, so the
-// renderer tells them apart with the predicates below, never by their
-// text. The messages are the user-facing words, built from the fields.
+// Each crosses every wire as its tag and fields and decodes back into
+// the same class, so callers tell them apart by tag, never by text.
 import * as Schema from "effect/Schema";
 
 export function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// The machine-readable code an error carries, when it has one (a
-// ControlError, a Node errno). What a wire sends beside the message so
-// the far side keys on the code and not on the prose.
+// What a wire sends beside the message, so the far side keys on a code.
 export function errorCodeOf(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) {
     return undefined;
@@ -19,8 +14,6 @@ export function errorCodeOf(error: unknown): string | undefined {
   return typeof error.code === "string" ? error.code : undefined;
 }
 
-// A project or worktree deleted out from under a call (worktree delete,
-// project removal, nuke racing a renderer poll).
 export class UnknownProjectError extends Schema.TaggedError<UnknownProjectError>()(
   "UnknownProjectError",
   { projectId: Schema.String },
@@ -39,8 +32,6 @@ export class UnknownWorktreeError extends Schema.TaggedError<UnknownWorktreeErro
   }
 }
 
-// A terminal that is not open on the host: closed, exited, or never
-// there.
 export class UnknownTerminalError extends Schema.TaggedError<UnknownTerminalError>()(
   "UnknownTerminalError",
   { terminalId: Schema.String },
@@ -56,12 +47,8 @@ export const isEntityGoneError = Schema.is(
   Schema.Union([UnknownProjectError, UnknownWorktreeError]),
 );
 
-// The hub bridge's rejection for a call on a peer it has no direct
-// session with (shared/hub/bridgeHandlers.ts requirePeer), with the
-// keeper's reason when it has one. The renderer keeps a peer's page
-// mounted through a session blip, and every query under it then fails
-// this way until the keeper lands the session again, which the device
-// registry already shows. So this one is not a toast.
+// Not a toast: a peer's page stays mounted through a session blip, and
+// every query under it fails this way until the keeper redials.
 export class NoDirectConnectionError extends Schema.TaggedError<NoDirectConnectionError>()(
   "NoDirectConnectionError",
   { deviceId: Schema.String, reason: Schema.optional(Schema.String) },
@@ -74,11 +61,7 @@ export class NoDirectConnectionError extends Schema.TaggedError<NoDirectConnecti
 
 export const isNoDirectConnectionError = Schema.is(NoDirectConnectionError);
 
-// An unforced convert that `sm adopt`'s guard refused: uncommitted
-// changes (untracked files included) or a status it couldn't read. The
-// host builds it from the engine's refusal code (host/lib/engineOps.ts
-// guardRefusal) in the page's words, not the CLI's, and the convert
-// page forces on the next click.
+// The convert page forces on the next click.
 export class ConvertRefusedError extends Schema.TaggedError<ConvertRefusedError>()(
   "ConvertRefusedError",
   { refusal: Schema.Literals(["uncommitted-changes", "status-unreadable"]) },
@@ -92,10 +75,6 @@ export class ConvertRefusedError extends Schema.TaggedError<ConvertRefusedError>
 
 export const isConvertRefusedError = Schema.is(ConvertRefusedError);
 
-// A delete or move refused because the worktree's create run
-// (carry-over, setup, port provision) is still working in it. The
-// detail page reports it instead of offering a force delete, which the
-// host would refuse the same way.
 export class WorktreeSettingUpError extends Schema.TaggedError<WorktreeSettingUpError>()(
   "WorktreeSettingUpError",
   {},
@@ -107,10 +86,6 @@ export class WorktreeSettingUpError extends Schema.TaggedError<WorktreeSettingUp
 
 export const isWorktreeSettingUpError = Schema.is(WorktreeSettingUpError);
 
-// Safe branch delete (`git branch -d`) refused because the branch has
-// commits unreachable from other refs. The renderer swaps its confirm
-// dialog into a force-delete prompt with friendlier copy than git's
-// stderr, which the engine's Git.deleteBranch fails with.
 export class BranchNotMergedError extends Schema.TaggedError<BranchNotMergedError>()(
   "BranchNotMergedError",
   { branch: Schema.String },
@@ -122,10 +97,8 @@ export class BranchNotMergedError extends Schema.TaggedError<BranchNotMergedErro
 
 export const isBranchNotMergedError = Schema.is(BranchNotMergedError);
 
-// "Sync from primary" refused because the primary branch conflicts with
-// this one: the rebase and the merge both stopped and were aborted, so
-// the worktree is as it was. The pill offers to merge anyway and leave
-// the conflicts to resolve.
+// The rebase and the merge both stopped and were aborted, so the
+// worktree is as it was.
 export class SyncConflictsError extends Schema.TaggedError<SyncConflictsError>()(
   "SyncConflictsError",
   { ref: Schema.String },
@@ -137,9 +110,6 @@ export class SyncConflictsError extends Schema.TaggedError<SyncConflictsError>()
 
 export const isSyncConflictsError = Schema.is(SyncConflictsError);
 
-// A peer's command-access gate refused the call: that machine does not
-// run commands from here (the device link's CommandGate), as
-// distinct from a real handler failure.
 export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>()(
   "CommandRefusedError",
   {},
@@ -151,8 +121,6 @@ export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>
 
 export const isCommandRefusedError = Schema.is(CommandRefusedError);
 
-// A peer's sharing switch is off: that machine serves this device
-// nothing, reads included (the device link's SharingGate).
 export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
   "NotSharingError",
   {},
@@ -164,10 +132,7 @@ export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
 
 export const isNotSharingError = Schema.is(NotSharingError);
 
-// A byte channel's open refused by the host (app/host/socket/): the
-// link carries no byte channels, the id is already open, or the
-// connection holds as many as it may (MAX_CHANNELS_PER_LINK,
-// app/shared/remote/link.ts). The message is the reason's marker.
+// The message is the reason's marker.
 export class ChannelRefusedError extends Schema.TaggedError<ChannelRefusedError>()(
   "ChannelRefusedError",
   {
@@ -185,10 +150,7 @@ export class ChannelRefusedError extends Schema.TaggedError<ChannelRefusedError>
 
 export const isChannelRefusedError = Schema.is(ChannelRefusedError);
 
-// The far side failed the call with something no class above names.
-// Its message is the far side's own words, and its code the errno it
-// carried, so errorMessageOf and errorCodeOf read it like the error it
-// was.
+// Anything no class above names: the far side's message and errno.
 export class RemoteCallError extends Schema.TaggedError<RemoteCallError>()(
   "RemoteCallError",
   { text: Schema.String, code: Schema.optional(Schema.String) },
@@ -198,10 +160,7 @@ export class RemoteCallError extends Schema.TaggedError<RemoteCallError>()(
   }
 }
 
-// The device link's handshake (modules/link.ts): the two builds speak
-// different protocol versions (protocol.ts), so neither can read the
-// other. Terminal until one of them updates, and the peer's page says
-// so in these words.
+// Terminal until one of the builds updates.
 export class ProtocolVersionMismatchError extends Schema.TaggedError<ProtocolVersionMismatchError>()(
   "ProtocolVersionMismatchError",
   { hostVersion: Schema.Int, clientVersion: Schema.Int },
@@ -215,9 +174,8 @@ export const isProtocolVersionMismatchError = Schema.is(
   ProtocolVersionMismatchError,
 );
 
-// The handshake's refusal: the hello proved no ticket this host minted
-// for that device, or came after the connection's one hello. Terminal
-// for the dial: a redial with the same ticket cannot change the answer.
+// Terminal for the dial: a redial with the same ticket gets the same
+// answer.
 export class LinkRefusedError extends Schema.TaggedError<LinkRefusedError>()(
   "LinkRefusedError",
   {},
@@ -227,7 +185,6 @@ export class LinkRefusedError extends Schema.TaggedError<LinkRefusedError>()(
   }
 }
 
-// A call on a device link before its hello was accepted.
 export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthenticatedError>()(
   "LinkUnauthenticatedError",
   {},
@@ -237,7 +194,6 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
   }
 }
 
-// Every error above, as it crosses a wire.
 export const ContractErrorSchema = Schema.Union([
   UnknownProjectError,
   UnknownWorktreeError,
@@ -257,9 +213,6 @@ export const ContractErrorSchema = Schema.Union([
 
 export const isContractError = Schema.is(ContractErrorSchema);
 
-// How a call fails on the device link: as one of the errors above, or
-// as RemoteCallError, which carries any other failure's message and
-// code.
 export const CallFailureSchema = Schema.Union([
   ...ContractErrorSchema.members,
   RemoteCallError,
@@ -269,7 +222,6 @@ export const isRemoteCallError = Schema.is(RemoteCallError);
 
 export type CallFailure = typeof CallFailureSchema.Type;
 
-// What a call's failure crosses a wire as.
 export const callFailureOf = (error: unknown): CallFailure =>
   isContractError(error)
     ? error

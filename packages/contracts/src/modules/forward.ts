@@ -5,37 +5,20 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { PortNumberSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// Port forwarding over byte channels: a forwarded TCP connection
-// crosses the device link as raw bytes on one of the link's channels
-// (modules/link.ts), beside the calls. This contract is only the OPEN:
-// the caller mints a channel id, attaches its end of the channel on its
-// own transport first, then invokes open, and the host dials the
-// loopback port and attaches the socket under that id before
-// answering. From then on bytes, ends and resets ride the channel
-// itself, and a slow reader holds the far end back. The mirror stream
-// is the other byte-stream open (mirror:openStream), on the same
-// channel layer. This is the HOST side a remote peer drives. The client
-// half is host/portForward/bridge.ts.
-//
-// {remote:true, gated:true}: the surface rides the host's command
-// grant, fail-closed. open dials 127.0.0.1 only, because the feature IS
-// reaching the remote machine's own loopback dev server, never a hop
+// Only the open: the caller attaches its end of the channel first, then
+// the host dials the loopback port and attaches the socket before
+// answering. Bytes, ends and resets ride the channel. Dials 127.0.0.1
+// only: the feature is the remote machine's own dev server, never a hop
 // beyond it.
 
-// Channel ids are CLIENT-minted (schemas/hexId.ts pins the shape):
-// the caller attaches its endpoint under the id before the open, so
-// the host's first bytes always find it. The host refuses an id
-// already attached on that connection.
+// Client-minted, so the host's first bytes always find the caller's end.
 const ChannelIdSchema = HexId32Schema;
 
-// The host's coded refusals, as the exact message texts the client
-// side matches on (the engine's start probe, the UI's inline wording):
-// mint and match through these, never a literal.
-// connect-failed is a prefix, the rest are the whole message.
+// Matched exactly by the client side: mint and match through these.
+// connect-failed is a prefix, the rest whole messages.
 export const FORWARD_CONNECT_FAILED = "connect-failed";
 
-// The host dialed the port and nothing answered: the one refusal that
-// says something about the port rather than the peer or the grant.
+// The one refusal about the port rather than the peer or the grant.
 export function isForwardConnectFailedError(error: unknown): boolean {
   return errorMessageOf(error).startsWith(FORWARD_CONNECT_FAILED);
 }
