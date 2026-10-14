@@ -3,7 +3,6 @@
 // carry, and GitHub's rate limit.
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { releaseChannel } from "@shigomori/contracts/releaseVersions";
 import { parse, type SemVer } from "semver";
 import { isV3Release } from "./flavor.ts";
 
@@ -81,15 +80,16 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
     return name.endsWith(".zip") && name.includes(marker);
   })?.browser_download_url ?? "";
 
-// The release a build moves to, or undefined when none is ahead. A prod
-// build (`releases`) takes the highest of the full releases and of the
-// prereleases in its own channel, so a full 2.0.0 beats every
-// 2.0.0-beta.N, which ends the beta, and never an alpha or beta of
-// 3.0.0 (flavor.ts isV3Release). A v3 build (`v3`) takes the highest of
-// those alone: a full release, 3.0.0 included, is another flavor's
-// bundle. Either way a release flagged
-// prerelease under a full release's tag stays hidden, as the update
-// server hides it, and one without its zip for this arch yet (the
+// The release a build moves to, or undefined when none is ahead. Only a
+// release above the build in semver's order is offered, which ranks
+// alpha below beta below rc below the full release, so a build never
+// moves back a stage. A prerelease build (`releases`) takes the highest
+// later prerelease, of any stage, or full release, and a full build full
+// releases alone. Neither takes a prerelease of 3.0.0 (flavor.ts
+// isV3Release). A v3 build (`v3`) takes those alone: a full release,
+// 3.0.0 included, is another flavor's bundle. Either way a release
+// flagged prerelease under a full release's tag stays hidden, as the
+// update server hides it, and one without its zip for this arch yet (the
 // workflow uploads assets minutes after the tag) is skipped, as the
 // update server skips it.
 export const pickRelease = (
@@ -98,7 +98,7 @@ export const pickRelease = (
   arch: string,
   line: "releases" | "v3" = "releases",
 ): ReleaseInfo | undefined => {
-  const channel = releaseChannel(current);
+  const onPrerelease = current.prerelease.length > 0;
   const marker = `-darwin-${arch}-`;
   let best: { release: GitHubRelease; version: SemVer; url: string } | null =
     null;
@@ -112,7 +112,7 @@ export const pickRelease = (
     } else if (isV3Release(tag)) {
       continue;
     } else if (version.prerelease.length > 0) {
-      if (releaseChannel(version) !== channel) continue;
+      if (!onPrerelease) continue;
     } else if (release?.prerelease === true) {
       continue;
     }

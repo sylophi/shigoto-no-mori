@@ -1,6 +1,6 @@
 // The three builds and every name that tells them apart, so two of
 // them run side by side on one machine without one reading or writing
-// another's files: prod is what ships, v3 is an alpha or beta of 3.0.0
+// another's files: prod is what ships, v3 is a prerelease of 3.0.0
 // dogfooded beside prod until v3 merges into main, and dev is what `pnpm dev` runs. A packaged
 // build's flavor is baked in when it is built (the release workflow
 // builds v3 for a v3 release and prod for anything else), and a dev run
@@ -94,12 +94,12 @@ export const flavorNames = (flavor: Flavor): FlavorNames => FLAVORS[flavor];
 export const isFlavor = (text: string): text is Flavor =>
   text === "prod" || text === "v3" || text === "dev";
 
-// A v3 release: an alpha (`v3.0.0-alpha.N`) or, once the feature set
-// is frozen, a beta (`v3.0.0-beta.N`) of 3.0.0. The full 3.0.0 is the
+// A v3 release: an alpha (`v3.0.0-alpha.N`), a beta (`v3.0.0-beta.N`)
+// or a release candidate (`v3.0.0-rc.N`) of 3.0.0. The full 3.0.0 is the
 // production cutover, a prod release. Only a v3 build moves to one
 // (updateFeed.ts pickRelease).
 export const isV3Release = (version: string) =>
-  /^v?3\.0\.0-(alpha|beta)(\.|$)/.test(version);
+  /^v?3\.0\.0-(alpha|beta|rc)(\.|$)/.test(version);
 
 // A release tag's flavor: a v3 release builds v3, anything else prod.
 export const flavorOfVersion = (version: string): "prod" | "v3" =>
