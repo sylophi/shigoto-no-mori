@@ -40,6 +40,7 @@ import { startAgentWatch } from "./lib/agentWatch";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
+import { startThemeRotation } from "./lib/themeRotation";
 import { localDeviceId, queryKeys, worktreeQueriesOn } from "./lib/queryKeys";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
@@ -156,17 +157,21 @@ export function bootApp({
     throw new Error("#root element missing from index.html");
   }
 
-  createRoot(rootElement).render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <ClerkGate Provider={ClerkProvider}>
-          <App router={router} />
-        </ClerkGate>
-        <AppToaster />
-        <UpdateNews />
-        <ErrorDetailsHost />
-      </QueryClientProvider>
-    </StrictMode>,
+  // Rendered once the launch's palette rotation has landed, so the
+  // first frame wears the palette it moved to.
+  void startThemeRotation(queryClient).then(() =>
+    createRoot(rootElement).render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <ClerkGate Provider={ClerkProvider}>
+            <App router={router} />
+          </ClerkGate>
+          <AppToaster />
+          <UpdateNews />
+          <ErrorDetailsHost />
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
   );
 
   return router;

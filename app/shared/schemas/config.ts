@@ -35,6 +35,8 @@ const LightThemeSchema = z.enum(LIGHT_THEME_IDS);
 const DarkThemeSchema = z.enum(DARK_THEME_IDS);
 export type LightTheme = z.infer<typeof LightThemeSchema>;
 export type DarkTheme = z.infer<typeof DarkThemeSchema>;
+const ThemeRotationSchema = z.enum(["launch", "hourly", "daily", "weekly"]);
+export type ThemeRotation = z.infer<typeof ThemeRotationSchema>;
 
 export const LauncherCommandSchema = z.object({
   id: z.string().min(1),
@@ -421,6 +423,12 @@ export const ClientConfigSchema = z.object({
   // Mirrored to localStorage with the switch.
   lightTheme: LightThemeSchema.optional(),
   darkTheme: DarkThemeSchema.optional(),
+  // Rotation: how often the picks move on to the next light and dark
+  // pair (shared/themes.ts), which holds them together. Absent is off.
+  // The stamp is when the picks last changed by a rotation or a
+  // Settings save, which the timed rotations count from.
+  themeRotation: ThemeRotationSchema.optional(),
+  themeRotatedAt: z.number().optional(),
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir
