@@ -22,42 +22,17 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
 import { errorMessageOf } from "../errors.ts";
 
-// Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
-// remote work"): a worktree kept identical on two devices, every file,
-// both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
-// Mutagen). The app supervises this device's daemon
-// (host/mirror/MirrorDaemon.ts), bridges its streams to peers as byte
-// channels on the device link (openStream below, the link's channels in
-// modules/link.ts), and serves `file-sync serve` for peers mirroring
-// FROM here.
-//
-// Host-scoped: a device's mirrors are facts about that device, and a
-// remote viewer sees them (list is a read). A mirror always runs on
-// the device holding the original. Its one start, startTo, sends one
-// of this device's worktrees to a peer (branch, commits, uncommitted
-// changes, through the ordinary move) and opens the mirror on top, so
-// the first cycle has little to move and git agrees on both sides
-// from the first second. A mirror asked for from the copy's side (a
-// peer's page, "mirror it here") is the same start, invoked on the
-// device holding the original with this device as the target: the
-// local orchestrator startFrom asks it, and leaves an invitation
-// behind (host/mirror/invites.ts) so the peer's send, stream and git
-// half land here whatever this device's command-access switch says. The
-// start and the controls (stop, pause, resume, setIgnores) act on a
-// session this device runs, and are offered to peers too: a mirror
-// pairs two devices, and either side's page controls it, the far end
-// through the device that runs the session. They ride that device's
-// command grant like every other mutation.
+// A mirror always runs on the device holding the original. startTo sends
+// the worktree through the ordinary move and opens the mirror on top, so
+// git agrees on both sides from the first second. Asked for from the
+// copy's side, startFrom leaves an invitation behind so the peer's send,
+// stream and git half land here whatever this device's switch says.
 
-// Mutagen mints session identifiers ("sync_" plus a base62 body). The
-// daemon echoes them verbatim, so the shape is pinned only loosely.
+// Mutagen's ids, pinned loosely.
 const MirrorSessionIdSchema = Schema.String.check(
   Schema.isBetweenLength(1, 128),
 );
 
-// The leave-out rule and its patterns are defined with the pull
-// (modules/sync.ts), which carries them too. Re-exported so
-// the mirror surfaces keep one import path.
 export { type MirrorIgnoreMode, MirrorIgnoreModeSchema };
 export {
   anchorIgnoredPath,
@@ -69,33 +44,18 @@ export {
   unanchorIgnoredPath,
 } from "../mirrorIgnores.ts";
 
-// What kind of session it is, one label the host writes at the start
-// (host/mirror/registry.ts modeOf reads it): "mirror", "mirror-branch"
-// for a primary checkout's mirror (the copy sits on mirror/<branch> for
-// whatever branch the original is on, git/branches.ts, and the
-// git follower reads the two names as one branch), or
-// "transfer-<token>" for the session a pull opens to carry a
-// transplant's ignored files across once (host/mirror/oneShot.ts),
-// which nothing treats as a mirror. A label and not a session field:
-// the session document crosses to peers that parse it strictly.
+// "mirror", "mirror-branch" (a primary's mirror, its copy on
+// mirror/<branch>) or "transfer-<token>" (a pull's one-shot, not a
+// mirror). A label, not a field: peers parse the session strictly.
 export const MIRROR_LABEL_MODE = "mode";
-// The session a re-open (an ignore change) replaced, on the session
-// that replaced it: the git follower carries the old one's agreement
-// across, and the host ends the old one on sight should it outlive the
-// re-open (a quit or a failed terminate between the two). Mutagen's
-// ids fit the label alphabet.
+// The session an ignore change's re-open replaced: the follower carries
+// its agreement across, and the host ends it on sight if it outlived the
+// re-open.
 export const MIRROR_LABEL_REPLACES = "replaces";
-// The engine's terminal states share a prefix (MirrorStatusSchema
-// below): a root emptied, deleted or changed type under the session.
 export function isHaltedStatus(status: string): boolean {
   return status.startsWith("halted-");
 }
 
-// The rule in one phrase, the same on every surface that names it:
-// the session's history line, the live card's chip, the fake host's posed
-// thread. `count` is the paths the rule names, which a rule still
-// being picked knows outright. A session's patterns go through
-// summarizeIgnores, which counts them.
 export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
   const paths = `${count} ${count === 1 ? "path" : "paths"}`;
   switch (mode) {
@@ -110,8 +70,8 @@ export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
   }
 }
 
-// The same phrase off a session's patterns. A bring rule's patterns
-// are mostly gitignore rules, so its count is the brought paths.
+// A bring rule's patterns are mostly gitignore rules, so it counts the
+// brought paths.
 export function summarizeIgnores(
   mode: MirrorIgnoreMode,
   ignores: readonly string[],
@@ -121,7 +81,7 @@ export function summarizeIgnores(
     mode === "bring" ? broughtPaths(ignores).length : ignores.length,
   );
 }
-// The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).
+// file-sync/engine.go mirrorStatusCode.
 const MirrorStatusSchema = Schema.Literals([
   "disconnected",
   "halted-on-root-emptied",
@@ -187,8 +147,6 @@ const MirrorEndpointStateSchema = strict(
   }),
 );
 
-// The git half of a mirror (host/mirror/gitState.ts): HEAD, the tip and
-// the staged tree, as one document either side can produce and apply.
 const GitHeadSchema = Schema.Union([
   strict(
     Schema.Struct({ kind: Schema.Literal("branch"), branch: GitRefNameSchema }),
@@ -211,8 +169,6 @@ export const GitStateCoreSchema = strict(
 const GitStateSchema = strict(
   Schema.Struct({
     ...GitStateCoreSchema.struct.fields,
-    // The carrier commit for a staged index (refs/shigomori/index/<id>
-    // on the reporting device), or null when nothing is staged.
     indexCommit: Schema.NullOr(CommitHashSchema),
   }),
 );
@@ -235,8 +191,6 @@ const MirrorApplyGitStatePayloadSchema = strict(
       }),
     ),
     state: GitStateCoreSchema,
-    // Landing refs the applier may sweep afterwards: the app's
-    // namespace only.
     sweep: Schema.optional(
       Schema.Array(SyncLandingRefSchema).check(Schema.isMaxLength(8)),
     ),
@@ -252,13 +206,9 @@ const MirrorApplyGitStateResultSchema = strict(
   }),
 );
 
-// The git follower's verdict on one session (host/mirror/gitFollow.ts),
-// attached to the session by the host. synced: both sides agree.
-// following: a change is being carried across. diverged: both sides
-// changed since they last agreed, and neither is touched. blocked: the
-// other side's state cannot land here (a branch collision, an unborn
-// worktree), with the reason. error: the last attempt failed. off: not
-// followed (paused, or the daemon has not reported the session yet).
+// diverged: both sides changed since they last agreed, and neither is
+// touched. blocked: the other side's state can't land here (detail says
+// why).
 const MirrorGitStatusSchema = strict(
   Schema.Struct({
     status: Schema.Literals([
@@ -274,11 +224,8 @@ const MirrorGitStatusSchema = strict(
 );
 export type MirrorGitStatus = typeof MirrorGitStatusSchema.Type;
 
-// One session this device runs, as the daemon reports it. The local
-// side is always this device (alpha in Mutagen's terms) and holds the
-// original. The remote side is the copy, on the peer named by
-// deviceId, at remoteRoot, which is its worktree projectId/worktreeId. localProjectId/localWorktreeId
-// are lifted out of the labels the start orchestration wrote.
+// The local side (Mutagen's alpha) holds the original; the copy is on
+// deviceId's projectId/worktreeId.
 export const MirrorSessionSchema = strict(
   Schema.Struct({
     session: MirrorSessionIdSchema,
@@ -292,12 +239,9 @@ export const MirrorSessionSchema = strict(
     worktreeId: Schema.String,
     remoteRoot: Schema.String,
     paused: Schema.Boolean,
-    // The engine's ignore list for this session (the .git pointer left
-    // out: it is never the user's choice) and the rule it came from.
+    // Without the .git pointer, never the user's choice.
     ignores: Schema.Array(Schema.String),
     ignoreMode: MirrorIgnoreModeSchema,
-    // When the session was created, epoch milliseconds, so the page can
-    // say how long the mirror has been running.
     createdAt: Schema.Natural,
     status: MirrorStatusSchema,
     statusText: Schema.String,
@@ -307,25 +251,17 @@ export const MirrorSessionSchema = strict(
     excludedConflicts: Schema.Natural,
     local: MirrorEndpointStateSchema,
     remote: MirrorEndpointStateSchema,
-    // Attached by the host from the git follower. Absent when the host
-    // has no follower for it yet.
     git: Schema.optional(MirrorGitStatusSchema),
-    // Set while a stop is under way: the engine has ended the session
-    // and the copy is being removed. The list keeps the session until
-    // the copy is gone, so the pair reads as one worktree throughout.
+    // The list keeps a stopping session until the copy is gone, so the
+    // pair reads as one worktree throughout.
     stopping: Schema.optional(Schema.Boolean),
   }),
 );
 export type MirrorSession = typeof MirrorSessionSchema.Type;
 
-// One session as the daemon's state line carries it (file-sync/
-// engine.go mirrorSessionState), before the host lifts the label-borne
-// ids out and attaches what it knows of its own. An unknown top-level
-// key is stripped rather than refused, so a field a newer engine adds
-// to the session cannot freeze the state stream. A missing or mistyped
-// one still fails, and the nested shapes (endpoint, staging, conflict,
-// problem, change) stay strict, shared with the contract above, so a
-// field added inside them still fails the session.
+// As the daemon's state line carries it. An unknown top-level key is
+// stripped rather than refused, so a newer engine's field can't freeze
+// the stream; the nested shapes stay strict.
 const {
   localProjectId: _localProjectId,
   localWorktreeId: _localWorktreeId,
@@ -337,19 +273,15 @@ const {
 export const MirrorSessionRawSchema = Schema.Struct(rawSessionFields);
 export type MirrorSessionRaw = typeof MirrorSessionRawSchema.Type;
 
-// One stream this device SERVES: a peer is mirroring the named worktree
-// from here, on the channel the peer minted with openStream. Known
-// from the open until the channel is gone.
+// A stream this device serves to a peer mirroring from here.
 const MirrorServingSchema = strict(
   Schema.Struct({
     channelId: HexId32Schema,
     projectId: Schema.String,
     worktreeId: WorktreeIdSchema,
-    // The calling device, or "" on a wire that stamps no caller.
+    // "" on a wire that stamps no caller.
     peerDeviceId: Schema.String,
-    // The peer's own worktree for this stream (its local copy), when the
-    // peer named it: what lets this device's sidebar fold the peer's row
-    // into the served worktree's. Absent on a peer that predates it.
+    // The peer's copy, so the sidebar can fold its row into this one.
     peerWorktreeId: Schema.optional(WorktreeIdSchema),
     since: Schema.Natural,
   }),
@@ -365,10 +297,6 @@ const MirrorDaemonStatusSchema = Schema.Literals([
 ]);
 export type MirrorDaemonStatus = typeof MirrorDaemonStatusSchema.Type;
 
-// Why a device's daemon can't take a mirror start, or undefined when
-// it can: the host's refusal (requireRunningEngine) and the start
-// buttons' disabled title, so the two say the same thing. `where`
-// names the device, which is the one holding the original.
 export function mirrorEngineBlocker(
   status: MirrorDaemonStatus,
   where = "this device",
@@ -391,7 +319,6 @@ export function mirrorEngineBlocker(
 const MirrorListResultSchema = strict(
   Schema.Struct({
     daemon: MirrorDaemonStatusSchema,
-    // Why a "failing" daemon last stopped or couldn't start.
     daemonFailure: Schema.optional(Schema.String),
     sessions: Schema.Array(MirrorSessionSchema),
     serving: Schema.Array(MirrorServingSchema),
@@ -399,13 +326,7 @@ const MirrorListResultSchema = strict(
 );
 export type MirrorListResult = typeof MirrorListResultSchema.Type;
 
-// The mirror start, built on the send: one of THIS device's
-// worktrees, copied to a peer (cloning the repo there first when the
-// peer has no checkout, `cloneInto` in the peer's terms) and kept in
-// step with it. The session runs here, on the original's device: it
-// reaches the peer through the peer's grant, which the send already
-// needed. Invoked by the peer itself when the mirror is asked for from
-// the copy's side, the target being the caller.
+// `cloneInto` is in the peer's terms.
 const MirrorStartToPayloadSchema = strict(
   Schema.Struct({
     ...SyncSendWorktreePayloadSchema.struct.fields,
@@ -415,16 +336,8 @@ const MirrorStartToPayloadSchema = strict(
 );
 export type MirrorStartToPayload = typeof MirrorStartToPayloadSchema.Type;
 
-// The mirror asked for from the copy's side: a peer's worktree, named
-// the way a pull names its source, kept in step with a copy landed
-// HERE. What the peer's startTo takes, in the pull's terms (the peer
-// resolves its own branch and folder), plus the session's rule, plus
-// the repo identity and the clone place the invitation holds the
-// landing to. Local-only (remote:false), like the pull: this device
-// invites the mirror, then asks the peer's startTo with itself as the
-// target, and the peer's send and session reach the copy through that
-// invitation (host/mirror/invites.ts), so this device's switch is not
-// in the way.
+// The source named as a pull names it; the identity and clone place are
+// what the invitation holds the landing to.
 const pullFields = SyncPullWorktreePayloadSchema.struct.fields;
 const MirrorStartFromPayloadSchema = strict(
   Schema.Struct({
@@ -440,7 +353,6 @@ const MirrorStartFromPayloadSchema = strict(
 );
 export type MirrorStartFromPayload = typeof MirrorStartFromPayloadSchema.Type;
 
-// The send's result (the copy as the peer landed it) and the session.
 export const MirrorStartToResultSchema = strict(
   Schema.Struct({
     ...SyncPullWorktreeResultSchema.struct.fields,
@@ -454,13 +366,9 @@ const MirrorSessionPayloadSchema = strict(
   }),
 );
 
-// Stopping removes the copy (on the peer), so it is refused unless
-// the copy is known to hold nothing the original lacks: the git
-// follower says "synced" (the other side holds the copy's commits and
-// staging) and the files are settled (mirrorFilesSettled). A paused
-// session, an unreachable peer, a conflict held still or one too young
-// to have reconciled all fail that. `force` is the user overriding it
-// after being told.
+// Stopping removes the copy, so it is refused unless the copy holds
+// nothing the original lacks (mirrorStopBlocker). `force` overrides,
+// after the user is told.
 const MirrorStopPayloadSchema = strict(
   Schema.Struct({
     ...MirrorSessionPayloadSchema.struct.fields,
@@ -468,9 +376,8 @@ const MirrorStopPayloadSchema = strict(
   }),
 );
 
-// The file half of the stop's safety (mirrorStopBlocker has both): the engine idle on a pair it has brought in step at
-// least once, both sides connected and nothing held still. Anything
-// else may leave an edit on the copy that never reached the original.
+// Anything short of this may leave an edit on the copy that never
+// reached the original.
 export function mirrorFilesSettled(
   session: Pick<
     MirrorSession,
@@ -496,10 +403,7 @@ export function mirrorFilesSettled(
   );
 }
 
-// Both halves: why a stop that removes the copy is not known to be
-// safe, in words that finish "Not confirmed in step: …", or undefined
-// when it is. The host's refusal and the dialog's warning say the same
-// thing.
+// Words that finish "Not confirmed in step: …".
 export function mirrorStopBlocker(
   session: Parameters<typeof mirrorFilesSettled>[0] & {
     git?: MirrorGitStatus;
@@ -533,16 +437,12 @@ export function mirrorStopBlocker(
   }
 }
 
-// What a stop did with the copy: removed it, or left it a worktree of
-// its own because the original was gone (the copy is then the only one
-// there is). A runner that predates the answer sends nothing, which
-// reads as removed, all it ever did.
+// removedCopy false: the original was gone, so the copy stays as the
+// only one there is.
 const MirrorStopResultSchema = Schema.UndefinedOr(
   strict(Schema.Struct({ removedCopy: Schema.Boolean })),
 );
 
-// The refusal's leading text, which the renderer matches to offer
-// discard-and-stop.
 const MIRROR_STOP_UNCONFIRMED =
   "The copy is not confirmed in step with the other device";
 
@@ -551,8 +451,6 @@ export function isMirrorStopUnconfirmed(error: unknown): boolean {
   return message.includes(MIRROR_STOP_UNCONFIRMED);
 }
 
-// The refusal as the host words it, and its reason (mirrorStopBlocker's
-// words) back out of it, one pair so the two cannot drift.
 const STOP_REFUSAL_TAIL =
   ", so the copy may hold work that exists nowhere else. Let the mirror catch up first, or remove the copy anyway.";
 
@@ -568,10 +466,8 @@ export function mirrorStopRefusalReason(error: unknown): string | undefined {
   return message.slice(start + MIRROR_STOP_UNCONFIRMED.length + 2, end);
 }
 
-// mirror:stop's other failure, thrown once the session is already
-// gone: the mirror did stop and only the copy's removal failed. Text
-// for the same reason, and told apart so a caller that reports the
-// stop (the CLI's unmirror) does not report a failure to stop.
+// The session stopped and only the copy's removal failed, told apart
+// so a caller doesn't report a failure to stop.
 export const MIRROR_COPY_STAYED = "The mirror stopped, but the copy";
 
 export function isMirrorCopyStayed(error: unknown): boolean {
@@ -579,23 +475,19 @@ export function isMirrorCopyStayed(error: unknown): boolean {
   return message.includes(MIRROR_COPY_STAYED);
 }
 
-// The mirror stream's open: the caller has attached its end of a byte
-// channel under this id on the calling connection (modules/link.ts),
-// and the host attaches a fresh `file-sync serve` for
-// the named worktree as the far end before answering.
+// The caller has attached its end of the channel; the host attaches a
+// fresh `file-sync serve` as the far end before answering.
 const MirrorOpenStreamPayloadSchema = strict(
   Schema.Struct({
     ...MirrorWorktreePayloadSchema.struct.fields,
     channelId: HexId32Schema,
-    // See MirrorServingSchema.peerWorktreeId.
     peerWorktreeId: Schema.optional(WorktreeIdSchema),
   }),
 );
 export type MirrorOpenStreamPayload = typeof MirrorOpenStreamPayloadSchema.Type;
 
-// Changing what a mirror leaves out: the engine cannot re-configure a
-// live session, so the host ends it and opens a fresh one on the same
-// pair. The new session id comes back.
+// The engine can't reconfigure a live session, so this re-opens it and
+// answers the new id.
 const MirrorSetIgnoresPayloadSchema = strict(
   Schema.Struct({
     ...MirrorSessionPayloadSchema.struct.fields,
@@ -604,10 +496,7 @@ const MirrorSetIgnoresPayloadSchema = strict(
   }),
 );
 
-// What happened to a mirror over time, kept by the device that runs
-// it, keyed by its local worktree so a re-opened session (an ignore
-// change) keeps the thread. Bounded per worktree (host/mirror/
-// history.ts), so the list is a recent window, not an archive.
+// Keyed by the local worktree, so a re-opened session keeps the thread.
 const MirrorEventKindSchema = Schema.Literals([
   "started",
   "stopped",
@@ -636,16 +525,11 @@ export const MirrorEventSchema = strict(
 export type MirrorEvent = typeof MirrorEventSchema.Type;
 export const MIRROR_HISTORY_LIMIT = 100;
 
-// A mirror this device asked a peer for, which the device link's gates
-// admit the peer's calls under (app/host/mirror/invites.ts): what the
-// ask named, which the landing must match, and the copy once landed.
+// What the landing must match for the link to admit the peer's calls.
 const MirrorInviteAskSchema = strict(
   Schema.Struct({
     peerDeviceId: DeviceIdSchema,
-    // The peer's original, the id its landing names.
     sourceWorktreeId: WorktreeIdSchema,
-    // The repo it belongs to, and where the copy lands when this device
-    // has no checkout of it.
     identity: Schema.NonEmptyString,
     cloneInto: Schema.optional(SyncCloneIntoSchema),
   }),
@@ -655,7 +539,6 @@ export type MirrorInviteAsk = typeof MirrorInviteAskSchema.Type;
 export const MirrorInviteSchema = strict(
   Schema.Struct({
     ...MirrorInviteAskSchema.struct.fields,
-    // The copy here, once the landing answered. Absent while pending.
     copy: Schema.optional(MirrorWorktreePayloadSchema),
   }),
 );
@@ -684,34 +567,24 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: false,
   }),
-  // Served to peers on the command grant: the copy's device asks the
-  // original's to start the mirror into it (see the payload's note).
   invoke("startTo", MirrorStartToPayloadSchema, MirrorStartToResultSchema, {
     remote: true,
     gated: true,
     grant: "changeCode",
   }),
-  // The ask from the copy's side, local-only like sync:pullWorktree:
-  // invites the mirror, then runs the peer's startTo towards here and
-  // relays its progress (sync:pullProgress, keyed by the peer's
-  // worktree).
   invoke("startFrom", MirrorStartFromPayloadSchema, MirrorStartToResultSchema, {
     remote: false,
     gated: true,
   }),
-  // The controls, served to peers on the command grant: the device at
-  // the far end of a mirror drives the session from its own page
-  // through the device running it (renderer/hooks/remote/useMirrors.ts
-  // useWorktreeMirrorLinks).
+  // The controls are remote: the far end drives the session through the
+  // device running it.
   invoke("stop", MirrorStopPayloadSchema, MirrorStopResultSchema, {
     remote: true,
     gated: true,
     grant: "changeCode",
   }),
-  // A copy here is no longer mirrored (its runner ended the session and
-  // kept it): the invitation this device left for that peer goes, so
-  // the peer's calls on the worktree need the grant again. Invitable,
-  // since an invited mirror's runner is exactly who says so.
+  // Drops the invitation for a copy no longer mirrored. Invitable: the
+  // invited runner is exactly who says so.
   invoke("release", MirrorWorktreePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
@@ -734,52 +607,36 @@ export const mirrorContract = defineContract(
     strict(Schema.Struct({ session: MirrorSessionIdSchema })),
     { remote: true, gated: true, grant: "changeCode" },
   ),
-  // Host-scoped like list: a peer viewing this device's mirror reads
-  // the same thread. Nothing here moves state.
   invoke("history", MirrorHistoryPayloadSchema, MirrorHistoryResultSchema, {
     remote: true,
     gated: false,
   }),
-  // Grant-gated like every byte-stream open.
   invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
     invitable: "copy",
   }),
-  // The git half, served to the device mirroring FROM here: read a
-  // worktree's git state (minting the index carrier ref, hence
-  // gated) and apply one. Both ride the command grant, or the
-  // invitation of a mirror asked for from here (invitable).
+  // Gated: reading mints the index carrier ref.
   invoke("gitState", MirrorWorktreePayloadSchema, GitStateSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
     invitable: "copy",
   }),
-  // Moves refs and the index here.
   invoke(
     "applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
     { remote: true, gated: true, grant: "changeCode", invitable: "copy" },
   ),
-  // Fired on every daemon snapshot and every serving-set change, so
-  // the list view re-reads without polling, locally and on the
-  // devices viewing this one. It carries the list it announces: a busy
-  // mirror fires this several times a second, and a viewer on another
-  // device would otherwise answer each one with a list round trip.
-  // Optional because the host may have none to send (no daemon yet, or
-  // a list that failed to build or to validate): it then announces the
-  // change bare, and a reader re-asks.
+  // Carries the list, since a busy mirror fires several times a second;
+  // bare when the host has none to send, and a reader re-asks.
   push("changed", Schema.UndefinedOr(MirrorListResultSchema), {
     remote: true,
   }),
-  // A served worktree's index was rewritten (something staged or
-  // unstaged there). Refs and HEAD already ping through
-  // git:projectChanged. The index is the one git fact that watcher
-  // ignores on purpose, so the mirror announces it itself for the
-  // follower on the other device.
+  // A served worktree's index was rewritten, the one git fact the git
+  // watcher ignores on purpose.
   push("gitChanged", MirrorWorktreePayloadSchema, {
     remote: true,
   }),

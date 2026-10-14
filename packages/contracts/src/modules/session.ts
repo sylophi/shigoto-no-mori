@@ -6,40 +6,31 @@ import { UpdaterStateSchema } from "../schemas/runtime.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// The shell's session with the host it started: what the Electron
-// process tells its host and asks of it, beside the
-// calls every window makes. Served on the loopback only (contracts'
-// link.ts, LoopbackGroup), so no call is remote, and kept out of
-// allContractModules, so no window's api carries it.
+// Loopback only, and kept out of allContractModules, so no window's api
+// carries it.
 
-// The account as the host is to know it. The shell keeps the credential
-// and the device key in the keychain and hands them over after every
-// change: secrets the host holds in memory only.
+// The shell keeps the credential and device key in the keychain and
+// hands them over after every change: the host holds them in memory
+// only.
 const AccountFactsSchema = strict(
   Schema.Struct({
     hubUrl: Schema.String,
     accountId: Schema.String,
     credential: Schema.String,
-    // The private key this device enrolled with, base64url: what the
-    // relay and the device link's handshakes prove this device by.
+    // Base64url: what the relay and link handshakes prove this device by.
     deviceKey: Schema.String,
-    // The web client's origin, the one extra origin the device link's
-    // listener admits. Empty when none is configured.
+    // The one extra origin the device link's listener admits.
     webOrigin: Schema.String,
-    // The command-access switch, kept on the account's record.
     acceptsCommands: Schema.Boolean,
   }),
 );
 export type AccountFacts = typeof AccountFactsSchema.Type;
 
-// What a quit, a restart into an update or a data-folder move would
-// interrupt.
 const BusyOperationsSchema = strict(
   Schema.Struct({
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    // Terminals whose shell runs something (a quit and a restart ask
-    // about them, a data-folder move does not count them).
+    // A data-folder move doesn't count them.
     busyTerminals: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     ),
@@ -49,29 +40,21 @@ const BusyOperationsSchema = strict(
 export const sessionContract = defineContract(
   "session",
   "host",
-  // The account's facts, null when signed out or unconfigured: at
-  // start, and after every change.
+  // Null when signed out or unconfigured. At start and after every change.
   invoke("account", Schema.NullOr(AccountFactsSchema), VoidSchema),
-  // The account's registry, as the shell last read it from the hub.
   invoke("accountDevices", Schema.Array(DeviceIdSchema), VoidSchema),
-  // A window of this machine gained or lost focus.
   invoke("windowFocused", Schema.Boolean, VoidSchema),
-  // The machine woke: every remote socket is probed.
+  // Every remote socket is probed.
   invoke("wake", VoidSchema, VoidSchema),
   invoke("busy", VoidSchema, BusyOperationsSchema),
-  // The shell's updater moved.
   invoke("updaterState", UpdaterStateSchema, VoidSchema),
-  // Open the user's agent on a guide session the shell minted for one
-  // of its windows.
   invoke("guideLaunch", GuideLaunchSchema, VoidSchema),
-  // The v3 migration's stuck moves tried again, from its page (the
-  // shell's migration:retry). Its progress comes as the move's did.
+  // Its progress comes as the move's did.
   invoke("migrationRetry", VoidSchema, VoidSchema),
-  // The hosts of this machine's projects' remotes, beside GitHub's, that
-  // the window's images may load from (predicates/imageHosts.ts).
+  // Hosts beside GitHub's that the window's images may load from.
   invoke("imageHosts", VoidSchema, Schema.Array(Schema.String)),
-  // Stop: the host closes its graph and exits. A hurried quit (an
-  // update install, a relaunch) signals scripts instead of waiting.
+  // A hurried quit (an update install, a relaunch) signals scripts
+  // instead of waiting.
   invoke(
     "quit",
     strict(Schema.Struct({ hurried: Schema.Boolean })),

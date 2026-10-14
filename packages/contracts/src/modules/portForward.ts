@@ -9,29 +9,14 @@ import {
 } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// Client-scoped control surface for the port-forward engine. The engine
-// binds real TCP listeners on THIS machine's loopback
-// (host/portForward/engine.ts) and drives a peer's host-scoped
-// forward verbs (forward.ts) underneath, so these calls belong to the
-// window's own device exactly like dialog and updater: they never mount
-// on a remote wire, and the web client's local registrar rejects them
-// fail-closed (unclassified client channels). That refusal is correct,
-// not a gap: a browser cannot bind a local port, so the feature is
-// app-only and the UI additionally gates itself on the page api's
-// isElectron.
+// Client-scoped: the engine binds listeners on this machine's loopback.
+// The web client refuses these by design: a browser can't bind a port.
 
-// forwardIds are engine-minted (schemas/hexId.ts pins the shape)
-// for the same reason forward.ts pins channel ids: a caller can only name
-// a forward it was told about.
+// Engine-minted, so a caller can only name a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 
-// The peer's worktree a forward was switched on from (its port list),
-// so the sidebar can say that worktree is being forwarded without
-// reading every peer worktree's port list. Absent for a forward started
-// from the account page. A label only: the engine forwards by (device,
-// port) either way, and the list's switches match by port, so a forward
-// another worktree (or the devices page) started shows on in the list
-// but marks only its own worktree.
+// A label for the sidebar only: the engine forwards by (device, port),
+// so a forward started elsewhere shows on in any worktree's list.
 const PortForwardWorktreeSchema = WorktreeScopedPayloadSchema;
 
 export type PortForwardWorktree = typeof PortForwardWorktreeSchema.Type;
@@ -40,7 +25,7 @@ const PortForwardStartPayloadSchema = strict(
   Schema.Struct({
     deviceId: DeviceIdSchema,
     remotePort: PortNumberSchema,
-    // Omitted means an ephemeral local port, the common case.
+    // Omitted: an ephemeral port.
     localPort: Schema.optional(PortNumberSchema),
     worktree: Schema.optional(PortForwardWorktreeSchema),
   }),
@@ -84,8 +69,6 @@ export const portForwardContract = defineContract(
   invoke("start", PortForwardStartPayloadSchema, PortForwardStartResultSchema),
   invoke("stop", PortForwardStopPayloadSchema, VoidSchema),
   invoke("list", VoidSchema, PortForwardListResultSchema),
-  // Fired by the engine whenever the forward or conn set changes, so
-  // the list query refreshes without polling. Payload-free on purpose:
-  // the list read is cheap and one signal shape cannot drift.
+  // Payload-free: the list read is cheap.
   push("changed", VoidSchema),
 );

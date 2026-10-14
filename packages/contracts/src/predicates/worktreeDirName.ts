@@ -1,39 +1,26 @@
-// Branch-name sanitization shared between the engine (naming the
-// worktree directory) and the renderer (previewing the destination path
-// in the new-worktree form).
-//
-// Unicode (CJK, emoji, accents) passes through untouched; we only mangle
-// what genuinely breaks as a single-segment directory name: path
-// separators (plus `:`, which Finder treats as one), and control
-// characters. `.`/`..` would collide with the parent-dir references,
-// and `root`/`primary` are the CLI's address keywords for the primary
-// checkout (`sm cd root`) so no managed worktree may carry them;
-// leaving the result empty signals the caller to fall back to an animal
-// name.
+// Unicode passes through; only what breaks a single path segment goes
+// (separators, `:` which Finder treats as one, control characters).
+// `root`/`primary` are the CLI's address keywords. An empty result means
+// fall back to a picked name.
 
 const PATH_SEPARATOR = /[/:]/g;
 // oxlint-disable-next-line no-control-regex -- intentional: strips control bytes
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
-// Checked against the lowercased name. The CLI matches its keywords
-// case-insensitively, so "Root" must be reserved too.
+// The CLI matches its keywords case-insensitively.
 const RESERVED_NAMES = new Set([".", "..", "root", "primary"]);
 
 export function sanitizeBranchForPath(branch: string): string {
   const slashed = branch
     .replace(PATH_SEPARATOR, "-")
     .replace(CONTROL_CHARS, "");
-  // Dots, dashes and ASCII whitespace (the v2 Go sm's \s), so a name
-  // comes out as it did.
+  // The v2 Go sm's \s, so a name comes out as it did.
   const trimmed = slashed.replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
   if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
   return trimmed;
 }
 
-// Submit-time check for user-typed worktree folder names: valid exactly
-// when sanitizing is a no-op. The live input filter
-// (sanitizeWorktreeNameInput in git/branches.ts) allows
-// individually-legal characters that combine into names we refuse
-// ("..", "root", a trailing dot).
+// Valid exactly when sanitizing is a no-op: the live input filter lets
+// through characters that combine into names this refuses.
 export function isValidWorktreeDirName(name: string): boolean {
   return name.length > 0 && sanitizeBranchForPath(name) === name;
 }

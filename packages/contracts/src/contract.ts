@@ -1,10 +1,6 @@
-// A contract module is an RpcGroup: one Rpc per call, tagged with its
-// channel (`<module>:<key>`), and the call's classification as
-// annotations on it, which the registrar and the transports read. An
-// invoke is a plain Rpc. A push is a streaming Rpc with no payload,
-// whose chunks are its payloads. A view is a streaming Rpc with a payload (VoidSchema when it
-// takes nothing): what a query answers, then again each time it
-// changes. Only the RPC transport serves views.
+// A push is a streaming Rpc with no payload, whose chunks are its
+// payloads. A view is a streaming Rpc with a payload (VoidSchema when it
+// takes nothing): what a query answers, then again each time it changes.
 import * as Context from "effect/Context";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -15,19 +11,12 @@ import type { ContractSchema } from "./codec.ts";
 import { CallFailureSchema } from "./errors.ts";
 import type { GrantId } from "./grants.ts";
 
-// Every contract module tags its calls with the side that serves them.
-// "host" calls run on the process that owns the projects, this
-// machine's or a peer's. "client" calls stay on the machine
-// the window runs on (native dialogs, shell, app menu). Remoteness is
-// a property of the transport a scope is wired to, never of the calls
-// themselves.
+// "host": the process that owns the projects, this machine's or a
+// peer's. "client": the machine the window runs on.
 export type ContractScope = "host" | "client";
 
-// The mirror invitation's scopes (see Invitable).
 export type InvitableScope = "landing" | "copy" | "project";
 
-// The module's own annotations: its name (the channel prefix) and its
-// scope.
 const ModuleName = Context.Service<"sm/contracts/ModuleName", string>(
   "sm/contracts/ModuleName",
 );
@@ -35,62 +24,37 @@ export const Scope = Context.Service<"sm/contracts/Scope", ContractScope>(
   "sm/contracts/Scope",
 );
 
-// Exposure axis, independent of scope. Only calls annotated true reach
-// a peer (LinkGroup in link.ts). A host-scoped invoke MUST say, so a
-// new call can never silently join the remote surface by inheriting a
-// default. Anything
-// other than exactly true is local-only. On a push, only one annotated
-// true reaches remote peers, so a push carrying host-only detail is
-// local by default.
+// Only calls annotated exactly true reach a peer. A host invoke must
+// say, so a new call never joins the remote surface by a default.
 export const Remote = Context.Service<"sm/contracts/Remote", boolean>(
   "sm/contracts/Remote",
 );
 
-// The gate axis for the device link. Gated true marks a call served
-// to another device only while this host's command-access switch is on
-// (CommandGate in link.ts, the one place that decides).
-// That is every call that changes state the user owns (writes files or
-// config, runs a script, moves a branch or a worktree), and also a few
-// READS kept behind the switch because of what they disclose:
-// fs:listDirectory, fs:scanForGitRepos, fs:isGitRepo, runtime:info,
-// cli:status, cli:shellStatus and the sync reads that name arbitrary
-// host paths (worktreeFolder, ignoredPaths, hasCommits), plus the source
-// links, stream and mirror-state calls that hand a peer this host's
-// bytes. So the name is the gate, not the effect. Gated false is served
-// to every account peer. A call that only refreshes a cache the host
-// keeps for itself (a fetch of remote-tracking refs, a gh listing) is
-// ungated even though it spawns a process and touches the network. A
-// remote host invoke must say (the registrar fails closed), while
-// client-scoped and local-only calls never reach the gate. A remote
-// gated call is something the switch hands to other devices, so it
-// names the consent line that covers it (Grant).
+// Served to another device only while the command switch is on: every
+// call that changes what the user owns, and the reads kept behind it for
+// what they disclose (arbitrary host paths, this host's bytes). A call
+// that only refreshes a cache the host keeps for itself is ungated,
+// though it spawns a process. A remote gated call names its Grant.
 export const Gated = Context.Service<"sm/contracts/Gated", boolean>(
   "sm/contracts/Gated",
 );
 
-// When true, a successful call counts as the user "using" the project
-// named by the payload's `projectId`, feeding the sidebar usage sorts.
-// Opt-in so reads and view-only preference changes never count.
+// A successful call counts as using the payload's `projectId` (the
+// usage sorts).
 export const TracksProjectUsage = Context.Service<
   "sm/contracts/TracksProjectUsage",
   boolean
 >("sm/contracts/TracksProjectUsage");
 
-// The switch's one exception: a gated call a mirror INTO this device
-// makes, which the invitation the ask left (host/mirror/invites.ts)
-// admits with the switch off, scoped to what the payload names.
-// "landing" is the peer's landing of the invited original
-// (sync:receiveWorktree), "copy" a call naming the copy's project and
-// worktree, "project" one naming only the copy's project. Set on the
-// contract, next to the call, so the invited surface cannot drift from
-// the calls a mirror makes.
+// The switch's one exception: a gated call a mirror into this device
+// makes, admitted by the invitation with the switch off, scoped to what
+// the payload names ("copy": the copy's project and worktree, "project":
+// its project only).
 export const Invitable = Context.Service<
   "sm/contracts/Invitable",
   InvitableScope
 >("sm/contracts/Invitable");
 
-// The consent line (grants.ts) that covers a remote gated call, the
-// words the command switch shows for what it hands to other devices.
 export const Grant = Context.Service<"sm/contracts/Grant", GrantId>(
   "sm/contracts/Grant",
 );
@@ -103,8 +67,7 @@ type InvokeOptions = {
   readonly grant?: GrantId;
 };
 
-// The options as annotations, each one only when given, so an absent
-// classification stays absent and the registrar can fail closed on it.
+// Only when given, so the registrar can fail closed on an absent one.
 function annotationsOf(options: InvokeOptions): Context.Context<never> {
   let annotations = Context.empty();
   const add = <S>(key: Context.Key<string, S>, value: S | undefined) => {
@@ -144,14 +107,10 @@ export const push = <const Key extends string, P extends ContractSchema>(
   payload: P,
   options: { readonly remote?: boolean } = {},
 ): Rpc.Rpc<Key, typeof Schema.Void, RpcSchema.Stream<P, typeof Schema.Never>> =>
-  // A push is a read: whoever may hear it hears it, so it is ungated
-  // by its own say rather than by a default.
   Rpc.make(key, { success: payload, stream: true }).annotateMerge(
     annotationsOf({ ...options, gated: false }),
   );
 
-// A view of what `query` answers, classified as the query is: a remote
-// view must say whether it is gated, like any remote invoke.
 export const view = <
   const Key extends string,
   I extends ContractSchema,
@@ -162,7 +121,6 @@ export const view = <
   output: O,
   options: Pick<InvokeOptions, "remote" | "gated" | "grant"> = {},
 ): Rpc.Rpc<Key, I, RpcSchema.Stream<O, typeof CallFailureSchema>> =>
-  // A view's reads fail the way an invoke does.
   Rpc.make(key, {
     payload: input,
     success: output,
@@ -174,18 +132,14 @@ export const view = <
     RpcSchema.Stream<O, typeof CallFailureSchema>
   >;
 
-// A contract module: the group of its calls, each tagged with its
-// channel, annotated with the module's name and scope (each call
-// carries the scope too). Read through its requests, so any module is
-// one (RpcGroup itself is invariant).
+// Read through its requests, so any module is one (RpcGroup itself is
+// invariant).
 export type ContractModule = RpcGroup.Any & {
   readonly requests: ReadonlyMap<string, Rpc.AnyWithProps>;
   readonly annotations: Context.Context<never>;
 };
 
-// A module as defineContract returns it: the group, with its name and
-// scope also in its type (never set at runtime), so the API built from
-// the modules can be typed per namespace and per scope.
+// The name and scope in the type only, never set at runtime.
 export type Contract<
   Name extends string,
   S extends ContractScope,
@@ -203,8 +157,8 @@ export const defineContract = <
   scope: S,
   ...rpcs: Rpcs
 ): Contract<Name, S, Rpc.Prefixed<Rpcs[number], `${Name}:`>> => {
-  // The group keys its calls by tag, so a second call under one name
-  // would replace the first without a word.
+  // The group keys by tag, so a second call under one name would
+  // silently replace the first.
   const keys = rpcs.map((rpc) => rpc["_tag"]);
   const twice = keys.find((key, i) => keys.indexOf(key) !== i);
   if (twice !== undefined) throw new Error(`${name}:${twice} is defined twice`);
@@ -223,7 +177,6 @@ export function scopeOf(module: ContractModule): ContractScope {
   return required(module.annotations, Scope);
 }
 
-// The module's name: its namespace in the API, its channels' prefix.
 export function nameOf(module: ContractModule): string {
   return required(module.annotations, ModuleName);
 }
@@ -242,24 +195,20 @@ export function callsOf(module: ContractModule): ContractCall[] {
   return [...module.requests.values()];
 }
 
-// A push or a view, as a type: its success is a stream.
 export type Streaming = {
   readonly successSchema: RpcSchema.Stream<Schema.Top, Schema.Top>;
 };
 
-// A push, as a type: a stream with no payload.
 export type Pushing = Streaming & {
   readonly payloadSchema: typeof Schema.Void;
 };
 
-// The calls of a module, as a union of their Rpc types.
 export type CallsOf<M> = M extends {
   readonly requests: ReadonlyMap<string, infer R>;
 }
   ? R
   : never;
 
-// One call of a module by its name, typed as it was defined.
 export function callOf<M extends ContractModule, const K extends string>(
   module: M,
   key: K,
@@ -270,8 +219,6 @@ export function callOf<M extends ContractModule, const K extends string>(
   return call as Extract<CallsOf<M>, { readonly _tag: `${string}:${K}` }>;
 }
 
-// A call's schemas as it was defined: an invoke's input and output, a
-// push's payload (the stream's chunk).
 export type InputOf<R> = R extends {
   readonly payloadSchema: infer P extends ContractSchema;
 }
@@ -299,14 +246,11 @@ export function outputOf<R extends ContractCall>(call: R): OutputOf<R> {
   return call.successSchema as OutputOf<R>;
 }
 
-// The name the client and the handler table use for a call: its
-// channel without the module prefix.
 export function keyOf(call: ContractCall): string {
   const channel = channelOf(call);
   return channel.slice(channel.indexOf(":") + 1);
 }
 
-// The call's channel on the wire, its tag.
 export function channelOf(call: ContractCall): string {
   return call["_tag"];
 }
@@ -331,8 +275,6 @@ export function payloadOf<R extends ContractCall>(call: R): PayloadOf<R> {
   return call.successSchema.success as PayloadOf<R>;
 }
 
-// An annotation the call carries, or undefined when it never classified
-// itself.
 export function annotation<S>(
   call: ContractCall,
   key: Context.Key<string, S>,
