@@ -1,7 +1,7 @@
-// Shared by both node-side builds (main and preload): the @shared alias,
-// the account define, and the one runtime dependency Vite must not
-// bundle. One file means a future node-side option can't be added to
-// just one of them. The account define is only referenced by main
+// Shared by the node-side builds (main, preload and the host): the
+// @shared alias, the account define, and the runtime imports Vite must
+// not bundle. One file means a future node-side option can't be added
+// to just one of them. The account define is only referenced by main
 // (main/ipc/modules/account.ts). In preload nothing names the constant,
 // so nothing is inlined there.
 import { resolve } from "node:path";
@@ -57,7 +57,11 @@ export default defineConfig({
       // node-pty loads its native addon and spawn helper by path
       // relative to its own package, so it has to stay a real
       // node_modules require (forge.config.ts ships that directory).
-      external: ["node-pty"],
+      // Every `node:` import is Electron's own. Forge marks only the
+      // building Node's builtinModules external, which on Node 22 leave
+      // out `node:sqlite`, and Vite bundled that as an empty stub: the
+      // host's store driver had no SQLite (v3.0.0-alpha.2).
+      external: ["node-pty", /^node:/],
     },
   },
 });

@@ -343,3 +343,6 @@ removed one the next time they read the registry. A relaunch after
   accessibility instead, asking the app for its page's tree by setting
   `AXManualAccessibility` once the page is up (`lab/relaunch.mts`), and
   read `main.log`. Started with `--sm-lab`, it relaunches on `SIGUSR2`.
+  `node scripts/smoke-app.mts <the .app>` launches it on fresh data
+  folders and waits for its store to open, as the release job does.
+  Its launches write the build's userData and logs folder.
