@@ -79,10 +79,3 @@ export const MIGRATION_POSES = {
 >;
 
 export type MigrationPose = keyof typeof MIGRATION_POSES;
-
-// terrier's repos, for the first run's project step.
-export const TERRIER_REPOS = [
-  { name: "dotfiles", path: "~/dev/dotfiles" },
-  { name: "kawaii-cam", path: "~/dev/kawaii-cam" },
-  { name: "shigoto-no-mori", path: "~/dev/shigoto-no-mori" },
-];

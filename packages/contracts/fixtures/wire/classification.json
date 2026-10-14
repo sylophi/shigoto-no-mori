@@ -1285,12 +1285,6 @@
     "remote": true,
     "gated": false
   },
-  "terrier:repos": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": false,
-    "gated": false
-  },
   "updater:check": {
     "kind": "invoke",
     "scope": "host",

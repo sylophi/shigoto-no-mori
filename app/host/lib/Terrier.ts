@@ -13,10 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type {
-  TerrierReadiness,
-  TerrierRepos,
-} from "@shigomori/contracts/schemas";
+import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import * as Processes from "@shigomori/engine/processes";
 
 // terrier refused the add, in its words.
@@ -33,8 +30,6 @@ export class Terrier extends Context.Service<
   Terrier,
   {
     readonly readiness: Effect.Effect<TerrierReadiness>;
-    // The repos `terrier ls --json` lists, none when it can't be read.
-    readonly repos: Effect.Effect<TerrierRepos>;
     // Registers a repo in terrier. Already registered is a success there.
     readonly add: (path: string) => Effect.Effect<void, TerrierAddError>;
     // For the global-config write flipping the toggle: the next read
@@ -116,24 +111,6 @@ const make = Effect.gen(function* () {
         }),
       );
     }),
-    repos: Processes.exec("terrier", ["ls", "--json"], {
-      timeout: TERRIER_SPAWN_TIMEOUT_MS,
-    }).pipe(
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.flatMap(({ stdout }) =>
-        Schema.decodeUnknownEffect(Schema.fromJsonString(TerrierListing))(
-          stdout,
-        ),
-      ),
-      Effect.map(({ projects }) =>
-        projects.map(({ path }) => ({
-          name: path.replace(/\/+$/, "").split("/").pop() || path,
-          path,
-        })),
-      ),
-      Effect.orElseSucceed((): TerrierRepos => []),
-      Effect.withSpan("Terrier.repos"),
-    ),
     invalidate: Cache.invalidateAll(cache).pipe(
       Effect.withSpan("Terrier.invalidate"),
     ),

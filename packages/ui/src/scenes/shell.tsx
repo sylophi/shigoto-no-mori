@@ -3,6 +3,7 @@
 // a crash.
 import { PhoneBackBarView } from "../views/AppShellView.tsx";
 import { ErrorFallbackView } from "../views/ErrorFallbackView.tsx";
+import { defaultBinding } from "../lib/keymap.ts";
 import { FirstRunView } from "../views/FirstRunView.tsx";
 import { ForestPageView } from "../views/ForestPageView.tsx";
 import { NotFoundPageView } from "../views/NotFoundPageView.tsx";
@@ -12,11 +13,15 @@ import { SceneSidebar } from "./sidebar.tsx";
 
 const noop = () => {};
 
-// The home with no project: the way to the first, and what it leads to.
+// The home with no project, a fresh install's first screen.
 export function FirstRunScene() {
   return (
     <SceneWindowFrame>
-      <FirstRunView onAdd={noop} />
+      <FirstRunView
+        worktreesDir="~/.sm/wt/"
+        addKeys={defaultBinding("addProject").label}
+        onAdd={noop}
+      />
     </SceneWindowFrame>
   );
 }

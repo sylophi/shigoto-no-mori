@@ -120,7 +120,7 @@ const smd = join(appDir, "dist-cli", "smd");
 const TOUR_LIMIT_MS = 300_000;
 
 // A fresh profile with one project of one commit, seeded before the app
-// starts, so it opens on the project and not on the first run's page.
+// starts, so it opens on the project and not on the empty home.
 const app = new DevApp({
   profile,
   repoName: "forest-demo",
