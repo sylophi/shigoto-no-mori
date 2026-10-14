@@ -20,8 +20,7 @@ type SignInStepHook = (due: boolean) => {
   readonly run: () => void;
 };
 
-// The sign-in step both pages share (the migration's and the first
-// run's), on this device's enrollment (useEnrollment): while `due`, a
+// The migration page's sign-in step, on this device's enrollment (useEnrollment): while `due`, a
 // live session enrolls once by itself, and a lapsed one, or a failed
 // enrollment, waits on the button, which tries again. A build with no
 // account service has no ClerkProvider to enroll under (ClerkGate), so

@@ -412,8 +412,6 @@ export const ClientConfigSchema = Schema.Struct({
   // count from.
   themeRotation: Schema.optional(ThemeRotationSchema),
   themeRotatedAt: Schema.optional(Schema.Finite),
-  // Past the first run's page.
-  welcomed: Schema.optional(Schema.Boolean),
   // Desktop only: it needs villager data in this device's data dir.
   villageLife: Schema.optional(Schema.Boolean),
   // Absent = on.

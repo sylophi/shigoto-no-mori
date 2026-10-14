@@ -13,8 +13,8 @@ export type HostForestScope = {
 // How many of the per-project reads (a project's pull requests, its
 // config, its icon, its GitHub description) go to one device at once.
 // The sidebar and the projects page ask them of every project, four
-// calls a project, and a first run that turns terrier on lists every
-// repo the person has in one go. The link lets a share of the host's
+// calls a project, and turning terrier on lists every repo the person
+// has in one go. The link lets a share of the host's
 // MAX_IN_FLIGHT_PER_PEER out at once and queues the rest in order
 // (shared/remote/rpcTransport.ts, LINK_CALLS_IN_FLIGHT), so a burst of
 // these alone would put the page's own calls behind hundreds of them:

@@ -1,10 +1,8 @@
-// The one page the window shows in place of the app while the app gets
-// itself ready: the v3 migration's and a fresh install's first run.
-// Each flow's container picks its steps; the page, the rows, the
-// progress line and the button are the same for both. No words but the
-// step names: the marks and the counts say the rest.
+// The page the window shows in place of the app while the v3 migration
+// gets it ready: its rows, the progress line and the button. No words
+// but the step names: the marks and the counts say the rest.
 import { Children, type ReactNode } from "react";
-import { AlertTriangle, Check, FolderGit2, TreeDeciduous } from "lucide-react";
+import { AlertTriangle, Check, TreeDeciduous } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import {
   type StatusTone,
@@ -215,7 +213,7 @@ export function StepActionView({
   );
 }
 
-// The sign-in, the same step in both flows: a button while it waits on
+// The sign-in: a button while it waits on
 // the person, and its mark alone while it goes by itself.
 export function SignInStepView({
   state,
@@ -240,41 +238,5 @@ export function SignInStepView({
         )
       }
     />
-  );
-}
-
-// Repos to add from a list the device already keeps (terrier's), one
-// click each.
-export function StepRepoChoicesView({
-  repos,
-  pending,
-  onPick,
-}: {
-  repos: ReadonlyArray<{ readonly name: string; readonly path: string }>;
-  // The repo being added.
-  pending: string | null;
-  onPick: (path: string) => void;
-}) {
-  return (
-    <ul className="max-h-40 overflow-y-auto">
-      {repos.map(({ name, path }) => (
-        <li key={path}>
-          <button
-            type="button"
-            disabled={pending !== null}
-            onClick={() => onPick(path)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50 dark:hover:bg-muted/50"
-          >
-            <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="shrink-0">{name}</span>
-            <SimpleTooltip whenTruncated tip={path}>
-              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                {path}
-              </span>
-            </SimpleTooltip>
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }

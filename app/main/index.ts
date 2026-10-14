@@ -335,7 +335,7 @@ app.on("ready", async () => {
   // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();
   installFatalRecovery({ isShuttingDown, rememberWindows });
-  // The saved theme and welcome before the first window. A graph that
+  // The saved theme before the first window. A graph that
   // failed first has no config to wait for, and its defaults stand.
   await Promise.race([
     ClientConfig.clientConfigRead(),

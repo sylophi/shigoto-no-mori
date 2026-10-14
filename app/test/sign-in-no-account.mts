@@ -1,11 +1,10 @@
 // Durable proof for a build with no account service (no Clerk
 // publishable key, as a dev checkout without .env.local): ClerkGate
-// mounts no ClerkProvider there, and the welcome and migration pages'
-// sign-in step (useSignInStep) must run without one, offering no
-// sign-in, rather than call a Clerk hook and land the first run in the
-// error boundary.
+// mounts no ClerkProvider there, and the migration page's sign-in step
+// (useSignInStep) must run without one, offering no sign-in, rather
+// than call a Clerk hook and land the migration in the error boundary.
 //
-// Run: pnpm test welcome-no-account.
+// Run: pnpm test sign-in-no-account.
 import assert from "node:assert/strict";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
@@ -17,7 +16,7 @@ import { ApiProvider, type RendererApi } from "@/lib/runtime/pageApi";
 // The page's api as a build with no key hands it over: the facts the
 // hook reads, and no calls.
 const api = {
-  deviceId: "welcome-no-account",
+  deviceId: "sign-in-no-account",
   isElectron: true,
   clerkPublishableKey: "",
 } as RendererApi;

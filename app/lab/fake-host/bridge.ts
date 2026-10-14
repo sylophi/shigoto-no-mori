@@ -119,7 +119,6 @@ import {
 } from "@shigomori/ui/fixtures/fixtures.ts";
 import { endpointState } from "@shigomori/ui/fixtures/mirrorFixtures.ts";
 import {
-  TERRIER_REPOS,
   MIGRATION_POSES,
   type MigrationPose,
 } from "@shigomori/ui/fixtures/stepsFixtures.ts";
@@ -887,7 +886,6 @@ function hostHandlersFor(
       };
     },
     "terrier:readiness": () => ({ installed: true, readable: true }),
-    "terrier:repos": () => TERRIER_REPOS,
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
@@ -1659,7 +1657,7 @@ const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
 const CROWD_OWNERS = ["sylophi", "rin", "kaiju-labs"];
 
 // ?fresh=1: Studio Mac a fresh install, with no project yet, for the
-// first run's page (?to=/welcome).
+// home it opens on.
 function initFresh(): void {
   const local = forests[LOCAL_DEVICE_ID];
   if (new URLSearchParams(location.search).get("fresh") !== "1") return;
