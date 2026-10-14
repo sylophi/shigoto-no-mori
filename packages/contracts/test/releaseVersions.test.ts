@@ -46,6 +46,7 @@ describe("releaseChannel", () => {
       "2.1.0-beta.1": "2.1.0-beta",
       "2.0.0-1": "2.0.0-1",
       "3.0.0-alpha.2": "3.0.0-alpha",
+      "2.0.0-beta.9007199254740993": "2.0.0-beta",
     };
     for (const [raw, want] of Object.entries(cases)) {
       assert.equal(releaseChannel(new SemVer(raw)), want, raw);

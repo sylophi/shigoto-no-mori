@@ -13,12 +13,13 @@ export function compareVersions(a: string, b: string): number {
 }
 
 // Less a trailing counter: 2.0.0-beta.1 and 2.0.0-beta.7 share
-// "2.0.0-beta". "" for a full release.
+// "2.0.0-beta". "" for a full release. semver keeps a counter past
+// MAX_SAFE_INTEGER as a string, so digits are tested as text.
 export function releaseChannel(version: semver.SemVer): string {
   const pre = version.prerelease;
   if (pre.length === 0) return "";
   const line =
-    pre.length > 1 && typeof pre.at(-1) === "number" ? pre.slice(0, -1) : pre;
+    pre.length > 1 && /^\d+$/.test(String(pre.at(-1))) ? pre.slice(0, -1) : pre;
   return `${version.major}.${version.minor}.${version.patch}-${line.join(".")}`;
 }
 

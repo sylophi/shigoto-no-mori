@@ -50,7 +50,8 @@ export function isUntracked(file: ChangedFile): boolean {
 }
 
 // Held to the worktree: a peer sends whatever it likes, and
-// `git diff --no-index` reads any file it is pointed at.
+// `git diff --no-index` reads any file it is pointed at. A leading "-"
+// is allowed: every path list goes into git argv after `--`.
 export const RepoRelPathSchema = Schema.NonEmptyString.check(
   Schema.makeFilter(
     (path: string) =>
