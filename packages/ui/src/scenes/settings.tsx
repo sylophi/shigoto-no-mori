@@ -290,6 +290,10 @@ export function SettingsAppearanceScene() {
             onPick={noop}
             doubutsu
             onDoubutsuChange={noop}
+            themeRotation={FORM.themeRotation}
+            onThemeRotationChange={noop}
+            themeRotationEvery={FORM.themeRotationEvery}
+            onThemeRotationEveryChange={noop}
             pauseAnimationsOnBattery
             onPauseAnimationsOnBatteryChange={noop}
             battery

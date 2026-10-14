@@ -1,4 +1,11 @@
-import { createContext, use, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   activeTheme,
   type DarkTheme,
@@ -98,7 +105,10 @@ export function PaletteProvider({
     setOverrideState(null);
   }
 
-  useEffect(() => {
+  // Before paint, so a saved look that differs from the boot mirror's
+  // (a launch's palette rotation, lib/themeRotation.ts) never shows a
+  // frame of the mirror's.
+  useLayoutEffect(() => {
     if (fromRoot) return;
     root.classList.toggle("doubutsu", applied.doubutsu);
     if (active) root.dataset.palette = active;

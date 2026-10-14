@@ -20,8 +20,13 @@ export function useCommitRewrites(
   const { data: operation } = useWorktreeOperation(worktree);
   const { canCommand } = useCommandAccess();
   const merges = new Map(history?.merges.map((m) => [m.hash, m.firstParent]));
+  // The uncut history's own list sits on where the branch left its base.
+  const below =
+    commits === history?.commits && !history.more
+      ? history.base?.hash
+      : undefined;
   return (index) =>
     canCommand && operation?.operation == null
-      ? commitRewriteAt(worktree, commits, index, merges)
+      ? commitRewriteAt(worktree, commits, index, merges, below)
       : NO_REWRITE;
 }
