@@ -328,7 +328,7 @@ const catalog = (names: Names) => {
       [
         "agents event --harness <id>",
         "Report a session's lifecycle event (stdin)",
-        "What the installed hooks run, and what any other harness can call the same way: one JSON object on stdin with hook_event_name and session_id (and cwd, which binds an unbound session started in a managed worktree). UserPromptSubmit sets the session working, PermissionRequest waiting on the user, PostToolUse (or PostToolUseFailure) for the tool it asked about working again once no prompt is open, Stop, StopFailure, Interrupt and an idle_prompt Notification idle, and SessionEnd unbinds it. With agent_id (a Codex subagent) the event is that subagent's, and its SubagentStop unbinds it. Prints nothing and exits 0 whatever happens.",
+        "What the installed hooks run, and what any other harness can call the same way: one JSON object on stdin with hook_event_name and session_id (and cwd, which binds an unbound session started in a managed worktree). UserPromptSubmit sets the session working, PermissionRequest waiting on the user, PostToolUse (or PostToolUseFailure) for the tool it asked about working again once no prompt is open, Stop, StopFailure, Interrupt, SessionEnd and an idle_prompt Notification idle. With agent_id (a Codex subagent) the event is that subagent's, and its SubagentStop unbinds it. Prints nothing and exits 0 whatever happens.",
       ],
     ],
 

@@ -1,4 +1,4 @@
-import type { Theme } from "@shigomori/contracts/schemas";
+import type { Theme, ThemeRotation } from "@shigomori/contracts/schemas";
 import {
   DARK_THEMES,
   type DarkTheme,
@@ -32,6 +32,10 @@ export function AppearanceSection({
   onLightThemeChange: (next: LightTheme) => void;
   darkTheme: DarkTheme;
   onDarkThemeChange: (next: DarkTheme) => void;
+  themeRotation: boolean;
+  onThemeRotationChange: (next: boolean) => void;
+  themeRotationEvery: ThemeRotation;
+  onThemeRotationEveryChange: (next: ThemeRotation) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   villageLife: boolean;

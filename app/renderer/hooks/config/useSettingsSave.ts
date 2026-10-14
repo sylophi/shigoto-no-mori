@@ -8,10 +8,7 @@ import {
   type DeviceSettingsPatch,
   type LauncherCommand,
 } from "@shigomori/contracts/schemas";
-import {
-  DEFAULT_DARK_THEME,
-  DEFAULT_LIGHT_THEME,
-} from "@shigomori/ui/lib/themes.ts";
+import { storedPicks } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { patchClientConfig } from "./useClientConfig";
@@ -81,12 +78,9 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
     // Default is on; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
-    // Each pick is omitted at its list's default, and kept while the
-    // switch is off so it comes back with it.
-    lightTheme:
-      state.lightTheme === DEFAULT_LIGHT_THEME ? undefined : state.lightTheme,
-    darkTheme:
-      state.darkTheme === DEFAULT_DARK_THEME ? undefined : state.darkTheme,
+    // Kept while the switch is off, so they come back with it.
+    ...storedPicks(state.lightTheme, state.darkTheme),
+    themeRotation: state.themeRotation ? state.themeRotationEvery : undefined,
     // Default is on, with the same opt-out serialization as doubutsu.
     pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
       ? undefined
@@ -219,7 +213,20 @@ export function useSettingsSave() {
       }
       if (clientPersisted) {
         try {
-          await patchClientConfig(page, registry, clientPatch);
+          // A pick or a rotation saved here starts a timed rotation's
+          // period over.
+          const restartsRotation = [
+            "lightTheme",
+            "darkTheme",
+            "themeRotation",
+          ].some((key) => key in clientPatch);
+          await patchClientConfig(
+            page,
+            registry,
+            restartsRotation
+              ? { ...clientPatch, themeRotatedAt: Date.now() }
+              : clientPatch,
+          );
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);
         }

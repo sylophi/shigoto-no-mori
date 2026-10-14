@@ -9,6 +9,7 @@ import {
   DARK_THEME_IDS,
   type LightTheme,
   LIGHT_THEME_IDS,
+  type ThemeRotation,
 } from "@shigomori/contracts/schemas/config";
 
 export { DARK_THEME_IDS, LIGHT_THEME_IDS };
@@ -103,6 +104,18 @@ export function resolveDoubutsuPicks(
   };
 }
 
+// The picks as the client config stores them: each omitted at its
+// list's default.
+export function storedPicks(
+  light: LightTheme,
+  dark: DarkTheme,
+): Pick<ClientConfig, "lightTheme" | "darkTheme"> {
+  return {
+    lightTheme: light === DEFAULT_LIGHT_THEME ? undefined : light,
+    darkTheme: dark === DEFAULT_DARK_THEME ? undefined : dark,
+  };
+}
+
 // The palette the current appearance wears, or null with the switch
 // off.
 export function activeTheme(
@@ -111,4 +124,55 @@ export function activeTheme(
 ): LightTheme | DarkTheme | null {
   if (!picks.doubutsu) return null;
   return resolved === "dark" ? picks.dark : picks.light;
+}
+
+// The pair a pick sits in: its swatch's column, where the light list
+// stacks over the dark one. An unknown pick (a newer build's) is the
+// first pair.
+function pairOf<Id extends string>(
+  options: readonly ThemeOption<Id>[],
+  id: Id,
+): number {
+  return Math.max(
+    0,
+    options.findIndex((o) => optionHolds(o, id)),
+  );
+}
+
+// The other half of a pick's pair, for the pickers while rotation
+// holds the two together.
+export function darkTwin(light: LightTheme): DarkTheme {
+  return DARK_THEMES[pairOf(LIGHT_THEMES, light)]?.id ?? DEFAULT_DARK_THEME;
+}
+export function lightTwin(dark: DarkTheme): LightTheme {
+  return LIGHT_THEMES[pairOf(DARK_THEMES, dark)]?.id ?? DEFAULT_LIGHT_THEME;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const ROTATION_MS: Record<Exclude<ThemeRotation, "launch">, number> = {
+  hourly: HOUR_MS,
+  daily: 24 * HOUR_MS,
+  weekly: 7 * 24 * HOUR_MS,
+};
+
+// The rotation's next turn, if one is due: the pair after the light
+// pick's, round to the first after the last, stamped `now`. Null with
+// rotation or the switch off. A launch is a moment like any other to
+// the timed rotations.
+export function rotationTurn(
+  config: ClientConfig,
+  now: number,
+  launching: boolean,
+): Pick<ClientConfig, "lightTheme" | "darkTheme" | "themeRotatedAt"> | null {
+  const picks = resolveDoubutsuPicks(config);
+  const every = config.themeRotation;
+  if (!picks.doubutsu || !every) return null;
+  const due =
+    every === "launch"
+      ? launching
+      : now - (config.themeRotatedAt ?? 0) >= ROTATION_MS[every];
+  if (!due) return null;
+  const next = (pairOf(LIGHT_THEMES, picks.light) + 1) % LIGHT_THEMES.length;
+  const light = LIGHT_THEMES[next]?.id ?? DEFAULT_LIGHT_THEME;
+  return { ...storedPicks(light, darkTwin(light)), themeRotatedAt: now };
 }
