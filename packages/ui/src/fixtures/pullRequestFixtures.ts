@@ -275,10 +275,15 @@ export function unposedPullRequests(projectId: string) {
   return FAKE_SM_PROJECT_IDS.has(projectId) ? FAKE_PRS : {};
 }
 
+// The map as the host leaves it, a merge made here included (the host
+// writes the page's merged read into it).
 export function fakePullRequests(projectId: string) {
-  return FAKE_SM_PROJECT_IDS.has(projectId)
-    ? posedPullRequestMap(new URLSearchParams(location.search))
-    : {};
+  if (!FAKE_SM_PROJECT_IDS.has(projectId)) return {};
+  const map = posedPullRequestMap(new URLSearchParams(location.search));
+  const merged = fakeMerged ? map[FAKE_PR_BRANCH] : undefined;
+  return merged === undefined
+    ? map
+    : { ...map, [FAKE_PR_BRANCH]: { ...merged, state: "MERGED" as const } };
 }
 
 // A branch's PR as a query's poses (?checks=, ?reviews=, ?prState=,
