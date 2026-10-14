@@ -76,8 +76,8 @@ jobs:
         working-directory: .
         run: pnpm install --frozen-lockfile
 
-      # The flavor (packages/engine/src/flavor.ts): a v*-v3.N tag builds
-      # the v3 app, which installs beside the prod one under its own
+      # The flavor (packages/engine/src/flavor.ts): a v3.0.0-alpha.N or
+      # v3.0.0-beta.N tag builds the v3 app, which installs beside the prod one under its own
       # name, folders and `smv3`, and points at the dev hub (the SM_V3_
       # variables) until v3 merges into main; anything else builds prod. The
       # later steps read SM_FLAVOR, the app's name and the account

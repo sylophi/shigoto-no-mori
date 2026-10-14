@@ -96,42 +96,59 @@ describe("pickRelease", () => {
     );
   });
 
-  it("never offers a prod build a v3 prerelease", () => {
-    assert.equal(
-      pickRelease(
-        semver("3.0.0-rc.1"),
-        withAlso(labRelease("v3.0.0-v3.5"), labRelease("v3.1.0-v3.1")),
-        "arm64",
-      ),
-      undefined,
-    );
+  // The alphas and betas of 3.0.0 are the v3 flavor's bundle, which
+  // installs beside prod under its own name and data folder.
+  const v3Releases = [
+    labRelease("v3.0.0-alpha.1"),
+    labRelease("v3.0.0-alpha.2"),
+    labRelease("v3.0.0-beta.1"),
+  ];
+
+  it("never offers a prod build an alpha or beta of 3.0.0", () => {
+    // A full build, and builds on their own prerelease lines, even one
+    // on the channel of a 3.0.0 alpha ahead of it.
+    for (const build of [
+      "2.34.1",
+      "2.0.0-beta.2",
+      "3.0.0-rc.1",
+      "3.0.0-alpha.1",
+    ]) {
+      assert.equal(
+        pickRelease(semver(build), withAlso(...v3Releases), "arm64"),
+        undefined,
+        build,
+      );
+    }
     assert.equal(
       pickRelease(
         semver("2.34.1"),
-        withAlso(labRelease("v3.0.0-v3.1")),
+        withAlso(...v3Releases, labRelease("v3.0.0")),
         "arm64",
-      ),
-      undefined,
+      )?.version,
+      "3.0.0",
     );
   });
 
-  it("offers a v3 build the newest v3 prerelease alone", () => {
-    const v3 = semver("3.0.0-v3.1");
+  it("offers a v3 build the 3.0.0 alphas and betas alone", () => {
     const all = withAlso(
-      labRelease("v3.0.0-v3.2"),
+      ...v3Releases,
       labRelease("v3.0.0-rc.1"),
       labRelease("v3.0.0"),
       labRelease("v3.1.0-beta.1"),
+      labRelease("v3.0.1-alpha.1"),
     );
-    assert.equal(pickRelease(v3, all, "arm64", "v3")?.version, "3.0.0-v3.2");
+    const v3 = (build: string) =>
+      pickRelease(semver(build), all, "arm64", "v3")?.version;
+    assert.equal(v3("3.0.0-alpha.1"), "3.0.0-beta.1");
+    assert.equal(v3("3.0.0-beta.1"), undefined);
     assert.equal(
-      pickRelease(v3, [...all, labRelease("v3.1.0-v3.1")], "arm64", "v3")
-        ?.version,
-      "3.1.0-v3.1",
-    );
-    assert.equal(
-      pickRelease(semver("3.0.0-v3.2"), all, "arm64", "v3"),
-      undefined,
+      pickRelease(
+        semver("3.0.0-alpha.1"),
+        withAlso(labRelease("v3.0.0-alpha.2")),
+        "arm64",
+        "v3",
+      )?.version,
+      "3.0.0-alpha.2",
     );
   });
 
