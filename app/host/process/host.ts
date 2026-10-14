@@ -176,6 +176,7 @@ async function main(): Promise<void> {
   try {
     await graph.context();
   } catch (error) {
+    log.error("[host] could not start:", error);
     Graph.failed(errorWordsOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
