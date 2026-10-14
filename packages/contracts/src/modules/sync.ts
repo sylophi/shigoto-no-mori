@@ -18,57 +18,19 @@ import {
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
 
-// Moving a worktree between devices. Commits cross on a SOURCE LINK:
-// one byte channel (modules/link.ts) between the device
-// holding the worktree (the source) and the one landing it (the
-// destination), carrying the destination's questions and the source's
-// answers, bundles as raw bytes (host/lib/sync/sourceLink.ts has the
-// conversation). Whichever device opened the channel, the conversation
-// is the same, and the device asked to open it is the one whose grant
-// gates it:
-//   - openSource: a pull (and the git follower fetching). The
-//     destination asks the source for its link, so the source's grant
-//     is the wall.
-//   - receiveWorktree: a send. The source asks the destination to land
-//     one of its worktrees, and the destination runs the same landing
-//     a pull runs, asking back over the link the source opened. The
-//     destination's grant is the wall, and the source is never asked
-//     for anything gated.
-//   - receiveBundle: the git follower pushing commits to the peer it
-//     mirrors with, which asks back for the one bundle and unpacks it.
-// All three are {remote:true, gated:true}. The byte-channel surface
-// already rides the command grant (a revoke drops every channel), so
-// the link needs no gate of its own.
-//
-// pullWorktree and sendWorktree are the LOCAL orchestrators a device's
-// own renderer (or the terminal's control ops) invokes: bring a peer's
-// worktree here, or send one of this device's to a peer. Tagged
-// {remote:false}, so they are never registered on any remote wire
-// (LinkGroup takes only remote:true) and the web client's local
-// registrar refuses them as mutations. teardownSource is a move's
-// second half, either way round: tearing the source down once the
-// copy is safe, which runs only when nothing can be lost (the dirty
-// state landed, or there was none) and rides the source device's
-// ordinary worktrees:delete (the peer's grant-gated one after a pull,
-// this device's own after a send). The two are separate verbs so the
-// transplant dialog can show the landed worktree before the user
-// decides what happens to the copy on the source device. pullProgress
-// is a move's running commentary back to the renderer that invoked it
-// (local-only, like the orchestrators themselves), keyed by the source
-// worktree either way: a send relays the destination's frames.
+// Commits cross on a source link, one byte channel between the device
+// holding the worktree and the one landing it. Whichever side opened it,
+// the conversation is the same, and the grant that gates it is the one
+// of the device asked to open it: the source's for a pull (openSource),
+// the destination's for a send (receiveWorktree) and a follower's push
+// (receiveBundle). The channel itself rides the command grant, so it
+// needs no gate of its own.
 
-// The refs a peer may request into a bundle, fail-closed: a branch
-// (refs/heads/<name>), a dirty-state capture
-// (refs/shigomori/dirty/<worktreeId>, see the engine's Dirty.ts) or a
-// mirror's index snapshot (refs/shigomori/index/<worktreeId>, see
-// host/mirror/gitState.ts). The
-// charset is deliberately conservative -- these strings cross the
-// device boundary into git argv on the host. This gate and the engine's
-// (Bundle.ts) are deliberately DIFFERENT, not a
-// mirror: this one pins the exact namespaces but still admits a
-// trailing "/" or ".lock", while the engine admits any refs/* yet bans
-// those tails. Two complementary sieves, defense in depth -- their
-// intersection is fail-closed, so nothing that clears both is exotic.
+// The refs a peer may request into a bundle: a branch, a dirty capture,
+// a mirror's index snapshot. These cross into git argv, hence the narrow
+// charset. The engine's gate (Bundle.ts) differs on purpose: it admits
+// any refs/* but bans a trailing "/" or ".lock", which this one admits.
+// Only what clears both goes through.
 const BUNDLE_REF_RE =
   /^refs\/(heads\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
 
@@ -84,9 +46,7 @@ export const SyncBundleRefSchema = Schema.String.check(
 );
 const isSyncBundleRef = Schema.is(SyncBundleRefSchema);
 
-// Where an unpacked ref may land (the engine enforces the same prefix
-// fail-closed): the app-owned namespace, never a branch or a tag. Also
-// the refs a mirror apply may sweep afterwards.
+// Never a branch or a tag. Also the refs a mirror apply may sweep.
 export const SyncLandingRefSchema = Schema.String.check(
   Schema.isPattern(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/),
   Schema.makeFilter(
@@ -96,10 +56,8 @@ export const SyncLandingRefSchema = Schema.String.check(
   ),
 );
 
-// A capture of a worktree's uncommitted state: its commit under
-// refs/shigomori/dirty/<worktreeId> (the engine's Dirty.ts), and that
-// commit's tree, which is what a teardown compares (capture commits
-// are not deterministic, their trees are).
+// A teardown compares the tree: capture commits are not deterministic,
+// their trees are.
 export const SyncCaptureSchema = strict(
   Schema.Struct({
     captured: Schema.Boolean,
@@ -109,16 +67,10 @@ export const SyncCaptureSchema = strict(
 );
 export type SyncCapture = typeof SyncCaptureSchema.Type;
 
-// What a capture leaves behind. The dirty capture has `git add -A`
-// semantics (the engine's Dirty.ts), so ignored files never cross a
-// transfer, and a teardown removes them with the source. Near every
-// real worktree carries ignored content (build output, node_modules),
-// so refusing the teardown over it would make the teardown
-// unreachable. Instead the transplant dialog lists these so the user
-// decides in the know. This is the one place that reasoning lives.
-// Same shape as the carry-over listing (the engine's Git.listIgnoredPaths
-// listIgnoredPaths): fully-ignored directories collapse to one
-// trailing-slash entry.
+// What a capture leaves behind (it has `git add -A` semantics), which a
+// teardown removes with the source. Nearly every worktree has ignored
+// content, so a teardown can't refuse over it; the dialog lists it
+// instead.
 const SyncIgnoredPathsPayloadSchema = strict(
   Schema.Struct({
     projectId: Schema.NonEmptyString,
@@ -126,23 +78,17 @@ const SyncIgnoredPathsPayloadSchema = strict(
   }),
 );
 
-// Capped on the wire: a worktree with scattered per-file ignores can
-// hold thousands. Wide enough for the mirror dialog's picker to list a
-// whole worktree, and past the cap it counts the rest.
+// A worktree with per-file ignores can hold thousands; past the cap,
+// `total` counts the rest.
 export const SYNC_IGNORED_PATHS_LIMIT = 32;
-// The rules ride under the engine's own cap (MIRROR_IGNORES_LIMIT),
-// not the path list's: a repo's gitignore files easily hold more than
-// 32 lines.
 const SyncIgnoredPathsResultSchema = strict(
   Schema.Struct({
     paths: Schema.Array(Schema.String).check(
       Schema.isMaxLength(SYNC_IGNORED_PATHS_LIMIT),
     ),
     total: Schema.Natural,
-    // The gitignore rules behind them (the root .gitignore and
-    // info/exclude, the engine's Git.listIgnoreRules), for a mirror that
-    // leaves gitignored files behind: a rule keeps out what is ignored
-    // tomorrow, where the paths above only cover today.
+    // The rules behind them: a rule keeps out what is ignored tomorrow,
+    // where the paths only cover today.
     patterns: Schema.Array(Schema.String).check(
       Schema.isMaxLength(MIRROR_IGNORES_LIMIT),
     ),
@@ -150,16 +96,10 @@ const SyncIgnoredPathsResultSchema = strict(
 );
 export type SyncIgnoredPathsResult = typeof SyncIgnoredPathsResultSchema.Type;
 
-// One folder of a worktree, for the mirror dialog's picker of what
-// stays behind (the same browse the carry-over picker offers, over one
-// checkout instead of the union) and the files page's tree. `ignored`
-// is git's verdict there. With `ruleIgnored` a folder a rule names
-// counts even when it holds a tracked file, as the picker needs: the
-// engine reads the rules and stays out of it whole, and only ignored
-// entries take an exception (a tracked file kept back would leave the
-// two git states disagreeing). The files page leaves it off, since it
-// hides what is ignored and a tracked file must stay. .git is never
-// listed.
+// One folder of a worktree. With `ruleIgnored`, a folder a rule names
+// counts as ignored even when it holds a tracked file, as the mirror's
+// picker needs (the engine stays out of it whole). The files page leaves
+// it off: a tracked file must show there.
 const SyncWorktreeFolderPayloadSchema = strict(
   Schema.Struct({
     ...SyncIgnoredPathsPayloadSchema.struct.fields,
@@ -181,25 +121,11 @@ const SyncWorktreeFolderEntrySchema = strict(
 );
 export type SyncWorktreeFolderEntry = typeof SyncWorktreeFolderEntrySchema.Type;
 
-// The local pull orchestration's input: which peer, which of ITS
-// project/worktree ids, and the branch to land here. sourceIdentity is
-// the repo identity the renderer matched a local project on; the
-// handler recomputes the local side and refuses on mismatch, so the
-// call structurally cannot be aimed at a non-matching local repo. The
-// branch refine pins it to the bundle allowlist up front, so a name
-// the source link would reject fails here with a clear message instead
-// of deep inside the transfer.
-// What a move (and the mirror built on the send) leaves out. Everything:
-// only .git stays put, the default (ignored files cross too).
-// Gitignored: what git ignores on the source stays there, so a build
-// folder or a .env never crosses. Custom: the user picked which of the
-// ignored paths stay behind. Bring: the gitignored rule turned around,
-// what git ignores stays there bar the ignored paths the user picked
-// to bring (the carry-over list's shape, for one pull or mirror). A
-// mirror remembers the mode on the session (a label) so its page can
-// say which rule is in force. The patterns themselves are the engine's
-// ignore list, in its gitignore-like syntax (a leading / anchors to
-// the root, ! negates, the last match wins).
+// What a move leaves out. everything: only .git stays (the default).
+// gitignored: what git ignores on the source stays. custom: the ignored
+// paths the user picked stay. bring: gitignored, bar the ignored paths
+// the user picked to bring. The patterns are the engine's gitignore-like
+// syntax (a leading / anchors, ! negates, the last match wins).
 export const MirrorIgnoreModeSchema = Schema.Literals([
   "everything",
   "gitignored",
@@ -218,19 +144,15 @@ export const MirrorIgnoresSchema = Schema.Array(
   MirrorIgnorePatternSchema,
 ).check(Schema.isMaxLength(MIRROR_IGNORES_LIMIT));
 
-// Whether a pull with this rule has ignored files to bring: the
-// capture never carries them, and gitignored leaves every one of them
-// behind, so only the other rules reach the files step. The host, the
-// fake host and the dialogs all read this one answer.
+// The capture never carries ignored files, and gitignored leaves them
+// all behind.
 export function pullBringsIgnoredFiles(
   mode: MirrorIgnoreMode | undefined,
 ): boolean {
   return mode !== undefined && mode !== "gitignored";
 }
 
-// A new checkout's place on this device: the folder it goes in and
-// its name, one segment (the add-project dialog's clone takes the
-// same pair, CloneProjectPayloadSchema). `~` is expanded by the host.
+// `~` is expanded by the host.
 export const SyncCloneIntoSchema = strict(
   Schema.Struct({
     parentDir: Schema.NonEmptyString,
@@ -252,12 +174,9 @@ export const SyncPullWorktreePayloadSchema = strict(
           "Branch name outside the sync allowlist",
       ),
     ),
-    // The source worktree's folder name, so the copy lands under the
-    // same name here and the two sides read as one worktree. Omitted
-    // when the source's name is not a valid managed dirname (an external
-    // worktree with an odd folder), in which case the create picks a
-    // fresh pool name. The handler refuses, rather than renaming, when
-    // that folder already exists on this device.
+    // The source's folder name, so the two sides read as one worktree.
+    // Omitted when it isn't a valid managed dirname (a fresh name is
+    // picked). The handler refuses, rather than renames, on a clash.
     worktreeName: Schema.optional(
       Schema.NonEmptyString.check(
         Schema.makeFilter(
@@ -266,47 +185,27 @@ export const SyncPullWorktreePayloadSchema = strict(
         ),
       ),
     ),
-    // Whether the create here runs the project's setup script. The
-    // dialogs default it by the ignore rule and the user can flip it.
-    // Absent reads as yes, the create's ordinary lifecycle.
+    // Absent = yes.
     runSetup: Schema.optional(Schema.Boolean),
-    // The ignored files to bring across once the worktree is here, as
-    // the leave-out rule and its patterns: the capture has `git add -A`
-    // semantics, so this is the only way an ignored file travels. A
-    // one-shot run of the mirror engine carries them (the "files" step).
-    // Absent: nothing beyond the capture, the move as the mirror start
-    // drives it (its own session brings the files and keeps bringing
-    // them). Gitignored leaves nothing to carry, so it skips the step.
+    // The only way an ignored file travels: a one-shot mirror run (the
+    // "files" step). Absent when a mirror's own session will bring them.
     ignoreMode: Schema.optional(MirrorIgnoreModeSchema),
     ignores: Schema.optional(MirrorIgnoresSchema),
-    // Where to clone the repo when this device has no checkout of it
-    // yet: the pull's landing project is made first (the peer's default
-    // branch, fetched over the device link like the branch itself, so a
-    // repo with no remote crosses too), registered, and the copy lands
-    // in it as usual. Ignored when a local project already matches: the
-    // dialog that offered it was reading a stale list, and the pull
-    // takes the checkout it has. Without it, a device with no checkout
-    // refuses as before.
+    // Where to clone the repo, over the link (so a repo with no remote
+    // crosses too), when this device has no checkout of it. Ignored when
+    // a local project already matches.
     cloneInto: Schema.optional(SyncCloneIntoSchema),
   }),
 );
 
-// The pull's progress, one frame per step change and per transferred
-// chunk, keyed by the SOURCE worktree id (the only id the caller holds
-// before the local worktree exists). `create` frames carry the new
-// worktree's ordinary lifecycle phase as it streams (carry-over, setup,
-// port provision). `transfer` frames carry the byte count, and so do
-// `clone` frames, for the repo's own bundle.
+// Keyed by the source worktree id, the only id the caller holds before
+// the copy exists.
 export const SyncPullStepSchema = Schema.Literals([
-  // The repo cloned here first, a pull with `cloneInto` alone.
   "clone",
   "capture",
   "transfer",
   "create",
   "apply",
-  // The ignored files, through the mirror engine run once. Only a pull
-  // with a leave-out rule reaches it, and `bytes`/`totalBytes` carry the
-  // staging figures.
   "files",
 ]);
 export type SyncPullStep = typeof SyncPullStepSchema.Type;
@@ -322,9 +221,8 @@ export const SyncPullProgressSchema = strict(
 );
 export type SyncPullProgress = typeof SyncPullProgressSchema.Type;
 
-// The "files" step's outcome. crossed:false with the reason means the
-// ignored files are still only on the source. conflicts counts the
-// paths both sides held differently, which keep this side's version.
+// conflicts: paths both sides held differently, which keep this side's
+// version.
 const SyncPullFilesSchema = strict(
   Schema.Struct({
     crossed: Schema.Boolean,
@@ -336,30 +234,19 @@ const SyncPullFilesSchema = strict(
 export const SyncPullWorktreeResultSchema = strict(
   Schema.Struct({
     worktree: WorktreeSchema,
-    // captured && !dirtyApplied is the partial-success case: the source
-    // had uncommitted changes, the worktree landed, but the apply was
-    // refused. The capture stays parked under the local worktree id and
-    // the source still holds the original dirty state.
+    // captured && !dirtyApplied: the worktree landed but the apply was
+    // refused. The capture stays parked here, and the source keeps its
+    // dirty state.
     captured: Schema.Boolean,
     dirtyApplied: Schema.Boolean,
-    // The "files" step's outcome, present when a leave-out rule asked
-    // for it (SyncPullFilesSchema).
     files: Schema.optional(SyncPullFilesSchema),
-    // The project the pull made for the copy to land in (`cloneInto`),
-    // as registered. Absent when the copy landed in a checkout this
-    // device already had.
     cloned: Schema.optional(ProjectSchema),
   }),
 );
 export type SyncPullWorktreeResult = typeof SyncPullWorktreeResultSchema.Type;
 
-// The send's input: which peer, and which of THIS device's worktrees.
-// The branch, the folder name and the repo identity are read off the
-// worktree by the handler, never taken from the caller. The setup
-// switch, the leave-out rule and the clone are the pull's: with no
-// checkout of the repo on the peer, the peer clones it from here first
-// (the destination's landing is the pull's, so it takes a pull's
-// `cloneInto`, named in the peer's own terms).
+// The branch, folder name and identity are read off the worktree, never
+// taken from the caller. `cloneInto` is in the peer's own terms.
 const pullFields = SyncPullWorktreePayloadSchema.struct.fields;
 export const SyncSendWorktreePayloadSchema = strict(
   Schema.Struct({
@@ -373,12 +260,8 @@ export const SyncSendWorktreePayloadSchema = strict(
   }),
 );
 
-// The id of a source link's channel, minted by the device that opens
-// it (modules/link.ts).
 const ChannelIdSchema = HexId32Schema;
 
-// A pull's source link: the source worktree on this host, which the
-// link captures and whose repo it bundles.
 const SyncOpenSourcePayloadSchema = strict(
   Schema.Struct({
     projectId: Schema.NonEmptyString,
@@ -387,11 +270,8 @@ const SyncOpenSourcePayloadSchema = strict(
   }),
 );
 
-// What a move recorded, for the teardown that may follow: the branch
-// and the tip it had, what was captured (and its tree), and whether the
-// capture was applied at the destination. Computed by the landing and
-// kept by the device that ran the move, so the data-loss rule runs on
-// the hosts' own facts, never on a caller's say-so.
+// Kept by the device that ran the move, so a teardown's data-loss rule
+// runs on the hosts' own facts, never on a caller's say-so.
 const SyncReceiptSchema = strict(
   Schema.Struct({
     branch: GitRefNameSchema,
@@ -403,13 +283,9 @@ const SyncReceiptSchema = strict(
 );
 export type SyncReceipt = typeof SyncReceiptSchema.Type;
 
-// The send's landing, asked of the destination: the pull's landing
-// input with the facts a pull reads off the source's list (the
-// identity, the branch, the folder name) supplied by the source
-// itself, plus the link it opened. `landBranch` is the branch the copy
-// is created on when it is not the source's own (a primary's mirror
-// lands on mirror/<branch>, git/branches.ts). The commits still
-// arrive under `branch`.
+// `landBranch` is the branch the copy is created on when it isn't the
+// source's own (a primary's mirror lands on mirror/<branch>); the commits
+// still arrive under `branch`.
 const SyncReceiveWorktreePayloadSchema = strict(
   Schema.Struct({
     identity: Schema.NonEmptyString,
@@ -422,7 +298,6 @@ const SyncReceiveWorktreePayloadSchema = strict(
     channelId: ChannelIdSchema,
   }),
 );
-// A receive answers with the pull result, less the files step.
 const { files: _files, ...receiveResultFields } =
   SyncPullWorktreeResultSchema.struct.fields;
 export const SyncReceiveWorktreeResultSchema = strict(
@@ -432,9 +307,6 @@ export const SyncReceiveWorktreeResultSchema = strict(
   }),
 );
 
-// The git follower's push (host/mirror/gitFollow.ts): the refs to land
-// under refs/shigomori/ here and the tips this host already holds,
-// which it asks the link for as one bundle.
 const SyncReceiveBundlePayloadSchema = strict(
   Schema.Struct({
     projectId: Schema.NonEmptyString,
@@ -453,11 +325,7 @@ const SyncFetchedSchema = strict(
   }),
 );
 
-// The teardown's fate. A refused or failed teardown never fails the
-// call: by then the move succeeded and the state is safe on both
-// sides, so the caller learns via sourceRemoved:false with sourceError
-// carrying the stable marker or message ("scripts-running", a
-// cleanup-script failure, a dirty state that did not land).
+// A refused teardown never fails the call: the move already succeeded.
 const SyncTeardownSourceResultSchema = strict(
   Schema.Struct({
     sourceRemoved: Schema.Boolean,
@@ -467,11 +335,8 @@ const SyncTeardownSourceResultSchema = strict(
 export type SyncTeardownSourceResult =
   typeof SyncTeardownSourceResultSchema.Type;
 
-// Which move a teardown follows, as the device that ran it names it:
-// the direction, the peer the worktree came from or went to, and the
-// SOURCE worktree (the peer's after a pull, this device's after a
-// send). What the move captured and applied is NOT on the wire: the
-// host reads back its own receipt.
+// worktreeId is the source's. What the move captured is not on the wire:
+// the host reads its own receipt.
 const SyncMoveDirectionSchema = Schema.Literals(["pull", "send"]);
 const SyncTeardownSourcePayloadSchema = strict(
   Schema.Struct({
@@ -483,17 +348,9 @@ const SyncTeardownSourcePayloadSchema = strict(
 );
 export type SyncMoveRef = typeof SyncTeardownSourcePayloadSchema.Type;
 
-// A move's cancel, keyed the way the caller keys its progress: by the
-// SOURCE worktree id, since the copy has no id of its own until the
-// create lands. Served to peers on the command grant: the device that
-// asked for a move it does not run (a mirror from the copy's side,
-// which the original's device runs) cancels it there. A host only ever
-// finds the moves of the device asking (host/lib/sync/Moves.ts keys on
-// the caller), so nothing else's move can be cancelled, and the
-// landing a send asks of a peer needs no cancel of its own: the sender
-// tears the link down, which the landing runs under. `cancelled` is
-// false when nothing by that key is in flight here, which a caller
-// reads as "already over".
+// Keyed by the source worktree id. Remote, for a move the asking device
+// doesn't run; a host only finds the asking device's own moves.
+// `cancelled` false: nothing by that key in flight.
 const SyncCancelMovePayloadSchema = strict(
   Schema.Struct({
     sourceWorktreeId: WorktreeIdSchema,
@@ -505,19 +362,15 @@ const SyncCancelMoveResultSchema = strict(
   }),
 );
 
-// How a cancelled move fails, as text: a peer's answer arrives re-worded ("The
-// other device answered: ..."), so the marker is matched anywhere in
-// it (see isMoveCancelledError). The destination is left as it was,
-// the source untouched: the dialog's cancelled step says so.
+// Matched anywhere in a message: a peer's answer arrives re-worded.
 export const MOVE_CANCELLED = "The move was cancelled";
 
 export function isMoveCancelledError(error: unknown): boolean {
   return errorMessageOf(error).includes(MOVE_CANCELLED);
 }
 
-// Which of the named commits the host already holds, so a sender can
-// thin a bundle (and skip a ref whose tip the receiver has, which
-// `git bundle create` would otherwise drop silently).
+// So a sender can thin a bundle, and skip a ref whose tip the receiver
+// has (`git bundle create` would drop it silently).
 const SYNC_HAS_COMMITS_LIMIT = 64;
 const SyncHasCommitsPayloadSchema = strict(
   Schema.Struct({
@@ -537,8 +390,7 @@ const SyncHasCommitsResultSchema = strict(
 export const syncContract = defineContract(
   "sync",
   "host",
-  // A read that discloses repo state (the names of ignored files), so
-  // it rides the command grant.
+  // Discloses the names of ignored files.
   invoke(
     "worktreeFolder",
     SyncWorktreeFolderPayloadSchema,
@@ -551,8 +403,6 @@ export const syncContract = defineContract(
     SyncIgnoredPathsResultSchema,
     { remote: true, gated: true, grant: "browseFiles" },
   ),
-  // The git follower's question about the copy's repo, so a mirror
-  // into this device asks it (invitable, by the copy's project).
   invoke(
     "hasCommits",
     SyncHasCommitsPayloadSchema,
@@ -564,19 +414,14 @@ export const syncContract = defineContract(
       invitable: "project",
     },
   ),
-  // The link opens and the call returns: what crosses after is bytes on
-  // the channel, and a capture it takes is announced by the git
-  // watcher like any ref write. The follower fetching the copy's commits opens one on the copy.
   invoke("openSource", SyncOpenSourcePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
     invitable: "copy",
   }),
-  // Both land refs (and a worktree). Both are a mirror's into the copy's
-  // device: the landing of the invited original, and the follower's
-  // push into the copy's project (under refs/shigomori/, never a
-  // branch, so the project is scope enough).
+  // receiveBundle lands under refs/shigomori/, never a branch, so the
+  // project is scope enough.
   invoke(
     "receiveWorktree",
     SyncReceiveWorktreePayloadSchema,
@@ -589,9 +434,7 @@ export const syncContract = defineContract(
     grant: "changeCode",
     invitable: "project",
   }),
-  // The local orchestrators (see the header note): remote:false keeps
-  // them off every remote wire, gated:true documents intent and keeps
-  // the web client's fail-closed refusal.
+  // gated keeps the web client's refusal of them.
   invoke(
     "pullWorktree",
     SyncPullWorktreePayloadSchema,
@@ -604,23 +447,18 @@ export const syncContract = defineContract(
     SyncPullWorktreeResultSchema,
     { remote: false, gated: true },
   ),
-  // The cancel reaches the device running the move or its landing (the
-  // payload's note), so it rides the grant like the moves themselves.
   invoke(
     "cancelMove",
     SyncCancelMovePayloadSchema,
     SyncCancelMoveResultSchema,
     { remote: true, gated: true, grant: "changeCode" },
   ),
-  // A move's second half, local-only like the moves: its remote half,
-  // after a pull, is the peer's ordinary grant-gated worktrees:delete.
+  // After a pull, its remote half is the peer's worktrees:delete.
   invoke(
     "teardownSource",
     SyncTeardownSourcePayloadSchema,
     SyncTeardownSourceResultSchema,
     { remote: false, gated: true },
   ),
-  // Untagged (local-only): the move runs on the device whose renderer
-  // invoked it, and the notifier hands the frames back to that caller.
   push("pullProgress", SyncPullProgressSchema),
 );

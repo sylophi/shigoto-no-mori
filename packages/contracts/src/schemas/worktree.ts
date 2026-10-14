@@ -6,15 +6,9 @@ import {
 } from "./payloads.ts";
 import { GitRefNameSchema, isRealBranch } from "./project.ts";
 
-// Abbreviated commit hashes are produced by `git log %h` and travel back
-// down into git argv (`git show <hash>`). Pinning them to hex is what
-// stops a value like "--output=/tmp/x" from ever reaching a flag
-// position, and it also drops rows a crafted commit subject forged into
-// the log output.
-// Up to 64 hex chars: in a sha256 object-format repo `%h` can emit up
-// to 64 (core.abbrev=no, or any abbrev past 40), and capping at sha1's
-// 40 would reject every record in that configuration, leaving the
-// commit list empty.
+// Hashes travel back into git argv, so hex keeps "--output=/tmp/x" out of
+// a flag position and drops rows a crafted subject forged into the log.
+// Up to 64: a sha256 repo's `%h` can emit that many.
 const COMMIT_HASH_RE = /^[0-9a-f]{4,64}$/;
 
 export const isCommitHash = (value: string): boolean =>
@@ -29,22 +23,14 @@ export const CommitSummarySchema = Schema.Struct({
   subject: Schema.String,
   author: Schema.String,
   date: Schema.String,
-  // Net additions/deletions across all files in this commit, parsed
-  // from `git log --shortstat`. Zero for an empty commit; a merge's are
-  // counted against its first parent, what it brought in.
+  // A merge's are counted against its first parent.
   additions: Schema.Natural,
   deletions: Schema.Natural,
 });
 export type CommitSummary = typeof CommitSummarySchema.Type;
 
-// An agent harness's session bound to a worktree (engine/Agents.ts):
-// working through a turn, waiting on the user mid-turn (a permission
-// prompt), or idle once the turn ended. harness is "claude", "codex",
-// or whatever a harness without built-in support calls itself. at is
-// when the state last changed, in ms. title is what the session is
-// about (its custom title, else its first prompt), tool and need what
-// it waits on (the prompt's tool, and its question, command, file or
-// URL), and message the one its last turn ended on.
+// at: when the state last changed, ms. tool and need: what a waiting
+// session waits on. message: the one its last turn ended on.
 const AgentSessionSchema = Schema.Struct({
   harness: Schema.String,
   session: Schema.String,
@@ -60,119 +46,60 @@ export type AgentSession = typeof AgentSessionSchema.Type;
 export const WorktreeSchema = Schema.Struct({
   id: Schema.String,
   projectId: Schema.NonEmptyString,
-  // The worktree's identity, the directory basename. Stable across branch
-  // checkouts/renames; for shigomori-created worktrees it's a randomly
-  // picked animal name.
+  // The directory basename: stable across branch changes.
   name: Schema.String,
-  // The currently checked-out branch. A *property* of the worktree, not
-  // its identity. May change via `git checkout` / `git branch -m`.
   branch: Schema.String,
   path: Schema.String,
-  // Commits this worktree has that its upstream doesn't, and vice versa.
-  // Both 0 when synced, when there's no upstream, or when HEAD is
-  // detached. Consumers should check `hasUpstream` to disambiguate.
+  // Both 0 without an upstream too: check `hasUpstream`.
   ahead: Schema.Natural,
   behind: Schema.Natural,
-  // True when the branch has an upstream configured AND that upstream
-  // still resolves (i.e. `@{u}` works). False for detached HEAD, brand-
-  // new local branches, or branches whose tracked remote was deleted.
+  // Configured and still resolving (`@{u}` works).
   hasUpstream: Schema.Boolean,
-  // True when the project has at least one git remote configured. Drives
-  // whether "Publish" is offered as an action versus only as a hint.
   hasRemote: Schema.Boolean,
-  // Only meaningful when ahead > 0 && behind > 0. True when a merge
-  // probe (`git merge-tree --write-tree`) reports no conflicts. The
-  // Pull-and-push action tries `git rebase @{u}` first (linear history)
-  // and falls back to `git merge @{u}` if a per-commit replay would
-  // conflict. The probe guarantees the merge will land.
+  // When diverged: a merge probe found no conflicts, so a pull-and-push
+  // can land (rebase first, else the merge the probe vouched for).
   divergedClean: Schema.Boolean,
-  // Commits the project's primary branch (resolved via the same logic
-  // as the "default branch" picker) has that this worktree's HEAD does
-  // not. 0 for the primary worktree, detached HEAD, or when the primary
-  // ref can't be resolved. The UI uses > 0 as the gate for offering
-  // the "Sync from primary" action.
+  // Measured against primaryRef. 0 when that can't be resolved.
   behindPrimary: Schema.Natural,
-  // How many of HEAD's newest commits exist on no remote-tracking ref
-  // at all. Bounds what amend and undo may rewrite. Distinct from
-  // `ahead`, which only measures the configured upstream.
+  // HEAD's newest commits on no remote-tracking ref at all (unlike
+  // `ahead`, which only measures the upstream): what amend and undo may
+  // rewrite.
   unpushedCount: Schema.Natural,
-  // The ref the "Sync from primary" action rebases onto, the same ref
-  // `behindPrimary` is measured against. Carries the remote prefix when
-  // the primary resolves to a remote-tracking ref (e.g. "origin/main"),
-  // so the renderer can show it on the pill without implying the source
-  // is a local branch.
+  // With its remote prefix when remote-tracking ("origin/main").
   primaryRef: Schema.optional(Schema.String),
-  // The primary branch's local name ("main" for a primaryRef of
-  // "origin/main"), the branch a stack of pull requests lands on
-  // (pullRequestStack.ts). Resolved by the engine with the remote
-  // list in hand, so the renderer never has to split the ref, and left
-  // out when it cannot be.
+  // "main" for "origin/main", resolved with the remote list in hand, so
+  // no client splits the ref.
   primaryBranch: Schema.optional(Schema.String),
-  // True when this branch's work is already in the primary branch. See
-  // the engine's Worktrees.ts for what does and doesn't count. Notably a local fast-forward merge doesn't, since
-  // its history is indistinguishable from a worktree that never
-  // committed. False for the primary worktree and for detached HEAD.
+  // A local fast-forward merge doesn't count: its history is
+  // indistinguishable from a worktree that never committed.
   mergedIntoPrimary: Schema.Boolean,
   changedCount: Schema.Natural,
-  // Newest mtime across the worktree's uncommitted changes, epoch ms.
-  // Absent when the tree is clean (or when the scan couldn't stat
-  // anything). Exists so "recently worked in" can account for edits that
-  // were never committed, not just the commit log.
+  // Newest mtime of the uncommitted changes, epoch ms.
   lastChangeAt: Schema.optional(Schema.Natural),
-  // When the worktree was added, epoch ms (the engine's
-  // createdAtOf). Absent for the primary checkout, which has no
-  // such record, and from builds older than the field.
+  // Epoch ms. Absent for the primary checkout.
   createdAt: Schema.optional(Schema.Natural),
-  // Most-recent first. Empty when the worktree has no commits yet.
-  // Bounded by the backend (currently 4) so the IPC payload stays
-  // small: 3 for the teaser plus 1 extra to signal "more available".
+  // Newest first, at most 4: 3 to show and 1 to signal more.
   recentCommits: Schema.Array(CommitSummarySchema),
-  // The repo's primary checkout. Shown in the UI for context but never
-  // removable, since deleting it would mean detaching the project itself.
   isPrimary: Schema.Boolean,
-  // True when the worktree lives outside shigomori's managed worktrees dir
-  // (i.e. created manually or by another tool). Primary checkouts are also
-  // technically external; the UI tags only non-primary externals.
+  // Outside the managed dir. True for the primary checkout too.
   isExternal: Schema.Boolean,
-  // True when HEAD points at a commit rather than a branch. In this case
-  // `branch` holds the short commit hash, not a real branch name, so
-  // rename is impossible and the UI styles it as a hash, not a branch.
+  // `branch` then holds the short commit hash.
   detached: Schema.Boolean,
-  // User-driven "out of focus" flag. Filtered out of the sidebar's main
-  // list by default but recoverable via the per-project "Show shelved"
-  // toggle. The worktree itself is untouched on disk.
   shelved: Schema.Boolean,
-  // User-driven "follow the remote" flag. While it is set, the app
-  // fast-forwards this worktree onto its upstream after each of its
-  // background fetches, as long as the worktree has no local commits,
-  // no uncommitted or untracked changes and no app-started process.
-  // Meant for the primary checkout and other branches only ever read
-  // here.
+  // Fast-forward onto the upstream after each background fetch, while
+  // there are no local commits, changes or app-started processes.
   autoPull: Schema.Boolean,
-  // Whether an agent session bound here is working (`sm agents`): once
-  // agents are allowed to (isAgentWorking) the sidebar files the
-  // worktree on its own shelf until every session's turn ends. Absent
-  // (an older build's row) = off.
   agentWorking: Schema.optional(Schema.Boolean),
-  // The agent sessions bound here, which their harness's hooks keep up
-  // to date. Absent from a peer on an older build.
   agentSessions: Schema.optional(Schema.Array(AgentSessionSchema)),
-  // What `sm describe` set (WorktreeDescriptionSchema): the work's
-  // name and summary, until a pull request's take their place
-  // (the ui package's lib/worktreeTitle.ts). Absent when unset.
+  // What `sm describe` set; a pull request's take their place.
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
 });
 export type Worktree = typeof WorktreeSchema.Type;
 
-// A worktree without its git probes: what `sm worktrees list
-// --identities` prints, for the host's lookups (which checkout an id
-// names, where it sits, its marks). Only `git worktree list` stands
-// behind it, so it is the cheap read every worktree-scoped handler
-// opens with. With --primary-ref each one also carries the project's
-// primary ref, resolved once per project the way the rows resolve it.
-// The fields are listed in the order the JSON carries them, which is
-// not the row's order.
+// A worktree without its git probes (`sm worktrees list --identities`),
+// the cheap read every worktree-scoped handler opens with. The fields are
+// in the JSON's order, not the row's.
 export const WorktreeIdentitySchema = Schema.Struct({
   id: WorktreeSchema.fields.id,
   projectId: WorktreeSchema.fields.projectId,
@@ -190,12 +117,6 @@ export const WorktreeIdentitySchema = Schema.Struct({
 });
 export type WorktreeIdentity = typeof WorktreeIdentitySchema.Type;
 
-// A worktree's relationship to its upstream, derived from the raw counts
-// on Worktree. The renderer maps each kind to what it shows in one
-// place (the ui package's lib/syncState.ts). The backend just reports facts so
-// it stays dumb. "publish" covers both "no upstream / remote exists"
-// and "no upstream / no remote", distinguished by `canPublish` so the UI
-// can disable the button.
 export type RemoteSyncState =
   | { kind: "detached" }
   | { kind: "synced" }
@@ -236,12 +157,9 @@ export function deriveRemoteSyncState(
   return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
 }
 
-// Whether the state's move waits for a clean tree. Pushing and
-// publishing only send commits. Every way of taking the remote's commits
-// writes the tree (a pull can collide with the edits, a rebase refuses
-// to start beside them), and picking a side of a split history throws
-// one away, so those wait. No default: a new kind fails typecheck here
-// until it says.
+// Taking the remote's commits writes the tree, and picking a side of a
+// split history throws one away, so those wait. No default: a new kind
+// must say.
 export function syncWaitsForCleanTree(state: RemoteSyncState): boolean {
   switch (state.kind) {
     case "detached":
@@ -256,8 +174,6 @@ export function syncWaitsForCleanTree(state: RemoteSyncState): boolean {
   }
 }
 
-// Whether the newest `count` commits exist on no remote, so they can
-// be amended or undone without rewriting anything shared.
 export function canRewriteCommits(
   worktree: Pick<Worktree, "unpushedCount">,
   count: number,
@@ -265,15 +181,8 @@ export function canRewriteCommits(
   return count <= worktree.unpushedCount;
 }
 
-// When the worktree last saw work, epoch ms, for recency sorting.
-// Uncommitted edits count: a worktree you were typing in five minutes
-// ago should outrank one whose last commit is newer but that you
-// haven't touched since. So does an agent session changing state (a
-// turn starting or ending, a prompt waiting on you), whether or not it
-// touched a file. 0 when nothing is known, like a clean worktree with
-// no commits yet. The engine's idle shelf reads activity the same way
-// (packages/engine/src/shelf.ts lastTouchedAt), so a change here goes
-// there too.
+// Uncommitted edits and agent session changes count too. The engine's
+// idle shelf (shelf.ts lastTouchedAt) must read activity the same way.
 export function worktreeLastActivityAt(
   worktree: Pick<Worktree, "lastChangeAt" | "recentCommits" | "agentSessions">,
 ): number {
@@ -285,29 +194,21 @@ export function worktreeLastActivityAt(
   );
 }
 
-// A worktree this app created and owns, as opposed to the project's own
-// checkout or one the user made by hand elsewhere. The flags that only
-// apply to our own worktrees (shelving, relocating) key off this. The
-// engine enforces the same rule, so offering them elsewhere produces a no-op
-// the UI then appears to ignore.
+// The engine applies the same rule to shelving and relocating.
 export function isManagedWorktree(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
 ): boolean {
   return !worktree.isPrimary && !worktree.isExternal;
 }
 
-// Whether auto-pull can be switched: it needs a branch that tracks an
-// upstream, and once on it stays switchable even if the upstream
-// vanishes, so it can be turned off again.
+// Once on, it stays switchable if the upstream vanishes, so it can be
+// turned off.
 export function canSetAutoPull(
   worktree: Pick<Worktree, "autoPull" | "hasUpstream" | "detached">,
 ): boolean {
   return worktree.autoPull || (worktree.hasUpstream && !worktree.detached);
 }
 
-// Whether a working agent session files the worktree on its shelf:
-// only once the window allows it (useAllowAgentWorking). Otherwise the
-// shelf ignores it everywhere.
 export function isAgentWorking(
   worktree: Pick<Worktree, "agentWorking">,
   allowAgentWorking: boolean,
@@ -315,11 +216,7 @@ export function isAgentWorking(
   return allowAgentWorking && worktree.agentWorking === true;
 }
 
-// Whether the worktree has data (title, custom ports) of its own.
-// The primary checkout lives at the project path, which never sits under
-// a managed prefix, so it's flagged external. It's still ours to
-// annotate. Only genuinely external worktrees (manual checkouts
-// elsewhere) deliberately have no stored state.
+// The primary is flagged external but still keeps data.
 export function hasWorktreeData(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
 ): boolean {
@@ -328,10 +225,8 @@ export function hasWorktreeData(
 
 export const CreateWorktreePayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
-  // Optional: caller-picked animal dirname. Falls back to the backend's
-  // own pick when omitted or when the requested name is already in use.
-  // The check backstops the renderer's sanitizing so reserved names
-  // ("root", "..") never reach `git worktree add`.
+  // Picked by the engine when omitted or taken. The check keeps reserved
+  // names ("root", "..") from `git worktree add`.
   worktreeName: Schema.optional(
     Schema.NonEmptyString.check(
       Schema.makeFilter(
@@ -340,38 +235,27 @@ export const CreateWorktreePayloadSchema = Schema.Struct({
       ),
     ),
   ),
-  // Optional: when omitted, the worktree's auto-picked animal name is
-  // used as the branch name too (the quick-create shortcut).
+  // Defaults to the worktree's name.
   branchName: Schema.optional(GitRefNameSchema),
   base: Schema.optional(GitRefNameSchema),
-  // When true: check out `base` as the worktree's branch (no -b, no new
-  // branch). Requires `base` to be set and not already checked out
-  // elsewhere. Ignores `branchName`.
+  // Check out `base` itself rather than branch from it.
   checkout: Schema.optional(Schema.Boolean),
-  // false: git writes every tracked file. Otherwise they're cloned
-  // (copy-on-write) from an existing checkout wherever it has them
-  // unchanged (`sm create --no-clone`).
+  // false: git writes every file, no copy-on-write clone.
   cloneFiles: Schema.optional(Schema.Boolean),
 });
 
 const CarryOverFailureSchema = Schema.Struct({
   path: Schema.String,
   reason: Schema.String,
-  // The checkout the failure is about when it isn't the primary (a
-  // sibling worktree's broken .worktreeinclude).
   source: Schema.optional(Schema.String),
 });
 
 export const CarryOverReportSchema = Schema.Struct({
   applied: Schema.Natural,
   failures: Schema.Array(CarryOverFailureSchema),
-  // .worktreeinclude resolution errors. Not carry-over entries, so they
-  // are reported separately from the per-entry failures above.
   includeFailures: Schema.optional(Schema.Array(CarryOverFailureSchema)),
-  // Entries taken from a worktree other than the primary (the engine looks
-  // in the base ref's worktree first, then the primary, then the rest).
-  // copiedInstead: a symlink entry copied because links only ever
-  // target the primary. Absent when everything came from the primary.
+  // Entries taken from a worktree other than the primary. copiedInstead:
+  // a symlink entry copied, since links only target the primary.
   sourced: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -388,9 +272,7 @@ export const CreateWorktreeResultSchema = Schema.Struct({
 });
 export type CreateWorktreeResult = typeof CreateWorktreeResultSchema.Type;
 
-// Phases the create lifecycle steps through, in order. Skipped if the
-// phase has no work (no carry-over entries, no setup script, port-pool
-// disabled). "idle" is the terminal sentinel emitted from `finally`.
+// In order; a phase with no work is skipped.
 export const CreatePhaseSchema = Schema.Literals([
   "carryOver",
   "setup",
@@ -404,14 +286,9 @@ export const WorktreeLifecyclePhaseSchema = Schema.Struct({
 });
 export type WorktreeLifecyclePhase = typeof WorktreeLifecyclePhaseSchema.Type;
 
-// A worktree's removal as the host announces it, to every window and
-// peer rather than to the caller alone: "removing" when the delete
-// starts (cleanup scripts, then the git remove), then "removed" once
-// it is gone or "kept" when the delete failed and the worktree stays.
-// A worktree on its way out would otherwise read as an ordinary one
-// to anyone who did not press the button (a mirror stop, a
-// transplant's source teardown, the CLI's unmirror, another window),
-// since the list only drops the row once the delete has resolved.
+// Announced to every window and peer: the list only drops the row once
+// the delete resolves, so a worktree on its way out would otherwise read
+// as ordinary to anyone who didn't start it.
 export const WorktreeRemovalSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   state: Schema.Literals(["removing", "removed", "kept"]),
@@ -421,8 +298,7 @@ export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;
 export const WorktreeCarryOverCompleteSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   report: CarryOverReportSchema,
-  // Manual carry-over entries auto-removed because .worktreeinclude now
-  // covers them. Absent when reconciliation removed nothing.
+  // Manual entries removed because .worktreeinclude now covers them.
   removedCarryOverPaths: Schema.optional(Schema.Array(Schema.String)),
 });
 export type WorktreeCarryOverComplete =
@@ -430,13 +306,9 @@ export type WorktreeCarryOverComplete =
 
 export const RelocateWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
-  // Absolute target directory for the moved worktree (parent is
-  // created if it doesn't exist).
   destinationPath: Schema.NonEmptyString,
 });
 
-// A move to the same parent under a new folder name, checked as a
-// custom name is at create.
 export const RenameWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   name: Schema.NonEmptyString.check(
@@ -447,12 +319,9 @@ export const RenameWorktreePayloadSchema = Schema.Struct({
   ),
 });
 
-// force false: adopt unforced (`sm adopt`), so it refuses a worktree with
-// uncommitted changes or untracked files (convertRefusedError), which
+// force false refuses a worktree with changes or untracked files, which
 // the row's count can miss (it honors `status.showUntrackedFiles no`).
-// The convert page always sends it. Missing means forced, what a
-// renderer from before the field expects, and an older host strips it
-// and forces too.
+// Absent = forced.
 export const ConvertExternalPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),
@@ -462,11 +331,8 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),
   skipCleanup: Schema.optional(Schema.Boolean),
-  // Refuse the delete outright (stable "scripts-running" message
-  // marker) when the app's registry shows live scripts in the worktree,
-  // instead of the default kill-then-delete. Set by the transplant
-  // orchestrator, which must never take down work still running on the
-  // source device. App-registry-only, so it never reaches `sm rm`.
+  // Refuse ("scripts-running") rather than kill live app scripts, for a
+  // transplant's teardown.
   refuseRunningScripts: Schema.optional(Schema.Boolean),
 });
 
@@ -475,8 +341,7 @@ export const RenameBranchPayloadSchema = Schema.Struct({
   newBranch: GitRefNameSchema,
 });
 
-// A new title, description or both for the worktree (`sm describe`).
-// One left out stays as it is, and an empty one clears it.
+// One left out stays as it is; an empty one clears it.
 export const DescribeWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   title: Schema.optional(Schema.String),
@@ -511,39 +376,25 @@ export const CommitDiffPayloadSchema = Schema.Struct({
 
 export const ListCommitsPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
-  // `git log --skip=N -n COUNT`; the renderer pages through with skip
-  // = pageIndex * count and stops when fewer than `count` come back.
   skip: Schema.Natural,
   count: Schema.Int.check(
     Schema.isGreaterThan(0),
     Schema.isLessThanOrEqualTo(200),
   ),
-  // Only commits whose message holds this, case blind.
+  // Case blind.
   query: Schema.optional(Schema.Trim.check(Schema.isMinLength(1))),
-  // History from this commit rather than HEAD.
   from: Schema.optional(CommitHashSchema),
 });
 
-// What the Git page's History tab draws (the engine's git/history.ts,
-// readBranchHistory): the branch's own commits, newest first, the
-// commit it left its base at, and how it stands against the upstream it
-// pushes to.
 export const BranchHistorySchema = Schema.Struct({
   commits: Schema.Array(CommitSummarySchema),
-  // More commits than were asked for: the list was cut.
   more: Schema.Boolean,
-  // Where the branch left the primary ref (`ref`, e.g. "origin/main").
-  // Null for the primary checkout, the primary branch itself, and a
-  // detached HEAD, whose commits are just HEAD's newest.
+  // Null for the primary, the primary branch and a detached HEAD, whose
+  // commits are just HEAD's newest.
   base: Schema.NullOr(
     Schema.Struct({ ref: Schema.String, hash: CommitHashSchema }),
   ),
-  // The upstream's short name ("origin/feature"), null without one.
   upstream: Schema.NullOr(Schema.String),
-  // HEAD's commits the upstream lacks, by short hash (as `commits` has
-  // them), the upstream's own commits HEAD lacks, newest first (cut like
-  // `commits`, `incomingMore` saying so), and where the two last agreed.
-  // Empty and null without an upstream.
   unpushed: Schema.Array(CommitHashSchema),
   incoming: Schema.Array(CommitSummarySchema),
   incomingMore: Schema.Boolean,
@@ -570,17 +421,13 @@ export const DeleteWorktreeResultSchema = Schema.Union([
 ]);
 export type DeleteWorktreeResult = typeof DeleteWorktreeResultSchema.Type;
 
-// A stack cleanup: the merged layers' worktrees go together, through
-// `sm rm --stack` on the highest of them (pullRequestStack.ts
-// stackCleanupFor picks it). `worktreeId` is any worktree of the stack.
+// `worktreeId` is any worktree of the stack.
 export const DeleteStackPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),
   skipCleanup: Schema.optional(Schema.Boolean),
 });
 
-// `removed` lists the worktree ids that went, on a cleanup failure the
-// ones removed before it.
 export const DeleteStackResultSchema = Schema.Union([
   Schema.Struct({
     ok: Schema.Literal(true),
