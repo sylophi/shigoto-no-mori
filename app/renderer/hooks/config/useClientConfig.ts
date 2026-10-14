@@ -5,12 +5,13 @@ import { queryKeys } from "@/lib/queryKeys";
 // The app instance's client store (theme, palettes, villageLife,
 // keepReachable),
 // served by the client-scoped clientConfig module. Device-wide settings
-// stay in useGlobalConfig. Three writers exist (useSettingsSave,
-// useKeepReachableUpdate, and the web AppearancePage save) and every one
-// funnels through mergeClientConfigWrite.
-// Shared with the one reader outside a component (the boot-time
-// create-device move in lib/remote/sharedSettingsSync.ts), so both hit
-// the same cache entry under the same rule.
+// stay in useGlobalConfig. Every writer (the Settings save, the
+// immediate patches, the palette rotation) funnels through
+// mergeClientConfigWrite.
+// Shared with the readers outside a component (the boot-time
+// create-device move in lib/remote/sharedSettingsSync.ts, the palette
+// rotation in lib/themeRotation.ts), so they hit the same cache entry
+// under the same rule.
 export const clientConfigQueryOptions = {
   queryKey: queryKeys.clientConfig(),
   queryFn: (): Promise<ClientConfig> => window.api.clientConfig.read(),

@@ -28,6 +28,7 @@ import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
+import { holdThemeRotation } from "@/lib/themeRotation";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import {
   type DarkTheme,
@@ -118,6 +119,9 @@ export function SettingsForm({
       fromConfig(initialConfig, initialClientConfig),
     );
   const setField = fieldSetter(setForm);
+
+  // No palette rotation turns behind the form's back.
+  useEffect(() => holdThemeRotation(), []);
 
   // Drop any staged previews when leaving the settings page so the rest
   // of the app falls back to the saved values.

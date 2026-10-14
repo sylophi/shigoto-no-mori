@@ -14,17 +14,49 @@ const CHECK_MS = 60 * 1000;
 
 const warn = (error: unknown) => console.warn("[themeRotation]", error);
 
-// The cache takes the turn before the write lands, so the launch's
-// render waits on a read alone.
+// Settings holds the rotation while it is open: its form seeds the
+// picks once, so a save after a turn would put back the pair the turn
+// moved on from.
+let holds = 0;
+export function holdThemeRotation(): () => void {
+  holds += 1;
+  return () => {
+    holds -= 1;
+  };
+}
+
 async function turn(queryClient: QueryClient, launching: boolean) {
-  const config = await queryClient.fetchQuery(clientConfigQueryOptions);
+  if (holds > 0) return;
+  // The cached doc rules a check out without a read. A turn it finds
+  // due rereads the store, which another tab (a web client's) may have
+  // moved on since. A failed read lets the launch render at once, and
+  // warns below rather than toasting every minute.
+  const cached = queryClient.getQueryData<ClientConfig>(
+    queryKeys.clientConfig(),
+  );
+  if (!launching && !(cached && rotationTurn(cached, Date.now(), false))) {
+    return;
+  }
+  const config = await queryClient.fetchQuery({
+    ...clientConfigQueryOptions,
+    staleTime: 0,
+    retry: false,
+    meta: { silentError: true },
+  });
   const patch = rotationTurn(config, Date.now(), launching);
   if (!patch) return;
+  // The cache takes the turn before the write lands, so the launch's
+  // render waits on the read alone. A refetch in flight would land
+  // over it, and a failed write takes it back.
+  await queryClient.cancelQueries({ queryKey: queryKeys.clientConfig() });
   queryClient.setQueryData<ClientConfig>(queryKeys.clientConfig(), {
     ...config,
     ...patch,
   });
-  void mergeClientConfigWrite(queryClient, patch).catch(warn);
+  void mergeClientConfigWrite(queryClient, patch).catch((error: unknown) => {
+    warn(error);
+    queryClient.setQueryData(queryKeys.clientConfig(), config);
+  });
 }
 
 export async function startThemeRotation(

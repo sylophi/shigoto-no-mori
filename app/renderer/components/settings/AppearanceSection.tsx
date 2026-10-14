@@ -130,7 +130,6 @@ export function AppearanceSection({
           onCheckedChange={onThemeRotationChange}
           disabled={!doubutsu}
           label="Rotate palettes"
-          description="Moves on to the next light and dark pair, keeping the two matched."
         />
         <div className="pl-11">
           <SegmentedControl

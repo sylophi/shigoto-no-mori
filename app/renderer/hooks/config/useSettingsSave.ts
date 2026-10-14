@@ -343,8 +343,8 @@ export function useSettingsSave({
       let persistedClientConfig: ClientConfig = clientConfig;
       if (clientPersisted) {
         try {
-          // A pick or a rotation saved here starts the hourly
-          // rotation's hour over.
+          // A pick or a rotation saved here starts a timed rotation's
+          // period over.
           const restartsRotation =
             state.lightTheme !== initialState.lightTheme ||
             state.darkTheme !== initialState.darkTheme ||
