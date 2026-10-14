@@ -106,12 +106,12 @@ describe("pickRelease", () => {
 
   it("never offers a prod build an alpha or beta of 3.0.0", () => {
     // A full build, and builds on their own prerelease lines, even one
-    // whose channel a 3.0.0 beta shares.
+    // on the channel of a 3.0.0 alpha ahead of it.
     for (const build of [
       "2.34.1",
       "2.0.0-beta.2",
       "3.0.0-rc.1",
-      "3.0.0-beta.1",
+      "3.0.0-alpha.1",
     ]) {
       assert.equal(
         pickRelease(semver(build), withAlso(...v3Releases), "arm64"),
