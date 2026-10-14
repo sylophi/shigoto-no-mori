@@ -205,7 +205,10 @@ it("draws every row of a real commit's diff at every scroll", async () => {
   });
   const errors: string[] = [];
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(m.text());
+    // A cold vite bundles a dependency it meets late (a grammar the
+    // highlighter loads) and answers the requests it raced with 504.
+    if (m.type() === "error" && !m.text().includes("Outdated Optimize Dep"))
+      errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push(e.message));
 
