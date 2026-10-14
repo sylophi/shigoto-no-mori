@@ -239,13 +239,10 @@ function buildQueryKeys(deviceId: string) {
     pullRequestOptions: (projectId: string) =>
       host("githubCli", "pullRequestOptions", projectId),
     // PR queries share a project-scoped prefix so invalidating
-    // pullRequestsForProject cascades to both projectPullRequests and
-    // any open worktreePullRequest.
+    // pullRequestsForProject reaches every open worktreePullRequest.
     pullRequestsAll: () => host("githubCli", "pullRequests"),
     pullRequestsForProject: (projectId: string) =>
       host("githubCli", "pullRequests", projectId),
-    projectPullRequests: (projectId: string) =>
-      host("githubCli", "pullRequests", projectId, "project"),
     worktreePullRequest: (projectId: string, branch: string) =>
       host("githubCli", "pullRequests", projectId, PR_BRANCH_SCOPE, branch),
     pullRequestCandidates: (projectId: string) =>
@@ -478,13 +475,4 @@ export function isWorktreePullRequestKey(query: {
     query.queryKey.length === worktreePullRequestKeyLength &&
     query.queryKey[prBranchScopeIndex] === PR_BRANCH_SCOPE
   );
-}
-
-// The branch a worktreePullRequest key was built for, the segment after
-// the branch scope.
-// Only for a key isWorktreePullRequestKey matched.
-export function worktreePullRequestKeyBranch(
-  queryKey: readonly unknown[],
-): string {
-  return queryKey[prBranchScopeIndex + 1] as string;
 }

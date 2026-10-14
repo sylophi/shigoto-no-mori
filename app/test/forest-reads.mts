@@ -1,5 +1,5 @@
-// Durable proof for the per-project reads (a project's pull requests,
-// its config, its icon, its GitHub description), which the sidebar and
+// Durable proof for the per-project reads (a project's config, its
+// icon, its GitHub description), which the sidebar and
 // the projects page ask of every project at once: however many projects there are, one device never has more of
 // them in flight than a quarter of the host's cap on a connection
 // (MAX_IN_FLIGHT_PER_PEER), so the page's own calls still go. A first
@@ -14,7 +14,6 @@ import * as Effect from "effect/Effect";
 import { it } from "vitest";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { projectIconQueryOptions } from "@/hooks/projects/useProjectIcon";
 import { repoDescriptionQueryOptions } from "@/hooks/projects/useRepoDescription";
@@ -36,8 +35,6 @@ function countingApi(fail: (projectId: string) => boolean = () => false) {
   const api = {
     run: (effect) => Effect.runPromise(effect),
     githubCli: {
-      projectPullRequests: ({ projectId }: { projectId: string }) =>
-        answer(projectId, {}),
       repoDescription: ({ projectId }: { projectId: string }) =>
         answer(projectId, null),
     },
@@ -58,7 +55,6 @@ const readAll = (api: HostApi, deviceId: string, projects: number) =>
     Array.from({ length: projects }, (_, index) => `p${index}`).flatMap(
       (projectId) =>
         [
-          projectPullRequestsQueryOptions(projectId, { deviceId, api }),
           shigomoriConfigQueryOptions(projectId, { deviceId, api }),
           projectIconQueryOptions(projectId, { deviceId, api }),
           repoDescriptionQueryOptions(projectId, { deviceId, api }),
@@ -74,7 +70,7 @@ const readAll = (api: HostApi, deviceId: string, projects: number) =>
 it("keeps a forest's reads to a quarter of the host's cap", async () => {
   const { api, counts } = countingApi();
   const results = await readAll(api, "device-a", 60);
-  assert.equal(counts.calls, 240);
+  assert.equal(counts.calls, 180);
   assert.ok(results.every((result) => result.status === "fulfilled"));
   assert.equal(counts.peak, MAX_IN_FLIGHT_PER_PEER / 4);
 });
@@ -83,9 +79,9 @@ it("frees a failed read's place", async () => {
   const { api, counts } = countingApi((projectId) => projectId.endsWith("3"));
   const results = await readAll(api, "device-b", 40);
   const failed = results.filter((result) => result.status === "rejected");
-  // p3, p13, p23 and p33, each four times.
-  assert.equal(failed.length, 16);
-  assert.equal(counts.calls, 160);
+  // p3, p13, p23 and p33, each three times.
+  assert.equal(failed.length, 12);
+  assert.equal(counts.calls, 120);
   assert.ok(counts.peak <= MAX_IN_FLIGHT_PER_PEER / 4);
 });
 

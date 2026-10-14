@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   useQuery,
   useQueryClient,
@@ -6,8 +6,6 @@ import {
 } from "@tanstack/react-query";
 import {
   matchesMapEntry,
-  toSlimPullRequest,
-  type PullRequest,
   type PullRequestDetail,
 } from "@shigomori/contracts/schemas";
 import {
@@ -15,7 +13,10 @@ import {
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { pullRequestMutationKey } from "@/hooks/projects/useProjectPullRequests";
+import {
+  pullRequestMutationKey,
+  useProjectPullRequests,
+} from "@/hooks/projects/useProjectPullRequests";
 import {
   mergeStateSettling,
   ownBranchPullRequest,
@@ -45,10 +46,11 @@ export function invalidateWorktreePullRequests(
 // Per-branch PR lookup for the open worktree page, on whichever device
 // the scope names. Fetches on mount so opening a worktree feels
 // instant, refetches when the window regains focus (a PR updated on
-// github.com while the app was backgrounded) and when the device's refs
-// move (invalidateWorktreePullRequests). A PR changing on GitHub with
-// none of those happening reaches it through the sweep broadcast
-// (syncProjectPullRequests). Silent on error to match the sweep's
+// github.com while the app was backgrounded), when the device's refs
+// move (invalidateWorktreePullRequests), and when the project's map (the
+// host's view of its sweep) disagrees with it, so a PR flipped on
+// github.com reaches an open page within a sweep. The host writes what
+// this read learns into that map. Silent on error to match the sweep's
 // swallow behavior. A transient gh failure shouldn't toast.
 export function useWorktreePullRequest(
   projectId: string,
@@ -59,24 +61,15 @@ export function useWorktreePullRequest(
   const { api, keys } = useHostScope();
   // When the current settling run began, so the poll below is bounded.
   const settlingSince = useRef<number | null>(null);
-  return useQuery<PullRequestDetail | null>({
+  const page = useQuery<PullRequestDetail | null>({
     queryKey: keys.worktreePullRequest(projectId, branch),
-    queryFn: async ({ signal }) => {
-      const pr = ownBranchPullRequest(
+    queryFn: async ({ signal }) =>
+      ownBranchPullRequest(
         await api.run(
           api.githubCli.worktreePullRequest({ projectId, branch }),
           { signal },
         ),
-      );
-      // Without this, the sidebar dot waits up to a full sweep tick to
-      // catch a PR merging on GitHub even after the user opened the
-      // worktree. The IPC throws on transient gh failure, so we only
-      // reach here with ground truth and never clobber the project map
-      // on a network hiccup. The host's BackgroundFetch.ts sweep still covers
-      // branches the user hasn't visited.
-      mirrorIntoProjectMap(queryClient, keys, projectId, branch, pr);
-      return pr;
-    },
+      ),
     enabled: options.enabled ?? true,
     // Nothing else refetches once the merge state is the only thing
     // lagging (the sweep's map doesn't carry it), so poll briefly. Not
@@ -103,30 +96,25 @@ export function useWorktreePullRequest(
     retry: false,
     meta: { silentError: true },
   });
-}
-
-export function mirrorIntoProjectMap(
-  queryClient: QueryClient,
-  keys: QueryKeyRegistry,
-  projectId: string,
-  branch: string,
-  pr: PullRequestDetail | null,
-): void {
-  // Read-then-maybe-write so we skip setQueryData entirely when nothing
-  // changed; even an updater that returns `prev` still bumps
-  // dataUpdatedAt and notifies every sidebar row observing the project
-  // map.
-  const key = keys.projectPullRequests(projectId);
-  const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
-  if (!prev || matchesMapEntry(pr, prev[branch])) return;
-  if (pr === null) {
-    const next = { ...prev };
-    delete next[branch];
-    queryClient.setQueryData<Record<string, PullRequest>>(key, next);
-    return;
-  }
-  queryClient.setQueryData<Record<string, PullRequest>>(key, {
-    ...prev,
-    [branch]: toSlimPullRequest(pr),
-  });
+  // The map holds only the newest 200 PRs (host PR_LIST_LIMIT), so one
+  // missing from it says nothing about this page's PR. A pending merge
+  // or draft toggle has written its optimistic result here, which the
+  // map can't match yet: the mutation refreshes the page as it settles.
+  // Only the map moving asks again: the page's own answer lands in it.
+  const entry = useProjectPullRequests(projectId).data?.[branch];
+  const detail = useRef(page.data);
+  detail.current = page.data;
+  useEffect(() => {
+    const shown = detail.current;
+    if (shown === undefined || (shown !== null && entry === undefined)) return;
+    if (queryClient.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
+      return;
+    if (!matchesMapEntry(shown, entry)) {
+      void queryClient.invalidateQueries(
+        { queryKey: keys.worktreePullRequest(projectId, branch), exact: true },
+        { cancelRefetch: false },
+      );
+    }
+  }, [entry, queryClient, keys, projectId, branch]);
+  return page;
 }

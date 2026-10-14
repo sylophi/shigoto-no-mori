@@ -1,34 +1,21 @@
-import {
-  queryOptions,
-  skipToken,
-  type QueryClient,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import {
-  matchesMapEntry,
-  type Project,
-  type PullRequest,
-  type PullRequestDetail,
-} from "@shigomori/contracts/schemas";
-import {
-  isWorktreePullRequestKey,
-  queryKeysFor,
-  worktreePullRequestKeyBranch,
-  type QueryKeyRegistry,
-} from "@/lib/queryKeys";
-import {
-  combineFanOut,
-  forestRead,
-  type HostForestScope,
-} from "@/hooks/remote/hostForestScope";
+import { useQueryClient } from "@tanstack/react-query";
+import { callOf } from "@shigomori/contracts/contract";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import type { Project } from "@shigomori/contracts/schemas";
+import * as Atom from "effect/reactivity/Atom";
+import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { ownBranchPullRequests } from "@shigomori/ui/lib/pullRequest.ts";
+import { hostViewAtom } from "@/lib/runtime/atoms";
+import {
+  useView,
+  useViewErrorToast,
+  useViews,
+  viewsOf,
+} from "@/lib/runtime/viewHooks";
 
-// Cascading invalidator: the shared key prefix knocks out both the
-// sidebar map and any open per-branch detail in one call, so PR
-// mutations can't desync the two layers by forgetting one.
+// Every open page's read of a branch's PR in the project, asked again
+// after a PR mutation (the map is the host's view, which the mutation
+// itself moves).
 export function invalidatePullRequestsForProject(
   qc: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
@@ -40,114 +27,57 @@ export function invalidatePullRequestsForProject(
 }
 
 // Shared by the PR mutations (merge, draft toggle), which write their
-// outcome into the page ahead of GitHub, so syncProjectPullRequests can
-// hold off while one runs.
+// outcome into the page ahead of GitHub, so a page comparing itself
+// with the map holds off while one runs (useWorktreePullRequest).
 export function pullRequestMutationKey(keys: QueryKeyRegistry) {
   return keys.pullRequestsAll();
 }
 
-// Answer to the sweep broadcast: the sweep already refreshed the
-// project map in the host, so the renderer refetches that, then re-asks
-// only the open worktree pages whose PR the new map disagrees with. A
-// PR flipped to draft or ready (or merged) on github.com thus reaches
-// an open page within a sweep, not at the next focus. Cascading to
-// every per-branch query instead would fire an extra `gh pr list
-// --head` per open page on every broadcast, most of them for PRs that
-// didn't move. Every device's broadcast lands here (lib/hostWatch.ts),
-// under that device's keys.
-export async function syncProjectPullRequests(
-  qc: QueryClient,
-  keys: QueryKeyRegistry,
-  projectId: string,
-): Promise<void> {
-  const mapKey = keys.projectPullRequests(projectId);
-  // "all": the comparison below needs the fresh map even when nothing
-  // is observing it. Main serves it from the sweep's cache, no gh call.
-  await qc.invalidateQueries({ queryKey: mapKey, refetchType: "all" });
-  const map = qc.getQueryData<Record<string, PullRequest>>(mapKey);
-  // A pending merge or draft toggle has written its optimistic result
-  // into the page, which the map can't match yet. The mutation
-  // refreshes the page itself when it settles.
-  if (!map || qc.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
-    return;
-  const pages = qc.getQueryCache().findAll({
-    queryKey: keys.pullRequestsForProject(projectId),
-    predicate: isWorktreePullRequestKey,
+const pullRequestsAtom = Atom.family((key: string) => {
+  const [deviceId = "", projectId = ""] = key.split("\n");
+  return hostViewAtom({
+    deviceId,
+    view: callOf(githubCliContract, "watchProjectPullRequests"),
+    input: { projectId },
   });
-  for (const page of pages) {
-    const detail = page.state.data as PullRequestDetail | null | undefined;
-    if (detail === undefined) continue;
-    const entry = map[worktreePullRequestKeyBranch(page.queryKey)];
-    // The map holds only the newest 200 PRs (host PR_LIST_LIMIT), so one
-    // missing from it says nothing about that PR.
-    if (detail !== null && entry === undefined) continue;
-    // cancelRefetch: false leaves a fetch already in flight to land
-    // rather than cancelling it and running the gh call again.
-    if (!matchesMapEntry(detail, entry)) {
-      void qc.invalidateQueries(
-        { queryKey: page.queryKey, exact: true },
-        { cancelRefetch: false },
-      );
-    }
-  }
-}
+});
 
-// Branch -> PR for a project, feeding the sidebar dots. The background
-// sweep in the host's BackgroundFetch.ts refreshes it and broadcasts
-// githubCli:projectPullRequestsRefreshed only when the data actually
-// changed; syncProjectPullRequests above refetches it off that
-// broadcast. The open worktree page reads its PR through
-// useWorktreePullRequest, and checks this map only to decide whether to
-// hold the section's place while that loads.
-// Scope rule as HostForestScope's: a peer's map caches under its
-// own device id, and a device with no session never fetches.
-export function projectPullRequestsQueryOptions(
-  projectId: string,
-  scope: HostForestScope,
-) {
-  const { deviceId, api } = scope;
-  return queryOptions<Record<string, PullRequest>>({
-    queryKey: queryKeysFor(deviceId).projectPullRequests(projectId),
-    queryFn:
-      api === undefined || deviceId === ""
-        ? skipToken
-        : async ({ signal }) =>
-            ownBranchPullRequests(
-              await forestRead(deviceId, () =>
-                api.run(api.githubCli.projectPullRequests({ projectId }), {
-                  signal,
-                }),
-              ),
-            ),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    meta: { errorTitle: "Couldn't load pull requests" },
-  });
-}
+// A device's project, as the map's views are keyed.
+export const pullRequestsKey = (deviceId: string, projectId: string) =>
+  `${deviceId}\n${projectId}`;
 
+// Every listed map of a device, for a caller that reads many projects.
+export const somePullRequestsAtom = viewsOf(pullRequestsAtom);
+
+// Branch -> PR for a project, feeding the sidebar dots: the host's view
+// of the background fetch's sweep, which a page's own read of its
+// branch's PR moves too (githubCli:worktreePullRequest). The open
+// worktree page reads its PR through useWorktreePullRequest, and checks
+// this map only to decide whether to hold the section's place while
+// that loads.
 export function useProjectPullRequests(projectId: string) {
-  const scope = useHostScope();
-  return useQuery(projectPullRequestsQueryOptions(projectId, scope));
+  const { deviceId, hasHost } = useHostScope();
+  const state = useView(
+    hasHost ? pullRequestsAtom(pullRequestsKey(deviceId, projectId)) : null,
+  );
+  useViewErrorToast(state, "Couldn't load pull requests");
+  return state;
 }
 
-// One query per project, sharing the per-project cache key with
+// One view per project, sharing the per-project atom with
 // useProjectPullRequests. The inbox sidebar is cross-project, so it
 // needs every map at once to tell a merged branch from a live one.
-// Main serves these from the sweep's cache, so the fan-out costs no
-// extra `gh` calls. Projects whose path is gone are skipped, since the
-// handler would just throw on the missing repo.
-//
-// Positionally aligned with `projects`, like useAllProjectWorktrees, so
-// a caller walking both indexes them the same way, through combineFanOut
-// so the array keeps its identity while nothing changed.
+// Projects whose path is gone are skipped, since the read would just
+// fail on the missing repo. Positionally aligned with `projects`, like
+// useAllProjectWorktrees.
 export function useAllProjectPullRequests(projects: readonly Project[]) {
-  const scope = useHostScope();
-  return useQueries({
-    queries: projects.map((project) => ({
-      ...projectPullRequestsQueryOptions(project.id, scope),
-      enabled: project.pathExists !== false,
-    })),
-    combine: combineFanOut,
-  });
+  const { deviceId, hasHost } = useHostScope();
+  return useViews(
+    somePullRequestsAtom,
+    projects.map((project) =>
+      hasHost && project.pathExists !== false
+        ? pullRequestsKey(deviceId, project.id)
+        : null,
+    ),
+  );
 }
