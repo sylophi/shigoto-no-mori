@@ -11,7 +11,7 @@
     "device": "pnpm -F ./app device",
     "test": "pnpm -F ./app test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "oxlint .",
+    "lint": "oxlint . && pnpm -C app react-compiler:check",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "web:dev": "pnpm -F ./app web:dev",

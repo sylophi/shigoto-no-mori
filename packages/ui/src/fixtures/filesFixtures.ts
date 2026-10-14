@@ -1,6 +1,7 @@
 // A posed worktree's files: the folder tree the files page and the
 // mirror picker browse, what the viewer reads for its files, and the
 // blobs a posed diff's image names. Pure data, served by bridge.ts.
+import { COMMIT_ICON_SIDES } from "./patches.ts";
 
 // What the files page's viewer reads for a FAKE_TREE file: something
 // the highlighter can dress by extension, the .env as the ignored file
@@ -12,8 +13,8 @@ export function fakeFile(path: string) {
 }
 
 // The two sides of FAKE_DIFF's icon.png (pullRequestFixtures.ts), by
-// the blob ids its patch names. SVG drawn as an image, which is all the
-// diff's preview sees.
+// the blob ids its patch names (patches.ts). SVG drawn as an image,
+// which is all the diff's preview sees.
 export function fakeBlob(oid: string) {
   const svg = FAKE_BLOBS[oid];
   if (svg === undefined) return { kind: "missing" as const };
@@ -25,10 +26,9 @@ export function fakeBlob(oid: string) {
   };
 }
 
-const FAKE_BLOBS: Record<string, string> = {
-  "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="56" fill="#9ca3af"/></svg>`,
-  "5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0": `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect x="8" y="8" width="112" height="112" rx="28" fill="#16a34a"/><path d="M40 84c0-28 20-44 48-44 0 28-16 48-44 48" fill="#bbf7d0"/></svg>`,
-};
+const FAKE_BLOBS: Record<string, string> = Object.fromEntries(
+  COMMIT_ICON_SIDES.map(({ oid, svg }) => [oid, svg]),
+);
 
 const FAKE_FILES: Record<string, string> = {
   ".env": "DATABASE_URL=postgres://localhost:5432/lab\n",
