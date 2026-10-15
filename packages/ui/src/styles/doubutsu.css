@@ -1182,9 +1182,17 @@
 
 /* A terminal tab is one pill as well, picked by the tab inside it,
    which sits it out. Its close keeps its own stripes. */
-.doubutsu [data-slot="terminal-tab-pick"]:is(:hover, :active) {
-  background-image: none;
-  animation: none;
+.doubutsu [data-slot="terminal-tab-pick"] {
+  &:active {
+    background-image: none;
+    animation: none;
+  }
+  @media (hover: hover) {
+    &:hover {
+      background-image: none;
+      animation: none;
+    }
+  }
 }
 
 /* A Visitors album sticker answers a pointer itself: it straightens

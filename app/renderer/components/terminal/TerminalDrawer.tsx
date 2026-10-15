@@ -32,8 +32,8 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const state = useTerminalDrawer();
   const key = drawerKey(deviceId, worktree.projectId, worktree.id);
   const drawer = drawerOf(state, key);
-  // Slides in when it opens on the page it was closed on (the toggle),
-  // not when a page change shows it open.
+  // Slides in when it opens on the page it was closed on (its toggle,
+  // a console), not when a page change shows it open.
   const [seen, setSeen] = useState({ key, open: drawer.open });
   const [slideIn, setSlideIn] = useState(false);
   if (seen.key !== key || seen.open !== drawer.open) {

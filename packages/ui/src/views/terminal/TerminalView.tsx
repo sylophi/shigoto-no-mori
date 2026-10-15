@@ -24,6 +24,12 @@ export type TerminalScreen = {
 // Starts feeding a screen, until the returned stop.
 export type TerminalFeed = (screen: TerminalScreen) => () => void;
 
+// The theme's mono weight (doubutsu sets 550), which xterm takes as a
+// number.
+const fontWeightOf = (host: HTMLElement): number =>
+  Number(host.ownerDocument.defaultView?.getComputedStyle(host).fontWeight) ||
+  400;
+
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
@@ -78,13 +84,13 @@ export function TerminalView({
     const host = hostRef.current;
     if (!host || !feed || !fontsIn) return;
     let theme = readTerminalTheme(host);
-    const style = host.ownerDocument.defaultView?.getComputedStyle(host);
     const term = new Terminal({
       // Matches the host's `font-terminal text-xs` and the theme's mono
       // weight. xterm sizes its cell grid from these, so they can't
       // come from CSS.
-      fontFamily: style?.fontFamily,
-      fontWeight: Number(style?.fontWeight) || "normal",
+      fontFamily:
+        host.ownerDocument.defaultView?.getComputedStyle(host).fontFamily,
+      fontWeight: fontWeightOf(host),
       fontSize: 12,
       lineHeight: 1.25,
       cursorBlink: true,
@@ -144,6 +150,8 @@ export function TerminalView({
     // DOM rather than the theme hooks. Only a changed palette is handed to xterm:
     // it repaints everything for any new theme object.
     const themeObserver = new MutationObserver(() => {
+      const weight = fontWeightOf(host);
+      if (term.options.fontWeight !== weight) term.options.fontWeight = weight;
       const next = readTerminalTheme(host);
       if (sameTheme(theme, next)) return;
       theme = next;

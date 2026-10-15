@@ -222,11 +222,13 @@
   }
   /* xterm's own bar is a square block as wide as its track. It takes
      the native overlay bar's shape instead: a thin pill, its color the
-     terminal theme's (terminalTheme.ts). */
+     terminal theme's (terminalTheme.ts). The clip is important because
+     xterm injects its colors as unlayered `background` shorthands,
+     which would reset it. */
   .xterm .xterm-scrollable-element > .scrollbar > .slider {
     border: 4px solid transparent;
     border-radius: 9999px;
-    background-clip: padding-box;
+    background-clip: padding-box !important;
   }
 
   /* Disabled controls show the not-allowed cursor. Only reaches elements

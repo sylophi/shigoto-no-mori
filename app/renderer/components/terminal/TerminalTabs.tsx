@@ -80,7 +80,6 @@ export function TerminalTabs({
   // closing.
   const seen = useRef<"waiting" | "opened" | "had">("waiting");
   const count = terminals === undefined ? undefined : tabs.length;
-  // Had a tab once, so none now is the last one closed.
   const [hadTabs, setHadTabs] = useState(false);
   if (count !== undefined && count > 0 && !hadTabs) setHadTabs(true);
   useEffect(() => {
@@ -116,7 +115,7 @@ export function TerminalTabs({
       }}
       onNew={open}
       onHide={onHide}
-      empty={count === 0 && hadTabs}
+      empty={onEmpty === undefined && count === 0 && hadTabs}
     >
       {pickedSlot !== undefined && scripts !== undefined ? (
         <ScriptConsole worktree={scripts.worktree} slot={pickedSlot} />

@@ -1,7 +1,7 @@
 // The bottom drawer a page's terminals sit in, over the footer and on
 // its surface: a handle along its top edge that drags its height, by
-// pointer or touch, over the tabs. Opened by its toggle, it slides up
-// out of the footer. On a phone it is a sheet over the whole page
+// pointer or touch, over the tabs. Opened on the page, it slides up out
+// of the footer. On a phone it is a sheet over the whole page
 // instead (the page is `relative` for it), where a console has the room
 // a script's output needs; its tabs' hide button closes it.
 import type { ReactNode } from "react";
@@ -14,7 +14,7 @@ export function TerminalDrawerView({
   children,
 }: {
   height: number;
-  // Opened just now by its toggle, not shown open by a page change.
+  // Opened just now on this page, not shown open by a page change.
   slideIn?: boolean;
   // A drag of the handle: the height it asks for.
   onHeight: (height: number) => void;
