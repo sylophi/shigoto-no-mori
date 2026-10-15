@@ -46,6 +46,7 @@ export function AppShell() {
   useDoctorWatch();
   const phone = usePhoneLayout();
   const { pathname } = useLocation();
+  const tabPage = isTabRoute(pathname);
   const navigate = useNavigate();
   usePaletteVariantHotkey(!pathname.startsWith("/settings"));
   useEscapeGoesBack();
@@ -92,6 +93,18 @@ export function AppShell() {
         phone && "pt-[env(safe-area-inset-top)]",
       )}
     >
+      {phone && tabPage && (
+        /* Safari on iOS tints its status bar from a fixed element on
+           top along the top edge, at least about 6px tall, else from
+           the body: the card a stacked page's back bar wants. A tab
+           page gives it the canvas it opens on (doubutsu.css: a page
+           header's band). */
+        <div
+          aria-hidden
+          data-slot="phone-top-edge"
+          className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[max(--spacing(3),env(safe-area-inset-top))] bg-background"
+        />
+      )}
       {!phone && (
         <>
           <div style={{ width: sidebar.width }} className="shrink-0">
@@ -114,7 +127,7 @@ export function AppShell() {
       <UpdateReadyToast />
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
-        {phone && !isTabRoute(pathname) && (
+        {phone && !tabPage && (
           /* A page stacked over the forest: the way back to it, where a
              wide viewport keeps the sidebar. Its full touch height is
              drawn, not left to the hit-area net: the page body under

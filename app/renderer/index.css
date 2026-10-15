@@ -152,7 +152,8 @@
      theme-color). Left transparent in a browser tab, that was white on
      every theme. A phone's bottom edge is the tab bar, so there the
      canvas continues its card. (Safari tints its top strip from that
-     same colour, a shade off the page's background up there.) */
+     same colour unless a fixed element covers the top edge: AppShell's
+     phone-top-edge.) */
   html,
   body {
     background-color: var(--background);
