@@ -26,9 +26,6 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     const at = updaterFiles(path, paths.dataDir);
     const statusPath = at.status;
     const temporaries = yield* Ref.make(0);
-    const removeAll = (target: string) =>
-      fs.remove(target, { recursive: true, force: true }).pipe(Effect.ignore);
-
     // A command run to the end, `from` its stdout or both its streams.
     // One that couldn't start reads as a failure with no output.
     const run = (
@@ -50,6 +47,13 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
           Effect.succeed<Ran>({ ok: false, output: "", cause }),
         ),
       );
+
+    // By rm, not FileSystem.remove: in the app, Electron's fs takes the
+    // app.asar inside a bundle for a folder, so a recursive remove of an
+    // .app fails on it, leaving a husk a rename onto then refuses
+    // (v3.0.0-alpha.4 to alpha.6 never staged an update).
+    const removeAll = (target: string) =>
+      run("rm", ["-rf", "--", target]).pipe(Effect.asVoid);
 
     // A file the terminal, the app and a v2 Go sm share, read leniently: one
     // that is missing, unreadable or malformed reads as absent.

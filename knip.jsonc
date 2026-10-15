@@ -63,6 +63,7 @@
     "pgrep",
     "chflags",
     "xattr",
+    "ditto",
     "port-pool",
     // app's, run by release.yml from app/ (knip reads it from the root).
     "electron-forge",

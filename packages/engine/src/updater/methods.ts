@@ -63,6 +63,14 @@ export const makeMethods = ({
     const { waitForRestart, appendInstallLog } = restart;
     // --- the methods ---
 
+    // open hands the app launchd's environment, not ours, so a data dir
+    // the environment chose (a test run's) is passed on, or the app
+    // would come back on the default one.
+    const relaunchArgs = (bundle: string) =>
+      paths.dataDirSource === "env"
+        ? ["--env", `SHIGOMORI_DATA_DIR=${paths.dataDir}`, bundle]
+        : [bundle];
+
     const available =
       offered === null ? Effect.fail(new UpdatesUnavailable()) : Effect.void;
 
@@ -197,12 +205,12 @@ export const makeMethods = ({
         Effect.tapError((error) =>
           appendInstallLog(
             `finish-install: ${causeText(error)} (relaunching the current app)`,
-          ).pipe(Effect.andThen(run("open", [bundle]))),
+          ).pipe(Effect.andThen(run("open", relaunchArgs(bundle)))),
         ),
       );
       // By path, in front: the user asked for the restart. A bundle id could
       // still resolve to the aside bundle just deleted.
-      const relaunched = yield* run("open", [bundle]);
+      const relaunched = yield* run("open", relaunchArgs(bundle));
       if (!relaunched.ok) {
         yield* appendInstallLog(
           `finish-install: installed ${installed.version} but relaunch failed: ${causeText(relaunched.cause)}`,
