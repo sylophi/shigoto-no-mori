@@ -251,8 +251,13 @@ jobs:
       # The app as the release signed it, opening its store, which only
       # its own host does (node:sqlite in Electron): on a data folder that
       # does not exist and on one an earlier launch left an empty store.db
-      # in (scripts/smoke-app.mts).
+      # in. Then updating itself, the loop every later release depends
+      # on: it stages a copy of itself signed again under a newer version
+      # from a local release list, takes an install request, and comes
+      # back swapped (scripts/smoke-app.mts). The identity signs that copy.
       - name: Launch the signed app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: node scripts/smoke-app.mts "out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app"
 
       - name: Upload assets to release

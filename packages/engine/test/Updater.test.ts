@@ -1545,7 +1545,10 @@ describe("finishing an install for the app", () => {
       `finish-install: waiting for app pid ${pid} to exit`,
       "finish-install: installed 2.0.0 and relaunched",
     ]);
-    assert.equal(calls().at(-1), `open ${box.installed}`);
+    assert.equal(
+      calls().at(-1),
+      `open --env SHIGOMORI_DATA_DIR=${box.dataDir} ${box.installed}`,
+    );
   });
 
   it("won't put a staged release over a newer app installed since", async () => {
@@ -1599,7 +1602,9 @@ describe("finishing an install for the app", () => {
       log(box).at(-1),
       "finish-install: No staged update to install. (relaunching the current app)",
     );
-    assert.deepEqual(calls(), [`open ${box.installed}`]);
+    assert.deepEqual(calls(), [
+      `open --env SHIGOMORI_DATA_DIR=${box.dataDir} ${box.installed}`,
+    ]);
   });
 
   it("says so when the relaunch fails", async () => {

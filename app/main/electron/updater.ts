@@ -35,6 +35,7 @@ import {
 import { dataDir } from "@shared/paths";
 import { readJson } from "../core/files/jsonFile";
 import { busyRemoteRefusal } from "@shared/busy";
+import { log } from "@shared/log";
 import { hostBusy, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
@@ -257,6 +258,7 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
       next = { kind: "error", message: messageOf(staged.failure) };
     }
     const failed = next.kind === "error";
+    if (next.kind === "error") log.warn(`[updater] ${next.message}`);
     if (
       failed &&
       shown !== null &&
@@ -432,9 +434,18 @@ export const layer = Layer.effectDiscard(
       return;
     }
     started = true;
-    // The only bridge request is "install" (UpdateRequestSchema). The
-    // CLI runs at this machine's own terminal, so it is attended.
-    yield* updaterBridge(() => void installUpdate(false));
+    // The CLI runs at this machine's own terminal, so its install is
+    // attended.
+    yield* updaterBridge({
+      install: () => void installUpdate(false),
+      failed: (error) => {
+        const message = `Couldn't read the update request: ${Updater.causeText(error)}`;
+        // Once, not on every poll it keeps failing.
+        if (state.kind === "error" && state.message === message) return;
+        log.warn(`[updater] ${message}`);
+        setState({ kind: "error", message });
+      },
+    });
     yield* Effect.forkScoped(
       Effect.gen(function* () {
         // Seed from disk before any network work: an update staged
