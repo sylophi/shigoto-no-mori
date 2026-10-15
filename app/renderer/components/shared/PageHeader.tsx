@@ -51,6 +51,7 @@ export function PageHeader({
 }) {
   return (
     <header
+      data-slot="page-header"
       className={cn(
         "relative flex flex-col overflow-hidden border-b border-border",
         PAGE_HEADER_PADDING,

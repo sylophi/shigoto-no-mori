@@ -734,11 +734,11 @@
    still moving underneath. Flat alpha, no backdrop blur: frosted glass
    is a v1 idiom, and doubutsu color-blocks.
 
-   Alpha is the whole knob here, and it trades against the lift. Light
-   mode has only 0.018 of lightness between --card and --background, so
-   the band leans on that thin margin; much below 70% and it stops
-   reading as a panel at all. Dark has 0.09 to spend and takes dilution
-   far more happily.
+   Alpha (--doubutsu-band-fill) is the whole knob here, and it trades
+   against the lift. Light mode has only 0.018 of lightness between
+   --card and --background, so the band leans on that thin margin;
+   much below 70% and it stops reading as a panel at all. Dark has 0.09
+   to spend and takes dilution far more happily.
 
    Descendant selectors on purpose: views nest their <header> at varying
    depths (Settings at the route root, WorktreeDetailInner one level
@@ -758,12 +758,29 @@
    blocks of its own, read as hard slabs on the wallpaper, louder than
    the header over them. Their own title rows are not <header>s, so the
    band does not stack inside them. */
+.doubutsu {
+  --doubutsu-band-fill: 70%;
+}
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer),
 .doubutsu
   :is([data-doubutsu-zone="main"], [data-slot="sheet-content"])
   :is([data-slot="diff-index"], [data-slot="file-tree"]),
 .doubutsu [data-doubutsu-zone="main"] [data-slot="live-card"] {
-  background-color: color-mix(in oklab, var(--card) 70%, transparent);
+  background-color: color-mix(
+    in oklab,
+    var(--card) var(--doubutsu-band-fill),
+    transparent
+  );
+}
+/* The strip Safari tints its status bar from (AppShell) continues a
+   page header's band, solid, as the band reads over the canvas. */
+.doubutsu:has([data-doubutsu-zone="main"] [data-slot="page-header"])
+  [data-slot="phone-top-edge"] {
+  background-color: color-mix(
+    in oklab,
+    var(--card) var(--doubutsu-band-fill),
+    var(--background)
+  );
 }
 
 /* --- Typography: AC chunky-by-default ---
