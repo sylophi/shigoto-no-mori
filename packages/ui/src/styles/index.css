@@ -220,6 +220,16 @@
   .xterm .xterm-viewport {
     scrollbar-width: none;
   }
+  /* xterm's own bar is a square block as wide as its track. It takes
+     the native overlay bar's shape instead: a thin pill, its color the
+     terminal theme's (terminalTheme.ts). The clip is important because
+     xterm injects its colors as unlayered `background` shorthands,
+     which would reset it. */
+  .xterm .xterm-scrollable-element > .scrollbar > .slider {
+    border: 4px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box !important;
+  }
 
   /* Disabled controls show the not-allowed cursor. Only reaches elements
      that keep pointer events, so components must not pair disabled state
@@ -272,32 +282,51 @@
 }
 
 /*
- * ANSI 16-color palette for the terminals. xterm reads these (and
- * the --background / --foreground tokens) through
- * terminal/terminalTheme.ts whenever the theme root's classes
- * change, so a theme can restyle the terminals by overriding them. OKLCH
- * values are tuned for legibility against both light and dark
- * backgrounds without a theme-specific override. The dim 8 colors
- * match what tools normally use for severity (red = error, yellow =
- * warn, etc.) and the bright 8 are punchier for emphasis.
+ * ANSI 16-color palette for the terminals. xterm reads these (and the
+ * --card / --foreground tokens it draws on) through
+ * terminal/terminalTheme.ts whenever the theme root's classes or
+ * palette change, so a theme can restyle the terminals by overriding
+ * them. Black and white are the theme's own ink and paper, so text a
+ * program draws on a colored background (a prompt's segments) reads in
+ * every palette, and bright black, the dim text of autosuggestions and
+ * hints, is the muted foreground. The hues are set per appearance, dark
+ * enough to read on a light card and light enough on a dark one.
  */
 [data-theme-scope] {
-  --ansi-black: oklch(0.55 0.005 270);
-  --ansi-red: oklch(0.6 0.18 25);
-  --ansi-green: oklch(0.62 0.17 145);
-  --ansi-yellow: oklch(0.72 0.15 85);
-  --ansi-blue: oklch(0.62 0.17 250);
-  --ansi-magenta: oklch(0.62 0.2 320);
-  --ansi-cyan: oklch(0.68 0.13 200);
-  --ansi-white: oklch(0.85 0.005 270);
-  --ansi-bright-black: oklch(0.65 0.005 270);
-  --ansi-bright-red: oklch(0.72 0.2 25);
-  --ansi-bright-green: oklch(0.78 0.2 145);
-  --ansi-bright-yellow: oklch(0.85 0.16 85);
-  --ansi-bright-blue: oklch(0.75 0.2 250);
-  --ansi-bright-magenta: oklch(0.74 0.22 320);
-  --ansi-bright-cyan: oklch(0.8 0.15 200);
-  --ansi-bright-white: oklch(0.97 0.005 270);
+  --ansi-black: var(--foreground);
+  --ansi-red: oklch(0.55 0.2 25);
+  --ansi-green: oklch(0.52 0.15 145);
+  --ansi-yellow: oklch(0.6 0.13 80);
+  --ansi-blue: oklch(0.5 0.18 255);
+  --ansi-magenta: oklch(0.52 0.2 320);
+  --ansi-cyan: oklch(0.55 0.1 205);
+  --ansi-white: color-mix(in oklab, var(--foreground) 25%, var(--card));
+  --ansi-bright-black: var(--muted-foreground);
+  --ansi-bright-red: oklch(0.6 0.21 25);
+  --ansi-bright-green: oklch(0.58 0.16 145);
+  --ansi-bright-yellow: oklch(0.66 0.14 85);
+  --ansi-bright-blue: oklch(0.57 0.18 255);
+  --ansi-bright-magenta: oklch(0.58 0.2 320);
+  --ansi-bright-cyan: oklch(0.6 0.11 205);
+  --ansi-bright-white: color-mix(in oklab, var(--foreground) 10%, var(--card));
+  --terminal-selection: color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+.dark {
+  --ansi-black: color-mix(in oklab, var(--foreground) 22%, var(--card));
+  --ansi-red: oklch(0.7 0.18 25);
+  --ansi-green: oklch(0.75 0.17 145);
+  --ansi-yellow: oklch(0.83 0.14 85);
+  --ansi-blue: oklch(0.7 0.15 250);
+  --ansi-magenta: oklch(0.72 0.18 320);
+  --ansi-cyan: oklch(0.78 0.11 200);
+  --ansi-white: color-mix(in oklab, var(--foreground) 80%, var(--card));
+  --ansi-bright-red: oklch(0.76 0.19 25);
+  --ansi-bright-green: oklch(0.82 0.18 145);
+  --ansi-bright-yellow: oklch(0.88 0.15 85);
+  --ansi-bright-blue: oklch(0.77 0.15 250);
+  --ansi-bright-magenta: oklch(0.78 0.18 320);
+  --ansi-bright-cyan: oklch(0.85 0.11 200);
+  --ansi-bright-white: var(--foreground);
 }
 
 /*

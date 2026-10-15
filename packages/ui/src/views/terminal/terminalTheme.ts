@@ -5,7 +5,7 @@ import type { ITheme } from "@xterm/xterm";
 // through probe elements instead: `color: var(--token)` computed on a
 // child of the console host yields whatever the active theme (light,
 // dark, doubutsu) assigns, in a form xterm's color parser accepts.
-// Callers re-read on every <html> class change (see TerminalView).
+// Callers re-read on every theme root change (see TerminalView).
 // The eight ANSI base colors. Each also has a --ansi-bright-* twin
 // feeding xterm's bright* key.
 const ANSI_BASES = [
@@ -45,13 +45,23 @@ function toHex(color: string, doc: Document): string {
 
 export function readTerminalTheme(host: HTMLElement): ITheme {
   const entries: Array<[ThemeColorKey, string]> = [
-    ["background", "var(--background)"],
+    ["background", "var(--card)"],
     ["foreground", "var(--foreground)"],
     ["cursor", "var(--foreground)"],
-    ["cursorAccent", "var(--background)"],
+    ["cursorAccent", "var(--card)"],
+    ["selectionBackground", "var(--terminal-selection)"],
+    // The native scrollbars' color (index.css), on xterm's own bar.
     [
-      "selectionBackground",
-      "color-mix(in oklab, var(--foreground) 22%, transparent)",
+      "scrollbarSliderBackground",
+      "color-mix(in oklab, var(--foreground) 25%, transparent)",
+    ],
+    [
+      "scrollbarSliderHoverBackground",
+      "color-mix(in oklab, var(--foreground) 40%, transparent)",
+    ],
+    [
+      "scrollbarSliderActiveBackground",
+      "color-mix(in oklab, var(--foreground) 50%, transparent)",
     ],
   ];
   for (const base of ANSI_BASES) {

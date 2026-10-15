@@ -47,6 +47,7 @@ export function TerminalButton({ worktree }: { worktree: Worktree }) {
       icon={<SquareTerminal />}
       label="Terminal"
       tip={keys.label}
+      expanded={open}
       onClick={() => setDrawerOpen(key, !open)}
     />
   );

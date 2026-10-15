@@ -37,7 +37,7 @@ export function ScriptConsoleView({
   const outputOnly = busy && !state.interactive;
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-9 shrink-0 items-center gap-3 border-b border-border px-3 py-1">
+      <div className="flex min-h-9 shrink-0 items-center gap-3 px-6 py-1 phone:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {command && (
             <SimpleTooltip whenTruncated tip={command}>
@@ -53,6 +53,11 @@ export function ScriptConsoleView({
             </span>
           )}
         </div>
+        {onClear && (
+          <IconButton onClick={onClear} aria-label="Clear log">
+            <Trash2 className="size-3.5" />
+          </IconButton>
+        )}
         {readOnlyNote === null &&
           (busy ? (
             <Button
@@ -83,19 +88,9 @@ export function ScriptConsoleView({
         <div className="relative min-h-0 flex-1">
           {terminal}
           {state.status === "starting" && !state.hasOutput && (
-            <div className="pointer-events-none absolute top-2 left-3 font-mono text-xs text-muted-foreground">
+            <div className="pointer-events-none absolute top-2 left-6 font-mono text-xs text-muted-foreground phone:left-4">
               Starting…
             </div>
-          )}
-          {onClear && (
-            <IconButton
-              onClick={onClear}
-              aria-label="Clear log"
-              // Above the terminal, whose scrollbar shares this corner.
-              className="absolute top-2 right-3 z-10 text-muted-foreground/60"
-            >
-              <Trash2 className="size-3.5" />
-            </IconButton>
           )}
         </div>
       )}
