@@ -156,18 +156,26 @@ export function DiffPage({
   // otherwise puts every row in the DOM up front and holds the window
   // for seconds. The file wrappers keep their full height, so the
   // scrollbar, the index's jumps and the scroll spy work as before.
-  const [virtualizer] = useState(() => new Virtualizer());
-  // Armed on the list rather than the scroll area: the list is what
-  // grows, and it only exists once there is a patch to show. The rows'
-  // own refs run first and queue up until this connects them. The
-  // scroll area is read off the DOM, not scrollRef: when both mount in
-  // one commit (a cached diff reopened), this ref runs before the
-  // parent's is set.
-  const listRef = (list: HTMLDivElement | null) => {
-    const scroller = list?.parentElement;
-    if (list && scroller) virtualizer.setup(scroller, list);
-    else virtualizer.cleanUp();
-  };
+  //
+  // The list's ref arms it, on the list rather than the scroll area: the
+  // list is what grows, and it only exists once there is a patch to
+  // show. The rows' own refs run first and queue up until this connects
+  // them. The scroll area is read off the DOM, not scrollRef: when both
+  // mount in one commit (a cached diff reopened), this ref runs before
+  // the parent's is set. The ref is made once with the virtualizer, not
+  // left to the compiler: a new one on a render has React call the old
+  // with null, and cleanUp disconnects every row.
+  const [{ virtualizer, listRef }] = useState(() => {
+    const made = new Virtualizer();
+    return {
+      virtualizer: made,
+      listRef: (list: HTMLDivElement | null) => {
+        const scroller = list?.parentElement;
+        if (list && scroller) made.setup(scroller, list);
+        else made.cleanUp();
+      },
+    };
+  });
   // The file list lives in the app sidebar (SidebarTakeover), which a
   // phone doesn't have. The same list opens as a bottom sheet there instead.
   const phone = usePhoneLayout();
@@ -252,18 +260,18 @@ export function DiffPage({
     changes,
     footer,
     onOpen: openInEditor,
+    className: "min-h-0 flex-1",
   };
   // The list, framed by the page when it frames it.
   const sidebarWith = (index: ReactNode) =>
     renderSidebar ? renderSidebar(index) : index;
 
-  const fileIndex = (onSelect: (key: string) => void) => (
-    <DiffFileIndexView
-      {...indexProps}
-      onSelect={onSelect}
-      className="min-h-0 flex-1"
-    />
-  );
+  // Picking a file in the phone's sheet closes it and jumps, so the tap
+  // lands on the file itself.
+  const selectFromSheet = (key: string) => {
+    setFileSheetOpen(false);
+    selectFile(key);
+  };
 
   return (
     <DiffPageView
@@ -272,7 +280,11 @@ export function DiffPage({
           back={{ label: backLabel, onClick: onBack }}
           actions={sidebarActions}
         >
-          {sidebarWith(showIndex && fileIndex(selectFile))}
+          {sidebarWith(
+            showIndex && (
+              <DiffFileIndexView {...indexProps} onSelect={selectFile} />
+            ),
+          )}
         </SidebarTakeover>
       }
       header={
@@ -357,18 +369,13 @@ export function DiffPage({
       }
       sheet={
         phone && (
-          // Picking a file closes the sheet and jumps, so the tap lands
-          // on the file itself.
           <DiffFilesSheetView
             open={fileSheetOpen}
             onOpenChange={setFileSheetOpen}
             title={filesLabel}
           >
             {sidebarWith(
-              fileIndex((key) => {
-                setFileSheetOpen(false);
-                selectFile(key);
-              }),
+              <DiffFileIndexView {...indexProps} onSelect={selectFromSheet} />,
             )}
           </DiffFilesSheetView>
         )

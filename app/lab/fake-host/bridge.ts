@@ -168,6 +168,10 @@ interface FakeHostControls {
   ): void;
   emitClient: FixtureWire["emit"];
   emitHost: FixtureWire["emit"];
+  // The patch a commit, branch or stash diff opened from now on reads,
+  // in place of FAKE_DIFF: one git printed for a repository of the
+  // caller's (the commit-diff-rows proof).
+  setPatch(patch: string): void;
   // Set by boot.tsx once the memory router is up.
   navigate?: (to: string) => void;
 }
@@ -715,8 +719,8 @@ function hostHandlersFor(
     "worktrees:pullAndPush": ({ worktreeId }) => syncAfter(worktreeId, evened),
     "worktrees:pushForce": ({ worktreeId }) => syncAfter(worktreeId, evened),
     "worktrees:overwrite": ({ worktreeId }) => syncAfter(worktreeId, evened),
-    "worktrees:commitDiff": () => FAKE_DIFF,
-    "worktrees:branchDiff": () => FAKE_DIFF,
+    "worktrees:commitDiff": () => fakePatch,
+    "worktrees:branchDiff": () => fakePatch,
     // The Git timeline's reads: the row's own commits, from a fork on
     // the primary branch for any worktree but the primary, one stash on
     // happy-hummingbird, nothing stopped, and a hunk per picked file.
@@ -740,7 +744,7 @@ function hostHandlersFor(
       };
     },
     "worktrees:watchStashes": ({ worktreeId }) => fakeStashes[worktreeId] ?? [],
-    "worktrees:stashDiff": () => FAKE_DIFF,
+    "worktrees:stashDiff": () => fakePatch,
     "worktrees:watchOperation": () => ({
       operation: null,
       continuable: false,
@@ -1259,6 +1263,7 @@ let pushFromPeer: (
   payload: unknown,
 ) => void = () => {};
 let fakeSessionSerial = 1;
+let fakePatch = FAKE_DIFF;
 
 function mirrorChanged() {
   for (const emit of mirrorWires.values()) emit("mirror:changed", undefined);
@@ -2136,6 +2141,9 @@ export function installFakeHostBridge(
     setSocket(phase) {
       socketPhase = phase;
       pushHub();
+    },
+    setPatch(patch) {
+      fakePatch = patch;
     },
     // Holds the given roots still on every posed mirror, each changed
     // on both sides, so the conflict chip and its list can be posed.

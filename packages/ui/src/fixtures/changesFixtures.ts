@@ -10,65 +10,66 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import type { FakeWorktree } from "./fixtures.ts";
+import { CHANGE_PATCHES } from "./patches.ts";
 
 // The files a worktree's changes are drawn from: the first
 // `changedCount` of them, then sorted by path like git status. One of
 // each kind, a deep path and a long name, and enough of them (8) for
 // the list's filter, so the marks, the truncation and the filter all
-// show.
-const POOL: readonly ChangedFile[] = [
-  {
-    path: "renderer/components/diff/CommitComposer.tsx",
-    kind: "modified",
-    counts: { additions: 38, deletions: 14 },
-    staged: "none",
-  },
-  {
-    path: "renderer/components/sidebar/DeviceBadge.tsx",
-    kind: "added",
-    counts: { additions: 7, deletions: 0 },
-    // In the index the way an agent's `git add` leaves a file, which the
-    // page's ticks pay no mind to.
-    staged: "all",
-  },
-  {
-    path: "renderer/lib/toast.tsx",
-    kind: "modified",
-    counts: { additions: 4, deletions: 1 },
-    staged: "none",
-  },
-  {
-    path: "renderer/lib/villagerVoice.ts",
-    kind: "modified",
-    counts: { additions: 12, deletions: 3 },
-    staged: "none",
-  },
-  {
-    path: "renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
-    prevPath: "renderer/components/worktreeDetail/commits/useSyncState.ts",
-    kind: "renamed",
-    counts: { additions: 2, deletions: 2 },
-    staged: "none",
-  },
-  {
-    path: "shared/legacy/oldStatus.ts",
-    kind: "deleted",
-    counts: { additions: 0, deletions: 21 },
-    staged: "none",
-  },
-  {
-    path: "app/test/proofs/commitComposer.test.ts",
-    kind: "added",
-    counts: { additions: 64, deletions: 0 },
-    staged: "none",
-  },
-  {
-    path: "README.md",
-    kind: "modified",
-    counts: { additions: 3, deletions: 0 },
-    staged: "none",
-  },
-];
+// show. Each one's patch, counts and hunks are git's (patches.ts).
+function changeOf(path: string) {
+  const change = CHANGE_PATCHES[path];
+  if (change === undefined) throw new Error(`no fixture patch for ${path}`);
+  return change;
+}
+
+const POOL: readonly ChangedFile[] = (
+  [
+    {
+      path: "renderer/components/diff/CommitComposer.tsx",
+      kind: "modified",
+      staged: "none",
+    },
+    {
+      path: "renderer/components/sidebar/DeviceBadge.tsx",
+      kind: "added",
+      // In the index the way an agent's `git add` leaves a file, which the
+      // page's ticks pay no mind to.
+      staged: "all",
+    },
+    {
+      path: "renderer/lib/toast.tsx",
+      kind: "modified",
+      staged: "none",
+    },
+    {
+      path: "renderer/lib/villagerVoice.ts",
+      kind: "modified",
+      staged: "none",
+    },
+    {
+      path: "renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
+      prevPath: "renderer/components/worktreeDetail/commits/useSyncState.ts",
+      kind: "renamed",
+      staged: "none",
+    },
+    {
+      path: "shared/legacy/oldStatus.ts",
+      kind: "deleted",
+      staged: "none",
+    },
+    {
+      path: "app/test/proofs/commitComposer.test.ts",
+      kind: "added",
+      staged: "none",
+    },
+    {
+      path: "README.md",
+      kind: "modified",
+      staged: "none",
+    },
+  ] satisfies Omit<ChangedFile, "counts">[]
+).map((file) => Object.assign(file, { counts: changeOf(file.path).counts }));
 
 const byPath = (a: ChangedFile, b: ChangedFile) =>
   a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
@@ -105,8 +106,8 @@ export function createFakeChanges(
     status: (worktreeId: string) => filesOf(worktreeId),
 
     // What the host's commit does to the tree: the picked files go, and
-    // HEAD moves. A file here has one change, so one ticked by hunk goes
-    // whole.
+    // HEAD moves. A file ticked by any of its hunks goes whole: the
+    // fixture keeps no file half committed.
     commit: (
       worktreeId: string,
       {
@@ -160,108 +161,21 @@ export function createFakeChanges(
       return { snapshot: "5eed5ab", worktree };
     },
 
-    // The picked file's one change, as patchFor draws it: past three
-    // lines of context, its deletions then its additions.
+    // The picked file's changes, as git's -U0 diff gives the hunk
+    // ticks them.
     hunks: (worktreeId: string, path: string) => {
       const file = filesOf(worktreeId).find((f) => f.path === path);
-      const adds = file?.counts?.additions ?? 0;
-      const dels = file?.counts?.deletions ?? 0;
       const head = findWorktree(worktreeId)?.recentCommits[0]?.hash ?? "0000";
-      if (!file || file.kind !== "modified" || adds + dels === 0) {
-        return { head, changes: [] };
-      }
-      return {
-        head,
-        changes: [
-          {
-            oldStart: dels === 0 ? 3 : 4,
-            oldCount: dels,
-            newStart: adds === 0 ? 3 : 4,
-            newCount: adds,
-          },
-        ],
-      };
+      if (!file || file.kind !== "modified") return { head, changes: [] };
+      return { head, changes: changeOf(path).hunks };
     },
 
-    // The patch for one picked file: a hunk the size of its counts.
+    // The patch for one picked file.
     fileDiff: (worktreeId: string, paths: readonly string[]) => {
       const path = paths.at(-1) ?? "";
       const file = filesOf(worktreeId).find((f) => f.path === path);
       if (!file) return "";
-      return patchFor(file);
+      return changeOf(file.path).patch;
     },
   };
-}
-
-const CODE = [
-  'import { cn } from "@/lib/utils";',
-  'import { pluralize } from "@/lib/pluralize";',
-  'import type { ChangedFile } from "@shigomori/contracts/schemas";',
-  "",
-  "// What the button says it will do.",
-  "export function label(count: number, amending: boolean): string {",
-  '  const what = pluralize(count, "file");',
-  "  return amending ? `Amend with ${what}` : `Commit ${what}`;",
-  "}",
-  "",
-  "export function tone(ahead: number): string {",
-  '  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
-  "}",
-  "",
-  "export function included(files: readonly ChangedFile[]): number {",
-  '  return files.filter((file) => file.staged !== "none").length;',
-  "}",
-  "",
-  "export const SUMMARY_SOFT_LIMIT = 72;",
-  "",
-  "export function overLimit(summary: string): boolean {",
-  "  return summary.trim().length > SUMMARY_SOFT_LIMIT;",
-  "}",
-  "",
-  'export const scope = (all: boolean) => (all ? "all" : "some");',
-];
-
-function lines(count: number, offset: number): string[] {
-  return Array.from(
-    { length: count },
-    (_, i) => CODE[(i + offset) % CODE.length] ?? "",
-  );
-}
-
-function patchFor(file: ChangedFile): string {
-  const adds = file.counts?.additions ?? 0;
-  const dels = file.counts?.deletions ?? 0;
-  const from = file.prevPath ?? file.path;
-  const head = [`diff --git a/${from} b/${file.path}`];
-  if (file.kind === "added") {
-    head.push("new file mode 100644", "--- /dev/null", `+++ b/${file.path}`);
-    return [
-      ...head,
-      `@@ -0,0 +1,${adds} @@`,
-      ...lines(adds, 0).map((l) => `+${l}`),
-      "",
-    ].join("\n");
-  }
-  if (file.kind === "deleted") {
-    head.push("deleted file mode 100644", `--- a/${from}`, "+++ /dev/null");
-    return [
-      ...head,
-      `@@ -1,${dels} +0,0 @@`,
-      ...lines(dels, 3).map((l) => `-${l}`),
-      "",
-    ].join("\n");
-  }
-  if (file.kind === "renamed") {
-    head.push(`rename from ${from}`, `rename to ${file.path}`);
-  }
-  head.push(`--- a/${from}`, `+++ b/${file.path}`);
-  const context = lines(3, 0);
-  return [
-    ...head,
-    `@@ -1,${context.length + dels} +1,${context.length + adds} @@`,
-    ...context.map((l) => ` ${l}`),
-    ...lines(dels, 4).map((l) => `-${l}`),
-    ...lines(adds, 6).map((l) => `+${l}`),
-    "",
-  ].join("\n");
 }

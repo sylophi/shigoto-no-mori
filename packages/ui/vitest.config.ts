@@ -1,6 +1,10 @@
 // The proofs read sources (the boundary) and render the scenes in Node,
 // where there is no window.
 import { defineConfig } from "vitest/config";
+import { isolateGit } from "../../gitIsolation";
+
+// The fixture patches' repositories run git (test/lib/fixtureRepos.ts).
+isolateGit();
 
 export default defineConfig({
   test: {
