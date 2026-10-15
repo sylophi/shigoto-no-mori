@@ -27,12 +27,21 @@ const ERRNO_TEXT: Record<string, string> = {
   EROFS: "read-only file system",
   EISDIR: "is a directory",
   ELOOP: "too many levels of symbolic links",
+  ENOTEMPTY: "directory not empty",
+  EEXIST: "file exists",
+  EXDEV: "cross-device link",
+  EBUSY: "device or resource busy",
 };
 
-// An error's errno as Go words it, else `fallback`.
+// An error's errno as Go words it, else `fallback`. An errno the table
+// doesn't word keeps the system's own message, which names it: the
+// platform's "Unknown" says nothing of it.
 export const errnoWords = (cause: unknown, fallback: string) => {
   const code = Predicate.hasProperty(cause, "code") ? String(cause.code) : "";
-  return ERRNO_TEXT[code] ?? fallback;
+  if (code === "") return fallback;
+  return (
+    ERRNO_TEXT[code] ?? (cause instanceof Error ? cause.message : fallback)
+  );
 };
 
 // A failed call's errno as Go words it, else its message.

@@ -345,4 +345,8 @@ removed one the next time they read the registry. A relaunch after
   read `main.log`. Started with `--sm-lab`, it relaunches on `SIGUSR2`.
   `node scripts/smoke-app.mts <the .app>` launches it on fresh data
   folders and waits for its store to open, as the release job does.
-  Its launches write the build's userData and logs folder.
+  With `APPLE_SIGNING_IDENTITY` set and the build signed by it, it then
+  has the app update itself into a copy signed again under a newer
+  version, as the release job does too. Its launches write the build's
+  userData and logs folder, and a build of a flavor whose app is running
+  on this machine quits at its single-instance lock.

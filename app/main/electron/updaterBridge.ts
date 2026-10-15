@@ -3,30 +3,28 @@
 // dir: the app publishes its updater state to
 // updater.json ({ pid, appVersion, state }) on boot and on every state
 // change, and consumes updater-request.json ({ action, requestedAt })
-// written by the CLI. Requests are picked up at boot (a request can
-// land in the gap around a restart) and via a watch of the data dir
-// afterwards. Everything here is best-effort: a failed write or a
-// malformed request degrades `sm update`, never the updater itself.
+// written by the CLI. The request is looked for every second from boot
+// on, not watched for: the data dir holds the worktrees, and under
+// their churn macOS's FSEvents drops events, which Node's fs.watch
+// passes over in silence. A failed publish degrades `sm update`, never
+// the updater itself.
 import path from "node:path";
 import { app } from "electron";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FileSystem from "effect/FileSystem";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import type {
-  UpdateRequest,
-  UpdaterState,
-  UpdaterStatus,
-} from "@shigomori/contracts/schemas";
+import type { UpdaterState, UpdaterStatus } from "@shigomori/contracts/schemas";
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
 import { updaterFiles } from "@shigomori/engine/Updater";
 import { dataDir } from "@shared/paths";
 import { readJson, writeJson } from "../core/files/jsonFile";
 
 const REQUEST_STALE_MS = 2 * 60_000;
+const REQUEST_POLL_MS = 1000;
 
 const files = () => updaterFiles(path, dataDir());
 
@@ -49,28 +47,34 @@ export const publishUpdaterState = (state: UpdaterState) => {
   );
 };
 
-// The watch, so the data-folder move can let go of the data dir.
-let watching: FiberHandle.FiberHandle | null = null;
+// The poll, so the data-folder move can let go of the data dir.
+let polling: FiberHandle.FiberHandle | null = null;
 
-// Consumes the request at boot, then each time the watch sees it
-// written, for the length of the scope (the updater's layer). The
-// watch's events burst (the CLI's temp and rename, this side's own
-// cleanup echoing back), so a request is claimed by renaming it aside
-// before it is read: a fresh one landing mid-read keeps its own file
-// and its own event instead of being deleted unread, and the claimed
-// file always goes, since unparseable leftovers must not shadow the
-// next request. The events are handled one at a time.
-export const updaterBridge = (
-  handle: (action: UpdateRequest["action"]) => void,
-): Effect.Effect<void, never, FileSystem.FileSystem | Scope.Scope> =>
+// Consumes the request, for the length of the scope (the updater's
+// layer). A request is claimed by renaming it aside before it is read,
+// so a fresh one landing mid-read keeps its own file instead of being
+// deleted unread, and the claimed file always goes, since an
+// unparseable leftover must not shadow the next request. A claim that
+// fails for any reason but there being no request is `failed`'s, every
+// poll until it clears.
+export const updaterBridge = ({
+  install,
+  failed,
+}: {
+  readonly install: () => void;
+  readonly failed: (error: unknown) => void;
+}): Effect.Effect<void, never, FileSystem.FileSystem | Scope.Scope> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const consumingPath = () => files().request + ".consuming";
-    // The boot's consume and the watch's share one claimed file, so they
-    // take turns.
-    const turns = yield* Semaphore.make(1);
     const consume = Effect.gen(function* () {
-      yield* fs.rename(files().request, consumingPath());
+      const claimed = yield* fs.rename(files().request, consumingPath()).pipe(
+        Effect.as(true),
+        Effect.catchReason("PlatformError", "NotFound", () =>
+          Effect.succeed(false),
+        ),
+      );
+      if (!claimed) return;
       const request = yield* readJson(
         consumingPath(),
         UpdateRequestSchema,
@@ -78,33 +82,21 @@ export const updaterBridge = (
       yield* Effect.ignore(fs.remove(consumingPath(), { force: true }));
       if (request === null) return;
       const now = yield* Clock.currentTimeMillis;
+      // A dropped request: the CLI times out and says so.
       if (now - request.requestedAt > REQUEST_STALE_MS) return;
-      handle(request.action);
-    }).pipe(
-      // Nothing to consume, or a dropped request: the CLI times out and
-      // says so.
-      Effect.ignore,
-      turns.withPermits(1),
-    );
-    // A data dir that is missing or goes (a nuke) ends the watch; the
-    // next launch watches afresh. Watched before the first consume, so
-    // a request written meanwhile is either consumed or heard.
-    watching = yield* FiberHandle.make();
-    const requestFile = path.basename(files().request);
+      // The only action there is (UpdateRequestSchema).
+      install();
+    }).pipe(Effect.catch((error) => Effect.sync(() => failed(error))));
+    polling = yield* FiberHandle.make();
     yield* FiberHandle.run(
-      watching,
-      fs.watch(dataDir()).pipe(
-        Stream.filter((event) => event.path === requestFile),
-        Stream.runForEach(() => consume),
-        Effect.ignore,
-      ),
+      polling,
+      consume.pipe(Effect.repeat(Schedule.spaced(REQUEST_POLL_MS))),
     );
-    yield* consume;
   });
 
 // Released before the data-folder move renames the data dir. The
 // post-move relaunch starts a fresh bridge.
 export function stopUpdaterBridge(): void {
-  if (watching !== null) Effect.runFork(FiberHandle.clear(watching));
-  watching = null;
+  if (polling !== null) Effect.runFork(FiberHandle.clear(polling));
+  polling = null;
 }
