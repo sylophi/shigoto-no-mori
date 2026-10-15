@@ -21,6 +21,7 @@ import {
   summarizeChecks,
 } from "@shigomori/contracts/schemas";
 import { armsAutoMerge } from "../lib/pullRequest.ts";
+import { COMMIT_PATCH } from "./patches.ts";
 
 const FAKE_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);
 
@@ -616,37 +617,6 @@ const FAKE_PR_DETAIL = {
 // Four files, so the diff pages pose a real file index (the list in
 // the sidebar on a wide viewport) and the phone's sheet, which needs a
 // patch of at least DiffPage's SHEET_MIN_FILES. One is an image, for
-// the preview of its two sides (fakeBlob in filesFixtures.ts).
-export const FAKE_DIFF = `diff --git a/public/icon.png b/public/icon.png
-index 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d..5d6e7f8a9b0c1d2e3f405162738495a6b7c8d9e0 100644
-Binary files a/public/icon.png and b/public/icon.png differ
-diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx
-index 4f2c9d1..a91f3c7 100644
---- a/renderer/components/sidebar/RowContent.tsx
-+++ b/renderer/components/sidebar/RowContent.tsx
-@@ -12,6 +12,8 @@ import { WorktreeRowLabel } from "./WorktreeRow";
-+import { DeviceBadge } from "./DeviceBadge";
-+
- export function RowContent({ row }: { row: SidebarRow }) {
-diff --git a/renderer/components/sidebar/DeviceBadge.tsx b/renderer/components/sidebar/DeviceBadge.tsx
-new file mode 100644
-index 0000000..5b0e77a
---- /dev/null
-+++ b/renderer/components/sidebar/DeviceBadge.tsx
-@@ -0,0 +1,7 @@
-+import { RowTag } from "@/components/ui/row-tag";
-+
-+// The owning device, as a two-letter tag at the row's trailing edge.
-+export function DeviceBadge({ label }: { label: string }) {
-+  const short = label.slice(0, 2).toUpperCase();
-+  return <RowTag title={label}>{short}</RowTag>;
-+}
-diff --git a/renderer/components/sidebar/WorktreeRow.tsx b/renderer/components/sidebar/WorktreeRow.tsx
-index c3d8e5f..dd44ee5 100644
---- a/renderer/components/sidebar/WorktreeRow.tsx
-+++ b/renderer/components/sidebar/WorktreeRow.tsx
-@@ -18,7 +18,7 @@ import { useWorktreeRowState } from "./useWorktreeRowState";
- export const WORKTREE_ROW_BUTTON =
--  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs";
-+  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors";
-`;
+// the preview of its two sides (fakeBlob in filesFixtures.ts). Git's
+// own output (patches.ts).
+export const FAKE_DIFF = COMMIT_PATCH;

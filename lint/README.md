@@ -15,6 +15,13 @@ its cases through oxlint's `RuleTester`.
 | `no-env-or-clock-in-service` | A service module reads the environment through `Config` and the time through `Clock`, never `process.env`, `Date.now()` or `new Date()`. |
 | `effect-fn-service-methods` | A method a service module's tag types as returning an `Effect.Effect` is `Effect.fn("Service.method")`, not a plain function. |
 
+`pnpm run lint` also runs `app/scripts/react-compiler-check.mts`,
+which fails on a component or hook in `app/renderer` or
+`packages/ui/src` that the React Compiler skips, printing the file,
+the function and the compiler's reason. The ones it skipped when the
+check came are listed in `app/scripts/react-compiler-bailouts.json`,
+to be fixed and taken off.
+
 ## Service modules
 
 A service module is a `.ts` or `.mts` file named for its service in

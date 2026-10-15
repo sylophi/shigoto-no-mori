@@ -22,7 +22,13 @@ pre-commit:
           # whole repo.
           - name: lint-all
             glob: "{.oxlintrc.json,lint/**,package.json,pnpm-workspace.yaml}"
-            run: pnpm run lint
+            run: node_modules/.bin/oxlint
+          # The functions the React Compiler skips, held to the list
+          # (app/scripts/react-compiler-check.mts). A change to the
+          # check or its list checks every file.
+          - name: react-compiler
+            glob: "{app/renderer/**,packages/ui/src/**,app/scripts/react-compiler-*}"
+            run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON app/scripts/react-compiler-check.mts {staged_files}
           # The lint plugin's own rules (lint/README.md).
           - name: lint-rules
             glob: "lint/**"

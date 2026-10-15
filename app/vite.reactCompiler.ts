@@ -13,9 +13,13 @@
 import { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 
+// What the compiler is handed, by the builds and by the bailout check
+// (scripts/react-compiler-check.mts), which adds its logger.
+export const REACT_COMPILER_OPTIONS = {};
+
 export function reactCompiler() {
   return babel({
-    presets: [reactCompilerPreset()],
+    presets: [reactCompilerPreset(REACT_COMPILER_OPTIONS)],
     overrides: [
       // `include` is babel's synonym for `test`, and the one of the two
       // the plugin's types admit.
