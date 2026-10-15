@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { paramToSlot, type ScriptSlot } from "@/store/scriptSlot";
 import {
@@ -32,6 +32,14 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const state = useTerminalDrawer();
   const key = drawerKey(deviceId, worktree.projectId, worktree.id);
   const drawer = drawerOf(state, key);
+  // Slides in when it opens on the page it was closed on (the toggle),
+  // not when a page change shows it open.
+  const [seen, setSeen] = useState({ key, open: drawer.open });
+  const [slideIn, setSlideIn] = useState(false);
+  if (seen.key !== key || seen.open !== drawer.open) {
+    setSeen({ key, open: drawer.open });
+    setSlideIn(seen.key === key && drawer.open);
+  }
   if (!drawer.open) return null;
   const close = () => setDrawerOpen(key, false);
   const slots = drawer.scripts
@@ -40,6 +48,7 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   return (
     <TerminalDrawerView
       height={state.height}
+      slideIn={slideIn}
       onHeight={(asked) =>
         setDrawerHeight(
           Math.round(

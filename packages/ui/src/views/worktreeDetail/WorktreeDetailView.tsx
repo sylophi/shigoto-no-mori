@@ -66,7 +66,8 @@ export function WorktreeDetailView({
   ports: ReactNode;
   scripts: ReactNode;
   footer: ReactNode;
-  // The terminal drawer, under the footer while it is open.
+  // The terminal drawer, over the footer while it is open, so the
+  // footer and its Terminal toggle keep their place.
   drawer?: ReactNode;
 }) {
   return (
@@ -145,8 +146,8 @@ export function WorktreeDetailView({
         </div>
       </div>
 
-      {footer}
       {drawer}
+      {footer}
     </div>
   );
 }

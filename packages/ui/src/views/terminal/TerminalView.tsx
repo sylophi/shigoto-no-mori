@@ -78,11 +78,13 @@ export function TerminalView({
     const host = hostRef.current;
     if (!host || !feed || !fontsIn) return;
     let theme = readTerminalTheme(host);
+    const style = host.ownerDocument.defaultView?.getComputedStyle(host);
     const term = new Terminal({
-      // Matches the host's `font-terminal text-xs`. xterm sizes its cell
-      // grid from these, so they can't come from CSS.
-      fontFamily:
-        host.ownerDocument.defaultView?.getComputedStyle(host).fontFamily,
+      // Matches the host's `font-terminal text-xs` and the theme's mono
+      // weight. xterm sizes its cell grid from these, so they can't
+      // come from CSS.
+      fontFamily: style?.fontFamily,
+      fontWeight: Number(style?.fontWeight) || "normal",
       fontSize: 12,
       lineHeight: 1.25,
       cursorBlink: true,
@@ -223,7 +225,7 @@ export function TerminalView({
       data-slot="terminal"
       data-keyboard-surface="raw"
       {...usersAlone("terminal")}
-      className="isolate h-full w-full overflow-hidden bg-background px-3 py-2 font-terminal text-xs"
+      className="isolate h-full w-full overflow-hidden bg-card px-6 py-2 font-terminal text-xs phone:px-4"
     >
       <div
         ref={hostRef}

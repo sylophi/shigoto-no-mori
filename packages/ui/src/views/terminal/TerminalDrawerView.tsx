@@ -1,16 +1,21 @@
-// The bottom drawer a page's terminals sit in: a handle along its top
-// edge that drags its height, by pointer or touch, over the tabs. On a
-// phone it is a sheet over the whole page instead (the page is
-// `relative` for it), where a console has the room a script's output
-// needs; its tabs' hide button closes it.
+// The bottom drawer a page's terminals sit in, over the footer and on
+// its surface: a handle along its top edge that drags its height, by
+// pointer or touch, over the tabs. Opened by its toggle, it slides up
+// out of the footer. On a phone it is a sheet over the whole page
+// instead (the page is `relative` for it), where a console has the room
+// a script's output needs; its tabs' hide button closes it.
 import type { ReactNode } from "react";
+import { cn } from "../../lib/utils.ts";
 
 export function TerminalDrawerView({
   height,
   onHeight,
+  slideIn = false,
   children,
 }: {
   height: number;
+  // Opened just now by its toggle, not shown open by a page change.
+  slideIn?: boolean;
   // A drag of the handle: the height it asks for.
   onHeight: (height: number) => void;
   children: ReactNode;
@@ -20,7 +25,7 @@ export function TerminalDrawerView({
       aria-label="Terminals"
       data-slot="terminal-drawer"
       style={{ height }}
-      className="relative flex shrink-0 flex-col border-t border-border bg-background phone:absolute phone:inset-0 phone:z-30 phone:h-auto! phone:border-t-0"
+      className="relative flex shrink-0 flex-col border-t border-border bg-card phone:absolute phone:inset-0 phone:z-30 phone:h-auto! phone:border-t-0"
     >
       <div
         role="separator"
@@ -41,7 +46,20 @@ export function TerminalDrawerView({
           );
         }}
       />
-      <div className="min-h-0 flex-1">{children}</div>
+      {/* Clipped, so the slide comes out from behind the footer. The
+          box keeps its size meanwhile: only a transform moves, and the
+          terminal does not refit on every frame. */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <div
+          className={cn(
+            "h-full",
+            slideIn &&
+              "duration-200 ease-(--ease-out-quart) motion-safe:animate-in motion-safe:slide-in-from-bottom",
+          )}
+        >
+          {children}
+        </div>
+      </div>
     </section>
   );
 }

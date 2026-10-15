@@ -1,10 +1,13 @@
 // A row of terminal tabs over the picked one's body: each tab its
 // label and a close, a new terminal at the row's end, and whatever the
 // place it sits in adds after that (a drawer's hide). Left and right arrows move the
-// pick, as tabs do.
+// pick, as tabs do. The row and the body are one surface, the card,
+// inset to the page's gutter.
 import type { ReactNode } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import { ChevronDown, Plus, X } from "lucide-react";
+import { Button } from "../../primitives/button.tsx";
+import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
@@ -24,6 +27,7 @@ export function TerminalTabsView({
   onClose,
   onNew,
   onHide,
+  empty = false,
   children,
 }: {
   tabs: readonly TerminalTab[];
@@ -34,6 +38,9 @@ export function TerminalTabsView({
   onNew?: () => void;
   // Present where the tabs fold away (a drawer).
   onHide?: () => void;
+  // The last tab was closed and nothing opens another by itself (a
+  // device's page).
+  empty?: boolean;
   // The picked tab's body.
   children: ReactNode;
 }) {
@@ -45,46 +52,48 @@ export function TerminalTabsView({
     <Tabs.Root
       value={selectedId}
       onValueChange={(id: string) => onSelect(id)}
-      className="flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-col bg-card"
     >
-      <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border px-2">
+      <div className="flex h-9 shrink-0 items-center gap-1 px-6 phone:px-4">
         <Tabs.List
           ref={listRef}
           activateOnFocus
           aria-label="Terminals"
-          className="flex min-w-0 [scrollbar-width:none] items-center gap-0.5 overflow-x-auto"
+          className="flex min-w-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto"
         >
           {tabs.map((tab) => {
             const selected = tab.id === selectedId;
             return (
+              // One pill built from two controls: the pill takes the
+              // hover, and its close shows while it is hovered or picked.
               <div
                 key={tab.id}
                 data-slot="terminal-tab"
                 className={cn(
-                  "group flex h-6 shrink-0 items-center rounded-md pr-0.5 text-xs transition-colors",
+                  "group flex h-6 shrink-0 items-center rounded-full pr-0.5 text-xs transition-colors",
                   selected
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Tabs.Tab
                   value={tab.id}
+                  data-slot="terminal-tab-pick"
                   aria-label={tab.label}
                   className={cn(
-                    "flex h-full items-center pl-2",
+                    "flex h-full items-center pl-2.5",
                     tab.ended && "opacity-60",
                   )}
                 >
                   <SimpleTooltip whenTruncated tip={tab.label}>
-                    <span className="max-w-40 truncate font-mono">
-                      {tab.label}
-                    </span>
+                    <span className="max-w-40 truncate">{tab.label}</span>
                   </SimpleTooltip>
                 </Tabs.Tab>
                 <IconButton
                   aria-label={`Close ${tab.label}`}
                   onClick={() => onClose(tab.id)}
-                  className="ml-0.5 p-0.5"
+                  reveal={!selected}
+                  className="ml-0.5 rounded-full p-0.5 group-hover:opacity-100 hover:bg-foreground/10"
                 >
                   <X className="size-3" />
                 </IconButton>
@@ -93,7 +102,11 @@ export function TerminalTabsView({
           })}
         </Tabs.List>
         {onNew && (
-          <IconButton aria-label="New terminal" onClick={onNew}>
+          <IconButton
+            aria-label="New terminal"
+            onClick={onNew}
+            className="rounded-full"
+          >
             <Plus className="size-3.5" />
           </IconButton>
         )}
@@ -101,13 +114,34 @@ export function TerminalTabsView({
           <IconButton
             aria-label="Hide terminals"
             onClick={onHide}
-            className="ml-auto"
+            className="-mr-1 ml-auto rounded-full"
           >
             <ChevronDown className="size-3.5" />
           </IconButton>
         )}
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 flex-1">
+        {empty ? (
+          <div className="px-6 py-2 phone:px-4">
+            <EmptyPanel>
+              <p>No terminals open.</p>
+              {onNew && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onNew}
+                  className="mt-3"
+                >
+                  <Plus />
+                  New terminal
+                </Button>
+              )}
+            </EmptyPanel>
+          </div>
+        ) : (
+          children
+        )}
+      </div>
     </Tabs.Root>
   );
 }

@@ -53,6 +53,7 @@
  *      guide-callout-box, guide-ring   guide/GuideView.tsx
  *      sidebar-project-row       sidebar/ProjectRow.tsx
  *      sidebar-project-pick      sidebar/ProjectHeaderView.tsx
+ *      terminal-tab, terminal-tab-pick   terminal/TerminalTabsView.tsx
  *      project-tile              shared/ProjectIcon.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
@@ -97,7 +98,7 @@
  *
  * 6. Tailwind utility names (stable public API, checked loosely):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
- *    -semibold/-bold/-black/-mono, [class*="backdrop-blur"].
+ *    -semibold/-bold/-black/-mono/-terminal, [class*="backdrop-blur"].
  *
  * Token blocks below use `[data-theme-scope].doubutsu` (not
  * `.doubutsu`) so they outrank index.css's `[data-theme-scope]` /
@@ -789,10 +790,16 @@
   font-weight: 700;
 }
 .doubutsu .font-mono,
+.doubutsu .font-terminal,
 .doubutsu pre,
 .doubutsu code,
 .doubutsu kbd {
   font-weight: 550;
+}
+/* A terminal's selection wears the accent, as every selection here
+   does. */
+[data-theme-scope].doubutsu {
+  --terminal-selection: color-mix(in oklab, var(--accent) 85%, transparent);
 }
 /* A mono input's placeholder reads as prose (placeholder:font-sans),
    but it inherits the mono treatment above. It takes the body's weight
@@ -1124,7 +1131,8 @@
       li[data-row-idx].cursor-pointer,
       :is([data-slot="switch"], [data-slot="checkbox"]):not(label *),
       [data-slot="diff-index-row"],
-      [data-slot="sidebar-project-row"]
+      [data-slot="sidebar-project-row"],
+      [data-slot="terminal-tab"]
     ):not(:disabled, [aria-disabled="true"], [data-disabled]),
     label:has(input[type="radio"]:not(:disabled)),
     label:has(input[type="checkbox"]:not(:disabled))
@@ -1168,6 +1176,13 @@
    beside it keep their own stripes, like the diff row's tick and
    discard. */
 .doubutsu [data-slot="sidebar-project-pick"]:is(:hover, :active) {
+  background-image: none;
+  animation: none;
+}
+
+/* A terminal tab is one pill as well, picked by the tab inside it,
+   which sits it out. Its close keeps its own stripes. */
+.doubutsu [data-slot="terminal-tab-pick"]:is(:hover, :active) {
   background-image: none;
   animation: none;
 }
