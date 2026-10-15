@@ -90,9 +90,17 @@ const pidAlive = (pid: number) => {
   }
 };
 
+// A signal to a process gone already is no failure of the smoke's.
+const signal = (pid: number, name: NodeJS.Signals) => {
+  try {
+    process.kill(pid, name);
+  } catch {}
+};
+
 async function stop(pid: number, exited: () => boolean): Promise<void> {
-  process.kill(pid, "SIGTERM");
-  if (!(await until(exited, QUIT_WITHIN_MS))) process.kill(pid, "SIGKILL");
+  if (exited()) return;
+  signal(pid, "SIGTERM");
+  if (!(await until(exited, QUIT_WITHIN_MS))) signal(pid, "SIGKILL");
   await until(exited, QUIT_WITHIN_MS);
 }
 
