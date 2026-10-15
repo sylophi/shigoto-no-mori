@@ -1,5 +1,6 @@
 // The worktree footer's leading verbs share one shape: a ghost text
-// button that opens a dialog or a page. Files leads on every worktree,
+// button that opens a dialog, a page or the terminal drawer, lit while
+// the drawer it shows is open. Files leads on every worktree,
 // then Mirror (or, mirrored, the running mirror's Mirroring in its
 // place). Each gives up its label on a narrow footer at its own rank
 // (the app's worktreeDetail/footerFit.ts).
@@ -12,6 +13,7 @@ export function FooterActionButtonView({
   label,
   tip,
   disabledReason,
+  expanded,
   onClick,
 }: {
   rank: number;
@@ -20,6 +22,8 @@ export function FooterActionButtonView({
   tip?: string;
   // Disables the button and becomes its tip.
   disabledReason?: string;
+  // Set for a toggle of what it shows (the terminal drawer).
+  expanded?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -32,6 +36,7 @@ export function FooterActionButtonView({
       className="shrink-0 text-muted-foreground hover:text-foreground"
       tip={disabledReason ?? tip}
       disabled={disabledReason !== undefined}
+      aria-expanded={expanded}
       onClick={onClick}
     />
   );
