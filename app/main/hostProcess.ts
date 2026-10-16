@@ -42,7 +42,9 @@ import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
 import { makePortServer } from "./ipc/ShellLink";
 import { createShellRegistrar } from "./ipc/shellRegistrar";
 import { deviceIdWithin } from "./core/host/deviceId";
-import { busyWithin, watchHost } from "./core/host/watchdog";
+import { beats, busyWithin, watchHost } from "./core/host/watchdog";
+import { clearLoopbackOf } from "./core/host/leftovers";
+import { dataDir } from "@shared/paths";
 
 type Address = {
   readonly port: number;
@@ -96,6 +98,19 @@ const QUIT_DEADLINE_MS = 15_000;
 // stays silent this long is killed and forked again.
 const WATCH_EVERY = "10 seconds";
 const SILENT_LIMIT = "30 seconds";
+// A host that is starting has no link to ask yet: its loop beats on
+// its parent port (host.ts) from the moment it runs, and one whose
+// beats stop this long before it is up is killed. Longer than the
+// running limit, since a start may import a store in one go. A second
+// start in a row that stalls is the failure, said and shown, rather
+// than a loop of starts.
+const START_SILENT_LIMIT = "60 seconds";
+const START_STALLS_ALLOWED = 1;
+// How long a killed host is given to exit before it is killed outright
+// (a host stopped by a signal never sees the first).
+const KILL_GRACE_MS = 5_000;
+// How long a restart waits on clearing what the host before it left.
+const CLEAR_WITHIN_MS = 2_000;
 // How long a quit or an update waits to hear whether the host is busy.
 const BUSY_DEADLINE = "3 seconds";
 const IDLE = { runningScripts: 0, inflightDeletes: 0 } as const;
@@ -122,6 +137,12 @@ let onFailed: (failure: HostFailure) => void = () => {};
 let parkedExit: Promise<void> | null = null;
 let nextPark = deferred<void>();
 let restarting: Promise<void> | null = null;
+// The host that last said it is up, and the starts in a row since then
+// that stalled before one did.
+let upHost: UtilityProcess | null = null;
+let startStalls = 0;
+// The host whose stalled starts were given up on, left down.
+let stalledOut: UtilityProcess | null = null;
 
 // The shell's link to the current host, made on first use: a window
 // may ask before the hold is up, and waits for the host's address.
@@ -159,6 +180,8 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
     // Up, its sweep has claimed what the hosts before it left.
     replaced = [];
+    upHost = child;
+    startStalls = 0;
     // The device the host is rides along, which the shell's account
     // calls name.
     reportedDeviceId = reported.deviceId;
@@ -189,7 +212,7 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
           sleeps: () => sleeps,
           silent: () => {
             log.warn("[host] silent for 30 s, starting it again");
-            watched.kill();
+            killHard(watched);
           },
         }),
       );
@@ -217,6 +240,26 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   guide: ({ session: token, action }) =>
     onGuide((guide) => guide.drive(token, action)),
 };
+
+// Asks the host to exit, and makes it once the grace runs out.
+function killHard(running: UtilityProcess): void {
+  const pid = running.pid;
+  let exited = false;
+  running.once("exit", () => {
+    exited = true;
+  });
+  running.kill();
+  if (pid === undefined) return;
+  setTimeout(() => {
+    if (exited) return;
+    log.warn(`[host] ${pid} did not exit when asked, killing it`);
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Gone meanwhile.
+    }
+  }, KILL_GRACE_MS).unref();
+}
 
 function fork(): void {
   const { port1, port2 } = new MessageChannelMain();
@@ -253,9 +296,55 @@ function fork(): void {
   }
   if (server !== null) void Effect.runPromise(server.attach(port1, null));
   forked.postMessage(null, [port2]);
+  // Its loop's beats, until it is up (START_SILENT_LIMIT).
+  const beat = beats();
+  forked.on("message", beat.beat);
+  Effect.runFork(
+    watchHost({
+      probe: beat.next,
+      every: WATCH_EVERY,
+      limit: START_SILENT_LIMIT,
+      watching: () =>
+        child === forked &&
+        upHost !== forked &&
+        !quitting &&
+        parkedExit === null,
+      asleep: () => asleep,
+      sleeps: () => sleeps,
+      silent: () => {
+        startStalls += 1;
+        if (startStalls > START_STALLS_ALLOWED) {
+          // Not forked again: the failure is what follows.
+          stalledOut = forked;
+          const message = `The host stopped responding while it started, ${startStalls} times in a row.`;
+          log.error(`[host] ${message}`);
+          killHard(forked);
+          onFailed({ message, storeReport: null });
+          return;
+        }
+        log.warn("[host] silent for 60 s while starting, starting it again");
+        killHard(forked);
+      },
+    }),
+  );
   forked.once("exit", (code) => {
     if (child === forked) child = null;
     if (quitting || parkedExit !== null) return;
+    // Gone unasked: what it published of its loopback names a port
+    // nobody serves. A quit's host takes its own away (Loopback.ts).
+    // Cleared before the next host starts, so it can't take that host's
+    // own file, and only waited on so long: a data dir that holds it
+    // holds the next host too, which the start watch then sees.
+    const cleared =
+      spawned === undefined
+        ? Promise.resolve()
+        : Promise.race([
+            clearLoopbackOf(dataDir(), spawned.pid),
+            new Promise<void>((resolve) =>
+              setTimeout(resolve, CLEAR_WITHIN_MS).unref(),
+            ),
+          ]);
+    if (stalledOut === forked) return;
     log.warn(`[host] exited unasked (code ${code}), starting it again`);
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
@@ -277,7 +366,9 @@ function fork(): void {
       (gone) => gone.exitedAt >= now - CRASH_WINDOW_MS,
     );
     if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
-    fork();
+    void cleared.then(() => {
+      if (!quitting) fork();
+    });
   });
 }
 

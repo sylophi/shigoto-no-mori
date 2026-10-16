@@ -54,3 +54,28 @@ export const watchHost = (options: {
       }
     }
   });
+
+// A starting host's beats (host.ts posts one every few seconds from
+// its first moment), as a probe for watchHost: `next` settles at the
+// beat after it is asked. A host has no link to ask until it is up, and
+// a loop stuck before then beats no more.
+export const beats = (): {
+  readonly beat: () => void;
+  readonly next: Effect.Effect<void>;
+} => {
+  let waiting: Array<() => void> = [];
+  return {
+    beat: () => {
+      const settled = waiting;
+      waiting = [];
+      for (const resolve of settled) resolve();
+    },
+    next: Effect.callback<void>((resume) => {
+      const resolve = () => resume(Effect.void);
+      waiting.push(resolve);
+      return Effect.sync(() => {
+        waiting = waiting.filter((other) => other !== resolve);
+      });
+    }),
+  };
+};

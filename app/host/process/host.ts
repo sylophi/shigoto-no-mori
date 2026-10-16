@@ -45,6 +45,7 @@ type HostPort = {
   start(): void;
 };
 type ParentPort = {
+  postMessage(message: unknown): void;
   once(
     event: "message",
     listener: (event: { ports: ReadonlyArray<HostPort> }) => void,
@@ -102,6 +103,14 @@ const facts = hostFacts();
 const flavor = facts.flavor;
 // Electron adds parentPort to a utility process, and its types are Electron's
 const parentPort = (process as { parentPort: ParentPort }).parentPort;
+
+// The loop's beat, which the shell reads while this host starts
+// (main/hostProcess.ts): a loop stuck before the host is up stops it.
+const BEAT_EVERY_MS = 5_000;
+// oxlint-disable-next-line unicorn/require-post-message-target-origin -- a utility process's parent port, which has no origin
+const beat = () => parentPort.postMessage("beat");
+beat();
+setInterval(beat, BEAT_EVERY_MS).unref();
 
 let hurried = false;
 let runtime: { readonly dispose: () => Promise<void> } | null = null;

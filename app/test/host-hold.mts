@@ -16,10 +16,18 @@
 //     "Not responding" on this device), and a reconnect asked while
 //     a link is up is no drop. Over the REAL loopback
 //     (host/socket/Loopback.ts), with the shell's token.
+//   - a host that is starting is watched by its loop's beats: a real
+//     process whose loop is stuck in a watch's open (the stall V3.md's
+//     "A watch that froze the host" records) is called silent within
+//     the start limit, and one that beats is left alone.
+//   - a host gone unasked leaves no loopback behind: its pid's
+//     loopback.json and the one it was writing aside go, and a
+//     loopback.json another host published stays.
 //
 // Run: pnpm test host-hold.
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync, fork } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Context from "effect/Context";
@@ -39,7 +47,8 @@ import * as Views from "@host/lib/Views";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";
 import * as Loopback from "@host/socket/Loopback";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
-import { busyWithin, watchHost } from "../main/core/host/watchdog.ts";
+import { beats, busyWithin, watchHost } from "../main/core/host/watchdog.ts";
+import { clearLoopbackOf } from "../main/core/host/leftovers.ts";
 import { hostContext } from "./lib/hostRuntime.mts";
 import { pushesLayer } from "./lib/hostStandIns.mts";
 import { testClock, waitFor } from "./lib/checkKit.mts";
@@ -246,5 +255,83 @@ it("the shell's link dials a restarted host once, the reconnect asked as it came
     }
   } finally {
     await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+});
+
+it("a starting host whose loop sticks in a watch's open is called silent, and one that beats is not", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sm-host-start-"));
+  const fifo = join(dir, "fifo");
+  execFileSync("mkfifo", [fifo]);
+  // A host's start in miniature: it beats as host.ts does, then (when
+  // told to stick) watches a path whose open does not return.
+  const script = join(dir, "host.cjs");
+  writeFileSync(
+    script,
+    `const { watch } = require("node:fs");
+setInterval(() => process.send("beat"), 100);
+if (process.argv[2] === "stick") setTimeout(() => watch(process.argv[3]), 500);
+`,
+  );
+  const watch = async (mode: "stick" | "beat") => {
+    const child = fork(script, [mode, fifo], { stdio: "ignore" });
+    const beat = beats();
+    child.on("message", beat.beat);
+    let silent = false;
+    let watching = true;
+    const watched = Effect.runPromise(
+      watchHost({
+        probe: beat.next,
+        every: "200 millis",
+        limit: "1 second",
+        watching: () => watching,
+        asleep: () => false,
+        sleeps: () => 0,
+        silent: () => {
+          silent = true;
+        },
+      }),
+    );
+    const settled = await Promise.race([
+      watched.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 4_000)),
+    ]);
+    watching = false;
+    child.kill("SIGKILL");
+    await watched;
+    return { settled, silent };
+  };
+  try {
+    assert.deepEqual(await watch("stick"), { settled: true, silent: true });
+    assert.deepEqual(await watch("beat"), { settled: false, silent: false });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const published = (pid: number) =>
+  JSON.stringify({ pid, port: 1, token: "t", appVersion: "0" });
+
+it("a host gone unasked leaves no loopback behind, and another host's stays", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sm-host-left-"));
+  const file = join(dir, "loopback.json");
+  try {
+    writeFileSync(file, published(4242));
+    writeFileSync(`${file}.4242`, published(4242));
+    await clearLoopbackOf(dir, 4242);
+    assert.ok(!existsSync(file), "its loopback.json must go");
+    assert.ok(!existsSync(`${file}.4242`), "its file aside must go");
+
+    writeFileSync(file, published(5151));
+    await clearLoopbackOf(dir, 4242);
+    assert.ok(existsSync(file), "another host's loopback.json must stay");
+
+    // Nothing there, or something unreadable: nothing to clear.
+    rmSync(file);
+    await clearLoopbackOf(dir, 4242);
+    writeFileSync(file, "{");
+    await clearLoopbackOf(dir, 4242);
+    assert.ok(existsSync(file));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

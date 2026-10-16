@@ -1,0 +1,147 @@
+// A file watch that can't stop the host. `fs.watch` opens the path it
+// watches with a plain open(2) on the calling thread (libuv's
+// uv_fs_event_start), so a path whose open does not return stops the
+// host's whole loop with it: no call answered, no link, and a host
+// restarted onto the same path stuck again as it starts (V3.md, "A
+// watch that froze the host"). The one seen: a worktree on an external
+// disk, whose first read macOS holds for the Files and Folders prompt
+// until someone answers it. A FIFO does the same. So the path is opened
+// first on the thread pool, without blocking and within a deadline, and
+// watched only once that open came back on a folder or a file. One that
+// did not is tried again on an interval, and watched once it opens, so
+// the watch is late rather than lost. A held open keeps one of the
+// pool's four threads until it returns, and every file read and write
+// the host makes goes through that pool too: a retry waits on its
+// path's open rather than starting another, and no more than two opens
+// are under way at once, so held ones never take the whole pool.
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import type { PlatformError } from "effect/PlatformError";
+import * as Stream from "effect/Stream";
+import { log } from "@shared/log";
+
+const OPEN_WITHIN: Duration.Input = "5 seconds";
+const RETRY_EVERY: Duration.Input = "30 seconds";
+
+// An open still on its way, per path.
+const opening = new Map<string, Promise<string | null>>();
+// Opens under way at once, and the ones waiting for a turn.
+const OPENS_AT_ONCE = 2;
+let underWay = 0;
+const turns: Array<() => void> = [];
+
+const turn = (): Promise<void> => {
+  if (underWay < OPENS_AT_ONCE) {
+    underWay += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => turns.push(resolve));
+};
+
+const done = (): void => {
+  const next = turns.shift();
+  if (next === undefined) underWay -= 1;
+  else next();
+};
+
+// How a path is opened to see whether it can be watched: the real open
+// unless a proof stands in for it.
+type Opener = (path: string) => Promise<{
+  stat(): Promise<{ isDirectory(): boolean; isFile(): boolean }>;
+  close(): Promise<void>;
+}>;
+const openToProbe: Opener = (path) =>
+  open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+
+const opened = (path: string, openPath: Opener): Promise<string | null> => {
+  const held = opening.get(path);
+  if (held !== undefined) return held;
+  const attempt = turn()
+    .then(() => openPath(path).finally(done))
+    .then(async (handle) => {
+      try {
+        const stat = await handle.stat();
+        return stat.isDirectory() || stat.isFile()
+          ? null
+          : "is not a folder or a file";
+      } finally {
+        await handle.close().catch(() => {});
+      }
+    })
+    // A path that fails to open fails the watch the same way, without
+    // hanging: the watch says so as it always has.
+    .catch(() => null)
+    .finally(() => opening.delete(path));
+  opening.set(path, attempt);
+  return attempt;
+};
+
+// An open of `path` that did not come back within `within`, in words.
+// Off the startup disk, that is macOS holding it for the Files and
+// Folders prompt.
+export const heldOpen = (path: string, within: Duration.Input): string =>
+  path.startsWith("/Volumes/")
+    ? "is waiting for permission to read files on a removable or network volume (System Settings, Privacy & Security, Files and Folders)"
+    : `did not open within ${Duration.format(Duration.fromInputUnsafe(within))}`;
+
+export type Probe = {
+  readonly within?: Duration.Input;
+  readonly retryEvery?: Duration.Input;
+  readonly open?: Opener;
+};
+
+// Why `path` can't be watched right now, or none when its open came
+// back in time on a folder or a file.
+export const unwatchable = (
+  path: string,
+  probe: Probe = {},
+): Effect.Effect<Option.Option<string>> => {
+  const within = probe.within ?? OPEN_WITHIN;
+  return Effect.promise(() => opened(path, probe.open ?? openToProbe)).pipe(
+    Effect.timeoutOption(within),
+    Effect.map((result) =>
+      Option.isNone(result)
+        ? Option.some(heldOpen(path, within))
+        : Option.fromNullishOr(result.value),
+    ),
+  );
+};
+
+// Settles once `path` opens promptly, trying again on an interval until
+// it does. Says once in the log why a path waits, and again once it is
+// watched.
+export const untilWatchable = (
+  path: string,
+  probe: Probe = {},
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const every = probe.retryEvery ?? RETRY_EVERY;
+    let waited = false;
+    while (true) {
+      const reason = yield* unwatchable(path, probe);
+      if (Option.isNone(reason)) break;
+      if (!waited) {
+        log.warn(
+          `[watch] ${path} ${reason.value}: not watched for now, trying again every ${Duration.format(Duration.fromInputUnsafe(every))}`,
+        );
+        waited = true;
+      }
+      yield* Effect.sleep(every);
+    }
+    if (waited) log.info(`[watch] ${path} opens again: watched`);
+  });
+
+// `fs.watch(path, options)`, started once the path opens promptly.
+export const watchPath = (
+  fs: FileSystem.FileSystem,
+  path: string,
+  options?: FileSystem.WatchOptions,
+  probe: Probe = {},
+): Stream.Stream<FileSystem.WatchEvent, PlatformError> =>
+  Stream.unwrap(
+    untilWatchable(path, probe).pipe(Effect.as(fs.watch(path, options))),
+  );

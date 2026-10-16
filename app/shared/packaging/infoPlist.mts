@@ -18,3 +18,12 @@ export const LOCAL_NETWORK_USAGE_DESCRIPTION =
 // the engine drives over AppleScript (Open.ts).
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
   "Shigoto no Mori opens terminal tools like Claude Code in a new window of your terminal.";
+
+// The Files and Folders prompts' sentences, shown the first time the
+// host reads a project or worktree kept on an external disk or a
+// network share (watching it among the first reads). Until the prompt
+// is answered, macOS holds that read.
+export const REMOVABLE_VOLUMES_USAGE_DESCRIPTION =
+  "Shigoto no Mori follows the projects and worktrees you keep on external disks.";
+export const NETWORK_VOLUMES_USAGE_DESCRIPTION =
+  "Shigoto no Mori follows the projects and worktrees you keep on network volumes.";
