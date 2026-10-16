@@ -93,11 +93,12 @@ export function LocationForm({
   const inPlace = (worktree: Worktree): boolean => {
     const proposed = proposedFor(worktree);
     if (proposed === worktree.path) return true;
-    const { dataDir, dataDirReal } = device;
+    if (device.dataDirReal === undefined) return false;
+    // A hand-edited pointer may end the folder in a slash.
+    const dataDir = device.dataDir.replace(/\/+$/, "");
     return (
-      dataDirReal !== undefined &&
       proposed.startsWith(`${dataDir}/`) &&
-      worktree.path === `${dataDirReal}${proposed.slice(dataDir.length)}`
+      worktree.path === `${device.dataDirReal}${proposed.slice(dataDir.length)}`
     );
   };
 

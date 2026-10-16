@@ -1,4 +1,3 @@
-import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
@@ -6,6 +5,7 @@ import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
 import { errorWordsOf } from "@host/lib/errorWords";
@@ -37,15 +37,6 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 
 let moveInFlight = false;
 
-const realSpelling = (dir: string): { dataDirReal?: string } => {
-  try {
-    const real = realpathSync(dir);
-    return real === dir ? {} : { dataDirReal: real };
-  } catch {
-    return {};
-  }
-};
-
 // What follows a data-folder move that failed. Before the host let go
 // of the folder, nothing: the app carries on where it was. After, it
 // runs without its loopback and store watch, so it restarts: for a
@@ -65,15 +56,22 @@ export const runtimeHandlers = {
   // Host facts only. isDev deliberately isn't here: it describes the
   // client build and rides the preload bridge (api.isDev) instead.
   info: () =>
-    Effect.sync(() => ({
-      dataDir: dataDir(),
-      ...realSpelling(dataDir()),
-      dataDirSource: dataDirSource(),
-      // resolve() drops the trailing slash a hand-edited pointer may carry.
-      atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
-      canonicalDataDirName: canonicalDataDirName(),
-      homedir: homedir(),
-    })),
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = dataDir();
+      const real = yield* fs
+        .realPath(dir)
+        .pipe(Effect.orElseSucceed(() => dir));
+      return {
+        dataDir: dir,
+        ...(real === dir ? {} : { dataDirReal: real }),
+        dataDirSource: dataDirSource(),
+        // resolve() drops the trailing slash a hand-edited pointer may carry.
+        atDefaultDataDir: resolve(dir) === defaultDataDir(),
+        canonicalDataDirName: canonicalDataDirName(),
+        homedir: homedir(),
+      };
+    }),
 
   moveDataDir: ({ parentDir }, ctx) =>
     Effect.gen(function* () {

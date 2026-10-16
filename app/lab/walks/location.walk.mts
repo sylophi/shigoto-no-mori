@@ -23,8 +23,7 @@ it("offers no move for a worktree already in place", async () => {
   await main(page)
     .getByRole("heading", { name: "Worktree location" })
     .waitFor();
-  await main(page).getByText("Managed", { exact: true }).waitFor();
-  await page.waitForTimeout(500);
+  await main(page).getByRole("button", { name: "Save location" }).waitFor();
   const text = await main(page).innerText();
   expect(text).not.toContain("will move");
   expect(text).not.toMatch(/Move \d+ worktree/);
