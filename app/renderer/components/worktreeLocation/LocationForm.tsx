@@ -88,9 +88,21 @@ export function LocationForm({
   const proposedFor = (worktree: Worktree): string =>
     worktreePathFor(layoutInputs, worktree.name);
 
-  const toMove = customMissing
-    ? []
-    : movable.filter((w) => proposedFor(w) !== w.path);
+  // Git spells a worktree's path with the data dir's links resolved, so
+  // one already in place under a linked data dir reads in either.
+  const inPlace = (worktree: Worktree): boolean => {
+    const proposed = proposedFor(worktree);
+    if (proposed === worktree.path) return true;
+    if (device.dataDirReal === undefined) return false;
+    // A hand-edited pointer may end the folder in a slash.
+    const dataDir = device.dataDir.replace(/\/+$/, "");
+    return (
+      proposed.startsWith(`${dataDir}/`) &&
+      worktree.path === `${device.dataDirReal}${proposed.slice(dataDir.length)}`
+    );
+  };
+
+  const toMove = customMissing ? [] : movable.filter((w) => !inPlace(w));
 
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();

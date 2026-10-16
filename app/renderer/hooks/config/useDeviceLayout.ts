@@ -16,6 +16,9 @@ export function useDeviceLayout(): DeviceLayout | null {
   if (!runtime || !globalConfig) return null;
   return {
     dataDir: runtime.dataDir,
+    ...(runtime.dataDirReal === undefined
+      ? {}
+      : { dataDirReal: runtime.dataDirReal }),
     canonicalDataDirName: runtime.canonicalDataDirName,
     homedir: runtime.homedir,
     onProjectDrive:
