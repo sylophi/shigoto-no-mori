@@ -41,7 +41,7 @@ export const finished = (migration: MigrationProgress) =>
     (step) => step === null || step.state === "done" || step.state === "stuck",
   );
 
-const make = Effect.gen(function* () {
+export const make = Effect.gen(function* () {
   const ref = yield* SubscriptionRef.make<MigrationProgress>({
     planned: false,
     import: null,

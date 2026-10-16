@@ -143,6 +143,24 @@ it("fails with the path when the data dir can't be made", async () => {
   );
 });
 
+it("refuses a store a newer version of the app migrated, and writes nothing to it", async () => {
+  await query(
+    (sql) =>
+      sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (999, 'from_a_later_build')`,
+  );
+  await assert.rejects(
+    query(() => Effect.void),
+    (error) => {
+      assert.ok(error instanceof Store.StoreOpenError);
+      assert.match(
+        error.message,
+        /made by a newer version of the app; update the app/,
+      );
+      return true;
+    },
+  );
+});
+
 it("imports what the JSON files hold, and leaves every one in place when it skipped something", async () => {
   const registry = {
     projects: [

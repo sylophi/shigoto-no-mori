@@ -510,6 +510,50 @@ export const makeProjectChecks = ({
         ];
       });
 
+    // The moves a crash or an interrupt cut short, whose process is gone:
+    // finished or undone by where git lists the checkout. The app's start
+    // does the same.
+    const checkInterruptedMoves = (project: ListedProject) =>
+      Effect.gen(function* () {
+        const worktrees = yield* Worktrees.Worktrees;
+        const cut = (yield* worktrees.interruptedMoves).filter(
+          (move) => move.projectId === project.id,
+        );
+        if (cut.length === 0) return [];
+        const n = cut.length;
+        const shown = cut.map(
+          ({ fromPath, toPath }) =>
+            `${tildify(fromPath, home)} to ${tildify(toPath, home)}`,
+        );
+        return [
+          repairable<StoreServices>(
+            check("Projects", "project-interrupted-moves", project.name).warn(
+              `${n} worktree move${plural(n)} cut short: ${shown.join(", ")}`,
+              "Run the fix to finish each one git already made and undo the rest.",
+            ),
+            {
+              prompt: "",
+              label: `finished the cut-short move${plural(n)} for ${project.name}`,
+              destructive: false,
+              writesStore: true,
+              apply: Effect.gen(function* () {
+                yield* worktrees.resumeMoves;
+                const left = (yield* worktrees.interruptedMoves).filter(
+                  (move) => move.projectId === project.id,
+                );
+                if (left.length > 0) {
+                  return yield* new WorktreesNotMoved({
+                    why: left
+                      .map(({ fromPath }) => tildify(fromPath, home))
+                      .join(", "),
+                  });
+                }
+              }),
+            },
+          ),
+        ];
+      });
+
     // Lifecycle scripts fail late and loudly, mid-create. A script naming
     // a file that isn't in the repo is the common cause, and checkable
     // without running anything.
@@ -748,6 +792,7 @@ export const makeProjectChecks = ({
           : [project.path];
         entries.push(
           ...(yield* checkProjectWorktrees(project, identities, bases)),
+          ...(yield* checkInterruptedMoves(project)),
           ...(yield* checkWtMoves(project)),
           ...(Result.isSuccess(identities)
             ? yield* checkLeases(project, identities.success, allocations)

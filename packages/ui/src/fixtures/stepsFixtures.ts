@@ -37,6 +37,18 @@ export const MIGRATION_POSES = {
     },
     signIn: { state: "waiting", asks: false },
   },
+  importStuck: {
+    migration: {
+      planned: true,
+      import: {
+        state: "stuck",
+        reason:
+          "~/.sm/registry.json could not be imported into the store. Fix the file or move it aside, then retry.\nRegistry: registry.json doesn't parse (Unexpected token '}' at position 312)",
+      },
+      worktrees: MOVE,
+    },
+    signIn: { state: "waiting", asks: false },
+  },
   moving: {
     migration: {
       planned: true,

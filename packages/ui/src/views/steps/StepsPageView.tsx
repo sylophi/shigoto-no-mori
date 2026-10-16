@@ -193,6 +193,15 @@ export function StepStuckView({
   );
 }
 
+// Why a step is stuck, in full: a few lines, kept selectable to copy.
+export function StepReasonView({ text }: { text: string }) {
+  return (
+    <p className="text-xs break-words whitespace-pre-wrap text-muted-foreground select-text">
+      {text}
+    </p>
+  );
+}
+
 // The button a step waits on, or the page's own.
 export function StepActionView({
   label,

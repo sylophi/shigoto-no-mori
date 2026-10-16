@@ -20,6 +20,7 @@ import { changes } from "./migrations/changes.ts";
 import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
 import { mirrorHistory } from "./migrations/mirrorHistory.ts";
 import { mirrorInvites } from "./migrations/mirrorInvites.ts";
+import { moving } from "./migrations/moving.ts";
 import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
@@ -28,7 +29,7 @@ import { v2Import } from "./migrations/v2Import.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
-import { storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
+import { StoreError, storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
 import { hashesOf, removeV2Files, sameHashes, v2Files } from "./v2Files.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
@@ -86,6 +87,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
   "12_v2_import": v2Import,
+  "13_moving": moving,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files
@@ -207,10 +209,31 @@ export const layer = (
       const fs = yield* FileSystem.FileSystem;
       const migration = yield* Migration.Migration;
       const platform = yield* platformOnly;
-      const importing = (state: "running" | "done" | "stuck") =>
+      const importing = (state: "running" | "done") =>
         migration.update((current) =>
           current.import === null ? current : { ...current, import: { state } },
         );
+      // A store that failed to open or import, stuck with why. One that
+      // failed before it could tell an import was owed (a driver that
+      // won't load) owes one all the same when the 2.x files are there.
+      const stuck = (reason: string) =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const v2 = yield* Effect.forEach(V2_FILES, (file) =>
+            fs
+              .exists(path.join(dataDir, file))
+              .pipe(Effect.orElseSucceed(() => false)),
+          );
+          yield* migration.update((current) =>
+            current.import === null && !v2.some(Boolean)
+              ? current
+              : {
+                  planned: true,
+                  import: { state: "stuck", reason },
+                  worktrees: current.worktrees ?? Migration.WAITING_MOVE,
+                },
+          );
+        });
       const sql = yield* Effect.gen(function* () {
         // A fresh device has no data dir until its first command.
         yield* fs.makeDirectory(dataDir, { recursive: true });
@@ -244,11 +267,16 @@ export const layer = (
         const newest = Math.max(
           ...Object.keys(migrations).map((key) => Number.parseInt(key, 10)),
         );
-        const due =
-          owed ||
-          (yield* latestApplied.pipe(
-            Effect.provideService(SqlClient.SqlClient, client),
-          )) < newest;
+        const latest = yield* latestApplied.pipe(
+          Effect.provideService(SqlClient.SqlClient, client),
+        );
+        // A schema this build doesn't know, which it would read wrong and
+        // could write wrong: the updater never offers a lower version, and
+        // the store refuses one too.
+        if (latest > newest) {
+          return yield* new StoreError({ category: "newer", cause: latest });
+        }
+        const due = owed || latest < newest;
         const ran = due
           ? yield* migrate({ loader: Migrator.fromRecord(migrations) }).pipe(
               Effect.provideService(SqlClient.SqlClient, client),
@@ -278,7 +306,7 @@ export const layer = (
                     new StoreOpenError({ path: store, cause: defect }),
                   ),
         ),
-        Effect.tapError(() => importing("stuck")),
+        Effect.tapError((error) => stuck(error.message)),
       );
       return Context.make(SqlClient.SqlClient, sql);
     }),

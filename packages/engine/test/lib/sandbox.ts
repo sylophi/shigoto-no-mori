@@ -43,6 +43,7 @@ import * as Migration from "../../src/Migration.ts";
 import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
+import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
 import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
 import { macfs } from "./macfs.ts";
@@ -71,6 +72,7 @@ export type Engine =
   | Control.Control
   | Transfer.Transfer
   | WtFolder.WtFolder
+  | WorktreeData.WorktreeData
   | Migration.Migration;
 
 // What the agent hooks run, as the installed binary names itself.

@@ -33,6 +33,7 @@ import {
   scriptOf,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
+import type { KeptArea } from "./kept.ts";
 import type { StatusCardArea } from "./statusCard.ts";
 
 const checkName = (name: string) =>
@@ -49,9 +50,11 @@ const checkName = (name: string) =>
 export const makeCreating = ({
   listing,
   statusCard,
+  kept,
 }: {
   readonly listing: ListingArea;
   readonly statusCard: StatusCardArea;
+  readonly kept: KeptArea;
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
@@ -405,6 +408,9 @@ export const makeCreating = ({
             subject: place,
           });
         }
+        // The id is the path's, so what a worktree removed from here left
+        // under it (a removal a crash cut short) isn't this one's.
+        yield* kept.forget(project, made.id);
         return { made, found, cloned };
       });
 

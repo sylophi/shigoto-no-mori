@@ -4,8 +4,10 @@
 // caller ends it with its process group. The long-lived children
 // (cloudflared, the file-sync daemon, the scripts) hold their handles
 // themselves.
+import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -26,6 +28,52 @@ const signalZero = (pid: number) => {
 
 // Whether a process with the pid exists, whoever owns it.
 export const pidAlive = (pid: number) => Effect.sync(() => signalZero(pid));
+
+// How long ago `pid` started, in seconds, from ps's elapsed time
+// ([[dd-]hh:]mm:ss); none when ps can't say.
+const ageOf = (pid: number) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const ran = yield* captureWithin(
+      spawner,
+      "ps",
+      ["-o", "etime=", "-p", String(pid)],
+      "5 seconds",
+    ).pipe(Effect.option);
+    if (Option.isNone(ran) || ran.value.code !== 0)
+      return Option.none<number>();
+    const match = /^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$/.exec(
+      ran.value.output.trim(),
+    );
+    if (match === null) return Option.none<number>();
+    const [, days = "0", hours = "0", minutes = "0", seconds = "0"] = match;
+    return Option.some(
+      ((Number(days) * 24 + Number(hours)) * 60 + Number(minutes)) * 60 +
+        Number(seconds),
+    );
+  });
+
+// When `pid` started, in this machine's milliseconds, to the second;
+// none when ps can't say.
+export const startOf = (pid: number) =>
+  Effect.gen(function* () {
+    const age = yield* ageOf(pid);
+    const now = yield* Clock.currentTimeMillis;
+    return Option.map(age, (seconds) => now - seconds * 1000);
+  });
+
+// Whether the process that recorded itself as `pid`, started at
+// `startedAt`, still runs: a live pid that started at another time is
+// another process the system handed the number to since.
+export const stillRunning = (pid: number, startedAt: number) =>
+  Effect.gen(function* () {
+    if (pid < 2 || !(yield* pidAlive(pid))) return false;
+    const started = yield* startOf(pid);
+    // A few seconds' slack: ps counts in whole seconds.
+    return (
+      Option.isNone(started) || Math.abs(started.value - startedAt) <= 5000
+    );
+  });
 
 const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
   stream.pipe(Stream.decodeText(), Stream.mkString);
