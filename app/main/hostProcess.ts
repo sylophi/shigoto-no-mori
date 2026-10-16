@@ -32,7 +32,7 @@ import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
 import { HOST_FACTS_FLAG, type HostFacts } from "@shared/hostFacts";
 import { appPlace } from "./electron/appPlace";
-import { noteMigration } from "./ipc/modules/migration";
+import { migrationFailed, noteMigration } from "./ipc/modules/migration";
 import { showMoveFailed } from "./electron/moveFailed";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
@@ -115,6 +115,13 @@ let address = deferred<Reported>();
 let replaced: { pid: number; startedAt: number; exitedAt: number }[] = [];
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
+// A host that couldn't start as the migration's page showed: left down,
+// the page saying why, until the page's Retry starts one again once it
+// has exited. `parkedExit` settles as it exits; `nextPark` as the next
+// host is parked, for a Retry that came first.
+let parkedExit: Promise<void> | null = null;
+let nextPark = deferred<void>();
+let restarting: Promise<void> | null = null;
 
 // The shell's link to the current host, made on first use: a window
 // may ask before the hold is up, and waits for the host's address.
@@ -188,7 +195,18 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
       );
     }
   },
-  failed: (failure) => onFailed(failure),
+  failed: (failure) => {
+    if (migrationFailed(failure)) {
+      const failing = child;
+      parkedExit = new Promise((resolve) => {
+        if (failing === null) resolve();
+        else failing.once("exit", () => resolve());
+      });
+      nextPark.resolve();
+      return;
+    }
+    onFailed(failure);
+  },
   migration: (progress) => noteMigration(progress),
   relaunch: () => relaunchAppUnattended(),
   moveFailed: ({ reason }) => showMoveFailed(reason),
@@ -236,8 +254,8 @@ function fork(): void {
   if (server !== null) void Effect.runPromise(server.attach(port1, null));
   forked.postMessage(null, [port2]);
   forked.once("exit", (code) => {
-    child = null;
-    if (quitting) return;
+    if (child === forked) child = null;
+    if (quitting || parkedExit !== null) return;
     log.warn(`[host] exited unasked (code ${code}), starting it again`);
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
@@ -261,6 +279,21 @@ function fork(): void {
     if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
     fork();
   });
+}
+
+// The host the migration's page is stuck on started again, once it is
+// parked and has exited: one start for every Retry that asks meanwhile.
+export function restartParkedHost(): Promise<void> {
+  restarting ??= nextPark.promise
+    .then(() => parkedExit)
+    .then(() => {
+      parkedExit = null;
+      nextPark = deferred<void>();
+      restarting = null;
+      crashes.length = 0;
+      if (!quitting) fork();
+    });
+  return restarting;
 }
 
 // The session with the current host, waiting for one to be up.

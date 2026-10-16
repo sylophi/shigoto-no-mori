@@ -11,7 +11,7 @@ import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { noteMigrating } from "../../electron/windows";
 import * as Effect from "effect/Effect";
-import { host } from "../../hostProcess";
+import { host, type HostFailure, restartParkedHost } from "../../hostProcess";
 import { broadcastAll } from "../register";
 
 let latest: MigrationProgress | null = null;
@@ -23,8 +23,25 @@ const tell = (progress: MigrationProgress | null) => {
   broadcastAll(migrationContract, "changed", progress);
 };
 
+// A host starting over says nothing yet, which never replaces what the
+// one before it said.
 export function noteMigration(progress: MigrationProgress): void {
-  if (!continued) tell(progress);
+  if (continued || (!progress.planned && latest?.planned === true)) return;
+  tell(progress);
+}
+
+// A host that couldn't start while the page shows the import: the page
+// says why, in place of the dialog, and its Retry starts a host again.
+// False when no import is under way here.
+export function migrationFailed(failure: HostFailure): boolean {
+  if (continued || latest?.import == null || latest.import.state === "done") {
+    return false;
+  }
+  tell({
+    ...latest,
+    import: { state: "stuck", reason: failure.storeReport ?? failure.message },
+  });
+  return true;
 }
 
 export const migrationHandlers: Handlers<
@@ -36,5 +53,9 @@ export const migrationHandlers: Handlers<
     continued = true;
     tell(null);
   },
-  retry: () => Effect.runPromise(host().migrationRetry()),
+  // A stuck import's host can't answer: it is started again instead.
+  retry: () =>
+    latest?.import?.state === "stuck"
+      ? restartParkedHost()
+      : Effect.runPromise(host().migrationRetry()),
 };

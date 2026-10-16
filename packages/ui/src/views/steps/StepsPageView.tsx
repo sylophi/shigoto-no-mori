@@ -193,6 +193,14 @@ export function StepStuckView({
   );
 }
 
+export function StepReasonView({ text }: { text: string }) {
+  return (
+    <p className="text-xs break-words whitespace-pre-wrap text-muted-foreground select-text">
+      {text}
+    </p>
+  );
+}
+
 // The button a step waits on, or the page's own.
 export function StepActionView({
   label,

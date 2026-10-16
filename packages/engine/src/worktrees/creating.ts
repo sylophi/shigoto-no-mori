@@ -4,6 +4,7 @@ import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktree
 import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -33,6 +34,7 @@ import {
   scriptOf,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
+import type { KeptArea } from "./kept.ts";
 import type { StatusCardArea } from "./statusCard.ts";
 
 const checkName = (name: string) =>
@@ -49,12 +51,15 @@ const checkName = (name: string) =>
 export const makeCreating = ({
   listing,
   statusCard,
+  kept,
 }: {
   readonly listing: ListingArea;
   readonly statusCard: StatusCardArea;
+  readonly kept: KeptArea;
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
+    const sql = yield* SqlClient.SqlClient;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const carryOver = yield* CarryOver.CarryOver;
     const cloneCheckout = yield* CloneCheckout.CloneCheckout;
@@ -91,6 +96,21 @@ export const makeCreating = ({
       });
 
     const occupied = (file: string) => entryExists(fs, file);
+
+    // Refused while a move under way names the path: what is kept under
+    // its id, a capture among it, is that move's until it ends.
+    const unreserved = (place: string) =>
+      Effect.gen(function* () {
+        const [moving] = yield* sql<{ from_path: string }>`
+          SELECT from_path FROM moving
+          WHERE from_path = ${place} OR to_path = ${place}`.pipe(Effect.orDie);
+        if (moving !== undefined) {
+          return yield* new WorktreeRefused({
+            reason: "move-in-progress",
+            subject: moving.from_path,
+          });
+        }
+      });
 
     const destination = Effect.fn("Worktrees.destination")(function* (
       project: RegisteredProject,
@@ -314,6 +334,7 @@ export const makeCreating = ({
             subject: place,
           });
         }
+        yield* unreserved(place);
         yield* fs
           .makeDirectory(path.dirname(place), { recursive: true })
           .pipe(Effect.orDie);
@@ -409,6 +430,9 @@ export const makeCreating = ({
             subject: place,
           });
         }
+        // The id is the path's, so what a worktree removed from here left
+        // under it (a removal a crash cut short) isn't this one's.
+        yield* kept.forget(project, made.id);
         return { made, found, cloned };
       });
 
@@ -473,6 +497,7 @@ export const makeCreating = ({
     return {
       checkName,
       occupied,
+      unreserved,
       destination,
       scriptContext,
       runScript,

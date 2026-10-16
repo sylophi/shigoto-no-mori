@@ -1,6 +1,6 @@
 // The page a window shows in place of the app while it gets ready: the
-// v3 migration in each of its states (its import under way, the
-// worktrees on the move, a locked one stuck, a lapsed session's
+// v3 migration in each of its states (its import under way or stuck,
+// the worktrees on the move, a locked one stuck, a lapsed session's
 // sign-in, every step done).
 import { MigrationView } from "../views/steps/MigrationView.tsx";
 import {
@@ -30,6 +30,7 @@ function migration(pose: MigrationPose, retried = false) {
 }
 
 export const MigrationWaitingScene = migration("waiting");
+export const MigrationImportStuckScene = migration("importStuck");
 export const MigrationMovingScene = migration("moving");
 export const MigrationStuckScene = migration("stuck");
 export const MigrationStillStuckScene = migration("stuck", true);

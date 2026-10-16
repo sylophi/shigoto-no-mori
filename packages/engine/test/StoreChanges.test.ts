@@ -112,9 +112,10 @@ const unwatched = new Set([
   "wt_moves",
   "wt_move_scan",
   "v2_import",
+  "moving",
 ]);
 
-it("watches every table but the caches, the host's own (terminals, running scripts, the mirrors' state) and the migration's (the wt/ move, the v2 import)", () =>
+it("watches every table but the caches, the host's own (terminals, running scripts, the mirrors' state) the migration's (the wt/ move, the v2 import) and the moves under way", () =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

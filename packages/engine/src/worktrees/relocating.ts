@@ -14,16 +14,16 @@ import type { RegisteredProject } from "../Registry.ts";
 import { isManagedPath, worktreeIdFromPath } from "../worktreeLayout.ts";
 import { RelocateRefused, type WorktreeIdentity } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
-import type { RemovingArea } from "./removing.ts";
+import type { KeptArea } from "./kept.ts";
 import type { MovingArea } from "./moving.ts";
 
 export const makeRelocating = ({
   listing,
-  removing,
+  kept,
   moving,
 }: {
   readonly listing: ListingArea;
-  readonly removing: RemovingArea;
+  readonly kept: KeptArea;
   readonly moving: MovingArea;
 }) =>
   Effect.gen(function* () {
@@ -36,7 +36,6 @@ export const makeRelocating = ({
     const paths = yield* Paths.Paths;
     const binary = paths.binaryName;
     const { identities } = listing;
-    const { rekeyWorktree } = removing;
     const { move } = moving;
 
     // The linked worktrees that moved along with the repo: git lists them
@@ -106,7 +105,7 @@ export const makeRelocating = ({
           );
           if (now === undefined) continue;
           const from = worktreeIdFromPath(oldPath);
-          if (from !== now.id) yield* rekeyWorktree(project, from, now.id);
+          if (from !== now.id) yield* kept.rekey(project, from, now.id);
         }
       });
 

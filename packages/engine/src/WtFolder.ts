@@ -2,14 +2,16 @@
 // `wtFolder` migration owes (migrations/wtFolder.ts). The first start
 // looks through the v2 roots of every listed project, terrier's
 // included, and records each folder there. Each is then moved as
-// `worktrees move` moves one, inside a transaction so two processes
-// starting together don't both take it. One that can't be moved keeps
-// its folder and records why, for the doctor to report and retry. A
-// crash between git's move and the carry-over finds the worktree at its
-// new path on the next start and carries it then. The first start's
+// `worktrees move` moves one, whose own record keeps two processes
+// starting together from both taking it and lets a start finish one a
+// crash cut short (worktrees/moving.ts). One that can't be moved keeps
+// its folder and records why, for the doctor to report and retry. The
+// first start's
 // moves are reported to the migration as they go (Migration.ts), and
 // a start that resumes them counts the ones made before.
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -128,10 +130,18 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const migration = yield* Migration.Migration;
 
-  // One recorded move, made or failed, inside a transaction that holds
-  // the store's write lock, which another process waits on. A worktree
-  // something runs in (a shell, a dev server, an agent) stays, since
-  // the move would take its folder from under it.
+  // Why a move couldn't be made, on its row. A store that refuses even
+  // that (busy, or read-only) leaves the row as it was, tried again by
+  // the next start.
+  const failed = (fromPath: string, error: string) =>
+    sql`UPDATE wt_moves SET error = ${error}
+      WHERE from_path = ${fromPath} AND moved = 0`.pipe(Effect.ignore);
+
+  // One recorded move, made or failed. A worktree something runs in (a
+  // shell, a dev server, an agent) stays, since the move would take its
+  // folder from under it. The move's own record keeps a second process
+  // starting together from taking it too (worktrees/moving.ts), so no
+  // write lock is held across git's move.
   const moveOne = (
     project: Registry.RegisteredProject,
     fromPath: string,
@@ -140,65 +150,68 @@ const make = Effect.gen(function* () {
       { readonly message: string }
     >,
   ) =>
-    sql.withTransaction(
-      Effect.gen(function* () {
-        const [row] = yield* sql<Row>`
-          UPDATE wt_moves SET error = error
-          WHERE from_path = ${fromPath} AND moved = 0
-          RETURNING from_path, to_path, project_id, error`;
-        if (row === undefined) return;
-        const listed = yield* worktrees.identities(project).pipe(Effect.result);
-        if (Result.isFailure(listed)) {
-          yield* sql`UPDATE wt_moves SET error = ${why(listed.failure)}
-            WHERE from_path = ${fromPath}`;
-          return;
-        }
-        // git spells a path with its symlinks resolved.
-        const at = (p: string) =>
-          Effect.map(
-            fs.realPath(p).pipe(Effect.orElseSucceed(() => p)),
-            (real) =>
-              listed.success.find((id) => id.path === p || id.path === real),
+    Effect.gen(function* () {
+      const [row] = yield* sql<Row>`
+        SELECT from_path, to_path, project_id, error FROM wt_moves
+        WHERE from_path = ${fromPath} AND moved = 0`;
+      if (row === undefined) return;
+      const listed = yield* worktrees.identities(project).pipe(Effect.result);
+      if (Result.isFailure(listed)) {
+        return yield* failed(fromPath, why(listed.failure));
+      }
+      // git spells a path with its symlinks resolved.
+      const at = (p: string) =>
+        Effect.map(fs.realPath(p).pipe(Effect.orElseSucceed(() => p)), (real) =>
+          listed.success.find((id) => id.path === p || id.path === real),
+        );
+      const from = yield* at(row.from_path);
+      if (from !== undefined) {
+        // Not knowing what runs in it is no leave to move it.
+        const busy = Result.isFailure(running)
+          ? running.failure.message
+          : closeFirst(
+              running.success.filter(({ cwd }) =>
+                isSameOrInside(cwd, row.from_path),
+              ),
+            );
+        if (busy !== undefined) return yield* failed(fromPath, busy);
+      }
+      if (from === undefined) {
+        // Listed at its wt/ path with no record to say it is this one
+        // (git moved it before a crash, under a build that kept none): it
+        // stays stuck, never carried by path alone. Listed nowhere, it is
+        // a stray folder, which stays where it is, unless another process
+        // has made the move meanwhile.
+        if ((yield* at(row.to_path)) !== undefined) {
+          return yield* failed(
+            fromPath,
+            "git lists it in wt/ already, moved before a crash; what sm kept under its old id wasn't carried",
           );
-        const from = yield* at(row.from_path);
-        if (from !== undefined) {
-          // Not knowing what runs in it is no leave to move it.
-          const busy = Result.isFailure(running)
-            ? running.failure.message
-            : closeFirst(
-                running.success.filter(({ cwd }) =>
-                  isSameOrInside(cwd, row.from_path),
-                ),
-              );
-          if (busy !== undefined) {
-            yield* sql`UPDATE wt_moves SET error = ${busy}
-              WHERE from_path = ${fromPath}`;
-            return;
-          }
         }
-        // A move records itself as made (Worktrees.carryMoved).
-        const made =
-          from !== undefined
-            ? Effect.asVoid(
-                worktrees.move({ project, worktree: from }, row.to_path),
-              )
-            : (yield* at(row.to_path)) !== undefined
-              ? // git moved it before a crash; the carry-over is still owed.
-                Effect.asVoid(
-                  worktrees.carryMoved(project, row.from_path, row.to_path),
-                )
-              : undefined;
-        if (made === undefined) {
-          // Not a worktree git lists: a stray folder stays where it is.
-          yield* sql`DELETE FROM wt_moves WHERE from_path = ${fromPath}`;
-          return;
-        }
-        const outcome = yield* Effect.result(made);
-        if (Result.isFailure(outcome)) {
-          yield* sql`UPDATE wt_moves SET error = ${why(outcome.failure)}
-            WHERE from_path = ${fromPath}`;
-        }
-      }),
+        return yield* sql`DELETE FROM wt_moves
+          WHERE from_path = ${fromPath} AND moved = 0
+          AND NOT EXISTS (SELECT 1 FROM moving WHERE from_path = ${fromPath})`;
+      }
+      // A move records itself as made (Worktrees.carryMoved).
+      const outcome = yield* Effect.result(
+        worktrees.move({ project, worktree: from }, row.to_path),
+      );
+      if (
+        Result.isFailure(outcome) &&
+        // Another process is making this very move.
+        !(
+          outcome.failure instanceof Worktrees.WorktreeRefused &&
+          outcome.failure.reason === "move-in-progress"
+        )
+      ) {
+        yield* failed(fromPath, why(outcome.failure));
+      }
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.interrupt
+          : failed(fromPath, errorMessageOf(Cause.squash(cause))),
+      ),
     );
 
   // rmdir, which takes only an empty folder.
@@ -208,6 +221,21 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => false),
     );
 
+  // The emptied v2 roots of `rows`' moves, and the `worktrees` folder
+  // above one.
+  const sweepRoots = (rows: ReadonlyArray<{ readonly from_path: string }>) =>
+    Effect.gen(function* () {
+      const roots = new Set(rows.map((row) => path.dirname(row.from_path)));
+      for (const root of roots) {
+        const there = yield* fs
+          .exists(root)
+          .pipe(Effect.orElseSucceed(() => false));
+        if (!there || !(yield* removeEmpty(root))) continue;
+        const above = path.dirname(root);
+        if (path.basename(above) === "worktrees") yield* removeEmpty(above);
+      }
+    });
+
   // The project's moves, the failed ones too with `again`. `report`
   // hears each move before and after it is tried.
   const moveProject = (
@@ -216,6 +244,8 @@ const make = Effect.gen(function* () {
     report?: (fromPath: string, tried: boolean) => Effect.Effect<void>,
   ) =>
     Effect.gen(function* () {
+      // Its moves a crash cut short, before any is tried again.
+      yield* worktrees.resumeMoves;
       const project = (yield* registry.listed).find(
         ({ id }) => id === projectId,
       );
@@ -232,14 +262,8 @@ const make = Effect.gen(function* () {
         yield* report?.(row.from_path, true) ?? Effect.void;
       }
       yield* git.run(project.path, ["worktree", "repair"]).pipe(Effect.ignore);
-      // The emptied v2 roots, and the `worktrees` folder above one.
-      const roots = new Set(rows.map((row) => path.dirname(row.from_path)));
-      for (const root of roots) {
-        if (!(yield* removeEmpty(root))) continue;
-        const above = path.dirname(root);
-        if (path.basename(above) === "worktrees") yield* removeEmpty(above);
-      }
-    }).pipe(Effect.orDie);
+      yield* sweepRoots(rows);
+    });
 
   const unmoved = sql<Row>`
     SELECT from_path, to_path, project_id, error FROM wt_moves
@@ -365,9 +389,37 @@ const make = Effect.gen(function* () {
       );
     });
 
+  // A step the store's own failure stopped (busy, read-only): stuck with
+  // why, for its Retry, rather than a start that can't go on.
+  const stopped = (cause: Cause.Cause<unknown>) =>
+    Effect.gen(function* () {
+      if (Cause.hasInterruptsOnly(cause)) return yield* Effect.interrupt;
+      yield* Effect.logWarning("The move into wt/ stopped", cause);
+      const reason = { name: "", reason: errorMessageOf(Cause.squash(cause)) };
+      // A start that owes no migration goes on, and the next one tries
+      // again.
+      yield* migration.update((current) =>
+        current.import === null && current.worktrees === null
+          ? { ...current, planned: true }
+          : {
+              planned: true,
+              import: current.import,
+              worktrees: {
+                ...(current.worktrees ?? Migration.WAITING_MOVE),
+                state: "stuck",
+                current: null,
+                stuck: [...(current.worktrees?.stuck ?? []), reason],
+              },
+            },
+      );
+    });
+
   const drain = Effect.gen(function* () {
-    yield* scan.pipe(Effect.orDie);
-    const rows = yield* migrationRows.pipe(Effect.orDie);
+    // A move of any worktree a crash cut short, before the migration's
+    // own: one of them may be the one cut short.
+    yield* worktrees.resumeMoves;
+    yield* scan;
+    const rows = yield* migrationRows;
     const pending = rows.filter((row) => row.moved === 0 && row.error === null);
     const begun = yield* migration.current;
     if (pending.length > 0 || begun.worktrees !== null) {
@@ -391,22 +443,24 @@ const make = Effect.gen(function* () {
     }
     const owed = yield* sql<{ project_id: string }>`
       SELECT DISTINCT project_id FROM wt_moves
-      WHERE moved = 0 AND error IS NULL`.pipe(Effect.orDie);
+      WHERE moved = 0 AND error IS NULL`;
     for (const { project_id } of owed) {
       yield* moveProject(project_id, false, report);
     }
+    // Those a start that stopped after its moves left.
+    yield* sweepRoots(rows);
     yield* moving((step) => ({
       ...step,
       state: step.stuck.length > 0 ? "stuck" : "done",
       current: null,
     }));
-  }).pipe(Effect.withSpan("WtFolder.drain"));
+  }).pipe(Effect.catchCause(stopped), Effect.withSpan("WtFolder.drain"));
 
   // The move's step as the store has it now: what another path (the
   // doctor's fix) moved since is counted, and its stuck rows listed.
   const stepNow = (state: WorktreeMoveStep["state"]) =>
     Effect.gen(function* () {
-      const rows = yield* migrationRows.pipe(Effect.orDie);
+      const rows = yield* migrationRows;
       const stuck = rows.flatMap((row) =>
         row.moved === 0 && row.error !== null
           ? [stuckOf(row.from_path, row.error)]
@@ -426,9 +480,10 @@ const make = Effect.gen(function* () {
   const retryStuck = retrying
     .withPermit(
       Effect.gen(function* () {
-        const stuck = (yield* migrationRows.pipe(Effect.orDie)).filter(
-          (row) => row.moved === 0 && row.error !== null,
-        );
+        // A scan the store's failure stopped is made now, and the moves
+        // it left untried are tried with the stuck ones.
+        yield* scan;
+        const stuck = (yield* migrationRows).filter((row) => row.moved === 0);
         // Nothing to move reads the store and ends, without a running
         // step that would call every window back to the page.
         if (stuck.length > 0) yield* stepNow("running");
@@ -436,14 +491,17 @@ const make = Effect.gen(function* () {
           yield* moveProject(projectId, true, report);
         }
       }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("The retry of the move into wt/ failed", cause),
+        ),
         // A retry that failed still ends its step, read from the store.
-        Effect.ensuring(stepNow("done")),
+        Effect.ensuring(stepNow("done").pipe(Effect.catchCause(stopped))),
       ),
     )
     .pipe(Effect.withSpan("WtFolder.retryStuck"));
 
   const retry = Effect.fn("WtFolder.retry")(function* (projectId: string) {
-    yield* moveProject(projectId, true);
+    yield* moveProject(projectId, true).pipe(Effect.orDie);
     return (yield* unmoved).filter((row) => row.projectId === projectId);
   });
 

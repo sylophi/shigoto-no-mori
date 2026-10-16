@@ -495,6 +495,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "move-destination-exists",
       "move-not-listed",
       "move-copy-failed",
+      "move-in-progress",
       "adopt-primary",
       "adopt-managed",
     ]),
@@ -550,6 +551,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         const said = errorMessageOf(this.cause);
         return `Couldn't copy the worktree to ${this.subject}: ${said}`;
       }
+      case "move-in-progress":
+        return `${this.subject} is already being moved. Wait for it, or run \`doctor --fix\` if that move's process is gone.`;
       case "adopt-primary":
         return "The primary checkout can't be converted";
       case "adopt-managed":

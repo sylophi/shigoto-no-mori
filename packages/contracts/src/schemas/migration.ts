@@ -28,6 +28,14 @@ const WorktreeMoveStepSchema = Schema.Struct({
 });
 export type WorktreeMoveStep = typeof WorktreeMoveStepSchema.Type;
 
+// The import of the 2.x files into the store, and why it is stuck: the
+// store that wouldn't open or the file it refused, with what the doctor
+// found.
+const ImportStepSchema = Schema.Struct({
+  state: MigrationStepStateSchema,
+  reason: Schema.optional(Schema.String),
+});
+
 // What this start of the engine owes a 2.x data dir, as it goes: the
 // import of its JSON files into the store, and the move of its
 // worktrees into `wt/`. A step it doesn't owe is null. Until `planned`,
@@ -36,7 +44,7 @@ export type WorktreeMoveStep = typeof WorktreeMoveStepSchema.Type;
 // key is the window's own (useEnrollment), not the host's.
 export const MigrationSchema = Schema.Struct({
   planned: Schema.Boolean,
-  import: Schema.NullOr(Schema.Struct({ state: MigrationStepStateSchema })),
+  import: Schema.NullOr(ImportStepSchema),
   worktrees: Schema.NullOr(WorktreeMoveStepSchema),
 });
 export type MigrationProgress = typeof MigrationSchema.Type;

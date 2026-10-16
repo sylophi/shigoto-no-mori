@@ -17,6 +17,7 @@ const CATEGORIES = [
   "read-only",
   "damaged",
   "unmigrated",
+  "newer",
   "failed",
 ] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -42,6 +43,7 @@ export const storeWords: Record<Category, string> = {
   damaged: "The store looks damaged. The doctor says what it can repair.",
   unmigrated:
     "This data folder is still v2's, and is only read until it moves to v3. Open the app to move it, or run the doctor with --fix.",
+  newer: "It was made by a newer version of the app; update the app.",
   failed: "Couldn't read or write the store.",
 };
 

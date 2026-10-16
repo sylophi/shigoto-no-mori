@@ -12,6 +12,7 @@ import {
   StepActionView,
   StepCountView,
   StepProgressView,
+  StepReasonView,
   StepRowView,
   StepsPageView,
   StepStuckView,
@@ -31,7 +32,8 @@ export function MigrationView({
   signIn: SignInStep | null;
   onSignIn: () => void;
   onContinue: () => void;
-  // The stuck moves tried again, and whether that is under way.
+  // The stuck import or moves tried again, and whether that is under
+  // way.
   onRetry: () => void;
   retrying: boolean;
   // Whether a retry has run, so a move still stuck says so.
@@ -49,7 +51,23 @@ export function MigrationView({
       }
     >
       {imported !== null && (
-        <StepRowView label="Projects and settings" state={imported.state} />
+        <StepRowView label="Projects and settings" state={imported.state}>
+          {imported.state === "stuck" && (
+            <>
+              {imported.reason !== undefined && (
+                <StepReasonView text={imported.reason} />
+              )}
+              <div className="flex items-center justify-end">
+                <StepActionView
+                  label="Retry"
+                  variant="outline"
+                  pending={retrying}
+                  onClick={onRetry}
+                />
+              </div>
+            </>
+          )}
+        </StepRowView>
       )}
       {worktrees !== null && (
         <StepRowView

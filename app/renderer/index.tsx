@@ -11,6 +11,10 @@ import type { RendererApi } from "./lib/runtime/pageApi";
 import { pageRoot } from "./lib/themeRoot";
 import { exposeToLab } from "./lib/runtime/labHandle";
 import * as Desktop from "./lib/runtime/desktop";
+import {
+  mountStuckImport,
+  stuckImport,
+} from "./components/migration/StuckImport";
 
 async function boot() {
   const bridge = window.electronBridge;
@@ -18,8 +22,17 @@ async function boot() {
   const { requestShellPort: _, route, isLab, ...facts } = bridge;
   const client = await startClient(Desktop.layer(bridge));
   disposeWithPage(client);
-  // The device id is the host's, read from its store.
-  const { deviceId } = await client.api.run(client.api.window.hostAddress());
+  // The device id is the host's, read from its store. A host that can't
+  // open it, stuck on the import, leaves the window the migration's page.
+  const first = await Promise.race([
+    client.api.run(client.api.window.hostAddress()),
+    stuckImport(client.api).then((progress) => ({ progress })),
+  ]);
+  if ("progress" in first) {
+    mountStuckImport(client.api, pageRoot(), first.progress);
+    return;
+  }
+  const { deviceId } = first;
   const api: RendererApi = { ...facts, deviceId, ...client.api };
   if (facts.isDev || isLab) exposeToLab(api);
   const router = mountWindow(startApp({ api, links: client.links }), {

@@ -1,6 +1,7 @@
 // Worktrees' removing: the guards a removal passes, the teardown, and
 // the checkout and branch going.
 import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -10,16 +11,11 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as CloneCheckout from "../CloneCheckout.ts";
 import * as Config from "../Config.ts";
-import { dirtyRef } from "../Dirty.ts";
 import * as Git from "../Git.ts";
 import { shellQuote } from "../Lifecycle.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
-import * as Registry from "../Registry.ts";
-import type { RegisteredProject } from "../Registry.ts";
-import * as WorktreeData from "../WorktreeData.ts";
 import { ownedLevels } from "../worktreeLayout.ts";
 import {
   CleanupFailed,
@@ -34,6 +30,7 @@ import {
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { CreatingArea } from "./creating.ts";
+import type { KeptArea } from "./kept.ts";
 
 const notPrimary = (worktree: WorktreeIdentity) =>
   worktree.isPrimary
@@ -48,17 +45,16 @@ const notPrimary = (worktree: WorktreeIdentity) =>
 export const makeRemoving = ({
   listing,
   creating,
+  kept,
 }: {
   readonly listing: ListingArea;
   readonly creating: CreatingArea;
+  readonly kept: KeptArea;
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
-    const cloneCheckout = yield* CloneCheckout.CloneCheckout;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const config = yield* Config.Config;
-    const registry = yield* Registry.Registry;
-    const data = yield* WorktreeData.WorktreeData;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
@@ -181,42 +177,6 @@ export const makeRemoving = ({
         }
       }).pipe(Effect.ignore);
 
-    // What is kept under an id that is going away: marks, the shelf, the
-    // title, and a pending dirty capture.
-    const forget = (project: RegisteredProject, worktreeId: string) =>
-      Effect.all([
-        registry.forgetWorktree(worktreeId),
-        data.forget(project.id, worktreeId),
-        git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
-        // What clones proved about its files, as a source.
-        cloneCheckout.forget(worktreeId),
-      ]);
-
-    // What is kept under one id, carried to another.
-    const rekeyWorktree = (
-      project: RegisteredProject,
-      from: string,
-      to: string,
-    ) =>
-      Effect.gen(function* () {
-        yield* registry.moveWorktree(from, to);
-        yield* data.move(project.id, from, to);
-        // A pending capture belongs to the worktree, not its old path.
-        const capture = yield* git.refTip(project.path, dirtyRef(from));
-        if (Option.isSome(capture)) {
-          yield* git
-            .updateRef({
-              repo: project.path,
-              ref: dirtyRef(to),
-              commit: capture.value,
-            })
-            .pipe(
-              Effect.andThen(git.deleteRef(project.path, dirtyRef(from))),
-              Effect.ignore,
-            );
-        }
-      });
-
     const removable = (worktree: WorktreeIdentity, force: boolean) =>
       notPrimary(worktree).pipe(
         Effect.andThen(requireClean(worktree, force, "remove", "")),
@@ -229,6 +189,9 @@ export const makeRemoving = ({
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
         readonly preflighted?: boolean;
+        // A clock on each cleanup script: one that runs past it fails the
+        // cleanup, as a script that failed does.
+        readonly cleanupWithin?: Duration.Input;
       },
       reporter: Reporter,
     ) {
@@ -251,8 +214,19 @@ export const makeRemoving = ({
             phase: CleanupFailed["phase"],
             command: string,
             slot: LifecycleSlot,
-          ) =>
-            runScript(context, reporter, command, slot).pipe(
+          ) => {
+            // The run a clock stops is named by the run it started.
+            let started = "";
+            const watched: Reporter = {
+              ...reporter,
+              report: (event) => {
+                if (event.event === "script" && event.kind === "started") {
+                  started = event.runId;
+                }
+                return reporter.report(event);
+              },
+            };
+            return runScript(context, watched, command, slot).pipe(
               Effect.flatMap(({ code, runId }) =>
                 code === 0
                   ? Effect.void
@@ -260,7 +234,24 @@ export const makeRemoving = ({
                       new CleanupFailed({ phase, exitCode: code, runId }),
                     ),
               ),
+              (run) =>
+                options.cleanupWithin === undefined
+                  ? run
+                  : run.pipe(
+                      Effect.timeoutOrElse({
+                        duration: options.cleanupWithin,
+                        orElse: () =>
+                          Effect.fail(
+                            new CleanupFailed({
+                              phase,
+                              exitCode: null,
+                              runId: started,
+                            }),
+                          ),
+                      }),
+                    ),
             );
+          };
           cleanupRan = true;
           if (pool) {
             yield* cleanup(
@@ -275,12 +266,26 @@ export const makeRemoving = ({
         }
       }
       // Unforced, git checks the tree again at the delete, which covers
-      // what a cleanup script wrote since the check above.
-      const removed = yield* removeCheckout(
-        project.path,
-        worktree.path,
-        options.force,
-      ).pipe(Effect.result);
+      // what a cleanup script wrote since the check above. Once git's
+      // side is done (an orphaned checkout's too), what is kept under the
+      // id goes before anything can cut in: a worktree made at the same
+      // path later would take it over.
+      const removed = yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const outcome = yield* removeCheckout(
+            project.path,
+            worktree.path,
+            options.force,
+          ).pipe(Effect.result);
+          if (
+            Result.isSuccess(outcome) ||
+            outcome.failure instanceof OrphanedWorktree
+          ) {
+            yield* kept.forget(project, worktree.id);
+          }
+          return outcome;
+        }),
+      );
       if (
         Result.isFailure(removed) &&
         !(removed.failure instanceof OrphanedWorktree)
@@ -300,12 +305,9 @@ export const makeRemoving = ({
         }
         return yield* failure;
       }
-      // An orphaned checkout is git's side done, so the bookkeeping still
-      // follows it.
       if (!worktree.isExternal) {
         yield* pruneEmptyParents(worktree.path, project.path);
       }
-      yield* forget(project, worktree.id);
       if (
         !options.keepBranch &&
         deleteBranchOnRemove !== false &&
@@ -331,7 +333,6 @@ export const makeRemoving = ({
       wipe,
       removeCheckout,
       pruneEmptyParents,
-      rekeyWorktree,
       removable,
       remove,
     };

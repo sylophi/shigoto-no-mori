@@ -5,7 +5,6 @@
 // pid being dead, or alive in another process that started since. A v2
 // Go sm reads a file with a start in it as holding no pid; the two
 // never stage into one data dir.
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -13,8 +12,7 @@ import * as Predicate from "effect/Predicate";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { atoi } from "./doctorParse.ts";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { captureWithin, pidAlive } from "./processes.ts";
+import { pidAlive, startOf } from "./processes.ts";
 
 // A stager is downloading an update, and owns the files in updates/.
 export class UpdateInProgress extends Schema.TaggedError<UpdateInProgress>()(
@@ -35,39 +33,6 @@ export class StagingLockUnavailable extends Schema.TaggedError<StagingLockUnavai
     return `Couldn't take the update staging lock at ${this.path}.`;
   }
 }
-
-// How long ago `pid` started, in seconds, from ps's elapsed time
-// ([[dd-]hh:]mm:ss); none when ps can't say.
-const ageOf = (pid: number) =>
-  Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const ran = yield* captureWithin(
-      spawner,
-      "ps",
-      ["-o", "etime=", "-p", String(pid)],
-      "5 seconds",
-    ).pipe(Effect.option);
-    if (Option.isNone(ran) || ran.value.code !== 0)
-      return Option.none<number>();
-    const match = /^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$/.exec(
-      ran.value.output.trim(),
-    );
-    if (match === null) return Option.none<number>();
-    const [, days = "0", hours = "0", minutes = "0", seconds = "0"] = match;
-    return Option.some(
-      ((Number(days) * 24 + Number(hours)) * 60 + Number(minutes)) * 60 +
-        Number(seconds),
-    );
-  });
-
-// When `pid` started, in this machine's milliseconds, to the second;
-// none when ps can't say.
-const startOf = (pid: number) =>
-  Effect.gen(function* () {
-    const age = yield* ageOf(pid);
-    const now = yield* Clock.currentTimeMillis;
-    return Option.map(age, (seconds) => now - seconds * 1000);
-  });
 
 // Who holds the pidfile: none when there is none, and pid 0 when its
 // content isn't one. The file holds the stager's pid and when it

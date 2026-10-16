@@ -58,6 +58,7 @@ import {
 import { FilesPageScene, FilesPartsScene } from "./files.tsx";
 import {
   MigrationDoneScene,
+  MigrationImportStuckScene,
   MigrationMovingScene,
   MigrationSignInScene,
   MigrationStillStuckScene,
@@ -100,6 +101,7 @@ const PHONE = { size: [390, 844], window: "phone" } as const;
 export const scenes = {
   firstRun: { Scene: FirstRunScene, ...DESKTOP },
   migrationWaiting: { Scene: MigrationWaitingScene, ...DESKTOP },
+  migrationImportStuck: { Scene: MigrationImportStuckScene, ...DESKTOP },
   migrationMoving: { Scene: MigrationMovingScene, ...DESKTOP },
   migrationStuck: { Scene: MigrationStuckScene, ...DESKTOP },
   migrationStillStuck: { Scene: MigrationStillStuckScene, ...DESKTOP },
