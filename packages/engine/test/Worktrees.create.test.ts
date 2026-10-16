@@ -13,8 +13,8 @@ import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox | undefined;
 let links: string | undefined;
-afterEach(() => {
-  box?.remove();
+afterEach(async () => {
+  await box?.remove();
   if (links !== undefined) rmSync(links, { recursive: true, force: true });
 });
 
@@ -40,4 +40,5 @@ it("creates a worktree under a data dir behind a symlink", async () => {
   )) as { worktree?: Worktrees.WorktreeRow; error?: string };
   assert.equal(created.error, undefined);
   assert.equal(created.worktree?.branch, "fox");
+  assert.equal(created.worktree?.isExternal, false);
 });

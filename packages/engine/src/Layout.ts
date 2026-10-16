@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Config from "./Config.ts";
 import * as layout from "./worktreeLayout.ts";
@@ -14,7 +15,8 @@ export class Layout extends Context.Service<
     // Where the project's new worktrees go.
     readonly worktreeBase: (project: ProjectPlace) => Effect.Effect<string>;
     // Every base whose direct children are the project's managed
-    // worktrees, whatever its layout is now.
+    // worktrees, whatever its layout is now, each also as git spells it
+    // (its symlinks resolved).
     readonly managedBases: (
       project: ProjectPlace,
     ) => Effect.Effect<ReadonlyArray<string>>;
@@ -23,6 +25,7 @@ export class Layout extends Context.Service<
 
 const make = Effect.gen(function* () {
   const config = yield* Config.Config;
+  const fs = yield* FileSystem.FileSystem;
   const { dataDir, dataDirName } = yield* Paths.Paths;
   const place = { dataDir, dataDirName };
 
@@ -68,11 +71,15 @@ const make = Effect.gen(function* () {
   const managedBases = Effect.fn("Layout.managedBases")(function* (
     project: ProjectPlace,
   ) {
-    return layout.managedBases(
+    const bases = layout.managedBases(
       project.path,
       yield* projectSettings(project),
       place,
     );
+    const real = yield* Effect.forEach(bases, (base) =>
+      fs.realPath(base).pipe(Effect.orElseSucceed(() => base)),
+    );
+    return [...new Set([...bases, ...real])];
   });
 
   return Layout.of({ worktreeBase, managedBases });
