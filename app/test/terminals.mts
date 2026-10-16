@@ -57,10 +57,9 @@ import {
 } from "./lib/checkKit.mts";
 import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
 
-// The alternate-screen mode a restored history's tail leaves, if any.
-const LEAVES = new RegExp(String.raw`^\x1b\[\?(1049|1047|47)l`);
-const leaves = (history: string) =>
-  LEAVES.exec(Terminals.restoredTail(history))?.[1];
+// What a restored history replays, before its tail.
+const replayed = (history: string) =>
+  Terminals.restoredHistory(history).split("\x1b[?1000l")[0];
 
 describe("the history", () => {
   it("drops terminal queries and keeps everything else", () => {
@@ -69,14 +68,17 @@ describe("the history", () => {
     assert.equal(withoutQueries(sent), "ab\x1b[31mred\x1b[0m");
   });
 
-  it("ends a restored history out of the alternate screen only if it is in it", () => {
-    assert.equal(leaves("$ ls\r\nfile\r\n$ "), undefined);
-    assert.equal(leaves("\x1b[?1049hvim"), "1049");
-    assert.equal(leaves("\x1b[?25;1049hvim"), "1049");
-    assert.equal(leaves("\x1b[?47hless"), "47");
-    assert.equal(leaves("\x1b[?1047hless"), "1047");
-    assert.equal(leaves("\x1b[?1049hvim\x1b[?1049l$ "), undefined);
-    assert.equal(leaves("\x1b[?1049hvim\x1bc$ "), undefined);
+  it("replays a history that ends on the alternate screen up to where it went there", () => {
+    const main = "one\r\ntwo\r\n$ vim\r\n";
+    assert.equal(replayed(main), main);
+    assert.equal(replayed(`${main}\x1b[?1049h\x1b[H\x1b[2JVIM`), main);
+    assert.equal(replayed(`${main}\x1b[?25;1049h\x1b[HVIM`), main);
+    assert.equal(replayed(`${main}\x1b[?47h\x1b[H\x1b[2JLESS`), main);
+    assert.equal(replayed(`${main}\x1b[?1047hLESS`), main);
+    const back = `${main}\x1b[?1049hVIM\x1b[?1049l$ `;
+    assert.equal(replayed(back), back);
+    const reset = `${main}\x1b[?1049hVIM\x1bc$ `;
+    assert.equal(replayed(reset), reset);
   });
 
   it("answers a reconnect with what came after its seq", () => {

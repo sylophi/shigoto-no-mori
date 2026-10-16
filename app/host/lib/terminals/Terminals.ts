@@ -94,11 +94,7 @@ const SAVE_AT_MOST = Duration.minutes(1);
 const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
 // What a restored history ends with, so the fresh shell's prompt lands
 // on a clean screen: out of the mouse and the keypad modes, with the
-// cursor shown and the colors reset, and out of the alternate screen if
-// the history left it on, by the mode it went in with. 1049 restores the
-// cursor it saved going in, which on the main screen is one never
-// saved, the top left, where the new prompt's clear to the end of the
-// screen would wipe the lines replayed above it.
+// cursor shown and the colors reset.
 const RESTORED_TAIL =
   "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
 // A private mode set or reset, its modes as they come (`1049;25`), or a
@@ -106,17 +102,25 @@ const RESTORED_TAIL =
 const SCREEN_MODES = new RegExp(String.raw`\x1b\[\?([\d;]+)([hl])|\x1bc`, "g");
 const ALTERNATE = new Set(["1049", "1047", "47"]);
 
-export const restoredTail = (history: string): string => {
-  let alternate: string | undefined;
-  for (const [sequence, modes, set] of history.matchAll(SCREEN_MODES)) {
+// A history that ends on the alternate screen (a full-screen program
+// ran at the quit) is replayed up to where it went there: the main
+// screen as that program found it, cursor and all. Leaving the
+// alternate screen instead puts the cursor where the program left it,
+// or for 1049 where it saved it, and the fresh prompt's clear to the
+// end of the screen wipes the lines above.
+export const restoredHistory = (history: string): string => {
+  let entered: number | undefined;
+  for (const match of history.matchAll(SCREEN_MODES)) {
+    const [sequence, modes, set] = match;
     if (sequence === "\x1bc") {
-      alternate = undefined;
+      entered = undefined;
       continue;
     }
-    const mode = modes?.split(";").find((m) => ALTERNATE.has(m));
-    if (mode !== undefined) alternate = set === "h" ? mode : undefined;
+    if (!modes?.split(";").some((mode) => ALTERNATE.has(mode))) continue;
+    if (set === "l") entered = undefined;
+    else entered ??= match.index;
   }
-  return (alternate === undefined ? "" : `\x1b[?${alternate}l`) + RESTORED_TAIL;
+  return history.slice(0, entered) + RESTORED_TAIL;
 };
 
 interface Session {
@@ -405,9 +409,7 @@ const make = <R>(options: {
           pty,
           history: makeHistory(
             restored?.seq ?? 0,
-            restored === undefined
-              ? ""
-              : restored.history + restoredTail(restored.history),
+            restored === undefined ? "" : restoredHistory(restored.history),
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
