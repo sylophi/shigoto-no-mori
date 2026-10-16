@@ -49,9 +49,10 @@ export const loadsFrom = (
 
 // Remote images load lazily and without a referrer: a long changelog
 // shouldn't pull every screenshot at once, and GitHub needn't learn
-// which page asked. An image GitHub signed for five minutes
-// (the host's withSignedImages), loads at once: lazily, one under a
-// description's fold would wait past its signature. On a purifier of
+// which page asked. An image GitHub signed for a few minutes (the
+// host's withSignedImages) loads at once: lazily, one under a
+// description's fold would wait past its signature. Any signature is in
+// the query, so an image with one loads at once, a badge's too. On a purifier of
 // the module's own, so no other sanitize in the app picks the rule up.
 // A server (a scene rendered in Node or at build time) has no DOM to
 // sanitize with, and draws the source as text instead (Markdown).
@@ -81,9 +82,7 @@ if (purify.isSupported) {
       node.removeAttribute(attribute);
     }
     if (node.tagName === "IMG") {
-      const signed = node
-        .getAttribute("src")
-        ?.startsWith("https://private-user-images.githubusercontent.com/");
+      const signed = node.getAttribute("src")?.includes("?");
       if (!signed) node.setAttribute("loading", "lazy");
       node.setAttribute("referrerpolicy", "no-referrer");
     }
