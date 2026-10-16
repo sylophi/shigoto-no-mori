@@ -4,6 +4,7 @@
 // the tree. While arranging, the bar holds only the way out of it.
 import type { ReactNode } from "react";
 import {
+  CircleQuestionMark,
   Inbox,
   LayoutGrid,
   ListTree,
@@ -16,6 +17,7 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from "../../primitives/segmented-control.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome.ts";
 
@@ -153,6 +155,32 @@ export function SidebarNavActionsView({
         )}
       </NavIconButton>
     </>
+  );
+}
+
+// The guide, as the Help menu names it. The click hands over where the
+// button is, for a menu of several agents to open there.
+export function SidebarGuideButtonView({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: (at: { x: number; y: number }) => void;
+}) {
+  return (
+    <SimpleTooltip tip={label}>
+      <button
+        type="button"
+        onClick={(event) => {
+          const { left, top } = event.currentTarget.getBoundingClientRect();
+          onClick({ x: left, y: top });
+        }}
+        aria-label={label}
+        className={SIDEBAR_ICON_BUTTON}
+      >
+        <CircleQuestionMark className="size-3.5" />
+      </button>
+    </SimpleTooltip>
   );
 }
 
