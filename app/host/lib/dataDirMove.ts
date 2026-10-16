@@ -415,7 +415,12 @@ const finishMove = (journal: Journal, at: string) =>
 const undoMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* Effect.ignore(reviveStore);
+    // A store that can't write again keeps the journal, for its next
+    // open to revive it.
+    const revived = yield* reviveStore.pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
     yield* Effect.ignore(rekeyWorktrees(journal.moved, true));
     if (journal.partial !== null) {
       yield* Effect.ignore(
@@ -439,7 +444,9 @@ const undoMove = (journal: Journal, at: string) =>
         );
       }
     }
-    yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+    if (revived) {
+      yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+    }
   });
 
 // At start, with the graph up and before anything reads a worktree by

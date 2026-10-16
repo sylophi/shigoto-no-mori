@@ -195,7 +195,9 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   let resolved = yield* resolve;
   if (
     resolved.source !== "env" &&
-    (yield* rescueStrandedMove({
+    !(yield* fs.exists(resolved.dataDir).pipe(Effect.orElseSucceed(() => true)))
+  ) {
+    yield* rescueStrandedMove({
       named: resolved.dataDir,
       pointerFile: path.join(configHome, names.configDir, names.pointer),
       legacyPointerFile:
@@ -203,8 +205,9 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
           ? null
           : path.join(configHome, names.configDir, names.legacyPointer),
       defaultDataDir: path.join(home, names.dataDir),
-    })) !== null
-  ) {
+    });
+    // Found again either way: another process may have made the same
+    // rescue first.
     resolved = yield* resolve;
   }
 
