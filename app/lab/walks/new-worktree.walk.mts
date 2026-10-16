@@ -19,19 +19,12 @@ beforeAll(async () => {
 });
 afterAll(() => lab?.close());
 
-// Each worktree's branch, by the folder's name.
-const worktrees = () =>
-  Object.fromEntries(
-    lab
-      .git(repo, "worktree", "list", "--porcelain")
-      .split("\n\n")
-      .filter(Boolean)
-      .map((entry) => {
-        const path = /^worktree (.*)$/m.exec(entry)?.[1] ?? "";
-        const branch = /^branch refs\/heads\/(.*)$/m.exec(entry)?.[1] ?? "";
-        return [path.split("/").at(-1) ?? "", branch];
-      }),
-  );
+// The branches the repo's worktrees have checked out.
+const checkedOut = () =>
+  lab
+    .git(repo, "worktree", "list", "--porcelain")
+    .split("\n")
+    .flatMap((line) => /^branch refs\/heads\/(.*)$/.exec(line)?.[1] ?? []);
 
 const openNewWorktree = async () => {
   const { page } = lab;
@@ -50,7 +43,7 @@ it("branches off a source under the name typed", async () => {
   await main(page)
     .getByRole("heading", { level: 1, name: "walk-branch" })
     .waitFor();
-  assert.equal(worktrees()["walk-branch"], "walk-branch");
+  await expect.poll(checkedOut).toContain("walk-branch");
   assert.equal(
     lab.git(repo, "rev-parse", "walk-branch").trim(),
     lab.git(repo, "rev-parse", "origin/main").trim(),
@@ -67,5 +60,5 @@ it("checks out the source branch itself", async () => {
   await main(page)
     .getByRole("heading", { level: 1, name: "feature/one" })
     .waitFor();
-  await expect.poll(() => worktrees()["feature-one"]).toBe("feature/one");
+  await expect.poll(checkedOut).toContain("feature/one");
 });

@@ -27,12 +27,15 @@ else.
 
 ## Where they run
 
-- **On every pull request**, in CI's `walks` job (`checks.yml`). It
-  packages the lab build on a macOS runner and runs every walk. The
-  walks take about 30 s here and about 2 minutes on a runner, and
-  packaging adds about 3.
+- **After every landing on release/v3**, in the `Walks` workflow
+  (`.github/workflows/walks.yml`), which packages the lab build on a
+  macOS runner and runs every walk: about 2 minutes of walks and 3 of
+  packaging, too long for every pull request. It can also be started
+  by hand (`workflow_dispatch`). A regression shows within the hour
+  after a merge and before any cut.
 - **Before every prerelease cut**, as the packaged check
-  (`V3.md`, Process). The build is the one about to be cut.
+  (`V3.md`, Process), on the build about to be cut.
+- **By hand**, with `pnpm walks`, for a change that touches a page.
 
 ## Adding one
 
