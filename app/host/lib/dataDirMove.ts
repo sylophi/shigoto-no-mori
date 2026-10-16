@@ -42,7 +42,13 @@ import {
   getBusyOperations,
   markDeleteInflight,
 } from "./scripts";
-import { JOURNAL, type Journal, JournalJson } from "@shared/dataDirMoveJournal";
+import {
+  JOURNAL,
+  type Journal,
+  JournalJson,
+  retireStore,
+  reviveStore,
+} from "@shigomori/engine/dataDirMoveJournal";
 import {
   canonicalDataDirName,
   dataDir,
@@ -317,7 +323,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
-        if (pointerStaged) yield* Effect.ignore(removeIfThere(pointerTmp));
+        // Once the folder landed, the staged pointer is how a start finds
+        // it (Paths' rescue).
+        if (pointerStaged && !renamed) {
+          yield* Effect.ignore(removeIfThere(pointerTmp));
+        }
         if (journaled && !renamed) yield* undoMove(journal, oldDir);
       }),
     ),
@@ -330,14 +340,19 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
 });
 
 // The store held still while a copy reads it: a write transaction open
-// for the copy's length, so a write from the terminal or a hook waits,
-// and gives up as busy, rather than tearing the copy or landing in the
-// store the move leaves behind. An UPDATE that changes nothing still
-// takes the write lock.
+// for the copy's length (an UPDATE that changes nothing still takes the
+// write lock), so a write from the terminal or a hook waits rather than
+// tearing the copy, and the store left behind retired in the same
+// transaction (`retireStore`).
 export const holdingStore = <A, E, R>(copy: Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
-      Effect.andThen(sql`UPDATE changes SET version = version WHERE 0`, copy),
+      Effect.gen(function* () {
+        yield* sql`UPDATE changes SET version = version WHERE 0`;
+        const copied = yield* copy;
+        yield* retireStore;
+        return copied;
+      }),
     ),
   );
 
@@ -400,6 +415,7 @@ const finishMove = (journal: Journal, at: string) =>
 const undoMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    yield* Effect.ignore(reviveStore);
     yield* Effect.ignore(rekeyWorktrees(journal.moved, true));
     if (journal.partial !== null) {
       yield* Effect.ignore(

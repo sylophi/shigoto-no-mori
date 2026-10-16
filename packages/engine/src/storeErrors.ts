@@ -10,6 +10,8 @@ import * as Schema from "effect/Schema";
 // What a write to the 2.x files read into memory raises
 // (Store.fromFiles).
 export const UNMIGRATED = "sm-unmigrated";
+// What a write to a store a data-folder move left behind raises.
+export const MOVED = "sm-data-folder-moved";
 
 const CATEGORIES = [
   "busy",
@@ -17,6 +19,7 @@ const CATEGORIES = [
   "read-only",
   "damaged",
   "unmigrated",
+  "moved",
   "newer",
   "failed",
 ] as const;
@@ -43,6 +46,7 @@ export const storeWords: Record<Category, string> = {
   damaged: "The store looks damaged. The doctor says what it can repair.",
   unmigrated:
     "This data folder is still v2's, and is only read until it moves to v3. Open the app to move it, or run the doctor with --fix.",
+  moved: "The data folder moved while this ran; run it again.",
   newer: "It was made by a newer version of the app; update the app.",
   failed: "Couldn't read or write the store.",
 };
@@ -73,6 +77,7 @@ export const categoryOf = (error: unknown): Category => {
   }
   const said = textOf(error);
   if (said.includes(UNMIGRATED)) return "unmigrated";
+  if (said.includes(MOVED)) return "moved";
   if (/SQLITE_BUSY|SQLITE_LOCKED|database is locked/i.test(said)) return "busy";
   if (/SQLITE_FULL|disk is full|ENOSPC/i.test(said)) return "full";
   if (/SQLITE_READONLY|readonly database|read-only/i.test(said)) {

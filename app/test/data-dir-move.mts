@@ -27,11 +27,12 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -44,7 +45,12 @@ import {
   moveDataDir,
   resumeLayer,
 } from "../host/lib/dataDirMove.ts";
-import { JOURNAL, rescueStrandedMove } from "../shared/dataDirMoveJournal.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import {
+  JOURNAL,
+  rescueStrandedMove,
+  reviveStore,
+} from "@shigomori/engine/dataDirMoveJournal";
 import { afterFailedMove } from "../host/ipc/modules/runtime.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
@@ -272,6 +278,19 @@ it("a move that failed after the folder was let go never leaves the app running 
   );
 });
 
+// A write from another process, or why it was refused.
+function writeTheStore(): string {
+  const other = new DatabaseSync(join(engineDataDir, "store.db"));
+  try {
+    other.exec("UPDATE changes SET version = version + 1");
+    return "written";
+  } catch (error) {
+    return String(error);
+  } finally {
+    other.close();
+  }
+}
+
 it("holds the store still while a move copies it to another volume", async () => {
   const refused = await runHost(
     holdingStore(
@@ -291,21 +310,26 @@ it("holds the store still while a move copies it to another volume", async () =>
     ),
   );
   assert.match(refused, /locked|busy/i, "another process's write waits");
+  // And once the copy is made, the store left behind refuses the write
+  // that waited, until an undone move revives it.
+  assert.match(writeTheStore(), /sm-data-folder-moved/);
+  await runHost(reviveStore);
+  assert.equal(writeTheStore(), "written");
 });
 
 // A data folder a move landed, its journal naming where it came from.
-function landed(at: string, from: string): void {
+function landed(at: string, from: string, partial: string | null = null): void {
   mkdirSync(at, { recursive: true });
   writeFileSync(join(at, "store.db"), "");
   writeFileSync(
     join(at, JOURNAL),
-    JSON.stringify({ from, to: at, partial: null, moved: [] }),
+    JSON.stringify({ from, to: at, partial, moved: [] }),
   );
 }
 
 // A move a crash cut between moving the folder and moving the pointer:
 // the folder that arrived holds the journal, naming the one that left.
-it("finds a data folder whose move a crash cut before its pointer moved", () => {
+it("finds a data folder whose move a crash cut before its pointer moved", async () => {
   const root = tempDir("sm-data-rescue-", track);
   const config = join(root, "config");
   mkdirSync(config);
@@ -313,17 +337,19 @@ it("finds a data folder whose move a crash cut before its pointer moved", () => 
   const defaultDataDir = join(root, "home", ".sm");
   const custom = join(root, "drive", ".sm");
   const rescue = (named: string) =>
-    rescueStrandedMove({
-      named,
-      pointerFile,
-      legacyPointerFile: null,
-      defaultDataDir,
-    });
+    Effect.runPromise(
+      rescueStrandedMove({
+        named,
+        pointerFile,
+        legacyPointerFile: null,
+        defaultDataDir,
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
 
   // From the default: the pointer was staged beside itself.
   landed(custom, defaultDataDir);
   writeFileSync(`${pointerFile}.tmp.ab12`, `${custom}\n`);
-  assert.equal(rescue(defaultDataDir), custom);
+  assert.equal(await rescue(defaultDataDir), custom);
   assert.equal(readFileSync(pointerFile, "utf8").trim(), custom);
   assert.equal(existsSync(`${pointerFile}.tmp.ab12`), false);
   rmSync(join(custom, JOURNAL));
@@ -331,7 +357,7 @@ it("finds a data folder whose move a crash cut before its pointer moved", () => 
   // Back to the default: the pointer still names the folder that left.
   landed(defaultDataDir, custom);
   rmSync(custom, { recursive: true });
-  assert.equal(rescue(custom), defaultDataDir);
+  assert.equal(await rescue(custom), defaultDataDir);
   assert.equal(existsSync(pointerFile), false);
 
   // A copy keeps its source and journal, which the start undoes instead.
@@ -346,9 +372,73 @@ it("finds a data folder whose move a crash cut before its pointer moved", () => 
     }),
   );
   writeFileSync(`${pointerFile}.tmp.cd34`, `${custom}\n`);
-  assert.equal(rescue(defaultDataDir), null);
+  assert.equal(await rescue(defaultDataDir), null);
+  assert.equal(existsSync(pointerFile), false);
+
+  // A copy's journal never counts, even with its source out of sight (a
+  // drive unplugged as the copy was undone): only a rename's does.
+  rmSync(defaultDataDir, { recursive: true });
+  rmSync(custom, { recursive: true });
+  landed(custom, defaultDataDir, join(root, "drive", ".sm.partial-x"));
+  assert.equal(await rescue(defaultDataDir), null);
   assert.equal(existsSync(pointerFile), false);
 
   // And a journal about another folder is none of this one's.
-  assert.equal(rescue(join(root, "elsewhere")), null);
+  assert.equal(await rescue(join(root, "elsewhere")), null);
+});
+
+it("a rename interrupted before its pointer moved keeps the staged pointer the next start finds it by", async () => {
+  const parent = join(elsewhere, "same-volume");
+  const destination = join(parent, "moved");
+  const pointerFile = join(elsewhere, "config-3", "data-dir");
+  const staging = Deferred.makeUnsafe<void>();
+  const move = runHost(
+    Effect.gen(function* () {
+      const real = yield* FileSystem.FileSystem;
+      const fs: FileSystem.FileSystem = {
+        ...real,
+        rename: (from, to) =>
+          to === pointerFile
+            ? Deferred.succeed(staging, undefined).pipe(
+                Effect.andThen(Effect.never),
+              )
+            : real.rename(from, to),
+      };
+      return yield* moveDataDir(parent, {
+        place: {
+          dataDir: engineDataDir,
+          pointerFile,
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        beforeMove: Effect.void,
+        killAllScripts: Effect.void,
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+    }).pipe(Effect.forkDetach),
+  );
+  const fiber = await move;
+  await Effect.runPromise(Deferred.await(staging));
+  await Effect.runPromise(Fiber.interrupt(fiber));
+  try {
+    assert.ok(existsSync(join(destination, "data-dir-move.json")));
+    const staged = readdirSync(dirname(pointerFile)).filter((entry) =>
+      entry.startsWith("data-dir.tmp."),
+    );
+    assert.equal(staged.length, 1, "the staged pointer stays");
+    const found = await Effect.runPromise(
+      rescueStrandedMove({
+        named: engineDataDir,
+        pointerFile,
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    assert.equal(found, destination);
+    assert.equal(readFileSync(pointerFile, "utf8").trim(), destination);
+  } finally {
+    // This process's data folder back where the other cases find it.
+    renameSync(destination, engineDataDir);
+    rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
+  }
 });

@@ -22,7 +22,6 @@ import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { rescueStrandedMove } from "@shared/dataDirMoveJournal";
 import {
   dataDirPointerPath as pointerPathFor,
   legacyDataDirPointerPath as legacyPointerPathFor,
@@ -48,28 +47,13 @@ let found: Found | null = null;
 // fails loudly instead of flipping the path under live callers.
 export async function initDataDir(flavor: Flavor): Promise<void> {
   if (found !== null) throw new Error("dataDir already initialized");
-  const find = () =>
-    Effect.runPromise(
-      Effect.service(Paths.Paths).pipe(
-        Effect.provide(
-          Paths.layer(flavor).pipe(Layer.provide(NodeServices.layer)),
-        ),
+  const paths = await Effect.runPromise(
+    Effect.service(Paths.Paths).pipe(
+      Effect.provide(
+        Paths.layer(flavor).pipe(Layer.provide(NodeServices.layer)),
       ),
-    );
-  let paths = await find();
-  // A move a crash cut before its pointer moved: committed, and the data
-  // dir found again where the move left it.
-  if (
-    paths.dataDirSource !== "env" &&
-    rescueStrandedMove({
-      named: paths.dataDir,
-      pointerFile: pointerPathFor(flavor),
-      legacyPointerFile: legacyPointerPathFor(flavor),
-      defaultDataDir: join(paths.home, paths.dataDirName),
-    }) !== null
-  ) {
-    paths = await find();
-  }
+    ),
+  );
   found = {
     dataDir: paths.dataDir,
     source: paths.dataDirSource,
