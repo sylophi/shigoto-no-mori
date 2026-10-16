@@ -134,9 +134,9 @@ export const nuke = Command.make(
         if (what === "the config folder") {
           // Its pointer went with the app's nuke. Anything else in it is
           // the owner's.
-          try {
+          yield* Effect.try(() => {
             if (readdirSync(path).length === 0) rmdirSync(path);
-          } catch {}
+          }).pipe(Effect.ignore);
         } else if (
           what === "the app's own folder" ||
           what === "the logs" ||
