@@ -225,6 +225,25 @@ export const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
 // regenerated lockfile runs to tens of megabytes on its own.
 export const PATCH_MAX_OUTPUT = 64 * 1024 * 1024;
 
+// Every patch a diff page parses is git's own, whatever the user's
+// config. The a/ and b/ prefixes, which diff.noprefix and its kin would
+// change, are pinned as config before the command: `stash show` drops
+// --src-prefix under diff.noprefix, and --default-prefix is newer than
+// the git floor (2.40), which leaves a key it doesn't know alone.
+export const PATCH_CONFIG = [
+  "-c",
+  "diff.noprefix=false",
+  "-c",
+  "diff.mnemonicPrefix=false",
+  "-c",
+  "diff.srcPrefix=a/",
+  "-c",
+  "diff.dstPrefix=b/",
+] as const;
+
+// And after it, no external diff or textconv in place of a change.
+export const PATCH_FLAGS = ["--no-ext-diff", "--no-textconv"] as const;
+
 // Pathspecs travel as argv, and a big refactor can carry enough paths
 // to brush the OS's limit, so they go one chunk per git.
 export const PATHSPEC_CHUNK = 500;

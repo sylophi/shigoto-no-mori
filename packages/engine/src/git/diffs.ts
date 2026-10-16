@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { splitZ } from "../gitParse.ts";
-import { PATCH_MAX_OUTPUT } from "./documents.ts";
+import { PATCH_CONFIG, PATCH_FLAGS, PATCH_MAX_OUTPUT } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
 
 export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
@@ -53,17 +53,27 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
         worktree,
         [
           ...pathspec,
+          ...PATCH_CONFIG,
           ...(untracked
             ? [
                 "diff",
                 "--no-index",
                 "--no-color",
                 "--full-index",
+                ...PATCH_FLAGS,
                 "--",
                 "/dev/null",
                 file,
               ]
-            : ["diff", "HEAD", "--no-color", "--full-index", "--", ...paths]),
+            : [
+                "diff",
+                "HEAD",
+                "--no-color",
+                "--full-index",
+                ...PATCH_FLAGS,
+                "--",
+                ...paths,
+              ]),
         ],
         { anyExit: true, maxOutputBytes: PATCH_MAX_OUTPUT },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
