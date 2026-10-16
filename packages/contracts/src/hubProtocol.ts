@@ -53,6 +53,10 @@ export const CLOSE_DEVICE_REVOKED = 4102;
 export const CLOSE_SUPERSEDED = 4103;
 export const CLOSE_CREDENTIAL_ROTATED = 4104;
 export const CLOSE_RATE_LIMITED = 4105;
+// The socket stopped answering its pings (a laptop asleep with it left
+// open), so the hub took it off the roster. Not a verdict: the device
+// dials again once it is back.
+export const CLOSE_SILENT = 4106;
 
 // A browser profile holds one per tab. Past it, the oldest gives way.
 export const MAX_DEVICE_CONNECTIONS = 32;

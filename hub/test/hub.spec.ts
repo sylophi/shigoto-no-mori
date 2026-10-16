@@ -7,6 +7,7 @@ import {
   CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
   CLOSE_RATE_LIMITED,
+  CLOSE_SILENT,
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
   encodeEnvelope,
@@ -493,6 +494,91 @@ describe("presence", () => {
     await a.socket.untilPresence(["dev-code-a", "dev-code-c"]);
     c.socket.ws.close(CLOSE_DEVICE_REVOKED, "client picked this code");
     await a.socket.untilPresence(["dev-code-a"]);
+  });
+});
+
+// The window shortened for the proof, on the account's object.
+async function shortSilence(accountId: string, ms: number) {
+  await runInDurableObject(
+    env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId)),
+    (hub: DeviceHub) => {
+      hub.silentAfterMs = ms;
+    },
+  );
+}
+
+// Pings as a device does, until the returned stop.
+function keepPinging(socket: { ws: WebSocket }): () => void {
+  const timer = setInterval(() => socket.ws.send(HUB_PING), 50);
+  return () => clearInterval(timer);
+}
+
+describe("a device that went silent", () => {
+  it("leaves the roster when a peer asks it, the ask is nacked, and it rejoins by dialing again", async () => {
+    const a = await enrollAndConnect("acct-silent", "dev-silent-a");
+    const b = await enrollAndConnect("acct-silent", "dev-silent-b");
+    await a.socket.untilPresence(["dev-silent-a", "dev-silent-b"]);
+    await shortSilence("acct-silent", 400);
+    const stop = keepPinging(a.socket);
+    try {
+      await sleep(700);
+      // B stopped pinging (asleep with its socket open); A did not.
+      a.socket.send({ t: "relay", to: "dev-silent-b", frame: "ask" });
+      await a.socket.untilPresence(["dev-silent-a"]);
+      expect(await a.socket.next()).toEqual({
+        t: "nack",
+        to: "dev-silent-b",
+        reason: "offline",
+      });
+      expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
+      // Back from sleep, B dials again and is a device like any other.
+      const back = await openSocket((await mintTicket(b.credential)).ticket);
+      await back.untilPresence(["dev-silent-a", "dev-silent-b"]);
+      await a.socket.untilPresence(["dev-silent-a", "dev-silent-b"]);
+      a.socket.send({ t: "relay", to: "dev-silent-b", frame: "again" });
+      await back.untilRelay("again");
+    } finally {
+      stop();
+    }
+  });
+
+  it("spares the device that asks, however long since its last ping", async () => {
+    const a = await enrollAndConnect("acct-silent-asker", "dev-silent-qa");
+    const b = await enrollAndConnect("acct-silent-asker", "dev-silent-qb");
+    await a.socket.untilPresence(["dev-silent-qa", "dev-silent-qb"]);
+    await shortSilence("acct-silent-asker", 400);
+    // Neither pings: A wakes and asks before its next ping goes out.
+    await sleep(700);
+    a.socket.send({ t: "relay", to: "dev-silent-qb", frame: "ask" });
+    await a.socket.untilPresence(["dev-silent-qa"]);
+    expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
+    // Its ask counts as a ping for every sweep after it too: another
+    // device's message sweeps, and A stays.
+    const c = await enrollAndConnect("acct-silent-asker", "dev-silent-qc");
+    await a.socket.untilPresence(["dev-silent-qa", "dev-silent-qc"]);
+    c.socket.send({ t: "relay", to: "dev-silent-qa", frame: "answer" });
+    await a.socket.untilRelay("answer");
+    expect(a.socket.ws.readyState).toBe(WebSocket.OPEN);
+  });
+
+  it("leaves the roster on a read of it", async () => {
+    const a = await enrollAndConnect("acct-silent-read", "dev-silent-ra");
+    const b = await enrollAndConnect("acct-silent-read", "dev-silent-rb");
+    await a.socket.untilPresence(["dev-silent-ra", "dev-silent-rb"]);
+    await shortSilence("acct-silent-read", 400);
+    const stop = keepPinging(a.socket);
+    try {
+      await sleep(700);
+      const online = await runInDurableObject(
+        env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-silent-read")),
+        (hub: DeviceHub) => hub.online(),
+      );
+      expect(online).toEqual(["dev-silent-ra"]);
+      await a.socket.untilPresence(["dev-silent-ra"]);
+      expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
+    } finally {
+      stop();
+    }
   });
 });
 

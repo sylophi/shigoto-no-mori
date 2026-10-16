@@ -7,10 +7,12 @@
 // LAN client resolves, so everything downstream (the bridge cache,
 // sync, port-forward) stays transport agnostic.
 //
-// DIAL STRATEGY: one overall deadline around the WHOLE attempt (the ask
-// included: it gets the deadline as its timeout, so a wedged peer that
-// never answers cannot hang the bridge's cached promise forever). All
-// candidate SOCKETS open concurrently, each sealed with its own ticket
+// DIAL STRATEGY: a deadline for each of the attempt's two legs, the
+// ask and then the candidate race, so a wedged peer that never answers
+// cannot hang the bridge's cached promise forever, and an answer that
+// came late (a peer just woken) leaves the race its whole budget: a
+// handshake across the tunnel after a slow answer used to run out and
+// win on the next rung instead. All candidate SOCKETS open concurrently, each sealed with its own ticket
 // to the key the hub's roster names for the peer (shared/remote/
 // sealedSocket.ts), so whoever answers a candidate address, only the
 // peer completes the handshake. The HELLOS are serialized:
@@ -175,9 +177,8 @@ export type DirectDialerDeps = {
   // package so a failed candidate names its errno instead of a bare
   // 1006 (see OpenClientSocket in shared/remote/deviceLink.ts).
   openSocket?: OpenClientSocket;
-  // Test seams. Real callers take the defaults and real time.
+  // Test seam. Real callers take the default.
   deadlineMs?: number;
-  now?: () => number;
 };
 
 export type DirectDialer = {
@@ -251,25 +252,23 @@ function exhaustionError(
 }
 
 export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
-  // The overall attempt deadline. HELLO_TIMEOUT_MS is the wire's one
-  // honest "a handshake should have happened by now" value, and each
-  // leg below (the ask, every candidate handshake) individually stays
-  // under it.
+  // Each leg's deadline (the ask, then the race). HELLO_TIMEOUT_MS is
+  // the wire's one honest "a handshake should have happened by now"
+  // value.
   const deadlineMs = deps.deadlineMs ?? HELLO_TIMEOUT_MS;
-  const now = deps.now ?? Date.now;
   const dialableKinds = [...(deps.dialableKinds ?? ALL_DIRECT_CANDIDATE_KINDS)];
 
   // Open every candidate's socket at once, then hello them one at a
   // time in socket-open order (see the file header for why hellos are
   // serialized). The first successful handshake wins and every other
-  // socket is abandoned pre-auth. The race rejects when what is left
-  // of the attempt's budget (remainingMs) runs out, and a handshake that
+  // socket is abandoned pre-auth. The race rejects when its budget
+  // (budgetMs) runs out, and a handshake that
   // resolves after settlement is closed rather than leaked.
   function raceCandidates(
     deviceId: string,
     opts: ConnectPeerOpts | undefined,
     candidates: DirectCandidate[],
-    remainingMs: number,
+    budgetMs: number,
     seal: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array },
     connectionId: string,
   ): Promise<DeviceConnection> {
@@ -287,7 +286,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
               `direct dial to ${deviceId} exceeded its ${deadlineMs}ms deadline`,
             ),
         );
-      }, remainingMs);
+      }, budgetMs);
       // Every settlement clears the deadline timer, so a settled race
       // leaves nothing armed.
       const resolve = (connection: DeviceConnection): void => {
@@ -341,9 +340,9 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
                 deps.onAnyPush?.(deviceId, channel, payload);
               }
             },
-            // The open is bounded by what is left of the attempt, and the
+            // The open is bounded by the race's budget, and the
             // race's deadline abandons whatever is still waiting.
-            deadlineMs: remainingMs,
+            deadlineMs: budgetMs,
           }),
       );
 
@@ -425,14 +424,12 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     });
   }
 
-  // One whole attempt under ONE deadline, so the bridge's cached
-  // promise always settles: the ask gets the whole budget as its
-  // timeout, and the candidate race whatever is left of it.
+  // One whole attempt, each leg under its deadline, so the bridge's
+  // cached promise always settles.
   async function connectDirect(
     deviceId: string,
     opts?: ConnectPeerOpts,
   ): Promise<PeerConnection> {
-    const deadlineAt = now() + deadlineMs;
     // This dial's connection: its tickets are minted for it, and its
     // hello names it.
     const connectionId = newConnectionId();
@@ -479,7 +476,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       deviceId,
       opts,
       info.candidates.slice(0, MAX_DIAL_CANDIDATES),
-      Math.max(1, deadlineAt - now()),
+      deadlineMs,
       { localKey, remoteKey },
       connectionId,
     );

@@ -52,6 +52,7 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import { spawn } from "node:child_process";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { names } from "../flavor";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 // The first check waits out the boot rush: staging can download
@@ -429,7 +430,8 @@ export const layer = Layer.effectDiscard(
         run = null;
       }),
     );
-    if (!app.isPackaged) {
+    // A dev run, or a test flavor, has no releases to move to.
+    if (!app.isPackaged || names.updates === null) {
       setState({ kind: "unsupported" });
       return;
     }

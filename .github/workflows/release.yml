@@ -100,9 +100,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The flavor (packages/engine/src/flavor.ts): a v3.0.0-alpha.N,
-      # -beta.N or -rc.N tag builds the v3 app, which installs beside the prod one under its own
-      # name, folders and `smv3`, and points at the dev hub (the SM_V3_
-      # variables) until v3 merges into main; anything else builds prod. The
+      # -beta.N or -rc.N tag builds the v3 app, which installs beside the
+      # prod one under its own name, folders and `smv3`, and points at
+      # the dev hub (the SM_PREVIEW_ variables, every build before prod's)
+      # until v3 merges into main; anything else builds prod. The
       # later steps read SM_FLAVOR, the app's name and the account
       # config from the job's environment.
       - name: Pick the flavor
@@ -111,8 +112,8 @@ jobs:
           PROD_HUB: ${{ vars.SM_DEVICE_HUB_URL }}
           PROD_CLERK: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
           PROD_WEB: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
-          V3_HUB: ${{ vars.SM_V3_DEVICE_HUB_URL }}
-          V3_CLERK: ${{ vars.SM_V3_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+          PREVIEW_HUB: ${{ vars.SM_PREVIEW_DEVICE_HUB_URL }}
+          PREVIEW_CLERK: ${{ vars.SM_PREVIEW_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
         run: |
           FLAVOR="$(node --input-type=module -e '
             import { flavorOfVersion } from "@shigomori/engine/flavor";
@@ -126,8 +127,8 @@ jobs:
             echo "SM_FLAVOR=$FLAVOR"
             echo "SM_APP_NAME=$APP_NAME"
             if [[ "$FLAVOR" == v3 ]]; then
-              echo "SM_DEVICE_HUB_URL=$V3_HUB"
-              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$V3_CLERK"
+              echo "SM_DEVICE_HUB_URL=$PREVIEW_HUB"
+              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$PREVIEW_CLERK"
             else
               echo "SM_DEVICE_HUB_URL=$PROD_HUB"
               echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$PROD_CLERK"
