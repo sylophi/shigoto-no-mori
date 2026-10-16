@@ -6,8 +6,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { pidAlive, stillRunning } from "./processes.ts";
 import { MOVED } from "./storeErrors.ts";
 
 export const JOURNAL = "data-dir-move.json";
@@ -16,6 +19,12 @@ export const Journal = Schema.Struct({
   to: Schema.String,
   // The sibling a copy to another volume fills, null for a rename.
   partial: Schema.NullOr(Schema.String),
+  // The process making the move, and when it started (absent when ps
+  // couldn't say): while it runs, the store it retired keeps refusing
+  // writes. A journal from before either was written has neither, and
+  // its mover counts as running.
+  pid: Schema.optional(Schema.Finite),
+  startedAt: Schema.optional(Schema.Finite),
   moved: Schema.Array(
     Schema.Struct({
       projectId: Schema.String,
@@ -76,16 +85,73 @@ export const rescueStrandedMove = (input: {
       ) {
         continue;
       }
-      yield* file === null
-        ? fs.remove(pointerFile, { force: true })
-        : fs.rename(file, pointerFile);
+      const published = yield* (
+        file === null
+          ? fs.remove(pointerFile, { force: true })
+          : fs.rename(file, pointerFile)
+      ).pipe(Effect.result);
+      if (Result.isFailure(published)) {
+        // Another process may have made the same rescue first; otherwise
+        // the data dir is where no pointer leads, which no fallback to the
+        // folder that left may hide.
+        const now = yield* fs.readFileString(pointerFile).pipe(
+          Effect.map((text) => text.trim()),
+          Effect.orElseSucceed(() => null),
+        );
+        const committed =
+          file === null
+            ? now === null
+            : now !== null && path.resolve(now) === path.resolve(at);
+        if (!committed) {
+          return yield* new DataDirStranded({
+            from: named,
+            to: at,
+            pointer: pointerFile,
+            reason: published.failure.message,
+          });
+        }
+      }
+      // The pre-2.0 pointer is read once the current one is gone, so one
+      // left naming the folder that left would lead back to it.
       if (legacyPointerFile !== null) {
-        yield* fs.remove(legacyPointerFile, { force: true });
+        const removed = yield* fs
+          .remove(legacyPointerFile, { force: true })
+          .pipe(Effect.result);
+        if (
+          Result.isFailure(removed) &&
+          (yield* fs
+            .exists(legacyPointerFile)
+            .pipe(Effect.orElseSucceed(() => true)))
+        ) {
+          return yield* new DataDirStranded({
+            from: named,
+            to: at,
+            pointer: legacyPointerFile,
+            reason: removed.failure.message,
+          });
+        }
       }
       return at;
     }
     return null;
-  }).pipe(Effect.orElseSucceed(() => null));
+  });
+
+// A data folder a move landed whose pointer couldn't be made to lead to
+// it: every process refuses to start rather than make a fresh one where
+// the pointer still leads.
+export class DataDirStranded extends Schema.TaggedError<DataDirStranded>()(
+  "DataDirStranded",
+  {
+    from: Schema.String,
+    to: Schema.String,
+    pointer: Schema.String,
+    reason: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `The data folder moved from ${this.from} to ${this.to}, and the pointer at ${this.pointer} couldn't be updated (${this.reason}). Make that file's folder writable, or put ${this.to} in it.`;
+  }
+}
 
 const WRITES = ["INSERT", "UPDATE", "DELETE"];
 
@@ -112,8 +178,8 @@ export const retireStore = Effect.gen(function* () {
 });
 
 // The store a move left let write again, for a move undone: in the
-// process that undoes it, and as the store opens where a journal says a
-// move was cut short (Store.ts).
+// process that undoes it, and as the store opens beside the journal of a
+// move whose process is gone (Store.ts).
 export const reviveStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const triggers = yield* sql<{ name: string }>`SELECT name FROM sqlite_master
@@ -122,3 +188,29 @@ export const reviveStore = Effect.gen(function* () {
     yield* sql.unsafe(`DROP TRIGGER IF EXISTS "${name}"`);
   }
 });
+
+// The journal in `dir` of a move whose process is gone: a store opening
+// beside it is one a crash left retired. A live mover's, or none, is not.
+export const strandedJournal = (dir: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const journal = yield* fs.readFileString(path.join(dir, JOURNAL)).pipe(
+      Effect.map(Schema.decodeUnknownOption(JournalJson)),
+      Effect.orElseSucceed(() => Option.none<Journal>()),
+    );
+    if (Option.isNone(journal)) return false;
+    const spawner = yield* Effect.serviceOption(
+      ChildProcessSpawner.ChildProcessSpawner,
+    );
+    const { pid, startedAt } = journal.value;
+    if (pid === undefined) return false;
+    return !(yield* Option.isSome(spawner) && startedAt !== undefined
+      ? stillRunning(pid, startedAt).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner.value,
+          ),
+        )
+      : pidAlive(pid));
+  });

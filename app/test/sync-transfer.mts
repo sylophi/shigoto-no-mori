@@ -1424,6 +1424,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
           source,
           into,
           landing,
+          identity,
           Projects.addProject,
           onProgress,
         ),
@@ -1526,6 +1527,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
           },
           { parentDir: clonesDir, name: "cut" },
           "feat/landing",
+          identity,
           Projects.addProject,
         ),
     ),
@@ -1535,6 +1537,50 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     [],
   );
   assert.equal((await listProjects()).length, before);
+  // One whose register never ran (a crash right after the rename, here a
+  // register that fails) is left whole, and the next clone of that folder
+  // registers it.
+  const lateSource = {
+    projectId: sourceProjectId,
+    worktreeId: worktreeIdFromPath(sourceRepo),
+  };
+  const lateInto = { parentDir: clonesDir, name: "late" };
+  await assert.rejects(() =>
+    withPeerSource(lateSource, (source) =>
+      cloneCheckoutFromPeer(source, lateInto, "feat/landing", identity, () =>
+        Effect.fail(new Git.GitRefusedError({ reason: "the host went away" })),
+      ),
+    ),
+  );
+  assert.ok(existsSync(join(clonesDir, "late", ".git", "sm-clone-pending")));
+  assert.equal((await listProjects()).length, before);
+  // Another repo asked into that folder takes nothing of it.
+  await assert.rejects(
+    () =>
+      withPeerSource(lateSource, (source) =>
+        cloneCheckoutFromPeer(
+          source,
+          lateInto,
+          "feat/landing",
+          "another-repo",
+          Projects.addProject,
+        ),
+      ),
+    /already exists/,
+  );
+  assert.equal((await listProjects()).length, before);
+  const late = await withPeerSource(lateSource, (source) =>
+    cloneCheckoutFromPeer(
+      source,
+      lateInto,
+      "feat/landing",
+      identity,
+      Projects.addProject,
+    ),
+  );
+  assert.equal(late.path, join(clonesDir, "late"));
+  assert.ok(!existsSync(join(clonesDir, "late", ".git", "sm-clone-pending")));
+  assert.equal((await listProjects()).length, before + 1);
   // A pull told where to clone beside a checkout it already has
   // takes the checkout: nothing is cloned and the result says so.
   const wtBesidePath = await addWorktree(sourceRepo, "wt-beside", "beside");

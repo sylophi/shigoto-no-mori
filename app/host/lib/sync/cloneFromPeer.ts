@@ -15,9 +15,17 @@
 // there. Up to the rename everything is undone on failure, and a sibling
 // a crash left is swept by the next clone of the same name.
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
-import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   SyncBundleRefSchema,
@@ -31,6 +39,32 @@ import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
+
+// Inside a clone's .git, from just before its rename until its register:
+// the folder and the repo (its identity) it is a clone of, which a retry
+// of the same repo into the same folder registers.
+const PENDING = "sm-clone-pending";
+const Pending = Schema.fromJsonString(
+  Schema.Struct({ dest: Schema.String, identity: Schema.String }),
+);
+
+const pendingIn = (dir: string) =>
+  Effect.promise(() =>
+    readFile(join(dir, ".git", PENDING), "utf8").then(
+      (text) => Option.getOrNull(Schema.decodeUnknownOption(Pending)(text)),
+      () => null,
+    ),
+  );
+
+const finishRegister = <A, E, R>(
+  dest: string,
+  register: (dest: string) => Effect.Effect<A, E, R>,
+) =>
+  Effect.tap(register(dest), () =>
+    Effect.promise(() =>
+      rm(join(dest, ".git", PENDING), { force: true }).catch(() => {}),
+    ),
+  );
 
 // The siblings `.name.partial-<pid>` whose process is gone.
 const sweepPartials = (parent: string, name: string) =>
@@ -63,6 +97,9 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   // The branch the landing puts its copy on afterwards: the clone's own
   // branch cannot be it, and that is known before a byte moves.
   landing: string,
+  // The repo's identity, which a clone a crash left must match to be
+  // taken for this one.
+  identity: string,
   register: (dest: string) => Effect.Effect<A, E, R>,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ) {
@@ -81,6 +118,12 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   yield* Effect.promise(() =>
     mkdir(parent, { recursive: true }).catch(() => {}),
   );
+  // A clone a crash left renamed in but not registered: registered now.
+  const left = join(parent, name);
+  const pending = yield* pendingIn(left);
+  if (pending?.dest === left && pending.identity === identity) {
+    return yield* finishRegister(left, register);
+  }
   const [dest, { branch, remoteUrl }] = yield* Effect.all(
     [
       Effect.flatMap(Git.Git, (git) => git.checkDestination(parent, name)),
@@ -166,6 +209,14 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
           ]);
         }
       });
+      // Says the clone is whole until its register: a retry that finds it
+      // in the folder registers it rather than refusing the folder.
+      yield* Effect.promise(() =>
+        writeFile(
+          join(partial, ".git", PENDING),
+          Schema.encodeSync(Pending)({ dest, identity }),
+        ),
+      );
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
           yield* Effect.tryPromise({
@@ -175,7 +226,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
                 reason: `Couldn't put the clone at ${dest}: ${errnoWords(error, errorMessageOf(error))}.`,
               }),
           });
-          return yield* register(dest);
+          return yield* finishRegister(dest, register);
         }),
       );
     }),
