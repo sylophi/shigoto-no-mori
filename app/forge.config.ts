@@ -75,6 +75,13 @@ const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
 // carries a Developer ID signature (see shared/packaging/macSigning.mts).
 const signingIdentity = macSigningIdentity(process.env);
 const shouldSignMac = signingIdentity !== null;
+// A test flavor takes a debugger (flavor.ts debuggable), which on a
+// Developer-ID build would act with that signature's keychain access.
+if (shouldSignMac && names.debuggable) {
+  throw new Error(
+    `The ${flavor} flavor takes a debugger, so it is never signed with a Developer ID: unset APPLE_SIGNING_IDENTITY.`,
+  );
+}
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
 // The dmg's volume name is what Finder prints in the window's title bar

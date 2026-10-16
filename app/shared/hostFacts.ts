@@ -2,6 +2,7 @@
 // the app's place, version, folders and page origin, which the host
 // reads as its HostFacts service (host/lib/HostFacts.ts).
 import * as Schema from "effect/Schema";
+import { isFlavor } from "@shigomori/engine/flavor";
 
 export const HostFactsSchema = Schema.Struct({
   packaged: Schema.Boolean,
@@ -19,7 +20,7 @@ export const HostFactsSchema = Schema.Struct({
   rendererOrigin: Schema.String,
   // The build's flavor (main/flavor.ts), which names the data dir and
   // the binaries.
-  flavor: Schema.Literals(["prod", "v3", "dev"]),
+  flavor: Schema.String.check(Schema.makeFilter(isFlavor)),
   // The hosts that exited unasked since one was last up, each with when
   // the shell started it, the last a moment before this one: what their
   // scripts left running is this one's to stop (lib/scripts/

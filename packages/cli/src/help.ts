@@ -49,6 +49,11 @@ const catalog = (names: Names) => {
         "A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook), the data dir (the pointer file, config, registry and state parse, stale locks, leftover update downloads and worktree marks, port-pool leases, global launchers, the terrier registry), processes a crashed app left running, then each project, terrier's included (its repo, git's worktree metadata vs the disk, moved worktrees, scripts, carry-over, launchers, leftover transfer refs). Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
       ],
       [
+        "nuke --yes [--keep-app]",
+        "Take everything of this build off the machine",
+        "What Settings' Danger zone does, with no window, so a test build is cleaned up from a script: the app in this command's bundle is quit, then started to remove its worktrees, this command's links, the shell and agent hooks, this device from your account and its login item, then its data folder, its own folder, logs, preferences and keychain item. Then the bundle itself (--keep-app keeps it). Runs only from a packaged build's command. Exits non-zero when something stayed, saying what.",
+      ],
+      [
         "help [<command>] [--all]",
         "Show help",
         "help <command> documents one command, --all prints every command at once.",
@@ -546,8 +551,9 @@ function section(
 
 export type HelpLook = {
   readonly names: Names;
-  // The build that isn't prod (v3, dev), which the title names.
-  readonly unshipped: "v3" | "dev" | null;
+  // The build that isn't prod (v3, dev, a test flavor), which the
+  // title names.
+  readonly unshipped: string | null;
   readonly color: boolean;
   // The terminal's width, clamped.
   readonly columns: number;

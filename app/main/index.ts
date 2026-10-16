@@ -17,6 +17,12 @@ import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
 import { finishPendingNuke } from "./core/nuke/finish";
+import {
+  finishHeadlessNuke,
+  headless as headlessNuke,
+  runHeadlessNuke,
+} from "./electron/headlessNuke";
+import { NUKE_EXIT } from "@shigomori/engine/footprint";
 import { asksForRemoteDebugging } from "./electron/debugSwitches";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
@@ -69,6 +75,7 @@ import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
 
 if (
   app.isPackaged &&
+  !names.debuggable &&
   asksForRemoteDebugging((name) => app.commandLine.hasSwitch(name))
 ) {
   process.exit(1);
@@ -128,11 +135,14 @@ takeUpdateEndpointOverrides();
 // instance owning the data dir. It tells the user nothing, because raising
 // the running window is what launching the app asked for.
 if (!app.requestSingleInstanceLock()) {
-  app.exit(0);
-} else {
+  app.exit(headlessNuke ? NUKE_EXIT.running : 0);
+} else if (
   // A nuke's files (main/electron/nuke.ts), before anything opens one:
   // with the lock held, so no other instance is using them.
-  finishPendingNuke(app.getPath("userData"));
+  finishPendingNuke(app.getPath("userData")) &&
+  headlessNuke
+) {
+  finishHeadlessNuke();
 }
 
 // After the rename above, which names the log folder, and the nuke's
@@ -344,6 +354,12 @@ app.on("ready", async () => {
       () => undefined,
     ),
   ]);
+  // `<binary> nuke`: the halves a window would run, and no window.
+  if (headlessNuke) {
+    await graph.catch(() => undefined);
+    await runHeadlessNuke();
+    return;
+  }
   openWindowsAtStart({ restart: takeRestartVisibility(), isShuttingDown });
   reconcileLaunchAtLogin();
   rememberVisibilityAtShutdown();

@@ -10,7 +10,9 @@ The app has three builds, its flavors: prod is what ships, v3 is an
 alpha, beta or rc of 3.0.0 (`v3.0.0-alpha.N`, `-beta.N`, `-rc.N`) the owner
 runs beside prod until v3 merges into main, and dev is `pnpm dev`.
 Each keeps its own state and never reads another's, so all three run on
-one machine at once as three devices. Every name below comes from one
+one machine at once as three devices. A test flavor, a packaged build
+under a word of its own, is a fourth that is thrown away after its
+test (Packaged build, as a test flavor, below). Every name below comes from one
 table, `packages/engine/src/flavor.ts`. A packaged build's flavor is
 baked in when it is built (`SM_FLAVOR`, which the release workflow
 sets from the tag) and main reads it in one place (`main/flavor.ts`),
@@ -31,7 +33,7 @@ which hands it to the host.
 | Single-instance lock  | in its userData                                 | in its userData                                        | in its userData                                       |
 | CLI                   | `sm`, `shigomori` (bundled)                     | `smv3`, `shigomori-v3` (bundled)                       | `smd`, `shigomori-dev` (`dist-cli/smd`)               |
 | Updates               | full releases, and its own rc line              | the v3 prereleases alone                               | none                                                  |
-| Hub and Clerk config  | Baked in at build time                          | Baked in at build time (the dev hub, `SM_V3_` variables)  | `.env.local` (`hub-dev.shigomori.com`)                |
+| Hub and Clerk config  | Baked in at build time                          | Baked in at build time (the dev hub, `SM_PREVIEW_` variables)  | `.env.local` (`hub-dev.shigomori.com`)                |
 
 A v3 build's terminal command, shell hook and agent hooks are its
 own (`smv3`, markers and entries named for `shigomori-v3`), beside
@@ -329,24 +331,48 @@ removed one the next time they read the registry. A relaunch after
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
   `hub/.dev.vars`, see `hub/README.md`, "Develop and test".
-- **Packaged build** (`pnpm make`, `SM_FLAVOR=v3` for a v3 one).
-  The only way to test a packaged scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
+- **Packaged build, as a test flavor** (`SM_FLAVOR=<word> pnpm
+  package`, `lab` by convention). A word that is no build's makes a
+  test flavor: every name follows from it (`Shigoto no Mori (lab)`,
+  `com.sylophi.shigomori.lab`, `shigomori-lab://`, `~/.smlab`,
+  `smlab`; `packages/engine/src/flavor.ts` `derive`), so it runs
+  beside the installed apps and the dev app and shares nothing with
+  them (`packages/engine/src/footprint.ts` lists what it puts on the
+  machine). It has no updates and no login item, is never signed with
+  a Developer ID (forge refuses with `APPLE_SIGNING_IDENTITY` set), so
+  runs on the mock keychain, and takes a debugging port as the dev app
+  does:
+
+  ```sh
+  SM_FLAVOR=lab pnpm package
+  node scripts/smoke-app.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app" --serve 9341
+  # weblab: new { "name": "lab", "attach": "127.0.0.1:9341", "dir": "<this checkout>" }
+  "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes
+  ```
+
+  The smoke opens the store on two fresh data folders, then with
+  `--serve` leaves the app up on a third with the port open until it
+  is stopped, and deletes that folder. `smlab nuke --yes` then takes
+  everything of the build off the machine, its bundle too.
+- **Packaged prod or v3 build** (`pnpm make`, `SM_FLAVOR=v3` for a v3
+  one). The only way to test a packaged scheme registration under the
+  real names. Without `APPLE_SIGNING_IDENTITY` in the build
   environment the bundle is unsigned and, like dev, runs on
   Chromium's mock keychain: the real keychain is exercised only by a
   Developer-ID-signed build (the release workflow). A local prod
   build shares the installed app's userData, and tokens it writes are
   under the mock key, so switching between it and the installed app
-  signs the other out once. It takes no debugging port: a packaged
-  build quits when started with `--remote-debugging-port` or
-  `--remote-debugging-pipe` (`main/electron/debugSwitches.ts`), so
-  weblab can't attach to it. Read and drive its window through macOS
-  accessibility instead, asking the app for its page's tree by setting
-  `AXManualAccessibility` once the page is up (`lab/relaunch.mts`), and
-  read `main.log`. Started with `--sm-lab`, it relaunches on `SIGUSR2`.
-  `node scripts/smoke-app.mts <the .app>` launches it on fresh data
-  folders and waits for its store to open, as the release job does.
-  With `APPLE_SIGNING_IDENTITY` set and the build signed by it, it then
-  has the app update itself into a copy signed again under a newer
-  version, as the release job does too. Its launches write the build's
-  userData and logs folder, and a build of a flavor whose app is running
-  on this machine quits at its single-instance lock.
+  signs the other out once. It takes no debugging port: it quits when
+  started with `--remote-debugging-port` or `--remote-debugging-pipe`
+  (`main/electron/debugSwitches.ts`). Read and drive its window
+  through macOS accessibility instead, asking the app for its page's
+  tree by setting `AXManualAccessibility` once the page is up
+  (`lab/relaunch.mts`), and read `main.log`. Started with `--sm-lab`,
+  it relaunches on `SIGUSR2`. `node scripts/smoke-app.mts <the .app>`
+  launches it on fresh data folders and waits for its store to open,
+  as the release job does. With `APPLE_SIGNING_IDENTITY` set and the
+  build signed by it, it then has the app update itself into a copy
+  signed again under a newer version, as the release job does too.
+  Its launches write the build's userData and logs folder, and a build
+  of a flavor whose app is running on this machine quits at its
+  single-instance lock.

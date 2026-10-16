@@ -20,6 +20,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { WebSocket as WsWebSocket } from "ws";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
@@ -266,6 +267,15 @@ function fork(): void {
 export function host(): ReturnType<typeof session> {
   return session();
 }
+
+// The host's runtime calls a window makes, for the nuke the shell runs
+// with no window (electron/headlessNuke.ts).
+export const hostRuntime = () => effectClient(runtimeContract, link());
+
+// An exit with no quit sequence (that nuke's): the host closes its
+// graph first, which stops what it runs (the tunnel's connector among
+// them), and is not forked again.
+export const letHostGo = (): Promise<void> => Effect.runPromise(stop(true));
 
 // What the host is busy with, as a quit or an update asks: idle when
 // it cannot say within a few seconds, since a host that does not

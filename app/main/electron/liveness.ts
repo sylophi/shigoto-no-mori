@@ -31,6 +31,7 @@ import { scheduleRelaunch } from "./relaunch";
 import { rememberVisibilityForRestart } from "./restartVisibility";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
+import { names } from "../flavor";
 
 function keepReachableEnabled(): boolean {
   // Inert on a build with no account service: the setting exists so a
@@ -77,9 +78,11 @@ export function reconcileLaunchAtLogin(): void {
   // Electron binary under node_modules and relaunch a throwaway dev
   // instance at every login. Register only from packaged builds, where
   // the login item points at the real installed app.
-  if (!app.isPackaged) {
+  // A test flavor's bundle is thrown away after its test, so it leaves
+  // no login item behind either.
+  if (!app.isPackaged || names.debuggable) {
     log.info(
-      `[liveness] dev build, not touching the login item (keepReachable=${keepReachable})`,
+      `[liveness] dev or test build, not touching the login item (keepReachable=${keepReachable})`,
     );
     return;
   }
