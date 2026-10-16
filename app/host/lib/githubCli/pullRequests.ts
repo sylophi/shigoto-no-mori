@@ -508,39 +508,69 @@ function toReviews(pr: GqlExtrasPullRequest): PullRequestReviews {
   return { decision: pr.reviewDecision, reviewers };
 }
 
-// An attachment (github.com/user-attachments/assets/<id>, or the older
-// github.com/<owner>/<repo>/assets/<n>/<id>) in a private repo loads
-// only for a browser signed in to GitHub, which the app's
-// windows aren't, so the markdown body's images stay blank. The body
-// GitHub renders points each at a signed URL anyone can load for five
-// minutes, and an image in the markdown (![](…) or src=…) takes its
-// attachment's. A link stays as written, for the browser it opens in.
-// A signed URL is reused while it has a minute left, so a refetch
-// leaves the body as it was and its images don't load again.
+// An attachment (<host>/user-attachments/assets/<id>, or the older
+// <host>/<owner>/<repo>/assets/<n>/<id>, on github.com, a GitHub
+// Enterprise Server or GHE.com) in a private repo, or anywhere on an
+// Enterprise Server in private mode, loads only for a browser signed in
+// to that host, which the app's windows aren't, so the markdown body's
+// images stay blank. The body GitHub renders points each at a URL anyone
+// can load (signed for a few minutes where it is signed), on the
+// attachment's host, a subdomain of it or githubusercontent.com, with
+// the attachment's id in it, and an
+// image in the markdown (![](…) or src=…) takes its attachment's. A link
+// stays as written, for the browser it opens in. A signed URL is reused
+// while it has a minute left, so a refetch leaves the body as it was and
+// its images don't load again.
 const SIGNED_URL_REUSE_MS = 4 * 60_000;
 const signedUrls = new Map<string, { url: string; until: number }>();
-const SIGNED_URL =
-  /https:\/\/private-user-images\.githubusercontent\.com\/\d+\/\d+-([0-9a-f-]{36})\.[^"]+/g;
-const ATTACHED_IMAGE =
-  /(!\[[^\]]*\]\(\s*<?|\bsrc\s*=\s*["']?)https:\/\/github\.com\/(?:user-attachments\/assets|[\w.-]+\/[\w.-]+\/assets\/\d+)\/([0-9a-f-]{36})/g;
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const ATTACHMENT_PATH = `/(?:user-attachments/assets|[\\w.-]+/[\\w.-]+/assets/\\d+)/(${UUID})`;
+const ATTACHED_IMAGE = new RegExp(
+  `(!\\[[^\\]]*\\]\\(\\s*<?|\\bsrc\\s*=\\s*["']?)https://([a-z0-9.-]+)${ATTACHMENT_PATH}`,
+  "gi",
+);
+const RENDERED_URL = /\b(?:src|href)="(https:\/\/[^"]+)"/g;
+const ID = new RegExp(UUID);
+const IS_ATTACHMENT = new RegExp(`^${ATTACHMENT_PATH}$`, "i");
 
 function withSignedImages(body: string, bodyHTML: string): string {
   const now = Date.now();
-  for (const [id, signed] of signedUrls) {
-    if (signed.until <= now) signedUrls.delete(id);
+  for (const [key, signed] of signedUrls) {
+    if (signed.until <= now) signedUrls.delete(key);
   }
-  for (const [url, id] of bodyHTML.matchAll(SIGNED_URL)) {
-    if (id !== undefined && !signedUrls.has(id)) {
-      signedUrls.set(id, {
-        url: url.replaceAll("&amp;", "&"),
-        until: now + SIGNED_URL_REUSE_MS,
-      });
+  const hostOf = new Map<string, string>();
+  for (const [, , host = "", id = ""] of body.matchAll(ATTACHED_IMAGE)) {
+    hostOf.set(id.toLowerCase(), host.toLowerCase());
+  }
+  for (const [, html = ""] of bodyHTML.matchAll(RENDERED_URL)) {
+    const rendered = html.replaceAll("&amp;", "&");
+    let url: URL;
+    try {
+      url = new URL(rendered);
+    } catch {
+      continue;
+    }
+    const id = ID.exec(url.pathname)?.[0];
+    const host = id === undefined ? undefined : hostOf.get(id);
+    if (id === undefined || host === undefined) continue;
+    const loadable =
+      url.hostname === host
+        ? !IS_ATTACHMENT.test(url.pathname)
+        : url.hostname.endsWith(`.${host}`) ||
+          url.hostname.endsWith(".githubusercontent.com");
+    const key = `${host}/${id}`;
+    if (loadable && !signedUrls.has(key)) {
+      signedUrls.set(key, { url: rendered, until: now + SIGNED_URL_REUSE_MS });
     }
   }
-  return body.replace(ATTACHED_IMAGE, (whole, lead: string, id: string) => {
-    const signed = signedUrls.get(id);
-    return signed ? lead + signed.url : whole;
-  });
+  return body.replace(
+    ATTACHED_IMAGE,
+    (whole, lead: string, host: string, id: string) => {
+      const key = `${host.toLowerCase()}/${id.toLowerCase()}`;
+      const signed = signedUrls.get(key);
+      return signed ? lead + signed.url : whole;
+    },
+  );
 }
 
 // Server-side filtering + minimal fields keeps this cheap even on
