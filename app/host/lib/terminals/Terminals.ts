@@ -100,9 +100,15 @@ const RESTORED_TAIL =
 // A private mode set or reset (CSI in seven or eight bits), its modes as
 // they come (`1049;25`), or a full reset, which leaves the alternate
 // screen too.
+// A control character inside one is carried out and skipped, as a
+// terminal does, but CAN and SUB end it.
 const SCREEN_MODES = new RegExp(
-  String.raw`(?:\x1b\[|\x9b)\?([\d;]+)([hl])|\x1bc`,
+  String.raw`(?:\x1b\[|\x9b)\?([\d;\x00-\x17\x19\x1c-\x1f]+)([hl])|\x1bc`,
   "g",
+);
+// The start of a sequence the output so far hasn't finished.
+const UNFINISHED = new RegExp(
+  String.raw`(?:\x1b\[|\x9b)[\x00-\x17\x19\x1c-\x3f]*$|\x1b$`,
 );
 const ALTERNATE = new Set([1049, 1047, 47]);
 
@@ -121,7 +127,8 @@ export const alternateScreen = (
       enteredAt = undefined;
       continue;
     }
-    if (!modes?.split(";").some((mode) => ALTERNATE.has(Number(mode)))) {
+    const listed = modes?.replace(/[^\d;]/g, "").split(";") ?? [];
+    if (!listed.some((mode) => ALTERNATE.has(Number(mode)))) {
       continue;
     }
     if (set === "l") {
@@ -133,6 +140,19 @@ export const alternateScreen = (
     }
   }
   return { on, enteredAt };
+};
+
+// The alternate screen after a read, from where the last one left it,
+// with what of this one the next has to finish.
+export const followAlternate = (
+  before: { readonly on: boolean; readonly carry: string },
+  data: string,
+): { readonly on: boolean; readonly carry: string } => {
+  const seen = before.carry + data;
+  return {
+    on: alternateScreen(seen, before.on).on,
+    carry: (UNFINISHED.exec(seen)?.[0] ?? "").slice(-256),
+  };
 };
 
 // What a terminal's next start replays: a history that ends on the
@@ -163,8 +183,7 @@ interface Session {
   // On the alternate screen, followed as output comes in, so it holds
   // once the ring has dropped where the program went there.
   alternate: boolean;
-  // The output's last characters, which a sequence split across two
-  // reads starts in.
+  // A sequence the last read left unfinished, which the next finishes.
   carry: string;
   // Closed by its user or with its worktree, so not saved for the next
   // start.
@@ -320,9 +339,10 @@ const make = <R>(options: {
             backlog.paused = false;
             session.pty.resume();
           }
-          const seen = session.carry + data;
-          session.alternate = alternateScreen(seen, session.alternate).on;
-          session.carry = seen.slice(-16);
+          ({ on: session.alternate, carry: session.carry } = followAlternate(
+            { on: session.alternate, carry: session.carry },
+            data,
+          ));
           for (const piece of pieces(data)) {
             session.seq += 1;
             session.history.append(session.seq, piece);
@@ -440,8 +460,11 @@ const make = <R>(options: {
         const session: Session = {
           terminal,
           pty,
+          // A restored history is a chunk of its own, past the saved seq,
+          // so a client that saw the terminal before the restart starts
+          // over.
           history: makeHistory(
-            restored?.seq ?? 0,
+            restored === undefined ? 0 : restored.seq + 1,
             // A row an earlier build saved holds the history as it was.
             restored === undefined
               ? ""
@@ -454,7 +477,7 @@ const make = <R>(options: {
           scope,
           changed: Latch.makeUnsafe(false),
           changedAt: 0,
-          seq: restored?.seq ?? 0,
+          seq: restored === undefined ? 0 : restored.seq + 1,
           size,
           exited: Option.none(),
           alternate: false,

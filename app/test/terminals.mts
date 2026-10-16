@@ -84,11 +84,28 @@ describe("the history", () => {
     // The ring dropped where the program went there: none of it is the
     // main screen.
     assert.equal(Terminals.replayable("\x1b[HVIM redraw", true), "");
-    // A sequence split across two reads, the first's tail carried.
-    const split = "$ vim\r\n\x1b[?10";
-    const first = Terminals.alternateScreen(split);
-    assert.equal(first.on, false);
-    assert.equal(Terminals.alternateScreen(`${split}49h`, first.on).on, true);
+    // A control character inside the sequence is skipped, as xterm does.
+    assert.equal(replayed(`${main}\x1b[?1049\x00hVIM`), main);
+    // A sequence split across two reads, however long its modes.
+    const reads = [
+      "$ vim\r\n\x1b[?1049h",
+      "VIM\x1b[?25;1000;1002;1003;1006;10",
+      "49l$ ",
+    ];
+    let state = { on: false, carry: "" };
+    const seen = reads.map((read) => {
+      state = Terminals.followAlternate(state, read);
+      return state.on;
+    });
+    assert.deepEqual(seen, [true, true, false]);
+  });
+
+  it("has a client from before a restore start over", () => {
+    const restored = makeHistory(8, "saved\r\n");
+    assert.equal(restored.since(7).reset, true);
+    assert.equal(restored.since(undefined).reset, true);
+    restored.append(9, "$ ");
+    assert.deepEqual(restored.since(8), { data: "$ ", seq: 9, reset: false });
   });
 
   it("answers a reconnect with what came after its seq", () => {
