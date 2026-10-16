@@ -95,15 +95,6 @@ export const storeErrorOf = (error: unknown): StoreError | undefined => {
   if (Predicate.isTagged(error, "SqlError")) {
     return new StoreError({ category: categoryOf(error), cause: error });
   }
-  // The store's open makes its file before SQLite opens it, in a data
-  // folder that may not let it.
-  if (
-    Predicate.isTagged(error, "PlatformError") &&
-    Predicate.hasProperty(error, "reason") &&
-    Predicate.isTagged(error.reason, "PermissionDenied")
-  ) {
-    return new StoreError({ category: "read-only", cause: error });
-  }
   // A migration's statement comes wrapped in the migrator's own error.
   return Predicate.isTagged(error, "MigrationError") &&
     Predicate.hasProperty(error, "cause")

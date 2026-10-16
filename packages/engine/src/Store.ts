@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -38,12 +39,21 @@ export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    const store = storeErrorOf(this.cause);
+    const store = storeErrorOf(this.cause) ?? deniedFolder(this.cause);
     return store === undefined || store.category === "failed"
       ? `Could not open the store at ${this.path}.`
       : `Could not open the store at ${this.path}. ${store.message}`;
   }
 }
+
+// The open makes the store's file before SQLite opens it, in a data
+// folder that may not let it.
+const deniedFolder = (cause: unknown): StoreError | undefined =>
+  Predicate.isTagged(cause, "PlatformError") &&
+  Predicate.hasProperty(cause, "reason") &&
+  Predicate.isTagged(cause.reason, "PermissionDenied")
+    ? new StoreError({ category: "read-only", cause })
+    : undefined;
 
 // Opens the database file in WAL mode, with the driver of the process's
 // runtime: `@effect/sql-sqlite-node` in the host, `@effect/sql-sqlite-bun`
