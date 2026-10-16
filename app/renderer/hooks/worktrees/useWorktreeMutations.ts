@@ -2,6 +2,7 @@ import {
   useIsMutating,
   useMutation,
   useQueryClient,
+  useMutationState,
 } from "@tanstack/react-query";
 import type { StackCleanupFailure } from "@shigomori/ui/views/worktreeDetail/pullRequests/ClosedPullRequestBoxView.tsx";
 import type {
@@ -28,8 +29,10 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useWorktreeRemoving } from "@/hooks/worktrees/useWorktreeLifecycle";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -109,6 +112,23 @@ interface ConvertExternalWorktreeInput {
   force: boolean;
 }
 
+// The renames this window has under way on a device, by their key: a
+// page whose worktree one is moving waits for its answer rather than
+// leave as the old row goes (WorktreeDetail).
+const renameKey = (deviceId: string) => ["rename-worktree", deviceId] as const;
+
+export function useRenamingWorktree(
+  deviceId: string,
+  worktreeId: string,
+): boolean {
+  return useMutationState({
+    filters: { mutationKey: renameKey(deviceId), status: "pending" },
+    select: (mutation) =>
+      (mutation.state.variables as { worktreeId?: string } | undefined)
+        ?.worktreeId,
+  }).includes(worktreeId);
+}
+
 // Convert and relocate both leave the worktree under a new id: swap
 // the row in the list and drop the script runs cached under the old id.
 function useReplaceWorktree<
@@ -119,15 +139,28 @@ function useReplaceWorktree<
   rowOf: (result: Result) => Worktree,
   // The page surfaces per-row errors inline; a toast on top would be noise.
   meta: Record<string, unknown> = { silentError: true },
+  // Whether the window follows the worktree to its new id. From the
+  // hook's callbacks, which outlive the page, not a caller's mutate.
+  follow = false,
 ) {
   const registry = useRegistry();
+  const router = useRouter();
+  const nav = useWorktreeNav();
   const { api, deviceId } = useHostScope();
   const scriptRuns = useScriptRuns();
-  return useMutation<Result, Error, Input>({
+  return useMutation<Result, Error, Input, { from: string }>({
+    ...(follow ? { mutationKey: renameKey(deviceId) } : {}),
     mutationFn: (input) => api.run(call(api, input)),
-    onSuccess: (result, vars) => {
-      spliceWorktreeRow(registry, deviceId, rowOf(result), vars.worktreeId);
+    onMutate: () => ({ from: router.state.location.pathname }),
+    onSuccess: (result, vars, context) => {
+      const row = rowOf(result);
+      spliceWorktreeRow(registry, deviceId, row, vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
+      // Only a window still where the rename started: one that went
+      // elsewhere meanwhile stays there.
+      if (follow && router.state.location.pathname === context?.from) {
+        nav.toWorktree(row.projectId, row.id, true);
+      }
     },
     meta,
   });
@@ -170,6 +203,7 @@ export function useRenameWorktree() {
     (api, input) => api.worktrees.rename(input),
     (worktree) => worktree,
     { errorTitle: "Couldn't rename worktree" },
+    true,
   );
 }
 
