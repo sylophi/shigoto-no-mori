@@ -39,6 +39,8 @@ type MovingRow = {
   readonly from_path: string;
   readonly to_path: string;
   readonly project_id: string;
+  readonly link: string;
+  readonly carried: number;
   readonly partial: string | null;
   readonly pid: number;
   readonly started_at: number;
@@ -102,6 +104,7 @@ export const makeMoving = ({
               from_path: from,
               to_path: to,
               project_id: project.id,
+              link: yield* linkOf(from),
               partial: null,
               ...(yield* self),
             })} ON CONFLICT DO NOTHING RETURNING from_path`.pipe(Effect.orDie))
@@ -110,8 +113,7 @@ export const makeMoving = ({
         });
         if (yield* claim) return;
         const [held] = yield* sql<MovingRow>`
-          SELECT from_path, to_path, project_id, partial, pid, started_at
-          FROM moving WHERE from_path = ${from}`.pipe(Effect.orDie);
+          SELECT * FROM moving WHERE from_path = ${from}`.pipe(Effect.orDie);
         if (held !== undefined) yield* resumeOne(held);
         if (!(yield* claim)) {
           return yield* new WorktreeRefused({
@@ -141,18 +143,17 @@ export const makeMoving = ({
         return taken.length > 0;
       }).pipe(Effect.orDie);
 
-    // Whether `copy` is a copy of the checkout at `of`: the same link to
-    // the same entry of git's, which nothing but this move writes there.
-    // Only a folder known this way is ever deleted by a resume.
-    const copyOf = (copy: string, of: string) =>
-      Effect.gen(function* () {
-        const link = (dir: string) =>
-          fs
-            .readFileString(path.join(dir, ".git"))
-            .pipe(Effect.orElseSucceed(() => ""));
-        const [a, b] = [yield* link(copy), yield* link(of)];
-        return a !== "" && a === b;
-      });
+    // A checkout's link to its entry of git's (its `.git` file), which
+    // git's move keeps and a copy repeats: what tells the move's own
+    // checkout, or a copy of it, from another folder at the same path.
+    // Empty when there is none to read.
+    const linkOf = (dir: string) =>
+      fs.readFileString(path.join(dir, ".git")).pipe(
+        Effect.map((text) => text.trim()),
+        Effect.orElseSucceed(() => ""),
+      );
+    const holdsLink = (dir: string, link: string) =>
+      Effect.map(linkOf(dir), (found) => link !== "" && found === link);
 
     // The move git can't make, across volumes: the checkout copied into a
     // sibling of `to` and renamed in once whole, git pointed at it, and the
@@ -277,49 +278,51 @@ export const makeMoving = ({
         Effect.gen(function* () {
           yield* claimMove(project, worktree.path, to);
           underWay.add(worktree.path);
-          yield* fs
-            .makeDirectory(path.dirname(to), { recursive: true })
-            .pipe(Effect.orDie);
-          const moved = yield* git
-            .run(project.path, ["worktree", "move", "--", worktree.path, to])
-            .pipe(
-              Effect.asVoid,
-              Effect.catchTags({
-                GitCommandError: (error) =>
-                  Git.stderrOf(error)
-                    .toLowerCase()
-                    .includes("cross-device link")
-                    ? Effect.suspend(() => {
-                        crossed = true;
-                        return moveAcrossVolumes(
-                          project,
-                          worktree.path,
-                          to,
-                          restore,
-                        );
-                      })
-                    : Effect.fail(error),
-              }),
-              Effect.result,
-            );
-          if (Result.isFailure(moved)) {
-            yield* forgetRecord(worktree.path);
-            // The folders made for it go again when they are ours and empty.
-            yield* pruneEmptyParents(to, project.path);
-            return yield* moved.failure;
-          }
-          const landed = yield* carry(project, worktree.path, to);
-          // The original a copy across volumes leaves, once git lists the
-          // copy: a stray folder, not a failed move.
-          if (crossed) yield* wipe(worktree.path).pipe(Effect.ignore);
-          // A capture's ref that couldn't follow keeps the record, for the
-          // next start to carry it.
-          if (landed.captured) yield* forgetRecord(worktree.path);
-          return landed.row;
-        }).pipe(
-          Effect.onInterrupt(() => forgetRecord(worktree.path)),
-          Effect.ensuring(Effect.sync(() => underWay.delete(worktree.path))),
-        ),
+          return yield* Effect.gen(function* () {
+            yield* fs
+              .makeDirectory(path.dirname(to), { recursive: true })
+              .pipe(Effect.orDie);
+            const moved = yield* git
+              .run(project.path, ["worktree", "move", "--", worktree.path, to])
+              .pipe(
+                Effect.asVoid,
+                Effect.catchTags({
+                  GitCommandError: (error) =>
+                    Git.stderrOf(error)
+                      .toLowerCase()
+                      .includes("cross-device link")
+                      ? Effect.suspend(() => {
+                          crossed = true;
+                          return moveAcrossVolumes(
+                            project,
+                            worktree.path,
+                            to,
+                            restore,
+                          );
+                        })
+                      : Effect.fail(error),
+                }),
+                Effect.result,
+              );
+            if (Result.isFailure(moved)) {
+              yield* forgetRecord(worktree.path);
+              // The folders made for it go again when they are ours and empty.
+              yield* pruneEmptyParents(to, project.path);
+              return yield* moved.failure;
+            }
+            const landed = yield* carry(project, worktree.path, to);
+            // The original a copy across volumes leaves, once git lists the
+            // copy: a stray folder, not a failed move.
+            if (crossed) yield* wipe(worktree.path).pipe(Effect.ignore);
+            // A capture's ref that couldn't follow keeps the record, for the
+            // next start to carry it.
+            if (landed.captured) yield* forgetRecord(worktree.path);
+            return landed.row;
+          }).pipe(
+            Effect.onInterrupt(() => forgetRecord(worktree.path)),
+            Effect.ensuring(Effect.sync(() => underWay.delete(worktree.path))),
+          );
+        }),
       );
       yield* pruneEmptyParents(worktree.path, project.path);
       return { worktree: carried, previousId: worktree.id };
@@ -358,26 +361,33 @@ export const makeMoving = ({
       project: RegisteredProject,
       fromPath: string,
       toPath: string,
+      rekeyed = false,
     ) =>
       Effect.gen(function* () {
         const moved = yield* findMoved(project, toPath);
         const from = worktreeIdFromPath(fromPath);
         let captured = true;
         if (moved.id !== from) {
-          yield* sql
-            .withTransaction(
-              Effect.all([
-                kept.rekeyRows(project, from, moved.id),
-                sql`INSERT INTO wt_moves ${sql.insert({
-                  from_path: fromPath,
-                  to_path: moved.path,
-                  project_id: project.id,
-                  moved: 1,
-                })} ON CONFLICT (from_path) DO UPDATE SET
-                  to_path = excluded.to_path, moved = 1, error = NULL`,
-              ]),
-            )
-            .pipe(Effect.orDie);
+          // Once only: a folder made at the old path since owns what is
+          // under the old id by then.
+          if (!rekeyed) {
+            yield* sql
+              .withTransaction(
+                Effect.all([
+                  kept.rekeyRows(project, from, moved.id),
+                  sql`INSERT INTO wt_moves ${sql.insert({
+                    from_path: fromPath,
+                    to_path: moved.path,
+                    project_id: project.id,
+                    moved: 1,
+                  })} ON CONFLICT (from_path) DO UPDATE SET
+                    to_path = excluded.to_path, moved = 1, error = NULL`,
+                  sql`UPDATE moving SET carried = 1
+                    WHERE from_path = ${fromPath}`,
+                ]),
+              )
+              .pipe(Effect.orDie);
+          }
           captured = yield* kept.rekeyCapture(project, from, moved.id);
           yield* carryLease(fromPath, moved);
         }
@@ -393,51 +403,66 @@ export const makeMoving = ({
     });
 
     // One recorded move whose process is gone, taken over by this one
-    // alone, by where git lists the checkout: at its destination it is
-    // finished (the carry, then the original a copy left), elsewhere
-    // undone (the partial copy, or the whole one a crash left before git
-    // was pointed at it). A folder is deleted only when it is the move's
-    // own: the partial sibling it named, or a copy of the checkout.
+    // alone. It landed when git lists its own checkout (the link it
+    // recorded) at the destination and no longer at the source: it is
+    // finished (the carry from where it stopped, then the original a copy
+    // left). Still listed at the source, it is undone (the partial copy,
+    // or the whole one a crash left before git was pointed at it). A
+    // folder is deleted only when it is the move's own: the partial
+    // sibling it named, or one holding its link.
     const resumeOne = (record: MovingRow) =>
       Effect.gen(function* () {
         if (yield* live(record)) return;
         if (!(yield* takeOver(record))) return;
         underWay.add(record.from_path);
-        const project = (yield* registry.listed).find(
-          ({ id }) => id === record.project_id,
-        );
-        if (project === undefined) return yield* forgetRecord(record.from_path);
-        if (record.partial !== null) {
-          yield* wipe(record.partial).pipe(Effect.ignore);
-        }
-        if ((yield* listedAt(project, record.to_path)) !== undefined) {
-          const landed = yield* carry(
-            project,
-            record.from_path,
-            record.to_path,
+        yield* Effect.gen(function* () {
+          const project = (yield* registry.listed).find(
+            ({ id }) => id === record.project_id,
           );
-          if (
-            record.partial !== null &&
-            (yield* listedAt(project, record.from_path)) === undefined &&
-            (yield* copyOf(record.from_path, record.to_path))
-          ) {
-            yield* wipe(record.from_path).pipe(Effect.ignore);
+          if (project === undefined) {
+            return yield* forgetRecord(record.from_path);
           }
-          yield* pruneEmptyParents(record.from_path, project.path);
-          if (landed.captured) yield* forgetRecord(record.from_path);
-          return;
-        }
-        if (
-          record.partial !== null &&
-          (yield* listedAt(project, record.from_path)) !== undefined &&
-          (yield* copyOf(record.to_path, record.from_path))
-        ) {
-          yield* wipe(record.to_path).pipe(Effect.ignore);
-        }
-        yield* pruneEmptyParents(record.to_path, project.path);
-        yield* forgetRecord(record.from_path);
+          if (record.partial !== null) {
+            yield* wipe(record.partial).pipe(Effect.ignore);
+          }
+          const atSource =
+            (yield* listedAt(project, record.from_path)) !== undefined;
+          const landed =
+            !atSource &&
+            (yield* listedAt(project, record.to_path)) !== undefined &&
+            (record.link === "" ||
+              (yield* holdsLink(record.to_path, record.link)));
+          if (landed) {
+            const carried = yield* carry(
+              project,
+              record.from_path,
+              record.to_path,
+              record.carried === 1,
+            );
+            if (
+              record.partial !== null &&
+              (yield* holdsLink(record.from_path, record.link))
+            ) {
+              yield* wipe(record.from_path).pipe(Effect.ignore);
+            }
+            yield* pruneEmptyParents(record.from_path, project.path);
+            if (carried.captured) yield* forgetRecord(record.from_path);
+            return;
+          }
+          if (
+            atSource &&
+            record.partial !== null &&
+            (yield* listedAt(project, record.to_path)) === undefined &&
+            (yield* holdsLink(record.to_path, record.link))
+          ) {
+            yield* wipe(record.to_path).pipe(Effect.ignore);
+          }
+          yield* pruneEmptyParents(record.to_path, project.path);
+          yield* forgetRecord(record.from_path);
+        }).pipe(
+          Effect.ensuring(Effect.sync(() => underWay.delete(record.from_path))),
+        );
       }).pipe(
-        Effect.ensuring(Effect.sync(() => underWay.delete(record.from_path))),
         // A repo that can't be read now keeps its record for the next try.
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
@@ -456,14 +481,12 @@ export const makeMoving = ({
 
     const resume = Effect.gen(function* () {
       const records = yield* sql<MovingRow>`
-        SELECT from_path, to_path, project_id, partial, pid, started_at
-        FROM moving`.pipe(Effect.orDie);
+        SELECT * FROM moving`.pipe(Effect.orDie);
       for (const record of records) yield* resumeOne(record);
     }).pipe(Effect.withSpan("Worktrees.resumeMoves"));
 
     const interrupted = sql<MovingRow>`
-      SELECT from_path, to_path, project_id, partial, pid, started_at
-      FROM moving`.pipe(
+      SELECT * FROM moving`.pipe(
       Effect.flatMap((records) =>
         Effect.filter(records, (record) =>
           Effect.map(live(record), (holds) => !holds),

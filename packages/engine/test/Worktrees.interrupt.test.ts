@@ -9,7 +9,13 @@
 // `interrupted-workflows`.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -239,7 +245,8 @@ const deadRecord = (
   project: Registry.RegisteredProject,
   from: string,
   to: string,
-  partial: string | null = null,
+  link: string,
+  carried = 0,
 ) =>
   Effect.flatMap(
     SqlClient.SqlClient,
@@ -248,11 +255,16 @@ const deadRecord = (
         from_path: from,
         to_path: to,
         project_id: project.id,
-        partial,
+        link,
+        carried,
+        partial: null,
         pid: 4_194_304,
         started_at: 0,
       })}`,
   );
+
+// A checkout's `.git` file, as a move records it.
+const linkOf = (dir: string) => readFileSync(join(dir, ".git"), "utf8").trim();
 
 const records = Effect.flatMap(
   SqlClient.SqlClient,
@@ -264,11 +276,12 @@ it("a resume never deletes a folder the move didn't make", async () => {
     Effect.gen(function* () {
       const worktrees = yield* Worktrees.Worktrees;
       const to = join(dirname(worktree.path), "vixen");
+      const link = linkOf(worktree.path);
       box.git(repo, "worktree", "move", worktree.path, to);
       // Someone's folder at the old path since the crash.
       mkdirSync(worktree.path);
       writeFileSync(join(worktree.path, "notes.txt"), "mine\n");
-      yield* deadRecord(project, worktree.path, to);
+      yield* deadRecord(project, worktree.path, to, link);
       yield* worktrees.resumeMoves;
       return {
         kept: existsSync(join(worktree.path, "notes.txt")),
@@ -317,6 +330,7 @@ it("a move another live process holds is left to it", async () => {
         from_path: worktree.path,
         to_path: to,
         project_id: project.id,
+        link: linkOf(worktree.path),
         partial: null,
         pid: sleeper.pid ?? 0,
         started_at: Date.now(),
@@ -346,8 +360,9 @@ it("a resume carries a dirty capture the crash left under the old id", async () 
       const to = join(dirname(worktree.path), "vixen");
       const head = box.git(repo, "rev-parse", "HEAD").trim();
       box.git(repo, "update-ref", `refs/shigomori/dirty/${worktree.id}`, head);
+      const link = linkOf(worktree.path);
       box.git(repo, "worktree", "move", worktree.path, to);
-      yield* deadRecord(project, worktree.path, to);
+      yield* deadRecord(project, worktree.path, to, link);
       yield* worktrees.resumeMoves;
       const now = (yield* worktrees.identities(project)).find(
         (row) => row.path === to,
@@ -370,4 +385,116 @@ it("a resume carries a dirty capture the crash left under the old id", async () 
   )) as { refs: string; wanted: string; records: number };
   assert.deepEqual(result.refs, result.wanted);
   assert.equal(result.records, 0);
+});
+
+it("a resume never takes another checkout at the destination for the moved one", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      const to = join(dirname(worktree.path), "vixen");
+      yield* data.describe(project.id, worktree.id, { title: "the fox" });
+      // Cut before git's move; another tool made a worktree there since.
+      yield* deadRecord(project, worktree.path, to, linkOf(worktree.path));
+      box.git(repo, "worktree", "add", "-q", "-b", "vixen", to);
+      yield* worktrees.resumeMoves;
+      const vixen = (yield* worktrees.identities(project)).find(
+        (row) => row.path === to,
+      );
+      assert.ok(vixen);
+      return {
+        fox: (yield* data.description(project.id, worktree.id)).title,
+        vixen: (yield* data.description(project.id, vixen.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { fox: "the fox", vixen: "", records: 0 });
+});
+
+it("a resume of a move carried before the crash never re-keys again", async () => {
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      const to = join(dirname(worktree.path), "vixen");
+      const moved = yield* worktrees.move({ project, worktree }, to);
+      yield* data.describe(project.id, moved.worktree.id, { title: "moved" });
+      // What a folder made at the old path since keeps under the old id.
+      yield* data.describe(project.id, worktree.id, { title: "newcomer" });
+      yield* deadRecord(project, worktree.path, to, linkOf(to), 1);
+      yield* worktrees.resumeMoves;
+      return {
+        moved: (yield* data.description(project.id, moved.worktree.id)).title,
+        newcomer: (yield* data.description(project.id, worktree.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, {
+    moved: "moved",
+    newcomer: "newcomer",
+    records: 0,
+  });
+});
+
+it("a create refuses a path a cut-short move still names", async () => {
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO moving ${sql.insert({
+        from_path: join(dirname(worktree.path), "otter"),
+        to_path: join(dirname(worktree.path), "elsewhere"),
+        project_id: project.id,
+        link: "",
+        partial: null,
+        pid: process.pid,
+        started_at: 0,
+      })}`;
+      const refused = yield* worktrees
+        .create(
+          project,
+          { name: "otter", skipSetup: true },
+          { report: () => Effect.void, color: false },
+        )
+        .pipe(Effect.flip);
+      return refused instanceof Worktrees.WorktreeRefused && refused.reason;
+    }),
+  );
+  assert.equal(result, "move-in-progress");
+});
+
+it("a resume leaves a copy this process is making alone", async () => {
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const to = join(dirname(worktree.path), "vixen");
+      const mark = join(box.home, "held");
+      process.env["PATH"] = stopWrappers(join(box.home, "stop-bin"), {
+        stop: { tool: "cp", when: "after", match: ".partial-" },
+        mark,
+        seconds: 2,
+        crossVolume: true,
+      }).PATH;
+      const moving = yield* Effect.forkChild(
+        worktrees.move({ project, worktree }, to),
+      );
+      yield* held(mark);
+      yield* worktrees.resumeMoves;
+      yield* worktrees.resumeMoves;
+      const during = (yield* worktrees.interruptedMoves).length;
+      const moved = yield* Fiber.join(moving);
+      process.env["PATH"] = path;
+      return {
+        during,
+        at: moved.worktree.path === to,
+        records: (yield* records).length,
+        partials: readdirSync(dirname(to)).filter((entry) =>
+          entry.includes(".partial-"),
+        ),
+      };
+    }),
+  );
+  assert.deepEqual(result, { during: 0, at: true, records: 0, partials: [] });
 });

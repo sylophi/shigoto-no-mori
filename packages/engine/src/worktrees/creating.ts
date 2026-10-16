@@ -4,6 +4,7 @@ import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktree
 import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -58,6 +59,7 @@ export const makeCreating = ({
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
+    const sql = yield* SqlClient.SqlClient;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const carryOver = yield* CarryOver.CarryOver;
     const cloneCheckout = yield* CloneCheckout.CloneCheckout;
@@ -315,6 +317,17 @@ export const makeCreating = ({
           return yield* new WorktreeRefused({
             reason: "destination-taken",
             subject: place,
+          });
+        }
+        // A move cut short still names the path: what is kept under its
+        // id, its capture among it, is the move's until a resume ends it.
+        const [moving] = yield* sql<{ from_path: string }>`
+          SELECT from_path FROM moving
+          WHERE from_path = ${place} OR to_path = ${place}`.pipe(Effect.orDie);
+        if (moving !== undefined) {
+          return yield* new WorktreeRefused({
+            reason: "move-in-progress",
+            subject: moving.from_path,
           });
         }
         yield* fs
