@@ -28,6 +28,7 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useWorktreeRemoving } from "@/hooks/worktrees/useWorktreeLifecycle";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -111,6 +112,20 @@ interface ConvertExternalWorktreeInput {
 
 // Convert and relocate both leave the worktree under a new id: swap
 // the row in the list and drop the script runs cached under the old id.
+// Where a worktree a replace moved went, by device and its old id, for
+// its page to follow instead of leaving (WorktreeDetail). Taken once.
+const movedTo = new Map<string, Worktree>();
+
+export function takeMovedWorktree(
+  deviceId: string,
+  worktreeId: string,
+): Worktree | undefined {
+  const key = `${deviceId}/${worktreeId}`;
+  const moved = movedTo.get(key);
+  movedTo.delete(key);
+  return moved;
+}
+
 function useReplaceWorktree<
   Input extends { projectId: string; worktreeId: string },
   Result,
@@ -119,6 +134,7 @@ function useReplaceWorktree<
   rowOf: (result: Result) => Worktree,
   // The page surfaces per-row errors inline; a toast on top would be noise.
   meta: Record<string, unknown> = { silentError: true },
+  then?: (row: Worktree) => void,
 ) {
   const registry = useRegistry();
   const { api, deviceId } = useHostScope();
@@ -126,8 +142,11 @@ function useReplaceWorktree<
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => api.run(call(api, input)),
     onSuccess: (result, vars) => {
-      spliceWorktreeRow(registry, deviceId, rowOf(result), vars.worktreeId);
+      const row = rowOf(result);
+      movedTo.set(`${deviceId}/${vars.worktreeId}`, row);
+      spliceWorktreeRow(registry, deviceId, row, vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
+      then?.(row);
     },
     meta,
   });
@@ -164,12 +183,17 @@ interface RenameWorktreeInput {
 }
 
 // A rename is a move to a new folder name, so the id changes as a
-// relocate's does.
+// relocate's does, and the page follows it to the new id. From here,
+// not the caller's mutate: the list can drop the old row before the
+// answer arrives, which sends the page away, and a caller's callbacks
+// die with it.
 export function useRenameWorktree() {
+  const nav = useWorktreeNav();
   return useReplaceWorktree<RenameWorktreeInput, Worktree>(
     (api, input) => api.worktrees.rename(input),
     (worktree) => worktree,
     { errorTitle: "Couldn't rename worktree" },
+    (worktree) => nav.toWorktree(worktree.projectId, worktree.id, true),
   );
 }
 

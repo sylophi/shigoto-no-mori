@@ -5,6 +5,7 @@ import {
 import { useEffect, useRef } from "react";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { takeMovedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 import { WorktreeUnavailableView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
@@ -13,7 +14,7 @@ import { useApi } from "@/lib/runtime/pageApi";
 export function WorktreeDetail() {
   const api = useApi();
   const { projectId, worktreeId } = useScopedWorktreeParams();
-  const { remote } = useHostScope();
+  const { remote, deviceId } = useHostScope();
   const { data: projects = [], isPending: projectsPending } = useProjects();
   const {
     data: worktrees = [],
@@ -28,7 +29,8 @@ export function WorktreeDetail() {
   // A worktree that vanishes from under its open page (a mirror stop
   // removed the copy, a peer tore its transplant source down here, a
   // terminal ran sm rm) leaves the page the way this page's own delete
-  // does, instead of stranding it on "not found". Keyed on the route's
+  // does, instead of stranding it on "not found", and one this window
+  // renamed or moved is followed to its new id. Keyed on the route's
   // pair so a page that opened on a missing worktree is not sent away,
   // and a delete that already moved to a sibling is left alone.
   const key = `${projectId}/${worktreeId}`;
@@ -40,9 +42,19 @@ export function WorktreeDetail() {
     }
     if (seen.current === key && !worktreesPending && !worktreesError) {
       seen.current = null;
-      nav.toFallback([worktreeId], true);
+      const moved = takeMovedWorktree(deviceId, worktreeId);
+      if (moved) nav.toWorktree(moved.projectId, moved.id, true);
+      else nav.toFallback([worktreeId], true);
     }
-  }, [worktree, worktreesPending, worktreesError, key, worktreeId, nav]);
+  }, [
+    worktree,
+    worktreesPending,
+    worktreesError,
+    key,
+    worktreeId,
+    deviceId,
+    nav,
+  ]);
 
   useEffect(() => {
     // Local-only page-open work, once per worktree page opened:
