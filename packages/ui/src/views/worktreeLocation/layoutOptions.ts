@@ -7,7 +7,10 @@ import type { WorktreeLayout } from "@shigomori/contracts/schemas";
 // What a device's layout previews are drawn from: its paths and its
 // settings, with its home folder to spell paths under. The app's
 // useDeviceLayout reads it.
-export type DeviceLayout = DeviceLayoutInputs & { homedir: string };
+export type DeviceLayout = DeviceLayoutInputs & {
+  homedir: string;
+  dataDirReal?: string;
+};
 
 export interface LayoutOption {
   value: WorktreeLayout;
