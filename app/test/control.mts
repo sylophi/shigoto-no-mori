@@ -151,6 +151,7 @@ import {
   createCliRunner,
   delay,
   makeTracker,
+  waitFor,
 } from "./lib/checkKit.mts";
 import { secondEngine } from "./lib/smBinary.mts";
 import { afterAll, beforeAll, it } from "vitest";
@@ -1451,8 +1452,7 @@ it("the hub out of reach says so with its cause, and a revoked credential reads 
 it("an app silent past one ping but short of the limit still answers the terminal", async () => {
   // ---- (8c) An app that goes quiet for a while (its loop held by
   // other work) is not a lost connection: it answers no ping for 12 s,
-  // past the second of the client's looks (every 5 s from its connect)
-  // and short of the limit, then the call.
+  // then the call.
   registryWaits = Effect.sync(() => {
     const until = Date.now() + 12_000;
     while (Date.now() < until) {
@@ -1466,6 +1466,30 @@ it("an app silent past one ping but short of the limit still answers the termina
     registryWaits = Effect.void;
   }
 }, 60_000);
+
+it("a call the terminal stopped for longer than any ping limit, as a sleep stops it, still answers", async () => {
+  // ---- (8d) The app answers while the terminal's process is stopped
+  // (SIGSTOP) for 20 s: on resuming, its overdue timers are no word
+  // that the app went (V3.md, "Local links and liveness").
+  registryWaits = Effect.sleep("22 seconds");
+  let pid: number | undefined;
+  const resumed = (async () => {
+    await waitFor(() => pid !== undefined, "the terminal to start");
+    await delay(2_000);
+    process.kill(pid as number, "SIGSTOP");
+    await delay(20_000);
+    process.kill(pid as number, "SIGCONT");
+  })();
+  try {
+    const listed = await runCli(["--json", "devices"], (spawned) => {
+      pid = spawned;
+    });
+    await resumed;
+    assert.equal(listed.code, 0, listed.stderrTail);
+  } finally {
+    registryWaits = Effect.void;
+  }
+}, 90_000);
 
 it("a loopback.json removed under the running app is republished", async () => {
   // ---- (9) A data wipe takes loopback.json with the rest of the data

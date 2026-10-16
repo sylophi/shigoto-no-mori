@@ -24,6 +24,7 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
+import type { HostRestartReasonSchema } from "@shigomori/contracts/modules/window";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { effectClient } from "@shared/ipc/effectClient";
@@ -44,6 +45,8 @@ import { createShellRegistrar } from "./ipc/shellRegistrar";
 import { deviceIdWithin } from "./core/host/deviceId";
 import { beats, busyWithin, watchHost } from "./core/host/watchdog";
 import { clearLoopbackOf } from "./core/host/leftovers";
+import { lastEndedSpans, restartDetail } from "./core/host/restartLog";
+import { type HostBeat, isHostBeat } from "@shared/hostBeat";
 import { dataDir } from "@shared/paths";
 
 type Address = {
@@ -97,14 +100,14 @@ const QUIT_DEADLINE_MS = 15_000;
 // A host that is up is asked something cheap this often, and one that
 // stays silent this long is killed and forked again.
 const WATCH_EVERY = "10 seconds";
-const SILENT_LIMIT = "30 seconds";
+const SILENT_LIMIT_S = 30;
 // A host that is starting has no link to ask yet: its loop beats on
 // its parent port (host.ts) from the moment it runs, and one whose
 // beats stop this long before it is up is killed. Longer than the
 // running limit, since a start may import a store in one go. A second
 // start in a row that stalls is the failure, said and shown, rather
 // than a loop of starts.
-const START_SILENT_LIMIT = "60 seconds";
+const START_SILENT_LIMIT_S = 60;
 const START_STALLS_ALLOWED = 1;
 // How long a killed host is given to exit before it is killed outright
 // (a host stopped by a signal never sees the first).
@@ -143,6 +146,45 @@ let upHost: UtilityProcess | null = null;
 let startStalls = 0;
 // The host whose stalled starts were given up on, left down.
 let stalledOut: UtilityProcess | null = null;
+// Each host's last beat, and why the shell stopped it when it did.
+type Held = {
+  lastBeat: { readonly at: number; readonly beat: HostBeat } | null;
+  stoppedFor: HostRestartReason | null;
+};
+type HostRestartReason = typeof HostRestartReasonSchema.Type;
+const held = new WeakMap<UtilityProcess, Held>();
+// The restarts since the app started, and the last one's reason, which
+// a window whose link came back asks for (window:hostRestarts).
+let restarts = 0;
+let restartReason: HostRestartReason | null = null;
+
+// A restart in main.log: why, then what the host was in at its last
+// beat and the spans it last finished.
+function noteRestart(
+  running: UtilityProcess,
+  reason: HostRestartReason,
+  why: string,
+): void {
+  restarts += 1;
+  restartReason = reason;
+  log.warn(`[host] ${why}, starting it again`);
+  const beat = held.get(running)?.lastBeat ?? null;
+  const now = Date.now();
+  void lastEndedSpans(app.getPath("logs")).then((ended) => {
+    for (const line of restartDetail({ beat, now, ended })) log.info(line);
+  });
+}
+
+// The shell stops a host that went silent, and starts another.
+function stopSilent(running: UtilityProcess, seconds: number): void {
+  const state = held.get(running);
+  const reason: HostRestartReason = { kind: "silent", seconds };
+  if (state !== undefined) state.stoppedFor = reason;
+  noteRestart(running, reason, `silent for ${seconds} s`);
+  killHard(running);
+}
+
+export const hostRestarts = () => ({ count: restarts, reason: restartReason });
 
 // The shell's link to the current host, made on first use: a window
 // may ask before the hold is up, and waits for the host's address.
@@ -206,14 +248,11 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
         watchHost({
           probe: session().busy(),
           every: WATCH_EVERY,
-          limit: SILENT_LIMIT,
+          limit: `${SILENT_LIMIT_S} seconds`,
           watching: () => child === watched && !quitting,
           asleep: () => asleep,
           sleeps: () => sleeps,
-          silent: () => {
-            log.warn("[host] silent for 30 s, starting it again");
-            killHard(watched);
-          },
+          silent: () => stopSilent(watched, SILENT_LIMIT_S),
         }),
       );
     }
@@ -279,6 +318,8 @@ function fork(): void {
     { serviceName: "Shigoto no Mori Host", stdio: "pipe" },
   );
   child = forked;
+  const state: Held = { lastBeat: null, stoppedFor: null };
+  held.set(forked, state);
   // Read at its spawn: an exited utility process's pid reads undefined.
   let spawned: { pid: number; startedAt: number } | undefined;
   forked.once("spawn", () => {
@@ -296,14 +337,17 @@ function fork(): void {
   }
   if (server !== null) void Effect.runPromise(server.attach(port1, null));
   forked.postMessage(null, [port2]);
-  // Its loop's beats, until it is up (START_SILENT_LIMIT).
+  // Its loop's beats, until it is up (START_SILENT_LIMIT_S).
   const beat = beats();
-  forked.on("message", beat.beat);
+  forked.on("message", (message: unknown) => {
+    if (isHostBeat(message)) state.lastBeat = { at: Date.now(), beat: message };
+    beat.beat();
+  });
   Effect.runFork(
     watchHost({
       probe: beat.next,
       every: WATCH_EVERY,
-      limit: START_SILENT_LIMIT,
+      limit: `${START_SILENT_LIMIT_S} seconds`,
       watching: () =>
         child === forked &&
         upHost !== forked &&
@@ -322,8 +366,7 @@ function fork(): void {
           onFailed({ message, storeReport: null });
           return;
         }
-        log.warn("[host] silent for 60 s while starting, starting it again");
-        killHard(forked);
+        stopSilent(forked, START_SILENT_LIMIT_S);
       },
     }),
   );
@@ -345,7 +388,13 @@ function fork(): void {
             ),
           ]);
     if (stalledOut === forked) return;
-    log.warn(`[host] exited unasked (code ${code}), starting it again`);
+    if (state.stoppedFor === null) {
+      noteRestart(
+        forked,
+        { kind: "exited", code },
+        `exited unasked (code ${code})`,
+      );
+    }
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
     const now = Date.now();

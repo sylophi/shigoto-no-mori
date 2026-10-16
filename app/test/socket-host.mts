@@ -123,7 +123,13 @@ import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 import { runHost } from "./lib/hostRuntime.mts";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import type { ChannelHandle } from "@shigomori/contracts/link";
-import { delay, type Track, waitFor } from "./lib/checkKit.mts";
+import {
+  delay,
+  sleepingClock,
+  testClock,
+  type Track,
+  waitFor,
+} from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {
   DIALER,
@@ -1389,6 +1395,44 @@ it("liveness: the host cuts a linked peer that falls silent past the timeout", a
   const exit = await raw.hello();
   assert.ok(Exit.isSuccess(exit));
   assert.equal(await raw.closed, 1001);
+});
+
+it("liveness: a dialer cuts a peer only on a probe it had the whole timeout to answer: not across a hidden page's minute-late turns, and on time once the peer goes silent", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const clock = testClock();
+  const { wall, stop } = sleepingClock(clock);
+  // A peer that goes silent: its frames stop reaching the dialer while
+  // the socket stays open.
+  let deaf = false;
+  let closed = 0;
+  const connection = await dialListener(track, listener, {
+    clock: wall,
+    onClose: () => (closed += 1),
+    openSocket: (url) => {
+      const ws = new WebSocket(url);
+      const emit = ws.emit.bind(ws);
+      ws.emit = (event: string | symbol, ...args: unknown[]) =>
+        deaf && event === "message" ? false : emit(event, ...args);
+      return ws;
+    },
+  });
+  const answers = async () =>
+    assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+      leaseMs: 5,
+    });
+  // A hidden page: each turn a minute late, ten times over.
+  for (let turn = 0; turn < 10; turn++) {
+    stop(45_000);
+    await clock.advance(15_000);
+  }
+  await answers();
+  assert.equal(closed, 0, "a link cut on a probe it had no turn to answer");
+  // The peer goes silent while the dialer's turns come on time.
+  deaf = true;
+  for (let turn = 0; turn < 4; turn++) await clock.advance(15_000);
+  await waitFor(() => closed === 1, "the silent peer's link to be cut");
 });
 
 it("stop: the listener stopping closes every link, and nothing answers after", async () => {

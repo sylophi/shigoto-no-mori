@@ -58,6 +58,12 @@ export interface Lab {
   sm(...args: string[]): string;
   // Quits the app as a person does and starts it again on the same root.
   restart(): Promise<void>;
+  // The app's processes: its main one first, then every helper it
+  // started, each with its command line.
+  pids(): { pid: number; command: string }[];
+  // The app's host process (main/hostProcess.ts), the one Electron
+  // utility process it forks that runs node.
+  hostPid(): number;
   close(): Promise<void>;
 }
 
@@ -92,6 +98,21 @@ export const refuseRunningLab = () => {
     );
   }
 };
+
+function appPids(app: number | undefined): { pid: number; command: string }[] {
+  if (app === undefined) return [];
+  const listed = execFileSync("ps", ["-A", "-o", "pid=,ppid=,command="], {
+    encoding: "utf8",
+  });
+  const found = [{ pid: app, command: "" }];
+  for (const line of listed.split("\n")) {
+    const [pid, ppid, ...command] = line.trim().split(/\s+/);
+    if (Number(ppid) === app) {
+      found.push({ pid: Number(pid), command: command.join(" ") });
+    }
+  }
+  return found;
+}
 
 export async function bootLab(options: LabOptions): Promise<Lab> {
   const bundle = labBundle();
@@ -243,6 +264,15 @@ async function launch(
     git,
     sm,
     restart,
+    pids: () => appPids(current.run.child.pid),
+    hostPid: () => {
+      const host = appPids(current.run.child.pid).find(({ command }) =>
+        command.includes("node.mojom.NodeService"),
+      );
+      if (host === undefined)
+        throw new Error("the lab app has no host process");
+      return host.pid;
+    },
     close,
   };
 }

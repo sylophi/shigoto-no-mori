@@ -16,8 +16,10 @@ import {
 } from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Fiber from "effect/Fiber";
@@ -30,6 +32,7 @@ import * as Socket from "effect/socket/Socket";
 import type * as Scope from "effect/Scope";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { type ChannelMux, createChannelMux } from "./channels";
+import { watchLiveness } from "./liveness";
 import { type FlatClient, linkTransport, rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
 import { LINK_MAX_FRAME_BYTES, LinkGroup } from "@shigomori/contracts/link";
@@ -97,6 +100,8 @@ export type DeviceLinkOptions = {
   deadlineMs: number;
   // Test seam: the protocol version the hello claims. This build's.
   protocolVersion?: number;
+  // Test seam: the clock the link's timings read. The live one.
+  clock?: Clock.Clock;
   // What this device is (contracts' link.ts, DeviceKindSchema), which
   // decides whether a second link of its supersedes the first. A
   // desktop app unless said otherwise.
@@ -223,12 +228,23 @@ export const dialDevice = (
       }),
     );
     const dropped = yield* Deferred.make<void>();
-    const socket = yield* Socket.fromWebSocket(Effect.succeed(wire), {
-      openTimeout: options.deadlineMs,
-    });
+    const cuttable = cuttableSocket(wire);
+    const socket = yield* Socket.fromWebSocket(
+      Effect.succeed(cuttable.socket),
+      {
+        openTimeout: options.deadlineMs,
+      },
+    );
     const socketProtocol = yield* RpcClient.makeProtocolSocket({
+      // Pings keep the far end's slot alive (its HOST_LIVENESS_TIMEOUT_MS)
+      // and judge nothing: Effect's pinger condemns a link on the age of
+      // the last frame before it sends, on the wall clock. A link to
+      // another machine is judged by watchLiveness below, and the
+      // loopback's to this machine's own host by nothing here: the
+      // shell's watchdog judges that host (V3.md, "Local links and
+      // liveness").
       pingInterval: PING_INTERVAL_MS,
-      pingTimeout: PING_TIMEOUT_MS,
+      pingTimeout: Duration.infinity,
       // One socket, one ticket: a dropped link is the keeper's to redial.
       retryPolicy: Schedule.recurs(0),
     }).pipe(
@@ -342,6 +358,14 @@ export const dialDevice = (
     yield* call("link:ping", undefined).pipe(
       Effect.mapError(() => connectError("the peer did not answer the ping")),
     );
+    if (options.expectedDeviceId !== options.localDeviceId) {
+      yield* watchLiveness({
+        ping: call("link:ping", undefined),
+        intervalMs: PING_INTERVAL_MS,
+        timeoutMs: PING_TIMEOUT_MS,
+        dead: Effect.sync(cuttable.cut),
+      }).pipe(Effect.forkScoped);
+    }
 
     const channels = createChannelMux({
       call: (tag, payload) => Effect.asVoid(call(tag, payload)),
@@ -407,6 +431,9 @@ export function openDevice(
       yield* dropped;
     }).pipe(
       Effect.scoped,
+      options.clock === undefined
+        ? (dial) => dial
+        : Effect.provideService(Clock.Clock, options.clock),
       Effect.catch((failed) =>
         Effect.andThen(
           Deferred.fail(opened, failed),
@@ -444,6 +471,48 @@ export function openDevice(
       return connected;
     },
     abandon: close,
+  };
+}
+
+// A socket as Effect reads it, with a cut that closes it for Effect at
+// once, as its pinger's verdict did: the link's calls fail as a drop,
+// and the link drops. The close handshake with a peer that stopped
+// answering can take a browser a minute, so it is not waited on.
+function cuttableSocket(wire: Socket.WebSocketLike) {
+  type Listener = (event: Socket.WebSocketEvent) => void;
+  const closes = new Set<Listener>();
+  let cut = false;
+  const socket: Socket.WebSocketLike = {
+    get readyState() {
+      return cut ? 3 : wire.readyState;
+    },
+    addEventListener(type, listener, options) {
+      if (type === "close") closes.add(listener);
+      wire.addEventListener(type, listener, options);
+    },
+    removeEventListener(type, listener) {
+      if (type === "close") closes.delete(listener);
+      wire.removeEventListener(type, listener);
+    },
+    close: (code, reason) => wire.close(code, reason),
+    send: (data) => wire.send(data),
+  };
+  return {
+    socket,
+    cut: () => {
+      if (cut) return;
+      cut = true;
+      for (const listener of closes) {
+        wire.removeEventListener("close", listener);
+        listener({ code: 1006, reason: "the peer stopped answering" });
+      }
+      closes.clear();
+      try {
+        wire.close(1000);
+      } catch {
+        // Already closing.
+      }
+    },
   };
 }
 
