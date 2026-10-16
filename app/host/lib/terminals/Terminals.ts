@@ -93,10 +93,79 @@ const SAVE_AT_MOST = Duration.minutes(1);
 // SIGKILL a moment later if it is still there.
 const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
 // What a restored history ends with, so the fresh shell's prompt lands
-// on a clean screen: out of the alternate screen, the mouse and the
-// keypad modes, with the cursor shown and the colors reset.
+// on a clean screen: out of the mouse and the keypad modes, with the
+// cursor shown and the colors reset.
 const RESTORED_TAIL =
-  "\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
+  "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
+// A private mode set or reset (CSI in seven or eight bits), its modes as
+// they come (`1049;25`), or a full reset, which leaves the alternate
+// screen too.
+// A control character inside one is carried out and skipped, as a
+// terminal does, but CAN and SUB end it.
+const SCREEN_MODES = new RegExp(
+  String.raw`(?:\x1b\[|\x9b)\?([\d;\x00-\x17\x19\x1c-\x1f]+)([hl])|\x1bc`,
+  "g",
+);
+// The start of a sequence the output so far hasn't finished.
+const UNFINISHED = new RegExp(
+  String.raw`(?:\x1b\[|\x9b)[\x00-\x17\x19\x1c-\x3f]*$|\x1b$`,
+);
+const ALTERNATE = new Set([1049, 1047, 47]);
+
+// Whether `text` leaves the terminal on the alternate screen, from
+// `before` at its start, and where it last went there if it did.
+export const alternateScreen = (
+  text: string,
+  before = false,
+): { readonly on: boolean; readonly enteredAt: number | undefined } => {
+  let on = before;
+  let enteredAt: number | undefined;
+  for (const match of text.matchAll(SCREEN_MODES)) {
+    const [sequence, modes, set] = match;
+    if (sequence === "\x1bc") {
+      on = false;
+      enteredAt = undefined;
+      continue;
+    }
+    const listed = modes?.replace(/[^\d;]/g, "").split(";") ?? [];
+    if (!listed.some((mode) => ALTERNATE.has(Number(mode)))) {
+      continue;
+    }
+    if (set === "l") {
+      on = false;
+      enteredAt = undefined;
+    } else if (!on) {
+      on = true;
+      enteredAt = match.index;
+    }
+  }
+  return { on, enteredAt };
+};
+
+// The alternate screen after a read, from where the last one left it,
+// with what of this one the next has to finish.
+export const followAlternate = (
+  before: { readonly on: boolean; readonly carry: string },
+  data: string,
+): { readonly on: boolean; readonly carry: string } => {
+  const seen = before.carry + data;
+  return {
+    on: alternateScreen(seen, before.on).on,
+    carry: (UNFINISHED.exec(seen)?.[0] ?? "").slice(-256),
+  };
+};
+
+// What a terminal's next start replays: a history that ends on the
+// alternate screen (a full-screen program ran at the quit) up to where
+// it went there, the main screen as that program found it, cursor and
+// all, or none of it if the ring no longer holds that point. Leaving the
+// alternate screen instead puts the cursor where the program left it,
+// or for 1049 where it saved it, and the fresh prompt's clear to the
+// end of the screen would wipe the lines above.
+export const replayable = (history: string, alternate: boolean): string => {
+  if (!alternate) return history;
+  return history.slice(0, alternateScreen(history).enteredAt ?? 0);
+};
 
 interface Session {
   readonly terminal: Terminal;
@@ -111,6 +180,11 @@ interface Session {
   seq: number;
   size: Size;
   exited: Option.Option<number | null>;
+  // On the alternate screen, followed as output comes in, so it holds
+  // once the ring has dropped where the program went there.
+  alternate: boolean;
+  // A sequence the last read left unfinished, which the next finishes.
+  carry: string;
   // Closed by its user or with its worktree, so not saved for the next
   // start.
   forget: boolean;
@@ -265,6 +339,10 @@ const make = <R>(options: {
             backlog.paused = false;
             session.pty.resume();
           }
+          ({ on: session.alternate, carry: session.carry } = followAlternate(
+            { on: session.alternate, carry: session.carry },
+            data,
+          ));
           for (const piece of pieces(data)) {
             session.seq += 1;
             session.history.append(session.seq, piece);
@@ -328,7 +406,7 @@ const make = <R>(options: {
         ...session.terminal,
         cwd: Option.getOrElse(folder, () => session.terminal.cwd),
         seq: session.seq,
-        history: session.history.text(),
+        history: replayable(session.history.text(), session.alternate),
       });
     });
 
@@ -379,20 +457,36 @@ const make = <R>(options: {
           ),
           Effect.provideService(FileSystem.FileSystem, fs),
         );
+        // A restored history is a chunk of its own, numbered past any
+        // chunk the terminal sent before the restart (more may have gone
+        // out after its last save), so a client that saw it then starts
+        // over. Chunks count far slower than milliseconds.
+        const first =
+          restored === undefined
+            ? 0
+            : Math.max(restored.seq + 1, yield* Clock.currentTimeMillis);
         const session: Session = {
           terminal,
           pty,
           history: makeHistory(
-            restored?.seq ?? 0,
-            restored === undefined ? "" : restored.history + RESTORED_TAIL,
+            first,
+            // A row an earlier build saved holds the history as it was.
+            restored === undefined
+              ? ""
+              : replayable(
+                  restored.history,
+                  alternateScreen(restored.history).on,
+                ) + RESTORED_TAIL,
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
           changed: Latch.makeUnsafe(false),
           changedAt: 0,
-          seq: restored?.seq ?? 0,
+          seq: first,
           size,
           exited: Option.none(),
+          alternate: false,
+          carry: "",
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));

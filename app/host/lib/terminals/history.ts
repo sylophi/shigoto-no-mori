@@ -48,8 +48,8 @@ export type History = {
   readonly text: () => string;
 };
 
-// A ring starting after `seq`, holding `text` as that chunk when given
-// (a restored terminal's saved history).
+// A ring starting after `seq`, or holding `text` as chunk `seq` when
+// given (a restored terminal's saved history).
 export function makeHistory(
   seq: number,
   text = "",
@@ -89,7 +89,8 @@ export function makeHistory(
   if (text.length > 0) {
     chunks.push({ seq, data: text });
     length = text.length;
-    dropped = seq - 1;
+    // A client from before holds another history: it starts over.
+    dropped = seq;
   }
   return {
     append,
