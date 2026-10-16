@@ -5,7 +5,7 @@ import {
 import { useEffect, useRef } from "react";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { isRenaming } from "@/hooks/worktrees/useWorktreeMutations";
+import { useRenamingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 import { WorktreeUnavailableView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
@@ -25,6 +25,7 @@ export function WorktreeDetail() {
   const project = projects.find((p) => p.id === projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
   const nav = useWorktreeNav();
+  const renaming = useRenamingWorktree(deviceId, worktreeId);
 
   // A worktree that vanishes from under its open page (a mirror stop
   // removed the copy, a peer tore its transplant source down here, a
@@ -40,7 +41,7 @@ export function WorktreeDetail() {
       return;
     }
     // A rename from here is under way: its answer takes the page on.
-    if (isRenaming(deviceId, worktreeId)) return;
+    if (renaming) return;
     if (seen.current === key && !worktreesPending && !worktreesError) {
       seen.current = null;
       nav.toFallback([worktreeId], true);
@@ -51,7 +52,7 @@ export function WorktreeDetail() {
     worktreesError,
     key,
     worktreeId,
-    deviceId,
+    renaming,
     nav,
   ]);
 
@@ -68,7 +69,7 @@ export function WorktreeDetail() {
     // Cold cache (e.g. a reload landing directly on this route): the
     // lists haven't resolved yet, so absence doesn't mean missing.
     if (worktreesPending || projectsPending) return null;
-    if (isRenaming(deviceId, worktreeId)) return null;
+    if (renaming) return null;
     // The worktrees query is silent on error because the sidebar owns
     // that message, so without this branch a failed listing would read
     // as a deleted worktree and offer no way back.
