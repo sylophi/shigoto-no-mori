@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -134,6 +135,8 @@ it("finds a data dir a rename landed before its pointer moved, from two processe
       from: join(home, ".sm"),
       to: moved,
       partial: null,
+      pid: 4_194_304,
+      startedAt: 0,
       moved: [],
     }),
   );
@@ -151,4 +154,36 @@ it("finds a data dir a rename landed before its pointer moved, from two processe
     readFileSync(join(home, ".config", "shigomori", "data-dir"), "utf8").trim(),
     moved,
   );
+});
+
+it("refuses to resolve a data dir a rename landed whose pointer can't be written, naming both folders", async () => {
+  const moved = join(home, "drive", ".sm");
+  mkdirSync(moved, { recursive: true });
+  writeFileSync(join(moved, "store.db"), "");
+  writeFileSync(
+    join(moved, JOURNAL),
+    JSON.stringify({
+      from: join(home, ".sm"),
+      to: moved,
+      partial: null,
+      pid: 4_194_304,
+      startedAt: 0,
+      moved: [],
+    }),
+  );
+  const config = join(home, ".config", "shigomori");
+  mkdirSync(config, { recursive: true });
+  writeFileSync(join(config, "data-dir.tmp.ab12"), `${moved}\n`);
+  chmodSync(config, 0o555);
+  try {
+    await assert.rejects(resolve(), (error: Error) => {
+      assert.match(
+        error.message,
+        new RegExp(`moved from ${join(home, ".sm")} to ${moved}`),
+      );
+      return true;
+    });
+  } finally {
+    chmodSync(config, 0o755);
+  }
 });

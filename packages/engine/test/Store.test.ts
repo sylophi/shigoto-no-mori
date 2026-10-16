@@ -144,15 +144,31 @@ it("fails with the path when the data dir can't be made", async () => {
   );
 });
 
-it("opens a store a cut-short data-folder move retired writable again while its journal is there", async () => {
+it("opens a store a data-folder move retired writable again only once its mover is gone", async () => {
   await query((sql) =>
     Effect.provideService(retireStore, SqlClient.SqlClient, sql),
   );
-  await assert.rejects(
-    query((sql) => sql`UPDATE changes SET version = version + 1`),
-  );
-  write(JOURNAL, "{}");
-  await query((sql) => sql`UPDATE changes SET version = version + 1`);
+  const writes = () =>
+    query((sql) => sql`UPDATE changes SET version = version + 1`).then(
+      () => true,
+      () => false,
+    );
+  assert.equal(await writes(), false);
+  const journal = (pid: number) =>
+    write(JOURNAL, {
+      from: dataDir,
+      to: join(dataDir, "..", "elsewhere"),
+      partial: join(dataDir, "..", "elsewhere.partial-x"),
+      pid,
+      // A live pid that started at another time is another process.
+      startedAt: pid === process.pid ? Date.now() - process.uptime() * 1000 : 0,
+      moved: [],
+    });
+  // A move still under way: this process plays its mover.
+  journal(process.pid);
+  assert.equal(await writes(), false);
+  journal(4_194_304);
+  assert.equal(await writes(), true);
 });
 
 it("refuses a store a newer version of the app migrated, and writes nothing to it", async () => {

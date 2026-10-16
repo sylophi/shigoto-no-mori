@@ -36,6 +36,7 @@ import type * as Types from "effect/Types";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Ops from "./engineOps";
 import * as Git from "@shigomori/engine/Git";
+import { startOf } from "@shigomori/engine/processes";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import {
   clearDeleteInflight,
@@ -236,6 +237,8 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     from: oldDir,
     to: newDir,
     partial: null,
+    pid: process.pid,
+    startedAt: Option.getOrElse(yield* startOf(process.pid), () => Date.now()),
     moved: repairTargets.flatMap(({ project, moved }) =>
       moved.map((m) => ({
         projectId: project.id,

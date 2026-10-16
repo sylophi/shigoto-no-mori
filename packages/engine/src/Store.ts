@@ -27,7 +27,7 @@ import { terminals } from "./migrations/terminals.ts";
 import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { v2Import } from "./migrations/v2Import.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
-import { JOURNAL, reviveStore } from "./dataDirMoveJournal.ts";
+import { reviveStore, strandedJournal } from "./dataDirMoveJournal.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { StoreError, storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
@@ -252,12 +252,9 @@ export const layer = (
         }
         const client = yield* open(store);
         // A copy across volumes a crash cut short left this store refusing
-        // writes; its journal is still here, and the move is undone.
-        if (
-          yield* fs
-            .exists(path.join(dataDir, JOURNAL))
-            .pipe(Effect.orElseSucceed(() => false))
-        ) {
+        // writes; its journal is still here, its process gone, and the move
+        // is undone. While the mover runs the store keeps refusing them.
+        if (yield* strandedJournal(dataDir)) {
           yield* reviveStore.pipe(
             Effect.provideService(SqlClient.SqlClient, client),
           );

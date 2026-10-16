@@ -1535,6 +1535,34 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     [],
   );
   assert.equal((await listProjects()).length, before);
+  // One whose register never ran (a crash right after the rename, here a
+  // register that fails) is left whole, and the next clone of that folder
+  // registers it.
+  const lateSource = {
+    projectId: sourceProjectId,
+    worktreeId: worktreeIdFromPath(sourceRepo),
+  };
+  const lateInto = { parentDir: clonesDir, name: "late" };
+  await assert.rejects(() =>
+    withPeerSource(lateSource, (source) =>
+      cloneCheckoutFromPeer(source, lateInto, "feat/landing", () =>
+        Effect.fail(new Git.GitRefusedError({ reason: "the host went away" })),
+      ),
+    ),
+  );
+  assert.ok(existsSync(join(clonesDir, "late", ".git", "sm-clone-pending")));
+  assert.equal((await listProjects()).length, before);
+  const late = await withPeerSource(lateSource, (source) =>
+    cloneCheckoutFromPeer(
+      source,
+      lateInto,
+      "feat/landing",
+      Projects.addProject,
+    ),
+  );
+  assert.equal(late.path, join(clonesDir, "late"));
+  assert.ok(!existsSync(join(clonesDir, "late", ".git", "sm-clone-pending")));
+  assert.equal((await listProjects()).length, before + 1);
   // A pull told where to clone beside a checkout it already has
   // takes the checkout: nothing is cloned and the result says so.
   const wtBesidePath = await addWorktree(sourceRepo, "wt-beside", "beside");
