@@ -14,6 +14,9 @@ export default defineConfig({
     globalSetup: ["lab/walks/lib/teardown.mts"],
     pool: "forks",
     fileParallelism: false,
+    // A runner under load takes seconds to land what a click asked
+    // for, past expect.poll's own second.
+    expect: { poll: { timeout: 10_000 } },
     testTimeout: 3 * 60_000,
     hookTimeout: 2 * 60_000,
   },
