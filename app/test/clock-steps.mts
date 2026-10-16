@@ -342,6 +342,19 @@ it("direct keeper: a session's uptime is monotonic, and a wake starts again one 
     await clock.advance(1);
     assert.equal(dials.length, round + 2, `round ${round}: on its rung`);
   }
+  // A session that was stable before a sleep, dropped right after the
+  // wake: the next dial waits only the bottom rung.
+  assert.equal(dials.length, 3);
+  await clock.advance(STABLE_CONNECTION_MS);
+  clock.sleep(HOUR);
+  keeper.dialNow();
+  await clock.advance(5_000);
+  keeper.peerDropped("B");
+  await clock.settle();
+  await clock.advance(BACKOFF_LADDER_MS[0] - 1);
+  assert.equal(dials.length, 3, "not before the bottom rung");
+  await clock.advance(1);
+  assert.equal(dials.length, 4, "the uptime earned before the sleep counts");
 });
 
 it("renewal: one failed ask while the session stays up is retried, the network coming back asks at once, and the renewals carry on from there", async () => {
