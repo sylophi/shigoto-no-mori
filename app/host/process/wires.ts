@@ -63,7 +63,7 @@ import {
   hubConnectInputs,
   provisionDeviceTunnel,
 } from "./account";
-import { hostBinaryPath, hostFacts } from "./facts";
+import { hostBinaryPath, hostFacts, tunnelPidFile } from "./facts";
 
 // The device link's listener. A peer's socket opens with one of the
 // single-use connect tickets connectInfo mints over the device hub and
@@ -182,9 +182,7 @@ export const tunnelLayer = () =>
         try: () => provisionDeviceTunnel(port),
         catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
       }),
-    // The live child's pid, so a crashed host's leftover connector
-    // is killed on the next start.
-    pidFilePath: () => join(hostFacts().userDataPath, "cloudflared.pid"),
+    pidFilePath: tunnelPidFile,
     // Tunnel state rides the hub status snapshot, so the account
     // page updates live.
     onChange: () => remote.now()?.plane.notifyStatusChanged(),
