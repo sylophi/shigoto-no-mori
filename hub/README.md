@@ -173,8 +173,8 @@ malformed envelope, so a new device sees no pong and redials it once a
 minute until the Worker is redeployed (it keeps working meanwhile, just
 noisily).
 
-The pings are also the hub's word on a device: a socket whose last one
-is more than 90 s old (`SILENT_AFTER_MS` in `src/hubObject.ts`) is
+The pings are also the hub's word on a device: a socket that has sent
+neither one nor any other message for more than 90 s (`SILENT_AFTER_MS` in `src/hubObject.ts`) is
 closed with `4106` and leaves the roster, which a device redials on.
 A laptop that sleeps leaves its socket open, and Cloudflare reports no
 close for it. It is judged when the object runs anyway (an ask relayed
