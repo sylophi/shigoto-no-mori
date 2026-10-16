@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -9,6 +15,7 @@ import * as Layer from "effect/Layer";
 import { afterEach, beforeEach, it } from "vitest";
 import type { Flavor } from "../src/flavor.ts";
 import * as Paths from "../src/Paths.ts";
+import { JOURNAL } from "../src/dataDirMoveJournal.ts";
 
 let home: string;
 beforeEach(() => {
@@ -115,4 +122,33 @@ it("gives the v3 flavor its own folder, with nothing pre-2.0 to adopt", async ()
   assert.equal(paths.dataDir, join(home, ".smv3"));
   assert.equal(paths.dataDirSource, "default");
   assert.equal(paths.binaryName, "smv3");
+});
+
+it("finds a data dir a rename landed before its pointer moved, from two processes at once", async () => {
+  const moved = join(home, "drive", ".sm");
+  mkdirSync(moved, { recursive: true });
+  writeFileSync(join(moved, "store.db"), "");
+  writeFileSync(
+    join(moved, JOURNAL),
+    JSON.stringify({
+      from: join(home, ".sm"),
+      to: moved,
+      partial: null,
+      moved: [],
+    }),
+  );
+  mkdirSync(join(home, ".config", "shigomori"), { recursive: true });
+  writeFileSync(
+    join(home, ".config", "shigomori", "data-dir.tmp.ab12"),
+    `${moved}\n`,
+  );
+  const found = await Promise.all([resolve(), resolve()]);
+  assert.deepEqual(
+    found.map((paths) => paths.dataDir),
+    [moved, moved],
+  );
+  assert.equal(
+    readFileSync(join(home, ".config", "shigomori", "data-dir"), "utf8").trim(),
+    moved,
+  );
 });

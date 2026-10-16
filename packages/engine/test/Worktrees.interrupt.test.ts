@@ -790,3 +790,30 @@ it("a resume relinks a checkout git renamed deeper but never recorded, linked re
   );
   assert.deepEqual(result, { title: "the fox", records: 0 });
 });
+
+it("a move git renamed deeper but couldn't record, linked relatively, is relinked and carried", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      box.git(repo, "config", "worktree.useRelativePaths", "true");
+      box.git(repo, "worktree", "repair", worktree.path);
+      yield* data.describe(project.id, worktree.id, { title: "the fox" });
+      const to = join(dirname(worktree.path), "den", "vixen");
+      // git that renames the checkout, then fails writing its records.
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree move"*) mkdir -p "${dirname(to)}"; mv "${worktree.path}" "${to}"; echo "fatal: could not write gitdir" >&2; exit 128;; esac\nexec "${real}/git" "$@"`,
+      );
+      const moved = yield* worktrees.move({ project, worktree }, to);
+      process.env["PATH"] = path;
+      return {
+        at: moved.worktree.path === to,
+        title: (yield* data.description(project.id, moved.worktree.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { at: true, title: "the fox", records: 0 });
+});

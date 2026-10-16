@@ -31,6 +31,7 @@ import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Ops from "./engineOps";
@@ -41,6 +42,13 @@ import {
   getBusyOperations,
   markDeleteInflight,
 } from "./scripts";
+import {
+  JOURNAL,
+  type Journal,
+  JournalJson,
+  retireStore,
+  reviveStore,
+} from "@shigomori/engine/dataDirMoveJournal";
 import {
   canonicalDataDirName,
   dataDir,
@@ -95,24 +103,6 @@ export const sessionPlace = Effect.try({
       reason: errorMessageOf(error),
     }),
 });
-
-// The journal a move keeps in the data dir while it runs.
-const JOURNAL = "data-dir-move.json";
-const Journal = Schema.Struct({
-  from: Schema.String,
-  to: Schema.String,
-  // The sibling a copy to another volume fills, null for a rename.
-  partial: Schema.NullOr(Schema.String),
-  moved: Schema.Array(
-    Schema.Struct({
-      projectId: Schema.String,
-      oldPath: Schema.String,
-      newPath: Schema.String,
-    }),
-  ),
-});
-type Journal = typeof Journal.Type;
-const JournalJson = Schema.fromJsonString(Journal);
 
 // The tree at `from` copied to `to`, symlinks (carry-over entries) as
 // links rather than followed.
@@ -306,9 +296,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (!sameVolume) {
       journal.partial = `${newDir}.partial-${suffix}`;
       yield* writeJournal;
-      yield* (opts.copy ?? copyTree)(oldDir, journal.partial).pipe(
-        Effect.mapError(callFailureOf),
-      );
+      const partial = journal.partial;
+      yield* opts.copy === undefined
+        ? holdingStore(copyTree(oldDir, partial)).pipe(
+            Effect.mapError(callFailureOf),
+          )
+        : opts.copy(oldDir, partial).pipe(Effect.mapError(callFailureOf));
       yield* fs
         .rename(journal.partial, newDir)
         .pipe(Effect.mapError(callFailureOf));
@@ -330,7 +323,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
-        if (pointerStaged) yield* Effect.ignore(removeIfThere(pointerTmp));
+        // Once the folder landed, the staged pointer is how a start finds
+        // it (Paths' rescue).
+        if (pointerStaged && !renamed) {
+          yield* Effect.ignore(removeIfThere(pointerTmp));
+        }
         if (journaled && !renamed) yield* undoMove(journal, oldDir);
       }),
     ),
@@ -341,6 +338,23 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     ),
   );
 });
+
+// The store held still while a copy reads it: a write transaction open
+// for the copy's length (an UPDATE that changes nothing still takes the
+// write lock), so a write from the terminal or a hook waits rather than
+// tearing the copy, and the store left behind retired in the same
+// transaction (`retireStore`).
+export const holdingStore = <A, E, R>(copy: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* sql`UPDATE changes SET version = version WHERE 0`;
+        const copied = yield* copy;
+        yield* retireStore;
+        return copied;
+      }),
+    ),
+  );
 
 // A rename refused because the two paths are on different volumes.
 const crossesVolumes = (error: PlatformError.PlatformError) =>
@@ -401,6 +415,12 @@ const finishMove = (journal: Journal, at: string) =>
 const undoMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    // A store that can't write again keeps the journal, for its next
+    // open to revive it.
+    const revived = yield* reviveStore.pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
     yield* Effect.ignore(rekeyWorktrees(journal.moved, true));
     if (journal.partial !== null) {
       yield* Effect.ignore(
@@ -424,7 +444,9 @@ const undoMove = (journal: Journal, at: string) =>
         );
       }
     }
-    yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+    if (revived) {
+      yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+    }
   });
 
 // At start, with the graph up and before anything reads a worktree by

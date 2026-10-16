@@ -22,6 +22,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import { StoreImportError } from "../src/migrations/importJson.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
+import { JOURNAL, retireStore } from "../src/dataDirMoveJournal.ts";
 import { nodeStore, openNode } from "./lib/nodeStore.ts";
 
 const execFileP = promisify(execFile);
@@ -141,6 +142,17 @@ it("fails with the path when the data dir can't be made", async () => {
       return true;
     },
   );
+});
+
+it("opens a store a cut-short data-folder move retired writable again while its journal is there", async () => {
+  await query((sql) =>
+    Effect.provideService(retireStore, SqlClient.SqlClient, sql),
+  );
+  await assert.rejects(
+    query((sql) => sql`UPDATE changes SET version = version + 1`),
+  );
+  write(JOURNAL, "{}");
+  await query((sql) => sql`UPDATE changes SET version = version + 1`);
 });
 
 it("refuses a store a newer version of the app migrated, and writes nothing to it", async () => {
