@@ -144,6 +144,23 @@ it("fails with the path when the data dir can't be made", async () => {
   );
 });
 
+it("says a data folder it can't write to is read-only", async () => {
+  write("registry.json", { projects: [] });
+  chmodSync(dataDir, 0o555);
+  try {
+    await assert.rejects(
+      query(() => Effect.void),
+      (error) => {
+        assert.ok(error instanceof Store.StoreOpenError);
+        assert.match(error.message, /read-only here/);
+        return true;
+      },
+    );
+  } finally {
+    chmodSync(dataDir, 0o755);
+  }
+});
+
 it("opens a store a data-folder move retired writable again only once its mover is gone", async () => {
   await query((sql) =>
     Effect.provideService(retireStore, SqlClient.SqlClient, sql),
