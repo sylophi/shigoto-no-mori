@@ -31,6 +31,7 @@ import { useWorktreeRemoving } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -110,22 +111,16 @@ interface ConvertExternalWorktreeInput {
   force: boolean;
 }
 
+// Worktrees a rename from this window is moving, by device and old id.
+// Their page waits for the answer rather than leave as the old row goes
+// (WorktreeDetail).
+const renaming = new Set<string>();
+
+export const isRenaming = (deviceId: string, worktreeId: string) =>
+  renaming.has(`${deviceId}/${worktreeId}`);
+
 // Convert and relocate both leave the worktree under a new id: swap
 // the row in the list and drop the script runs cached under the old id.
-// Where a worktree a replace moved went, by device and its old id, for
-// its page to follow instead of leaving (WorktreeDetail). Taken once.
-const movedTo = new Map<string, Worktree>();
-
-export function takeMovedWorktree(
-  deviceId: string,
-  worktreeId: string,
-): Worktree | undefined {
-  const key = `${deviceId}/${worktreeId}`;
-  const moved = movedTo.get(key);
-  movedTo.delete(key);
-  return moved;
-}
-
 function useReplaceWorktree<
   Input extends { projectId: string; worktreeId: string },
   Result,
@@ -134,19 +129,33 @@ function useReplaceWorktree<
   rowOf: (result: Result) => Worktree,
   // The page surfaces per-row errors inline; a toast on top would be noise.
   meta: Record<string, unknown> = { silentError: true },
-  then?: (row: Worktree) => void,
+  // Whether a window still on the worktree's page follows it to the new
+  // id. From the hook's callbacks, which outlive the page, not a
+  // caller's mutate.
+  follow = false,
 ) {
   const registry = useRegistry();
+  const router = useRouter();
+  const nav = useWorktreeNav();
   const { api, deviceId } = useHostScope();
   const scriptRuns = useScriptRuns();
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => api.run(call(api, input)),
+    onMutate: (vars) => {
+      if (follow) renaming.add(`${deviceId}/${vars.worktreeId}`);
+    },
     onSuccess: (result, vars) => {
       const row = rowOf(result);
-      movedTo.set(`${deviceId}/${vars.worktreeId}`, row);
       spliceWorktreeRow(registry, deviceId, row, vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
-      then?.(row);
+      const segments = router.state.location.pathname.split("/");
+      const onPage = segments[segments.indexOf("worktrees") + 1];
+      if (follow && onPage === vars.worktreeId) {
+        nav.toWorktree(row.projectId, row.id, true);
+      }
+    },
+    onSettled: (_result, _error, vars) => {
+      renaming.delete(`${deviceId}/${vars.worktreeId}`);
     },
     meta,
   });
@@ -183,17 +192,13 @@ interface RenameWorktreeInput {
 }
 
 // A rename is a move to a new folder name, so the id changes as a
-// relocate's does, and the page follows it to the new id. From here,
-// not the caller's mutate: the list can drop the old row before the
-// answer arrives, which sends the page away, and a caller's callbacks
-// die with it.
+// relocate's does.
 export function useRenameWorktree() {
-  const nav = useWorktreeNav();
   return useReplaceWorktree<RenameWorktreeInput, Worktree>(
     (api, input) => api.worktrees.rename(input),
     (worktree) => worktree,
     { errorTitle: "Couldn't rename worktree" },
-    (worktree) => nav.toWorktree(worktree.projectId, worktree.id, true),
+    true,
   );
 }
 
