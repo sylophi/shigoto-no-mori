@@ -158,6 +158,25 @@ export const makeMoving = ({
         const named = text.trim().replace(/^gitdir:\s*/, "");
         return yield* fs.realPath(path.resolve(dir, named));
       }).pipe(Effect.orElseSucceed(() => ""));
+    // The checkout gone from `from` and at `to`, holding `link`: git's
+    // rename made, whatever git said after it.
+    const movedOnDisk = (from: string, to: string, link: string) =>
+      Effect.gen(function* () {
+        const gone = !(yield* fs
+          .exists(from)
+          .pipe(Effect.orElseSucceed(() => true)));
+        return gone && link !== "" && (yield* holdsLink(to, link));
+      });
+
+    // git pointed at a checkout it renamed but couldn't record, and
+    // whether it now lists it there.
+    const relinked = (project: RegisteredProject, to: string) =>
+      git.run(project.path, ["worktree", "repair", "--", to]).pipe(
+        Effect.andThen(listedAt(project, to)),
+        Effect.map((found) => found !== undefined),
+        Effect.orElseSucceed(() => false),
+      );
+
     // A copy's `.git` file as copied, which a relative link resolves
     // wrongly from until git is pointed at it.
     const sameGitFile = (copy: string, of: string) =>
@@ -295,6 +314,7 @@ export const makeMoving = ({
         Effect.gen(function* () {
           yield* claimMove(project, worktree.path, to);
           underWay.add(worktree.path);
+          const link = yield* linkOf(worktree.path);
           return yield* Effect.gen(function* () {
             yield* fs
               .makeDirectory(path.dirname(to), { recursive: true })
@@ -322,10 +342,19 @@ export const makeMoving = ({
                 Effect.result,
               );
             if (Result.isFailure(moved)) {
-              yield* forgetRecord(worktree.path);
-              // The folders made for it go again when they are ours and empty.
-              yield* pruneEmptyParents(to, project.path);
-              return yield* moved.failure;
+              // git renames the checkout before it writes its own records,
+              // so a failure can come after the move: the record stays,
+              // for git's link to be repaired and the carry made.
+              if (!crossed && (yield* movedOnDisk(worktree.path, to, link))) {
+                if (!(yield* relinked(project, to)))
+                  return yield* moved.failure;
+              } else {
+                yield* forgetRecord(worktree.path);
+                // The folders made for it go again when they are ours and
+                // empty.
+                yield* pruneEmptyParents(to, project.path);
+                return yield* moved.failure;
+              }
             }
             const landed = yield* carry(project, worktree.path, to);
             // The original a copy across volumes leaves, once git lists the
@@ -441,6 +470,19 @@ export const makeMoving = ({
           }
           if (record.partial !== null) {
             yield* wipe(record.partial).pipe(Effect.ignore);
+          }
+          // git renamed it but couldn't record it: pointed at it now.
+          if (
+            (yield* listedAt(project, record.to_path)) === undefined &&
+            (yield* movedOnDisk(
+              record.from_path,
+              record.to_path,
+              record.link,
+            )) &&
+            !(yield* relinked(project, record.to_path))
+          ) {
+            // Still can't: kept for the next try.
+            return;
           }
           // Its own checkout, not one git put at the path since.
           const atSource =

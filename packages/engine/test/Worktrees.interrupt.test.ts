@@ -16,6 +16,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -711,4 +712,53 @@ it("an adopt whose add fails keeps a detached checkout's commit", async () => {
     }),
   );
   assert.deepEqual(result, { failed: true, held: true });
+});
+
+it("a move git renamed but couldn't record is relinked and carried", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      yield* data.describe(project.id, worktree.id, { title: "the fox" });
+      const to = join(dirname(worktree.path), "vixen");
+      // git that renames the checkout, then fails writing its records.
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree move"*) mv "${worktree.path}" "${to}"; echo "fatal: could not write gitdir" >&2; exit 128;; esac\nexec "${real}/git" "$@"`,
+      );
+      const moved = yield* worktrees.move({ project, worktree }, to);
+      process.env["PATH"] = path;
+      return {
+        at: moved.worktree.path === to,
+        title: (yield* data.description(project.id, moved.worktree.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { at: true, title: "the fox", records: 0 });
+});
+
+it("a resume relinks a checkout git renamed but never recorded", async () => {
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      yield* data.describe(project.id, worktree.id, { title: "the fox" });
+      const to = join(dirname(worktree.path), "vixen");
+      const link = linkOf(worktree.path);
+      renameSync(worktree.path, to);
+      yield* deadRecord(project, worktree.path, to, link);
+      yield* worktrees.resumeMoves;
+      const vixen = (yield* worktrees.identities(project)).find(
+        (row) => row.path === to,
+      );
+      assert.ok(vixen);
+      return {
+        title: (yield* data.description(project.id, vixen.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { title: "the fox", records: 0 });
 });
