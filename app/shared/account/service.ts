@@ -62,6 +62,25 @@ export class TunnelProvisionDeniedError extends Error {
   }
 }
 
+// The hub's rate limiter turned a read away: a 429, which the API names
+// no error for, so it read "Decode error". A later ask is answered (the
+// device list's query asks three more times, a second, two and four
+// apart).
+export class HubRateLimitedError extends Error {
+  constructor() {
+    super("the hub is rate-limiting this device; retrying");
+    this.name = "HubRateLimitedError";
+  }
+}
+
+function isRateLimited(error: unknown): boolean {
+  return (
+    HttpClientError.isHttpClientError(error) &&
+    "response" in error.reason &&
+    error.reason.response.status === 429
+  );
+}
+
 // A status the API names no error for, from a client error that is not
 // the rate limiter's: the same request will be refused again.
 function isRefusedStatus(error: unknown): boolean {
@@ -176,9 +195,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async listDevices(credential) {
-      const { devices } = Schema.decodeSync(DeviceListResponseSchema)(
-        await call(credential, (client) => client.listDevices()),
-      );
+      const listed = await call(credential, (client) =>
+        client.listDevices(),
+      ).catch((error: unknown) => {
+        throw isRateLimited(error) ? new HubRateLimitedError() : error;
+      });
+      const { devices } = Schema.decodeSync(DeviceListResponseSchema)(listed);
       return [...devices];
     },
 

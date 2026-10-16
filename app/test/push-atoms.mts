@@ -465,6 +465,52 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   registry.dispose();
 });
 
+it("remote devices: a burst of hub pushes naming a device the list lacks reads the list one at a time, once more after the read out, and cancels none", async () => {
+  const { registry, queryClient, hubPush } = page();
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
+  let asked = 0;
+  let cancelled = 0;
+  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
+    status: () => Effect.never,
+    listDevices: () =>
+      Effect.sync(() => {
+        asked += 1;
+      }).pipe(
+        Effect.andThen(Effect.sleep("100 millis")),
+        Effect.as([studio]),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            cancelled += 1;
+          }),
+        ),
+      ),
+  };
+  // A roster naming a device the account list never has (one enrolled
+  // elsewhere, or a ghost), pushed as a churning roster pushes it.
+  const ghostly = status({ onlineDeviceIds: [PEER, "ghost"] });
+  const hubCalls: Pick<RendererApi["hub"], "status"> = {
+    status: () => Effect.succeed(ghostly),
+  };
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account,
+    hub: hubCalls,
+    peerApi: noPeerApi,
+  } as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  for (let push = 0; push < 25; push++) {
+    await hubPush(ghostly);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(cancelled, 0, "a read cancelled by the next");
+  // 25 pushes over about 150 ms, each read 100 ms: the first, and one
+  // after each read a change came during.
+  assert.ok(asked >= 2 && asked <= 3, `the hub was asked ${asked} times`);
+  registry.dispose();
+});
+
 it("remote devices: a peer that stops taking commands is refused before the device list's fetch lands", async () => {
   const { registry, queryClient, hubPush } = page();
   let latest = status();

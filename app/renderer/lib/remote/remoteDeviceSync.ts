@@ -193,11 +193,40 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
 // Re-reads the shared list whether or not an observer is mounted (an
 // invalidation alone would refetch only under the account page). The
 // landing reconciles through the cache subscription. A failure is
-// swallowed there and the store keeps the last good list.
+// swallowed there and the store keeps the last good list. A read
+// already out is joined, not cancelled: cancelling it sent the next,
+// and its caller (throughCancel) asked again, so a burst of hub pushes
+// was a burst of reads the hub answered with 429.
 function refetchDeviceList(): void {
-  void boundClient().refetchQueries({
-    queryKey: queryKeys.accountDevices(),
-  });
+  void boundClient().refetchQueries(
+    { queryKey: queryKeys.accountDevices() },
+    { cancelRefetch: false },
+  );
+}
+
+// The re-read a roster asks for (a device the list doesn't know, one
+// that left): one at a time, and a roster that changes while one is out
+// asks for one more after it settles, however many times it changed. A
+// read already out may predate the change, so it is not trusted to
+// answer it, and it is never cancelled.
+let listRead: Promise<unknown> | null = null;
+let readAgain = false;
+function askListAgain(): void {
+  if (listRead !== null) {
+    readAgain = true;
+    return;
+  }
+  listRead = boundClient()
+    .refetchQueries(
+      { queryKey: queryKeys.accountDevices() },
+      { cancelRefetch: false },
+    )
+    .finally(() => {
+      listRead = null;
+      if (!readAgain) return;
+      readAgain = false;
+      askListAgain();
+    });
 }
 
 // The list as the shared cache holds it, refetching only when it is
@@ -274,9 +303,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const hasUnknownOnline = [...online].some(
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
-  if ((hasUnknownOnline || someoneLeft) && hubDriven) {
-    refetchDeviceList();
-  }
+  if ((hasUnknownOnline || someoneLeft) && hubDriven) askListAgain();
   // This machine is not a remote device to itself, so it is skipped.
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));

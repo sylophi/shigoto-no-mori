@@ -46,6 +46,7 @@ import {
   isHubRefusal,
 } from "@shigomori/contracts/hubApi";
 import {
+  HubRateLimitedError,
   TunnelProvisionDeniedError,
   createAccountService,
   isHubUnreachable,
@@ -334,6 +335,16 @@ it("service: a refusal rejects with the hub's contract error", async () => {
   await assert.rejects(
     () => service.listDevices("device-credential"),
     (error) => error instanceof HubDeviceRevokedError && isHubRefusal(error),
+  );
+});
+
+it("service: a rate-limited device list says so, not a decode error", async () => {
+  const { service } = stubService(() => new Response(null, { status: 429 }));
+  await assert.rejects(
+    () => service.listDevices("device-credential"),
+    (error) =>
+      error instanceof HubRateLimitedError &&
+      error.message === "the hub is rate-limiting this device; retrying",
   );
 });
 
