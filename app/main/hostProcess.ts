@@ -272,12 +272,10 @@ export function host(): ReturnType<typeof session> {
 // with no window (electron/headlessNuke.ts).
 export const hostRuntime = () => effectClient(runtimeContract, link());
 
-// An exit with no quit sequence (that nuke's): the host goes with it,
-// and is not forked again.
-export function letHostGo(): void {
-  quitting = true;
-  child?.kill();
-}
+// An exit with no quit sequence (that nuke's): the host closes its
+// graph first, which stops what it runs (the tunnel's connector among
+// them), and is not forked again.
+export const letHostGo = (): Promise<void> => Effect.runPromise(stop(true));
 
 // What the host is busy with, as a quit or an update asks: idle when
 // it cannot say within a few seconds, since a host that does not

@@ -19,11 +19,13 @@ export const headless = app.commandLine.hasSwitch(NUKE_SWITCH);
 
 // The start that found the marker: what is left once its files are gone.
 export function finishHeadlessNuke(): void {
+  let left = false;
   if (__SM_SIGNED_MAC_BUILD__) {
     const { service, account } = safeStorageItemNames(app.getName());
     try {
       deleteGenericPassword(service, account);
     } catch (error) {
+      left = true;
       console.log(`[nuke] left: the keychain item "${service}": ${error}`);
     }
   }
@@ -34,7 +36,7 @@ export function finishHeadlessNuke(): void {
   } catch {
     // None written.
   }
-  app.exit(NUKE_EXIT.finished);
+  app.exit(left ? NUKE_EXIT.finishedWithLeft : NUKE_EXIT.finished);
 }
 
 // The live halves, once the host is up.
@@ -45,11 +47,11 @@ export async function runHeadlessNuke(): Promise<void> {
     const left = [...host.left, ...shell.left];
     for (const { what, why } of left)
       console.log(`[nuke] left: ${what}: ${why}`);
-    letHostGo();
+    await letHostGo();
     app.exit(left.length === 0 ? NUKE_EXIT.again : NUKE_EXIT.againWithLeft);
   } catch (error) {
     log.error("[nuke] could not nuke:", error);
-    letHostGo();
+    await letHostGo();
     app.exit(1);
   }
 }

@@ -80,6 +80,8 @@ export const NUKE_SWITCH = "sm-nuke";
 export const NUKE_EXIT = {
   // The files are gone: nothing is left to do.
   finished: 0,
+  // The same, with something it couldn't delete, said on its output.
+  finishedWithLeft: 13,
   // The live half ran: start it again to delete the files.
   again: 10,
   // The same, with something it couldn't take off, said on its output.

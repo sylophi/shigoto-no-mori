@@ -112,6 +112,10 @@ export const nuke = Command.make(
           stdio: "inherit",
         }).status;
         if (code === NUKE_EXIT.finished) break;
+        if (code === NUKE_EXIT.finishedWithLeft) {
+          left = true;
+          break;
+        }
         if (code === NUKE_EXIT.againWithLeft) left = true;
         else if (code !== NUKE_EXIT.again) {
           return yield* new UsageError({
