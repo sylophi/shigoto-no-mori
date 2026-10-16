@@ -205,6 +205,11 @@
       {
         "kind": "error",
         "message": "Couldn't reach the release feed"
+      },
+      {
+        "kind": "error",
+        "message": "Couldn't move the update next to the app: Permission denied",
+        "install": true
       }
     ],
     "normalizes": [
@@ -259,6 +264,14 @@
         "action": "install"
       }
     ]
+  },
+  "InstallFailureSchema": {
+    "accepts": [
+      {
+        "message": "Installed 3.2.0 but couldn't relaunch the app: exit status 1"
+      }
+    ],
+    "rejects": [{}]
   },
   "StagedManifestSchema": {
     "accepts": [

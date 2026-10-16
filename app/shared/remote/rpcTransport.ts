@@ -43,11 +43,19 @@ export type FlatClient = (
 ) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>;
 
 // The link dropped while calls were in flight, or a call came after it
-// did: a disconnect, distinct from the handler's own failure.
+// did: a disconnect, distinct from the handler's own failure. `local`
+// for a link to this machine's own app (its host on the loopback, its
+// shell over a port), which a restart drops.
 export class RemoteDisconnectedError extends Error {
-  constructor() {
-    super("remote device disconnected");
+  readonly local: boolean;
+  constructor(local = false) {
+    super(
+      local
+        ? "lost the connection to this device"
+        : "remote device disconnected",
+    );
     this.name = "RemoteDisconnectedError";
+    this.local = local;
   }
 }
 
@@ -167,8 +175,12 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
   };
   // Every push, before its subscribers hear it.
   readonly onPush?: (channel: string, payload: unknown) => void;
+  // The far end is this machine's own app, which its drops name.
+  readonly local?: boolean;
 }): Effect.fn.Return<Link, never, Scope.Scope> {
   const { client, group } = options;
+  const local = options.local === true;
+  const dropped = droppedOn(local);
   const fanOut = pushFanOut();
   const gated = fifoGate(LINK_CALLS_IN_FLIGHT);
   for (const call of group.requests.values()) {
@@ -222,7 +234,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
               : Effect.fail(error);
           }),
         ),
-      ).pipe(Effect.mapError(failureOf), gated);
+      ).pipe(Effect.mapError(failureOn(local)), gated);
       return span === undefined ? called : Effect.withParentSpan(called, span);
     },
     view: (channel, input) => {
@@ -247,7 +259,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
               : Stream.fail(error);
           }),
         ),
-      ).pipe(Stream.mapError(failureOf));
+      ).pipe(Stream.mapError(failureOn(local)));
     },
     pushes: fanOut.pushes,
   };
@@ -288,7 +300,7 @@ export function linkTransport(
           Exit.isSuccess(exit)
             ? undefined
             : Cause.hasInterruptsOnly(exit.cause)
-              ? new RemoteDisconnectedError()
+              ? new RemoteDisconnectedError(link.local === true)
               : Cause.squash(exit.cause),
         );
       });
@@ -320,19 +332,21 @@ export function linkTransport(
 
 // A request the socket couldn't write: the link going under it, which
 // the transport raises as a defect.
-const dropped = (defect: unknown) =>
-  Socket.isSocketError(defect) ? new RemoteDisconnectedError() : undefined;
+const droppedOn = (local: boolean) => (defect: unknown) =>
+  Socket.isSocketError(defect) ? new RemoteDisconnectedError(local) : undefined;
 
 // A call's failure as its caller sees it: the contract error it was
 // sent as (RemoteCallError for a plain one, carrying its message and
 // code), or the link gone.
-function failureOf(error: unknown): unknown {
-  if (isContractError(error) || isRemoteCallError(error)) return error;
-  if (Predicate.isTagged(error, "RpcClientError")) {
-    return new RemoteDisconnectedError();
-  }
-  return error instanceof Error ? error : new Error(String(error));
-}
+const failureOn =
+  (local: boolean) =>
+  (error: unknown): unknown => {
+    if (isContractError(error) || isRemoteCallError(error)) return error;
+    if (Predicate.isTagged(error, "RpcClientError")) {
+      return new RemoteDisconnectedError(local);
+    }
+    return error instanceof Error ? error : new Error(String(error));
+  };
 
 function rejectionOf(cause: Cause.Cause<unknown>): unknown {
   if (Cause.hasInterruptsOnly(cause)) {

@@ -103,6 +103,8 @@ exec /bin/ps "$@"`,
   script(
     "open",
     `echo "open $*" >> "${control}/calls"
+# Whether a failed install's note was there for the app it opens.
+[ -e "\${2#SHIGOMORI_DATA_DIR=}/updates/install-failure.json" ] && touch "${control}/opened-on-note"
 [ ! -e "${control}/open-fails" ]`,
   );
   // Copies (not extractions) fail with control/ditto-fails.
@@ -1538,6 +1540,12 @@ const log = (box: Box) =>
       return line.replace(/^\S+ /, "");
     });
 
+// What a failed finish-install left for the app's next start, if anything.
+const failureNote = (box: Box) => {
+  const file = join(box.updates, "install-failure.json");
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+};
+
 describe("finishing an install for the app", () => {
   it("refuses a pid that isn't one, as a usage error", async () => {
     const box = newBox();
@@ -1567,6 +1575,7 @@ describe("finishing an install for the app", () => {
       `finish-install: waiting for app pid ${pid} to exit`,
       "finish-install: installed 2.0.0 and relaunched",
     ]);
+    assert.equal(failureNote(box), null);
     assert.equal(
       calls().at(-1),
       `open --env SHIGOMORI_DATA_DIR=${box.dataDir} ${box.installed}`,
@@ -1607,6 +1616,9 @@ describe("finishing an install for the app", () => {
       log(box).at(-1),
       `finish-install: Process ${pid} is still running after 2m0s. (aborting)`,
     );
+    assert.deepEqual(failureNote(box), {
+      message: `Process ${pid} is still running after 2m0s.`,
+    });
     assert.equal(
       calls().some((line) => line.startsWith("open")),
       false,
@@ -1624,6 +1636,11 @@ describe("finishing an install for the app", () => {
       log(box).at(-1),
       "finish-install: No staged update to install. (relaunching the current app)",
     );
+    assert.deepEqual(failureNote(box), {
+      message: "No staged update to install.",
+    });
+    // Left before the relaunch, so the app it brings back finds it.
+    assert.ok(existsSync(join(control, "opened-on-note")));
     assert.deepEqual(calls(), [
       `open --env SHIGOMORI_DATA_DIR=${box.dataDir} ${box.installed}`,
     ]);
@@ -1641,8 +1658,11 @@ describe("finishing an install for the app", () => {
     );
     assert.equal(
       log(box).at(-1),
-      "finish-install: installed 2.0.0 but relaunch failed: exit status 1",
+      "finish-install: Installed 2.0.0 but couldn't relaunch the app: exit status 1",
     );
+    assert.deepEqual(failureNote(box), {
+      message: "Installed 2.0.0 but couldn't relaunch the app: exit status 1",
+    });
     assert.equal(versionAt(box.installed), "2.0.0");
   });
 

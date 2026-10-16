@@ -4,10 +4,14 @@ import {
   releaseVersionOf,
 } from "@shigomori/contracts/releaseVersions";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
+import type { updaterContract } from "@shigomori/contracts/modules/updater";
+import type { EffectClient } from "@shigomori/contracts/types";
+import type * as Effect from "effect/Effect";
+import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 
-// Which devices are behind the newest app release, for the update toast
-// and Settings' Update all (hooks/system/useUpdater.ts), kept free of
-// React and the bridge so it can be proven on its own.
+// Which devices are behind the newest app release, and the restart into
+// one, for the update toast and Settings (hooks/system/useUpdater.ts),
+// kept free of React and the bridge so they can be proven on their own.
 
 // A device behind the newest release this window knows of: `staged`
 // when its update is a restart away, else it restarts once it has
@@ -80,4 +84,22 @@ export function findOutdated(devices: readonly DeviceUpdater[]): KnownUpdates {
     }
   }
   return { latest, oldest, outdated };
+}
+
+// Restarts a device into its staged update, through its api (a
+// HostApi's `updater` and `run`). This machine's own app going away
+// under the call is that restart under way, or a host restart the
+// shell's install carries on through: no failure of the install's,
+// which the updater's state reports (the next app start's, when the
+// swap or its relaunch failed).
+export async function restartIntoUpdate(api: {
+  readonly updater: Pick<EffectClient<typeof updaterContract>, "install">;
+  readonly run: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
+}): Promise<void> {
+  try {
+    await api.run(api.updater.install());
+  } catch (error) {
+    if (error instanceof RemoteDisconnectedError && error.local) return;
+    throw error;
+  }
 }

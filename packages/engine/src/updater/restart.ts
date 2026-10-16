@@ -3,6 +3,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import type { InstallFailure } from "@shigomori/contracts/schemas/runtime";
 import { type AppStatus, formatLocalRfc3339 } from "../updateFeed.ts";
 import {
   HandoffFailed,
@@ -17,8 +18,13 @@ import type { FilesArea } from "./files.ts";
 export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { updates: updatesDir, installLog, status: statusPath } = files.at;
-    const { appAlive, readStatus } = files;
+    const {
+      updates: updatesDir,
+      installLog,
+      installFailure,
+      status: statusPath,
+    } = files.at;
+    const { appAlive, readStatus, writeShared } = files;
     // --- the running app ---
 
     // The handed-off install restarts the app. Success is updater.json
@@ -96,7 +102,26 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
         );
       }).pipe(Effect.ignore);
 
-    return { waitForRestart, appendInstallLog };
+    // A finish-install that failed, for the log and for the next app
+    // start, which shows it: before the relaunch of the current app that
+    // may follow, so that start finds it.
+    const noteInstallFailure = (
+      pid: number,
+      line: string,
+      failure: InstallFailure,
+    ) =>
+      appendInstallLog(`finish-install: ${line}`).pipe(
+        Effect.andThen(
+          writeShared(
+            installFailure,
+            `${JSON.stringify(failure, null, 2)}\n`,
+            pid,
+          ),
+        ),
+        Effect.ignore,
+      );
+
+    return { waitForRestart, appendInstallLog, noteInstallFailure };
   });
 
 export type RestartArea = Effect.Success<ReturnType<typeof makeRestart>>;

@@ -53,7 +53,13 @@ export const UpdaterStateSchema = Schema.Union([
     // null when the OS gave an unparseable date.
     releaseDate: Schema.NullOr(Schema.String),
   }),
-  Schema.Struct({ kind: Schema.Literal("error"), message: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("error"),
+    message: Schema.String,
+    // The installer's own failure (its swap or relaunch), which the
+    // windows toast where a check's failure stays in Settings.
+    install: Schema.optional(Schema.Boolean),
+  }),
 ]);
 export type UpdaterState = typeof UpdaterStateSchema.Type;
 
@@ -75,6 +81,12 @@ export const UpdateRequestSchema = Schema.Struct({
   requestedAt: Schema.Finite,
 });
 export type UpdateRequest = typeof UpdateRequestSchema.Type;
+
+// What a failed finish-install leaves for the next app start, the
+// relaunch of the current app it falls back to among them, which shows
+// it as the updater's error.
+export const InstallFailureSchema = Schema.Struct({ message: Schema.String });
+export type InstallFailure = typeof InstallFailureSchema.Type;
 
 // Beside a verified staged update; seeds "ready" at boot.
 export const StagedManifestSchema = Schema.Struct({
