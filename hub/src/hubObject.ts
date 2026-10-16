@@ -73,7 +73,7 @@ const RELAY_PER_SECOND = 30;
 // it every half minute. Judged when the object runs anyway (a message,
 // a roster read), never on a timer of its own, which would bill a
 // request and wake a hibernated object every time.
-export const SILENT_AFTER_MS = 90_000;
+const SILENT_AFTER_MS = 90_000;
 
 // The standard close code for a message over the size the socket
 // accepts.
@@ -105,9 +105,11 @@ export type EnrollOutcome =
   | { readonly status: "account-full" };
 
 // A socket's attachment, which survives hibernation: when it connected,
-// so the device's oldest gives way past MAX_DEVICE_CONNECTIONS.
+// so the device's oldest gives way past MAX_DEVICE_CONNECTIONS, and when
+// it last sent a message, which proves it alive as a ping does.
 interface SocketAttachment {
   readonly connectedAt: number;
+  readonly heardAt?: number;
 }
 
 export class DeviceHub extends DurableObject<Env> {
@@ -334,6 +336,10 @@ export class DeviceHub extends DurableObject<Env> {
   }
 
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    ws.serializeAttachment({
+      connectedAt: connectedAt(ws),
+      heardAt: Date.now(),
+    } satisfies SocketAttachment);
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
     // A socket over its budget, or sending what no envelope this hub
@@ -355,8 +361,8 @@ export class DeviceHub extends DurableObject<Env> {
     if (from === undefined) return;
     // An ask to a device that went silent is where its peers find out:
     // it leaves the roster, and the ask is nacked as offline.
-    const evicted = this.evictSilent(ws);
-    if (evicted.size > 0) this.announcePresence(evicted, ws);
+    const evicted = this.evictSilent();
+    if (evicted.size > 0) this.announcePresence(evicted);
     const targets = this.ctx
       .getWebSockets(envelope.to)
       .filter((target) => !evicted.has(target));
@@ -458,12 +464,8 @@ export class DeviceHub extends DurableObject<Env> {
   // required because getWebSockets can still list sockets that just
   // closed or are closing: callers name the departing ones instead of
   // trusting the listing.
-  // `spare` as in evictSilent.
-  private announcePresence(
-    exclude: ReadonlySet<WebSocket>,
-    spare?: WebSocket,
-  ): void {
-    const evicted = this.evictSilent(spare);
+  private announcePresence(exclude: ReadonlySet<WebSocket>): void {
+    const evicted = this.evictSilent();
     const sockets = this.ctx
       .getWebSockets()
       .filter((ws) => !exclude.has(ws) && !evicted.has(ws));
@@ -474,16 +476,15 @@ export class DeviceHub extends DurableObject<Env> {
     for (const ws of sockets) this.safeSend(ws, text);
   }
 
-  // Closes every socket silent past silentAfterMs but `spare` (one that
-  // just sent a message), answering the ones it closed, which the
-  // caller leaves out of the roster it announces or reads.
-  private evictSilent(spare?: WebSocket): ReadonlySet<WebSocket> {
+  // Closes every socket silent past silentAfterMs, answering the ones it
+  // closed, which the caller leaves out of the roster it announces or
+  // reads.
+  private evictSilent(): ReadonlySet<WebSocket> {
     const now = Date.now();
     const evicted = new Set<WebSocket>();
     for (const ws of this.ctx.getWebSockets()) {
-      if (ws === spare) continue;
       const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws);
-      const heard = Math.max(pinged?.getTime() ?? 0, connectedAt(ws));
+      const heard = Math.max(pinged?.getTime() ?? 0, heardAt(ws));
       if (now - heard <= this.silentAfterMs) continue;
       evicted.add(ws);
       try {
@@ -513,6 +514,12 @@ export class DeviceHub extends DurableObject<Env> {
 function connectedAt(ws: WebSocket): number {
   const attachment = ws.deserializeAttachment() as SocketAttachment | null;
   return attachment?.connectedAt ?? 0;
+}
+
+// When the socket last sent a message, or connected.
+function heardAt(ws: WebSocket): number {
+  const attachment = ws.deserializeAttachment() as SocketAttachment | null;
+  return attachment?.heardAt ?? attachment?.connectedAt ?? 0;
 }
 
 // The row delete and the tickets of a revoke, in that order (revoke).

@@ -552,6 +552,12 @@ describe("a device that went silent", () => {
     a.socket.send({ t: "relay", to: "dev-silent-qb", frame: "ask" });
     await a.socket.untilPresence(["dev-silent-qa"]);
     expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
+    // Its ask counts as a ping for every sweep after it too: another
+    // device's message sweeps, and A stays.
+    const c = await enrollAndConnect("acct-silent-asker", "dev-silent-qc");
+    await a.socket.untilPresence(["dev-silent-qa", "dev-silent-qc"]);
+    c.socket.send({ t: "relay", to: "dev-silent-qa", frame: "answer" });
+    await a.socket.untilRelay("answer");
     expect(a.socket.ws.readyState).toBe(WebSocket.OPEN);
   });
 
