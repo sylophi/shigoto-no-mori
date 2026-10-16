@@ -6,7 +6,12 @@
 import type { StashEntry } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import { splitZ } from "../gitParse.ts";
-import { GitRefusedError, PATCH_MAX_OUTPUT } from "./documents.ts";
+import {
+  GitRefusedError,
+  PATCH_CONFIG,
+  PATCH_FLAGS,
+  PATCH_MAX_OUTPUT,
+} from "./documents.ts";
 import type { OperationArea } from "./operation.ts";
 import type { RunningArea } from "./running.ts";
 
@@ -187,12 +192,14 @@ export const makeStash = ({
         [
           "-c",
           "core.quotePath=false",
+          ...PATCH_CONFIG,
           "stash",
           "show",
           "-p",
           "--include-untracked",
           "--no-color",
           "--full-index",
+          ...PATCH_FLAGS,
           ref,
         ],
         { maxOutputBytes: PATCH_MAX_OUTPUT },

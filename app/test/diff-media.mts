@@ -86,16 +86,18 @@ it("an image's patch has no hunks and names both blobs, which read back", async 
   assert.deepEqual(sides, [media(OLD), media(NEW)]);
 });
 
-// The blob read takes a full id only (ReadBlobPayloadSchema), so every
-// patch a diff page reads names its blobs in full.
-it("every diff page's patch names its blobs by full id", async () => {
-  const { repo, head } = seedRepo();
+// The patch of every diff page for board.png: the working tree's (an
+// edit, and an untracked copy), a commit's, a branch's and a stash's.
+async function everyPatch(repo: string, head: string) {
   const root = git(repo, "rev-list", "--max-parents=0", "HEAD").trim();
   writeFileSync(join(repo, "board.png"), OLD);
   const working = await fileDiff(repo, ["board.png"], false);
+  writeFileSync(join(repo, "copy.png"), OLD);
+  const untracked = await fileDiff(repo, ["copy.png"], true);
   git(repo, "stash", "-q");
-  const patches = {
+  return {
     working,
+    untracked,
     commit: await engineGit.commitDiff(repo, head),
     branch: await engineGit.mergeBaseDiff({ repo, base: root, head }),
     stash: await engineGit.readStashDiff(
@@ -103,11 +105,37 @@ it("every diff page's patch names its blobs by full id", async () => {
       git(repo, "rev-parse", "--short", "stash@{0}").trim(),
     ),
   };
-  for (const [page, patch] of Object.entries(patches)) {
+}
+
+// The blob read takes a full id only (ReadBlobPayloadSchema), so every
+// patch a diff page reads names its blobs in full.
+it("every diff page's patch names its blobs by full id", async () => {
+  const { repo, head } = seedRepo();
+  for (const [page, patch] of Object.entries(await everyPatch(repo, head))) {
     const file = onlyFile(patch);
     for (const oid of [file.prevObjectId, file.newObjectId]) {
+      if (page === "untracked" && oid === file.prevObjectId) continue;
       assert.match(oid ?? "", /^[0-9a-f]{40}$/, page);
     }
+  }
+});
+
+// The parser needs git's own patch: the a/ and b/ prefixes, and the
+// change itself, not what an external diff or a textconv prints.
+it("every diff page's patch is git's own, whatever the repo's diff config", async () => {
+  const { repo, head } = seedRepo();
+  git(repo, "config", "diff.noprefix", "true");
+  git(repo, "config", "diff.external", "echo");
+  writeFileSync(join(repo, ".git", "info", "attributes"), "*.png diff=hex\n");
+  git(repo, "config", "diff.hex.textconv", "od -c");
+  for (const [page, patch] of Object.entries(await everyPatch(repo, head))) {
+    const file = onlyFile(patch);
+    assert.equal(
+      file.name,
+      page === "untracked" ? "copy.png" : "board.png",
+      page,
+    );
+    assert.ok(isMediaBinary(file), `${page}: a binary patch naming its blobs`);
   }
 });
 

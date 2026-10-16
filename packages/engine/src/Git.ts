@@ -58,6 +58,8 @@ import {
   LOCAL_TIPS_LIMIT,
   NestedRepositoryError,
   NoRemoteError,
+  PATCH_CONFIG,
+  PATCH_FLAGS,
   PATCH_MAX_OUTPUT,
   type PrimaryRelation,
   type RunOptions,
@@ -1068,10 +1070,12 @@ const make = Effect.gen(function* () {
         [
           "-c",
           "core.quotePath=false",
+          ...PATCH_CONFIG,
           "show",
           "--format=",
           "--no-color",
           "--full-index",
+          ...PATCH_FLAGS,
           "--diff-merges=first-parent",
           "--end-of-options",
           hash,
@@ -1080,23 +1084,18 @@ const make = Effect.gen(function* () {
         { maxOutputBytes: PATCH_MAX_OUTPUT, anyExit: true },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     }),
-    // Both have to be commits the repository already holds. The
-    // prefixes are pinned against diff.noprefix and its kin, and an
-    // external diff or a textconv is left out, none of which the pull
-    // request page's patch, gh's before, ever had.
+    // Both have to be commits the repository already holds.
     mergeBaseDiff: Effect.fn("Git.mergeBaseDiff")(function* (input) {
       return yield* run(
         input.repo,
         [
           "-c",
           "core.quotePath=false",
+          ...PATCH_CONFIG,
           "diff",
           "--no-color",
           "--full-index",
-          "--src-prefix=a/",
-          "--dst-prefix=b/",
-          "--no-ext-diff",
-          "--no-textconv",
+          ...PATCH_FLAGS,
           "--end-of-options",
           `${input.base}...${input.head}`,
         ],
