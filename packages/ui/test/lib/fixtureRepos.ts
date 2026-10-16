@@ -54,15 +54,30 @@ function withRepo<T>(build: (repo: string, git: Git) => T): T {
   }
 }
 
+// What every host patch carries (packages/engine/src/git/documents.ts).
+const PATCH_CONFIG = [
+  "-c",
+  "diff.noprefix=false",
+  "-c",
+  "diff.mnemonicPrefix=false",
+  "-c",
+  "diff.srcPrefix=a/",
+  "-c",
+  "diff.dstPrefix=b/",
+];
+const PATCH_FLAGS = ["--no-ext-diff", "--no-textconv"];
+
 // The host's commit patch (packages/engine/src/Git.ts, commitDiff).
 const commitDiff = (git: Git, hash: string) =>
   git(
     "-c",
     "core.quotePath=false",
+    ...PATCH_CONFIG,
     "show",
     "--format=",
     "--no-color",
     "--full-index",
+    ...PATCH_FLAGS,
     "--diff-merges=first-parent",
     "--end-of-options",
     hash,
@@ -227,12 +242,14 @@ export function buildChangesPatches() {
       git(
         "-c",
         "core.quotePath=false",
+        ...PATCH_CONFIG,
         ...(untracked
           ? [
               "diff",
               "--no-index",
               "--no-color",
               "--full-index",
+              ...PATCH_FLAGS,
               ...extra,
               "--",
               "/dev/null",
@@ -243,6 +260,7 @@ export function buildChangesPatches() {
               "HEAD",
               "--no-color",
               "--full-index",
+              ...PATCH_FLAGS,
               ...extra,
               "--",
               ...paths,
