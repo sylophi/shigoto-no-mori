@@ -381,12 +381,12 @@ export const reapOrphanedConnector = (pidFile: string) =>
     // The same pid floor as scripts/process.ts safeKill: never signal
     // groups, self, or launchd on a corrupt file.
     if (Number.isInteger(pid) && pid >= 2) {
-      const name = yield* Processes.exec("ps", [
-        "-p",
-        String(pid),
-        "-o",
-        "comm=",
-      ]).pipe(Effect.option);
+      // Bounded: the host's boot waits on this.
+      const name = yield* Processes.exec(
+        "ps",
+        ["-p", String(pid), "-o", "comm="],
+        { timeout: "5 seconds" },
+      ).pipe(Effect.option);
       if (
         Option.isSome(name) &&
         name.value.stdout.trim().toLowerCase().includes("cloudflared")
