@@ -152,11 +152,13 @@ export const makeMoving = ({
     // git's move keeps and a copy repeats: what tells the move's own
     // checkout, or a copy of it, from another folder at the same path.
     // Empty when there is none to read.
-    const linkOf = (dir: string) =>
+    // `from` is where the file was written, for one a rename carried
+    // before git could write it again.
+    const linkOf = (dir: string, from = dir) =>
       Effect.gen(function* () {
         const text = yield* fs.readFileString(path.join(dir, ".git"));
         const named = text.trim().replace(/^gitdir:\s*/, "");
-        return yield* fs.realPath(path.resolve(dir, named));
+        return yield* fs.realPath(path.resolve(from, named));
       }).pipe(Effect.orElseSucceed(() => ""));
     // The checkout gone from `from` and at `to`, holding `link`: git's
     // rename made, whatever git said after it.
@@ -165,7 +167,11 @@ export const makeMoving = ({
         const gone = !(yield* fs
           .exists(from)
           .pipe(Effect.orElseSucceed(() => true)));
-        return gone && link !== "" && (yield* holdsLink(to, link));
+        return (
+          gone &&
+          link !== "" &&
+          ((yield* holdsLink(to, link)) || (yield* linkOf(to, from)) === link)
+        );
       });
 
     // git pointed at a checkout it renamed but couldn't record, and

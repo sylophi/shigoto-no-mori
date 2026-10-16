@@ -762,3 +762,31 @@ it("a resume relinks a checkout git renamed but never recorded", async () => {
   );
   assert.deepEqual(result, { title: "the fox", records: 0 });
 });
+
+it("a resume relinks a checkout git renamed deeper but never recorded, linked relatively", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      box.git(repo, "config", "worktree.useRelativePaths", "true");
+      box.git(repo, "worktree", "repair", worktree.path);
+      yield* data.describe(project.id, worktree.id, { title: "the fox" });
+      const to = join(dirname(worktree.path), "den", "vixen");
+      mkdirSync(dirname(to), { recursive: true });
+      const link = linkOf(worktree.path);
+      // The rename alone: the link inside still reads from the old place.
+      renameSync(worktree.path, to);
+      yield* deadRecord(project, worktree.path, to, link);
+      yield* worktrees.resumeMoves;
+      const vixen = (yield* worktrees.identities(project)).find(
+        (row) => row.path === to,
+      );
+      assert.ok(vixen);
+      return {
+        title: (yield* data.description(project.id, vixen.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { title: "the fox", records: 0 });
+});
