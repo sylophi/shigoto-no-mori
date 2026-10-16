@@ -3,6 +3,7 @@
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Git from "../Git.ts";
 import * as Layout from "../Layout.ts";
 import * as Registry from "../Registry.ts";
 import { type Located, type Reporter, WorktreeRefused } from "./documents.ts";
@@ -24,6 +25,7 @@ export const makeAdopting = ({
 }) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
+    const git = yield* Git.Git;
     const layout = yield* Layout.Layout;
     const path = yield* Path.Path;
     const { projectSettings, identities, row } = listing;
@@ -79,6 +81,18 @@ export const makeAdopting = ({
         }
         yield* unreserved(place);
       }
+      // A detached checkout's tip is on no branch: a ref holds it from
+      // the wipe until the add has checked it out again, so an add that
+      // fails (or a crash between) loses no commit.
+      const held = `refs/shigomori/adopting/${worktree.id}`;
+      if (worktree.detached) {
+        const tip = yield* git.run(worktree.path, ["rev-parse", "HEAD"]);
+        yield* git.updateRef({
+          repo: project.path,
+          ref: held,
+          commit: tip.trim(),
+        });
+      }
       // From the wipe to the re-key nothing may cut in: the checkout is
       // gone until the add makes it again.
       const { made, found, cloned } = yield* Effect.uninterruptible(
@@ -99,6 +113,9 @@ export const makeAdopting = ({
           return added;
         }),
       );
+      if (worktree.detached) {
+        yield* git.deleteRef(project.path, held).pipe(Effect.ignore);
+      }
       const adopted = yield* row({ project, worktree: made });
       if (cloned !== undefined)
         yield* reporter.report({ event: "cloned", cloned });

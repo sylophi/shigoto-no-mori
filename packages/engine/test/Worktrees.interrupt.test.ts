@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -20,6 +21,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
@@ -608,4 +610,105 @@ it("a resume knows its checkout by git's entry when git links it relatively", as
     }),
   );
   assert.deepEqual(result, { autoPull: true, records: 0 });
+});
+
+it("a resume of a move git made carries it past a checkout git put at the old path since", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      yield* data.describe(project.id, worktree.id, { title: "the fox" });
+      const to = join(dirname(worktree.path), "vixen");
+      const link = linkOf(worktree.path);
+      box.git(repo, "worktree", "move", worktree.path, to);
+      box.git(repo, "worktree", "add", "-q", "-b", "newcomer", worktree.path);
+      yield* deadRecord(project, worktree.path, to, link);
+      yield* worktrees.resumeMoves;
+      const vixen = (yield* worktrees.identities(project)).find(
+        (row) => row.path === to,
+      );
+      assert.ok(vixen);
+      return {
+        vixen: (yield* data.description(project.id, vixen.id)).title,
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { vixen: "the fox", records: 0 });
+});
+
+it("a resume undoes a copy git links relatively that a crash left before git was pointed at it", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const sql = yield* SqlClient.SqlClient;
+      box.git(repo, "config", "worktree.useRelativePaths", "true");
+      box.git(repo, "worktree", "repair", worktree.path);
+      const to = join(dirname(worktree.path), "den", "vixen");
+      mkdirSync(dirname(to), { recursive: true });
+      cpSync(worktree.path, to, { recursive: true });
+      yield* sql`INSERT INTO moving ${sql.insert({
+        from_path: worktree.path,
+        to_path: to,
+        project_id: project.id,
+        link: linkOf(worktree.path),
+        partial: join(dirname(to), ".vixen.partial-x"),
+        pid: 4_194_304,
+        started_at: 0,
+      })}`;
+      yield* worktrees.resumeMoves;
+      return {
+        copy: existsSync(to),
+        original: existsSync(join(worktree.path, "README.md")),
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { copy: false, original: true, records: 0 });
+});
+
+it("an adopt whose add fails keeps a detached checkout's commit", async () => {
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const outside = join(box.home, "outside", "otter");
+      box.git(repo, "worktree", "add", "-q", "--detach", outside);
+      box.git(outside, "commit", "-q", "--allow-empty", "-m", "only here");
+      const tip = box.git(outside, "rev-parse", "HEAD").trim();
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external?.detached);
+      // git that refuses the add, and only the add.
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree add"*) echo "fatal: refused" >&2; exit 128;; esac\nexec "${real}/git" "$@"`,
+      );
+      const failed = yield* worktrees
+        .adopt(
+          { project, worktree: external },
+          { force: false },
+          {
+            report: () => Effect.void,
+            color: false,
+          },
+        )
+        .pipe(Effect.result);
+      process.env["PATH"] = path;
+      const kept = box
+        .git(
+          repo,
+          "for-each-ref",
+          "--format=%(objectname)",
+          "refs/shigomori/adopting",
+        )
+        .trim();
+      return { failed: Result.isFailure(failed), held: kept === tip };
+    }),
+  );
+  assert.deepEqual(result, { failed: true, held: true });
 });

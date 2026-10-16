@@ -158,6 +158,17 @@ export const makeMoving = ({
         const named = text.trim().replace(/^gitdir:\s*/, "");
         return yield* fs.realPath(path.resolve(dir, named));
       }).pipe(Effect.orElseSucceed(() => ""));
+    // A copy's `.git` file as copied, which a relative link resolves
+    // wrongly from until git is pointed at it.
+    const sameGitFile = (copy: string, of: string) =>
+      Effect.gen(function* () {
+        const read = (dir: string) =>
+          fs
+            .readFileString(path.join(dir, ".git"))
+            .pipe(Effect.orElseSucceed(() => ""));
+        const [a, b] = [yield* read(copy), yield* read(of)];
+        return a !== "" && a === b;
+      });
     const holdsLink = (dir: string, link: string) =>
       Effect.map(linkOf(dir), (found) => link !== "" && found === link);
 
@@ -431,8 +442,11 @@ export const makeMoving = ({
           if (record.partial !== null) {
             yield* wipe(record.partial).pipe(Effect.ignore);
           }
+          // Its own checkout, not one git put at the path since.
           const atSource =
-            (yield* listedAt(project, record.from_path)) !== undefined;
+            (yield* listedAt(project, record.from_path)) !== undefined &&
+            (record.link === "" ||
+              (yield* holdsLink(record.from_path, record.link)));
           const landed =
             !atSource &&
             (yield* listedAt(project, record.to_path)) !== undefined &&
@@ -459,7 +473,8 @@ export const makeMoving = ({
             atSource &&
             record.partial !== null &&
             (yield* listedAt(project, record.to_path)) === undefined &&
-            (yield* holdsLink(record.to_path, record.link))
+            ((yield* holdsLink(record.to_path, record.link)) ||
+              (yield* sameGitFile(record.to_path, record.from_path)))
           ) {
             yield* wipe(record.to_path).pipe(Effect.ignore);
           }
