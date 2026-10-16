@@ -72,6 +72,7 @@ import {
   PaletteScene,
 } from "./palette.tsx";
 import { GuidePartsScene } from "./guide.tsx";
+import { HostBandScene } from "./hostBand.tsx";
 import {
   CreatePullRequestScene,
   PullRequestPartsScene,
@@ -154,6 +155,7 @@ export const scenes = {
   palettePicked: { Scene: PalettePickedScene, ...DESKTOP },
   paletteEmpty: { Scene: PaletteEmptyScene, ...DESKTOP },
   guideParts: { Scene: GuidePartsScene, size: [720, 620] },
+  hostBand: { Scene: HostBandScene, size: [720, 200] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

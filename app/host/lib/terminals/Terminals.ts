@@ -29,6 +29,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { log } from "@shared/log";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Latch from "effect/Latch";
@@ -501,6 +502,11 @@ const make = <R>(options: {
             backlog.paused = true;
             pty.pause();
           }
+        });
+        // Heard so node-pty doesn't rethrow a read error on the PTY,
+        // which took the whole host down: the exit follows it.
+        pty.onError((error) => {
+          log.warn(`[terminals] a terminal's PTY failed: ${error.message}`);
         });
         // A shell that dies of a signal has no code to tell.
         pty.onExit(({ exitCode, signal }) => {

@@ -3,6 +3,7 @@
 // (shared/ipc/shell.ts), and the host's to the shell that started it
 // (host/process/shell.ts). The far end serves it with
 // main/ipc/ShellLink.ts.
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
@@ -27,8 +28,12 @@ export const portLink = Effect.fnUntraced(function* (
   const socket = portSocket(ends);
   const protocol = yield* RpcClient.makeProtocolSocket({
     // The far end is a process of this app on this machine: it
-    // answers or is gone with the port.
+    // answers or is gone with the port, so silence proves nothing.
+    // Effect's pinger, left its default timeout (the interval), read
+    // the wall clock and gave the port up for good after an idle hour
+    // or a sleep (V3.md, "Local links and liveness").
     pingInterval: "1 hour",
+    pingTimeout: Duration.infinity,
     retryPolicy: Schedule.recurs(0),
   }).pipe(
     Effect.provideService(

@@ -15,8 +15,14 @@ import {
   isNoDirectConnectionError,
   isNotSharingError,
 } from "@shigomori/contracts/errors";
+import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
+
+// What a cut action says: the call was lost with the process, which
+// the window's band names (HostBand).
+export const OWN_APP_DROP_WORDS =
+  "The app's background process restarted before this finished. Try again.";
 
 // Per-query opt-out: pass `meta: { silentError: true }` to suppress the
 // global toast (use when the call site renders a richer inline error).
@@ -65,12 +71,15 @@ export function createAppQueryClient(): QueryClient {
         // page waiting on an answer that cannot change. A command refusal
         // is deterministic too: the grant moves on the host's push, never
         // on a retry, and so is a peer not sharing. Keep the default three
-        // retries for everything else.
+        // retries for everything else. A read cut by this machine's own
+        // host going away asks again for as long as it takes: the ask
+        // waits for the link to land on the host that replaces it.
         retry: (failureCount, error) =>
-          failureCount < 3 &&
-          !isEntityGoneError(error) &&
-          !isCommandRefusedError(error) &&
-          !isNotSharingError(error),
+          isOwnAppDrop(error) ||
+          (failureCount < 3 &&
+            !isEntityGoneError(error) &&
+            !isCommandRefusedError(error) &&
+            !isNotSharingError(error)),
       },
     },
     queryCache: new QueryCache({
@@ -90,6 +99,9 @@ export function createAppQueryClient(): QueryClient {
         // renders its own missing state, so a toast per query would
         // only repeat that as errors.
         if (isEntityGoneError(err)) return;
+        // Quiet for the same reason: the window's band says the host is
+        // away, and the read is asked again.
+        if (isOwnAppDrop(err)) return;
         notifyError(query.meta?.errorTitle ?? "Something went wrong", err);
       },
     }),
@@ -105,7 +117,10 @@ export function createAppQueryClient(): QueryClient {
           return;
         }
         if (mutation.meta?.silentError) return;
-        notifyError(mutation.meta?.errorTitle ?? "Something went wrong", err);
+        notifyError(
+          mutation.meta?.errorTitle ?? "Something went wrong",
+          isOwnAppDrop(err) ? OWN_APP_DROP_WORDS : err,
+        );
       },
     }),
   });

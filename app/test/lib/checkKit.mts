@@ -25,6 +25,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
@@ -297,6 +298,44 @@ export function testClock() {
   };
 }
 
+// A test clock as a process's clocks read it: `sleep` moves the wall
+// clock and not the monotonic one, as a Mac's sleep does (and a clock
+// step, either way); `stop` moves both while no timer runs, as a
+// stopped process, or a hidden page's throttled timers, see them. The
+// timers keep the test clock's own pace.
+export function sleepingClock(clock: ReturnType<typeof testClock>) {
+  const test = Context.get(clock.context, Clock.Clock);
+  let slept = 0;
+  let stopped = 0;
+  const wall: Clock.Clock = {
+    ...test,
+    monotonicTimeNanosUnsafe: () =>
+      test.monotonicTimeNanosUnsafe() + BigInt(stopped) * 1_000_000n,
+    monotonicTimeNanos: Effect.sync(
+      () => test.monotonicTimeNanosUnsafe() + BigInt(stopped) * 1_000_000n,
+    ),
+    currentTimeMillisUnsafe: () => test.currentTimeMillisUnsafe() + slept,
+    currentTimeMillis: Effect.sync(
+      () => test.currentTimeMillisUnsafe() + slept,
+    ),
+    currentTimeNanosUnsafe: () =>
+      test.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n,
+    currentTimeNanos: Effect.sync(
+      () => test.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n,
+    ),
+  };
+  return {
+    wall,
+    sleep: (ms: number) => {
+      slept += ms;
+    },
+    stop: (ms: number) => {
+      slept += ms;
+      stopped += ms;
+    },
+  };
+}
+
 // The stand-in for a callback a stub only hands over later (a held
 // dial's release, a child's exit observer): calling it before then
 // fails the check instead of passing silently.
@@ -412,7 +451,11 @@ export function cliFailureMessage(result: CliResult, fallback: string): string {
     : `${fallback} (CLI exit ${result.code})`;
 }
 
-type RunCli = (args: string[]) => Promise<CliResult>;
+type RunCli = (
+  args: string[],
+  // Hears the binary's pid as it starts, for a check that signals it.
+  onSpawn?: (pid: number) => void,
+) => Promise<CliResult>;
 
 export type CliRunner = {
   runCli: RunCli;
@@ -424,12 +467,13 @@ export function createCliRunner(
   binary: string,
   env: NodeJS.ProcessEnv,
 ): CliRunner {
-  const runCli: RunCli = (args) =>
+  const runCli: RunCli = (args, onSpawn) =>
     new Promise((resolve, reject) => {
       const child = spawn(binary, ["--json", ...args], {
         env,
         detached: true,
       });
+      if (child.pid !== undefined) onSpawn?.(child.pid);
       let stdout = "";
       child.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString("utf8");

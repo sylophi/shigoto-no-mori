@@ -1206,21 +1206,25 @@ export const make = (options: {
         });
 
         // A peer silent past the timeout is cut, as if the roster had
-        // dropped it.
+        // dropped it. Never a process on this machine: one that dies
+        // closes its socket, and a wall clock that jumped over a sleep
+        // would cut the app's own windows at every wake (V3.md, "Local
+        // links and liveness").
         const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
-        yield* Effect.sync(() => {
-          const now = clock.currentTimeMillisUnsafe();
-          for (const connection of connections.values()) {
-            if (now - connection.lastInboundAt > livenessMs) {
-              connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
+        if (!local)
+          yield* Effect.sync(() => {
+            const now = clock.currentTimeMillisUnsafe();
+            for (const connection of connections.values()) {
+              if (now - connection.lastInboundAt > livenessMs) {
+                connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
+              }
             }
-          }
-        }).pipe(
-          Effect.repeat(
-            Schedule.spaced(Math.max(50, Math.floor(livenessMs / 4))),
-          ),
-          Effect.forkIn(scope),
-        );
+          }).pipe(
+            Effect.repeat(
+              Schedule.spaced(Math.max(50, Math.floor(livenessMs / 4))),
+            ),
+            Effect.forkIn(scope),
+          );
 
         yield* Scope.addFinalizer(
           scope,

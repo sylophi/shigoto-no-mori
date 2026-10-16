@@ -10,10 +10,12 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import type * as Tracer from "effect/Tracer";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
 import { effectClient } from "@shared/ipc/effectClient";
+import { beatOf } from "@shared/hostBeat";
 import { log } from "@shared/log";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
@@ -105,11 +107,14 @@ const flavor = facts.flavor;
 // Electron adds parentPort to a utility process, and its types are Electron's
 const parentPort = (process as { parentPort: ParentPort }).parentPort;
 
-// The loop's beat, which the shell reads while this host starts
-// (main/hostProcess.ts): a loop stuck before the host is up stops it.
+// The loop's beat, which the shell reads (main/hostProcess.ts): a loop
+// stuck before the host is up stops it, and the spans open at the last
+// beat name what a stuck host was doing.
 const BEAT_EVERY_MS = 5_000;
-// oxlint-disable-next-line unicorn/require-post-message-target-origin -- a utility process's parent port, which has no origin
-const beat = () => parentPort.postMessage("beat");
+const openSpans = new Set<Tracer.Span>();
+const beat = () =>
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a utility process's parent port, which has no origin
+  parentPort.postMessage(beatOf(openSpans, Date.now()));
 beat();
 setInterval(beat, BEAT_EVERY_MS).unref();
 
@@ -191,6 +196,7 @@ async function main(): Promise<void> {
         Observability.layer({
           packaged: facts.packaged,
           writeTraceLine: traceFile(facts.logsPath),
+          openSpans,
         }),
       ),
       Layer.provideMerge(NodeServices.layer),

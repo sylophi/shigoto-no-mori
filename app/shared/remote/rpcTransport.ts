@@ -45,19 +45,24 @@ export type FlatClient = (
 // The link dropped while calls were in flight, or a call came after it
 // did: a disconnect, distinct from the handler's own failure. `local`
 // for a link to this machine's own app (its host on the loopback, its
-// shell over a port), which a restart drops.
+// shell over a port), which only that process going drops: the host's
+// restart, in practice.
 export class RemoteDisconnectedError extends Error {
   readonly local: boolean;
   constructor(local = false) {
     super(
       local
-        ? "lost the connection to this device"
+        ? "lost the connection to the app's background process"
         : "remote device disconnected",
     );
     this.name = "RemoteDisconnectedError";
     this.local = local;
   }
 }
+
+// A call cut by this machine's own app going away under it.
+export const isOwnAppDrop = (error: unknown): boolean =>
+  error instanceof RemoteDisconnectedError && error.local;
 
 // A far end on another build answered a call, or sent a view's value,
 // in a shape this build does not read.
