@@ -18,7 +18,9 @@
 // the one that left, and the pointer committed. The copy holds the
 // store still, so no write tears it. And one that failed after the host let
 // go of the folder restarts the app, once its user has read why when
-// they asked for it here (the shell's dialog).
+// they asked for it here (the shell's dialog). A data folder reached
+// through a link carries its worktrees, which git names by the link's
+// target.
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
@@ -29,10 +31,11 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -452,4 +455,51 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
     renameSync(destination, engineDataDir);
     rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
   }
+});
+
+it("a data folder reached through a link carries the worktrees git names by its target", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined, "the worktree in the data folder");
+  const project = (await runHost(Ops.listProjects())).find(
+    (one) => one.id === projectId,
+  );
+  assert.ok(project !== undefined);
+  await runHost(Ops.describe(project, identity.id, { title: "Fox" }));
+  const linked = join(elsewhere, "linked");
+  symlinkSync(dirname(engineDataDir), linked);
+  const parent = join(elsewhere, "linked-to");
+  const movedFox = join(parent, "moved", "wt", "repo", "fox");
+  const moved = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: join(linked, basename(engineDataDir)),
+        pointerFile: join(elsewhere, "config-4", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      // The re-key is done by now. Failing here undoes the move before
+      // anything moved.
+      beforeMove: Effect.gen(function* () {
+        const journal = JSON.parse(
+          readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+        ) as { moved: { oldPath: string; newPath: string }[] };
+        assert.deepEqual(
+          journal.moved.map((one) => [one.oldPath, one.newPath]),
+          [[fox, movedFox]],
+        );
+        assert.equal(
+          yield* Effect.promise(() => titleOf(identity.id)),
+          undefined,
+          "the title re-keyed",
+        );
+        return yield* Effect.fail("stop before the folder moves");
+      }),
+      killAllScripts: Effect.void,
+    }).pipe(Effect.flip),
+  );
+  assert.equal(moved, "stop before the folder moves");
+  assert.equal(await titleOf(identity.id), "Fox", "undone");
 });

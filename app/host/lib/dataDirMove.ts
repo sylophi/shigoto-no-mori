@@ -144,8 +144,18 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   }
   const newDir = join(parent, place.dataDirName);
   const toDefault = newDir === place.defaultDataDir;
+  const fs = yield* FileSystem.FileSystem;
+  // git spells a path under a data folder reached through a link (/tmp,
+  // /var/folders, a folder linked to another drive) by the link's
+  // target, so a path counts as under it by either spelling.
+  const oldReal = yield* fs
+    .realPath(oldDir)
+    .pipe(Effect.orElseSucceed(() => oldDir));
+  const spellings = [oldDir, oldReal];
+  const underOld = (path: string) =>
+    spellings.find((dir) => isSameOrInside(path, dir));
 
-  if (isSameOrInside(newDir, oldDir)) {
+  if (underOld(newDir) !== undefined) {
     return yield* new DataDirMoveError({
       reason:
         newDir === oldDir
@@ -156,7 +166,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // Same trap as nukeEverything: a project repo registered from inside
   // the data dir would be dragged along, breaking its recorded path.
   const projects = yield* freshProjects;
-  const trapped = findProjectInsideDataDir(projects);
+  const trapped = findProjectInsideDataDir(projects, spellings);
   if (trapped) {
     return yield* new DataDirMoveError({
       reason:
@@ -201,18 +211,20 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
         Effect.map((identities) => ({
           project,
-          moved: identities
-            .filter((i) => !i.isPrimary && isSameOrInside(i.path, oldDir))
-            .map(
-              (i): MovedWorktree => ({
+          moved: identities.flatMap((i): MovedWorktree[] => {
+            const under = underOld(i.path);
+            if (i.isPrimary || under === undefined) return [];
+            return [
+              {
                 oldId: i.id,
                 oldPath: i.path,
                 newPath: join(
                   newDir,
-                  i.path.slice(oldDir.length).replace(/^[/\\]/, ""),
+                  i.path.slice(under.length).replace(/^[/\\]/, ""),
                 ),
-              }),
-            ),
+              },
+            ];
+          }),
         })),
         // Repo moved or deleted, so nothing to repair for this one.
         Effect.orElseSucceed(() => ({
@@ -227,7 +239,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     moved.map((m) => m.oldId),
   );
   for (const id of marked) markDeleteInflight(id);
-  const fs = yield* FileSystem.FileSystem;
   const suffix = (yield* Random.nextInt).toString(36);
   // The pointer is written beside itself under a name of its own, then
   // renamed in.
