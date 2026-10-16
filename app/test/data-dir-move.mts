@@ -13,13 +13,24 @@
 //     was never written.
 // And for one whose copy landed whole but whose pointer was never
 // written: the next start undoes it the same way and removes the copy,
-// which would refuse every retry. And one that failed after the host let
+// which would refuse every retry. A rename a crash cut before the
+// pointer moved is found by the folder that arrived, its journal naming
+// the one that left, and the pointer committed. The copy holds the
+// store still, so no write tears it. And one that failed after the host let
 // go of the folder restarts the app, once its user has read why when
 // they asked for it here (the shell's dialog).
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -28,7 +39,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
-import { moveDataDir, resumeLayer } from "../host/lib/dataDirMove.ts";
+import {
+  holdingStore,
+  moveDataDir,
+  resumeLayer,
+} from "../host/lib/dataDirMove.ts";
+import { JOURNAL, rescueStrandedMove } from "../shared/dataDirMoveJournal.ts";
 import { afterFailedMove } from "../host/ipc/modules/runtime.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
@@ -254,4 +270,85 @@ it("a move that failed after the folder was let go never leaves the app running 
     afterFailedMove({ watchersStopped: true, unattended: true }),
     "relaunch",
   );
+});
+
+it("holds the store still while a move copies it to another volume", async () => {
+  const refused = await runHost(
+    holdingStore(
+      Effect.sync(() => {
+        const other = new DatabaseSync(join(engineDataDir, "store.db"), {
+          timeout: 0,
+        });
+        try {
+          other.exec("UPDATE changes SET version = version + 1");
+          return "written";
+        } catch (error) {
+          return String(error);
+        } finally {
+          other.close();
+        }
+      }),
+    ),
+  );
+  assert.match(refused, /locked|busy/i, "another process's write waits");
+});
+
+// A data folder a move landed, its journal naming where it came from.
+function landed(at: string, from: string): void {
+  mkdirSync(at, { recursive: true });
+  writeFileSync(join(at, "store.db"), "");
+  writeFileSync(
+    join(at, JOURNAL),
+    JSON.stringify({ from, to: at, partial: null, moved: [] }),
+  );
+}
+
+// A move a crash cut between moving the folder and moving the pointer:
+// the folder that arrived holds the journal, naming the one that left.
+it("finds a data folder whose move a crash cut before its pointer moved", () => {
+  const root = tempDir("sm-data-rescue-", track);
+  const config = join(root, "config");
+  mkdirSync(config);
+  const pointerFile = join(config, "data-dir");
+  const defaultDataDir = join(root, "home", ".sm");
+  const custom = join(root, "drive", ".sm");
+  const rescue = (named: string) =>
+    rescueStrandedMove({
+      named,
+      pointerFile,
+      legacyPointerFile: null,
+      defaultDataDir,
+    });
+
+  // From the default: the pointer was staged beside itself.
+  landed(custom, defaultDataDir);
+  writeFileSync(`${pointerFile}.tmp.ab12`, `${custom}\n`);
+  assert.equal(rescue(defaultDataDir), custom);
+  assert.equal(readFileSync(pointerFile, "utf8").trim(), custom);
+  assert.equal(existsSync(`${pointerFile}.tmp.ab12`), false);
+  rmSync(join(custom, JOURNAL));
+
+  // Back to the default: the pointer still names the folder that left.
+  landed(defaultDataDir, custom);
+  rmSync(custom, { recursive: true });
+  assert.equal(rescue(custom), defaultDataDir);
+  assert.equal(existsSync(pointerFile), false);
+
+  // A copy keeps its source and journal, which the start undoes instead.
+  landed(custom, defaultDataDir);
+  writeFileSync(
+    join(defaultDataDir, JOURNAL),
+    JSON.stringify({
+      from: defaultDataDir,
+      to: custom,
+      partial: "x",
+      moved: [],
+    }),
+  );
+  writeFileSync(`${pointerFile}.tmp.cd34`, `${custom}\n`);
+  assert.equal(rescue(defaultDataDir), null);
+  assert.equal(existsSync(pointerFile), false);
+
+  // And a journal about another folder is none of this one's.
+  assert.equal(rescue(join(root, "elsewhere")), null);
 });

@@ -31,6 +31,7 @@ import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Ops from "./engineOps";
@@ -41,6 +42,7 @@ import {
   getBusyOperations,
   markDeleteInflight,
 } from "./scripts";
+import { JOURNAL, type Journal, JournalJson } from "@shared/dataDirMoveJournal";
 import {
   canonicalDataDirName,
   dataDir,
@@ -95,24 +97,6 @@ export const sessionPlace = Effect.try({
       reason: errorMessageOf(error),
     }),
 });
-
-// The journal a move keeps in the data dir while it runs.
-const JOURNAL = "data-dir-move.json";
-const Journal = Schema.Struct({
-  from: Schema.String,
-  to: Schema.String,
-  // The sibling a copy to another volume fills, null for a rename.
-  partial: Schema.NullOr(Schema.String),
-  moved: Schema.Array(
-    Schema.Struct({
-      projectId: Schema.String,
-      oldPath: Schema.String,
-      newPath: Schema.String,
-    }),
-  ),
-});
-type Journal = typeof Journal.Type;
-const JournalJson = Schema.fromJsonString(Journal);
 
 // The tree at `from` copied to `to`, symlinks (carry-over entries) as
 // links rather than followed.
@@ -306,9 +290,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (!sameVolume) {
       journal.partial = `${newDir}.partial-${suffix}`;
       yield* writeJournal;
-      yield* (opts.copy ?? copyTree)(oldDir, journal.partial).pipe(
-        Effect.mapError(callFailureOf),
-      );
+      const partial = journal.partial;
+      yield* opts.copy === undefined
+        ? holdingStore(copyTree(oldDir, partial)).pipe(
+            Effect.mapError(callFailureOf),
+          )
+        : opts.copy(oldDir, partial).pipe(Effect.mapError(callFailureOf));
       yield* fs
         .rename(journal.partial, newDir)
         .pipe(Effect.mapError(callFailureOf));
@@ -341,6 +328,18 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     ),
   );
 });
+
+// The store held still while a copy reads it: a write transaction open
+// for the copy's length, so a write from the terminal or a hook waits,
+// and gives up as busy, rather than tearing the copy or landing in the
+// store the move leaves behind. An UPDATE that changes nothing still
+// takes the write lock.
+export const holdingStore = <A, E, R>(copy: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.andThen(sql`UPDATE changes SET version = version WHERE 0`, copy),
+    ),
+  );
 
 // A rename refused because the two paths are on different volumes.
 const crossesVolumes = (error: PlatformError.PlatformError) =>

@@ -263,4 +263,15 @@ it("deletes at the next start what the marker names and all of userData, the loc
   writeFileSync(join(userData, "clientConfig.json"), "{}");
   assert.equal(finishPendingNuke(userData), false);
   assert.ok(existsSync(join(userData, "clientConfig.json")));
+
+  // Nor one whose marker can't be read, which stays: half a nuke would
+  // leave the data dir with userData gone.
+  mkdirSync(data, { recursive: true });
+  writeFileSync(join(data, "store.db"), "x");
+  writeFileSync(join(userData, NUKE_MARKER), '{"paths": ["');
+  assert.equal(finishPendingNuke(userData), false);
+  assert.ok(existsSync(join(data, "store.db")));
+  assert.ok(existsSync(join(userData, "clientConfig.json")));
+  assert.ok(existsSync(join(userData, NUKE_MARKER)));
+  assert.ok(!existsSync(join(userData, `${NUKE_MARKER}.tmp`)));
 });
