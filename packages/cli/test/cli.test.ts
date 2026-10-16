@@ -133,6 +133,24 @@ describe("a command line", () => {
     assert.equal((await runAt(box.home, "--help")).code, 0);
   });
 
+  it("traces each git it runs on stderr with --verbose, and nothing without", async () => {
+    const repo = box.repo("traced");
+    box.write("registry.json", {
+      projects: [{ id: "T", name: "traced", path: repo }],
+    });
+    await box.migrate("cli");
+    const traced = await runAt(repo, "--verbose", "list");
+    assert.equal(traced.code, 0, traced.stderr);
+    assert.match(
+      traced.stderr,
+      new RegExp(
+        `^\\[git\\] worktree list --porcelain -z \\(cwd ${repo}\\)$`,
+        "m",
+      ),
+    );
+    assert.doesNotMatch((await runAt(repo, "list")).stderr, /\[git\]/);
+  });
+
   it("sets, reads and clears autoShelveDays, off while unset", async () => {
     const get = () =>
       runAt(box.home, "--json", "config", "get", "autoShelveDays");
@@ -509,6 +527,9 @@ describe(
       args: ReadonlyArray<string>,
       keys: ReadonlyArray<readonly [shown: string, key: Key]>,
       env: NodeJS.ProcessEnv = {},
+      // Typed once the screen shows the text, with no menu to wait on:
+      // what the program the binary handed the terminal reads.
+      after?: readonly [shown: string, text: string],
     ) => {
       // script takes no socket for its input, which node's pipes are, so
       // cat hands it a pipe.
@@ -592,6 +613,10 @@ describe(
       };
       try {
         await type(keys);
+        if (after !== undefined) {
+          await showing(after[0], shown.length);
+          child.stdin.write(after[1]);
+        }
         child.stdin.end();
         await ended;
         return shown;
@@ -664,6 +689,27 @@ describe(
         ),
         JSON.stringify(shown),
       );
+    });
+
+    it("enters the worktree picked from the menus, and its shell has the keys", async () => {
+      await projects();
+      const entered = join(box.home, "entered");
+      // An interactive shell takes the terminal's foreground group, as a
+      // person's does.
+      box.fakeBin("job-shell", `PS1='shell-ready> ' exec /bin/zsh -f -i`);
+      const shown = await inTerminal(
+        ["cd"],
+        [
+          ["Select a project:", DOWN],
+          ["▸ beta", "\r"],
+          ["Select a worktree in beta:", DOWN],
+          ["▸ fox", "\r"],
+        ],
+        { SHELL: "job-shell" },
+        ["shell-ready>", `pwd > '${entered}'; exit\r`],
+      );
+      assert.equal(readFileSync(entered, "utf8"), `${box.home}/fox\n`);
+      assert.doesNotMatch(shown, /EIO|error:/i);
     });
 
     it("enters a worktree in the account's login shell when $SHELL is empty", async () => {

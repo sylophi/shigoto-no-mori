@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { ExitCode, Killed } from "./errors.ts";
+import { releaseStdin } from "./stdinFd.ts";
 
 // A program sm couldn't start: a script's manager (`exec`, Go's words
 // for the exec it did) or a subshell. `reason` is the errno's words.
@@ -82,6 +83,7 @@ export const handOver = (
     const env = Object.fromEntries(
       Object.entries(options.env).filter(([, value]) => value !== undefined),
     );
+    releaseStdin();
     const child = spawn(program, args, {
       cwd: options.cwd,
       env,

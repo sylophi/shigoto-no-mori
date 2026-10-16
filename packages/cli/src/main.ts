@@ -60,19 +60,20 @@ import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
 import { goArgs } from "./argv.ts";
 import { holdStdinFd } from "./stdinFd.ts";
+import { verboseSpawner } from "./verbose.ts";
 import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
 
 // --json, --verbose and --version are global wherever they sit, up to
 // a `--`, past which everything is the command's, as in Go.
-// --verbose is accepted and has nothing to add yet.
 function globalFlags(args: ReadonlyArray<string>) {
   const end = args.indexOf("--");
   const before = end === -1 ? args : args.slice(0, end);
   return {
     version: before.includes("--version") || before.includes("-V"),
     json: before.includes("--json"),
+    verbose: before.includes("--verbose"),
     rest: [
       ...before.filter((arg) => arg !== "--json" && arg !== "--verbose"),
       ...(end === -1 ? [] : args.slice(end)),
@@ -86,6 +87,7 @@ holdStdinFd();
 const {
   version: askedVersion,
   json,
+  verbose,
   rest,
 } = globalFlags(process.argv.slice(2));
 const plain =
@@ -173,7 +175,12 @@ const program = goArgs(sm, canonical(rest)).pipe(
   // refuses reports as Go's did, without the parser's help page.
   Effect.provide(
     Layer.mergeAll(
-      BunServices.layer,
+      verbose
+        ? Layer.merge(
+            BunServices.layer,
+            verboseSpawner.pipe(Layer.provide(BunServices.layer)),
+          )
+        : BunServices.layer,
       CliConfig.layer({ builtIns: [] }),
       Here.layer,
     ),
