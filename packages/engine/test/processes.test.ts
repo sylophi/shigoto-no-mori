@@ -1,4 +1,5 @@
-// A command run to its end, or past its deadline ended with it.
+// A command run to its end, or past its deadline ended with it, one
+// that ignores SIGTERM too.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -7,7 +8,7 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { it } from "vitest";
-import { CommandTimedOut, captureWithin } from "../src/processes.ts";
+import { CommandTimedOut, captureWithin, exec } from "../src/processes.ts";
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner>,
@@ -32,4 +33,16 @@ it("ends a command past its deadline, and fails naming it", async () => {
     .split("\n")
     .filter((line) => line.trim() === `sleep ${seconds}`);
   assert.deepEqual(running, []);
+});
+
+it("ends a command that ignores SIGTERM past exec's timeout", async () => {
+  const started = Date.now();
+  const exit = await run(
+    exec("perl", ["-e", '$SIG{TERM} = "IGNORE"; sleep 60'], {
+      timeout: "200 millis",
+    }),
+  );
+  assert.ok(Exit.isFailure(exit));
+  assert.match(String(exit), /timed out/);
+  assert.ok(Date.now() - started < 10_000, "ended by the SIGKILL after");
 });

@@ -303,6 +303,8 @@ export const exec = Effect.fn("exec")(function* (
         env: options.env,
         extendEnv: options.extendEnv,
         stdin: "ignore",
+        // A timeout's SIGTERM is waited on, so one ignored still ends.
+        forceKillAfter: "3 seconds",
       }),
     );
     const [stdout, stderr] = yield* Effect.all(
