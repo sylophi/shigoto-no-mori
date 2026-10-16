@@ -472,3 +472,19 @@ it("never carries a v2 worktree's marks onto another checkout at its wt/ path", 
   )) as string[];
   assert.ok(!after.includes(worktreeIdFromPath(join(wt, "c"))));
 });
+
+it("sweeps an emptied v2 root that holds only Finder's .DS_Store", async () => {
+  const repo = box.repo("repo", { "README.md": "hi\n" });
+  const dataDir = join(box.home, "engine");
+  const v2 = join(dataDir, "worktrees", "repo");
+  box.write("registry.json", {
+    projects: [{ id: "P1", name: "repo", path: repo }],
+  });
+  box.side("engine");
+  box.git(repo, "worktree", "add", "-q", "-b", "a", join(v2, "a"));
+  writeFileSync(join(v2, ".DS_Store"), "");
+  writeFileSync(join(dataDir, "worktrees", ".DS_Store"), "");
+  const { unmoved } = await state();
+  assert.deepEqual(unmoved, []);
+  assert.ok(!existsSync(join(dataDir, "worktrees")), "the v2 roots are gone");
+});
