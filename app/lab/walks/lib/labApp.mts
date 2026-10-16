@@ -20,9 +20,9 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
-export const NAME = "Shigoto no Mori (lab)";
+const NAME = "Shigoto no Mori (lab)";
 
-export const labBundle = (): string => {
+const labBundle = (): string => {
   const bundle =
     process.env["SM_LAB_APP"] ??
     join(APP_DIR, "out", `${NAME}-darwin-${process.arch}`, `${NAME}.app`);
@@ -68,14 +68,14 @@ export interface LabOptions {
 // footprint, which belongs to the lab build anyone on this machine runs:
 // one that is already running is someone's, and a walk would also lose
 // its single-instance lock to it.
-export const refuseRunningLab = (executable: string) => {
+export const refuseRunningLab = () => {
+  const escaped = NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Any lab build's app, wherever its bundle is: they share one
+  // footprint. Its helpers sit under Frameworks, not MacOS.
+  const pattern = `${escaped}\\.app/Contents/MacOS/${escaped}`;
   let running = "";
   try {
-    running = execFileSync(
-      "pgrep",
-      ["-f", executable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")],
-      { encoding: "utf8" },
-    );
+    running = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
   } catch {
     // pgrep exits 1 when nothing matches.
   }
@@ -89,7 +89,7 @@ export const refuseRunningLab = (executable: string) => {
 export async function bootLab(options: LabOptions): Promise<Lab> {
   const bundle = labBundle();
   const executable = join(bundle, "Contents", "MacOS", NAME);
-  refuseRunningLab(executable);
+  refuseRunningLab();
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-walk-")));
   try {
     return await launch(root, options, executable);

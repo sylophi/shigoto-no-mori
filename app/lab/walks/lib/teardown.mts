@@ -4,11 +4,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { labBundle, labCli, NAME, refuseRunningLab } from "./labApp.mts";
+import { labCli, refuseRunningLab } from "./labApp.mts";
 
 export function teardown(): void {
   // Someone's own lab build, which the walks refused to touch.
-  refuseRunningLab(join(labBundle(), "Contents", "MacOS", NAME));
+  refuseRunningLab();
   const dataDir = mkdtempSync(join(tmpdir(), "sm-walk-nuke-"));
   try {
     execFileSync(labCli(), ["nuke", "--yes", "--keep-app"], {
