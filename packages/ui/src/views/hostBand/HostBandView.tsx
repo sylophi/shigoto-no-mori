@@ -11,7 +11,7 @@ export type HostBandState =
   | { readonly kind: "away" }
   | { readonly kind: "restarted"; readonly reason: HostRestartReason };
 
-export function restartWords(reason: HostRestartReason): string {
+function restartWords(reason: HostRestartReason): string {
   if (reason.kind === "silent") {
     return `The app's background process stopped responding for ${reason.seconds} seconds and was restarted.`;
   }
