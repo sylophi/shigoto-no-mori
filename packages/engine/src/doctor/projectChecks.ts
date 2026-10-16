@@ -190,7 +190,12 @@ export const makeProjectChecks = ({
     ) =>
       Effect.gen(function* () {
         const strays: string[] = [];
+        // Each folder once, in git's spelling (bases come in both).
+        const real = new Set<string>();
         for (const base of bases) {
+          real.add(Option.getOrElse(yield* realPath(base), () => base));
+        }
+        for (const base of real) {
           const entries = yield* fs.readDirectory(base).pipe(Effect.option);
           if (Option.isNone(entries)) continue;
           for (const [name, entry] of yield* lstatIn(base, entries.value)) {
