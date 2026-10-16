@@ -20,7 +20,8 @@
 // go of the folder restarts the app, once its user has read why when
 // they asked for it here (the shell's dialog). A data folder reached
 // through a link carries its worktrees, which git names by the link's
-// target.
+// target (or spelled with trailing slashes), to their ids at the
+// destination's target.
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
@@ -457,49 +458,64 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
   }
 });
 
-it("a data folder reached through a link carries the worktrees git names by its target", async () => {
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
-  assert.ok(identity !== undefined, "the worktree in the data folder");
-  const project = (await runHost(Ops.listProjects())).find(
-    (one) => one.id === projectId,
-  );
-  assert.ok(project !== undefined);
-  await runHost(Ops.describe(project, identity.id, { title: "Fox" }));
-  const linked = join(elsewhere, "linked");
-  symlinkSync(dirname(engineDataDir), linked);
-  const parent = join(elsewhere, "linked-to");
-  const movedFox = join(parent, "moved", "wt", "repo", "fox");
-  const moved = await runHost(
-    moveDataDir(parent, {
-      place: {
-        dataDir: join(linked, basename(engineDataDir)),
-        pointerFile: join(elsewhere, "config-4", "data-dir"),
-        legacyPointerFile: null,
-        defaultDataDir: join(elsewhere, "home", ".sm"),
-        dataDirName: "moved",
-      },
-      // The re-key is done by now. Failing here undoes the move before
-      // anything moved.
-      beforeMove: Effect.gen(function* () {
-        const journal = JSON.parse(
-          readFileSync(join(engineDataDir, JOURNAL), "utf8"),
-        ) as { moved: { oldPath: string; newPath: string }[] };
-        assert.deepEqual(
-          journal.moved.map((one) => [one.oldPath, one.newPath]),
-          [[fox, movedFox]],
-        );
-        assert.equal(
-          yield* Effect.promise(() => titleOf(identity.id)),
-          undefined,
-          "the title re-keyed",
-        );
-        return yield* Effect.fail("stop before the folder moves");
-      }),
-      killAllScripts: Effect.void,
-    }).pipe(Effect.flip),
-  );
-  assert.equal(moved, "stop before the folder moves");
-  assert.equal(await titleOf(identity.id), "Fox", "undone");
-});
+it.each([
+  ["reached through a link", "linked"],
+  ["spelled with trailing slashes", "slashes"],
+])(
+  "a data folder %s, moved through a link, carries its worktrees to the ids git will name them by",
+  async (_, spelling) => {
+    const identity = (
+      await runHost(Ops.listWorktreeIdentities({ projectId }))
+    ).find((row) => row.path === fox);
+    assert.ok(identity !== undefined, "the worktree in the data folder");
+    const project = (await runHost(Ops.listProjects())).find(
+      (one) => one.id === projectId,
+    );
+    assert.ok(project !== undefined);
+    await runHost(Ops.describe(project, identity.id, { title: "Fox" }));
+    let dataDir = `${engineDataDir}///`;
+    if (spelling === "linked") {
+      const linked = join(elsewhere, "linked");
+      symlinkSync(dirname(engineDataDir), linked);
+      dataDir = join(linked, basename(engineDataDir));
+    }
+    // The destination reached through a link too: git will name the
+    // moved worktree by its target.
+    const target = join(elsewhere, `${spelling}-target`);
+    mkdirSync(target);
+    const parent = join(elsewhere, `${spelling}-to`);
+    symlinkSync(target, parent);
+    const movedFox = join(target, "moved", "wt", "repo", "fox");
+    const moved = await runHost(
+      moveDataDir(parent, {
+        place: {
+          dataDir,
+          pointerFile: join(elsewhere, `config-${spelling}`, "data-dir"),
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        // The re-key is done by now. Failing here undoes the move before
+        // anything moved.
+        beforeMove: Effect.gen(function* () {
+          const journal = JSON.parse(
+            readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+          ) as { moved: { oldPath: string; newPath: string }[] };
+          assert.deepEqual(
+            journal.moved.map((one) => [one.oldPath, one.newPath]),
+            [[fox, movedFox]],
+          );
+          assert.equal(
+            yield* Effect.promise(() => titleOf(identity.id)),
+            undefined,
+            "the title re-keyed",
+          );
+          return yield* Effect.fail("stop before the folder moves");
+        }),
+        killAllScripts: Effect.void,
+      }).pipe(Effect.flip),
+    );
+    assert.equal(moved, "stop before the folder moves");
+    assert.equal(await titleOf(identity.id), "Fox", "undone");
+  },
+);

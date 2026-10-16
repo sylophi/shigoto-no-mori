@@ -151,7 +151,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const oldReal = yield* fs
     .realPath(oldDir)
     .pipe(Effect.orElseSucceed(() => oldDir));
-  const spellings = [oldDir, oldReal];
+  const spellings = [oldDir, oldReal].map((dir) => dir.replace(/\/+$/, ""));
   const underOld = (path: string) =>
     spellings.find((dir) => isSameOrInside(path, dir));
 
@@ -199,6 +199,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     });
   });
 
+  // Where git will name the moved worktrees: by the destination's real
+  // spelling, which their new ids hash.
+  const newReal = join(
+    yield* fs.realPath(parent).pipe(Effect.orElseSucceed(() => parent)),
+    place.dataDirName,
+  );
+
   // Managed worktrees whose checkout sits under the data dir: their ids get
   // marked delete-inflight for the whole move (blocking a renderer
   // script run from landing in a directory mid-move, exactly like the
@@ -219,7 +226,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
                 oldId: i.id,
                 oldPath: i.path,
                 newPath: join(
-                  newDir,
+                  newReal,
                   i.path.slice(under.length).replace(/^[/\\]/, ""),
                 ),
               },
