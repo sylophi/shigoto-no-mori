@@ -520,22 +520,28 @@ it.each([
   },
 );
 
-it("a data folder that is itself a link is refused, its target left to move", async () => {
-  const alias = join(elsewhere, "alias");
-  symlinkSync(engineDataDir, alias);
-  const refused = await runHost(
-    moveDataDir(join(elsewhere, "alias-to"), {
-      place: {
-        dataDir: alias,
-        pointerFile: join(elsewhere, "config-alias", "data-dir"),
-        legacyPointerFile: null,
-        defaultDataDir: join(elsewhere, "home", ".sm"),
-        dataDirName: "moved",
-      },
-      beforeMove: Effect.void,
-      killAllScripts: Effect.void,
-    }).pipe(Effect.flip),
-  );
-  assert.match(String(refused), /is a link to/);
-  assert.equal(existsSync(join(elsewhere, "alias-to")), false);
-});
+it.each([
+  ["", "alias"],
+  ["///", "alias-slashes"],
+])(
+  "a data folder that is itself a link, spelled with %j after it, is refused",
+  async (trailing, name) => {
+    const alias = join(elsewhere, name);
+    symlinkSync(engineDataDir, alias);
+    const refused = await runHost(
+      moveDataDir(join(elsewhere, `${name}-to`), {
+        place: {
+          dataDir: `${alias}${trailing}`,
+          pointerFile: join(elsewhere, "config-alias", "data-dir"),
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        beforeMove: Effect.void,
+        killAllScripts: Effect.void,
+      }).pipe(Effect.flip),
+    );
+    assert.match(String(refused), /is a link to/);
+    assert.equal(existsSync(join(elsewhere, `${name}-to`)), false);
+  },
+);

@@ -110,6 +110,8 @@ export const sessionPlace = Effect.try({
 const copyTree = (from: string, to: string) =>
   fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
 
+const trimmed = (dir: string) => dir.replace(/\/+$/, "");
+
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
   parentDir: string | undefined,
@@ -151,14 +153,14 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const oldReal = yield* fs
     .realPath(oldDir)
     .pipe(Effect.orElseSucceed(() => oldDir));
+  const spellings = [trimmed(oldDir), trimmed(oldReal)];
   // A rename would move the link and leave its target where it is.
-  const link = yield* fs.readLink(oldDir).pipe(Effect.option);
+  const link = yield* fs.readLink(trimmed(oldDir)).pipe(Effect.option);
   if (Option.isSome(link)) {
     return yield* new DataDirMoveError({
       reason: `The data folder is a link to ${oldReal}. Move that folder instead.`,
     });
   }
-  const spellings = [oldDir, oldReal].map((dir) => dir.replace(/\/+$/, ""));
   const underOld = (path: string) =>
     spellings.find((dir) => isSameOrInside(path, dir));
 
