@@ -22,6 +22,7 @@ import { dataDir, dataDirSource } from "@shared/paths";
 import { writeNukeMarker } from "../core/nuke/finish";
 import { signOutForNuke } from "../ipc/modules/account";
 import { flavor } from "../flavor";
+import { setsLoginItem } from "./liveness";
 
 // What goes at the next start besides userData: the data dir, the logs,
 // and the pointer that found the data dir. A data dir set by
@@ -55,7 +56,7 @@ export async function nukeShell(): Promise<NukeReport> {
       why: errorMessageOf(error),
     });
   }
-  if (process.platform === "darwin") {
+  if (process.platform === "darwin" && setsLoginItem()) {
     app.setLoginItemSettings({ openAtLogin: false });
   }
   writeNukeMarker(app.getPath("userData"), pathsToDelete());

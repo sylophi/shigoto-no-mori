@@ -397,8 +397,12 @@ export const makeCreating = ({
             );
           cloned = { from: source.value, outcome };
         }
+        // git spells a path with its symlinks resolved.
+        const real = yield* fs
+          .realPath(place)
+          .pipe(Effect.orElseSucceed(() => place));
         const found = yield* identities(project);
-        const made = found.find((id) => id.path === place);
+        const made = found.find((id) => id.path === place || id.path === real);
         if (!made) {
           return yield* new WorktreeRefused({
             reason: "vanished",
