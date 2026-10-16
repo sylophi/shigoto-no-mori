@@ -32,6 +32,8 @@ import {
 import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   LOCAL_NETWORK_USAGE_DESCRIPTION,
+  NETWORK_VOLUMES_USAGE_DESCRIPTION,
+  REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
 } from "./shared/packaging/infoPlist.mts";
 import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 import { rendererSchemeName } from "./shared/packaging/rendererScheme.mts";
@@ -171,6 +173,8 @@ const config: ForgeConfig = {
     extendInfo: {
       NSLocalNetworkUsageDescription: LOCAL_NETWORK_USAGE_DESCRIPTION,
       NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
+      NSRemovableVolumesUsageDescription: REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
+      NSNetworkVolumesUsageDescription: NETWORK_VOLUMES_USAGE_DESCRIPTION,
     },
     ...(shouldSignMac
       ? {

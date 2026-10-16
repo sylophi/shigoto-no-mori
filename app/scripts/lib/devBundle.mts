@@ -44,6 +44,8 @@ import { flavorNames } from "@shigomori/engine/flavor";
 import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   LOCAL_NETWORK_USAGE_DESCRIPTION,
+  NETWORK_VOLUMES_USAGE_DESCRIPTION,
+  REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
 } from "../../shared/packaging/infoPlist.mts";
 import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
 
@@ -135,6 +137,8 @@ export function ensureDevBundle(): string {
     devName,
     LOCAL_NETWORK_USAGE_DESCRIPTION,
     APPLE_EVENTS_USAGE_DESCRIPTION,
+    REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
+    NETWORK_VOLUMES_USAGE_DESCRIPTION,
   });
   const usable = existsSync(bundleExecutable);
   const fresh =
@@ -183,6 +187,18 @@ export function ensureDevBundle(): string {
         "NSAppleEventsUsageDescription",
         "string",
         APPLE_EVENTS_USAGE_DESCRIPTION,
+      );
+      plutilReplace(
+        plist,
+        "NSRemovableVolumesUsageDescription",
+        "string",
+        REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
+      );
+      plutilReplace(
+        plist,
+        "NSNetworkVolumesUsageDescription",
+        "string",
+        NETWORK_VOLUMES_USAGE_DESCRIPTION,
       );
       plutilReplace(
         plist,
