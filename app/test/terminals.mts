@@ -11,7 +11,8 @@
 //   - a resize reaches every attached client,
 //   - a close ends every attach with an exit and leaves the list,
 //   - a quit saves each terminal, and the next start opens it again
-//     under its history in the folder it was in,
+//     under its history in the folder it was in, the history's lines
+//     left where they are,
 //   - a host killed while a terminal floods comes back with what it
 //     saved when the output last paused: whole, in that folder,
 //   - a worktree terminal whose worktree is gone closes,
@@ -56,11 +57,55 @@ import {
 } from "./lib/checkKit.mts";
 import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
 
+// What a restored row replays, from its history alone.
+const replayed = (history: string) =>
+  Terminals.replayable(history, Terminals.alternateScreen(history).on);
+
 describe("the history", () => {
   it("drops terminal queries and keeps everything else", () => {
     const sent =
       "a\x1b[c\x1b[>c\x1b[6n\x1b[?2026$p\x1b[14t\x1b]11;?\x07\x1b]10;?\x1b\\\x1bP$qm\x1b\\b\x1b[31mred\x1b[0m";
     assert.equal(withoutQueries(sent), "ab\x1b[31mred\x1b[0m");
+  });
+
+  it("replays a history that ends on the alternate screen up to where it went there", () => {
+    const main = "one\r\ntwo\r\n$ vim\r\n";
+    assert.equal(replayed(main), main);
+    assert.equal(replayed(`${main}\x1b[?1049h\x1b[H\x1b[2JVIM`), main);
+    assert.equal(replayed(`${main}\x1b[?25;1049h\x1b[HVIM`), main);
+    assert.equal(replayed(`${main}\x1b[?47h\x1b[H\x1b[2JLESS`), main);
+    assert.equal(replayed(`${main}\x1b[?1047hLESS`), main);
+    assert.equal(replayed(`${main}\x9b?1049hVIM`), main);
+    assert.equal(replayed(`${main}\x1b[?01049hVIM`), main);
+    const back = `${main}\x1b[?1049hVIM\x1b[?1049l$ `;
+    assert.equal(replayed(back), back);
+    const reset = `${main}\x1b[?1049hVIM\x1bc$ `;
+    assert.equal(replayed(reset), reset);
+    // The ring dropped where the program went there: none of it is the
+    // main screen.
+    assert.equal(Terminals.replayable("\x1b[HVIM redraw", true), "");
+    // A control character inside the sequence is skipped, as xterm does.
+    assert.equal(replayed(`${main}\x1b[?1049\x00hVIM`), main);
+    // A sequence split across two reads, however long its modes.
+    const reads = [
+      "$ vim\r\n\x1b[?1049h",
+      "VIM\x1b[?25;1000;1002;1003;1006;10",
+      "49l$ ",
+    ];
+    let state = { on: false, carry: "" };
+    const seen = reads.map((read) => {
+      state = Terminals.followAlternate(state, read);
+      return state.on;
+    });
+    assert.deepEqual(seen, [true, true, false]);
+  });
+
+  it("has a client from before a restore start over", () => {
+    const restored = makeHistory(8, "saved\r\n");
+    assert.equal(restored.since(7).reset, true);
+    assert.equal(restored.since(undefined).reset, true);
+    restored.append(9, "$ ");
+    assert.deepEqual(restored.since(8), { data: "$ ", seq: 9, reset: false });
   });
 
   it("answers a reconnect with what came after its seq", () => {
@@ -353,6 +398,12 @@ describe("the service", () => {
       const attached = attach(second, terminalId);
       await waitFor(() => attached.events.length >= 2, "the attach's head");
       assert.ok(attached.output().includes("moved-2"), "the history came back");
+      // On the main screen, leaving the alternate one would restore a
+      // cursor never saved, and the new prompt would clear what came back.
+      assert.ok(
+        !attached.output().includes("\x1b[?1049l"),
+        "a main-screen history is not sent out of the alternate screen",
+      );
       await withTerminals(second, (terminals) =>
         terminals.write(terminalId, "pwd\r"),
       );

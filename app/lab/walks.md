@@ -60,6 +60,12 @@ it("does what the person did", async () => {
   terminal command. `gh` takes a script, or a function of the root
   that makes one. `linkedDataDir` puts the data folder behind a
   symlink.
+- `lib/labApp.mts` starts the build (`bootLab`, with `--sm-lab`, so
+  the page's api is there for a walk that needs it). It hands back
+  the page, `git` for the walk's repos, `sm` for the bundle's
+  terminal command, and `restart`, which quits the app as the menu's
+  Quit does and starts it again on the same root. `gh` takes a script, or a function of the root
+  that makes one.
 - `lib/demoRepo.mts` is the repo most walks start from: a history
   with a long file and media, a bare origin, a branch with a commit
   of its own, a stash, and uncommitted changes of every kind. A walk
@@ -68,8 +74,9 @@ it("does what the person did", async () => {
   github.com over ssh, served from a bare repo, and a `gh` that
   answers for one open pull request. It logs what else it is asked.
 - `lib/page.mts` holds what walks read from the window: text through
-  the diff renderer's shadow roots, and which images, videos and
-  players actually loaded.
+  the diff renderer's shadow roots, which images, videos and players
+  actually loaded, and what a terminal holds (`terminalText`, read
+  from xterm's buffer, since it draws with WebGL).
 
 Reach controls by their role and accessible name, scoped to `main(page)`
 or `sidebar(page)`: a name matches as a substring, so "Create worktree"
@@ -89,4 +96,5 @@ build's single-instance lock is machine-wide.
 | `new-worktree` | A branch off a source; a source branch checked out as it is |
 | `rename` | Renaming a worktree from its page: the folder moves and the window stays on the worktree's page |
 | `location` | The Worktree location page with the data folder reached through a link: a worktree already in place is not offered a move |
+| `terminals` | A terminal from the worktree's footer runs what is typed; after the app quits as a person quits it and starts again, it is back in its folder with its lines above |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
