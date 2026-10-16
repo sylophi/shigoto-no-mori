@@ -166,9 +166,11 @@ export const findProjectByIdentityOrFail = (identity: string) =>
 // no extra read.
 export function findProjectInsideDataDir(
   projects: readonly Project[],
+  roots: readonly string[] = [dataDir()],
 ): Project | undefined {
-  const root = dataDir();
-  return projects.find((p) => isSameOrInside(toAbsolute(p.path), root));
+  return projects.find((p) =>
+    roots.some((root) => isSameOrInside(toAbsolute(p.path), root)),
+  );
 }
 
 // The project `projectId` names, or the entity-gone error.

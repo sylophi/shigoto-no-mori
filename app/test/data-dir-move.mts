@@ -18,7 +18,10 @@
 // the one that left, and the pointer committed. The copy holds the
 // store still, so no write tears it. And one that failed after the host let
 // go of the folder restarts the app, once its user has read why when
-// they asked for it here (the shell's dialog).
+// they asked for it here (the shell's dialog). A data folder reached
+// through a link carries its worktrees, which git names by the link's
+// target (or spelled with trailing slashes), to their ids at the
+// destination's target, and one that is itself a link is refused.
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
@@ -29,10 +32,11 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -453,3 +457,91 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
     rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
   }
 });
+
+it.each([
+  ["reached through a link", "linked"],
+  ["spelled with trailing slashes", "slashes"],
+])(
+  "a data folder %s, moved through a link, carries its worktrees to the ids git will name them by",
+  async (_, spelling) => {
+    const identity = (
+      await runHost(Ops.listWorktreeIdentities({ projectId }))
+    ).find((row) => row.path === fox);
+    assert.ok(identity !== undefined, "the worktree in the data folder");
+    const project = (await runHost(Ops.listProjects())).find(
+      (one) => one.id === projectId,
+    );
+    assert.ok(project !== undefined);
+    await runHost(Ops.describe(project, identity.id, { title: "Fox" }));
+    let dataDir = `${engineDataDir}///`;
+    if (spelling === "linked") {
+      const linked = join(elsewhere, "linked");
+      symlinkSync(dirname(engineDataDir), linked);
+      dataDir = join(linked, basename(engineDataDir));
+    }
+    // The destination reached through a link too: git will name the
+    // moved worktree by its target.
+    const target = join(elsewhere, `${spelling}-target`);
+    mkdirSync(target);
+    const parent = join(elsewhere, `${spelling}-to`);
+    symlinkSync(target, parent);
+    const movedFox = join(target, "moved", "wt", "repo", "fox");
+    const moved = await runHost(
+      moveDataDir(parent, {
+        place: {
+          dataDir,
+          pointerFile: join(elsewhere, `config-${spelling}`, "data-dir"),
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        // The re-key is done by now. Failing here undoes the move before
+        // anything moved.
+        beforeMove: Effect.gen(function* () {
+          const journal = JSON.parse(
+            readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+          ) as { moved: { oldPath: string; newPath: string }[] };
+          assert.deepEqual(
+            journal.moved.map((one) => [one.oldPath, one.newPath]),
+            [[fox, movedFox]],
+          );
+          assert.equal(
+            yield* Effect.promise(() => titleOf(identity.id)),
+            undefined,
+            "the title re-keyed",
+          );
+          return yield* Effect.fail("stop before the folder moves");
+        }),
+        killAllScripts: Effect.void,
+      }).pipe(Effect.flip),
+    );
+    assert.equal(moved, "stop before the folder moves");
+    assert.equal(await titleOf(identity.id), "Fox", "undone");
+  },
+);
+
+it.each([
+  ["", "alias"],
+  ["///", "alias-slashes"],
+])(
+  "a data folder that is itself a link, spelled with %j after it, is refused",
+  async (trailing, name) => {
+    const alias = join(elsewhere, name);
+    symlinkSync(engineDataDir, alias);
+    const refused = await runHost(
+      moveDataDir(join(elsewhere, `${name}-to`), {
+        place: {
+          dataDir: `${alias}${trailing}`,
+          pointerFile: join(elsewhere, "config-alias", "data-dir"),
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        beforeMove: Effect.void,
+        killAllScripts: Effect.void,
+      }).pipe(Effect.flip),
+    );
+    assert.match(String(refused), /is a link to/);
+    assert.equal(existsSync(join(elsewhere, `${name}-to`)), false);
+  },
+);
