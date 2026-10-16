@@ -457,14 +457,19 @@ const make = <R>(options: {
           ),
           Effect.provideService(FileSystem.FileSystem, fs),
         );
+        // A restored history is a chunk of its own, numbered past any
+        // chunk the terminal sent before the restart (more may have gone
+        // out after its last save), so a client that saw it then starts
+        // over. Chunks count far slower than milliseconds.
+        const first =
+          restored === undefined
+            ? 0
+            : Math.max(restored.seq + 1, yield* Clock.currentTimeMillis);
         const session: Session = {
           terminal,
           pty,
-          // A restored history is a chunk of its own, past the saved seq,
-          // so a client that saw the terminal before the restart starts
-          // over.
           history: makeHistory(
-            restored === undefined ? 0 : restored.seq + 1,
+            first,
             // A row an earlier build saved holds the history as it was.
             restored === undefined
               ? ""
@@ -477,7 +482,7 @@ const make = <R>(options: {
           scope,
           changed: Latch.makeUnsafe(false),
           changedAt: 0,
-          seq: restored === undefined ? 0 : restored.seq + 1,
+          seq: first,
           size,
           exited: Option.none(),
           alternate: false,
