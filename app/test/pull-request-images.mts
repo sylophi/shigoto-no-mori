@@ -122,7 +122,7 @@ const PNG = "11111111-1111-4111-8111-111111111111";
 const TAG = "22222222-2222-4222-8222-222222222222";
 const VIDEO = "33333333-3333-4333-8333-333333333333";
 const UNSIGNED = "44444444-4444-4444-8444-444444444444";
-const LEGACY = "55555555-5555-4555-8555-555555555555";
+const LEGACY = "5555aaaa-5555-4555-8555-55555555BBBB";
 
 const attachment = (id: string) =>
   `https://github.com/user-attachments/assets/${id}`;
@@ -300,8 +300,8 @@ it("an attached image on an Enterprise Server takes the media host's URL, which 
     `![gone](https://${GHE}/user-attachments/assets/${UNSIGNED})`,
   ].join("\r\n\r\n");
   // The Server's rendering: each image linked to itself, the one GitHub
-  // couldn't sign left at its attachment URL, and an image elsewhere
-  // whose path holds an attachment's id.
+  // couldn't sign left at its attachment URL, and a link and an image
+  // elsewhere whose paths hold an attachment's id.
   const { list, graphql: answer } = answers(GHE);
   writeFileSync(
     list,
@@ -317,7 +317,7 @@ it("an attached image on an Enterprise Server takes the media host's URL, which 
     answer,
     graphql(
       [
-        `<p><a href="https://${GHE}/team07/game/pull/33">#33</a> needs to merge first</p>`,
+        `<p><a href="https://${GHE}/team07/game/pull/33">#33</a> needs to merge first, <a href="https://${GHE}/team07/game/blob/main/${PNG}.png">as here</a></p>`,
         `<p><a href="${media(PNG)}"><img width="1512" alt="Screenshot" src="${media(PNG)}"></a></p>`,
         `<p><a href="${media(LEGACY)}"><img src="${media(LEGACY)}" alt="older"></a></p>`,
         `<p><a href="https://${GHE}/user-attachments/assets/${UNSIGNED}"><img src="https://tracker.example/${UNSIGNED}?t=1" alt="gone"></a></p>`,

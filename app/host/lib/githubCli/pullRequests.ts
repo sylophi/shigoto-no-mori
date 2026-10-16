@@ -529,8 +529,8 @@ const ATTACHED_IMAGE = new RegExp(
   `(!\\[[^\\]]*\\]\\(\\s*<?|\\bsrc\\s*=\\s*["']?)https://([a-z0-9.-]+)${ATTACHMENT_PATH}`,
   "gi",
 );
-const RENDERED_URL = /\b(?:src|href)="(https:\/\/[^"]+)"/g;
-const ID = new RegExp(UUID);
+const RENDERED_IMAGE = /<img\b[^>]*?\bsrc="(https:\/\/[^"]+)"/g;
+const ID = new RegExp(UUID, "i");
 const IS_ATTACHMENT = new RegExp(`^${ATTACHMENT_PATH}$`, "i");
 
 function withSignedImages(body: string, bodyHTML: string): string {
@@ -542,7 +542,7 @@ function withSignedImages(body: string, bodyHTML: string): string {
   for (const [, , host = "", id = ""] of body.matchAll(ATTACHED_IMAGE)) {
     hostOf.set(id.toLowerCase(), host.toLowerCase());
   }
-  for (const [, html = ""] of bodyHTML.matchAll(RENDERED_URL)) {
+  for (const [, html = ""] of bodyHTML.matchAll(RENDERED_IMAGE)) {
     const rendered = html.replaceAll("&amp;", "&");
     let url: URL;
     try {
@@ -550,7 +550,7 @@ function withSignedImages(body: string, bodyHTML: string): string {
     } catch {
       continue;
     }
-    const id = ID.exec(url.pathname)?.[0];
+    const id = ID.exec(url.pathname)?.[0]?.toLowerCase();
     const host = id === undefined ? undefined : hostOf.get(id);
     if (id === undefined || host === undefined) continue;
     const loadable =
