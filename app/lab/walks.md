@@ -86,4 +86,5 @@ build's single-instance lock is machine-wide.
 | `stashes` | The stash list and a stash's diff, stashing, a drop and its Undo, restore and keep |
 | `files` | The files viewer: the tree, an image, a video, a tone, markdown, a long text file |
 | `new-worktree` | A branch off a source; a source branch checked out as it is |
+| `rename` | Renaming a worktree from its page: the folder moves and the window stays on the worktree's page |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
