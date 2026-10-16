@@ -97,30 +97,54 @@ const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
 // cursor shown and the colors reset.
 const RESTORED_TAIL =
   "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
-// A private mode set or reset, its modes as they come (`1049;25`), or a
-// full reset, which leaves the alternate screen too.
-const SCREEN_MODES = new RegExp(String.raw`\x1b\[\?([\d;]+)([hl])|\x1bc`, "g");
-const ALTERNATE = new Set(["1049", "1047", "47"]);
+// A private mode set or reset (CSI in seven or eight bits), its modes as
+// they come (`1049;25`), or a full reset, which leaves the alternate
+// screen too.
+const SCREEN_MODES = new RegExp(
+  String.raw`(?:\x1b\[|\x9b)\?([\d;]+)([hl])|\x1bc`,
+  "g",
+);
+const ALTERNATE = new Set([1049, 1047, 47]);
 
-// A history that ends on the alternate screen (a full-screen program
-// ran at the quit) is replayed up to where it went there: the main
-// screen as that program found it, cursor and all. Leaving the
-// alternate screen instead puts the cursor where the program left it,
-// or for 1049 where it saved it, and the fresh prompt's clear to the
-// end of the screen wipes the lines above.
-export const restoredHistory = (history: string): string => {
-  let entered: number | undefined;
-  for (const match of history.matchAll(SCREEN_MODES)) {
+// Whether `text` leaves the terminal on the alternate screen, from
+// `before` at its start, and where it last went there if it did.
+export const alternateScreen = (
+  text: string,
+  before = false,
+): { readonly on: boolean; readonly enteredAt: number | undefined } => {
+  let on = before;
+  let enteredAt: number | undefined;
+  for (const match of text.matchAll(SCREEN_MODES)) {
     const [sequence, modes, set] = match;
     if (sequence === "\x1bc") {
-      entered = undefined;
+      on = false;
+      enteredAt = undefined;
       continue;
     }
-    if (!modes?.split(";").some((mode) => ALTERNATE.has(mode))) continue;
-    if (set === "l") entered = undefined;
-    else entered ??= match.index;
+    if (!modes?.split(";").some((mode) => ALTERNATE.has(Number(mode)))) {
+      continue;
+    }
+    if (set === "l") {
+      on = false;
+      enteredAt = undefined;
+    } else if (!on) {
+      on = true;
+      enteredAt = match.index;
+    }
   }
-  return history.slice(0, entered) + RESTORED_TAIL;
+  return { on, enteredAt };
+};
+
+// What a terminal's next start replays: a history that ends on the
+// alternate screen (a full-screen program ran at the quit) up to where
+// it went there, the main screen as that program found it, cursor and
+// all, or none of it if the ring no longer holds that point. Leaving the
+// alternate screen instead puts the cursor where the program left it,
+// or for 1049 where it saved it, and the fresh prompt's clear to the
+// end of the screen would wipe the lines above.
+export const replayable = (history: string, alternate: boolean): string => {
+  if (!alternate) return history;
+  return history.slice(0, alternateScreen(history).enteredAt ?? 0);
 };
 
 interface Session {
@@ -136,6 +160,12 @@ interface Session {
   seq: number;
   size: Size;
   exited: Option.Option<number | null>;
+  // On the alternate screen, followed as output comes in, so it holds
+  // once the ring has dropped where the program went there.
+  alternate: boolean;
+  // The output's last characters, which a sequence split across two
+  // reads starts in.
+  carry: string;
   // Closed by its user or with its worktree, so not saved for the next
   // start.
   forget: boolean;
@@ -290,6 +320,9 @@ const make = <R>(options: {
             backlog.paused = false;
             session.pty.resume();
           }
+          const seen = session.carry + data;
+          session.alternate = alternateScreen(seen, session.alternate).on;
+          session.carry = seen.slice(-16);
           for (const piece of pieces(data)) {
             session.seq += 1;
             session.history.append(session.seq, piece);
@@ -353,7 +386,7 @@ const make = <R>(options: {
         ...session.terminal,
         cwd: Option.getOrElse(folder, () => session.terminal.cwd),
         seq: session.seq,
-        history: session.history.text(),
+        history: replayable(session.history.text(), session.alternate),
       });
     });
 
@@ -409,7 +442,13 @@ const make = <R>(options: {
           pty,
           history: makeHistory(
             restored?.seq ?? 0,
-            restored === undefined ? "" : restoredHistory(restored.history),
+            // A row an earlier build saved holds the history as it was.
+            restored === undefined
+              ? ""
+              : replayable(
+                  restored.history,
+                  alternateScreen(restored.history).on,
+                ) + RESTORED_TAIL,
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
@@ -418,6 +457,8 @@ const make = <R>(options: {
           seq: restored?.seq ?? 0,
           size,
           exited: Option.none(),
+          alternate: false,
+          carry: "",
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));

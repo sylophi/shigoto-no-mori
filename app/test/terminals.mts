@@ -57,9 +57,9 @@ import {
 } from "./lib/checkKit.mts";
 import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
 
-// What a restored history replays, before its tail.
+// What a restored row replays, from its history alone.
 const replayed = (history: string) =>
-  Terminals.restoredHistory(history).split("\x1b[?1000l")[0];
+  Terminals.replayable(history, Terminals.alternateScreen(history).on);
 
 describe("the history", () => {
   it("drops terminal queries and keeps everything else", () => {
@@ -75,10 +75,20 @@ describe("the history", () => {
     assert.equal(replayed(`${main}\x1b[?25;1049h\x1b[HVIM`), main);
     assert.equal(replayed(`${main}\x1b[?47h\x1b[H\x1b[2JLESS`), main);
     assert.equal(replayed(`${main}\x1b[?1047hLESS`), main);
+    assert.equal(replayed(`${main}\x9b?1049hVIM`), main);
+    assert.equal(replayed(`${main}\x1b[?01049hVIM`), main);
     const back = `${main}\x1b[?1049hVIM\x1b[?1049l$ `;
     assert.equal(replayed(back), back);
     const reset = `${main}\x1b[?1049hVIM\x1bc$ `;
     assert.equal(replayed(reset), reset);
+    // The ring dropped where the program went there: none of it is the
+    // main screen.
+    assert.equal(Terminals.replayable("\x1b[HVIM redraw", true), "");
+    // A sequence split across two reads, the first's tail carried.
+    const split = "$ vim\r\n\x1b[?10";
+    const first = Terminals.alternateScreen(split);
+    assert.equal(first.on, false);
+    assert.equal(Terminals.alternateScreen(`${split}49h`, first.on).on, true);
   });
 
   it("answers a reconnect with what came after its seq", () => {
