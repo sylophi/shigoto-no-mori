@@ -155,6 +155,7 @@ import { it } from "vitest";
 import {
   CommandRefusedError,
   LinkRefusedError,
+  NoDirectConnectionError,
   NotSharingError,
 } from "@shigomori/contracts/errors";
 import { RemoteConnectError } from "@shared/remote/deviceLink";
@@ -319,11 +320,16 @@ const CLOSE_AUTH_LOCKED_OUT = 4003;
 // a function, which may throw to play a rejected ask.
 function fakeAskDialer(
   answer: DirectConnectInfo | (() => DirectConnectInfo),
-  opts: Pick<DirectDialerDeps, "dialableKinds" | "deadlineMs"> = {},
+  opts: Pick<DirectDialerDeps, "dialableKinds" | "deadlineMs"> & {
+    // How long the peer takes to answer the ask.
+    askDelayMs?: number;
+  } = {},
 ) {
   const dialer = createDirectDialer({
-    askConnectInfo: async () =>
-      typeof answer === "function" ? answer() : answer,
+    askConnectInfo: async () => {
+      if (opts.askDelayMs !== undefined) await delay(opts.askDelayMs);
+      return typeof answer === "function" ? answer() : answer;
+    },
     localDeviceId: DIALER,
     localAppVersion: "1.0.0",
     localKey: () => testDeviceKey(DIALER).pair,
@@ -690,6 +696,26 @@ it("a refusing candidate cannot deny the dial: a far end that refuses has proved
       { kind: "lan", url: `ws://127.0.0.1:${slowPort}`, ticket },
     ],
   });
+  const connection = await dialer.connectDirect(LISTENER);
+  trackTest(() => connection.close());
+  assert.equal(connection.remoteDeviceId, LISTENER);
+});
+
+it("a late answer leaves the race its own budget: a peer just woken answers most of the way to the deadline, and its candidate still wins", async () => {
+  const listener = await startDirectListener(trackTest);
+  // The handshake reaches the listener only after a slow route, as one
+  // across the tunnel after a wake does.
+  const slowPort = await delayProxy(trackTest, listener.port, 500);
+  const ticket = mintTicket(listener.tickets, DIALER);
+  const { dialer } = fakeAskDialer(
+    {
+      available: true,
+      acceptsCommands: false,
+      sharesData: true,
+      candidates: [{ kind: "lan", url: `ws://127.0.0.1:${slowPort}`, ticket }],
+    },
+    { deadlineMs: 1000, askDelayMs: 700 },
+  );
   const connection = await dialer.connectDirect(LISTENER);
   trackTest(() => connection.close());
   assert.equal(connection.remoteDeviceId, LISTENER);
@@ -1625,6 +1651,22 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   assert.deepEqual(bridge.directPeerVersions(), {});
 });
 
+it("a link that drops under a call is no session, in words: the call a woken window made on a link that died meanwhile fails as no direct connection, which a query waits out quietly and an action reports", async () => {
+  const listener = await startDirectListener(trackTest);
+  const { bridge } = await bridgeTo(trackTest, listener);
+  await bridge.dialPeer(LISTENER);
+  const held = invokeListener(bridge, HOLD, echoOf("p"));
+  await waitFor(() => listener.hold.started, "the held call to start");
+  await listener.binding.reconcile(null);
+  await assert.rejects(
+    async () => held,
+    (error) =>
+      error instanceof NoDirectConnectionError &&
+      error.message ===
+        `no direct connection to ${LISTENER} (remote device disconnected)`,
+  );
+});
+
 it("unreachable is typed: a failed direct dial rejects the invoke with the dial error and creates no hub data session", async () => {
   const listener = await startDirectListener(trackTest);
   // Free the port, then keep ADVERTISING it: the host hands out
@@ -1637,14 +1679,14 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
     deadlineMs: 1500,
   });
   const before = stub.receivedCount();
-  // An invoke racing the in-flight dial shares its typed fate.
+  // An invoke racing the in-flight dial shares its fate as no session,
+  // in the dial's words.
   const inFlight = bridge.dialPeer(LISTENER);
   await assert.rejects(
     async () => invokeListener(bridge, ECHO, echoOf("unreachable")),
-    // Typed pin: a dead advertised port fails the candidate's
-    // socket, so the dial error is the connect error itself, not
-    // some incidental throw.
-    (error) => error instanceof RemoteConnectError,
+    (error) =>
+      error instanceof NoDirectConnectionError &&
+      /ECONNREFUSED/.test(error.message),
   );
   await assert.rejects(
     () => inFlight,

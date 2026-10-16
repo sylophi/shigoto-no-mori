@@ -26,6 +26,7 @@ import {
   CLOSE_CREDENTIAL_ROTATED,
   CLOSE_DEVICE_REVOKED,
   CLOSE_RATE_LIMITED,
+  CLOSE_SILENT,
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
   DeviceEnvelopeSchema,
@@ -63,6 +64,17 @@ const KEY_TAG_PREFIX = "key:";
 export const RELAY_BURST = 300;
 const RELAY_PER_SECOND = 30;
 
+// How long a socket may go without a ping before the hub takes it off
+// the roster. A device pings every 15 s (app/shared/hub/connection.ts),
+// a background tab whose timers the browser throttles about once a
+// minute. Cloudflare reports no close for a laptop that went to sleep
+// with its socket open, and each of its dark wakes supersedes its own
+// socket, so without this it read online all night and its peers dialed
+// it every half minute. Judged when the object runs anyway (a message,
+// a roster read), never on a timer of its own, which would bill a
+// request and wake a hibernated object every time.
+const SILENT_AFTER_MS = 90_000;
+
 // The standard close code for a message over the size the socket
 // accepts.
 const CLOSE_MESSAGE_TOO_BIG = 1009;
@@ -93,9 +105,11 @@ export type EnrollOutcome =
   | { readonly status: "account-full" };
 
 // A socket's attachment, which survives hibernation: when it connected,
-// so the device's oldest gives way past MAX_DEVICE_CONNECTIONS.
+// so the device's oldest gives way past MAX_DEVICE_CONNECTIONS, and when
+// it last sent a message, which proves it alive as a ping does.
 interface SocketAttachment {
   readonly connectedAt: number;
+  readonly heardAt?: number;
 }
 
 export class DeviceHub extends DurableObject<Env> {
@@ -113,6 +127,8 @@ export class DeviceHub extends DurableObject<Env> {
   >();
   // The budget's clock, which the proofs stop to send a burst at once.
   relayClock: () => number = () => Date.now();
+  // How long a socket may stay silent, which the proofs shorten.
+  silentAfterMs = SILENT_AFTER_MS;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -146,7 +162,11 @@ export class DeviceHub extends DurableObject<Env> {
   }
 
   online(): string[] {
-    return this.onlineIds(this.ctx.getWebSockets());
+    const evicted = this.evictSilent();
+    if (evicted.size > 0) this.announcePresence(evicted);
+    return this.onlineIds(
+      this.ctx.getWebSockets().filter((ws) => !evicted.has(ws)),
+    );
   }
 
   // Revocation is one operation owned by this object: the D1 row, the
@@ -316,6 +336,10 @@ export class DeviceHub extends DurableObject<Env> {
   }
 
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    ws.serializeAttachment({
+      connectedAt: connectedAt(ws),
+      heardAt: Date.now(),
+    } satisfies SocketAttachment);
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
     // A socket over its budget, or sending what no envelope this hub
@@ -335,7 +359,13 @@ export class DeviceHub extends DurableObject<Env> {
     if (!envelope) return;
     const from = this.deviceIdOf(ws);
     if (from === undefined) return;
-    const targets = this.ctx.getWebSockets(envelope.to);
+    // An ask to a device that went silent is where its peers find out:
+    // it leaves the roster, and the ask is nacked as offline.
+    const evicted = this.evictSilent();
+    if (evicted.size > 0) this.announcePresence(evicted);
+    const targets = this.ctx
+      .getWebSockets(envelope.to)
+      .filter((target) => !evicted.has(target));
     if (targets.length === 0) {
       this.safeSend(
         ws,
@@ -435,12 +465,35 @@ export class DeviceHub extends DurableObject<Env> {
   // closed or are closing: callers name the departing ones instead of
   // trusting the listing.
   private announcePresence(exclude: ReadonlySet<WebSocket>): void {
-    const sockets = this.ctx.getWebSockets().filter((ws) => !exclude.has(ws));
+    const evicted = this.evictSilent();
+    const sockets = this.ctx
+      .getWebSockets()
+      .filter((ws) => !exclude.has(ws) && !evicted.has(ws));
     const text = encodeEnvelope({
       t: "presence",
       online: this.onlineDevices(sockets),
     });
     for (const ws of sockets) this.safeSend(ws, text);
+  }
+
+  // Closes every socket silent past silentAfterMs, answering the ones it
+  // closed, which the caller leaves out of the roster it announces or
+  // reads.
+  private evictSilent(): ReadonlySet<WebSocket> {
+    const now = Date.now();
+    const evicted = new Set<WebSocket>();
+    for (const ws of this.ctx.getWebSockets()) {
+      const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+      const heard = Math.max(pinged?.getTime() ?? 0, heardAt(ws));
+      if (now - heard <= this.silentAfterMs) continue;
+      evicted.add(ws);
+      try {
+        ws.close(CLOSE_SILENT, "silent");
+      } catch {
+        // Already closing.
+      }
+    }
+    return evicted;
   }
 
   // A socket can die between listing and sending, and a dead peer that
@@ -461,6 +514,12 @@ export class DeviceHub extends DurableObject<Env> {
 function connectedAt(ws: WebSocket): number {
   const attachment = ws.deserializeAttachment() as SocketAttachment | null;
   return attachment?.connectedAt ?? 0;
+}
+
+// When the socket last sent a message, or connected.
+function heardAt(ws: WebSocket): number {
+  const attachment = ws.deserializeAttachment() as SocketAttachment | null;
+  return attachment?.heardAt ?? attachment?.connectedAt ?? 0;
 }
 
 // The row delete and the tickets of a revoke, in that order (revoke).
