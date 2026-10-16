@@ -112,8 +112,6 @@ const SCAN_DEPTH = 6;
 
 // A step that only adds to what a project starts with: its failure,
 // or a defect under it, leaves the project as added.
-const bestEffort = <A, E, R>(step: Effect.Effect<A, E, R>) =>
-  step.pipe(Effect.ignoreCause);
 
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -143,8 +141,14 @@ const make = Effect.gen(function* () {
       [
         deviceOn("autoPullNew"),
         deviceOn("autoPopulateInstall"),
-        git.resolveDefaultBranch(primaryPath),
-        scripts.packageManager(primaryPath),
+        // git's and the folder's answers are hints: one that fails seeds
+        // nothing of its own.
+        git
+          .resolveDefaultBranch(primaryPath)
+          .pipe(Effect.orElseSucceed(() => Option.none<string>())),
+        scripts
+          .packageManager(primaryPath)
+          .pipe(Effect.orElseSucceed(() => Option.none<string>())),
       ],
       { concurrency: "unbounded" },
     );
@@ -157,8 +161,10 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       if (autoPull) {
-        yield* bestEffort(
-          registry.setMark("autoPull", worktreeIdFromPath(project.path), true),
+        yield* registry.setMark(
+          "autoPull",
+          worktreeIdFromPath(project.path),
+          true,
         );
       }
       const scope = {
@@ -167,16 +173,18 @@ const make = Effect.gen(function* () {
         path: project.path,
       } as const;
       if (Option.isSome(branch)) {
-        yield* bestEffort(config.set(scope, "defaultBranch", branch.value));
+        yield* config.set(scope, "defaultBranch", branch.value);
       }
       // A setup script is a setting a project without a default branch
       // can't take yet.
       if (install && Option.isSome(manager) && Option.isSome(branch)) {
-        yield* bestEffort(
-          config.set(scope, "scripts.setup", `${manager.value} install`),
-        );
+        yield* config.set(scope, "scripts.setup", `${manager.value} install`);
       }
-    }).pipe(bestEffort);
+    }).pipe(
+      // Inside the register's transaction: a write that fails takes the
+      // register with it, rather than leave a project half seeded.
+      Effect.orDie,
+    );
 
   // The project and its seed in one transaction: a crash leaves both or
   // neither.

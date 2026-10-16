@@ -208,6 +208,7 @@ export const landWorktree = (
           source,
           cloneInto,
           landBranch,
+          landing.identity,
           // A clone that got as far as its register stays: it is a
           // checkout of the repo at the place the user named, and a
           // retry lands in it. So a failed register says where it is: a

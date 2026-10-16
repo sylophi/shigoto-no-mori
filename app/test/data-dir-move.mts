@@ -242,6 +242,8 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
       from: old,
       to: `${engineDataDir}/`,
       partial: `${engineDataDir}.partial-x`,
+      pid: 4_194_304,
+      startedAt: 0,
       moved: [
         { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
       ],
@@ -323,7 +325,14 @@ function landed(at: string, from: string, partial: string | null = null): void {
   writeFileSync(join(at, "store.db"), "");
   writeFileSync(
     join(at, JOURNAL),
-    JSON.stringify({ from, to: at, partial, moved: [] }),
+    JSON.stringify({
+      from,
+      to: at,
+      partial,
+      pid: 4_194_304,
+      startedAt: 0,
+      moved: [],
+    }),
   );
 }
 
@@ -368,6 +377,8 @@ it("finds a data folder whose move a crash cut before its pointer moved", async 
       from: defaultDataDir,
       to: custom,
       partial: "x",
+      pid: 4_194_304,
+      startedAt: 0,
       moved: [],
     }),
   );
