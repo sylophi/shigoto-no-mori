@@ -37,7 +37,7 @@ import * as Stream from "effect/Stream";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
-import { type Flavor, flavorNames } from "./flavor.ts";
+import { type Flavor, flavorNames, isFlavor } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { pidAlive } from "./processes.ts";
 import * as Registry from "./Registry.ts";
@@ -46,7 +46,7 @@ import * as Registry from "./Registry.ts";
 // isn't the app.
 export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   "AppNotRunning",
-  { flavor: Schema.Literals(["prod", "v3", "dev"]) },
+  { flavor: Schema.String.check(Schema.makeFilter(isFlavor)) },
 ) {
   override get message(): string {
     const hint =
