@@ -19,10 +19,12 @@ export const Journal = Schema.Struct({
   to: Schema.String,
   // The sibling a copy to another volume fills, null for a rename.
   partial: Schema.NullOr(Schema.String),
-  // The process making the move, and when it started: while it runs, the
-  // store it retired keeps refusing writes.
-  pid: Schema.Finite,
-  startedAt: Schema.Finite,
+  // The process making the move, and when it started (absent when ps
+  // couldn't say): while it runs, the store it retired keeps refusing
+  // writes. A journal from before either was written has neither, and
+  // its mover counts as running.
+  pid: Schema.optional(Schema.Finite),
+  startedAt: Schema.optional(Schema.Finite),
   moved: Schema.Array(
     Schema.Struct({
       projectId: Schema.String,
@@ -109,10 +111,25 @@ export const rescueStrandedMove = (input: {
           });
         }
       }
+      // The pre-2.0 pointer is read once the current one is gone, so one
+      // left naming the folder that left would lead back to it.
       if (legacyPointerFile !== null) {
-        yield* fs
+        const removed = yield* fs
           .remove(legacyPointerFile, { force: true })
-          .pipe(Effect.ignore);
+          .pipe(Effect.result);
+        if (
+          Result.isFailure(removed) &&
+          (yield* fs
+            .exists(legacyPointerFile)
+            .pipe(Effect.orElseSucceed(() => true)))
+        ) {
+          return yield* new DataDirStranded({
+            from: named,
+            to: at,
+            pointer: legacyPointerFile,
+            reason: removed.failure.message,
+          });
+        }
       }
       return at;
     }
@@ -187,7 +204,8 @@ export const strandedJournal = (dir: string) =>
       ChildProcessSpawner.ChildProcessSpawner,
     );
     const { pid, startedAt } = journal.value;
-    return !(yield* Option.isSome(spawner)
+    if (pid === undefined) return false;
+    return !(yield* Option.isSome(spawner) && startedAt !== undefined
       ? stillRunning(pid, startedAt).pipe(
           Effect.provideService(
             ChildProcessSpawner.ChildProcessSpawner,

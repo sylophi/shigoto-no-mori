@@ -167,6 +167,15 @@ it("opens a store a data-folder move retired writable again only once its mover 
   // A move still under way: this process plays its mover.
   journal(process.pid);
   assert.equal(await writes(), false);
+  // A journal that names no mover (one from before they were written)
+  // keeps the store refusing until the host's resume undoes the move.
+  write(JOURNAL, {
+    from: dataDir,
+    to: join(dataDir, "..", "elsewhere"),
+    partial: join(dataDir, "..", "elsewhere.partial-x"),
+    moved: [],
+  });
+  assert.equal(await writes(), false);
   journal(4_194_304);
   assert.equal(await writes(), true);
 });

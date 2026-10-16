@@ -238,7 +238,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     to: newDir,
     partial: null,
     pid: process.pid,
-    startedAt: Option.getOrElse(yield* startOf(process.pid), () => Date.now()),
+    ...Option.match(yield* startOf(process.pid), {
+      onNone: () => ({}),
+      onSome: (startedAt) => ({ startedAt }),
+    }),
     moved: repairTargets.flatMap(({ project, moved }) =>
       moved.map((m) => ({
         projectId: project.id,

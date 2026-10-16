@@ -1424,6 +1424,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
           source,
           into,
           landing,
+          identity,
           Projects.addProject,
           onProgress,
         ),
@@ -1526,6 +1527,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
           },
           { parentDir: clonesDir, name: "cut" },
           "feat/landing",
+          identity,
           Projects.addProject,
         ),
     ),
@@ -1545,18 +1547,34 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
   const lateInto = { parentDir: clonesDir, name: "late" };
   await assert.rejects(() =>
     withPeerSource(lateSource, (source) =>
-      cloneCheckoutFromPeer(source, lateInto, "feat/landing", () =>
+      cloneCheckoutFromPeer(source, lateInto, "feat/landing", identity, () =>
         Effect.fail(new Git.GitRefusedError({ reason: "the host went away" })),
       ),
     ),
   );
   assert.ok(existsSync(join(clonesDir, "late", ".git", "sm-clone-pending")));
   assert.equal((await listProjects()).length, before);
+  // Another repo asked into that folder takes nothing of it.
+  await assert.rejects(
+    () =>
+      withPeerSource(lateSource, (source) =>
+        cloneCheckoutFromPeer(
+          source,
+          lateInto,
+          "feat/landing",
+          "another-repo",
+          Projects.addProject,
+        ),
+      ),
+    /already exists/,
+  );
+  assert.equal((await listProjects()).length, before);
   const late = await withPeerSource(lateSource, (source) =>
     cloneCheckoutFromPeer(
       source,
       lateInto,
       "feat/landing",
+      identity,
       Projects.addProject,
     ),
   );

@@ -25,6 +25,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   SyncBundleRefSchema,
@@ -40,13 +41,17 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
 
 // Inside a clone's .git, from just before its rename until its register:
-// the folder it names, which a retry registers.
+// the folder and the repo (its identity) it is a clone of, which a retry
+// of the same repo into the same folder registers.
 const PENDING = "sm-clone-pending";
+const Pending = Schema.fromJsonString(
+  Schema.Struct({ dest: Schema.String, identity: Schema.String }),
+);
 
 const pendingIn = (dir: string) =>
   Effect.promise(() =>
     readFile(join(dir, ".git", PENDING), "utf8").then(
-      (text) => text.trim(),
+      (text) => Option.getOrNull(Schema.decodeUnknownOption(Pending)(text)),
       () => null,
     ),
   );
@@ -92,6 +97,9 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   // The branch the landing puts its copy on afterwards: the clone's own
   // branch cannot be it, and that is known before a byte moves.
   landing: string,
+  // The repo's identity, which a clone a crash left must match to be
+  // taken for this one.
+  identity: string,
   register: (dest: string) => Effect.Effect<A, E, R>,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ) {
@@ -112,7 +120,8 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   );
   // A clone a crash left renamed in but not registered: registered now.
   const left = join(parent, name);
-  if ((yield* pendingIn(left)) === left) {
+  const pending = yield* pendingIn(left);
+  if (pending?.dest === left && pending.identity === identity) {
     return yield* finishRegister(left, register);
   }
   const [dest, { branch, remoteUrl }] = yield* Effect.all(
@@ -203,7 +212,10 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
       // Says the clone is whole until its register: a retry that finds it
       // in the folder registers it rather than refusing the folder.
       yield* Effect.promise(() =>
-        writeFile(join(partial, ".git", PENDING), `${dest}\n`),
+        writeFile(
+          join(partial, ".git", PENDING),
+          Schema.encodeSync(Pending)({ dest, identity }),
+        ),
       );
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {

@@ -187,3 +187,25 @@ it("refuses to resolve a data dir a rename landed whose pointer can't be written
     chmodSync(config, 0o755);
   }
 });
+
+it("refuses to resolve when a pre-2.0 pointer to the folder that left can't be removed", async () => {
+  // Moved back to the default: the folder there holds the journal, and
+  // only the pre-2.0 pointer still names the folder that left.
+  const left = join(home, "drive", ".sm");
+  const back = join(home, ".sm");
+  mkdirSync(back, { recursive: true });
+  writeFileSync(join(back, "store.db"), "");
+  writeFileSync(
+    join(back, JOURNAL),
+    JSON.stringify({ from: left, to: back, partial: null, moved: [] }),
+  );
+  const config = join(home, ".config", "shigomori");
+  mkdirSync(config, { recursive: true });
+  writeFileSync(join(config, "root"), `${left}\n`);
+  chmodSync(config, 0o555);
+  try {
+    await assert.rejects(resolve(), /moved from .* couldn't be updated/);
+  } finally {
+    chmodSync(config, 0o755);
+  }
+});
