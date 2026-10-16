@@ -98,6 +98,8 @@ type PeerState = {
   // drop reported however early ends the session's wait.
   dropped: Deferred.Deferred<void> | null;
   lastFailure: string | null;
+  // Failed dials since the last session (or since the peer came online).
+  failures: number;
   // Refused dials in a row, for the refusal ladder.
   refusals: number;
   // Cuts its wait on the shared ladder short.
@@ -165,14 +167,18 @@ export const make = (
         if (Result.isFailure(dialed)) {
           const error = dialed.failure;
           const message = errorMessageOf(error);
+          state.failures += 1;
           // One line per DISTINCT reason, not per rung: the ladder
           // redials forever, and a reason unchanged since the last
           // attempt says nothing new. This is the only place a failed
           // dial is logged at all (the renderer learns of it only when
           // it asks, through the no-session rejection), so without it a
-          // peer that never connects leaves no trace in the log.
+          // peer that never connects leaves no trace in the log. The
+          // attempt's number says how many the unlogged ones were.
           if (message !== state.lastFailure) {
-            log.warn(`[direct] dial to ${deviceId} failed: ${message}`);
+            log.warn(
+              `[direct] dial to ${deviceId} failed (attempt ${state.failures}): ${message}`,
+            );
           }
           state.lastFailure = message;
           // A peer with no listener (a web client) has nothing to dial
@@ -190,10 +196,13 @@ export const make = (
           return 0;
         }
         const connectedAt = yield* Clock.currentTimeMillis;
-        if (state.lastFailure !== null) {
-          log.info(`[direct] session to ${deviceId} established`);
+        if (state.failures > 0) {
+          log.info(
+            `[direct] session to ${deviceId} established after ${state.failures} failed attempts`,
+          );
         }
         state.lastFailure = null;
+        state.failures = 0;
         state.refusals = 0;
         yield* Deferred.await(dropped);
         return (yield* Clock.currentTimeMillis) - connectedAt;
@@ -204,6 +213,7 @@ export const make = (
         loop: null,
         dropped: null,
         lastFailure: null,
+        failures: 0,
         refusals: 0,
         wake: makeWake(),
       };
