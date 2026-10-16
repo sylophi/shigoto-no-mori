@@ -8,6 +8,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -18,6 +19,7 @@ export class DarwinHelperError extends Schema.TaggedError<DarwinHelperError>()(
   {
     method: Schema.Literals([
       "clone",
+      "exchange",
       "flags",
       "xattrs",
       "privateSize",
@@ -113,6 +115,13 @@ export class Darwin extends Context.Service<
       readonly to: string;
       readonly paths?: readonly string[] | undefined;
     }) => Stream.Stream<Entry<typeof Cloned.Type>, DarwinHelperError>;
+    // renamex_np(2)'s RENAME_SWAP: `a` and `b`, both there on one
+    // volume, trade places in one step, so neither path is ever missing.
+    // Answers what the call said, a failure among it.
+    readonly exchange: (input: {
+      readonly a: string;
+      readonly b: string;
+    }) => Effect.Effect<Entry<typeof Cloned.Type>, DarwinHelperError>;
     // st_flags as found. `clear` then removes the owner's flags but
     // compression and tracking.
     readonly flags: (
@@ -221,6 +230,23 @@ const make = (binary: string) =>
     return Darwin.of({
       clone: ({ from, to, paths }) =>
         run("clone", ["clone"], [from, to], paths, lineOf(Cloned)),
+      exchange: Effect.fn("Darwin.exchange")(function* ({ a, b }) {
+        const line = yield* run(
+          "exchange",
+          ["exchange"],
+          [a, b],
+          undefined,
+          lineOf(Cloned),
+        ).pipe(Stream.runHead);
+        if (Option.isNone(line)) {
+          return yield* new DarwinHelperError({
+            method: "exchange",
+            reason: "output",
+            cause: new Error("no line"),
+          });
+        }
+        return line.value;
+      }),
       flags: ({ root, paths, clear }) =>
         run(
           "flags",

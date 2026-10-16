@@ -208,13 +208,11 @@ export const landWorktree = (
           source,
           cloneInto,
           landBranch,
-          (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
-        ).pipe(
           // A clone that got as far as its register stays: it is a
           // checkout of the repo at the place the user named, and a
           // retry lands in it. So a failed register says where it is: a
           // retry would only find the folder taken.
-          Effect.flatMap((dest) =>
+          (dest) =>
             addProject(dest).pipe(
               Effect.mapError(
                 (error) =>
@@ -224,9 +222,8 @@ export const landWorktree = (
                   }),
               ),
             ),
-          ),
-          Effect.withSpan("Landing.clone"),
-        ));
+          (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+        ).pipe(Effect.withSpan("Landing.clone")));
     }
 
     // 2. Refuse up front what the create would refuse after the bundle

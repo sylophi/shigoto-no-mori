@@ -85,6 +85,7 @@ import {
   startScript,
 } from "@host/lib/scripts";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
+import * as Git from "@shigomori/engine/Git";
 import { followDescription as followDescriptionOn } from "@host/lib/sync/worktreeDescription";
 import {
   attachLink,
@@ -1419,11 +1420,17 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
         worktreeId: worktreeIdFromPath(sourceRepo),
       },
       (source) =>
-        Effect.flatMap(
-          cloneCheckoutFromPeer(source, into, landing, onProgress),
+        cloneCheckoutFromPeer(
+          source,
+          into,
+          landing,
           Projects.addProject,
+          onProgress,
         ),
     );
+  // What a clone a crash cut short left: swept by the next of its name.
+  mkdirSync(join(clonesDir, ".lone.partial-4194304"), { recursive: true });
+  writeFileSync(join(clonesDir, ".lone.partial-4194304", "half"), "");
   const cloneFrames: [number, number][] = [];
   const cloned = await cloneFrom(
     { parentDir: clonesDir, name: "lone" },
@@ -1431,6 +1438,11 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     (bytes, totalBytes) => cloneFrames.push([bytes, totalBytes]),
   );
   assert.equal(cloned.path, join(clonesDir, "lone"));
+  assert.deepEqual(
+    readdirSync(clonesDir).filter((entry) => entry.includes(".partial-")),
+    [],
+    "the clone is built beside its folder and renamed in, a dead one's sibling swept",
+  );
   assert.equal(
     await gitOut(cloned.path, "remote", "get-url", "origin"),
     originUrl,
@@ -1496,6 +1508,32 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     /would land on main/,
   );
   assert.equal(existsSync(join(clonesDir, "y")), false);
+  assert.equal((await listProjects()).length, before);
+  // One whose fetch fails after its sibling was made leaves neither the
+  // sibling nor the folder, and registers nothing.
+  await assert.rejects(() =>
+    withPeerSource(
+      {
+        projectId: sourceProjectId,
+        worktreeId: worktreeIdFromPath(sourceRepo),
+      },
+      (source) =>
+        cloneCheckoutFromPeer(
+          {
+            ...source,
+            fetch: () =>
+              Effect.fail(new Git.GitRefusedError({ reason: "cut off" })),
+          },
+          { parentDir: clonesDir, name: "cut" },
+          "feat/landing",
+          Projects.addProject,
+        ),
+    ),
+  );
+  assert.deepEqual(
+    readdirSync(clonesDir).filter((entry) => entry.includes("cut")),
+    [],
+  );
   assert.equal((await listProjects()).length, before);
   // A pull told where to clone beside a checkout it already has
   // takes the checkout: nothing is cloned and the result says so.

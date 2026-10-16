@@ -1,16 +1,17 @@
 //go:build darwin
 
 // macfs: the macOS filesystem calls Node has no binding for, for the
-// engine's Darwin service. Six verbs:
+// engine's Darwin service. Seven verbs:
 //
 //	macfs clone [-stdin] <src> <dst>   clonefile(2) a tree, mode and mtime kept
+//	macfs exchange <a> <b>             renamex_np(2) RENAME_SWAP: the two swapped in one step
 //	macfs flags [-stdin] [-clear] <root>   st_flags, the owner's cleared but compression and tracking
 //	macfs xattrs [-stdin] [-strip] <root>  xattr names, stripped but provenance
 //	macfs privsize [-stdin] <root>     APFS private size, null where unknown
 //	macfs fstype [-stdin] <root>       the filesystem's type name
 //	macfs lstat [-stdin] [-private] [-skip <dir>...] <root>  lstat(2): what git's index records, the flags, blocks and links
 //
-// Without -stdin, clone and fstype answer for the root itself and the
+// Without -stdin, clone, exchange and fstype answer for the root itself and the
 // other four walk the whole tree under it (but any -skip folder) (the root included, no
 // symlink followed). With -stdin they answer for the NUL-separated
 // paths on stdin, each relative to the root (clone: under both roots).
@@ -189,6 +190,11 @@ var verbs = map[string]verb{
 			return out, nil
 		}
 	}},
+	"exchange": {roots: 2, op: func(*flag.FlagSet) op {
+		return func(roots []string, rel string) (any, error) {
+			return cloned{rel}, exchange(filepath.Join(roots[0], rel), filepath.Join(roots[1], rel))
+		}
+	}},
 	"fstype": {roots: 1, op: func(*flag.FlagSet) op {
 		return func(roots []string, rel string) (any, error) {
 			name, err := fsType(filepath.Join(roots[0], rel))
@@ -197,7 +203,7 @@ var verbs = map[string]verb{
 	}},
 }
 
-const usage = "usage: macfs clone|flags|xattrs|privsize|fstype|lstat [-stdin] [-clear|-strip|-private] <root> [<dst>]"
+const usage = "usage: macfs clone|exchange|flags|xattrs|privsize|fstype|lstat [-stdin] [-clear|-strip|-private] <root> [<dst>]"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
