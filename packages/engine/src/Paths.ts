@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { type Flavor, flavorNames } from "./flavor.ts";
+import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
 
 // The pointer file as it was read: the file, the target it names, and
@@ -150,7 +151,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     return unreadable ? ("unreadable" as const) : ("absent" as const);
   });
 
-  const resolved = yield* Effect.gen(function* () {
+  const resolve = Effect.gen(function* () {
     const override = yield* env("SHIGOMORI_DATA_DIR");
     if (Option.isSome(override)) {
       return {
@@ -187,6 +188,28 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     }
     return { dataDir: current, source: "default" as const, pointer };
   });
+
+  // A move a crash cut before its pointer moved: committed, and the data
+  // dir found again where the move left it, before any process can make
+  // a fresh store at the folder that left.
+  let resolved = yield* resolve;
+  if (
+    resolved.source !== "env" &&
+    !(yield* fs.exists(resolved.dataDir).pipe(Effect.orElseSucceed(() => true)))
+  ) {
+    yield* rescueStrandedMove({
+      named: resolved.dataDir,
+      pointerFile: path.join(configHome, names.configDir, names.pointer),
+      legacyPointerFile:
+        names.legacyPointer === null
+          ? null
+          : path.join(configHome, names.configDir, names.legacyPointer),
+      defaultDataDir: path.join(home, names.dataDir),
+    });
+    // Found again either way: another process may have made the same
+    // rescue first.
+    resolved = yield* resolve;
+  }
 
   return Paths.of({
     home,

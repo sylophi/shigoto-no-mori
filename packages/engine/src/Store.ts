@@ -27,6 +27,7 @@ import { terminals } from "./migrations/terminals.ts";
 import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { v2Import } from "./migrations/v2Import.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
+import { JOURNAL, reviveStore } from "./dataDirMoveJournal.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { StoreError, storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
@@ -207,6 +208,7 @@ export const layer = (
     Effect.gen(function* () {
       const { dataDir, store } = yield* Paths.Paths;
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const migration = yield* Migration.Migration;
       const platform = yield* platformOnly;
       const importing = (state: "running" | "done") =>
@@ -218,7 +220,6 @@ export const layer = (
       // won't load) owes one all the same when the 2.x files are there.
       const stuck = (reason: string) =>
         Effect.gen(function* () {
-          const path = yield* Path.Path;
           const v2 = yield* Effect.forEach(V2_FILES, (file) =>
             fs
               .exists(path.join(dataDir, file))
@@ -250,6 +251,17 @@ export const layer = (
           yield* fs.chmod(file, 0o600).pipe(Effect.ignore);
         }
         const client = yield* open(store);
+        // A copy across volumes a crash cut short left this store refusing
+        // writes; its journal is still here, and the move is undone.
+        if (
+          yield* fs
+            .exists(path.join(dataDir, JOURNAL))
+            .pipe(Effect.orElseSucceed(() => false))
+        ) {
+          yield* reviveStore.pipe(
+            Effect.provideService(SqlClient.SqlClient, client),
+          );
+        }
         const owed = yield* owesImport(dataDir).pipe(
           Effect.provideService(SqlClient.SqlClient, client),
         );
