@@ -1081,8 +1081,9 @@ const make = Effect.gen(function* () {
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     }),
     // Both have to be commits the repository already holds. The
-    // prefixes are pinned against diff.noprefix and its kin, which the
-    // pull request page's patch, gh's before, never had.
+    // prefixes are pinned against diff.noprefix and its kin, and an
+    // external diff or a textconv is left out, none of which the pull
+    // request page's patch, gh's before, ever had.
     mergeBaseDiff: Effect.fn("Git.mergeBaseDiff")(function* (input) {
       return yield* run(
         input.repo,
@@ -1094,6 +1095,8 @@ const make = Effect.gen(function* () {
           "--full-index",
           "--src-prefix=a/",
           "--dst-prefix=b/",
+          "--no-ext-diff",
+          "--no-textconv",
           "--end-of-options",
           `${input.base}...${input.head}`,
         ],

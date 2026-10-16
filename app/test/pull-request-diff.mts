@@ -223,9 +223,12 @@ afterAll(async () => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-it("a PR made here shows both sides of each image, from git, whatever the prefixes", async () => {
+it("a PR made here shows both sides of each image, from git, whatever its diff config", async () => {
   const { root, git, repo, commit, viewPullRequest } = setup();
   git(repo, "config", "diff.noprefix", "true");
+  git(repo, "config", "diff.external", "echo");
+  writeFileSync(join(repo, ".git", "info", "attributes"), "*.png diff=hex\n");
+  git(repo, "config", "diff.hex.textconv", "od -c");
   git(repo, "switch", "-q", "-c", "images");
   commit(repo, BRANCH, ["gone.png"], "Images");
   assert.equal((await createPullRequest(repo)).url, PR_URL);
