@@ -110,6 +110,8 @@ export const sessionPlace = Effect.try({
 const copyTree = (from: string, to: string) =>
   fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
 
+const trimmed = (dir: string) => dir.replace(/\/+$/, "");
+
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // The new parent, or undefined to reset to the default location.
   parentDir: string | undefined,
@@ -144,8 +146,25 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   }
   const newDir = join(parent, place.dataDirName);
   const toDefault = newDir === place.defaultDataDir;
+  const fs = yield* FileSystem.FileSystem;
+  // git spells a path under a data folder reached through a link (/tmp,
+  // /var/folders, a folder linked to another drive) by the link's
+  // target, so a path counts as under it by either spelling.
+  const oldReal = yield* fs
+    .realPath(oldDir)
+    .pipe(Effect.orElseSucceed(() => oldDir));
+  const spellings = [trimmed(oldDir), trimmed(oldReal)];
+  // A rename would move the link and leave its target where it is.
+  const link = yield* fs.readLink(trimmed(oldDir)).pipe(Effect.option);
+  if (Option.isSome(link)) {
+    return yield* new DataDirMoveError({
+      reason: `The data folder is a link to ${oldReal}. Move that folder instead.`,
+    });
+  }
+  const underOld = (path: string) =>
+    spellings.find((dir) => isSameOrInside(path, dir));
 
-  if (isSameOrInside(newDir, oldDir)) {
+  if (underOld(newDir) !== undefined) {
     return yield* new DataDirMoveError({
       reason:
         newDir === oldDir
@@ -156,7 +175,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // Same trap as nukeEverything: a project repo registered from inside
   // the data dir would be dragged along, breaking its recorded path.
   const projects = yield* freshProjects;
-  const trapped = findProjectInsideDataDir(projects);
+  const trapped = findProjectInsideDataDir(projects, spellings);
   if (trapped) {
     return yield* new DataDirMoveError({
       reason:
@@ -189,6 +208,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     });
   });
 
+  // Where git will name the moved worktrees: by the destination's real
+  // spelling, which their new ids hash.
+  const newReal = join(
+    yield* fs.realPath(parent).pipe(Effect.orElseSucceed(() => parent)),
+    place.dataDirName,
+  );
+
   // Managed worktrees whose checkout sits under the data dir: their ids get
   // marked delete-inflight for the whole move (blocking a renderer
   // script run from landing in a directory mid-move, exactly like the
@@ -201,18 +227,20 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
         Effect.map((identities) => ({
           project,
-          moved: identities
-            .filter((i) => !i.isPrimary && isSameOrInside(i.path, oldDir))
-            .map(
-              (i): MovedWorktree => ({
+          moved: identities.flatMap((i): MovedWorktree[] => {
+            const under = underOld(i.path);
+            if (i.isPrimary || under === undefined) return [];
+            return [
+              {
                 oldId: i.id,
                 oldPath: i.path,
                 newPath: join(
-                  newDir,
-                  i.path.slice(oldDir.length).replace(/^[/\\]/, ""),
+                  newReal,
+                  i.path.slice(under.length).replace(/^[/\\]/, ""),
                 ),
-              }),
-            ),
+              },
+            ];
+          }),
         })),
         // Repo moved or deleted, so nothing to repair for this one.
         Effect.orElseSucceed(() => ({
@@ -227,7 +255,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     moved.map((m) => m.oldId),
   );
   for (const id of marked) markDeleteInflight(id);
-  const fs = yield* FileSystem.FileSystem;
   const suffix = (yield* Random.nextInt).toString(36);
   // The pointer is written beside itself under a name of its own, then
   // renamed in.
