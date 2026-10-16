@@ -21,6 +21,7 @@ import {
   isTabRoute,
 } from "@shigomori/ui/views/PhoneTabBarView.tsx";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { InstallFailedToast } from "@/components/InstallFailedToast";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
 import {
   useAccountStatus,
@@ -122,8 +123,14 @@ export function AppShell() {
       sidebar={<Sidebar />}
       sidebarWidth={sidebar.width}
       onResizeStart={sidebar.onMouseDown}
-      // Updates found on this machine or a peer, announced once each.
-      toasts={<UpdateReadyToast />}
+      // Updates found on this machine or a peer, announced once each,
+      // and this machine's last install when it failed.
+      toasts={
+        <>
+          <UpdateReadyToast />
+          <InstallFailedToast />
+        </>
+      }
       backBar={
         !isTabRoute(pathname) && (
           <PhoneBackBarView

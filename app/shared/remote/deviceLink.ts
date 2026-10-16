@@ -328,7 +328,13 @@ export const dialDevice = (
       );
     }
 
-    const link = yield* rpcLink({ client, group, onPush: options.onPush });
+    const link = yield* rpcLink({
+      client,
+      group,
+      onPush: options.onPush,
+      // The loopback's dial, to this machine's own host.
+      local: options.expectedDeviceId === options.localDeviceId,
+    });
 
     // A round trip behind the subscriptions, so the link counts as open
     // only once the host hears it for its pushes: the host serves a

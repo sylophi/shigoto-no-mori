@@ -29,6 +29,7 @@ import type {
   UpdaterState,
 } from "@shigomori/contracts/schemas";
 import {
+  InstallFailureSchema,
   StagedManifestSchema,
   UpdateStageResultSchema,
 } from "@shigomori/contracts/schemas";
@@ -39,7 +40,7 @@ import { log } from "@shared/log";
 import { hostBusy, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
-import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
+import { QUIT_AFTER_ANSWER_MS } from "./relaunch";
 import { publishUpdaterState, updaterBridge } from "./updaterBridge";
 import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
@@ -114,6 +115,18 @@ const readStagedManifest = Effect.gen(function* () {
     .exists(path.join(files.staged, manifest.bundleName))
     .pipe(Effect.orElseSucceed(() => false));
   return there ? manifest : null;
+});
+
+// What a failed finish-install left for this start, taken so the next
+// start doesn't show it again.
+const takeInstallFailure = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const file = Updater.updaterFiles(path, dataDir()).installFailure;
+  const failure = yield* readJson(file, InstallFailureSchema).pipe(
+    Effect.orElseSucceed(() => null),
+  );
+  if (failure !== null) yield* fs.remove(file).pipe(Effect.ignore);
+  return failure;
 });
 
 // The staged update, if it's one this build can restart into. A
@@ -260,12 +273,11 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
     }
     const failed = next.kind === "error";
     if (next.kind === "error") log.warn(`[updater] ${next.message}`);
-    if (
-      failed &&
-      shown !== null &&
-      (yield* installableStaged)?.version === shown.version
-    ) {
-      next = shown;
+    // What is staged stays up over a failed check: the release shown,
+    // or one a failed install's error stood in front of at boot.
+    if (failed) {
+      const onDisk = yield* installableStaged;
+      if (onDisk !== null) next = readyStateFrom(onDisk);
     }
     setState(next);
     failedChecks = failed ? failedChecks + 1 : 0;
@@ -351,22 +363,19 @@ async function installUpdate(unattended: boolean): Promise<void> {
       kind: "error",
       message: errorMessageOf(err),
     });
-    // A remote caller reads success as "restarting", and Update all
-    // restarts the asking machine on it, so the failure rides back.
-    if (unattended) throw err;
-    return;
+    // The caller reads success as "restarting" (Update all restarts the
+    // asking machine on a peer's), so the failure rides back to its
+    // toast.
+    throw err;
   }
-  // A peer's invoke is answered when this handler resolves, and quit
-  // tears the direct listener down before a queued frame can leave, so
-  // an unattended install returns first and quits a beat later. The
+  // The caller's invoke is answered when this handler resolves, and
+  // quit tears its listener down before a queued frame can leave (a
+  // peer's direct one, or the loopback this machine's window called
+  // on), so the install returns first and quits a beat later. The
   // caller then sees success instead of a dropped-session error for an
   // update that is installing fine. `installing` blocks a second run
   // in the gap.
-  if (unattended) {
-    setTimeout(() => app.quit(), UNATTENDED_QUIT_DELAY_MS);
-    return;
-  }
-  app.quit();
+  setTimeout(() => app.quit(), QUIT_AFTER_ANSWER_MS);
 }
 
 // Update this device, whether or not its update is here yet: Update
@@ -439,7 +448,8 @@ export const layer = Layer.effectDiscard(
     // The CLI runs at this machine's own terminal, so its install is
     // attended.
     yield* updaterBridge({
-      install: () => void installUpdate(false),
+      // A failure is the updater's state already.
+      install: () => void installUpdate(false).catch(() => undefined),
       failed: (error) => {
         const message = `Couldn't read the update request: ${Updater.causeText(error)}`;
         // Once, not on every poll it keeps failing.
@@ -456,6 +466,14 @@ export const layer = Layer.effectDiscard(
         // check still runs, in case a newer release has shipped since.
         const staged = yield* installableStaged;
         if (staged !== null) setState(readyStateFrom(staged));
+        // The last install's failure, which its installer left as it
+        // relaunched this build (or as nothing relaunched). Shown over a
+        // staged update until the first check, once.
+        const failure = yield* takeInstallFailure;
+        if (failure !== null) {
+          log.warn(`[updater] the last install failed: ${failure.message}`);
+          setState({ kind: "error", message: failure.message, install: true });
+        }
         yield* Effect.sleep(FIRST_CHECK_DELAY_MS);
         yield* runCheck;
         return yield* Effect.forever(

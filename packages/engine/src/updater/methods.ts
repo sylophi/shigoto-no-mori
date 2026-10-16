@@ -60,7 +60,7 @@ export const makeMethods = ({
     const { anchorOf } = signatures;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
-    const { waitForRestart, appendInstallLog } = restart;
+    const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
     // --- the methods ---
 
     // open hands the app launchd's environment, not ours, so a data dir
@@ -178,10 +178,13 @@ export const makeMethods = ({
     }) {
       yield* available;
       if (input.appPid <= 0) return yield* new InvalidAppPid();
+      const pid = input.running.pid;
+      const failed = (error: unknown, after = "") =>
+        noteInstallFailure(pid, `${causeText(error)}${after}`, {
+          message: causeText(error),
+        });
       const bundle = yield* installedBundle(input.running.executable).pipe(
-        Effect.tapError((error) =>
-          appendInstallLog(`finish-install: ${causeText(error)}`),
-        ),
+        Effect.tapError((error) => failed(error)),
       );
       yield* appendInstallLog(
         `finish-install: waiting for app pid ${input.appPid} to exit`,
@@ -194,31 +197,28 @@ export const makeMethods = ({
       );
       if (alive) {
         const error = new AppStillRunning({ pid: input.appPid });
-        yield* appendInstallLog(
-          `finish-install: ${causeText(error)} (aborting)`,
-        );
+        yield* failed(error, " (aborting)");
         return yield* error;
       }
-      const installed = yield* installStaged(bundle, input.running.pid).pipe(
+      const installed = yield* installStaged(bundle, pid).pipe(
         // The app quit to restart, so the current version comes back rather
         // than leaving it closed. A failed swap has restored it.
         Effect.tapError((error) =>
-          appendInstallLog(
-            `finish-install: ${causeText(error)} (relaunching the current app)`,
-          ).pipe(Effect.andThen(run("open", relaunchArgs(bundle)))),
+          failed(error, " (relaunching the current app)").pipe(
+            Effect.andThen(run("open", relaunchArgs(bundle))),
+          ),
         ),
       );
       // By path, in front: the user asked for the restart. A bundle id could
       // still resolve to the aside bundle just deleted.
       const relaunched = yield* run("open", relaunchArgs(bundle));
       if (!relaunched.ok) {
-        yield* appendInstallLog(
-          `finish-install: installed ${installed.version} but relaunch failed: ${causeText(relaunched.cause)}`,
-        );
-        return yield* new RelaunchFailed({
+        const error = new RelaunchFailed({
           version: installed.version,
           cause: relaunched.cause,
         });
+        yield* failed(error);
+        return yield* error;
       }
       yield* appendInstallLog(
         `finish-install: installed ${installed.version} and relaunched`,

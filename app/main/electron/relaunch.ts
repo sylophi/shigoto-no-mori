@@ -94,12 +94,13 @@ export function relaunchApp(): void {
   app.quit();
 }
 
-// How long a quit asked for by another device waits after its handler
-// resolved. A peer's invoke is answered when the handler resolves, and
-// quit tears the direct listener down before a queued frame can leave,
-// so the quit trails the reply and the caller sees success instead of
-// a dropped session. Shared with the updater's unattended install.
-export const UNATTENDED_QUIT_DELAY_MS = 500;
+// How long a quit asked for over a link waits after its handler
+// resolved. The invoke is answered when the handler resolves, and quit
+// tears the listener down (a peer's direct one, a window's loopback)
+// before a queued frame can leave, so the quit trails the reply and the
+// caller sees success instead of a dropped session. Shared with the
+// updater's install.
+export const QUIT_AFTER_ANSWER_MS = 500;
 
 // The relaunch is arranged at once and only the quit waits: a quit
 // from this machine's own user inside the gap then still comes back
@@ -107,7 +108,7 @@ export const UNATTENDED_QUIT_DELAY_MS = 500;
 export function relaunchAppUnattended(): void {
   if (requested) return;
   scheduleRelaunch();
-  setTimeout(() => app.quit(), UNATTENDED_QUIT_DELAY_MS);
+  setTimeout(() => app.quit(), QUIT_AFTER_ANSWER_MS);
 }
 
 export function isRelaunching(): boolean {
