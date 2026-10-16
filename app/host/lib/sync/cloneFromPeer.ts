@@ -9,10 +9,14 @@
 // source's remote is set up when it has one, and the checkout is
 // registered the way the add-project dialog's clone is (`sm projects
 // add`, config seed included, which is why the register waits for the
-// checkout). Up to the register everything is undone on failure: the
-// folder is this call's own, made here.
+// checkout). The repository is built in a sibling of the folder asked
+// for and renamed in once whole, then registered, the two uninterrupted,
+// so the folder asked for is either the clone, registered, or not
+// there. Up to the rename everything is undone on failure, and a sibling
+// a crash left is swept by the next clone of the same name.
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
@@ -27,15 +31,48 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
 
-// An interrupt (the move's cancel) undoes the folder like any failure.
-// During the fetch the link's reset does the failing. Answers the
-// checkout, which the caller registers.
-export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
+// Whether a process with the pid runs (signal 0 delivers nothing).
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+// The siblings `.name.partial-<pid>` whose process is gone.
+const sweepPartials = (parent: string, name: string) =>
+  Effect.promise(async () => {
+    const prefix = `.${name}.partial-`;
+    const entries = await readdir(parent).catch(() => []);
+    await Promise.all(
+      entries
+        .filter((entry) => {
+          const pid = Number(entry.slice(prefix.length));
+          return (
+            entry.startsWith(prefix) &&
+            Number.isInteger(pid) &&
+            pid > 1 &&
+            !alive(pid)
+          );
+        })
+        .map((entry) =>
+          rm(join(parent, entry), { recursive: true, force: true }),
+        ),
+    );
+  });
+
+// An interrupt (the move's cancel) undoes the sibling like any failure.
+// During the fetch the link's reset does the failing. `register` makes
+// the checkout a project, right after the rename; answers what it does.
+export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
   // The branch the landing puts its copy on afterwards: the clone's own
   // branch cannot be it, and that is known before a byte moves.
   landing: string,
+  register: (dest: string) => Effect.Effect<A, E, R>,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ) {
   // The source's default branch is what the checkout is made of, so the
@@ -71,9 +108,14 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   }
   const branchRef = decodeBundleRef(`refs/heads/${branch}`);
   const incomingRef = incomingRefFor(branch);
+  yield* sweepPartials(parent, name);
+  const partial = join(parent, `.${name}.partial-${process.pid}`);
+  const removePartial = Effect.promise(() =>
+    rm(partial, { recursive: true, force: true }).catch(() => {}),
+  );
 
   yield* Effect.tryPromise({
-    try: () => mkdir(dest),
+    try: () => mkdir(partial),
     catch: (error) =>
       new Git.GitRefusedError({
         reason: `Couldn't make ${dest}: ${errnoWords(error, errorMessageOf(error))}.`,
@@ -81,15 +123,15 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   });
   yield* Effect.gen(function* () {
     const git = yield* Git.Git;
-    yield* git.run(dest, ["init", "--quiet"]);
+    yield* git.run(partial, ["init", "--quiet"]);
     // HEAD names the branch before it exists, so the checkout below is
     // one reset, and a clone of a repo whose default branch is not
     // git's own default lands on the right one.
-    yield* git.run(dest, ["symbolic-ref", "HEAD", branchRef]);
+    yield* git.run(partial, ["symbolic-ref", "HEAD", branchRef]);
     const { fetched } = yield* source.fetch({
       refs: [branchRef],
       haves: [],
-      into: { path: dest },
+      into: { path: partial },
       onProgress,
     });
     const tip = fetched.find((entry) => entry.ref === incomingRef)?.commit;
@@ -98,26 +140,26 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
         reason: `${branch} did not arrive whole from the other device.`,
       });
     }
-    yield* git.updateRef({ repo: dest, ref: branchRef, commit: tip });
-    yield* git.deleteRef(dest, incomingRef);
-    yield* git.run(dest, ["reset", "--quiet", "--hard"]);
+    yield* git.updateRef({ repo: partial, ref: branchRef, commit: tip });
+    yield* git.deleteRef(partial, incomingRef);
+    yield* git.run(partial, ["reset", "--quiet", "--hard"]);
     // The remote as `git clone` would leave it: origin, its HEAD on the
     // branch, the branch tracking it. The source answered the URL with
     // the clone payload's own rule (shared/cloneUrl.ts), re-checked
     // here before it reaches argv.
     if (remoteUrl !== null && isCloneableRemote(remoteUrl)) {
-      yield* git.run(dest, ["remote", "add", "origin", remoteUrl]);
+      yield* git.run(partial, ["remote", "add", "origin", remoteUrl]);
       yield* git.updateRef({
-        repo: dest,
+        repo: partial,
         ref: `refs/remotes/origin/${branch}`,
         commit: tip,
       });
-      yield* git.run(dest, [
+      yield* git.run(partial, [
         "symbolic-ref",
         "refs/remotes/origin/HEAD",
         `refs/remotes/origin/${branch}`,
       ]);
-      yield* git.run(dest, [
+      yield* git.run(partial, [
         "branch",
         "--set-upstream-to",
         `origin/${branch}`,
@@ -125,12 +167,17 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
         branch,
       ]);
     }
-  }).pipe(
-    Effect.onError(() =>
-      Effect.promise(() =>
-        rm(dest, { recursive: true, force: true }).catch(() => {}),
-      ),
-    ),
+  }).pipe(Effect.onError(() => removePartial));
+  return yield* Effect.uninterruptible(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise({
+        try: () => rename(partial, dest),
+        catch: (error) =>
+          new Git.GitRefusedError({
+            reason: `Couldn't put the clone at ${dest}: ${errnoWords(error, errorMessageOf(error))}.`,
+          }),
+      }).pipe(Effect.tapError(() => removePartial));
+      return yield* register(dest);
+    }),
   );
-  return dest;
 });

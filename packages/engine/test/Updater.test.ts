@@ -53,6 +53,8 @@ import type { Flavor } from "../src/flavor.ts";
 import * as Paths from "../src/Paths.ts";
 import { UpdateInProgress } from "../src/stagingLock.ts";
 import * as Updater from "../src/Updater.ts";
+import * as Darwin from "../src/Darwin.ts";
+import { macfs } from "./lib/macfs.ts";
 
 // Real paths, as the updater resolves its own binary through links.
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "engine-updater-")));
@@ -334,11 +336,14 @@ type Setup = {
   readonly http: HttpClient.HttpClient;
   readonly flavor?: Flavor;
   readonly fault?: Fault;
+  // The darwin helper, which swaps the bundles in one exchange.
+  readonly darwin?: boolean;
 };
 
-const layerFor = ({ box, http, flavor = "prod", fault }: Setup) =>
+const layerFor = ({ box, http, flavor = "prod", fault, darwin }: Setup) =>
   Updater.layer(flavor).pipe(
     Layer.provideMerge(Paths.layer("prod")),
+    Layer.provide(darwin === true ? Darwin.layer(macfs()) : Layer.empty),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, http)),
     Layer.provide(
       fault === undefined
@@ -1360,6 +1365,23 @@ const interruptions: ReadonlyArray<{
 ];
 
 describe("installing", () => {
+  it("swaps the bundles in one exchange where the helper can, with no moment without an app", async () => {
+    const { box, http } = await readyBox();
+    // Setting the old app aside would fail: the exchange never does it.
+    const fault = failing((from) => from === box.installed);
+    const doc = await using({ box, http, fault, darwin: true }, (u) =>
+      u.update({ running: running(box), progress: () => Effect.void }),
+    );
+    assert.deepEqual(doc, {
+      ok: true,
+      status: "updated",
+      from: "1.0.0",
+      to: "2.0.0",
+    });
+    assert.equal(versionAt(box.installed), "2.0.0");
+    intact(box);
+  });
+
   it("swaps the staged bundle in when no app runs", async () => {
     const { box, http } = await readyBox();
     const { seen, progress } = progressLog();

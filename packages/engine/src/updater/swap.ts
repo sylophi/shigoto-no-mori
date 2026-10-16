@@ -1,5 +1,6 @@
 // The updater's swap: the staged app put in place of the running one, and the old one kept until it starts.
 import * as Effect from "effect/Effect";
+import * as Darwin from "../Darwin.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -47,6 +48,9 @@ export const makeSwap = ({
     //     fails. Between them the aside still holds the app.
     // The running terminal binary may live inside the target. Every step is
     // a rename or an unlink, never a write in place, so it keeps running.
+    // The darwin helper, where the process has it (the terminal does,
+    // beside its binary; the app's own updater graph never swaps).
+    const darwin = yield* Effect.serviceOption(Darwin.Darwin);
     const swap = Effect.fn("Updater.swap")(function* (
       staged: string,
       target: string,
@@ -94,6 +98,18 @@ export const makeSwap = ({
       );
       const aside = path.join(dir, `${base}.old-${pid}`);
       yield* removeAll(aside);
+      // One exchange where the volume can make it: the new bundle and the
+      // installed one trade places in one step, so no moment, a crash's
+      // included, leaves no app at the target, and the old one goes after.
+      if (Option.isSome(darwin)) {
+        const exchanged = yield* darwin.value
+          .exchange({ a: incoming, b: target })
+          .pipe(
+            Effect.map((line) => !Darwin.isFailed(line)),
+            Effect.orElseSucceed(() => false),
+          );
+        if (exchanged) return yield* removeAll(incoming);
+      }
       // Not interruptible: an interruption between the two renames would
       // leave no app at the target.
       yield* Effect.uninterruptible(

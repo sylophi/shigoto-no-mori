@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
@@ -118,6 +119,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const git = yield* Git.Git;
+  const sql = yield* SqlClient.SqlClient;
   const config = yield* Config.Config;
   const registry = yield* Registry.Registry;
   const scripts = yield* Scripts.Scripts;
@@ -134,18 +136,26 @@ const make = Effect.gen(function* () {
   // What a project starts with: auto-pull on its primary per the
   // autoPullNew setting, its default branch, and a `<pm> install` setup
   // script per autoPopulateInstall. A repo without a default branch
-  // stays unconfigured until its first setting.
-  const seed = (project: Registry.RegisteredProject) =>
+  // stays unconfigured until its first setting. Read before the
+  // register, whose transaction writes it.
+  const seedOf = (primaryPath: string) =>
+    Effect.all(
+      [
+        deviceOn("autoPullNew"),
+        deviceOn("autoPopulateInstall"),
+        git.resolveDefaultBranch(primaryPath),
+        scripts.packageManager(primaryPath),
+      ],
+      { concurrency: "unbounded" },
+    );
+
+  const seed = (
+    project: Registry.RegisteredProject,
+    [autoPull, install, branch, manager]: Effect.Success<
+      ReturnType<typeof seedOf>
+    >,
+  ) =>
     Effect.gen(function* () {
-      const [autoPull, install, branch, manager] = yield* Effect.all(
-        [
-          deviceOn("autoPullNew"),
-          deviceOn("autoPopulateInstall"),
-          git.resolveDefaultBranch(project.path),
-          scripts.packageManager(project.path),
-        ],
-        { concurrency: "unbounded" },
-      );
       if (autoPull) {
         yield* bestEffort(
           registry.setMark("autoPull", worktreeIdFromPath(project.path), true),
@@ -166,15 +176,24 @@ const make = Effect.gen(function* () {
       }
     }).pipe(bestEffort);
 
+  // The project and its seed in one transaction: a crash leaves both or
+  // neither.
   const register = Effect.fn("Projects.register")(function* (
     primaryPath: string,
   ) {
-    const project = yield* registry.register({
-      name: path.basename(primaryPath),
-      path: primaryPath,
-    });
-    yield* seed(project);
-    return project;
+    const facts = yield* seedOf(primaryPath);
+    return yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const project = yield* registry.register({
+            name: path.basename(primaryPath),
+            path: primaryPath,
+          });
+          yield* seed(project, facts);
+          return project;
+        }),
+      )
+      .pipe(Effect.catchTags({ SqlError: (error) => Effect.die(error) }));
   });
 
   const add = Effect.fn("Projects.add")(function* (at: string) {

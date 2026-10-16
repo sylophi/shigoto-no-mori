@@ -1419,11 +1419,17 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
         worktreeId: worktreeIdFromPath(sourceRepo),
       },
       (source) =>
-        Effect.flatMap(
-          cloneCheckoutFromPeer(source, into, landing, onProgress),
+        cloneCheckoutFromPeer(
+          source,
+          into,
+          landing,
           Projects.addProject,
+          onProgress,
         ),
     );
+  // What a clone a crash cut short left: swept by the next of its name.
+  mkdirSync(join(clonesDir, ".lone.partial-4194304"), { recursive: true });
+  writeFileSync(join(clonesDir, ".lone.partial-4194304", "half"), "");
   const cloneFrames: [number, number][] = [];
   const cloned = await cloneFrom(
     { parentDir: clonesDir, name: "lone" },
@@ -1431,6 +1437,11 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
     (bytes, totalBytes) => cloneFrames.push([bytes, totalBytes]),
   );
   assert.equal(cloned.path, join(clonesDir, "lone"));
+  assert.deepEqual(
+    readdirSync(clonesDir).filter((entry) => entry.includes(".partial-")),
+    [],
+    "the clone is built beside its folder and renamed in, a dead one's sibling swept",
+  );
   assert.equal(
     await gitOut(cloned.path, "remote", "get-url", "origin"),
     originUrl,
