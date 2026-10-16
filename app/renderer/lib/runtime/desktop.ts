@@ -6,13 +6,15 @@
 // through the hub bridge (shared/hub/bridgeHandlers.ts), never by
 // swapping these.
 import { isHostSide } from "@shigomori/contracts/link";
+import type { HostRestartsSchema } from "@shigomori/contracts/modules/window";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
 import type { ElectronBridge } from "../../../main/preload";
 import { ClientLinks } from "./ClientLinks";
-import { hostAnswering } from "./hostAnswering";
+import { hostAnswering, hostRestarted } from "./hostAnswering";
 
 export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
   Layer.effect(
@@ -32,6 +34,23 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         );
       });
       const shell = yield* shellLink(port);
+      const runFork = yield* FiberSet.makeRuntime<never>();
+      // Each landing asks the shell how many times it has started the
+      // host again: a count that moved since the last is a restart this
+      // window lived through, and the band says why.
+      let seen: number | null = null;
+      const askWhy = shell.call("window:hostRestarts", undefined).pipe(
+        Effect.tap((answer) =>
+          Effect.sync(() => {
+            const { count, reason } = answer as typeof HostRestartsSchema.Type;
+            if (seen !== null && count > seen && reason !== null) {
+              hostRestarted.publish({ reason });
+            }
+            seen = count;
+          }),
+        ),
+        Effect.ignore,
+      );
       const host = yield* hostLink({
         address: shell.call("window:hostAddress", undefined) as Effect.Effect<
           HostAddress,
@@ -39,7 +58,10 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         >,
         appVersion: bridge.appVersion,
         openSocket: (url) => new WebSocket(url),
-        onAnswering: (answering) => hostAnswering.publish(answering),
+        onAnswering: (answering) => {
+          hostAnswering.publish(answering);
+          if (answering) runFork(askWhy);
+        },
       });
       // The shell is this window's own build.
       const ownShell = { ...shell, local: true };

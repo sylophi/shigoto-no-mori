@@ -20,6 +20,21 @@ export const HostAddressSchema = strict(
   }),
 );
 
+// Why the shell last started this machine's host again, and how many
+// times it has: a window whose link to its host came back asks, and
+// says why when the count moved since it last asked.
+export const HostRestartReasonSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("silent"), seconds: Schema.Int }),
+  Schema.Struct({
+    kind: Schema.Literal("exited"),
+    code: Schema.NullOr(Schema.Int),
+  }),
+]);
+export const HostRestartsSchema = Schema.Struct({
+  count: Schema.Int,
+  reason: Schema.NullOr(HostRestartReasonSchema),
+});
+
 // So a quit can bring a window back to it.
 const RouteSchema = Schema.String.check(Schema.isPattern(/^\//));
 const RoutePayloadSchema = strict(Schema.Struct({ route: RouteSchema }));
@@ -36,6 +51,7 @@ export const windowContract = defineContract(
   invoke("relaunch", VoidSchema, VoidSchema),
   invoke("notify", NotifyPayloadSchema, VoidSchema),
   invoke("hostAddress", VoidSchema, HostAddressSchema),
+  invoke("hostRestarts", VoidSchema, HostRestartsSchema),
   invoke("open", RoutePayloadSchema, VoidSchema),
   // Reopened on at the next start.
   invoke("showing", RoutePayloadSchema, VoidSchema),

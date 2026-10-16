@@ -151,7 +151,10 @@ it("the host going away under the press is the restart under way, said as this d
   );
   assert.ok(dropped instanceof RemoteDisconnectedError);
   assert.equal(dropped.local, true);
-  assert.equal(errorMessageOf(dropped), "lost the connection to this device");
+  assert.equal(
+    errorMessageOf(dropped),
+    "lost the connection to the app's background process",
+  );
 
   const pressed = await startHost(quitting);
   await using second = await windowOn(pressed);

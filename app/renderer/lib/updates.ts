@@ -7,7 +7,7 @@ import type { UpdaterState } from "@shigomori/contracts/schemas";
 import type { updaterContract } from "@shigomori/contracts/modules/updater";
 import type { EffectClient } from "@shigomori/contracts/types";
 import type * as Effect from "effect/Effect";
-import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
+import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 
 // Which devices are behind the newest app release, and the restart into
 // one, for the update toast and Settings (hooks/system/useUpdater.ts),
@@ -99,7 +99,7 @@ export async function restartIntoUpdate(api: {
   try {
     await api.run(api.updater.install());
   } catch (error) {
-    if (error instanceof RemoteDisconnectedError && error.local) return;
+    if (isOwnAppDrop(error)) return;
     throw error;
   }
 }

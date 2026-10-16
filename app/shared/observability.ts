@@ -44,13 +44,18 @@ function serialize(line: Record<string, unknown>): string {
   }
 }
 
-const fileTracer = (writeTraceLine: (line: string) => void) =>
+const fileTracer = (
+  writeTraceLine: (line: string) => void,
+  open: Set<Tracer.Span> | undefined,
+) =>
   Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
+      open?.add(span);
       const end = span.end;
       span.end = function (endTime, exit) {
         end.call(this, endTime, exit);
+        open?.delete(span);
         const startTime = millis(span.status.startTime);
         writeTraceLine(
           serialize({
@@ -91,12 +96,17 @@ const devTools = (packaged: boolean) =>
 export const layer = (options: {
   readonly packaged: boolean;
   readonly writeTraceLine: (line: string) => void;
+  // Kept filled with the spans that have started and not ended.
+  readonly openSpans?: Set<Tracer.Span>;
 }) =>
   devTools(options.packaged).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Logger.layer([logger, Logger.tracerLogger]),
-        Layer.succeed(Tracer.Tracer, fileTracer(options.writeTraceLine)),
+        Layer.succeed(
+          Tracer.Tracer,
+          fileTracer(options.writeTraceLine, options.openSpans),
+        ),
       ),
     ),
   );

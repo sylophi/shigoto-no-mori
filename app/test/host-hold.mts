@@ -16,6 +16,11 @@
 //     "Not responding" on this device), and a reconnect asked while
 //     a link is up is no drop. Over the REAL loopback
 //     (host/socket/Loopback.ts), with the shell's token.
+//   - the link outlives a sleep: neither the window's end nor the
+//     host's judges it by a wall clock the sleep moved, so a wake
+//     drops nothing (V3.md, "Local links and liveness"). Over a
+//     browser's socket, which Effect still sets to read frames as
+//     bytes through the link's wrapper.
 //   - a host that is starting is watched by its loop's beats: a real
 //     process whose loop is stuck in a watch's open (the stall V3.md's
 //     "A watch that froze the host" records) is called silent within
@@ -30,6 +35,7 @@ import { execFileSync, fork } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -51,7 +57,7 @@ import { beats, busyWithin, watchHost } from "../main/core/host/watchdog.ts";
 import { clearLoopbackOf } from "../main/core/host/leftovers.ts";
 import { hostContext } from "./lib/hostRuntime.mts";
 import { pushesLayer } from "./lib/hostStandIns.mts";
-import { testClock, waitFor } from "./lib/checkKit.mts";
+import { sleepingClock, testClock, waitFor } from "./lib/checkKit.mts";
 
 const IDLE = { runningScripts: 0, inflightDeletes: 0 };
 
@@ -138,6 +144,41 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
   assert.equal(silent, 0);
 });
 
+it("the watchdog calls no host silent on a limit that came late, and asks again", async () => {
+  const clock = testClock();
+  const { wall, stop } = sleepingClock(clock);
+  const run = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.runPromiseWith(clock.context)(
+      Effect.provideService(effect, Clock.Clock, wall),
+    );
+  let silent = 0;
+  let watching = true;
+  const watched = run(
+    watchHost({
+      probe: Effect.never,
+      every: "10 seconds",
+      limit: "30 seconds",
+      watching: () => watching,
+      asleep: () => false,
+      sleeps: () => 0,
+      silent: () => {
+        silent += 1;
+      },
+    }),
+  );
+  // The whole app stopped a minute inside the round begun at 10 s: its
+  // limit comes due as it runs again, a minute late.
+  await clock.advance(20_000);
+  stop(60_000);
+  await clock.advance(20_000);
+  assert.equal(silent, 0, "a limit the shell ran a minute late for");
+  // The next round, on time, is silence.
+  await clock.advance(40_000);
+  assert.equal(silent, 1);
+  watching = false;
+  await watched;
+});
+
 it("a quit's busy check takes the host's answer, or none past its deadline or on a failure", async () => {
   const clock = testClock();
   const run = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -156,8 +197,9 @@ it("a quit's busy check takes the host's answer, or none past its deadline or on
   assert.deepEqual(await hung, Option.none());
 });
 
-// The REAL loopback, answering the shell's busy call, on its own scope.
-async function startHost(dataDir: string) {
+// The REAL loopback, answering the shell's busy call, on its own scope,
+// on the clock given.
+async function startHost(dataDir: string, clock?: Clock.Clock) {
   const registrar: LinkRegistrar = createServed();
   registrar.serveOne(sessionContract, "busy", () => Effect.succeed(IDLE));
   const host = await hostContext();
@@ -178,6 +220,10 @@ async function startHost(dataDir: string) {
         ),
       ),
       scope,
+    ).pipe(
+      clock === undefined
+        ? (built) => built
+        : Effect.provideService(Clock.Clock, clock),
     ) as Effect.Effect<Context.Context<Loopback.Loopback>, never, never>,
   );
   const { port, shellToken } = await Effect.runPromise(
@@ -255,6 +301,47 @@ it("the shell's link dials a restarted host once, the reconnect asked as it came
     }
   } finally {
     await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+});
+
+it("the link to the host outlives a sleep at either end", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "host-hold-"));
+  dataDirs.push(dataDir);
+  const clock = testClock();
+  const { wall, sleep } = sleepingClock(clock);
+  const host = await startHost(dataDir, wall);
+  const answering: boolean[] = [];
+  const scope = Scope.makeUnsafe();
+  // The window's socket: a browser's, whose binaryType starts as
+  // "blob" until Effect sets it, through the link's own wrapper.
+  const sockets: WebSocket[] = [];
+  try {
+    const link = await Effect.runPromise(
+      hostLink({
+        address: Effect.succeed(host.address),
+        appVersion: "9.9.9",
+        openSocket: (url) => {
+          const socket = new WebSocket(url);
+          sockets.push(socket);
+          return socket;
+        },
+        onAnswering: (now) => answering.push(now),
+      }).pipe(Effect.provideService(Clock.Clock, wall), Scope.provide(scope)),
+    );
+    const session = effectClient(sessionContract, link);
+    assert.deepEqual(await Effect.runPromise(session.busy()), IDLE);
+    assert.equal(sockets[0]?.binaryType, "arraybuffer");
+    // A night's sleep after the window's first ping, then the host's
+    // liveness round and the window's pinger, in that order, at the
+    // wake: either end, before the fix, cut the link there.
+    await clock.advance(15_000);
+    sleep(8 * 60 * 60_000);
+    for (let round = 0; round < 3; round++) await clock.advance(15_000);
+    assert.deepEqual(await Effect.runPromise(session.busy()), IDLE);
+    assert.deepEqual(answering, [true]);
+  } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await host.stop();
   }
 });
 

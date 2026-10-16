@@ -630,6 +630,7 @@ export type DialOpts = {
   onClose?: () => void;
   protocolVersion?: number;
   deviceKind?: "desktop" | "web";
+  clock?: DeviceLinkOptions["clock"];
 };
 
 // A dial straight at a listener, sealed with the test keys, before its
@@ -657,6 +658,7 @@ export function dialing(
     ...(opts.protocolVersion === undefined
       ? {}
       : { protocolVersion: opts.protocolVersion }),
+    ...(opts.clock === undefined ? {} : { clock: opts.clock }),
   });
 }
 

@@ -1362,6 +1362,10 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "window:hostRestarts": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "window:networkChanged": {
     "kind": "invoke",
     "scope": "client"

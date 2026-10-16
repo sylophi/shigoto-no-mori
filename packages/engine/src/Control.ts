@@ -25,6 +25,7 @@ import {
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -128,13 +129,16 @@ export const LOOPBACK_FILE = "loopback.json";
 // this long is not the app.
 const HANDSHAKE_TIMEOUT = "5 seconds";
 
-// A ping every 5 s, and the app gone once 15 s pass with no frame from
-// it. Effect's default limit is the interval itself, timed from the
-// last frame: an app quiet for one interval was cut, and so was one
-// whose pong came back sooner than the next ping's timer ran late,
-// which on loopback is most of them, so a call the app took over 5 s to
-// answer usually failed.
-const PING = { pingInterval: "5 seconds", pingTimeout: "15 seconds" } as const;
+// No verdict from pings: the app is a process on this machine, whose
+// socket closes as it goes, and the app's own watchdog is what judges a
+// host that stops answering, closing this call's socket as it starts
+// another. Effect's pinger reads the wall clock, so a sleep or a clock
+// step mid-call (a long land or send) failed a call both ends were
+// still serving (V3.md, "Local links and liveness").
+const PING = {
+  pingInterval: "1 hour",
+  pingTimeout: Duration.infinity,
+} as const;
 
 // The close code the link's listener turns a connection away with when
 // it holds as many as it takes.

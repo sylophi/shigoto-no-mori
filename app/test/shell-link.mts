@@ -4,7 +4,9 @@
 // value crosses as it is, a contract error comes back as its class with
 // its fields, any other failure as a plain Error with its message, a
 // push to every window reaches each, a push to one window reaches that
-// one alone, and a port that closes aborts its calls' connection.
+// one alone, a port that closes aborts its calls' connection, and a
+// link that heard nothing for an hour, then slept, still answers, the
+// window's and the host's alike (V3.md, "Local links and liveness").
 //
 // Run: pnpm test shell-link.
 import assert from "node:assert/strict";
@@ -13,6 +15,7 @@ import {
   BranchNotMergedError,
   isBranchNotMergedError,
 } from "@shigomori/contracts/errors";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
@@ -21,7 +24,16 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { afterEach, it } from "vitest";
-import { layer, ShellLink, type ShellRegistrar } from "../main/ipc/ShellLink";
+import { sleepingClock, testClock } from "./lib/checkKit.mts";
+import {
+  layer,
+  makePortServer,
+  ShellLink,
+  type ShellRegistrar,
+} from "../main/ipc/ShellLink";
+import { ShellCallsGroup } from "@shigomori/contracts/link";
+import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
+import { portLink } from "@shared/remote/portLink";
 import { createShellRegistrar } from "../main/ipc/shellRegistrar";
 import * as FiberSet from "effect/FiberSet";
 import { shellLink } from "@shared/ipc/shell";
@@ -185,4 +197,82 @@ it("a port that closes aborts its calls' connection", async () => {
     connection?.addEventListener("abort", resolve);
   });
   assert.equal(connection?.aborted, true);
+});
+
+// An idle hour, the pings answered and nothing else heard, then a
+// night's sleep, each with the next turn of every timer after it.
+function throughTime(clock: ReturnType<typeof testClock>) {
+  const { wall, sleep } = sleepingClock(clock);
+  const passes = async () => {
+    await clock.advance(60 * 60_000);
+    sleep(8 * 60 * 60_000);
+    await clock.advance(60 * 60_000);
+  };
+  return { wall, passes };
+}
+
+it("the window's link that heard nothing for an hour, then slept, still answers", async () => {
+  const registrar = createShellRegistrar();
+  registrar.serveOne(windowContract, "hostAddress", async () => ADDRESS);
+  const { link } = await serve(registrar);
+  const clock = testClock();
+  const { wall, passes } = throughTime(clock);
+  const { port1, port2 } = new MessageChannel();
+  await Effect.runPromise(link.attach(asMainPort(port1) as never, {} as never));
+  const scope = Scope.makeUnsafe();
+  scopes.push(scope);
+  const transport = await Effect.runPromise(
+    Effect.gen(function* () {
+      const runFork = yield* FiberSet.makeRuntime<never>();
+      return linkTransport(yield* shellLink(port2 as never), runFork);
+    }).pipe(Effect.provideService(Clock.Clock, wall), Scope.provide(scope)),
+  );
+  assert.deepEqual(
+    await transport.invoke("window:hostAddress", undefined),
+    ADDRESS,
+  );
+  await passes();
+  assert.deepEqual(
+    await transport.invoke("window:hostAddress", undefined),
+    ADDRESS,
+  );
+});
+
+it("the host's link to its shell, likewise, and each call runs once", async () => {
+  const registrar = createShellRegistrar();
+  let checks = 0;
+  registrar.serveOne(shellCallsContract, "updaterCheck", async () => {
+    checks += 1;
+  });
+  const scope = Scope.makeUnsafe();
+  scopes.push(scope);
+  const server = await Effect.runPromise(
+    makePortServer(registrar, ShellCallsGroup).pipe(Scope.provide(scope)),
+  );
+  const { port1, port2 } = new MessageChannel();
+  await Effect.runPromise(server.attach(asMainPort(port1) as never, null));
+  const clock = testClock();
+  const { wall, passes } = throughTime(clock);
+  const shell = await Effect.runPromise(
+    Effect.gen(function* () {
+      const runFork = yield* FiberSet.makeRuntime<never>();
+      const hostEnd = yield* portLink(
+        {
+          postMessage: (data) => port2.postMessage(data.slice()),
+          close: () => port2.close(),
+          listen: (onMessage, onClose) => {
+            port2.on("message", onMessage);
+            port2.on("close", onClose);
+            port2.start();
+          },
+        },
+        ShellCallsGroup,
+      );
+      return linkTransport(hostEnd, runFork);
+    }).pipe(Effect.provideService(Clock.Clock, wall), Scope.provide(scope)),
+  );
+  await shell.invoke("shellCalls:updaterCheck", undefined);
+  await passes();
+  await shell.invoke("shellCalls:updaterCheck", undefined);
+  assert.equal(checks, 2);
 });
