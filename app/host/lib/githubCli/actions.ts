@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -79,22 +80,45 @@ export function ghStream(
   return stream === "stdout" ? stdoutOf(err.cause) : stderrOf(err.cause);
 }
 
-// Streams `gh pr diff <num>` as plain unified diff text, ready to hand
-// to DiffView. Throws on gh failure so the renderer can show the error
-// inline (vs. silently rendering an empty diff).
+// A PR's diff, ready to hand to DiffView: git's, from the two commits
+// GitHub has on record for the PR, whenever they are here or can be
+// fetched, since only git's patch names blob ids in full and a media
+// file's sides are read back by them (readBlob); `gh pr diff`
+// abbreviates them. `gh pr diff` is the fallback when they can't be
+// fetched or diffed here. Fails rather than rendering an empty diff, so the renderer
+// shows the error inline.
 export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
   function* (opts: { cwd: string; number: number }) {
-    // PR diffs are usually small but can run into the MB range; bump the
-    // buffer so a sprawling PR doesn't ENOBUFS, and give the transfer
-    // more room than the default gh timeout.
-    return yield* runGh(["pr", "diff", String(opts.number)], {
-      cwd: opts.cwd,
+    const { cwd, number } = opts;
+    const raw = yield* runGh(
+      ["pr", "view", String(number), "--json", "url,baseRefOid,headRefOid"],
+      { cwd, fallback: "gh pr view failed" },
+    );
+    const pr = yield* decodeGhPrCommits(raw);
+    if (yield* fetchPullRequestCommits(cwd, pr)) {
+      // A shallow clone can hold both commits and no merge base.
+      const local = yield* (yield* Git.Git)
+        .mergeBaseDiff({ repo: cwd, base: pr.baseRefOid, head: pr.headRefOid })
+        .pipe(Effect.option);
+      if (Option.isSome(local)) return local.value;
+    }
+    // PR diffs can run into the MB range; bump the buffer so a sprawling
+    // PR doesn't ENOBUFS, and give the transfer more room than the
+    // default gh timeout.
+    return yield* runGh(["pr", "diff", String(number)], {
+      cwd,
       fallback: "gh pr diff failed",
       maxBuffer: 32 * 1024 * 1024,
       timeout: 120_000,
     }).pipe(
       Effect.catchIf(isDiffTooLarge, () =>
-        getLocalPullRequestDiff(opts.cwd, opts.number),
+        Effect.fail(
+          new GhActionError({
+            reason:
+              "This pull request is too large for GitHub to diff, and its " +
+              "commits couldn't be fetched and diffed here.",
+          }),
+        ),
       ),
     );
   },
@@ -119,54 +143,46 @@ const decodeGhPrCommits = Schema.decodeUnknownEffect(
   ),
 );
 
-// The same diff, computed by git from the two commits GitHub has on
-// record for the PR. The head is the pushed one, so a local branch that
-// is ahead of it or behind it doesn't change the answer. Either commit
-// can be missing here (a base that moved since the last fetch, a fork's
-// head), and those are fetched by hash from the remote that holds the
-// PR, into the object store and no ref.
-const getLocalPullRequestDiff = Effect.fnUntraced(function* (
+// A stalled fetch gives way to gh, which has its own deadline.
+const PULL_REQUEST_FETCH_DEADLINE = Duration.minutes(1);
+
+// Whether both of the PR's commits are here, fetching the ones that
+// aren't (a base that moved since the last fetch, a head pushed from
+// another device or a fork) by hash from the remote that holds the PR,
+// into the object store and no ref: there is nothing to clean up, and
+// the head of a fork's PR is reachable there too (refs/pull/<n>/head).
+const fetchPullRequestCommits = Effect.fnUntraced(function* (
   cwd: string,
-  number: number,
+  pr: { url: string; baseRefOid: string; headRefOid: string },
 ) {
-  const raw = yield* runGh(
-    ["pr", "view", String(number), "--json", "url,baseRefOid,headRefOid"],
-    { cwd, fallback: "gh pr view failed" },
-  );
-  const pr = yield* decodeGhPrCommits(raw);
-  const oids = [pr.baseRefOid, pr.headRefOid];
   const git = yield* Git.Git;
+  const oids = [pr.baseRefOid, pr.headRefOid];
   const present = yield* Effect.forEach(
     oids,
     (oid) => git.hasCommit(cwd, oid),
-    {
-      concurrency: "unbounded",
-    },
+    { concurrency: "unbounded" },
   );
   const missing = oids.filter((_, i) => !present[i]);
-  if (missing.length > 0) {
-    const remote = yield* remoteNameForUrl(cwd, pr.url);
-    if (!remote) {
-      return yield* new GhActionError({
-        reason:
-          `This pull request is too large for GitHub to diff, and no git ` +
-          `remote points at ${pr.url} to fetch it from.`,
-      });
-    }
-    yield* (yield* Git.Git).run(cwd, [
+  if (missing.length === 0) return true;
+  const remote = yield* remoteNameForUrl(cwd, pr.url);
+  if (!remote) return false;
+  return yield* git
+    .run(cwd, [
       "fetch",
       "--quiet",
       "--no-tags",
       "--no-write-fetch-head",
       remote,
       ...missing,
-    ]);
-  }
-  return yield* (yield* Git.Git).mergeBaseDiff({
-    repo: cwd,
-    base: pr.baseRefOid,
-    head: pr.headRefOid,
-  });
+    ])
+    .pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+      Effect.timeoutOrElse({
+        duration: PULL_REQUEST_FETCH_DEADLINE,
+        orElse: () => Effect.succeed(false),
+      }),
+    );
 });
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles
