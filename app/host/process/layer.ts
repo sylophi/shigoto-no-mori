@@ -241,7 +241,10 @@ const cachedAnswers = Layer.mergeAll(
 );
 
 // The bottom of the graph, closed last.
-const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
+const foundation = (
+  engine: Parameters<typeof Engine.layer>[0],
+  migration: Migration.Migration["Service"],
+) =>
   cachedAnswers.pipe(
     // A villager download under way stops here, and resumes next launch.
     Layer.provideMerge(Villagers.deviceLayer),
@@ -263,9 +266,10 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Engine.layer(engine)),
     // The v3 migration the store and the move into wt/ report to, told
-    // to the shell from before the store opens.
+    // to the shell from before the store opens. Made before the graph,
+    // so a graph that fails still has it to tell (host.ts).
     Layer.provideMerge(MigrationShell.tellShell),
-    Layer.provideMerge(Migration.layer),
+    Layer.provideMerge(Layer.succeed(Migration.Migration, migration)),
   );
 
 // The lower half of the graph below: the file-sync children, the
@@ -273,6 +277,7 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
 const scriptsAndFoundation = (options: {
   readonly hurried: () => boolean;
   readonly engine: Parameters<typeof Engine.layer>[0];
+  readonly migration: Migration.Migration["Service"];
 }) =>
   // Every file-sync child, the daemon and the serve children a peer's
   // streams opened.
@@ -297,7 +302,7 @@ const scriptsAndFoundation = (options: {
     Layer.provideMerge(
       logged("the data folder's unfinished move", resumeLayer),
     ),
-    Layer.provideMerge(foundation(options.engine)),
+    Layer.provideMerge(foundation(options.engine, options.migration)),
   );
 
 // Built from the bottom up, so the scope closes from the top down: read
@@ -305,6 +310,7 @@ const scriptsAndFoundation = (options: {
 export const layer = (options: {
   readonly hurried: () => boolean;
   readonly engine: Parameters<typeof Engine.layer>[0];
+  readonly migration: Migration.Migration["Service"];
 }) =>
   dataDirHolders.pipe(
     Layer.provideMerge(scriptGate),

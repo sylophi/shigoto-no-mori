@@ -2,26 +2,36 @@
 // and setup run again in a worktree.
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
+import * as Git from "../Git.ts";
+import * as Layout from "../Layout.ts";
 import * as Registry from "../Registry.ts";
 import { type Located, type Reporter, WorktreeRefused } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { CreatingArea } from "./creating.ts";
 import type { RemovingArea } from "./removing.ts";
+import type { KeptArea } from "./kept.ts";
 
 export const makeAdopting = ({
   listing,
   creating,
   removing,
+  kept,
 }: {
   readonly listing: ListingArea;
   readonly creating: CreatingArea;
   readonly removing: RemovingArea;
+  readonly kept: KeptArea;
 }) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
+    const git = yield* Git.Git;
+    const layout = yield* Layout.Layout;
+    const path = yield* Path.Path;
     const { projectSettings, identities, row } = listing;
-    const { provision, createLifecycle, addWorktree } = creating;
-    const { requireClean, removeCheckout, rekeyWorktree } = removing;
+    const { provision, createLifecycle, addWorktree, occupied, unreserved } =
+      creating;
+    const { requireClean, removeCheckout } = removing;
 
     const adopt = Effect.fn("Worktrees.adopt")(function* (
       located: Located,
@@ -60,19 +70,51 @@ export const makeAdopting = ({
             subject: name,
           });
         }
+        // A folder at the managed place would refuse the add after the
+        // wipe too.
+        const place = path.join(yield* layout.worktreeBase(project), name);
+        if (yield* occupied(place)) {
+          return yield* new WorktreeRefused({
+            reason: "destination-taken",
+            subject: place,
+          });
+        }
+        yield* unreserved(place);
       }
-      yield* removeCheckout(project.path, worktree.path, true);
-      yield* registry.setMark("shelved", worktree.id, false);
-      const { made, found, cloned } = yield* addWorktree(project, {
-        name,
-        branch: "",
-        base: worktree.branch,
-        checkout: true,
-        clone: true,
-      });
-      // The checkout moved, so its id did too, like after a move.
-      if (made.id !== worktree.id) {
-        yield* rekeyWorktree(project, worktree.id, made.id);
+      // A detached checkout's tip is on no branch: a ref holds it from
+      // the wipe until the add has checked it out again, so an add that
+      // fails (or a crash between) loses no commit.
+      const held = `refs/shigomori/adopting/${worktree.id}`;
+      if (worktree.detached) {
+        const tip = yield* git.run(worktree.path, ["rev-parse", "HEAD"]);
+        yield* git.updateRef({
+          repo: project.path,
+          ref: held,
+          commit: tip.trim(),
+        });
+      }
+      // From the wipe to the re-key nothing may cut in: the checkout is
+      // gone until the add makes it again.
+      const { made, found, cloned } = yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          yield* removeCheckout(project.path, worktree.path, true);
+          yield* registry.setMark("shelved", worktree.id, false);
+          const added = yield* addWorktree(project, {
+            name,
+            branch: "",
+            base: worktree.branch,
+            checkout: true,
+            clone: true,
+          });
+          // The checkout moved, so its id did too, like after a move.
+          if (added.made.id !== worktree.id) {
+            yield* kept.rekey(project, worktree.id, added.made.id);
+          }
+          return added;
+        }),
+      );
+      if (worktree.detached) {
+        yield* git.deleteRef(project.path, held).pipe(Effect.ignore);
       }
       const adopted = yield* row({ project, worktree: made });
       if (cloned !== undefined)

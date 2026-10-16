@@ -21,6 +21,7 @@ import {
   MACFS_DIST_DIR,
 } from "@shared/packaging/macfsDist.mts";
 import { openPortLink } from "@shared/remote/portLink";
+import * as Migration from "@shigomori/engine/Migration";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostFacts from "@host/lib/HostFacts";
 import { storeFailureReport } from "@host/lib/storeFailure";
@@ -152,10 +153,13 @@ async function main(): Promise<void> {
     macfs: hostBinaryPath(MACFS_DIST_DIR, MACFS_BINARY_NAME),
     sm: hostBinaryPath(CLI_DIST_DIR, cliBinaryName(flavor)),
   };
+  const migration = await Effect.runPromise(Migration.make);
   // The root's door on top: open once every service is up (graph.ts).
   const graph = ManagedRuntime.make(
     Graph.layer.pipe(
-      Layer.provideMerge(HostLayer.layer({ hurried: () => hurried, engine })),
+      Layer.provideMerge(
+        HostLayer.layer({ hurried: () => hurried, engine, migration }),
+      ),
       // What the shell handed over: its facts and its calls.
       Layer.provideMerge(
         Layer.mergeAll(
@@ -184,8 +188,16 @@ async function main(): Promise<void> {
       ...engine,
       version: facts.appVersion,
     });
+    // The migration as the failure left it, which the graph's own telling
+    // may not have reached the shell with: a stuck import shows its
+    // reason on the migration's page, in place of the dialog.
     await Effect.runPromise(
-      shell.failed({ message: errorWordsOf(error), storeReport }),
+      migration.current.pipe(
+        Effect.flatMap(shell.migration),
+        Effect.andThen(
+          shell.failed({ message: errorWordsOf(error), storeReport }),
+        ),
+      ),
     );
     process.exit(1);
   }

@@ -353,7 +353,8 @@ type Removal =
   | { ok: true; cleanupError?: undefined }
   | { ok: false; cleanupError: CleanupError };
 
-// A cancelled move's rollback puts the removal on a clock (timeoutMs).
+// A cancelled move's rollback puts each cleanup script on a clock
+// (timeoutMs).
 export const deleteWorktree = Effect.fnUntraced(function* (
   project: Project,
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
@@ -370,6 +371,9 @@ export const deleteWorktree = Effect.fnUntraced(function* (
           force: input.force === true,
           keepBranch: false,
           skipCleanup: input.skipCleanup === true,
+          ...(opts.timeoutMs === undefined
+            ? {}
+            : { cleanupWithin: opts.timeoutMs }),
         },
         scriptReporter(scripts),
       )
@@ -386,12 +390,10 @@ export const deleteWorktree = Effect.fnUntraced(function* (
         }),
       );
   });
-  return yield* asChange(
-    opts.timeoutMs === undefined
-      ? removal
-      : removal.pipe(Effect.timeout(opts.timeoutMs)),
-    { projectId: project.id, worktreeId: input.worktreeId },
-  ).pipe(Effect.ensuring(Effect.sync(scripts.end)));
+  return yield* asChange(removal, {
+    projectId: project.id,
+    worktreeId: input.worktreeId,
+  }).pipe(Effect.ensuring(Effect.sync(scripts.end)));
 });
 
 // The merged layers of a stack, removed together from the highest
@@ -473,8 +475,8 @@ export const forceRemoveWorktree = Effect.fnUntraced(function* (
   opts: { timeoutMs?: number } = {},
 ) {
   const silent = { notifyScript: () => {} };
-  // A run the clock stopped reads as a cleanup failure. A worktree that
-  // is not there is not retried.
+  // A cleanup the clock stopped reads as a cleanup failure. A worktree
+  // that is not there is not retried.
   const result = yield* deleteWorktree(
     project,
     { worktreeId, force: true },

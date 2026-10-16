@@ -22,6 +22,7 @@ import { makeResolving } from "./worktrees/resolving.ts";
 import { makeDescribing } from "./worktrees/describing.ts";
 import { makeCreating } from "./worktrees/creating.ts";
 import { makeRemoving } from "./worktrees/removing.ts";
+import { makeKept } from "./worktrees/kept.ts";
 import { makeMoving } from "./worktrees/moving.ts";
 import { makeAdopting } from "./worktrees/adopting.ts";
 import { makeRelocating } from "./worktrees/relocating.ts";
@@ -295,6 +296,18 @@ export class Worktrees extends Context.Service<
       fromPath: string,
       toPath: string,
     ) => Effect.Effect<WorktreeRow, WorktreeRefused | Git.GitError>;
+    // The moves a crash or an interrupt cut short, whose process is gone,
+    // finished where git lists the checkout at its destination and undone
+    // elsewhere (worktrees/moving.ts).
+    readonly resumeMoves: Effect.Effect<void>;
+    // Those moves, for the doctor to report.
+    readonly interruptedMoves: Effect.Effect<
+      ReadonlyArray<{
+        readonly fromPath: string;
+        readonly toPath: string;
+        readonly projectId: string;
+      }>
+    >;
     // The project's primary ref (the default-branch setting honored),
     // its remote and local branch when it is a remote-tracking ref, and
     // the remotes that resolved it. An empty ref when none resolves.
@@ -333,11 +346,12 @@ const make = Effect.gen(function* () {
   const statusCard = yield* makeStatusCard({ listing });
   const resolving = yield* makeResolving({ listing });
   const describing = yield* makeDescribing({ listing });
-  const creating = yield* makeCreating({ listing, statusCard });
-  const removing = yield* makeRemoving({ listing, creating });
-  const moving = yield* makeMoving({ listing, creating, removing });
-  const adopting = yield* makeAdopting({ listing, creating, removing });
-  const relocating = yield* makeRelocating({ listing, removing, moving });
+  const kept = yield* makeKept;
+  const creating = yield* makeCreating({ listing, statusCard, kept });
+  const removing = yield* makeRemoving({ listing, creating, kept });
+  const moving = yield* makeMoving({ listing, creating, removing, kept });
+  const adopting = yield* makeAdopting({ listing, creating, removing, kept });
+  const relocating = yield* makeRelocating({ listing, kept, moving });
   const { identities, primaryRefOf, list, row, identityList, identityRow } =
     listing;
   const { status } = statusCard;
@@ -351,7 +365,7 @@ const make = Effect.gen(function* () {
   const { setShelved, setAutoPull, description, describe } = describing;
   const { destination, scriptContext, create } = creating;
   const { removable, remove } = removing;
-  const { move, carryMoved, rename, rekey } = moving;
+  const { move, carryMoved, rename, rekey, resume, interrupted } = moving;
   const { adopt, setup } = adopting;
   const { relocateProject } = relocating;
   const sql = yield* SqlClient.SqlClient;
@@ -386,6 +400,8 @@ const make = Effect.gen(function* () {
     move,
     rename,
     carryMoved,
+    resumeMoves: resume,
+    interruptedMoves: interrupted,
     rekey,
     relocateProject,
     snapshotted: sql<{ worktree_id: string }>`

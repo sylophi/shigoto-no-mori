@@ -19,8 +19,9 @@ const isStoreFailure = Schema.is(
   Schema.Union([StoreOpenError, StoreImportError]),
 );
 
-// What the doctor found wrong, one line per check that warned or
-// failed, or null when `error` is not the store's.
+// What the doctor found wrong, one line per check that failed (a
+// warning is about something else: a shell hook, a leftover), or null
+// when `error` is not the store's.
 export async function storeFailureReport(
   error: unknown,
   options: {
@@ -55,7 +56,7 @@ export async function storeFailureReport(
   ).catch(() => null);
   const findings =
     report?.checks
-      .filter((check) => check.status !== "ok")
+      .filter((check) => check.status === "fail")
       .map((check) => `${check.title}: ${check.detail}`) ?? [];
   return [error.message, ...findings].join("\n");
 }
