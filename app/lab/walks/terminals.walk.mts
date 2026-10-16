@@ -40,7 +40,8 @@ it("comes back after a quit in its folder, with its lines above", async () => {
   // The window comes back on the page it was quit on.
   await lab.page.getByRole("heading", { level: 1, name: "main" }).waitFor();
   await openTerminal();
-  await expect.poll(screen).toContain("echo marker-$((6*7))");
+  // The output, not the command line: how a shell echoes a command
+  // depends on its prompt, and a long one wraps it.
   await expect.poll(screen).toMatch(/^marker-42$/m);
   await lab.page.locator(".xterm").click();
   await lab.page.keyboard.type("pwd");
