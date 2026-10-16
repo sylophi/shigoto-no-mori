@@ -14,12 +14,18 @@
 // install request `sm update` writes, and its installer swaps the new
 // bundle in and opens it again, on the same temporary data folder.
 //
-// The release job runs it on the signed build; locally:
+// The release job runs it on the signed build; locally, on a test
+// flavor's (`SM_FLAVOR=lab pnpm package`, app/lab/dev-app.md):
 //
 //   node scripts/smoke-app.mts "out/<app name>-darwin-arm64/<app name>.app"
 //
+// With --serve <port>, a test flavor's build is then left running on a
+// fresh data folder with its debugging port open there, for weblab to
+// attach to as to the dev app, until this script is stopped.
+//
 // It uses the build's own userData and logs folder, which a launch
-// creates, so run it where that build is not installed.
+// creates, so run it where that build is not installed, and nuke a
+// test flavor's after (`<its binary> nuke --yes`).
 
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -49,8 +55,13 @@ const STAGE_WITHIN_MS = 4 * 60_000;
 const RESTART_WITHIN_MS = 2 * 60_000;
 
 const argument = process.argv[2];
-if (argument === undefined || !argument.endsWith(".app")) {
-  console.error("usage: smoke-app.mts <path to the .app>");
+const serveAt = process.argv[3] === "--serve" ? process.argv[4] : undefined;
+if (
+  argument === undefined ||
+  !argument.endsWith(".app") ||
+  (process.argv.length > 3 && !/^\d+$/.test(serveAt ?? ""))
+) {
+  console.error("usage: smoke-app.mts <path to the .app> [--serve <port>]");
   process.exit(2);
 }
 const bundle: string = argument;
@@ -339,6 +350,33 @@ await launch("a data folder holding an empty store.db", (dataDir) => {
   mkdirSync(dataDir);
   writeFileSync(join(dataDir, "store.db"), "");
 });
+// Up on a data folder of its own, the port open, until stopped.
+async function serve(port: string) {
+  const root = mkdtempSync(join(tmpdir(), "sm-serve-"));
+  const dataDir = join(root, "data");
+  const child = spawn(executableIn(bundle), [], {
+    env: {
+      ...process.env,
+      SHIGOMORI_DATA_DIR: dataDir,
+      SHIGOMORI_DEBUG_PORT: port,
+    },
+    stdio: "inherit",
+  });
+  let exited = false;
+  child.once("exit", () => {
+    exited = true;
+  });
+  const stopped = new Promise<void>((resolve) => {
+    process.once("SIGINT", resolve);
+    process.once("SIGTERM", resolve);
+    child.once("exit", () => resolve());
+  });
+  console.log(`serving on 127.0.0.1:${port}, the data folder ${dataDir}`);
+  await stopped;
+  if (child.pid !== undefined) await stop(child.pid, () => exited);
+  rmSync(root, { recursive: true, force: true });
+}
+
 const identity = process.env.APPLE_SIGNING_IDENTITY;
 if (identity === undefined || identity === "") {
   console.log(
@@ -347,3 +385,4 @@ if (identity === undefined || identity === "") {
 } else {
   await update(identity);
 }
+if (serveAt !== undefined) await serve(serveAt);

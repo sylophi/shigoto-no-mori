@@ -1,17 +1,19 @@
-// Dev-only automation hook: SHIGOMORI_DEBUG_PORT=<port> opens
+// Automation hook: SHIGOMORI_DEBUG_PORT=<port> opens
 // Chromium's remote-debugging (CDP) endpoint so tooling can drive the
 // renderer (screenshots, theme checks, exercising flows end-to-end).
 // `electron-forge start -- --remote-debugging-port=...` can't do this:
 // forge puts app args after Electron's `--` separator, where Chromium
 // stops parsing switches. Env vars survive app.relaunch(), so
 // a driven session keeps its port across restarts (e.g. the moveDataDir
-// relaunch). No-op in packaged builds.
+// relaunch). A packaged build takes it only as a test flavor
+// (flavor.ts debuggable), which the lab drives the same way.
 import { app } from "electron";
 import { envSetting } from "@shared/config";
+import { names } from "../flavor";
 
 export function enableDevCdpPort(): void {
   const port = envSetting("SHIGOMORI_DEBUG_PORT");
-  if (!app.isPackaged && port) {
+  if ((!app.isPackaged || names.debuggable) && port) {
     app.commandLine.appendSwitch("remote-debugging-port", port);
   }
 }
