@@ -38,7 +38,7 @@ import {
   initDataDir,
 } from "@shared/paths";
 import { applyUserShellEnv } from "@shared/shellEnv";
-import { cliBinaryName } from "@shared/packaging/cliDist.mts";
+import { hostFailureWords } from "./hostFailureWords";
 import * as Observability from "@shared/observability";
 import * as UpdaterEngine from "./electron/updaterEngine";
 import { writeTraceLine } from "./electron/logFile";
@@ -393,17 +393,8 @@ function showHostFailure(failure: HostFailure): void {
     app.exit(1);
     return;
   }
-  if (failure.storeReport !== null) {
-    dialog.showErrorBox(
-      "Shigoto no Mori can't open its data",
-      `${failure.storeReport}\n\nRun \`${cliBinaryName(flavor)} doctor\` in a terminal for the repairs it offers.`,
-    );
-  } else {
-    dialog.showErrorBox(
-      "Shigoto no Mori can't start",
-      `${failure.message}\n\nQuit and relaunch the app. If it keeps happening, restart your machine or reinstall.`,
-    );
-  }
+  const { title, body } = hostFailureWords(failure, flavor);
+  dialog.showErrorBox(title, body);
   process.exit(1);
 }
 
