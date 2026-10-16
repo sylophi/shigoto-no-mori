@@ -28,12 +28,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import { afterAll, afterEach, beforeEach, it, vi } from "vitest";
 import { dataDir, initDataDirAt } from "@shared/paths";
 import {
@@ -96,7 +98,7 @@ it("the running files: whole on FileSystem, checked, absent as null", async () =
 });
 
 // The bridge on its own scope, its requests and failures noted.
-const bridge = (fs?: FileSystem.FileSystem) => {
+const bridge = (fs?: FileSystem.FileSystem, clock?: TestClock.TestClock) => {
   const asked: string[] = [];
   const failures: unknown[] = [];
   const scope = Scope.makeUnsafe();
@@ -109,6 +111,7 @@ const bridge = (fs?: FileSystem.FileSystem) => {
       }).pipe(
         Scope.provide(scope),
         Effect.provideService(FileSystem.FileSystem, fs ?? real),
+        clock ? Effect.provideService(Clock.Clock, clock) : (self) => self,
       );
     }),
   );
@@ -209,11 +212,39 @@ it("the updater's bridge: a claim that fails is reported, and the next poll stil
 });
 
 it("the updater's bridge: stops looking with its scope", async () => {
-  const { asked, started, stop } = bridge();
+  // Its looks counted on a clock the proof moves, so nothing here waits
+  // on the runner's speed.
+  const clock = await Effect.runPromise(Effect.scoped(TestClock.make()));
+  let looks = 0;
+  let settled = 0;
+  const { asked, started, stop } = bridge(
+    await onPlatform(
+      Effect.map(FileSystem.FileSystem, (real) => ({
+        ...real,
+        rename: (from, to) => {
+          looks++;
+          return real
+            .rename(from, to)
+            .pipe(Effect.ensuring(Effect.sync(() => settled++)));
+        },
+      })),
+    ),
+    clock,
+  );
   await started;
+  // A second ahead each time, as the next look's sleep may not have
+  // begun yet.
+  await waitFor(async () => {
+    await Effect.runPromise(clock.adjust("1 second"));
+    return settled >= 2 && settled === looks;
+  }, "a look at the start and the clock's");
+  // With no look under way, as a rename still on the thread pool can
+  // claim a request written after the stop.
+  const before = looks;
   await stop();
   request(Date.now());
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await Effect.runPromise(clock.adjust("1 minute"));
+  assert.equal(looks, before);
   assert.deepEqual(asked, []);
   assert.equal(existsSync(requestPath()), true);
   rmSync(requestPath());
