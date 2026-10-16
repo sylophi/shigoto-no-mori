@@ -336,19 +336,15 @@ const make = Effect.gen(function* () {
       copiedInstead?: true;
     }> = [];
     const excludes: string[] = [];
-    // Beside the worktree, on its volume and out of git's sight. One a
-    // crash left (its process gone) goes first.
+    // Beside the worktree, on its volume and out of git's sight. Any one a
+    // crash left there (its process gone) goes first.
     const parent = path.dirname(input.destination);
     const prefix = `.${path.basename(input.destination)}.carry-`;
     for (const left of yield* fs
       .readDirectory(parent)
       .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))) {
-      const pid = Number(left.slice(prefix.length));
-      if (
-        left.startsWith(prefix) &&
-        Number.isInteger(pid) &&
-        !(yield* pidAlive(pid))
-      ) {
+      const pid = Number(/^\..+\.carry-(\d+)$/.exec(left)?.[1]);
+      if (Number.isInteger(pid) && pid > 1 && !(yield* pidAlive(pid))) {
         yield* fs
           .remove(path.join(parent, left), { recursive: true })
           .pipe(Effect.ignore);

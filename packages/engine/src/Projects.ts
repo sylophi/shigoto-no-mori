@@ -169,7 +169,9 @@ const make = Effect.gen(function* () {
       if (Option.isSome(branch)) {
         yield* bestEffort(config.set(scope, "defaultBranch", branch.value));
       }
-      if (install && Option.isSome(manager)) {
+      // A setup script is a setting a project without a default branch
+      // can't take yet.
+      if (install && Option.isSome(manager) && Option.isSome(branch)) {
         yield* bestEffort(
           config.set(scope, "scripts.setup", `${manager.value} install`),
         );
