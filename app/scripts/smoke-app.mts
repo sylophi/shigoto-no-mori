@@ -486,7 +486,6 @@ async function updateInstalled(
   installed: string,
   dataDir: string,
 ) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-candidate-")));
   const version = versionOf(installed);
   const next = newerThan(version);
   // The app reads its version from the bundle's package.json, which a
@@ -514,6 +513,7 @@ async function updateInstalled(
     fail(`${installed} isn't running on ${dataDir}`);
   }
   if (!signedIn()) fail("the installed app isn't signed in");
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-candidate-")));
   const { url, server } = await serveRelease(bundle, next, identity, root);
   try {
     // Quit as the menu's Quit does (a busy app asks first), and started
