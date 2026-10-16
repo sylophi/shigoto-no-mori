@@ -31,19 +31,30 @@ export const makeKept = Effect.gen(function* () {
       )
       .pipe(Effect.orDie);
 
-  // A capture belongs to the worktree, not its old path.
+  // A capture belongs to the worktree, not its old path. Whether it
+  // followed (or there was none).
   const rekeyCapture = (project: RegisteredProject, from: string, to: string) =>
     Effect.gen(function* () {
       const capture = yield* git.refTip(project.path, dirtyRef(from));
-      if (Option.isNone(capture)) return;
-      yield* git
-        .updateRef({
-          repo: project.path,
-          ref: dirtyRef(to),
-          commit: capture.value,
-        })
-        .pipe(Effect.andThen(git.deleteRef(project.path, dirtyRef(from))));
-    }).pipe(Effect.ignore);
+      if (Option.isNone(capture)) return true;
+      yield* git.updateRef({
+        repo: project.path,
+        ref: dirtyRef(to),
+        commit: capture.value,
+      });
+      yield* git.deleteRef(project.path, dirtyRef(from));
+      return true;
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.as(
+          Effect.logWarning(
+            "A dirty capture's ref didn't follow its move",
+            cause,
+          ),
+          false,
+        ),
+      ),
+    );
 
   const forgetRows = (project: RegisteredProject, worktreeId: string) =>
     sql

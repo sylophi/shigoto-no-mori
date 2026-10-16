@@ -1,21 +1,25 @@
 // A worktree move or removal interrupted at each step (a cancelled call,
 // a closing graph): from the record of the move to its commit nothing
-// cuts in, a copy across volumes is undone, and an interrupt after the
-// commit finds the move made. The removal's tail, git's remove and the
+// cuts in, a copy across volumes is undone and frees its folder, and an
+// interrupt after the commit finds the move made. A resume deletes only
+// what the move made, leaves a live process's move to it, and carries
+// a capture's ref the crash left behind. The removal's tail, git's remove and the
 // forget, runs whole too. Each step is held by the wrappers in
 // lib/stopAt.ts; the same steps killed outright are the app's proof
 // `interrupted-workflows`.
 import assert from "node:assert/strict";
-import { existsSync, readdirSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
-import { afterEach, beforeEach, it } from "vitest";
+import * as SqlClient from "effect/sql/SqlClient";
+import { afterEach, beforeEach, it, onTestFinished } from "vitest";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
-import { type Sandbox, sandbox } from "./lib/sandbox.ts";
+import { type Engine, type Sandbox, sandbox } from "./lib/sandbox.ts";
 import { type Stop, stopWrappers } from "./lib/stopAt.ts";
 
 let box: Sandbox;
@@ -200,4 +204,170 @@ it("an interrupt after git's remove waits for the forget", async () => {
     }),
   );
   assert.deepEqual(result, { listed: false, autoPull: false, title: "" });
+});
+
+// A project with a worktree fox, marked, and what a resume reads.
+const withFox = <A, E>(
+  then: (fox: {
+    project: Registry.RegisteredProject;
+    worktree: Worktrees.WorktreeIdentity;
+    repo: string;
+  }) => Effect.Effect<A, E, Engine>,
+) =>
+  box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const made = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      const worktree = (yield* worktrees.identities(project)).find(
+        (row) => row.id === made.worktree.id,
+      );
+      assert.ok(worktree);
+      yield* worktrees.setAutoPull(worktree, true);
+      return yield* then({ project, worktree, repo });
+    }),
+  );
+
+// The record a process left that is gone (no pid 2^22 runs here).
+const deadRecord = (
+  project: Registry.RegisteredProject,
+  from: string,
+  to: string,
+  partial: string | null = null,
+) =>
+  Effect.flatMap(
+    SqlClient.SqlClient,
+    (sql) =>
+      sql`INSERT INTO moving ${sql.insert({
+        from_path: from,
+        to_path: to,
+        project_id: project.id,
+        partial,
+        pid: 4_194_304,
+        started_at: 0,
+      })}`,
+  );
+
+const records = Effect.flatMap(
+  SqlClient.SqlClient,
+  (sql) => sql<{ from_path: string }>`SELECT from_path FROM moving`,
+);
+
+it("a resume never deletes a folder the move didn't make", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const to = join(dirname(worktree.path), "vixen");
+      box.git(repo, "worktree", "move", worktree.path, to);
+      // Someone's folder at the old path since the crash.
+      mkdirSync(worktree.path);
+      writeFileSync(join(worktree.path, "notes.txt"), "mine\n");
+      yield* deadRecord(project, worktree.path, to);
+      yield* worktrees.resumeMoves;
+      return {
+        kept: existsSync(join(worktree.path, "notes.txt")),
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { kept: true, records: 0 });
+});
+
+it("a cancelled copy across volumes frees its folder for the next move", async () => {
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const to = join(dirname(worktree.path), "vixen");
+      const mark = join(box.home, "held");
+      process.env["PATH"] = stopWrappers(join(box.home, "stop-bin"), {
+        stop: { tool: "cp", when: "after", match: ".partial-" },
+        mark,
+        seconds: 1,
+        crossVolume: true,
+      }).PATH;
+      const moving = yield* Effect.forkChild(
+        worktrees.move({ project, worktree }, to),
+      );
+      yield* held(mark);
+      yield* Fiber.interrupt(moving);
+      process.env["PATH"] = path;
+      const left = (yield* records).length;
+      const moved = yield* worktrees.move({ project, worktree }, to);
+      return { left, at: moved.worktree.path === to };
+    }),
+  );
+  assert.deepEqual(result, { left: 0, at: true });
+});
+
+it("a move another live process holds is left to it", async () => {
+  const sleeper = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+  onTestFinished(() => void sleeper.kill());
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const sql = yield* SqlClient.SqlClient;
+      const to = join(dirname(worktree.path), "vixen");
+      yield* sql`INSERT INTO moving ${sql.insert({
+        from_path: worktree.path,
+        to_path: to,
+        project_id: project.id,
+        partial: null,
+        pid: sleeper.pid ?? 0,
+        started_at: Date.now(),
+      })}`;
+      yield* worktrees.resumeMoves;
+      const refused = yield* worktrees
+        .move({ project, worktree }, to)
+        .pipe(Effect.flip);
+      return {
+        records: (yield* records).length,
+        interrupted: (yield* worktrees.interruptedMoves).length,
+        refused: refused instanceof Worktrees.WorktreeRefused && refused.reason,
+      };
+    }),
+  );
+  assert.deepEqual(result, {
+    records: 1,
+    interrupted: 0,
+    refused: "move-in-progress",
+  });
+});
+
+it("a resume carries a dirty capture the crash left under the old id", async () => {
+  const result = (await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const to = join(dirname(worktree.path), "vixen");
+      const head = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${worktree.id}`, head);
+      box.git(repo, "worktree", "move", worktree.path, to);
+      yield* deadRecord(project, worktree.path, to);
+      yield* worktrees.resumeMoves;
+      const now = (yield* worktrees.identities(project)).find(
+        (row) => row.path === to,
+      );
+      assert.ok(now);
+      const refs = box
+        .git(
+          repo,
+          "for-each-ref",
+          "--format=%(refname)",
+          "refs/shigomori/dirty",
+        )
+        .trim();
+      return {
+        refs,
+        wanted: `refs/shigomori/dirty/${now.id}`,
+        records: (yield* records).length,
+      };
+    }),
+  )) as { refs: string; wanted: string; records: number };
+  assert.deepEqual(result.refs, result.wanted);
+  assert.equal(result.records, 0);
 });

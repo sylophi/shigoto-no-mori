@@ -53,8 +53,9 @@ export const migrationHandlers: Handlers<
     continued = true;
     tell(null);
   },
+  // A stuck import's host can't answer: it is started again instead.
   retry: () =>
-    restartParkedHost()
-      ? undefined
+    latest?.import?.state === "stuck"
+      ? restartParkedHost()
       : Effect.runPromise(host().migrationRetry()),
 };
