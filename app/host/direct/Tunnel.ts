@@ -249,8 +249,8 @@ export interface Options {
   // HTTPS and reads any edge answer that the LISTENER produced (the
   // 426 a ws server earns for a non-upgrade GET) as routable.
   readonly probe?: ((hostname: string) => Effect.Effect<boolean>) | undefined;
-  // Where the live child's pid is recorded so a crashed host's
-  // orphaned cloudflared can be reaped on the next launch. A getter
+  // Where the live child's pid is recorded, for the next host to reap
+  // it if this one dies unasked (reapOrphanedConnector). A getter
   // because the userData path is an app-ready fact. When absent
   // (tests), the bookkeeping is disabled.
   readonly pidFilePath?: (() => string) | undefined;
@@ -364,6 +364,41 @@ interface Memory {
   readonly denied: boolean;
 }
 
+// Kills the cloudflared a host that died unasked left running (a
+// crash, a SIGKILL, a stuck start the shell killed): nothing else stops
+// it, and it keeps fronting the hostname onto a port anything local may
+// rebind. Run once as the next host starts (process/host.ts), before
+// this host's own connector can write the file. The process NAME is
+// checked first, so a recycled pid never takes out another process.
+// When the app is never opened again, the orphan runs until it is
+// killed or the machine restarts.
+export const reapOrphanedConnector = (pidFile: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const raw = yield* fs.readFileString(pidFile).pipe(Effect.option);
+    if (Option.isNone(raw)) return;
+    const pid = Number.parseInt(raw.value.trim(), 10);
+    // The same pid floor as scripts/process.ts safeKill: never signal
+    // groups, self, or launchd on a corrupt file.
+    if (Number.isInteger(pid) && pid >= 2) {
+      const name = yield* Processes.exec("ps", [
+        "-p",
+        String(pid),
+        "-o",
+        "comm=",
+      ]).pipe(Effect.option);
+      if (
+        Option.isSome(name) &&
+        name.value.stdout.trim().toLowerCase().includes("cloudflared")
+      ) {
+        yield* Effect.try(() => process.kill(pid, "SIGKILL")).pipe(
+          Effect.ignore,
+        );
+      }
+    }
+    yield* fs.remove(pidFile, { force: true }).pipe(Effect.ignore);
+  });
+
 const stopped: Memory = {
   wantedPort: null,
   provision: null,
@@ -404,41 +439,6 @@ const make = (options: Options) =>
         return null;
       }
     });
-
-    // Kill a previous app instance's orphaned cloudflared, recorded in the
-    // pid file: nothing reaps the child when the host dies without running
-    // its quit (a crash, a SIGKILL), so the next launch does. The
-    // process NAME is verified before killing so a recycled pid never
-    // takes out an innocent process. Residual exposure, accepted: when the
-    // app is SIGKILLed and never launched again, the orphan connector
-    // keeps running until the machine reboots or the user kills it.
-    const reaped = yield* Ref.make(false);
-    const reapStaleOnce = Effect.gen(function* () {
-      const path = yield* pidFile;
-      if (path === null || (yield* Ref.getAndSet(reaped, true))) return;
-      const raw = yield* fs.readFileString(path).pipe(Effect.option);
-      if (Option.isNone(raw)) return;
-      const pid = Number.parseInt(raw.value.trim(), 10);
-      // The same pid floor as scripts/process.ts safeKill: never signal
-      // groups, self, or launchd on a corrupt file.
-      if (Number.isInteger(pid) && pid >= 2) {
-        const name = yield* Processes.exec("ps", [
-          "-p",
-          String(pid),
-          "-o",
-          "comm=",
-        ]).pipe(Effect.option);
-        if (
-          Option.isSome(name) &&
-          name.value.stdout.trim().toLowerCase().includes("cloudflared")
-        ) {
-          yield* Effect.try(() => process.kill(pid, "SIGKILL")).pipe(
-            Effect.ignore,
-          );
-        }
-      }
-      yield* fs.remove(path, { force: true }).pipe(Effect.ignore);
-    }).pipe(withSpawner);
 
     // The readiness probe chain for a freshly spawned child: attempts on
     // the probe ladder until routable, then advertise. A child that is
@@ -574,7 +574,7 @@ const make = (options: Options) =>
                   // what stops the app's group (a terminal's Ctrl-C, a
                   // launcher stopping it) stops the connector too. One
                   // the host's crash leaves is reaped through the pid
-                  // file at the next start.
+                  // file as the next host starts.
                   detached: false,
                   forceKillAfter: KILL_GRACE_MS,
                 }),
@@ -668,11 +668,6 @@ const make = (options: Options) =>
       (wanted: { readonly port: number } | null) =>
         lifecycle.withPermit(
           Effect.gen(function* () {
-            // The connector a crashed run left behind is reaped on the
-            // first reconcile whatever it wants: a signed-out boot never
-            // reaches a start, and the orphan keeps fronting the
-            // hostname onto a port anything local may rebind.
-            yield* reapStaleOnce;
             if (wanted === null) return yield* stopNow;
             const current = yield* SubscriptionRef.get(status);
             const known = yield* Ref.get(memory);

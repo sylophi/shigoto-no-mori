@@ -29,7 +29,8 @@ import * as Observability from "@shared/observability";
 import { initDataDir } from "@shared/paths";
 import * as Graph from "./graph";
 import * as Loopback from "@host/socket/Loopback";
-import { hostBinaryPath, hostFacts } from "./facts";
+import { reapOrphanedConnector } from "@host/direct/Tunnel";
+import { hostBinaryPath, hostFacts, tunnelPidFile } from "./facts";
 import * as HostLayer from "./layer";
 import * as ShellLayer from "./shell";
 import { startHost } from "./session";
@@ -112,6 +113,15 @@ const beat = () => parentPort.postMessage("beat");
 beat();
 setInterval(beat, BEAT_EVERY_MS).unref();
 
+// The connector a host that died unasked left running, killed first:
+// a boot that stalls later must not leave it running too. Awaited before
+// the graph, whose Tunnel writes the file again.
+const reaped = Effect.runPromise(
+  reapOrphanedConnector(tunnelPidFile()).pipe(
+    Effect.provide(NodeServices.layer),
+  ),
+);
+
 let hurried = false;
 let runtime: { readonly dispose: () => Promise<void> } | null = null;
 
@@ -163,6 +173,7 @@ async function main(): Promise<void> {
     sm: hostBinaryPath(CLI_DIST_DIR, cliBinaryName(flavor)),
   };
   const migration = await Effect.runPromise(Migration.make);
+  await reaped;
   // The root's door on top: open once every service is up (graph.ts).
   const graph = ManagedRuntime.make(
     Graph.layer.pipe(
