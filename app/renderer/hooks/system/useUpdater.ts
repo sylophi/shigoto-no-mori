@@ -15,6 +15,7 @@ import {
   findOutdated,
   type KnownUpdates,
   type OutdatedDevice,
+  restartIntoUpdate,
 } from "@/lib/updates";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { toast } from "@/lib/toast";
@@ -73,7 +74,7 @@ export function useUpdater() {
   });
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
   const install = useMutation({
-    mutationFn: () => api.run(api.updater.install()),
+    mutationFn: () => restartIntoUpdate(api),
     meta: { errorTitle: "Couldn't install the update" },
   });
 
@@ -88,6 +89,18 @@ export function useUpdater() {
     isError: query.isError,
     refetch: query.refetch,
   };
+}
+
+// This machine's last install's failure, when its installer failed (the
+// swap, or the relaunch): the reason the relaunched app's updater holds
+// until its first check.
+export function useInstallFailure(): string | null {
+  const page = useApi();
+  const { data } = useQuery({
+    ...updaterStateQueryOptions(page.deviceId, page),
+    enabled: useHasLocalHost(),
+  });
+  return data?.kind === "error" && data.install === true ? data.message : null;
 }
 
 // The devices this window could update right now: itself, plus every
@@ -270,7 +283,7 @@ async function updateDevice(
   device: OutdatedDevice,
 ): Promise<UpdateOutcome> {
   if (device.staged) {
-    await target.api.run(target.api.updater.install());
+    await restartIntoUpdate(target.api);
     return "installed";
   }
   await target.api.run(target.api.updater.update());

@@ -605,6 +605,7 @@ export const updaterFiles = (
     extract: path.join(updates, "extract"),
     releaseList: path.join(updates, "release-list.json"),
     installLog: path.join(updates, "install.log"),
+    installFailure: path.join(updates, "install-failure.json"),
     // What the app publishes, and what the terminal asks of it.
     status: path.join(dataDir, "updater.json"),
     request: path.join(dataDir, "updater-request.json"),

@@ -10,9 +10,13 @@
 // bundle signed by the installed app's team), the update an installed
 // app makes of itself: a copy of the build is the installed app, and a
 // copy re-signed under a newer version is the release a local release
-// list offers. The app stages it on its own first check, consumes the
-// install request `sm update` writes, and its installer swaps the new
-// bundle in and opens it again, on the same temporary data folder.
+// list offers. The app stages it on its own first check. It consumes
+// the install request `sm update` writes into an app folder the swap
+// can't write, and comes back on the old version saying why. Then
+// Settings' "Restart to update", pressed the way the window's button
+// does (press-restart-to-update.ts), answers, and the installer swaps
+// the new bundle in and opens it again, on the same temporary data
+// folder.
 //
 // The release job runs it on the signed build; locally, on a test
 // flavor's (`SM_FLAVOR=lab pnpm package`, app/lab/dev-app.md):
@@ -23,12 +27,18 @@
 // fresh data folder with its debugging port open there, for weblab to
 // attach to as to the dev app, until this script is stopped.
 //
+// With --update-installed <installed .app> <its data dir>, the step
+// before a cut instead (V3.md, "Process"): the app installed on this
+// machine, running and signed in, takes the build through Restart to
+// update (updateInstalled, below).
+//
 // It uses the build's own userData and logs folder, which a launch
 // creates, so run it where that build is not installed, and nuke a
 // test flavor's after (`<its binary> nuke --yes`).
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
+  chmodSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -55,13 +65,23 @@ const STAGE_WITHIN_MS = 4 * 60_000;
 const RESTART_WITHIN_MS = 2 * 60_000;
 
 const argument = process.argv[2];
-const serveAt = process.argv[3] === "--serve" ? process.argv[4] : undefined;
+const mode = process.argv[3];
+const serveAt = mode === "--serve" ? process.argv[4] : undefined;
+const installedAt =
+  mode === "--update-installed"
+    ? { app: process.argv[4] ?? "", dataDir: process.argv[5] ?? "" }
+    : undefined;
 if (
   argument === undefined ||
   !argument.endsWith(".app") ||
-  (process.argv.length > 3 && !/^\d+$/.test(serveAt ?? ""))
+  (mode === "--serve" && !/^\d+$/.test(serveAt ?? "")) ||
+  (mode === "--update-installed" &&
+    (!installedAt?.app.endsWith(".app") || installedAt.dataDir === "")) ||
+  (mode !== undefined && mode !== "--serve" && mode !== "--update-installed")
 ) {
-  console.error("usage: smoke-app.mts <path to the .app> [--serve <port>]");
+  console.error(
+    "usage: smoke-app.mts <path to the .app> [--serve <port> | --update-installed <installed .app> <its data dir>]",
+  );
   process.exit(2);
 }
 const bundle: string = argument;
@@ -167,7 +187,13 @@ function newerThan(version: string): string {
 
 type AppStatus = {
   pid: number;
-  state: { kind: string; version?: string; message?: string };
+  appVersion: string;
+  state: {
+    kind: string;
+    version?: string;
+    message?: string;
+    install?: boolean;
+  };
 };
 const statusIn = (dataDir: string): AppStatus | null => {
   try {
@@ -177,23 +203,23 @@ const statusIn = (dataDir: string): AppStatus | null => {
   }
 };
 
-async function update(identity: string) {
-  // Real, as the installer resolves the app's path before it opens it.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-smoke-update-")));
-  const dataDir = join(root, "data");
-  const installed = join(root, "installed", `${appName}.app`);
+// A copy of `build` signed again under `version`, zipped in `root` as
+// a release's asset, and a local release list offering it.
+async function serveRelease(
+  build: string,
+  version: string,
+  identity: string,
+  root: string,
+) {
   const release = join(root, "release", `${appName}.app`);
-  const version = versionOf(bundle);
-  const next = newerThan(version);
-  execFileSync("ditto", [bundle, installed]);
   // Only the outer bundle is signed again, as its Info.plist changed.
   // Its nested code keeps the build's signatures.
-  execFileSync("ditto", [bundle, release]);
+  execFileSync("ditto", [build, release]);
   execFileSync("plutil", [
     "-replace",
     "CFBundleShortVersionString",
     "-string",
-    next,
+    version,
     plist(release),
   ]);
   execFileSync("codesign", [
@@ -204,7 +230,7 @@ async function update(identity: string) {
     "--preserve-metadata=entitlements,requirements,flags,runtime",
     release,
   ]);
-  const zipName = `${appName}-darwin-${process.arch}-${next}.zip`;
+  const zipName = `${appName}-darwin-${process.arch}-${version}.zip`;
   const zip = join(root, zipName);
   execFileSync("ditto", ["-c", "-k", "--keepParent", release, zip]);
   rmSync(join(root, "release"), { recursive: true, force: true });
@@ -220,8 +246,8 @@ async function update(identity: string) {
     response.end(
       JSON.stringify([
         {
-          tag_name: `v${next}`,
-          prerelease: next.includes("-"),
+          tag_name: `v${version}`,
+          prerelease: version.includes("-"),
           body: "",
           published_at: new Date().toISOString(),
           assets: [
@@ -238,12 +264,46 @@ async function update(identity: string) {
     server.listen(0, "127.0.0.1", () => resolve()),
   );
   const { port } = server.address() as AddressInfo;
+  return { url: `http://127.0.0.1:${port}/releases`, server };
+}
+
+// Settings' "Restart to update", pressed as the window's button does
+// (press-restart-to-update.ts): its answer, or why it failed.
+function pressRestartToUpdate(dataDir: string): string | null {
+  const pressed = spawnSync(
+    "bun",
+    [join(import.meta.dirname, "press-restart-to-update.ts"), dataDir],
+    { encoding: "utf8" },
+  );
+  const said = pressed.stdout.trim();
+  try {
+    const outcome = JSON.parse(said) as { answer?: unknown; failed?: string };
+    return "failed" in outcome
+      ? (outcome.failed ?? "")
+      : outcome.answer === null
+        ? null
+        : `it answered ${JSON.stringify(outcome.answer)}`;
+  } catch {
+    return `the press printed ${JSON.stringify(said)} (${pressed.stderr.trim()})`;
+  }
+}
+
+async function update(identity: string) {
+  // Real, as the installer resolves the app's path before it opens it.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-smoke-update-")));
+  const dataDir = join(root, "data");
+  const installedDir = join(root, "installed");
+  const installed = join(installedDir, `${appName}.app`);
+  const version = versionOf(bundle);
+  const next = newerThan(version);
+  execFileSync("ditto", [bundle, installed]);
+  const { url, server } = await serveRelease(bundle, next, identity, root);
 
   const child = spawn(executableIn(installed), [], {
     env: {
       ...process.env,
       SHIGOMORI_DATA_DIR: dataDir,
-      SHIGOMORI_UPDATE_RELEASES_URL: `http://127.0.0.1:${port}/releases`,
+      SHIGOMORI_UPDATE_RELEASES_URL: url,
     },
     stdio: "inherit",
   });
@@ -251,18 +311,24 @@ async function update(identity: string) {
   child.once("exit", () => {
     exited = true;
   });
-  let relaunched: number | null = null;
-  const fail = (message: string): never => {
+  // The apps the installer opened, through LaunchServices: no children
+  // of ours, found by their executable.
+  const opened = new Set<number>();
+  const fail: (message: string) => never = (message) => {
     printLogs(dataDir);
     throw new Error(`the update: ${message}`);
   };
+  // Until the app publishes `kind` (or an error), or `gone` says it went.
+  const untilState = async (kind: string, gone: () => boolean) => {
+    await until(() => {
+      const state = statusIn(dataDir)?.state.kind;
+      return gone() || state === kind || state === "error";
+    }, STAGE_WITHIN_MS);
+    return statusIn(dataDir);
+  };
   try {
     const started = Date.now();
-    await until(() => {
-      const kind = statusIn(dataDir)?.state.kind;
-      return exited || kind === "ready" || kind === "error";
-    }, STAGE_WITHIN_MS);
-    const staged = statusIn(dataDir);
+    const staged = await untilState("ready", () => exited);
     if (staged?.state.kind !== "ready") {
       fail(
         exited
@@ -276,9 +342,12 @@ async function update(identity: string) {
       `the update: the app staged ${next} in ${Date.now() - started} ms`,
     );
 
-    // As `sm update` asks a running app: written whole, then renamed in.
+    // As `sm update` asks a running app (written whole, then renamed in),
+    // into a folder the swap can't write: the installer's reason must
+    // reach the app it brings back.
     const requestedAt = Date.now();
     const request = join(dataDir, "updater-request.json");
+    chmodSync(installedDir, 0o555);
     writeFileSync(
       `${request}.tmp`,
       JSON.stringify({ action: "install", requestedAt }),
@@ -291,28 +360,84 @@ async function update(identity: string) {
           : "the app took the install request and didn't quit",
       );
     }
-    console.log(`the update: the app took the request and quit`);
-
-    // The installer opens the new bundle through LaunchServices, so the
-    // relaunched app is no child of ours: it is found by its executable.
-    await until(() => {
-      relaunched = runningFrom(executableIn(installed));
-      return relaunched !== null;
+    const back = await until(() => {
+      const status = statusIn(dataDir);
+      return status !== null && status.pid !== child.pid;
     }, RESTART_WITHIN_MS);
+    const restored = statusIn(dataDir);
+    if (restored !== null) opened.add(restored.pid);
+    chmodSync(installedDir, 0o755);
+    if (!back)
+      fail("the installer didn't bring the app back after its swap failed");
+    const failed = await untilState("error", () => false);
+    if (failed?.state.kind !== "error" || failed.state.install !== true) {
+      fail(
+        `the app came back without the installer's reason: ${JSON.stringify(failed?.state)}`,
+      );
+    }
+    if (versionOf(installed) !== version) {
+      fail(`a failed swap left ${versionOf(installed)} installed`);
+    }
+    console.log(
+      `the update: a swap that couldn't write came back as ${version}, saying "${failed.state.message}"`,
+    );
+
+    // The installer opened it with the data folder alone, so its first
+    // check, a minute in, would ask the real feed and drop the staged
+    // update. Started again on the local list before then, it has the
+    // update ready from the start; then Settings' button, the way the
+    // window presses it.
+    await stop(failed.pid, () => !pidAlive(failed.pid));
+    const again = spawn(executableIn(installed), [], {
+      env: {
+        ...process.env,
+        SHIGOMORI_DATA_DIR: dataDir,
+        SHIGOMORI_UPDATE_RELEASES_URL: url,
+      },
+      stdio: "inherit",
+    });
+    const pid = again.pid ?? 0;
+    opened.add(pid);
+    await until(() => {
+      const status = statusIn(dataDir);
+      return (
+        !pidAlive(pid) || (status?.pid === pid && status.state.kind === "ready")
+      );
+    }, OPEN_WITHIN_MS);
+    const ready = statusIn(dataDir);
+    if (ready?.pid !== pid || ready.state.kind !== "ready") {
+      fail(
+        `the app started again didn't have ${next} ready: ${JSON.stringify(ready?.state)}`,
+      );
+    }
+    const pressedAt = Date.now();
+    const refused = pressRestartToUpdate(dataDir);
+    if (refused !== null) fail(`Restart to update failed: ${refused}`);
+    if (!(await until(() => !pidAlive(pid), RESTART_WITHIN_MS))) {
+      fail("the app answered Restart to update and didn't quit");
+    }
+    console.log("the update: Restart to update answered, and the app quit");
+
+    await until(
+      () => runningFrom(executableIn(installed)) !== null,
+      RESTART_WITHIN_MS,
+    );
+    const relaunched = runningFrom(executableIn(installed));
     if (relaunched === null) fail("the installer didn't open the app again");
+    opened.add(relaunched);
     if (versionOf(installed) !== next) {
       fail(`the app came back as ${versionOf(installed)}, not ${next}`);
     }
     const loopback = join(dataDir, "loopback.json");
     if (
       !(await until(
-        () => existsSync(loopback) && statSync(loopback).mtimeMs > requestedAt,
+        () => existsSync(loopback) && statSync(loopback).mtimeMs > pressedAt,
         OPEN_WITHIN_MS,
       ))
     ) {
       fail("the relaunched app didn't open its store on the same data folder");
     }
-    const leftovers = readdirSync(join(root, "installed")).filter(
+    const leftovers = readdirSync(installedDir).filter(
       (name) => name !== `${appName}.app`,
     );
     if (leftovers.length > 0) fail(`the swap left ${leftovers.join(", ")}`);
@@ -324,11 +449,11 @@ async function update(identity: string) {
       `the update: ${version} swapped for ${next} and opened again (pid ${relaunched})`,
     );
   } finally {
+    chmodSync(installedDir, 0o755);
     if (!exited && child.pid !== undefined) await stop(child.pid, () => exited);
-    const again = relaunched;
-    if (again !== null && pidAlive(again)) {
-      await stop(again, () => !pidAlive(again));
-    }
+    await Promise.all(
+      [...opened].map((pid) => stop(pid, () => !pidAlive(pid))),
+    );
     server.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -343,6 +468,126 @@ function runningFrom(executable: string): number | null {
     .map((row) => row.trim())
     .find((row) => row.replace(/^\d+\s+/, "").startsWith(executable));
   return line === undefined ? null : Number.parseInt(line, 10);
+}
+
+// The step before a cut (V3.md, "Process"): the app installed on this
+// machine, signed in on its own data folder, takes the candidate
+// `bundle` through Settings' button and comes back on it, signed in. The
+// candidate is built as the next version up from the installed one, so
+// the release cut after it is still an update, and offered from a local
+// release list the app is started on. The relaunch is on the real feed
+// again.
+async function updateInstalled(
+  identity: string,
+  installed: string,
+  dataDir: string,
+) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-candidate-")));
+  const version = versionOf(installed);
+  const next = newerThan(version);
+  // The app reads its version from the bundle's package.json, which a
+  // signature can't change: the build has to be made at it.
+  if (versionOf(bundle) !== next) {
+    throw new Error(
+      `the build is ${versionOf(bundle)}: make it as ${next} (pnpm -C app pkg set version=${next} before packaging)`,
+    );
+  }
+  const resources = join(installed, "Contents", "Resources");
+  const binary = readdirSync(resources).find((name) => /^sm\w*$/.test(name));
+  if (binary === undefined) throw new Error(`no sm binary in ${resources}`);
+  const signedIn = () => {
+    const devices = spawnSync(join(resources, binary), ["--json", "devices"], {
+      encoding: "utf8",
+    });
+    return devices.status === 0 && devices.stdout.includes('"thisDevice"');
+  };
+  const fail: (message: string) => never = (message) => {
+    printLogs(dataDir);
+    throw new Error(`the installed app's update: ${message}`);
+  };
+  const before = statusIn(dataDir);
+  if (before === null || !pidAlive(before.pid)) {
+    fail(`${installed} isn't running on ${dataDir}`);
+  }
+  if (!signedIn()) fail("the installed app isn't signed in");
+  const { url, server } = await serveRelease(bundle, next, identity, root);
+  try {
+    // Quit as the menu's Quit does (a busy app asks first), and started
+    // again on the local release list.
+    const bundleId = execFileSync(
+      "plutil",
+      ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist(installed)],
+      { encoding: "utf8" },
+    ).trim();
+    execFileSync("osascript", [
+      "-e",
+      `tell application id "${bundleId}" to quit`,
+    ]);
+    const quitting = before.pid;
+    if (!(await until(() => !pidAlive(quitting), STAGE_WITHIN_MS))) {
+      fail("the installed app didn't quit");
+    }
+    execFileSync("open", [
+      "-a",
+      installed,
+      "--env",
+      `SHIGOMORI_UPDATE_RELEASES_URL=${url}`,
+    ]);
+    await until(() => {
+      const status = statusIn(dataDir);
+      return (
+        status !== null &&
+        status.pid !== quitting &&
+        status.state.kind === "ready" &&
+        status.state.version === next
+      );
+    }, STAGE_WITHIN_MS);
+    const ready = statusIn(dataDir);
+    if (ready?.state.kind !== "ready" || ready.state.version !== next) {
+      fail(`the app didn't stage ${next}: ${JSON.stringify(ready?.state)}`);
+    }
+    console.log(
+      `the installed app: ${next} staged, pressing Restart to update`,
+    );
+    const refused = pressRestartToUpdate(dataDir);
+    if (refused !== null) fail(`Restart to update failed: ${refused}`);
+    const back = await until(() => {
+      const status = statusIn(dataDir);
+      return (
+        status !== null &&
+        status.pid !== ready.pid &&
+        pidAlive(status.pid) &&
+        status.appVersion === next &&
+        versionOf(installed) === next
+      );
+    }, RESTART_WITHIN_MS);
+    if (!back) {
+      fail(
+        `the app didn't come back as ${next} (it is ${versionOf(installed)})`,
+      );
+    }
+    if (!(await until(signedIn, OPEN_WITHIN_MS))) {
+      fail(`the app came back as ${next}, signed out`);
+    }
+    console.log(
+      `the installed app: ${version} updated to ${next} through Restart to update, and back signed in`,
+    );
+  } finally {
+    server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const identity = process.env.APPLE_SIGNING_IDENTITY;
+if (installedAt !== undefined) {
+  if (identity === undefined || identity === "") {
+    console.error(
+      "--update-installed signs the candidate: set APPLE_SIGNING_IDENTITY",
+    );
+    process.exit(2);
+  }
+  await updateInstalled(identity, installedAt.app, installedAt.dataDir);
+  process.exit(0);
 }
 
 await launch("a data folder that does not exist", () => {});
@@ -377,7 +622,6 @@ async function serve(port: string) {
   rmSync(root, { recursive: true, force: true });
 }
 
-const identity = process.env.APPLE_SIGNING_IDENTITY;
 if (identity === undefined || identity === "") {
   console.log(
     "the update: skipped, with no APPLE_SIGNING_IDENTITY to sign a newer copy",

@@ -47,7 +47,7 @@ export const portLink = Effect.fnUntraced(function* (
   }).pipe(
     Effect.provideService(RpcClient.Protocol, protocol),
   )) as unknown as FlatClient;
-  return yield* rpcLink({ client, group });
+  return yield* rpcLink({ client, group, local: true });
 });
 
 // The link for as long as the process lives: the host's to the shell
