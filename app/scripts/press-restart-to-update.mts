@@ -7,7 +7,7 @@
 // (scripts/smoke-app.mts). Prints the call's outcome as one JSON line:
 // {"answer": ...} or {"failed": "<message>"}.
 //
-//   bun scripts/press-restart-to-update.ts <data dir>
+//   bun scripts/press-restart-to-update.mts <data dir>
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -22,7 +22,7 @@ import * as Socket from "effect/socket/Socket";
 
 const dataDir = process.argv[2];
 if (dataDir === undefined) {
-  console.error("usage: press-restart-to-update.ts <data dir>");
+  console.error("usage: press-restart-to-update.mts <data dir>");
   process.exit(2);
 }
 const { port, token } = JSON.parse(

@@ -14,7 +14,7 @@
 // the install request `sm update` writes into an app folder the swap
 // can't write, and comes back on the old version saying why. Then
 // Settings' "Restart to update", pressed the way the window's button
-// does (press-restart-to-update.ts), answers, and the installer swaps
+// does (press-restart-to-update.mts), answers, and the installer swaps
 // the new bundle in and opens it again, on the same temporary data
 // folder.
 //
@@ -268,11 +268,11 @@ async function serveRelease(
 }
 
 // Settings' "Restart to update", pressed as the window's button does
-// (press-restart-to-update.ts): its answer, or why it failed.
+// (press-restart-to-update.mts): its answer, or why it failed.
 function pressRestartToUpdate(dataDir: string): string | null {
   const pressed = spawnSync(
     "bun",
-    [join(import.meta.dirname, "press-restart-to-update.ts"), dataDir],
+    [join(import.meta.dirname, "press-restart-to-update.mts"), dataDir],
     { encoding: "utf8" },
   );
   const said = pressed.stdout.trim();
