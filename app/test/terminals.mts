@@ -11,7 +11,8 @@
 //   - a resize reaches every attached client,
 //   - a close ends every attach with an exit and leaves the list,
 //   - a quit saves each terminal, and the next start opens it again
-//     under its history in the folder it was in,
+//     under its history in the folder it was in, the history's lines
+//     left where they are,
 //   - a host killed while a terminal floods comes back with what it
 //     saved when the output last paused: whole, in that folder,
 //   - a worktree terminal whose worktree is gone closes,
@@ -353,6 +354,12 @@ describe("the service", () => {
       const attached = attach(second, terminalId);
       await waitFor(() => attached.events.length >= 2, "the attach's head");
       assert.ok(attached.output().includes("moved-2"), "the history came back");
+      // On the main screen, leaving the alternate one would restore a
+      // cursor never saved, and the new prompt would clear what came back.
+      assert.ok(
+        !attached.output().includes("\x1b[?1049l"),
+        "a main-screen history is not sent out of the alternate screen",
+      );
       await withTerminals(second, (terminals) =>
         terminals.write(terminalId, "pwd\r"),
       );

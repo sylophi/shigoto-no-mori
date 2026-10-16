@@ -93,10 +93,22 @@ const SAVE_AT_MOST = Duration.minutes(1);
 // SIGKILL a moment later if it is still there.
 const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
 // What a restored history ends with, so the fresh shell's prompt lands
-// on a clean screen: out of the alternate screen, the mouse and the
-// keypad modes, with the cursor shown and the colors reset.
+// on a clean screen: out of the mouse and the keypad modes, with the
+// cursor shown and the colors reset, and out of the alternate screen if
+// the history left it on. Only then: on the main screen, leaving it
+// restores a cursor never saved, the top left, where the new prompt's
+// clear to the end of the screen wipes the lines replayed above it.
 const RESTORED_TAIL =
-  "\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
+  "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
+const ALTERNATE_SCREEN = new RegExp(
+  String.raw`\x1b\[\?(?:1049|1047|47)([hl])`,
+  "g",
+);
+
+const restoredTail = (history: string): string => {
+  const last = [...history.matchAll(ALTERNATE_SCREEN)].at(-1)?.[1];
+  return (last === "h" ? "\x1b[?1049l" : "") + RESTORED_TAIL;
+};
 
 interface Session {
   readonly terminal: Terminal;
@@ -384,7 +396,9 @@ const make = <R>(options: {
           pty,
           history: makeHistory(
             restored?.seq ?? 0,
-            restored === undefined ? "" : restored.history + RESTORED_TAIL,
+            restored === undefined
+              ? ""
+              : restored.history + restoredTail(restored.history),
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,

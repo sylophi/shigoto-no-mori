@@ -76,3 +76,47 @@ export function deepText(page: Page): Promise<string> {
     return out.join("\n");
   });
 }
+
+// What the visible terminal holds, line by line, scrollback included.
+// xterm draws with WebGL, so there are no rows to read: this finds the
+// view's Terminal in a React ref above the `.xterm` element and reads
+// its buffer. It leans on React's fiber fields, so a React bump that
+// moves them shows up here first.
+export function terminalText(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    type Buffer = {
+      length: number;
+      getLine(
+        i: number,
+      ): { translateToString(trim: boolean): string } | undefined;
+    };
+    type Hook = { memoizedState: unknown; next: Hook | null };
+    type Fiber = { return: Fiber | null; memoizedState: Hook | null };
+    const element = [...document.querySelectorAll(".xterm")].find(
+      (node) => (node as HTMLElement).offsetParent !== null,
+    );
+    if (!element) return null;
+    const key = Object.keys(element.parentElement ?? {}).find((k) =>
+      k.startsWith("__reactFiber$"),
+    );
+    let fiber: Fiber | null = key
+      ? ((Reflect.get(element.parentElement ?? {}, key) as Fiber | undefined) ??
+        null)
+      : null;
+    for (; fiber; fiber = fiber.return) {
+      for (let hook = fiber.memoizedState; hook; hook = hook.next) {
+        const held = (hook.memoizedState as { current?: unknown } | null)
+          ?.current as { buffer?: { active?: Buffer } } | undefined;
+        const buffer = held?.buffer?.active;
+        if (buffer && typeof buffer.getLine === "function") {
+          const lines: string[] = [];
+          for (let i = 0; i < buffer.length; i++) {
+            lines.push(buffer.getLine(i)?.translateToString(true) ?? "");
+          }
+          return lines.join("\n").trimEnd();
+        }
+      }
+    }
+    return null;
+  });
+}

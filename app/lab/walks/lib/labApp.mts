@@ -22,6 +22,7 @@ import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
 const NAME = "Shigoto no Mori (lab)";
+const BUNDLE_ID = "com.sylophi.shigomori.lab";
 
 const labBundle = (): string => {
   const bundle =
@@ -55,6 +56,8 @@ export interface Lab {
   git(cwd: string, ...args: string[]): string;
   // The bundle's terminal command on this lab's data folder.
   sm(...args: string[]): string;
+  // Quits the app as a person does and starts it again on the same root.
+  restart(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -162,55 +165,84 @@ async function launch(
   options.seed(reposDir, git);
   sm("projects", "add", reposDir, "--all", "--yes");
 
-  const port = await freeLoopbackPort();
-  const child = spawn(executable, [], {
-    env: {
-      ...env,
-      SHIGOMORI_DATA_DIR: dataDir,
-      SHIGOMORI_DEBUG_PORT: String(port),
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  let exited = false;
-  child.once("exit", () => {
-    exited = true;
-  });
-  let stderr = "";
-  child.stderr.on("data", (chunk: Buffer) => {
-    stderr = (stderr + chunk.toString()).slice(-8000);
-  });
+  const start = async () => {
+    const port = await freeLoopbackPort();
+    // --sm-lab hands the page api to the walks (labHandle.ts).
+    const child = spawn(executable, ["--sm-lab"], {
+      env: {
+        ...env,
+        SHIGOMORI_DATA_DIR: dataDir,
+        SHIGOMORI_DEBUG_PORT: String(port),
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const run = { child, exited: false, browser: null as Browser | null };
+    child.once("exit", () => {
+      run.exited = true;
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-8000);
+    });
+    const stop = async () => {
+      await run.browser?.close().catch(() => {});
+      if (!run.exited) child.kill("SIGTERM");
+      await waitFor(() => run.exited, "the lab app to quit", 10_000).catch(() =>
+        child.kill("SIGKILL"),
+      );
+    };
+    try {
+      await waitFor(
+        async () => {
+          if (run.exited) throw new Error(`the lab app exited: ${stderr}`);
+          const targets = await fetch(`http://127.0.0.1:${port}/json`)
+            .then((r) => r.json() as Promise<{ type: string }[]>)
+            .catch(() => []);
+          return targets.some((t) => t.type === "page");
+        },
+        "the lab app's window",
+        60_000,
+      );
+      run.browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+      const page = run.browser.contexts()[0]?.pages()[0];
+      if (page === undefined) throw new Error("the lab app has no window");
+      page.setDefaultTimeout(10_000);
+      await page.waitForFunction(
+        () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
+      );
+      return { run, page, stop };
+    } catch (cause) {
+      await stop();
+      throw cause;
+    }
+  };
 
-  let browser: Browser | null = null;
+  let current = await start();
   const close = async () => {
-    await browser?.close().catch(() => {});
-    if (!exited) child.kill("SIGTERM");
-    await waitFor(() => exited, "the lab app to quit", 10_000).catch(() =>
-      child.kill("SIGKILL"),
-    );
+    await current.stop();
     rmSync(root, { recursive: true, force: true });
   };
-  try {
-    await waitFor(
-      async () => {
-        if (exited) throw new Error(`the lab app exited: ${stderr}`);
-        const targets = await fetch(`http://127.0.0.1:${port}/json`)
-          .then((r) => r.json() as Promise<{ type: string }[]>)
-          .catch(() => []);
-        return targets.some((t) => t.type === "page");
-      },
-      "the lab app's window",
-      60_000,
-    );
-    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-    const page = browser.contexts()[0]?.pages()[0];
-    if (page === undefined) throw new Error("the lab app has no window");
-    page.setDefaultTimeout(10_000);
-    await page.waitForFunction(
-      () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
-    );
-    return { root, home, dataDir, page, git, sm, close };
-  } catch (cause) {
-    await close();
-    throw cause;
-  }
+  const restart = async () => {
+    await current.run.browser?.close().catch(() => {});
+    // As the menu's Quit does, so the app saves what it keeps across a
+    // start.
+    execFileSync("osascript", [
+      "-e",
+      `tell application id "${BUNDLE_ID}" to quit`,
+    ]);
+    await waitFor(() => current.run.exited, "the lab app to quit", 20_000);
+    current = await start();
+  };
+  return {
+    root,
+    home,
+    dataDir,
+    get page() {
+      return current.page;
+    },
+    git,
+    sm,
+    restart,
+    close,
+  };
 }
