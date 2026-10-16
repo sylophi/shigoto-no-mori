@@ -20,9 +20,9 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
-const NAME = "Shigoto no Mori (lab)";
+export const NAME = "Shigoto no Mori (lab)";
 
-const labBundle = (): string => {
+export const labBundle = (): string => {
   const bundle =
     process.env["SM_LAB_APP"] ??
     join(APP_DIR, "out", `${NAME}-darwin-${process.arch}`, `${NAME}.app`);
@@ -68,10 +68,14 @@ export interface LabOptions {
 // footprint, which belongs to the lab build anyone on this machine runs:
 // one that is already running is someone's, and a walk would also lose
 // its single-instance lock to it.
-const refuseRunningLab = (executable: string) => {
+export const refuseRunningLab = (executable: string) => {
   let running = "";
   try {
-    running = execFileSync("pgrep", ["-f", executable], { encoding: "utf8" });
+    running = execFileSync(
+      "pgrep",
+      ["-f", executable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")],
+      { encoding: "utf8" },
+    );
   } catch {
     // pgrep exits 1 when nothing matches.
   }

@@ -29,7 +29,8 @@ else.
 
 - **On every pull request**, in CI's `walks` job (`checks.yml`). It
   packages the lab build on a macOS runner and runs every walk. The
-  walks take about 30 s; packaging adds a few minutes.
+  walks take about 30 s here and about 2 minutes on a runner, and
+  packaging adds about 3.
 - **Before every prerelease cut**, as the packaged check
   (`V3.md`, Process). The build is the one about to be cut.
 
