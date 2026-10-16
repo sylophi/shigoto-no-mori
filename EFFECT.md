@@ -248,16 +248,19 @@ export const layer = Layer.effect(Registry, make);
   services: `FileSystem`, `Path`, `effect/process`, `Clock`, `Random`,
   `Config`. A service never imports `node:fs`, `node:child_process`,
   `node:os` or `node:path`, and never reads `process.env`. Nothing in
-  a service, the host, the shell, the engine or the contracts reads
-  `Date.now()` or `new Date()` (`no-wall-clock`).
+  a service, `app/shared`, the host, the shell, the engine or the
+  contracts reads `Date.now()` or `new Date()` (`no-wall-clock`); code
+  there that is not Effect takes `now` as a parameter, as
+  `host/direct/tickets.ts` does, and measures with `performance.now()`.
 - An instant (a time to store, show, or compare with another device's)
   is `Clock.currentTimeMillis` or `DateTime.now`, and dates are parsed,
   formatted and computed with `DateTime`, not `Date`. Elapsed time (a
-  deadline, a silence, an age, a rate) is `Clock.monotonicTimeNanos`,
+  deadline, a timeout, a rate) is `Clock.monotonicTimeNanos`,
   `Effect.timed` or a relative timer (`Effect.sleep`,
   `Effect.timeout`), never the difference of two instants:
   `Clock.currentTimeMillis` is `Date.now()` in this version, which a
-  clock step or a sleep moves. V3.md's Time design has the rest.
+  clock step moves. Neither counts a machine's sleep reliably, so
+  whether one counts is decided per case: V3.md's Time design.
 - The platform layer is provided once per process: `NodeServices`
   from `@effect/platform-node` in the host and the shells, the Bun
   equivalent in the terminal binary. The engine is written against the
@@ -305,8 +308,8 @@ export const layer = Layer.effect(Registry, make);
 - Tests are plain vitest cases that run their effects on the runtime
   of the thing under test: the engine sandbox's `box.engine(effect)`,
   the proofs' `runHost(effect)`. Effect's guidance uses `it.effect`
-  from `@effect/vitest`; a proof here needs the real graph, not a
-  fresh test context per case. A proof that spawns real git or the
+  from `@effect/vitest`; the proofs already run on the host's and the
+  engine's own runtimes, and keep one way to. A proof that spawns real git or the
   real `sm` keeps the forks pool and no file parallelism.
 - A boundary test (the differential clone test,
   the golden wire fixtures, the measurements) is a proof like any other
