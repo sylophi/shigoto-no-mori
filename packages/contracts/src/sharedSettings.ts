@@ -323,6 +323,7 @@ export function createSharedSettingsCopy(
     set: (key, value) => {
       // Up front, so `next` stays pure: it runs twice.
       const deviceId = opts.deviceId();
+      // oxlint-disable-next-line shigomori/no-wall-clock -- a stamp for last-writer order, kept above every stamp seen, so a clock step back cannot reorder
       const now = Date.now();
       const doc = update((current) =>
         withSharedSetting(current, key, value, deviceId, now),

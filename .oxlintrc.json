@@ -30,7 +30,8 @@
     "shigomori/effect-namespace-imports": "error",
     "shigomori/no-runtime-in-service": "error",
     "shigomori/no-node-builtins-in-service": "error",
-    "shigomori/no-env-or-clock-in-service": "error",
+    "shigomori/no-env-in-service": "error",
+    "shigomori/no-wall-clock": "error",
     "shigomori/effect-fn-service-methods": "error",
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "no-restricted-imports": [
@@ -63,6 +64,22 @@
         "packages/*/test/**"
       ],
       "rules": { "no-await-in-loop": "off" }
+    },
+    {
+      "files": [
+        "app/host/mirror/oneShot.ts",
+        "app/main/electron/updater.ts",
+        "app/host/lib/scripts/index.ts",
+        "app/main/hostProcess.ts",
+        "packages/engine/src/worktrees/moving.ts",
+        "app/host/lib/githubCli/pullRequests.ts",
+        "app/host/lib/sync/sourceLink.ts",
+        "app/host/mirror/gitFollow.ts",
+        "app/main/electron/liveness.ts",
+        "app/main/electron/notifications.ts",
+        "app/shared/hub/link.ts"
+      ],
+      "rules": { "shigomori/no-wall-clock": "off" }
     }
   ],
   "ignorePatterns": [
