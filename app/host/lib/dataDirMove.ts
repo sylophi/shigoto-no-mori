@@ -151,6 +151,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const oldReal = yield* fs
     .realPath(oldDir)
     .pipe(Effect.orElseSucceed(() => oldDir));
+  // A rename would move the link and leave its target where it is.
+  const link = yield* fs.readLink(oldDir).pipe(Effect.option);
+  if (Option.isSome(link)) {
+    return yield* new DataDirMoveError({
+      reason: `The data folder is a link to ${oldReal}. Move that folder instead.`,
+    });
+  }
   const spellings = [oldDir, oldReal].map((dir) => dir.replace(/\/+$/, ""));
   const underOld = (path: string) =>
     spellings.find((dir) => isSameOrInside(path, dir));

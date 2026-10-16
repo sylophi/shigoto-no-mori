@@ -21,7 +21,7 @@
 // they asked for it here (the shell's dialog). A data folder reached
 // through a link carries its worktrees, which git names by the link's
 // target (or spelled with trailing slashes), to their ids at the
-// destination's target.
+// destination's target, and one that is itself a link is refused.
 //
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
@@ -519,3 +519,23 @@ it.each([
     assert.equal(await titleOf(identity.id), "Fox", "undone");
   },
 );
+
+it("a data folder that is itself a link is refused, its target left to move", async () => {
+  const alias = join(elsewhere, "alias");
+  symlinkSync(engineDataDir, alias);
+  const refused = await runHost(
+    moveDataDir(join(elsewhere, "alias-to"), {
+      place: {
+        dataDir: alias,
+        pointerFile: join(elsewhere, "config-alias", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      beforeMove: Effect.void,
+      killAllScripts: Effect.void,
+    }).pipe(Effect.flip),
+  );
+  assert.match(String(refused), /is a link to/);
+  assert.equal(existsSync(join(elsewhere, "alias-to")), false);
+});
