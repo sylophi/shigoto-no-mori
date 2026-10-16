@@ -214,12 +214,22 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  // rmdir, which takes only an empty folder.
+  // rmdir, which takes only an empty folder. Finder's .DS_Store, which
+  // a v2 root it was opened in holds when nothing else is left there,
+  // counts as nothing.
   const removeEmpty = (dir: string) =>
-    spawner.exitCode(ChildProcess.make("rmdir", [dir])).pipe(
-      Effect.map((code) => code === 0),
-      Effect.orElseSucceed(() => false),
-    );
+    Effect.gen(function* () {
+      const entries = yield* fs
+        .readDirectory(dir)
+        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+      if (entries.length === 1 && entries[0] === ".DS_Store") {
+        yield* fs.remove(path.join(dir, ".DS_Store")).pipe(Effect.ignore);
+      }
+      return yield* spawner.exitCode(ChildProcess.make("rmdir", [dir])).pipe(
+        Effect.map((code) => code === 0),
+        Effect.orElseSucceed(() => false),
+      );
+    });
 
   // The emptied v2 roots of `rows`' moves, and the `worktrees` folder
   // above one.

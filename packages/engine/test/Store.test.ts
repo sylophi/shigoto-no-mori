@@ -16,12 +16,14 @@ import { promisify } from "node:util";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it } from "vitest";
 import { StoreImportError } from "../src/migrations/importJson.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
+import { storeErrorOf } from "../src/storeErrors.ts";
 import { JOURNAL, retireStore } from "../src/dataDirMoveJournal.ts";
 import { nodeStore, openNode } from "./lib/nodeStore.ts";
 
@@ -142,6 +144,38 @@ it("fails with the path when the data dir can't be made", async () => {
       return true;
     },
   );
+});
+
+it("says a data folder it can't write to is read-only", async () => {
+  write("registry.json", { projects: [] });
+  chmodSync(dataDir, 0o555);
+  try {
+    await assert.rejects(
+      query(() => Effect.void),
+      (error) => {
+        assert.ok(error instanceof Store.StoreOpenError);
+        assert.match(error.message, /read-only here/);
+        return true;
+      },
+    );
+  } finally {
+    chmodSync(dataDir, 0o755);
+  }
+});
+
+it("leaves a file the store doesn't own its own error when it can't be read", async () => {
+  write("elsewhere.txt", "x");
+  chmodSync(join(dataDir, "elsewhere.txt"), 0o000);
+  try {
+    const error = await Effect.runPromise(
+      Effect.flatMap(FileSystem.FileSystem, (fs) =>
+        fs.readFileString(join(dataDir, "elsewhere.txt")),
+      ).pipe(Effect.flip, Effect.provide(NodeServices.layer)),
+    );
+    assert.equal(storeErrorOf(error), undefined);
+  } finally {
+    chmodSync(join(dataDir, "elsewhere.txt"), 0o644);
+  }
 });
 
 it("opens a store a data-folder move retired writable again only once its mover is gone", async () => {
