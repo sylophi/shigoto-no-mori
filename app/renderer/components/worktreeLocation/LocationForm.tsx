@@ -88,9 +88,20 @@ export function LocationForm({
   const proposedFor = (worktree: Worktree): string =>
     worktreePathFor(layoutInputs, worktree.name);
 
-  const toMove = customMissing
-    ? []
-    : movable.filter((w) => proposedFor(w) !== w.path);
+  // Git spells a worktree's path with the data dir's links resolved, so
+  // one already in place under a linked data dir reads in either.
+  const inPlace = (worktree: Worktree): boolean => {
+    const proposed = proposedFor(worktree);
+    if (proposed === worktree.path) return true;
+    const { dataDir, dataDirReal } = device;
+    return (
+      dataDirReal !== undefined &&
+      proposed.startsWith(`${dataDir}/`) &&
+      worktree.path === `${dataDirReal}${proposed.slice(dataDir.length)}`
+    );
+  };
+
+  const toMove = customMissing ? [] : movable.filter((w) => !inPlace(w));
 
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();

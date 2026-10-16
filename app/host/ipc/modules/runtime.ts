@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
@@ -36,6 +37,15 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 
 let moveInFlight = false;
 
+const realSpelling = (dir: string): { dataDirReal?: string } => {
+  try {
+    const real = realpathSync(dir);
+    return real === dir ? {} : { dataDirReal: real };
+  } catch {
+    return {};
+  }
+};
+
 // What follows a data-folder move that failed. Before the host let go
 // of the folder, nothing: the app carries on where it was. After, it
 // runs without its loopback and store watch, so it restarts: for a
@@ -57,6 +67,7 @@ export const runtimeHandlers = {
   info: () =>
     Effect.sync(() => ({
       dataDir: dataDir(),
+      ...realSpelling(dataDir()),
       dataDirSource: dataDirSource(),
       // resolve() drops the trailing slash a hand-edited pointer may carry.
       atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),

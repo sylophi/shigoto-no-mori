@@ -58,7 +58,8 @@ it("does what the person did", async () => {
 - `lib/labApp.mts` starts the build (`bootLab`). It hands back the
   page, `git` for the walk's repos and `sm` for the bundle's
   terminal command. `gh` takes a script, or a function of the root
-  that makes one.
+  that makes one. `linkedDataDir` puts the data folder behind a
+  symlink.
 - `lib/demoRepo.mts` is the repo most walks start from: a history
   with a long file and media, a bare origin, a branch with a commit
   of its own, a stash, and uncommitted changes of every kind. A walk
@@ -87,4 +88,5 @@ build's single-instance lock is machine-wide.
 | `files` | The files viewer: the tree, an image, a video, a tone, markdown, a long text file |
 | `new-worktree` | A branch off a source; a source branch checked out as it is |
 | `rename` | Renaming a worktree from its page: the folder moves and the window stays on the worktree's page |
+| `location` | The Worktree location page with the data folder reached through a link: a worktree already in place is not offered a move |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |

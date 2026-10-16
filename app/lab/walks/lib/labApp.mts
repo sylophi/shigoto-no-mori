@@ -12,6 +12,7 @@ import {
   mkdtempSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
@@ -62,6 +63,9 @@ export interface LabOptions {
   readonly seed: (reposDir: string, git: Lab["git"]) => void;
   // The gh on the login shell's PATH, or one made in the walk's root.
   readonly gh?: string | ((root: string) => string);
+  // The data folder reached through a symlink, as /tmp, /var/folders or
+  // a folder linked to another drive put it.
+  readonly linkedDataDir?: boolean;
 }
 
 // The walks remove the build's saved windows and, at the end, its whole
@@ -106,7 +110,11 @@ async function launch(
 ): Promise<Lab> {
   const home = join(root, "home");
   const bin = join(root, "bin");
-  const dataDir = join(root, "data");
+  const dataDir = join(root, options.linkedDataDir ? "linked" : "", "data");
+  if (options.linkedDataDir) {
+    mkdirSync(join(root, "actual"));
+    symlinkSync(join(root, "actual"), join(root, "linked"));
+  }
   const reposDir = join(root, "repos");
   for (const dir of [home, bin, reposDir]) mkdirSync(dir, { recursive: true });
   writeFileSync(
