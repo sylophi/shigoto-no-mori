@@ -158,16 +158,11 @@ const held = new WeakMap<UtilityProcess, Held>();
 let restarts = 0;
 let restartReason: HostRestartReason | null = null;
 
-// A restart in main.log: why, then what the host was in at its last
-// beat and the spans it last finished.
-function noteRestart(
-  running: UtilityProcess,
-  reason: HostRestartReason,
-  why: string,
-): void {
-  restarts += 1;
-  restartReason = reason;
-  log.warn(`[host] ${why}, starting it again`);
+// A host's end in main.log: why, then what it was in at its last beat
+// and the spans it last finished. Whether another starts is the exit's
+// to say (fork's "starting it again").
+function noteStop(running: UtilityProcess, why: string): void {
+  log.warn(`[host] ${why}`);
   const beat = held.get(running)?.lastBeat ?? null;
   const now = Date.now();
   void lastEndedSpans(app.getPath("logs")).then((ended) => {
@@ -180,7 +175,7 @@ function stopSilent(running: UtilityProcess, seconds: number): void {
   const state = held.get(running);
   const reason: HostRestartReason = { kind: "silent", seconds };
   if (state !== undefined) state.stoppedFor = reason;
-  noteRestart(running, reason, `silent for ${seconds} s`);
+  noteStop(running, `silent for ${seconds} s, stopping it`);
   killHard(running);
 }
 
@@ -389,11 +384,7 @@ function fork(): void {
           ]);
     if (stalledOut === forked) return;
     if (state.stoppedFor === null) {
-      noteRestart(
-        forked,
-        { kind: "exited", code },
-        `exited unasked (code ${code})`,
-      );
+      noteStop(forked, `exited unasked (code ${code})`);
     }
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
@@ -415,6 +406,9 @@ function fork(): void {
       (gone) => gone.exitedAt >= now - CRASH_WINDOW_MS,
     );
     if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
+    restarts += 1;
+    restartReason = state.stoppedFor ?? { kind: "exited", code };
+    log.warn("[host] starting it again");
     void cleared.then(() => {
       if (!quitting) fork();
     });

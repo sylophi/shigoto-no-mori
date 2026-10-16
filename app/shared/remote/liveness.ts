@@ -14,11 +14,14 @@ const LATE_MS = 5_000;
 const nanosToMs = (nanos: bigint) => Number(nanos / 1_000_000n);
 
 // Every `intervalMs`, a probe (`ping`, a round trip) unless one is out.
-// One out past `timeoutMs` of turns that came on time is the far end's
-// silence, and `dead` runs. A late turn starts the observation again:
-// the probe out is set aside, and a new one asks.
+// Its answer, or any frame heard after it went (`heard` counts them: a
+// link busy carrying a transfer may queue the answer behind it), ends
+// it. One out past `timeoutMs` of turns that came on time is the far
+// end's silence, and `dead` runs. A late turn starts the observation
+// again: the probe out is set aside, and a new one asks.
 export const watchLiveness = (options: {
   readonly ping: Effect.Effect<unknown, unknown>;
+  readonly heard: () => number;
   readonly intervalMs: number;
   readonly timeoutMs: number;
   readonly dead: Effect.Effect<void>;
@@ -29,7 +32,11 @@ export const watchLiveness = (options: {
       mono: Effect.map(Clock.monotonicTimeNanos, nanosToMs),
     });
     let last = yield* read;
-    let probe: { readonly sentAt: number; answered: boolean } | null = null;
+    let probe: {
+      readonly sentAt: number;
+      readonly heardAt: number;
+      answered: boolean;
+    } | null = null;
     while (true) {
       yield* Effect.sleep(options.intervalMs);
       const now = yield* read;
@@ -37,14 +44,23 @@ export const watchLiveness = (options: {
         Math.max(now.wall - last.wall, now.mono - last.mono) >
         options.intervalMs + LATE_MS;
       last = now;
-      if (probe?.answered === true || late) probe = null;
+      if (
+        probe !== null &&
+        (probe.answered || late || options.heard() > probe.heardAt)
+      ) {
+        probe = null;
+      }
       if (probe !== null) {
         if (now.mono - probe.sentAt >= options.timeoutMs) {
           return yield* options.dead;
         }
         continue;
       }
-      const asked = { sentAt: now.mono, answered: false };
+      const asked = {
+        sentAt: now.mono,
+        heardAt: options.heard(),
+        answered: false,
+      };
       probe = asked;
       yield* options.ping.pipe(
         Effect.andThen(

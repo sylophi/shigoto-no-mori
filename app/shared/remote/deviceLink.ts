@@ -361,6 +361,7 @@ export const dialDevice = (
     if (options.expectedDeviceId !== options.localDeviceId) {
       yield* watchLiveness({
         ping: call("link:ping", undefined),
+        heard: cuttable.heard,
         intervalMs: PING_INTERVAL_MS,
         timeoutMs: PING_TIMEOUT_MS,
         dead: Effect.sync(cuttable.cut),
@@ -477,28 +478,40 @@ export function openDevice(
 // A socket as Effect reads it, with a cut that closes it for Effect at
 // once, as its pinger's verdict did: the link's calls fail as a drop,
 // and the link drops. The close handshake with a peer that stopped
-// answering can take a browser a minute, so it is not waited on.
+// answering can take a browser a minute, so it is not waited on. Every
+// other property is the socket's own, so Effect still sets its
+// `binaryType` and pauses it. `heard` counts the frames that came.
 function cuttableSocket(wire: Socket.WebSocketLike) {
   type Listener = (event: Socket.WebSocketEvent) => void;
   const closes = new Set<Listener>();
   let cut = false;
-  const socket: Socket.WebSocketLike = {
-    get readyState() {
-      return cut ? 3 : wire.readyState;
+  let heard = 0;
+  wire.addEventListener("message", () => {
+    heard += 1;
+  });
+  const socket = new Proxy(wire, {
+    get(target, key) {
+      if (key === "readyState") return cut ? 3 : target.readyState;
+      if (key === "addEventListener") {
+        return (type: string, listener: Listener, options?: object) => {
+          if (type === "close") closes.add(listener);
+          target.addEventListener(type as "close", listener, options);
+        };
+      }
+      if (key === "removeEventListener") {
+        return (type: string, listener: Listener) => {
+          if (type === "close") closes.delete(listener);
+          target.removeEventListener(type as "close", listener);
+        };
+      }
+      const value: unknown = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
     },
-    addEventListener(type, listener, options) {
-      if (type === "close") closes.add(listener);
-      wire.addEventListener(type, listener, options);
-    },
-    removeEventListener(type, listener) {
-      if (type === "close") closes.delete(listener);
-      wire.removeEventListener(type, listener);
-    },
-    close: (code, reason) => wire.close(code, reason),
-    send: (data) => wire.send(data),
-  };
+    set: (target, key, value) => Reflect.set(target, key, value, target),
+  });
   return {
     socket,
+    heard: () => heard,
     cut: () => {
       if (cut) return;
       cut = true;

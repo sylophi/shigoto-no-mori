@@ -18,7 +18,9 @@
 //     (host/socket/Loopback.ts), with the shell's token.
 //   - the link outlives a sleep: neither the window's end nor the
 //     host's judges it by a wall clock the sleep moved, so a wake
-//     drops nothing (V3.md, "Local links and liveness").
+//     drops nothing (V3.md, "Local links and liveness"). Over a
+//     browser's socket, which Effect still sets to read frames as
+//     bytes through the link's wrapper.
 //   - a host that is starting is watched by its loop's beats: a real
 //     process whose loop is stuck in a watch's open (the stall V3.md's
 //     "A watch that froze the host" records) is called silent within
@@ -310,17 +312,25 @@ it("the link to the host outlives a sleep at either end", async () => {
   const host = await startHost(dataDir, wall);
   const answering: boolean[] = [];
   const scope = Scope.makeUnsafe();
+  // The window's socket: a browser's, whose binaryType starts as
+  // "blob" until Effect sets it, through the link's own wrapper.
+  const sockets: WebSocket[] = [];
   try {
     const link = await Effect.runPromise(
       hostLink({
         address: Effect.succeed(host.address),
         appVersion: "9.9.9",
-        openSocket: (url) => new WsWebSocket(url),
+        openSocket: (url) => {
+          const socket = new WebSocket(url);
+          sockets.push(socket);
+          return socket;
+        },
         onAnswering: (now) => answering.push(now),
       }).pipe(Effect.provideService(Clock.Clock, wall), Scope.provide(scope)),
     );
     const session = effectClient(sessionContract, link);
     assert.deepEqual(await Effect.runPromise(session.busy()), IDLE);
+    assert.equal(sockets[0]?.binaryType, "arraybuffer");
     // A night's sleep after the window's first ping, then the host's
     // liveness round and the window's pinger, in that order, at the
     // wake: either end, before the fix, cut the link there.

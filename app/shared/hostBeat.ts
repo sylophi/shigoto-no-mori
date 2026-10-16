@@ -5,7 +5,7 @@
 import type * as Tracer from "effect/Tracer";
 
 export type HostBeat = {
-  // The newest first, with how long each had run.
+  // The newest first, then the oldest, with how long each had run.
   readonly open: ReadonlyArray<{ readonly name: string; readonly ms: number }>;
 };
 
@@ -25,7 +25,10 @@ export function beatOf(open: Iterable<Tracer.Span>, now: number): HostBeat {
     });
   }
   started.sort((a, b) => a.ms - b.ms);
-  return { open: started.slice(0, NAMED) };
+  // The newest, and the oldest: a call stuck since before the newest
+  // began.
+  const oldest = started.length > NAMED ? started.slice(-1) : [];
+  return { open: [...started.slice(0, NAMED - oldest.length), ...oldest] };
 }
 
 export const isHostBeat = (message: unknown): message is HostBeat =>
