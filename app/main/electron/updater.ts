@@ -273,12 +273,11 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
     }
     const failed = next.kind === "error";
     if (next.kind === "error") log.warn(`[updater] ${next.message}`);
-    if (
-      failed &&
-      shown !== null &&
-      (yield* installableStaged)?.version === shown.version
-    ) {
-      next = shown;
+    // What is staged stays up over a failed check: the release shown,
+    // or one a failed install's error stood in front of at boot.
+    if (failed) {
+      const onDisk = yield* installableStaged;
+      if (onDisk !== null) next = readyStateFrom(onDisk);
     }
     setState(next);
     failedChecks = failed ? failedChecks + 1 : 0;

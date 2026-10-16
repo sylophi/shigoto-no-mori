@@ -273,8 +273,12 @@ function pressRestartToUpdate(dataDir: string): string | null {
   const pressed = spawnSync(
     "bun",
     [join(import.meta.dirname, "press-restart-to-update.mts"), dataDir],
-    { encoding: "utf8" },
+    // Long enough for a busy app's dialog to be answered.
+    { encoding: "utf8", timeout: RESTART_WITHIN_MS },
   );
+  if (pressed.error !== undefined) {
+    return `the press didn't answer: ${pressed.error.message}`;
+  }
   const said = pressed.stdout.trim();
   try {
     const outcome = JSON.parse(said) as { answer?: unknown; failed?: string };
