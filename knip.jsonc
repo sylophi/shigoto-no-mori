@@ -62,6 +62,7 @@
     "osascript",
     "pgrep",
     "chflags",
+    "mkfifo",
     "xattr",
     "ditto",
     "openssl",

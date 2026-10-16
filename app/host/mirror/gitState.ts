@@ -44,10 +44,12 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
+import { untilWatchable } from "@host/lib/watchPath";
 
 // A state that can't be read or applied, in the words the other device
 // hears (an operation in progress among them, operationInRefusal).
@@ -563,15 +565,16 @@ export const watchIndexFile = (
   onChange: () => void,
   debounceMs = 300,
 ) =>
-  Effect.map(
-    Effect.flatMap(Git.Git, (git) => git.gitDir(worktreePath)),
-    (gitDir) => {
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      let watcher: ReturnType<typeof watch>;
+  Effect.gen(function* () {
+    const gitDir = yield* (yield* Git.Git).gitDir(worktreePath);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let watcher: ReturnType<typeof watch> | null = null;
+    const start = () => {
       try {
         watcher = watch(gitDir, { persistent: false });
       } catch {
-        return () => {};
+        return;
       }
       watcher.on("change", (_event, file) => {
         if (file !== "index") return;
@@ -582,9 +585,22 @@ export const watchIndexFile = (
         }, debounceMs);
       });
       watcher.on("error", () => {});
-      return () => {
-        if (timer !== null) clearTimeout(timer);
-        watcher.close();
-      };
-    },
-  );
+    };
+    // A git dir whose open hangs would hang the host with it: watched
+    // once it opens promptly (watchPath).
+    const waiting = Effect.runFork(
+      untilWatchable(gitDir).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (!stopped) start();
+          }),
+        ),
+      ),
+    );
+    return () => {
+      stopped = true;
+      Effect.runFork(Fiber.interrupt(waiting));
+      if (timer !== null) clearTimeout(timer);
+      watcher?.close();
+    };
+  });

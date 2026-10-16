@@ -41,6 +41,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
+import { watchPath } from "@host/lib/watchPath";
 
 const DEBOUNCE_MS = 300;
 const EDIT_WINDOW = "1 second";
@@ -209,7 +210,7 @@ const make = (deps: GitWatcherDeps) =>
     // window. A tree that goes away drops its watch, which the next read
     // of the project's trees starts again if the tree is back.
     const watchTree = (projectId: string, tree: string) =>
-      fs.watch(tree, { recursive: true }).pipe(
+      watchPath(fs, tree, { recursive: true }).pipe(
         Stream.filter((event) => isWorkingTreeChange(event.path)),
         Stream.groupedWithin(Number.POSITIVE_INFINITY, EDIT_WINDOW),
         Stream.runForEach(() =>
@@ -261,7 +262,7 @@ const make = (deps: GitWatcherDeps) =>
       projectId: string,
       entry: { readonly gitDir: string; readonly projectPath: string },
     ) =>
-      fs.watch(entry.gitDir, { recursive: true }).pipe(
+      watchPath(fs, entry.gitDir, { recursive: true }).pipe(
         Stream.filter((event) => isRelevantGitPath(event.path)),
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() =>
