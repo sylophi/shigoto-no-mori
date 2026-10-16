@@ -27,7 +27,8 @@ export const makeAdopting = ({
     const layout = yield* Layout.Layout;
     const path = yield* Path.Path;
     const { projectSettings, identities, row } = listing;
-    const { provision, createLifecycle, addWorktree, occupied } = creating;
+    const { provision, createLifecycle, addWorktree, occupied, unreserved } =
+      creating;
     const { requireClean, removeCheckout } = removing;
 
     const adopt = Effect.fn("Worktrees.adopt")(function* (
@@ -76,6 +77,7 @@ export const makeAdopting = ({
             subject: place,
           });
         }
+        yield* unreserved(place);
       }
       // From the wipe to the re-key nothing may cut in: the checkout is
       // gone until the add makes it again.

@@ -97,6 +97,21 @@ export const makeCreating = ({
 
     const occupied = (file: string) => entryExists(fs, file);
 
+    // Refused while a move under way names the path: what is kept under
+    // its id, a capture among it, is that move's until it ends.
+    const unreserved = (place: string) =>
+      Effect.gen(function* () {
+        const [moving] = yield* sql<{ from_path: string }>`
+          SELECT from_path FROM moving
+          WHERE from_path = ${place} OR to_path = ${place}`.pipe(Effect.orDie);
+        if (moving !== undefined) {
+          return yield* new WorktreeRefused({
+            reason: "move-in-progress",
+            subject: moving.from_path,
+          });
+        }
+      });
+
     const destination = Effect.fn("Worktrees.destination")(function* (
       project: RegisteredProject,
       requested: string,
@@ -319,17 +334,7 @@ export const makeCreating = ({
             subject: place,
           });
         }
-        // A move cut short still names the path: what is kept under its
-        // id, its capture among it, is the move's until a resume ends it.
-        const [moving] = yield* sql<{ from_path: string }>`
-          SELECT from_path FROM moving
-          WHERE from_path = ${place} OR to_path = ${place}`.pipe(Effect.orDie);
-        if (moving !== undefined) {
-          return yield* new WorktreeRefused({
-            reason: "move-in-progress",
-            subject: moving.from_path,
-          });
-        }
+        yield* unreserved(place);
         yield* fs
           .makeDirectory(path.dirname(place), { recursive: true })
           .pipe(Effect.orDie);
@@ -488,6 +493,7 @@ export const makeCreating = ({
     return {
       checkName,
       occupied,
+      unreserved,
       destination,
       scriptContext,
       runScript,

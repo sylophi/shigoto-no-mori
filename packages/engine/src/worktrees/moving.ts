@@ -2,11 +2,10 @@
 // volumes too, and what is kept under its id carried along.
 //
 // A move is recorded in `moving` before anything moves
-// (migrations/moving.ts). git's move is its commit point: from there the
-// carry runs uninterrupted and deletes the record in the transaction that
-// re-keys what is kept under the id, and a move a crash cut short is
-// finished or undone by `resume` (at the app's start and by the doctor's
-// fix), by where git lists the checkout.
+// (migrations/moving.ts), and git's move is its commit point. From the
+// record to the carry nothing interrupts it; the record goes once the
+// carry is whole, and a move a crash cut short is finished or undone by
+// `resume` (at the app's start and by the doctor's fix).
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -93,29 +92,34 @@ export const makeMoving = ({
           : yield* withSpawner(stillRunning(record.pid, record.started_at));
       });
 
-    // The record of a move about to start. Another process's move of the
-    // same folder holds it while that process runs; one whose process is
-    // gone is resumed first.
+    // The record of a move about to start, refused while another move
+    // under way names either folder: its carry may still be owed what is
+    // kept under their ids. One whose process is gone is resumed first.
     const claimMove = (project: RegisteredProject, from: string, to: string) =>
       Effect.gen(function* () {
-        const claim = Effect.gen(function* () {
-          return (
-            (yield* sql`INSERT INTO moving ${sql.insert({
+        const others = sql<MovingRow>`SELECT * FROM moving
+          WHERE from_path IN (${from}, ${to}) OR to_path IN (${from}, ${to})`;
+        const claim = sql.withTransaction(
+          Effect.gen(function* () {
+            // The write lock first, so no other claim reads between.
+            yield* sql`UPDATE moving SET pid = pid WHERE 0`;
+            if ((yield* others).length > 0) return false;
+            yield* sql`INSERT INTO moving ${sql.insert({
               from_path: from,
               to_path: to,
               project_id: project.id,
               link: yield* linkOf(from),
               partial: null,
               ...(yield* self),
-            })} ON CONFLICT DO NOTHING RETURNING from_path`.pipe(Effect.orDie))
-              .length > 0
-          );
-        });
-        if (yield* claim) return;
-        const [held] = yield* sql<MovingRow>`
-          SELECT * FROM moving WHERE from_path = ${from}`.pipe(Effect.orDie);
-        if (held !== undefined) yield* resumeOne(held);
-        if (!(yield* claim)) {
+            })}`;
+            return true;
+          }),
+        );
+        if (yield* claim.pipe(Effect.orDie)) return;
+        for (const held of yield* others.pipe(Effect.orDie)) {
+          yield* resumeOne(held);
+        }
+        if (!(yield* claim.pipe(Effect.orDie))) {
           return yield* new WorktreeRefused({
             reason: "move-in-progress",
             subject: from,

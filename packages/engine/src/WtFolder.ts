@@ -2,11 +2,11 @@
 // `wtFolder` migration owes (migrations/wtFolder.ts). The first start
 // looks through the v2 roots of every listed project, terrier's
 // included, and records each folder there. Each is then moved as
-// `worktrees move` moves one, inside a transaction so two processes
-// starting together don't both take it. One that can't be moved keeps
-// its folder and records why, for the doctor to report and retry. A
-// crash between git's move and the carry-over finds the worktree at its
-// new path on the next start and carries it then. The first start's
+// `worktrees move` moves one, whose own record keeps two processes
+// starting together from both taking it and lets a start finish one a
+// crash cut short (worktrees/moving.ts). One that can't be moved keeps
+// its folder and records why, for the doctor to report and retry. The
+// first start's
 // moves are reported to the migration as they go (Migration.ts), and
 // a start that resumes them counts the ones made before.
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
@@ -176,23 +176,16 @@ const make = Effect.gen(function* () {
             );
         if (busy !== undefined) return yield* failed(fromPath, busy);
       }
-      // A move records itself as made (Worktrees.carryMoved).
-      const made =
-        from !== undefined
-          ? Effect.asVoid(
-              worktrees.move({ project, worktree: from }, row.to_path),
-            )
-          : (yield* at(row.to_path)) !== undefined
-            ? // git moved it before a crash; the carry-over is still owed.
-              Effect.asVoid(
-                worktrees.carryMoved(project, row.from_path, row.to_path),
-              )
-            : undefined;
-      if (made === undefined) {
-        // Not a worktree git lists: a stray folder stays where it is.
+      if (from === undefined) {
+        // Not a worktree git lists there: a stray folder stays where it
+        // is. One git moved before a crash was finished by its record's
+        // resume, which marked it moved.
         return yield* sql`DELETE FROM wt_moves WHERE from_path = ${fromPath}`;
       }
-      const outcome = yield* Effect.result(made);
+      // A move records itself as made (Worktrees.carryMoved).
+      const outcome = yield* Effect.result(
+        worktrees.move({ project, worktree: from }, row.to_path),
+      );
       if (
         Result.isFailure(outcome) &&
         // Another process is making this very move.
@@ -241,6 +234,8 @@ const make = Effect.gen(function* () {
     report?: (fromPath: string, tried: boolean) => Effect.Effect<void>,
   ) =>
     Effect.gen(function* () {
+      // Its moves a crash cut short, before any is tried again.
+      yield* worktrees.resumeMoves;
       const project = (yield* registry.listed).find(
         ({ id }) => id === projectId,
       );

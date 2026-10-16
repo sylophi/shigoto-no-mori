@@ -498,3 +498,77 @@ it("a resume leaves a copy this process is making alone", async () => {
   );
   assert.deepEqual(result, { during: 0, at: true, records: 0, partials: [] });
 });
+
+it("a move into a folder another move still names is refused", async () => {
+  const sleeper = spawn("/bin/sleep", ["30"], { stdio: "ignore" });
+  onTestFinished(() => void sleeper.kill());
+  const result = await withFox(({ project, worktree }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const sql = yield* SqlClient.SqlClient;
+      const otter = join(dirname(worktree.path), "otter");
+      // otter moved away, its carry still owed, in a process that runs.
+      yield* sql`INSERT INTO moving ${sql.insert({
+        from_path: otter,
+        to_path: join(dirname(worktree.path), "far"),
+        project_id: project.id,
+        link: "",
+        carried: 1,
+        partial: null,
+        pid: sleeper.pid ?? 0,
+        started_at: Date.now(),
+      })}`;
+      const refused = yield* worktrees
+        .move({ project, worktree }, otter)
+        .pipe(Effect.flip);
+      return refused instanceof Worktrees.WorktreeRefused && refused.reason;
+    }),
+  );
+  assert.equal(result, "move-in-progress");
+});
+
+it("an adopt into a folder a move still names is refused before the checkout goes", async () => {
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const sql = yield* SqlClient.SqlClient;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const outside = join(box.home, "outside", "otter");
+      box.git(repo, "worktree", "add", "-q", "-b", "otter", outside);
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external?.isExternal);
+      const place = join(
+        dirname((yield* worktrees.destination(project, "x")).path),
+        "otter",
+      );
+      yield* sql`INSERT INTO moving ${sql.insert({
+        from_path: place,
+        to_path: join(box.home, "far"),
+        project_id: project.id,
+        link: "",
+        partial: null,
+        pid: process.pid,
+        started_at: 0,
+      })}`;
+      const refused = yield* worktrees
+        .adopt(
+          { project, worktree: external },
+          { force: false },
+          {
+            report: () => Effect.void,
+            color: false,
+          },
+        )
+        .pipe(Effect.flip);
+      return {
+        reason: refused instanceof Worktrees.WorktreeRefused && refused.reason,
+        kept: existsSync(join(outside, "README.md")),
+      };
+    }),
+  );
+  assert.deepEqual(result, { reason: "move-in-progress", kept: true });
+});

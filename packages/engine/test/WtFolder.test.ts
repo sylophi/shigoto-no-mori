@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
 import * as Doctor from "../src/Doctor.ts";
@@ -407,15 +408,27 @@ it("counts a lease held under another spelling of the worktree's folder", async 
   assert.deepEqual(leasesOf(doc), []);
 });
 
-it("carries the id of a worktree git moved before a crash", async () => {
+it("carries the id of a worktree git moved before a crash, by the move's record", async () => {
   const { repo, v2, wt } = v2Project();
   await state();
   const oldId = worktreeIdFromPath(join(v2, "c"));
+  const link = readFileSync(join(v2, "c", ".git"), "utf8").trim();
   box.git(repo, "worktree", "unlock", join(v2, "c"));
   box.git(repo, "worktree", "move", join(v2, "c"), join(wt, "c"));
   const after = (await box.engine(
     Effect.gen(function* () {
       const registry = yield* Registry.Registry;
+      const sql = yield* SqlClient.SqlClient;
+      // The record the crashed process left.
+      yield* sql`INSERT INTO moving ${sql.insert({
+        from_path: join(v2, "c"),
+        to_path: join(wt, "c"),
+        project_id: "P1",
+        link,
+        partial: null,
+        pid: 4_194_304,
+        started_at: 0,
+      })}`;
       yield* registry.setMark("autoPull", oldId, true);
       const left = yield* (yield* WtFolder.WtFolder).retry("P1");
       return { left, autoPull: [...(yield* registry.marked("autoPull"))] };
@@ -439,4 +452,22 @@ it("moves the worktrees of a project terrier lists", async () => {
   const { unmoved } = await state();
   assert.deepEqual(unmoved, []);
   assert.ok(listed(repo).includes(join(dataDir, "wt", "repo", "a")));
+});
+
+it("never carries a v2 worktree's marks onto another checkout at its wt/ path", async () => {
+  const { repo, v2, wt } = v2Project();
+  await state();
+  const oldId = worktreeIdFromPath(join(v2, "c"));
+  box.git(repo, "worktree", "unlock", join(v2, "c"));
+  box.git(repo, "worktree", "remove", "--force", join(v2, "c"));
+  box.git(repo, "worktree", "add", "-q", "-b", "other", join(wt, "c"));
+  const after = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      yield* registry.setMark("autoPull", oldId, true);
+      yield* (yield* WtFolder.WtFolder).retry("P1");
+      return [...(yield* registry.marked("autoPull"))];
+    }),
+  )) as string[];
+  assert.ok(!after.includes(worktreeIdFromPath(join(wt, "c"))));
 });
