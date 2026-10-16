@@ -95,19 +95,28 @@ const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
 // What a restored history ends with, so the fresh shell's prompt lands
 // on a clean screen: out of the mouse and the keypad modes, with the
 // cursor shown and the colors reset, and out of the alternate screen if
-// the history left it on. Only then: on the main screen, leaving it
-// restores a cursor never saved, the top left, where the new prompt's
-// clear to the end of the screen wipes the lines replayed above it.
+// the history left it on, by the mode it went in with. 1049 restores the
+// cursor it saved going in, which on the main screen is one never
+// saved, the top left, where the new prompt's clear to the end of the
+// screen would wipe the lines replayed above it.
 const RESTORED_TAIL =
   "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
-const ALTERNATE_SCREEN = new RegExp(
-  String.raw`\x1b\[\?(?:1049|1047|47)([hl])`,
-  "g",
-);
+// A private mode set or reset, its modes as they come (`1049;25`), or a
+// full reset, which leaves the alternate screen too.
+const SCREEN_MODES = new RegExp(String.raw`\x1b\[\?([\d;]+)([hl])|\x1bc`, "g");
+const ALTERNATE = new Set(["1049", "1047", "47"]);
 
-const restoredTail = (history: string): string => {
-  const last = [...history.matchAll(ALTERNATE_SCREEN)].at(-1)?.[1];
-  return (last === "h" ? "\x1b[?1049l" : "") + RESTORED_TAIL;
+export const restoredTail = (history: string): string => {
+  let alternate: string | undefined;
+  for (const [sequence, modes, set] of history.matchAll(SCREEN_MODES)) {
+    if (sequence === "\x1bc") {
+      alternate = undefined;
+      continue;
+    }
+    const mode = modes?.split(";").find((m) => ALTERNATE.has(m));
+    if (mode !== undefined) alternate = set === "h" ? mode : undefined;
+  }
+  return (alternate === undefined ? "" : `\x1b[?${alternate}l`) + RESTORED_TAIL;
 };
 
 interface Session {

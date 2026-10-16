@@ -57,11 +57,26 @@ import {
 } from "./lib/checkKit.mts";
 import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
 
+// The alternate-screen mode a restored history's tail leaves, if any.
+const LEAVES = new RegExp(String.raw`^\x1b\[\?(1049|1047|47)l`);
+const leaves = (history: string) =>
+  LEAVES.exec(Terminals.restoredTail(history))?.[1];
+
 describe("the history", () => {
   it("drops terminal queries and keeps everything else", () => {
     const sent =
       "a\x1b[c\x1b[>c\x1b[6n\x1b[?2026$p\x1b[14t\x1b]11;?\x07\x1b]10;?\x1b\\\x1bP$qm\x1b\\b\x1b[31mred\x1b[0m";
     assert.equal(withoutQueries(sent), "ab\x1b[31mred\x1b[0m");
+  });
+
+  it("ends a restored history out of the alternate screen only if it is in it", () => {
+    assert.equal(leaves("$ ls\r\nfile\r\n$ "), undefined);
+    assert.equal(leaves("\x1b[?1049hvim"), "1049");
+    assert.equal(leaves("\x1b[?25;1049hvim"), "1049");
+    assert.equal(leaves("\x1b[?47hless"), "47");
+    assert.equal(leaves("\x1b[?1047hless"), "1047");
+    assert.equal(leaves("\x1b[?1049hvim\x1b[?1049l$ "), undefined);
+    assert.equal(leaves("\x1b[?1049hvim\x1bc$ "), undefined);
   });
 
   it("answers a reconnect with what came after its seq", () => {
