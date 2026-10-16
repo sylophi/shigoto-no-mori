@@ -341,7 +341,9 @@ removed one the next time they read the registry. A relaunch after
   machine). It has no updates and no login item, is never signed with
   a Developer ID (forge refuses with `APPLE_SIGNING_IDENTITY` set), so
   runs on the mock keychain, and takes a debugging port as the dev app
-  does:
+  does. It can't sign in: Clerk's dev instance refuses its scheme's
+  origin (`origin_authorization_headers_conflict`), so a flow that
+  needs an account runs on a dev profile instead:
 
   ```sh
   SM_FLAVOR=lab pnpm package
