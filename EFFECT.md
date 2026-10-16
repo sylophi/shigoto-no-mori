@@ -8,8 +8,17 @@ modules (the menu, windows, deep links) are plain Electron code;
 `app/main/README.md` says which of the shell is Effect.
 
 Effect is pinned to one exact version, the latest stable release (the
-workspace catalog). The source of that version, `node_modules/effect`
-in any checkout, is the reference for any API question. `rpc`,
+workspace catalog). Read Effect's own guidance for that version before
+writing Effect code: `AGENTS.md` in the installed package
+(`node_modules/effect` in any package of the workspace, such as
+`app/node_modules/effect/AGENTS.md`), the `ai-docs/` examples beside it
+that it links, and for Schema, `SCHEMA.md` at the pinned tag
+(`https://github.com/Effect-TS/effect/blob/effect@4.0.2/packages/effect/SCHEMA.md`,
+a long guide to read in chunks; its tag moves with the catalog). This
+file adds what the repo decides beyond it, and says why wherever it
+departs from it. The source of that version, in the same folder, is
+the reference for any API question. All of it is read only, and it
+beats memory and any other copy of Effect's docs. `rpc`,
 `socket`, `process`, `cli`, `http` and `sql` are marked
 `@stability unstable` in that version. Never write a pattern on those
 modules from memory; read the source first.
@@ -77,7 +86,8 @@ export const layer = Layer.effect(Registry, make);
   module is consumed the same way: `import * as Registry from
   "./Registry.ts"`, then `yield* Registry.Registry` and
   `Registry.layer`. Named imports are fine for a pure helper, an
-  error, a schema or a type.
+  error, a schema or a type. Effect's guidance imports from `"effect"`;
+  the repo keeps the one form `effect-namespace-imports` holds.
 - **No standalone interface name.** The type is `Registry["Service"]`.
 - **Dependencies come from the environment** (`yield*
   FileSystem.FileSystem`), never as parameters to `make`, never from a
@@ -88,6 +98,21 @@ export const layer = Layer.effect(Registry, make);
   constructor that fits: `Layer.succeed` or `Layer.sync` for a
   service with no effects, `Layer.effect` for one built with effects,
   a scoped constructor for one that owns a resource (section 5).
+- **The layer is the module's export**, not a `static layer` on the
+  tag as in Effect's guidance: a service spread over sub-makers needs
+  `make` apart from the tag, and every service reads the same way.
+- **Functions:** `Effect.gen` inline; a reusable function is
+  `Effect.fn("name")` where a span helps (every service method) and
+  `Effect.fnUntraced` otherwise (a helper, a hot path), and
+  `Effect.fn.Return<A, E>` states a return type no tag gives.
+  Combinators go to `Effect.fn` as its further arguments, not on a
+  `.pipe`, and no function only wraps an `Effect.gen`. A failure is
+  `return yield* new SomeError(...)`.
+- **Configuration with a default** is a `Context.Reference`.
+- **Data from outside** (a file, a wire, a process's output) is decoded
+  with Schema, never `JSON.parse` and a cast or a hand-made guard. A
+  runtime check on a value is `Predicate`, never a hand-written
+  `isRecord` or `typeof x === "object" && x !== null`.
 - **Tag names** are `sm/<package>/<Service>`.
 - **Moving a service** updates every consumer. No re-export shims.
 - **A service too big to hold at once spans a few modules**, one per
@@ -167,12 +192,15 @@ export const layer = Layer.effect(Registry, make);
   unknown or lower-level failures.
 - One distinction, one encoding: a separate class when callers or the
   user-facing message branch on it, a field when it only helps
-  diagnostics. A message that reaches the wire, the store or the UI is
-  behavior, and a refactor keeps it.
+  diagnostics. The reasons one operation fails for, when callers
+  branch on them, can be a tagged `reason` field instead, caught with
+  `Effect.catchReason` or `catchReasons`. A message that reaches the
+  wire, the store or the UI is behavior, and a refactor keeps it.
 - No helper whose whole body is `new SomeError(args)`. Predicates are
   `export const isFoo = Schema.is(Foo)`.
-- Catch known tags with `Effect.catchTags({ ... })`, even for one
-  tag. `Effect.catch` handles the whole channel; `catchIf` is for
+- Catch one known tag (or a list sharing a handler) with
+  `Effect.catchTag`, several with `Effect.catchTags({ ... })`.
+  `Effect.catch` handles the whole channel; `catchIf` is for
   structural checks like a platform error code.
 - Errors cross every wire as their tag and fields and decode back into
   the same class on the other side. The renderer branches on `_tag`,
@@ -190,7 +218,9 @@ export const layer = Layer.effect(Registry, make);
   shape. The pid file for orphans stays, since a scope cannot help
   after a crash.
 - A fiber that must outlive the current effect is forked into a scope
-  (`Effect.forkScoped`, `Effect.forkIn`), never as a daemon.
+  (`Effect.forkScoped`, `Effect.forkIn`), never as a daemon. A
+  background task with no interface is a `Layer.effectDiscard`, and
+  resources built on demand per key are a `LayerMap.Service`.
 - An operation that can be cancelled is interruptible by default. An
   uninterruptible region is explicit, short, and says why.
 - Each step of an operation that moves state registers its undo as a
@@ -217,8 +247,17 @@ export const layer = Layer.effect(Registry, make);
 - Filesystem, paths, processes, clock, randomness and environment are
   services: `FileSystem`, `Path`, `effect/process`, `Clock`, `Random`,
   `Config`. A service never imports `node:fs`, `node:child_process`,
-  `node:os` or `node:path`, and never reads `process.env` or
-  `Date.now()`.
+  `node:os` or `node:path`, and never reads `process.env`. Nothing in
+  a service, the host, the shell, the engine or the contracts reads
+  `Date.now()` or `new Date()` (`no-wall-clock`).
+- An instant (a time to store, show, or compare with another device's)
+  is `Clock.currentTimeMillis` or `DateTime.now`, and dates are parsed,
+  formatted and computed with `DateTime`, not `Date`. Elapsed time (a
+  deadline, a silence, an age, a rate) is `Clock.monotonicTimeNanos`,
+  `Effect.timed` or a relative timer (`Effect.sleep`,
+  `Effect.timeout`), never the difference of two instants:
+  `Clock.currentTimeMillis` is `Date.now()` in this version, which a
+  clock step or a sleep moves. V3.md's Time design has the rest.
 - The platform layer is provided once per process: `NodeServices`
   from `@effect/platform-node` in the host and the shells, the Bun
   equivalent in the terminal binary. The engine is written against the
@@ -265,7 +304,9 @@ export const layer = Layer.effect(Registry, make);
   `waitFor`, never on a fixed delay.
 - Tests are plain vitest cases that run their effects on the runtime
   of the thing under test: the engine sandbox's `box.engine(effect)`,
-  the proofs' `runHost(effect)`. A proof that spawns real git or the
+  the proofs' `runHost(effect)`. Effect's guidance uses `it.effect`
+  from `@effect/vitest`; a proof here needs the real graph, not a
+  fresh test context per case. A proof that spawns real git or the
   real `sm` keeps the forks pool and no file parallelism.
 - A boundary test (the differential clone test,
   the golden wire fixtures, the measurements) is a proof like any other

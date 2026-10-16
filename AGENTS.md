@@ -17,7 +17,9 @@
   screenshot, the real app on several devices), start at
   `app/lab/README.md`. Pages and windows are driven with weblab.
 - UI changes follow `app/DESIGN.md`.
-- Effect code follows `EFFECT.md`. While the `release/v3` branch lives, `V3.md`
+- Effect code follows `EFFECT.md`, which starts by sending you to
+  Effect's own guidance for the pinned version: read it before writing
+  Effect code. While the `release/v3` branch lives, `V3.md`
   is its charter and checklist, and `CLAUDE.md` holds the rules for a
   thread working one of its items.
 - A pull request has a short title and a body that is a single brief

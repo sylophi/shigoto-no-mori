@@ -60,6 +60,7 @@ export function createMirrorHistory(deps: {
   now?: () => number;
   onChange?: () => void;
 }) {
+  // oxlint-disable-next-line shigomori/no-wall-clock -- an event's time, for display; history keeps insertion order
   const now = deps.now ?? Date.now;
   let events: Record<string, readonly MirrorEvent[]> | null = null;
   const seen = new Map<string, Seen>();

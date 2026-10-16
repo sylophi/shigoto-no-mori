@@ -115,6 +115,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       worktreeId: worktree.id,
       peerDeviceId: ctx.callerDeviceId ?? "",
       ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
+      // oxlint-disable-next-line shigomori/no-wall-clock -- when serving began, for display
       since: Date.now(),
     },
     stopIndexWatch: null,
