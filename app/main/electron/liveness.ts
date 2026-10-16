@@ -54,6 +54,14 @@ function keepReachableEnabled(): boolean {
   }
 }
 
+// A dev build must not install a login item: it would point at the
+// Electron binary under node_modules and relaunch a throwaway dev
+// instance at every login. Register only from packaged builds, where
+// the login item points at the real installed app. A test flavor's
+// bundle is thrown away after its test, so it leaves no login item
+// behind either.
+export const setsLoginItem = (): boolean => app.isPackaged && !names.debuggable;
+
 // (1) Launch-at-login. Reads the single opt-in and registers or clears
 // the OS login item to match. Idempotent (setLoginItemSettings with the
 // same value is a no-op) and never throws: it is called at boot and on
@@ -74,13 +82,7 @@ export function reconcileLaunchAtLogin(): void {
     );
     return;
   }
-  // A dev build must not install a login item: it would point at the
-  // Electron binary under node_modules and relaunch a throwaway dev
-  // instance at every login. Register only from packaged builds, where
-  // the login item points at the real installed app.
-  // A test flavor's bundle is thrown away after its test, so it leaves
-  // no login item behind either.
-  if (!app.isPackaged || names.debuggable) {
+  if (!setsLoginItem()) {
     log.info(
       `[liveness] dev or test build, not touching the login item (keepReachable=${keepReachable})`,
     );
