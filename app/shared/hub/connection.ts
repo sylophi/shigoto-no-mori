@@ -55,7 +55,7 @@ import {
   supervise,
 } from "@shared/remote/supervisor";
 import { log } from "@shared/log";
-import { elapsedMillisUnsafe } from "@shared/elapsed";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { deviceKeyPair } from "@shared/crypto/deviceKey";
 import type { KeyPair } from "@shared/crypto/noise";
 

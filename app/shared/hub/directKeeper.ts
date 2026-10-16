@@ -61,7 +61,7 @@ import {
 } from "@shared/remote/supervisor";
 import { isTerminalDialError, NoDialableCandidateError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { elapsedMillisUnsafe } from "@shared/elapsed";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
 type DirectKeeperDeps = {

@@ -33,7 +33,7 @@ import { loadProjects } from "@host/lib/projects";
 import { runningScriptWorktreeIds } from "@host/lib/scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
-import { elapsedMillisUnsafe } from "@shared/elapsed";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
 // Skip if a fetch finished within this window. Short enough that rapid
@@ -51,7 +51,7 @@ const SWEEP_INTERVAL_MS = 60_000;
 
 // A peer's request keeps the timer ticking this long, so a peer that
 // renews once per interval never sees it lapse. This and the windows
-// above are monotonic elapsed time (shared/elapsed.ts), so a clock step
+// above are monotonic elapsed time (`@shigomori/engine/elapsed`), so a clock step
 // neither holds a fetch back nor ends a lease.
 const ATTENTION_LEASE_MS = 2 * SWEEP_INTERVAL_MS;
 

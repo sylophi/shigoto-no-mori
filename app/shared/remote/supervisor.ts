@@ -19,7 +19,7 @@
 // (the renderer runtime forbids Math.random anyway), and time is the
 // Clock of the context the supervisor is made in, so a test on a
 // TestClock asserts the ladder and the reset without sleeping real
-// seconds. Uptime is monotonic elapsed time (shared/elapsed.ts), and
+// seconds. Uptime is monotonic elapsed time (`@shigomori/engine/elapsed`), and
 // a wake starts it again: a sleep is not time a connection proved
 // itself healthy, and a clock step is no time at all.
 import * as Clock from "effect/Clock";
@@ -36,7 +36,7 @@ import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
-import { elapsedMillisUnsafe } from "@shared/elapsed";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
