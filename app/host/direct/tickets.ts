@@ -95,6 +95,7 @@ export function createConnectTicketStore(
   opts: ConnectTicketStoreOpts = {},
 ): ConnectTicketStore {
   const ttlMs = opts.ttlMs ?? DIRECT_TICKET_TTL_MS;
+  // oxlint-disable-next-line shigomori/no-wall-clock -- a ticket expires by real time, so a sleep expires it too; tests pass their own
   const now = opts.now ?? Date.now;
   // The lookup consume needs, ticket string to its binding.
   const pending = new Map<

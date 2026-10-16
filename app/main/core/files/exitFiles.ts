@@ -49,6 +49,7 @@ export function atomicWriteJsonSync(
   { mode }: { mode?: number } = {},
 ): void {
   mkdirSync(dirname(filePath), { recursive: true });
+  // oxlint-disable-next-line shigomori/no-wall-clock -- makes a temp name unique with the pid and counter, not a time decision
   const temp = `${filePath}.tmp.${process.pid}.${Date.now()}.${tempCounter++}`;
   writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, {
     encoding: "utf8",
