@@ -356,7 +356,7 @@ export class DeviceHub extends DurableObject<Env> {
     // An ask to a device that went silent is where its peers find out:
     // it leaves the roster, and the ask is nacked as offline.
     const evicted = this.evictSilent(ws);
-    if (evicted.size > 0) this.announcePresence(evicted);
+    if (evicted.size > 0) this.announcePresence(evicted, ws);
     const targets = this.ctx
       .getWebSockets(envelope.to)
       .filter((target) => !evicted.has(target));
@@ -458,8 +458,12 @@ export class DeviceHub extends DurableObject<Env> {
   // required because getWebSockets can still list sockets that just
   // closed or are closing: callers name the departing ones instead of
   // trusting the listing.
-  private announcePresence(exclude: ReadonlySet<WebSocket>): void {
-    const evicted = this.evictSilent();
+  // `spare` as in evictSilent.
+  private announcePresence(
+    exclude: ReadonlySet<WebSocket>,
+    spare?: WebSocket,
+  ): void {
+    const evicted = this.evictSilent(spare);
     const sockets = this.ctx
       .getWebSockets()
       .filter((ws) => !exclude.has(ws) && !evicted.has(ws));

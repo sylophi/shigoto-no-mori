@@ -542,6 +542,19 @@ describe("a device that went silent", () => {
     }
   });
 
+  it("spares the device that asks, however long since its last ping", async () => {
+    const a = await enrollAndConnect("acct-silent-asker", "dev-silent-qa");
+    const b = await enrollAndConnect("acct-silent-asker", "dev-silent-qb");
+    await a.socket.untilPresence(["dev-silent-qa", "dev-silent-qb"]);
+    await shortSilence("acct-silent-asker", 400);
+    // Neither pings: A wakes and asks before its next ping goes out.
+    await sleep(700);
+    a.socket.send({ t: "relay", to: "dev-silent-qb", frame: "ask" });
+    await a.socket.untilPresence(["dev-silent-qa"]);
+    expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
+    expect(a.socket.ws.readyState).toBe(WebSocket.OPEN);
+  });
+
   it("leaves the roster on a read of it", async () => {
     const a = await enrollAndConnect("acct-silent-read", "dev-silent-ra");
     const b = await enrollAndConnect("acct-silent-read", "dev-silent-rb");
