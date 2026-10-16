@@ -45,8 +45,8 @@ export const attachStdin = () => {
 // Before the terminal goes to another program (handOver): a reader a
 // menu attached keeps a read pending on its dup, and once an
 // interactive shell takes the terminal's foreground group that read
-// fails with EIO, which Bun throws. Destroying the reader closes the
-// dup, never fd 0, and the program reads the terminal alone.
+// fails with EIO, which Bun throws. Destroying the reader ends that
+// read (fd 0 stays open), and the program reads the terminal alone.
 export const releaseStdin = () => {
   if (!attached) return;
   attached = false;
