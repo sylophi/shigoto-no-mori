@@ -201,6 +201,9 @@ export const makeProjectChecks = ({
           for (const [name, entry] of yield* lstatIn(base, entries.value)) {
             const dir = path.join(base, name);
             if (known.has(dir) || !isDirMode(entry.mode)) continue;
+            // A move's partial copy or a create's carry-over staging, which
+            // their processes or the next start clear.
+            if (/^\..+\.(partial|carry)-[\w-]+$/.test(name)) continue;
             // A sibling project with the same folder name shares a managed
             // base, so only a stray whose metadata points back here counts.
             const repo = yield* git.locate(dir);

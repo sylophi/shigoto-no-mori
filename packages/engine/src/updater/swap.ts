@@ -1,5 +1,6 @@
 // The updater's swap: the staged app put in place of the running one, and the old one kept until it starts.
 import * as Effect from "effect/Effect";
+import * as Darwin from "../Darwin.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -42,11 +43,16 @@ export const makeSwap = ({
     //     fails.
     //  2. Verify the signature again where it now sits, closing the gap
     //     since staging.
-    //  3. Rename the target aside and the new bundle in: two renames in one
-    //     directory, each atomic, the first rolled back when the second
-    //     fails. Between them the aside still holds the app.
+    //  3. Exchange the two in one step where the darwin helper can
+    //     (renamex_np's RENAME_SWAP), so the target always holds an app;
+    //     else rename the target aside and the new bundle in, two renames
+    //     in one directory, each atomic, the first rolled back when the
+    //     second fails, the aside holding the app between them.
     // The running terminal binary may live inside the target. Every step is
     // a rename or an unlink, never a write in place, so it keeps running.
+    // The darwin helper, where the process has it (the terminal does,
+    // beside its binary; the app's own updater graph never swaps).
+    const darwin = yield* Effect.serviceOption(Darwin.Darwin);
     const swap = Effect.fn("Updater.swap")(function* (
       staged: string,
       target: string,
@@ -94,6 +100,28 @@ export const makeSwap = ({
       );
       const aside = path.join(dir, `${base}.old-${pid}`);
       yield* removeAll(aside);
+      // One exchange where the volume can make it: the new bundle and the
+      // installed one trade places in one step, so no moment, a crash's
+      // included, leaves no app at the target, and the old one goes after.
+      if (Option.isSome(darwin)) {
+        const version = yield* bundleVersion(incoming).pipe(Effect.option);
+        const exchanged = yield* darwin.value
+          .exchange({ a: incoming, b: target })
+          .pipe(
+            Effect.map((line) => !Darwin.isFailed(line)),
+            Effect.orElseSucceed(() => false),
+          );
+        // A helper that failed after its call still made the exchange
+        // when the target holds the new version now.
+        const landed =
+          exchanged ||
+          (Option.isSome(version) &&
+            Option.contains(
+              yield* bundleVersion(target).pipe(Effect.option),
+              version.value,
+            ));
+        if (landed) return yield* removeAll(incoming);
+      }
       // Not interruptible: an interruption between the two renames would
       // leave no app at the target.
       yield* Effect.uninterruptible(

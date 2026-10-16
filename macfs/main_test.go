@@ -109,6 +109,27 @@ func TestCloneWholeTree(t *testing.T) {
 	}
 }
 
+func TestExchangeSwapsTwoTrees(t *testing.T) {
+	root := t.TempDir()
+	a, b := filepath.Join(root, "a.app"), filepath.Join(root, ".a.app.new")
+	writeFile(t, filepath.Join(a, "version"), "1\n", 0o644)
+	writeFile(t, filepath.Join(b, "version"), "2\n", 0o644)
+	lines := macfs(t, "", "exchange", b, a)
+	if lines["."]["error"] != nil {
+		t.Fatalf("lines = %v", lines)
+	}
+	for p, want := range map[string]string{a: "2\n", b: "1\n"} {
+		if content, err := os.ReadFile(filepath.Join(p, "version")); err != nil || string(content) != want {
+			t.Fatalf("%s: %q %v", p, content, err)
+		}
+	}
+	// One side missing is no swap.
+	missing := macfs(t, "", "exchange", filepath.Join(root, "gone"), a)
+	if errorCode(missing["."]) != "ENOENT" {
+		t.Fatalf("missing = %v", missing)
+	}
+}
+
 func TestFlagsWalkAndClear(t *testing.T) {
 	root := t.TempDir()
 	hidden := filepath.Join(root, "dir/hidden")

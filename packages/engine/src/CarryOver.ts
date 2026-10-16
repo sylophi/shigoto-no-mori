@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Darwin from "./Darwin.ts";
 import { copyFailure, copyTree, entryExists } from "./entries.ts";
+import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
 
 export type CarryOverEntry = {
@@ -243,6 +244,7 @@ const make = Effect.gen(function* () {
   const applyOne = (
     sources: ReadonlyArray<Source>,
     destination: string,
+    staging: string,
     entry: CarryOverEntry,
   ) =>
     Effect.gen(function* () {
@@ -281,7 +283,16 @@ const make = Effect.gen(function* () {
             .pipe(Effect.mapError((error) => error.message));
           return isDirectory ? entry.path : undefined;
         }
-        yield* cloneOrCopy(from, to);
+        // Copied whole beside the worktree, then renamed in, so an entry
+        // is there whole or not at all.
+        const staged = path.join(staging, entry.path);
+        yield* fs
+          .makeDirectory(path.dirname(staged), { recursive: true })
+          .pipe(Effect.mapError((error) => error.message));
+        yield* cloneOrCopy(from, staged);
+        yield* fs
+          .rename(staged, to)
+          .pipe(Effect.mapError((error) => error.message));
         return undefined;
       }).pipe(Effect.result);
       return Result.isSuccess(outcome)
@@ -325,8 +336,31 @@ const make = Effect.gen(function* () {
       copiedInstead?: true;
     }> = [];
     const excludes: string[] = [];
+    // Beside the worktree, on its volume and out of git's sight. Any one a
+    // crash left there (its process gone) goes first.
+    const parent = path.dirname(input.destination);
+    const prefix = `.${path.basename(input.destination)}.carry-`;
+    for (const left of yield* fs
+      .readDirectory(parent)
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))) {
+      const pid = Number(/^\..+\.carry-(\d+)$/.exec(left)?.[1]);
+      if (Number.isInteger(pid) && pid > 1 && !(yield* pidAlive(pid))) {
+        yield* fs
+          .remove(path.join(parent, left), { recursive: true })
+          .pipe(Effect.ignore);
+      }
+    }
+    const staging = path.join(parent, `${prefix}${process.pid}`);
+    yield* Effect.addFinalizer(() =>
+      fs.remove(staging, { recursive: true, force: true }).pipe(Effect.ignore),
+    );
     for (const entry of entries) {
-      const outcome = yield* applyOne(sources, input.destination, entry);
+      const outcome = yield* applyOne(
+        sources,
+        input.destination,
+        staging,
+        entry,
+      );
       const sibling = outcome.source !== undefined && !outcome.source.isPrimary;
       if (outcome.failure !== undefined) {
         failures.push({
@@ -350,7 +384,7 @@ const make = Effect.gen(function* () {
       ...(includeFailures.length > 0 ? { includeFailures } : {}),
       ...(sourced.length > 0 ? { sourced } : {}),
     });
-  });
+  }, Effect.scoped);
 
   return CarryOver.of({ apply });
 });

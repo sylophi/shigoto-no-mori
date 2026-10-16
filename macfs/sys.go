@@ -21,6 +21,13 @@ func cloneTree(src, dst string) error {
 	return unix.Clonefile(src, dst, unix.CLONE_NOFOLLOW)
 }
 
+// a and b trade places in one step, so no reader ever finds either path
+// missing: what an update's swap of the app bundle needs. Both must
+// exist, on one volume.
+func exchange(a, b string) error {
+	return unix.RenamexNp(a, b, unix.RENAME_SWAP)
+}
+
 // The name of the filesystem holding p: "apfs", "hfs", "smbfs", ...
 func fsType(p string) (string, error) {
 	var st unix.Statfs_t
