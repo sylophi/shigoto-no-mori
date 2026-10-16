@@ -212,8 +212,6 @@ it("the updater's bridge: a claim that fails is reported, and the next poll stil
 });
 
 it("the updater's bridge: stops looking with its scope", async () => {
-  // Its looks counted on a clock the proof moves, so nothing here waits
-  // on the runner's speed.
   const clock = await Effect.runPromise(Effect.scoped(TestClock.make()));
   let looks = 0;
   let settled = 0;
@@ -232,11 +230,13 @@ it("the updater's bridge: stops looking with its scope", async () => {
     clock,
   );
   await started;
-  // A second ahead each time, as the next look's sleep may not have
-  // begun yet.
+  // A second ahead once the looks so far have settled, again until
+  // one more starts, as the next look's sleep may not have begun yet.
   await waitFor(async () => {
+    if (settled !== looks) return false;
+    if (looks >= 2) return true;
     await Effect.runPromise(clock.adjust("1 second"));
-    return settled >= 2 && settled === looks;
+    return false;
   }, "a look at the start and the clock's");
   // With no look under way, as a rename still on the thread pool can
   // claim a request written after the stop.
