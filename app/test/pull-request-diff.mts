@@ -5,7 +5,8 @@
 // abbreviated ids read as "Can't show this file here.". Commits that
 // aren't here, a PR pushed from another device, are fetched by hash
 // from the PR's remote first, into no ref. gh pr diff answers only when
-// they can't be fetched, and its too_large then says so.
+// they can't be fetched or git can't diff them here, and its too_large
+// then says so.
 //
 // The PR is made the way the create dialog makes it (createPullRequest,
 // which pushes the branch), from a branch that adds, changes and
@@ -26,7 +27,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parsePatchFiles } from "@pierre/diffs";
+import { ReadBlobPayloadSchema } from "@shigomori/contracts/schemas";
 import { isMediaBinary } from "@shigomori/ui/lib/patchFiles.ts";
+import * as Schema from "effect/Schema";
 import { getPullRequestDiff as getPullRequestDiffEffect } from "@host/lib/githubCli/actions";
 import * as NewPullRequest from "@host/lib/githubCli/newPullRequest";
 import { readGitBlob as readGitBlobEffect } from "@host/lib/worktrees/files";
@@ -158,8 +161,12 @@ function setup() {
   return { root, git, remote, repo, clone, commit, viewPullRequest };
 }
 
+// The blob read's contract, which refuses an abbreviated id.
+const decodeBlobId = Schema.decodeUnknownSync(ReadBlobPayloadSchema.fields.oid);
+
 // The files of a PR's patch by name, and each media side's bytes as
-// readGitBlob hands them back, by the ids the patch names.
+// readGitBlob hands them back, by the ids the patch names, each one the
+// blob read takes.
 async function readPatch(repo: string, patch: string) {
   const files = parsePatchFiles(patch).flatMap((p) => p.files);
   const sides = new Map<string, Buffer | null>();
@@ -169,6 +176,7 @@ async function readPatch(repo: string, patch: string) {
       ["new", file.newObjectId],
     ] as const) {
       if (!oid || /^0+$/.test(oid)) continue;
+      decodeBlobId(oid);
       const blob = await readGitBlob(repo, oid, file.name);
       sides.set(
         `${side} ${file.name}`,
@@ -215,8 +223,9 @@ afterAll(async () => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-it("a PR made here shows both sides of each image, from git", async () => {
+it("a PR made here shows both sides of each image, from git, whatever the prefixes", async () => {
   const { root, git, repo, commit, viewPullRequest } = setup();
+  git(repo, "config", "diff.noprefix", "true");
   git(repo, "switch", "-q", "-c", "images");
   commit(repo, BRANCH, ["gone.png"], "Images");
   assert.equal((await createPullRequest(repo)).url, PR_URL);
@@ -256,18 +265,27 @@ it("a PR pushed from another device is fetched by hash, into no ref", async () =
   assert.equal(git(repo, "for-each-ref"), refs, "no ref made or moved");
 });
 
-it("gh pr diff answers when the commits can't be fetched", async () => {
+it("gh pr diff answers when the commits can't be fetched or diffed here", async () => {
   const { root, git, repo, viewPullRequest } = setup();
   viewPullRequest("1".repeat(40));
   assert.equal(await getPullRequestDiff(repo, 1), GH_DIFF);
 
   writeFileSync(join(root, "diff"), "too_large");
   await assert.rejects(getPullRequestDiff(repo, 1), {
-    message: `This pull request is too large for GitHub to diff, and its commits couldn't be fetched from ${PR_URL}.`,
+    message: `This pull request is too large for GitHub to diff, and its commits couldn't be fetched and diffed here.`,
   });
 
-  git(repo, "remote", "set-url", "origin", "git@github.com:o/elsewhere.git");
   writeFileSync(join(root, "diff"), "ok");
+  git(repo, "switch", "-q", "--orphan", "unrelated");
+  git(repo, "commit", "-q", "--allow-empty", "-m", "unrelated");
+  viewPullRequest(git(repo, "rev-parse", "HEAD").trim());
+  assert.equal(
+    await getPullRequestDiff(repo, 1),
+    GH_DIFF,
+    "both commits here and no merge base, as in a shallow clone",
+  );
+
+  git(repo, "remote", "set-url", "origin", "git@github.com:o/elsewhere.git");
   assert.equal(
     await getPullRequestDiff(repo, 1),
     GH_DIFF,

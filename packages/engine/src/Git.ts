@@ -1080,7 +1080,9 @@ const make = Effect.gen(function* () {
         { maxOutputBytes: PATCH_MAX_OUTPUT, anyExit: true },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     }),
-    // Both have to be commits the repository already holds.
+    // Both have to be commits the repository already holds. The
+    // prefixes are pinned against diff.noprefix and its kin, which the
+    // pull request page's patch, gh's before, never had.
     mergeBaseDiff: Effect.fn("Git.mergeBaseDiff")(function* (input) {
       return yield* run(
         input.repo,
@@ -1090,6 +1092,8 @@ const make = Effect.gen(function* () {
           "diff",
           "--no-color",
           "--full-index",
+          "--src-prefix=a/",
+          "--dst-prefix=b/",
           "--end-of-options",
           `${input.base}...${input.head}`,
         ],

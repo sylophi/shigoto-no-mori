@@ -85,7 +85,7 @@ export function ghStream(
 // fetched, since only git's patch names blob ids in full and a media
 // file's sides are read back by them (readBlob); `gh pr diff`
 // abbreviates them. `gh pr diff` is the fallback when they can't be
-// fetched. Fails rather than rendering an empty diff, so the renderer
+// fetched or diffed here. Fails rather than rendering an empty diff, so the renderer
 // shows the error inline.
 export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
   function* (opts: { cwd: string; number: number }) {
@@ -96,11 +96,11 @@ export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
     );
     const pr = yield* decodeGhPrCommits(raw);
     if (yield* fetchPullRequestCommits(cwd, pr)) {
-      return yield* (yield* Git.Git).mergeBaseDiff({
-        repo: cwd,
-        base: pr.baseRefOid,
-        head: pr.headRefOid,
-      });
+      // A shallow clone can hold both commits and no merge base.
+      const local = yield* (yield* Git.Git)
+        .mergeBaseDiff({ repo: cwd, base: pr.baseRefOid, head: pr.headRefOid })
+        .pipe(Effect.option);
+      if (Option.isSome(local)) return local.value;
     }
     // PR diffs can run into the MB range; bump the buffer so a sprawling
     // PR doesn't ENOBUFS, and give the transfer more room than the
@@ -115,8 +115,8 @@ export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
         Effect.fail(
           new GhActionError({
             reason:
-              `This pull request is too large for GitHub to diff, and its ` +
-              `commits couldn't be fetched from ${pr.url}.`,
+              "This pull request is too large for GitHub to diff, and its " +
+              "commits couldn't be fetched and diffed here.",
           }),
         ),
       ),
