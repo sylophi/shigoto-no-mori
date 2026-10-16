@@ -61,6 +61,7 @@ import {
 } from "@shared/remote/supervisor";
 import { isTerminalDialError, NoDialableCandidateError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { elapsedMillisUnsafe } from "@shared/elapsed";
 import { log } from "@shared/log";
 
 type DirectKeeperDeps = {
@@ -86,9 +87,11 @@ export type DirectKeeper = {
   // dial failure, cleared the moment a dial succeeds), for the
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
-  // The network is back, or the machine awake: every peer waiting out
-  // the shared ladder dials now. A refused peer keeps its slow ladder,
-  // which is what keeps it clear of the host's lockout.
+  // The network is back, the machine awake or a tab back: every peer
+  // waiting out the shared ladder dials now, and a live session's
+  // uptime starts again from this observation (as the supervisor's
+  // does). A refused peer keeps its slow ladder, which is what keeps it
+  // clear of the host's lockout.
   dialNow(): void;
 };
 
@@ -102,6 +105,9 @@ type PeerState = {
   failures: number;
   // Refused dials in a row, for the refusal ladder.
   refusals: number;
+  // Since when the live session's uptime counts (monotonic), null
+  // while there is none.
+  upSince: number | null;
   // Cuts its wait on the shared ladder short.
   wake: Wake;
 };
@@ -130,6 +136,7 @@ export const make = (
 ): Effect.Effect<DirectKeeper, never, Scope.Scope> =>
   Effect.gen(function* () {
     const run = yield* FiberSet.makeRuntime<never>();
+    const clock = yield* Clock.Clock;
 
     // Membership here IS "was in the last live roster": reconcile prunes
     // and seeds it, so an offline-to-online transition always lands on a
@@ -195,7 +202,7 @@ export const make = (
           }
           return 0;
         }
-        const connectedAt = yield* Clock.currentTimeMillis;
+        state.upSince = elapsedMillisUnsafe(clock);
         if (state.failures > 0) {
           log.info(
             `[direct] session to ${deviceId} established after ${state.failures} failed attempts`,
@@ -205,7 +212,12 @@ export const make = (
         state.failures = 0;
         state.refusals = 0;
         yield* Deferred.await(dropped);
-        return (yield* Clock.currentTimeMillis) - connectedAt;
+        const uptime =
+          state.upSince === null
+            ? 0
+            : elapsedMillisUnsafe(clock) - state.upSince;
+        state.upSince = null;
+        return uptime;
       });
 
     const keep = (deviceId: string) => {
@@ -215,6 +227,7 @@ export const make = (
         lastFailure: null,
         failures: 0,
         refusals: 0,
+        upSince: null,
         wake: makeWake(),
       };
       state.loop = run(
@@ -286,7 +299,11 @@ export const make = (
       },
 
       dialNow() {
-        for (const state of states.values()) state.wake.now();
+        const now = elapsedMillisUnsafe(clock);
+        for (const state of states.values()) {
+          if (state.upSince !== null) state.upSince = now;
+          state.wake.now();
+        }
       },
     } satisfies DirectKeeper;
   });

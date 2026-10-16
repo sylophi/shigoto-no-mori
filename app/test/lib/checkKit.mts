@@ -25,6 +25,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
@@ -293,6 +294,44 @@ export function testClock() {
     advance: async (ms: number) => {
       await runtime.runPromise(TestClock.adjust(ms));
       await settle();
+    },
+  };
+}
+
+// A test clock as a process's clocks read it: `sleep` moves the wall
+// clock and not the monotonic one, as a Mac's sleep does (and a clock
+// step, either way); `stop` moves both while no timer runs, as a
+// stopped process, or a hidden page's throttled timers, see them. The
+// timers keep the test clock's own pace.
+export function sleepingClock(clock: ReturnType<typeof testClock>) {
+  const test = Context.get(clock.context, Clock.Clock);
+  let slept = 0;
+  let stopped = 0;
+  const wall: Clock.Clock = {
+    ...test,
+    monotonicTimeNanosUnsafe: () =>
+      test.monotonicTimeNanosUnsafe() + BigInt(stopped) * 1_000_000n,
+    monotonicTimeNanos: Effect.sync(
+      () => test.monotonicTimeNanosUnsafe() + BigInt(stopped) * 1_000_000n,
+    ),
+    currentTimeMillisUnsafe: () => test.currentTimeMillisUnsafe() + slept,
+    currentTimeMillis: Effect.sync(
+      () => test.currentTimeMillisUnsafe() + slept,
+    ),
+    currentTimeNanosUnsafe: () =>
+      test.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n,
+    currentTimeNanos: Effect.sync(
+      () => test.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n,
+    ),
+  };
+  return {
+    wall,
+    sleep: (ms: number) => {
+      slept += ms;
+    },
+    stop: (ms: number) => {
+      slept += ms;
+      stopped += ms;
     },
   };
 }

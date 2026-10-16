@@ -19,7 +19,9 @@
 // (the renderer runtime forbids Math.random anyway), and time is the
 // Clock of the context the supervisor is made in, so a test on a
 // TestClock asserts the ladder and the reset without sleeping real
-// seconds.
+// seconds. Uptime is monotonic elapsed time (shared/elapsed.ts), and
+// a wake starts it again: a sleep is not time a connection proved
+// itself healthy, and a clock step is no time at all.
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -34,6 +36,7 @@ import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
+import { elapsedMillisUnsafe } from "@shared/elapsed";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
@@ -109,9 +112,10 @@ type SupervisorOptions = {
 };
 
 export type Supervisor = {
-  // The network is back, or the machine awake: a backoff wait ends now
-  // and the next attempt starts, instead of after the rest of its rung.
-  // Does nothing outside a backoff.
+  // The network is back, the machine awake or a tab back: a backoff
+  // wait ends now and the next attempt starts, instead of after the
+  // rest of its rung, and a live connection's uptime starts again from
+  // this observation.
   dialNow(): void;
 };
 
@@ -197,6 +201,9 @@ export const supervise = (
 ): Effect.Effect<Supervisor, never, Scope.Scope> =>
   Effect.gen(function* () {
     const { classifyClose } = options;
+    const clock = yield* Clock.Clock;
+    // Since when the live connection's uptime counts, null while none is.
+    let upSince: number | null = null;
     const setStatus = (next: SupervisorStatus) =>
       Effect.sync(() => options.onStatus?.(next));
 
@@ -251,7 +258,7 @@ export const supervise = (
         return 0;
       }
       const connection = connected.success;
-      const connectedAt = yield* Clock.currentTimeMillis;
+      upSince = elapsedMillisUnsafe(clock);
       yield* setStatus({
         phase: "connected",
         remoteDeviceId: connection.remoteDeviceId,
@@ -261,10 +268,13 @@ export const supervise = (
       const code = yield* Deferred.await(closed).pipe(
         Effect.ensuring(Effect.sync(() => options.onConnection?.(null))),
       );
+      const uptime =
+        upSince === null ? 0 : elapsedMillisUnsafe(clock) - upSince;
+      upSince = null;
       const verdict = classifyClose(code);
       if (verdict !== null)
         return yield* block(verdict.reason, verdict.message);
-      return (yield* Clock.currentTimeMillis) - connectedAt;
+      return uptime;
     }).pipe(Effect.scoped);
 
     const wake = makeWake();
@@ -285,5 +295,10 @@ export const supervise = (
       ),
       Effect.forkScoped,
     );
-    return { dialNow: wake.now };
+    return {
+      dialNow: () => {
+        if (upSince !== null) upSince = elapsedMillisUnsafe(clock);
+        wake.now();
+      },
+    };
   });
