@@ -64,9 +64,42 @@ export interface LabOptions {
   readonly gh?: string | ((root: string) => string);
 }
 
+// The walks remove the build's saved windows and, at the end, its whole
+// footprint, which belongs to the lab build anyone on this machine runs:
+// one that is already running is someone's, and a walk would also lose
+// its single-instance lock to it.
+const refuseRunningLab = (executable: string) => {
+  let running = "";
+  try {
+    running = execFileSync("pgrep", ["-f", executable], { encoding: "utf8" });
+  } catch {
+    // pgrep exits 1 when nothing matches.
+  }
+  if (running.trim() !== "") {
+    throw new Error(
+      `A lab build is running (pid ${running.trim().split("\n").join(", ")}): quit it before the walks.`,
+    );
+  }
+};
+
 export async function bootLab(options: LabOptions): Promise<Lab> {
   const bundle = labBundle();
+  const executable = join(bundle, "Contents", "MacOS", NAME);
+  refuseRunningLab(executable);
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-walk-")));
+  try {
+    return await launch(root, options, executable);
+  } catch (cause) {
+    rmSync(root, { recursive: true, force: true });
+    throw cause;
+  }
+}
+
+async function launch(
+  root: string,
+  options: LabOptions,
+  executable: string,
+): Promise<Lab> {
   const home = join(root, "home");
   const bin = join(root, "bin");
   const dataDir = join(root, "data");
@@ -118,7 +151,7 @@ export async function bootLab(options: LabOptions): Promise<Lab> {
   sm("projects", "add", reposDir, "--all", "--yes");
 
   const port = await freeLoopbackPort();
-  const child = spawn(join(bundle, "Contents", "MacOS", NAME), [], {
+  const child = spawn(executable, [], {
     env: {
       ...env,
       SHIGOMORI_DATA_DIR: dataDir,

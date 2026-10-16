@@ -40,6 +40,10 @@ beforeAll(async () => {
         base: "main",
         title: "Images",
       });
+      // Past what GitHub has for the pull request: its diff must not show.
+      writeFileSync(join(repo, "local-only.txt"), "not pushed\n");
+      git(repo, "add", "-A");
+      git(repo, "commit", "-q", "-m", "Not pushed");
     },
   });
   await lab.page.getByRole("button", { name: "demo, open images" }).click();
@@ -66,6 +70,8 @@ it("draws the pull request's diff, the image on both sides", async () => {
     .poll(() => deepText(page), { message: unexpected() })
     .toContain("Now with images");
   const text = await deepText(page);
+  expect(text).toContain("changed into");
+  expect(text).not.toContain("local-only.txt");
   for (const path of ["README.md", "media/logo.png", "media/logo-copy.png"]) {
     expect(text).toContain(path);
   }

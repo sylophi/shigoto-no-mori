@@ -20,8 +20,10 @@ first on the login shell's PATH, and none of the user's shell hooks
 also holds a data folder and the walk's repos, registered through the
 bundle's own `smlab`. After the last walk, `smlab nuke --yes
 --keep-app` takes the build's settings, logs and keychain item off the
-machine. The bundle stays. `SM_LAB_APP` points the walks at a build
-somewhere else.
+machine. The bundle stays. That footprint is the lab build's on this
+machine, whoever runs it, so the walks refuse to start while a lab
+build is running. `SM_LAB_APP` points the walks at a build somewhere
+else.
 
 ## Where they run
 
