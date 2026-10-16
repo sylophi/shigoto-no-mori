@@ -45,6 +45,13 @@ import {
   NoDirectConnectionError,
 } from "@shigomori/contracts/errors";
 import { peerViewFailure } from "./peerViewFailure";
+import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
+
+// No session to the peer, with what the dial or the drop said.
+const noSession = (deviceId: string, error: unknown) =>
+  error instanceof NoDirectConnectionError
+    ? error
+    : new NoDirectConnectionError({ deviceId, reason: errorMessageOf(error) });
 
 // hub:invokePeer as a window's host and a web tab serve it: an effect,
 // so a call interrupted where it was made (a query superseded or
@@ -323,7 +330,31 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
         ),
       );
     }
-    return entry.promise;
+    return entry.promise.catch((error: unknown) =>
+      Promise.reject(noSession(deviceId, error)),
+    );
+  }
+
+  // A call on the session: one the link dropped under (a peer that slept
+  // is found out only by the next probe or ping) is no session, which a
+  // query waits out quietly until the redial lands, not the peer's own
+  // failure.
+  async function invokeOn(
+    deviceId: string,
+    channel: string,
+    input: unknown,
+    options?: InvokeOptions,
+  ): Promise<unknown> {
+    const peer = await requirePeer(deviceId);
+    return peer.transport
+      .invoke(channel, input, options)
+      .catch((error: unknown) =>
+        Promise.reject(
+          error instanceof RemoteDisconnectedError
+            ? noSession(deviceId, error)
+            : error,
+        ),
+      );
   }
 
   return {
@@ -333,17 +364,11 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
       await openPeer(deviceId);
     },
 
-    invokeOnPeer: async (deviceId, channel, input, options) => {
-      const peer = await requirePeer(deviceId);
-      return peer.transport.invoke(channel, input, options);
-    },
+    invokeOnPeer: invokeOn,
 
-    invokePeer: async ({ deviceId, channel, input }) => {
-      const peer = await requirePeer(deviceId);
-      // Disconnect and no-session errors reject through here, and a
-      // peer's contract error reaches the renderer as its class.
-      return peer.transport.invoke(channel, input);
-    },
+    // A peer's contract error reaches the renderer as its class.
+    invokePeer: ({ deviceId, channel, input }) =>
+      invokeOn(deviceId, channel, input),
 
     watchPeer: ({ deviceId, channel, input }, observer) => {
       let stopped = false;
@@ -356,15 +381,7 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
         // No way to the peer yet, whatever the dial said (a hub ask timed
         // out, no listener offered): the redial's to mend, so the view
         // asks again, where the peer's own view failing ends it.
-        (error: unknown) =>
-          observer.end(
-            error instanceof NoDirectConnectionError
-              ? error
-              : new NoDirectConnectionError({
-                  deviceId,
-                  reason: errorMessageOf(error),
-                }),
-          ),
+        (error: unknown) => observer.end(error),
       );
       return () => {
         stopped = true;

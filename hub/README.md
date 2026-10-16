@@ -171,8 +171,17 @@ killed is found and redialed within seconds. Deploy the Worker BEFORE
 shipping devices that heartbeat: an old Worker drops the ping as a
 malformed envelope, so a new device sees no pong and redials it once a
 minute until the Worker is redeployed (it keeps working meanwhile, just
-noisily). The reverse skew is silent: an old device never pings and the
-auto-response never fires.
+noisily).
+
+The pings are also the hub's word on a device: a socket whose last one
+is more than 90 s old (`SILENT_AFTER_MS` in `src/hubObject.ts`) is
+closed with `4106` and leaves the roster, which a device redials on.
+A laptop that sleeps leaves its socket open, and Cloudflare reports no
+close for it. It is judged when the object runs anyway (an ask relayed
+to the socket's device, a read or an announce of the roster), never on
+an alarm, which would bill a request and wake the object each time.
+Every build above the floor pings; one that did not would be closed
+every 90 s.
 
 The Worker serves any browser origin (`Access-Control-Allow-Origin:
 *`) and needs no origin config. Every route authenticates from an

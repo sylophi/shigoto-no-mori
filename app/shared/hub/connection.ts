@@ -238,6 +238,19 @@ export const make = (
     // This socket's name on the hub, kept across redials. A web device
     // holds one per tab, and the hub relays to each.
     const connectionId = newConnectionId();
+    // The peers the last roster named, across redials, so the log says
+    // who came and went, the one record of a peer's presence there is.
+    let roster: ReadonlySet<string> = new Set();
+    const noteRoster = (online: readonly string[], self: string) => {
+      const next = new Set(online.filter((id) => id !== self));
+      for (const id of next) {
+        if (!roster.has(id)) log.info(`[hub] ${id} came online`);
+      }
+      for (const id of roster) {
+        if (!next.has(id)) log.info(`[hub] ${id} went offline`);
+      }
+      roster = next;
+    };
 
     function notifyChange(): void {
       deps.onChange?.();
@@ -341,7 +354,7 @@ export const make = (
           seenAsks,
           send: (text) => socket.send(text),
           serveConnectInfo: deps.serveConnectInfo,
-          onPresence: () => {
+          onPresence: (online) => {
             // The teardown's empty roster on a dead socket is not a
             // live roster: it must not reach the direct plane while the
             // supervisor still reads the socket as connected (that
@@ -351,8 +364,10 @@ export const make = (
             if (!established) {
               established = true;
               link = nextLink;
+              log.info("[hub] connected");
               Deferred.doneUnsafe(accepted, Exit.void);
             }
+            noteRoster(online, opts.deviceId);
             notifyChange();
           },
         });
@@ -394,6 +409,7 @@ export const make = (
             // An established socket dropped. The owner's close and a
             // death stay silent, so the supervisor never reconnects
             // against its own stop and hears a death once.
+            log.info(`[hub] the socket closed (code ${code})`);
             onClose(code);
           }
           notifyChange();
@@ -417,6 +433,7 @@ export const make = (
         // minute.
         const declareDead = Effect.sync(() => {
           if (dead) return;
+          log.info("[hub] the socket stopped answering its pings");
           dead = true;
           tearDownLink();
           onClose(null);
@@ -501,6 +518,9 @@ export const make = (
           connect: (onClose) => dial(opts, onClose),
           classifyClose: hubCloseClassifier,
           onStatus: (next) => {
+            if (next.phase === "blocked" && socketStatus.phase !== "blocked") {
+              log.warn(`[hub] blocked (${next.reason}): ${next.message}`);
+            }
             socketStatus = next;
             notifyChange();
           },
