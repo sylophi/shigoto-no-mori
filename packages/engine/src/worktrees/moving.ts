@@ -147,15 +147,17 @@ export const makeMoving = ({
         return taken.length > 0;
       }).pipe(Effect.orDie);
 
-    // A checkout's link to its entry of git's (its `.git` file), which
+    // The entry of git's a checkout belongs to (the admin folder its
+    // `.git` file names, resolved, as git may write it relative), which
     // git's move keeps and a copy repeats: what tells the move's own
     // checkout, or a copy of it, from another folder at the same path.
     // Empty when there is none to read.
     const linkOf = (dir: string) =>
-      fs.readFileString(path.join(dir, ".git")).pipe(
-        Effect.map((text) => text.trim()),
-        Effect.orElseSucceed(() => ""),
-      );
+      Effect.gen(function* () {
+        const text = yield* fs.readFileString(path.join(dir, ".git"));
+        const named = text.trim().replace(/^gitdir:\s*/, "");
+        return yield* fs.realPath(path.resolve(dir, named));
+      }).pipe(Effect.orElseSucceed(() => ""));
     const holdsLink = (dir: string, link: string) =>
       Effect.map(linkOf(dir), (found) => link !== "" && found === link);
 

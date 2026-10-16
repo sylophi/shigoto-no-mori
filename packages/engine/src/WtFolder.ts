@@ -177,10 +177,20 @@ const make = Effect.gen(function* () {
         if (busy !== undefined) return yield* failed(fromPath, busy);
       }
       if (from === undefined) {
-        // Not a worktree git lists there: a stray folder stays where it
-        // is. One git moved before a crash was finished by its record's
-        // resume, which marked it moved.
-        return yield* sql`DELETE FROM wt_moves WHERE from_path = ${fromPath}`;
+        // Listed at its wt/ path with no record to say it is this one
+        // (git moved it before a crash, under a build that kept none): it
+        // stays stuck, never carried by path alone. Listed nowhere, it is
+        // a stray folder, which stays where it is, unless another process
+        // has made the move meanwhile.
+        if ((yield* at(row.to_path)) !== undefined) {
+          return yield* failed(
+            fromPath,
+            "git lists it in wt/ already, moved before a crash; what sm kept under its old id wasn't carried",
+          );
+        }
+        return yield* sql`DELETE FROM wt_moves
+          WHERE from_path = ${fromPath} AND moved = 0
+          AND NOT EXISTS (SELECT 1 FROM moving WHERE from_path = ${fromPath})`;
       }
       // A move records itself as made (Worktrees.carryMoved).
       const outcome = yield* Effect.result(

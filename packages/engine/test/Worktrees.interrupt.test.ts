@@ -14,9 +14,10 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
@@ -263,8 +264,16 @@ const deadRecord = (
       })}`,
   );
 
-// A checkout's `.git` file, as a move records it.
-const linkOf = (dir: string) => readFileSync(join(dir, ".git"), "utf8").trim();
+// A checkout's entry of git's, as a move records it.
+const linkOf = (dir: string) =>
+  realpathSync(
+    resolve(
+      dir,
+      readFileSync(join(dir, ".git"), "utf8")
+        .trim()
+        .replace(/^gitdir:\s*/, ""),
+    ),
+  );
 
 const records = Effect.flatMap(
   SqlClient.SqlClient,
@@ -571,4 +580,32 @@ it("an adopt into a folder a move still names is refused before the checkout goe
     }),
   );
   assert.deepEqual(result, { reason: "move-in-progress", kept: true });
+});
+
+it("a resume knows its checkout by git's entry when git links it relatively", async () => {
+  const result = await withFox(({ project, worktree, repo }) =>
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      box.git(repo, "config", "worktree.useRelativePaths", "true");
+      box.git(repo, "worktree", "repair", worktree.path);
+      // Deeper, so git writes the link anew.
+      const to = join(dirname(worktree.path), "den", "vixen");
+      mkdirSync(dirname(to), { recursive: true });
+      const link = linkOf(worktree.path);
+      box.git(repo, "worktree", "move", worktree.path, to);
+      yield* deadRecord(project, worktree.path, to, link);
+      yield* worktrees.resumeMoves;
+      const now = (yield* worktrees.identities(project)).find(
+        (row) => row.path === to,
+      );
+      assert.ok(now);
+      return {
+        autoPull: (yield* (yield* Registry.Registry).marked("autoPull")).has(
+          now.id,
+        ),
+        records: (yield* records).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { autoPull: true, records: 0 });
 });

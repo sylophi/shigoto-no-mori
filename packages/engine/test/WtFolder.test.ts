@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -412,7 +413,7 @@ it("carries the id of a worktree git moved before a crash, by the move's record"
   const { repo, v2, wt } = v2Project();
   await state();
   const oldId = worktreeIdFromPath(join(v2, "c"));
-  const link = readFileSync(join(v2, "c", ".git"), "utf8").trim();
+  const link = realpathSync(join(repo, ".git", "worktrees", "c"));
   box.git(repo, "worktree", "unlock", join(v2, "c"));
   box.git(repo, "worktree", "move", join(v2, "c"), join(wt, "c"));
   const after = (await box.engine(
