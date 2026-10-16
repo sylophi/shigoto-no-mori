@@ -99,8 +99,13 @@ it("amends the last commit's message from its strip", async () => {
     .toBe("Recommit");
   const before = lab.git(repo, "rev-list", "--count", "HEAD").trim();
   await page.getByRole("button", { name: "Amend the last commit" }).click();
-  await page.getByLabel("Commit summary").fill("Recommit, amended");
-  await page.keyboard.press("Meta+Enter");
+  // Amend mode fills the summary with the commit's message once it has
+  // read it, so the new message goes in after that.
+  const summary = page.getByLabel("Commit summary");
+  await expect.poll(() => summary.inputValue()).toBe("Recommit");
+  await summary.fill("Recommit, amended");
+  await expect.poll(() => summary.inputValue()).toBe("Recommit, amended");
+  await page.getByRole("button", { name: "Amend the message" }).click();
   await expect
     .poll(() => lab.git(repo, "log", "-1", "--format=%s").trim())
     .toBe("Recommit, amended");
