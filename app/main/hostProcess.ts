@@ -109,6 +109,8 @@ const START_STALLS_ALLOWED = 1;
 // How long a killed host is given to exit before it is killed outright
 // (a host stopped by a signal never sees the first).
 const KILL_GRACE_MS = 5_000;
+// How long a restart waits on clearing what the host before it left.
+const CLEAR_WITHIN_MS = 2_000;
 // How long a quit or an update waits to hear whether the host is busy.
 const BUSY_DEADLINE = "3 seconds";
 const IDLE = { runningScripts: 0, inflightDeletes: 0 } as const;
@@ -330,9 +332,18 @@ function fork(): void {
     if (quitting || parkedExit !== null) return;
     // Gone unasked: what it published of its loopback names a port
     // nobody serves. A quit's host takes its own away (Loopback.ts).
-    if (spawned !== undefined) {
-      void clearLoopbackOf(dataDir(), spawned.pid);
-    }
+    // Cleared before the next host starts, so it can't take that host's
+    // own file, and only waited on so long: a data dir that holds it
+    // holds the next host too, which the start watch then sees.
+    const cleared =
+      spawned === undefined
+        ? Promise.resolve()
+        : Promise.race([
+            clearLoopbackOf(dataDir(), spawned.pid),
+            new Promise<void>((resolve) =>
+              setTimeout(resolve, CLEAR_WITHIN_MS).unref(),
+            ),
+          ]);
     if (stalledOut === forked) return;
     log.warn(`[host] exited unasked (code ${code}), starting it again`);
     // One that died before it was up leaves its waiters to the next.
@@ -355,7 +366,9 @@ function fork(): void {
       (gone) => gone.exitedAt >= now - CRASH_WINDOW_MS,
     );
     if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
-    fork();
+    void cleared.then(() => {
+      if (!quitting) fork();
+    });
   });
 }
 

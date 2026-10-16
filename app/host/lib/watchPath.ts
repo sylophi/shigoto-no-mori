@@ -9,8 +9,11 @@
 // first on the thread pool, without blocking and within a deadline, and
 // watched only once that open came back on a folder or a file. One that
 // did not is tried again on an interval, and watched once it opens, so
-// the watch is late rather than lost. A held open keeps one pool thread
-// until it returns, and a retry waits on it rather than taking another.
+// the watch is late rather than lost. A held open keeps one of the
+// pool's four threads until it returns, and every file read and write
+// the host makes goes through that pool too: a retry waits on its
+// path's open rather than starting another, and no more than two opens
+// are under way at once, so held ones never take the whole pool.
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import * as Duration from "effect/Duration";
@@ -26,11 +29,32 @@ const RETRY_EVERY: Duration.Input = "30 seconds";
 
 // An open still on its way, per path.
 const opening = new Map<string, Promise<string | null>>();
+// Opens under way at once, and the ones waiting for a turn.
+const OPENS_AT_ONCE = 2;
+let underWay = 0;
+const turns: Array<() => void> = [];
+
+const turn = (): Promise<void> => {
+  if (underWay < OPENS_AT_ONCE) {
+    underWay += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => turns.push(resolve));
+};
+
+const done = (): void => {
+  const next = turns.shift();
+  if (next === undefined) underWay -= 1;
+  else next();
+};
 
 const opened = (path: string): Promise<string | null> => {
   const held = opening.get(path);
   if (held !== undefined) return held;
-  const attempt = open(path, constants.O_RDONLY | constants.O_NONBLOCK)
+  const attempt = turn()
+    .then(() =>
+      open(path, constants.O_RDONLY | constants.O_NONBLOCK).finally(done),
+    )
     .then(async (handle) => {
       try {
         const stat = await handle.stat();
