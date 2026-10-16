@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import { afterEach, it, vi } from "vitest";
+import { NotSharingError } from "@shigomori/contracts/errors";
 import {
   encodeEnvelope,
   HUB_PING,
@@ -187,7 +188,7 @@ it("hub socket: a ping that went unanswered into a sleep condemns nothing on its
   await clock.advance(1_000 + BACKOFF_LADDER_MS[0]);
   assert.equal(hub.tickets(), 2, "redialed after the failed probe");
   assert.ok(
-    lines.some((line) => line.includes("woke after 60 minutes")),
+    lines.some((line) => line.includes("woke after 60 min")),
     lines.join("\n"),
   );
   assert.equal(connection.status().socket.phase, "connected");
@@ -244,7 +245,7 @@ function flapping() {
   };
 }
 
-it("supervisor: uptime is monotonic and starts again at a wake, so neither a sleep nor a forward step makes a short connection stable, and a backward step keeps a healthy one from looking short", async () => {
+it("supervisor: uptime is monotonic, and a wake starts again one not yet stable, so neither a sleep nor a forward step makes a short connection stable, a backward step keeps a healthy one from looking short, and uptime earned before a sleep still counts", async () => {
   const s = flapping();
   await s.clock.settle();
   // A connection that drops at once climbs the ladder.
@@ -287,9 +288,28 @@ it("supervisor: uptime is monotonic and starts again at a wake, so neither a sle
   s.drop();
   await s.clock.settle();
   assert.equal(s.lastDelay(), BACKOFF_LADDER_MS[0], "a stable run resets");
+  await s.clock.advance(BACKOFF_LADDER_MS[0]);
+
+  // A drop right after the wake of one that was stable before the sleep,
+  // from a higher rung.
+  s.drop();
+  await s.clock.settle();
+  assert.equal(s.lastDelay(), entryAt(BACKOFF_LADDER_MS, 1));
+  await s.clock.advance(entryAt(BACKOFF_LADDER_MS, 1));
+  await s.clock.advance(STABLE_CONNECTION_MS);
+  s.clock.sleep(HOUR);
+  s.supervisor.dialNow();
+  await s.clock.advance(5_000);
+  s.drop();
+  await s.clock.settle();
+  assert.equal(
+    s.lastDelay(),
+    BACKOFF_LADDER_MS[0],
+    "the uptime earned before the sleep still counts",
+  );
 });
 
-it("direct keeper: a session's uptime is monotonic and starts again at a wake, as the supervisor's", async () => {
+it("direct keeper: a session's uptime is monotonic, and a wake starts again one not yet stable, as the supervisor's", async () => {
   const clock = clocks();
   const dials: number[] = [];
   const keeper = madeOn(
@@ -328,10 +348,14 @@ it("renewal: one failed ask while the session stays up is retried, the network c
   vi.useFakeTimers();
   const asks: boolean[] = [];
   let fail = false;
+  let refusal = false;
   const renewals = makeSweepRenewals(
     {
       sweep: (_deviceId, renewal) => {
         asks.push(renewal);
+        if (refusal) {
+          return Promise.reject(new NotSharingError({}));
+        }
         return fail
           ? Promise.reject(new Error("timed out"))
           : Promise.resolve({ leaseMs: 120_000 });
@@ -364,6 +388,19 @@ it("renewal: one failed ask while the session stays up is retried, the network c
   await vi.advanceTimersByTimeAsync(2_000);
   await vi.advanceTimersByTimeAsync(60_000);
   assert.equal(asks.length, 9);
+
+  // A refusal is the peer's answer: nothing asks again until a landing.
+  const refused = asks.length;
+  fail = false;
+  await vi.advanceTimersByTimeAsync(60_000);
+  assert.equal(asks.length, refused + 1);
+  refusal = true;
+  await vi.advanceTimersByTimeAsync(10 * 60_000);
+  assert.equal(asks.length, refused + 2, "a refusal parks");
+  refusal = false;
+  renewals.landed("B");
+  await vi.advanceTimersByTimeAsync(0);
+  assert.equal(asks.length, refused + 3);
 
   // Unfocused, nothing is retried or renewed.
   fail = true;

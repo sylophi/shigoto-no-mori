@@ -82,7 +82,8 @@ const TERMINATE_GRACE_MS = 1_500;
 // that ping going unanswered for PROBE_TIMEOUT_MS, so a timer that ran
 // late (a stopped process, a sleep) condemns nothing by itself. A
 // probe (a wake from sleep, a tab coming back) is that fresh ping at
-// once.
+// once. A hidden tab's timers can stretch that window to about a
+// minute, so it finds a dead socket that much later.
 const PING_INTERVAL_MS = 15_000;
 const PING_TIMEOUT_MS = 40_000;
 
@@ -462,7 +463,7 @@ export const make = (
             (elapsedMillisUnsafe(clock) - lastFrame.elapsed);
           log.info(
             sleptMs >= 60_000
-              ? `[hub] woke after ${Math.round(sleptMs / 60_000)} minutes, and the socket had not lived through it`
+              ? `[hub] woke after ${Math.round(sleptMs / 60_000)} min, and the socket had not lived through it`
               : "[hub] the socket stopped answering its pings",
           );
           dead = true;

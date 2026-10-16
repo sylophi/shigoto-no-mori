@@ -6,6 +6,10 @@
 // looked), then renewed within the lease the host hands back, for as
 // long as this window stays focused. Boot-scoped like the device sync.
 import { focusManager } from "@tanstack/react-query";
+import {
+  isCommandRefusedError,
+  isNotSharingError,
+} from "@shigomori/contracts/errors";
 import { documentFocused } from "@/lib/focus";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { remoteDevicesAtom } from "./devices";
@@ -26,13 +30,19 @@ type Deps = {
 // The asks and their renewals per device, for as long as `attend(true)`
 // holds. A failed ask (a request that timed out or lost its answer on a
 // session that stayed up) is retried on RETRY_MS, and `retryNow` (the
-// network back) asks every failed one at once.
+// network back) asks every failed one at once. A refusal (commands or
+// sharing off on the peer) is the peer's answer, not a failure: it
+// waits for the next focus or landing.
 export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
-  // Failed asks in a row, per device with a retry pending.
-  const failures = new Map<string, number>();
-  // Bumped by every ask, so the answer to a superseded one schedules nothing.
-  const asks = new Map<string, number>();
+  // Per device with a retry pending: failed asks in a row, and whether
+  // the ask that failed was a renewal.
+  const failures = new Map<string, { count: number; renewal: boolean }>();
+  // The latest ask per device, from a count that never goes back, so the
+  // answer to a superseded one (from before a blur, say) schedules
+  // nothing.
+  const latest = new Map<string, number>();
+  let asked = 0;
   let attended = attendedAtStart;
 
   const cancel = (deviceId: string): void => {
@@ -42,28 +52,36 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
 
   const ask = (deviceId: string, renewal = false): void => {
     cancel(deviceId);
-    const id = (asks.get(deviceId) ?? 0) + 1;
-    asks.set(deviceId, id);
-    const later = (delayMs: number, next: boolean) =>
+    asked += 1;
+    const id = asked;
+    latest.set(deviceId, id);
+    const later = (delayMs: number, next: boolean) => {
+      cancel(deviceId);
       timers.set(
         deviceId,
         setTimeout(() => ask(deviceId, next), delayMs),
       );
+    };
     deps.sweep(deviceId, renewal).then(
       ({ leaseMs }) => {
-        if (asks.get(deviceId) !== id) return;
+        if (latest.get(deviceId) !== id) return;
         failures.delete(deviceId);
         if (attended) later(leaseMs / 2, true);
       },
-      () => {
-        if (asks.get(deviceId) !== id) return;
-        if (!attended || !deps.connected(deviceId)) {
+      (error: unknown) => {
+        if (latest.get(deviceId) !== id) return;
+        if (
+          !attended ||
+          !deps.connected(deviceId) ||
+          isCommandRefusedError(error) ||
+          isNotSharingError(error)
+        ) {
           failures.delete(deviceId);
           return;
         }
-        const failed = failures.get(deviceId) ?? 0;
-        failures.set(deviceId, failed + 1);
-        later(RETRY_MS[Math.min(failed, RETRY_MS.length - 1)] ?? 0, renewal);
+        const count = (failures.get(deviceId)?.count ?? 0) + 1;
+        failures.set(deviceId, { count, renewal });
+        later(RETRY_MS[Math.min(count - 1, RETRY_MS.length - 1)] ?? 0, renewal);
       },
     );
   };
@@ -72,7 +90,7 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
     failures.clear();
-    asks.clear();
+    latest.clear();
   };
 
   return {
@@ -87,8 +105,8 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
       if (attended) ask(deviceId);
     },
     retryNow: (): void => {
-      for (const deviceId of failures.keys()) {
-        if (timers.has(deviceId)) ask(deviceId, true);
+      for (const [deviceId, { renewal }] of failures) {
+        if (timers.has(deviceId)) ask(deviceId, renewal);
       }
     },
     stop,

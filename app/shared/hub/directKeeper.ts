@@ -57,6 +57,7 @@ import {
   backoffDelayMs,
   makeWake,
   restartSchedule,
+  STABLE_CONNECTION_MS,
   type Wake,
 } from "@shared/remote/supervisor";
 import { isTerminalDialError, NoDialableCandidateError } from "./directDial";
@@ -88,9 +89,9 @@ export type DirectKeeper = {
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
   // The network is back, the machine awake or a tab back: every peer
-  // waiting out the shared ladder dials now, and a live session's
-  // uptime starts again from this observation (as the supervisor's
-  // does). A refused peer keeps its slow ladder, which is what keeps it
+  // waiting out the shared ladder dials now, and a live session not yet
+  // stable counts its uptime again from this observation (as the
+  // supervisor's does). A refused peer keeps its slow ladder, which is what keeps it
   // clear of the host's lockout.
   dialNow(): void;
 };
@@ -301,7 +302,12 @@ export const make = (
       dialNow() {
         const now = elapsedMillisUnsafe(clock);
         for (const state of states.values()) {
-          if (state.upSince !== null) state.upSince = now;
+          if (
+            state.upSince !== null &&
+            now - state.upSince < STABLE_CONNECTION_MS
+          ) {
+            state.upSince = now;
+          }
           state.wake.now();
         }
       },
