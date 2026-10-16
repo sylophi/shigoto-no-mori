@@ -12,6 +12,9 @@
 //     without a reconcile;
 //   - a path that does not open in time is said in words, a consent
 //     wait for one on another volume.
+//   - held opens never take more than two of the thread pool's four
+//     threads: a third path waits its turn, is said to be late, and is
+//     watched once a held open comes back.
 //
 // Run: pnpm test watch-open.
 import assert from "node:assert/strict";
@@ -28,7 +31,13 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { it } from "vitest";
 import { layer as gitWatcherLayer } from "../host/lib/GitWatcher.ts";
-import { heldOpen, unwatchable, watchPath } from "../host/lib/watchPath.ts";
+import {
+  type Probe,
+  heldOpen,
+  untilWatchable,
+  unwatchable,
+  watchPath,
+} from "../host/lib/watchPath.ts";
 import {
   delay,
   sandboxGit,
@@ -158,4 +167,65 @@ it("a path that does not open in time is said in words, and one that is no folde
     Option.isNone(await Effect.runPromise(unwatchable(join(root, "gone")))),
     "a path that fails to open is left to the watch to say",
   );
+});
+
+it("held opens take no more than two pool threads, and a path behind them is watched once one comes back", async () => {
+  const folder = {
+    stat: async () => ({ isDirectory: () => true, isFile: () => false }),
+    close: async () => {},
+  };
+  // Opens that come back only when released, as a held open does.
+  const release = new Map<string, () => void>();
+  let underWay = 0;
+  let most = 0;
+  const open = (path: string) => {
+    underWay += 1;
+    most = Math.max(most, underWay);
+    return new Promise<typeof folder>((resolve) => {
+      const settle = () => {
+        underWay -= 1;
+        resolve(folder);
+      };
+      if (path.startsWith("/held/")) release.set(path, settle);
+      else settle();
+    });
+  };
+  const probe: Probe = {
+    within: "200 millis",
+    retryEvery: "100 millis",
+    open,
+  };
+  try {
+    for (const path of ["/held/a", "/held/b"]) {
+      assert.match(
+        Option.getOrNull(await Effect.runPromise(unwatchable(path, probe))) ??
+          "",
+        /did not open within/,
+      );
+    }
+    assert.match(
+      Option.getOrNull(
+        await Effect.runPromise(unwatchable("/local/tree", probe)),
+      ) ?? "",
+      /did not open within/,
+      "a path behind two held opens waits its turn",
+    );
+    let watched = false;
+    const waiting = Effect.runPromise(
+      untilWatchable("/local/tree", probe).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            watched = true;
+          }),
+        ),
+      ),
+    );
+    await delay(400);
+    assert.equal(watched, false);
+    release.get("/held/a")?.();
+    await waiting;
+    assert.equal(most, 2, "no more than two opens under way at once");
+  } finally {
+    for (const settle of release.values()) settle();
+  }
 });

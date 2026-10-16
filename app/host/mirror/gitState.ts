@@ -44,12 +44,12 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
-import { log } from "@shared/log";
-import { unwatchable } from "@host/lib/watchPath";
+import { untilWatchable } from "@host/lib/watchPath";
 
 // A state that can't be read or applied, in the words the other device
 // hears (an operation in progress among them, operationInRefusal).
@@ -567,30 +567,40 @@ export const watchIndexFile = (
 ) =>
   Effect.gen(function* () {
     const gitDir = yield* (yield* Git.Git).gitDir(worktreePath);
-    // A git dir whose open hangs would hang the host with it (watchPath).
-    const reason = yield* unwatchable(gitDir);
-    if (Option.isSome(reason)) {
-      log.warn(`[watch] ${gitDir} ${reason.value}: its index not watched`);
-      return () => {};
-    }
+    let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let watcher: ReturnType<typeof watch>;
-    try {
-      watcher = watch(gitDir, { persistent: false });
-    } catch {
-      return () => {};
-    }
-    watcher.on("change", (_event, file) => {
-      if (file !== "index") return;
-      if (timer !== null) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        onChange();
-      }, debounceMs);
-    });
-    watcher.on("error", () => {});
+    let watcher: ReturnType<typeof watch> | null = null;
+    const start = () => {
+      try {
+        watcher = watch(gitDir, { persistent: false });
+      } catch {
+        return;
+      }
+      watcher.on("change", (_event, file) => {
+        if (file !== "index") return;
+        if (timer !== null) clearTimeout(timer);
+        timer = setTimeout(() => {
+          timer = null;
+          onChange();
+        }, debounceMs);
+      });
+      watcher.on("error", () => {});
+    };
+    // A git dir whose open hangs would hang the host with it: watched
+    // once it opens promptly (watchPath).
+    const waiting = Effect.runFork(
+      untilWatchable(gitDir).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (!stopped) start();
+          }),
+        ),
+      ),
+    );
     return () => {
+      stopped = true;
+      Effect.runFork(Fiber.interrupt(waiting));
       if (timer !== null) clearTimeout(timer);
-      watcher.close();
+      watcher?.close();
     };
   });

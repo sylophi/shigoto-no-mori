@@ -48,13 +48,20 @@ const done = (): void => {
   else next();
 };
 
-const opened = (path: string): Promise<string | null> => {
+// How a path is opened to see whether it can be watched: the real open
+// unless a proof stands in for it.
+type Opener = (path: string) => Promise<{
+  stat(): Promise<{ isDirectory(): boolean; isFile(): boolean }>;
+  close(): Promise<void>;
+}>;
+const openToProbe: Opener = (path) =>
+  open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+
+const opened = (path: string, openPath: Opener): Promise<string | null> => {
   const held = opening.get(path);
   if (held !== undefined) return held;
   const attempt = turn()
-    .then(() =>
-      open(path, constants.O_RDONLY | constants.O_NONBLOCK).finally(done),
-    )
+    .then(() => openPath(path).finally(done))
     .then(async (handle) => {
       try {
         const stat = await handle.stat();
@@ -81,13 +88,20 @@ export const heldOpen = (path: string, within: Duration.Input): string =>
     ? "is waiting for permission to read files on a removable or network volume (System Settings, Privacy & Security, Files and Folders)"
     : `did not open within ${Duration.format(Duration.fromInputUnsafe(within))}`;
 
+export type Probe = {
+  readonly within?: Duration.Input;
+  readonly retryEvery?: Duration.Input;
+  readonly open?: Opener;
+};
+
 // Why `path` can't be watched right now, or none when its open came
 // back in time on a folder or a file.
 export const unwatchable = (
   path: string,
-  within: Duration.Input = OPEN_WITHIN,
-): Effect.Effect<Option.Option<string>> =>
-  Effect.promise(() => opened(path)).pipe(
+  probe: Probe = {},
+): Effect.Effect<Option.Option<string>> => {
+  const within = probe.within ?? OPEN_WITHIN;
+  return Effect.promise(() => opened(path, probe.open ?? openToProbe)).pipe(
     Effect.timeoutOption(within),
     Effect.map((result) =>
       Option.isNone(result)
@@ -95,33 +109,39 @@ export const unwatchable = (
         : Option.fromNullishOr(result.value),
     ),
   );
+};
 
-// `fs.watch(path, options)`, started once the path opens promptly. Says
-// once in the log why a path waits, and again once it is watched.
+// Settles once `path` opens promptly, trying again on an interval until
+// it does. Says once in the log why a path waits, and again once it is
+// watched.
+export const untilWatchable = (
+  path: string,
+  probe: Probe = {},
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const every = probe.retryEvery ?? RETRY_EVERY;
+    let waited = false;
+    while (true) {
+      const reason = yield* unwatchable(path, probe);
+      if (Option.isNone(reason)) break;
+      if (!waited) {
+        log.warn(
+          `[watch] ${path} ${reason.value}: not watched for now, trying again every ${Duration.format(Duration.fromInputUnsafe(every))}`,
+        );
+        waited = true;
+      }
+      yield* Effect.sleep(every);
+    }
+    if (waited) log.info(`[watch] ${path} opens again: watched`);
+  });
+
+// `fs.watch(path, options)`, started once the path opens promptly.
 export const watchPath = (
   fs: FileSystem.FileSystem,
   path: string,
   options?: FileSystem.WatchOptions,
-  timing: {
-    readonly within?: Duration.Input;
-    readonly retryEvery?: Duration.Input;
-  } = {},
+  probe: Probe = {},
 ): Stream.Stream<FileSystem.WatchEvent, PlatformError> =>
   Stream.unwrap(
-    Effect.gen(function* () {
-      let waited = false;
-      while (true) {
-        const reason = yield* unwatchable(path, timing.within);
-        if (Option.isNone(reason)) break;
-        if (!waited) {
-          log.warn(
-            `[watch] ${path} ${reason.value}: not watched for now, trying again every ${Duration.format(Duration.fromInputUnsafe(timing.retryEvery ?? RETRY_EVERY))}`,
-          );
-          waited = true;
-        }
-        yield* Effect.sleep(timing.retryEvery ?? RETRY_EVERY);
-      }
-      if (waited) log.info(`[watch] ${path} opens again: watched`);
-      return fs.watch(path, options);
-    }),
+    untilWatchable(path, probe).pipe(Effect.as(fs.watch(path, options))),
   );
