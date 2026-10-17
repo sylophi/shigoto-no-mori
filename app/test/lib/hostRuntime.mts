@@ -16,6 +16,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
 import * as Engine from "../../host/lib/Engine.ts";
 import * as BackgroundFetch from "../../host/lib/BackgroundFetch.ts";
+import * as CliShell from "../../host/lib/cli/shell.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
@@ -91,6 +92,7 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(ScriptChanges.layer),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),
+    Layer.provideMerge(CliShell.layer),
     Layer.provideMerge(engine),
     Layer.provideMerge(childDefaults),
     Layer.provideMerge(NodeServices.layer),

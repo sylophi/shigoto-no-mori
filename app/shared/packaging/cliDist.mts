@@ -33,28 +33,6 @@ export function cliDataDirName(flavor: Flavor): string {
   return flavorNames(flavor).dataDir;
 }
 
-function configDir(flavor: Flavor): string {
-  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  return join(configHome, flavorNames(flavor).configDir);
-}
-
-// The data dir pointer file: one line holding an absolute path that
-// relocates the flavor's data dir away from ~/<dataDirName>. Lives
-// outside the data dir (nothing inside it can say where it is).
-// Read at boot by the engine (Paths.ts), and written by the app when
-// the user moves the data folder. SHIGOMORI_DATA_DIR beats it.
-export function dataDirPointerPath(flavor: Flavor): string {
-  return join(configDir(flavor), flavorNames(flavor).pointer);
-}
-
-// The pointer's filename before 2.0, none for a flavor that never had
-// one. Readers fall back to it only when the current file is absent.
-// Nothing writes it any more, and the data-folder move deletes it.
-export function legacyDataDirPointerPath(flavor: Flavor): string | null {
-  const legacy = flavorNames(flavor).legacyPointer;
-  return legacy === null ? null : join(configDir(flavor), legacy);
-}
-
 // Where user-facing executables get linked. The XDG spec's location
 // for user executables is ~/.local/bin (it defines no env var for it);
 // honor the de-facto XDG_BIN_HOME override when set. Caveat: a

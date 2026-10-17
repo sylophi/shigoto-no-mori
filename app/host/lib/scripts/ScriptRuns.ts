@@ -21,7 +21,7 @@ import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { resolveShell } from "./loginShell";
+import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { signalTree, signalTreeBestEffort } from "./process";
 
 // No process could be started: a missing login shell, or a PTY that
@@ -107,7 +107,8 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
   opts: SpawnOptions,
   stopping: () => Stopping,
 ) {
-  const { command: shell, args: shellArgs } = resolveShell();
+  const { shell, args: shellArgs } = yield* (yield* Lifecycle.Lifecycle)
+    .loginShell;
   // node-pty's helper execs the shell in the child and exits 1 without
   // a word if that fails, which would show as a bare "exit 1".
   const there = yield* (yield* FileSystem.FileSystem)
@@ -146,7 +147,7 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         const spawned = spawnPty(
           shell,
           opts.command === null
-            ? shellArgs
+            ? [...shellArgs]
             : [...shellArgs, "-c", opts.command],
           {
             name: "xterm-256color",
@@ -240,6 +241,7 @@ export class ScriptRuns extends Context.Service<
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
+  const lifecycle = yield* Lifecycle.Lifecycle;
   const scope = yield* Effect.scope;
   const open = Effect.fn("ScriptRuns.open")(function* (opts: SpawnOptions) {
     const run = yield* Scope.fork(scope);
@@ -250,6 +252,7 @@ const make = Effect.gen(function* () {
       Scope.provide(run),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Lifecycle.Lifecycle, lifecycle),
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
     // The stopping is taken when close is called, not when its effect

@@ -20,11 +20,8 @@ import type {
 import * as Ops from "@host/lib/engineOps";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import { findProject } from "@host/lib/projects";
-import {
-  type NotifyScriptEvent,
-  type ScriptEnvValues,
-  worktreeEnv,
-} from "@host/lib/scripts";
+import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/scripts";
+import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
 import type { Start } from "@host/lib/terminals/Terminals";
 
 interface ScriptRunContext {
@@ -64,18 +61,11 @@ export const prepareScriptRun = Effect.fnUntraced(function* (
     scriptEnv: {
       projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
       defaultBranch: worktree.primaryRef ?? "",
-      title: withoutNul(described?.title),
-      description: withoutNul(described?.description),
+      title: described?.title ?? "",
+      description: described?.description ?? "",
     },
   } satisfies ScriptRunContext;
 });
-
-// Free text, and a spawn refuses an env value that holds a NUL, so one
-// stray byte would keep the script from starting (the engine's scriptEnv
-// drops them too).
-function withoutNul(text: string | undefined): string {
-  return (text ?? "").replaceAll("\0", "");
-}
 
 export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {
   return Object.assign(ctx.notifier(scriptsContract, "event"), {
@@ -98,7 +88,10 @@ export const terminalStart = (owner: TerminalOwner) => {
     const ctx = yield* prepareScriptRun(project, owner.worktreeId);
     return {
       cwd: ctx.worktree.path,
-      env: { ...env, ...worktreeEnv(ctx.worktree, project, ctx.scriptEnv) },
+      env: {
+        ...env,
+        ...scriptEnvOf({ worktree: ctx.worktree, project, ...ctx.scriptEnv }),
+      },
     } satisfies Start;
   }).pipe(
     // Anything but the worktree or project being gone is a defect.

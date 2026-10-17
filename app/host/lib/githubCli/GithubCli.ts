@@ -3,6 +3,9 @@
 // merge settings and About text. Every answer is cached, since the
 // sidebar, the open worktree and the repo queries all ask on every
 // worktree open.
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import { findExecutable } from "@shigomori/engine/executables";
 import type {
   GhUnavailableReason,
   GithubCliReadiness,
@@ -146,6 +149,7 @@ const decodePullRequestOptions = Schema.decodeUnknownEffect(
 
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   // The device settings, for the integration's switch.
   const engineConfig = yield* EngineConfig.Config;
@@ -175,7 +179,12 @@ const make = Effect.gen(function* () {
   // bare it answers for one host alone and an Enterprise login would
   // read as none. The token itself is dropped unread.
   const probe = yield* Effect.gen(function* () {
-    const installed = (yield* Processes.resolveOnPath("gh")) !== null;
+    const installed = Option.isSome(
+      yield* findExecutable("gh").pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+      ),
+    );
     if (!installed) return { installed, authed: false };
     const asks = [
       [] as string[],

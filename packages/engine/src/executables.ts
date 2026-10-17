@@ -1,5 +1,7 @@
 // Finding a program on PATH, as a shell would: the first regular file
-// with an execute bit under one of PATH's directories.
+// under one of PATH's directories this process may execute.
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -18,10 +20,14 @@ export const findExecutable = Effect.fn("findExecutable")(function* (
   for (const dir of searched.split(":")) {
     // An empty entry is the working directory.
     const candidate = path.join(dir === "" ? "." : dir, name);
-    const runnable = yield* fs.stat(candidate).pipe(
-      Effect.map((info) => info.type === "File" && (info.mode & 0o111) !== 0),
-      Effect.orElseSucceed(() => false),
-    );
+    const runnable =
+      (yield* fs.stat(candidate).pipe(
+        Effect.map((info) => info.type === "File"),
+        Effect.orElseSucceed(() => false),
+      )) &&
+      (yield* Effect.tryPromise(() => access(candidate, constants.X_OK)).pipe(
+        Effect.isSuccess,
+      ));
     if (runnable) return Option.some(candidate);
   }
   return Option.none<string>();

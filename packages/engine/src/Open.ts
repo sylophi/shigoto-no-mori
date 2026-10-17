@@ -2,6 +2,7 @@
 // terminal tool through the chosen terminal), the repo's GitHub page, or
 // a custom command line. Each open counts toward the row's order. And
 // opening one of its files in the editor the device settings name.
+import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +18,7 @@ import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
-import { scriptEnv, shellQuote } from "./Lifecycle.ts";
+import { shellQuote } from "./Lifecycle.ts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
 
@@ -307,6 +308,7 @@ const make = Effect.gen(function* () {
                     `"$0" "$@" </dev/null >/dev/null 2>&1 &`,
                     shell,
                     ...args,
+                    "-c",
                     entry.command,
                   ],
                   {
@@ -314,7 +316,7 @@ const make = Effect.gen(function* () {
                     detached: true,
                     extendEnv: true,
                     env: {
-                      ...scriptEnv(context, entry.label),
+                      ...scriptEnvOf(context, entry.label),
                       SHIGOMORI_WORKSPACE_PATH: where,
                     },
                     stdin: "ignore",
