@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Registry from "../src/Registry.ts";
@@ -115,6 +116,30 @@ it("drops what a removed project's path kept: its place and its primary's marks"
     }),
   );
   assert.deepEqual(left, [["/r/B"], []]);
+});
+
+// What forgetWorktree clears for any worktree, and the owners' rows by
+// the project's path, go with a removed project's primary too.
+it("leaves nothing kept under a removed project's primary or path", async () => {
+  box.write("registry.json", { projects: [project("A")] });
+  const primary = worktreeIdFromPath("/r/A");
+  const left = await box.engine(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO unshelved_at (worktree_id, at) VALUES (${primary}, 1)`;
+      yield* sql`INSERT INTO clone_verified (source_id, path, record)
+        VALUES (${primary}, ${"f"}, ${"oid stat"})`;
+      yield* sql`INSERT INTO icon_cache (project_path, source_path, updated_at)
+        VALUES (${"/r/A"}, ${null}, 1)`;
+      yield* (yield* registry).unregister("A");
+      const [row] = yield* sql<{ readonly n: number }>`SELECT
+        (SELECT COUNT(*) FROM unshelved_at) +
+        (SELECT COUNT(*) FROM clone_verified) +
+        (SELECT COUNT(*) FROM icon_cache) AS n`;
+      return row?.n;
+    }),
+  );
+  assert.equal(left, 0);
 });
 
 it("keeps a device id once minted, and replaces one that isn't UUID-shaped", async () => {

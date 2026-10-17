@@ -1447,6 +1447,9 @@ describe("projects relocate", () => {
       stillThere.stderr,
       `smd: ${alpha} is still there. Relocate is for a repo that was moved or renamed by hand.\n`,
     );
+    // What is kept under the primary's id follows it to the new one.
+    const titled = await runAt(alpha, "worktrees", "describe", "-t", "Main");
+    assert.equal(titled.code, 0, titled.stderr);
     const moved = join(box.home, "gamma");
     renameSync(alpha, moved);
     const relocated = await runAt(
@@ -1474,6 +1477,56 @@ describe("projects relocate", () => {
     assert.equal(doc.ok, true);
     assert.equal(doc.project.id, "A");
     assert.equal(doc.project.path, moved);
+    const title = await runAt(moved, "--json", "worktrees", "describe");
+    assert.equal((title.doc as { title: string }).title, "Main");
+  });
+});
+
+describe("projects relocate, asked again", () => {
+  it("carries a linked worktree's title when git already re-linked it, as after a relocate a crash cut short", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const layout = await runAt(
+      alpha,
+      "projects",
+      "config",
+      "set",
+      "worktreeLayout",
+      "in-project",
+    );
+    assert.equal(layout.code, 0, layout.stderr);
+    const made = await runAt(alpha, "--json", "worktrees", "create", "fox");
+    assert.equal(made.code, 0, made.stderr);
+    const fox = (made.doc as { worktree: { path: string } }).worktree.path;
+    const titled = await runAt(fox, "worktrees", "describe", "-t", "Fox");
+    assert.equal(titled.code, 0, titled.stderr);
+    const moved = join(box.home, "gamma");
+    renameSync(alpha, moved);
+    // The repair a relocate runs first, as if it then crashed.
+    box.git(
+      moved,
+      "worktree",
+      "repair",
+      join(moved, fox.slice(alpha.length + 1)),
+    );
+    const relocated = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      moved,
+    );
+    assert.equal(relocated.code, 0, relocated.stderr);
+    const title = await runAt(
+      join(moved, fox.slice(alpha.length + 1)),
+      "--json",
+      "worktrees",
+      "describe",
+    );
+    assert.equal((title.doc as { title: string }).title, "Fox");
   });
 });
 

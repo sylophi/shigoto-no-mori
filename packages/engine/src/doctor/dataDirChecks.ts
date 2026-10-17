@@ -80,6 +80,7 @@ const checkDormantState = (
     if (!complete) return [];
     const config = yield* Config.Config;
     const data = yield* WorktreeData.WorktreeData;
+    const sql = yield* SqlClient.SqlClient;
     const stored = new Set([
       ...(yield* config.storedProjectIds),
       ...kept.map(({ projectId }) => projectId),
@@ -113,7 +114,14 @@ const checkDormantState = (
           apply: Effect.forEach(
             dormant,
             (id) =>
-              Effect.andThen(config.forgetProject(id), data.forgetProject(id)),
+              sql
+                .withTransaction(
+                  Effect.andThen(
+                    config.forgetProject(id),
+                    data.forgetProject(id),
+                  ),
+                )
+                .pipe(Effect.orDie),
             { discard: true },
           ),
         },
@@ -708,13 +716,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           const ids = idsOf.get(projectId);
           return ids !== undefined && !ids.has(worktreeId);
         }).length;
-        const sets: ReadonlyArray<ReadonlySet<string>> = [
-          yield* registry.marked("shelved"),
-          yield* registry.marked("autoPull"),
-          new Set((yield* registry.agentSessions).keys()),
-          yield* worktrees.snapshotted,
-          yield* worktrees.unshelved,
-        ];
+        const sets = Object.values(yield* registry.keptIds);
         const marked = new Set<string>();
         let leftover = 0;
         for (const set of sets) {

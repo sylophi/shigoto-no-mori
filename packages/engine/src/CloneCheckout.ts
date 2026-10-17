@@ -1308,10 +1308,8 @@ const make = Effect.gen(function* () {
   const forget = Effect.fn("CloneCheckout.forget")(function* (
     worktreeId: string,
   ) {
-    yield* sql`DELETE FROM clone_verified WHERE source_id = ${worktreeId}`.pipe(
-      Effect.ignore,
-    );
-  });
+    yield* sql`DELETE FROM clone_verified WHERE source_id = ${worktreeId}`;
+  }, Effect.orDie);
 
   return CloneCheckout.of({
     pickSource,

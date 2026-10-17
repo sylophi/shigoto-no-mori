@@ -7,7 +7,6 @@ import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/sql/SqlClient";
 import { type AgentSession } from "./agentSessions.ts";
 import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
@@ -314,6 +313,13 @@ export class Worktrees extends Context.Service<
     readonly primaryTarget: (
       project: RegisteredProject,
     ) => Effect.Effect<PrimaryTarget>;
+    // Forgets what is kept under a gone worktree's id in one
+    // transaction, all but its dirty capture, which may hold the only
+    // copy of some work.
+    readonly forgetKept: (
+      project: RegisteredProject,
+      worktreeId: string,
+    ) => Effect.Effect<void>;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
     readonly rekey: (
@@ -334,10 +340,6 @@ export class Worktrees extends Context.Service<
       ProjectRow,
       RelocateRefused | Registry.UnknownProject | Registry.ProjectPathTaken
     >;
-    // The ids the shelf holds a snapshot for.
-    readonly snapshotted: Effect.Effect<ReadonlySet<string>>;
-    // The ids with an unshelve time on file.
-    readonly unshelved: Effect.Effect<ReadonlySet<string>>;
   }
 >()("sm/engine/Worktrees") {}
 
@@ -368,7 +370,6 @@ const make = Effect.gen(function* () {
   const { move, carryMoved, rename, rekey, resume, interrupted } = moving;
   const { adopt, setup } = adopting;
   const { relocateProject } = relocating;
-  const sql = yield* SqlClient.SqlClient;
 
   return Worktrees.of({
     identities,
@@ -403,19 +404,8 @@ const make = Effect.gen(function* () {
     resumeMoves: resume,
     interruptedMoves: interrupted,
     rekey,
+    forgetKept: kept.forgetRows,
     relocateProject,
-    snapshotted: sql<{ worktree_id: string }>`
-      SELECT worktree_id FROM shelf_snapshots`.pipe(
-      Effect.map((rows) => new Set(rows.map(({ worktree_id }) => worktree_id))),
-      Effect.orDie,
-      Effect.withSpan("Worktrees.snapshotted"),
-    ),
-    unshelved: sql<{ worktree_id: string }>`
-      SELECT worktree_id FROM unshelved_at`.pipe(
-      Effect.map((rows) => new Set(rows.map(({ worktree_id }) => worktree_id))),
-      Effect.orDie,
-      Effect.withSpan("Worktrees.unshelved"),
-    ),
     checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
       located: Located,
       force: boolean,
