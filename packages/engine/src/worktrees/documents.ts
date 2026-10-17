@@ -556,7 +556,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       case "adopt-managed":
         return "Worktree is already shigomori-managed";
       case "adopt-moved":
-        return `${this.subject} moved on to another commit while it was being adopted. Adopt it again.`;
+        return `${this.subject} moved on to another commit, or couldn't be read, while it was being adopted. Both checkouts are kept; remove the one you don't need.`;
       case "adopt-locked":
         return `${this.subject} is locked. Unlock it (git worktree unlock) to adopt it.`;
     }

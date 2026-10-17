@@ -6,10 +6,12 @@
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Layer from "effect/Layer";
 import { type AgentSession } from "./agentSessions.ts";
 import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
+import { guarded } from "./moveGuard.ts";
 import { splitRemoteRef } from "./gitParse.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import * as Registry from "./Registry.ts";
@@ -385,6 +387,9 @@ export class Worktrees extends Context.Service<
 >()("sm/engine/Worktrees") {}
 
 const make = Effect.gen(function* () {
+  // The worktrees' mutations, which a data-folder move waits out and
+  // refuses while it owns the store.
+  const mutation = guarded(yield* SqlClient.SqlClient);
   const listing = yield* makeListing;
   const statusCard = yield* makeStatusCard({ listing });
   const resolving = yield* makeResolving({ listing });
@@ -435,19 +440,19 @@ const make = Effect.gen(function* () {
     }),
     describe,
     destination,
-    create,
-    adopt,
+    create: mutation(create),
+    adopt: mutation(adopt),
     setup,
-    remove,
-    move,
-    rename,
+    remove: mutation(remove),
+    move: mutation(move),
+    rename: mutation(rename),
     carryMoved,
     resumeMoves: resume,
     interruptedMoves: interrupted,
-    rekey,
+    rekey: mutation(rekey),
     forgetKept: kept.forgetRows,
     keptUnder: kept.keptUnder,
-    relocateProject,
+    relocateProject: mutation(relocateProject),
     deletesBranch: removing.deletesBranch,
     relocationPlan,
     relink,

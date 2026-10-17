@@ -52,11 +52,14 @@ import {
   undoMove,
 } from "@shigomori/engine/dataDirMove";
 import {
+  CLAIMED,
   JOURNAL,
   type Journal,
   retireStore,
+  reviveStore,
   writeJournal,
 } from "@shigomori/engine/dataDirMoveJournal";
+import { awaitMutations } from "@shigomori/engine/moveGuard";
 import {
   canonicalDataDirName,
   dataDir,
@@ -190,11 +193,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // settled first, as a start settles it, and a move waits while it
   // can't be, rather than write its own over it.
   yield* resumeDataDirMove(oldDir).pipe(Effect.ignoreCause({ log: "Warn" }));
-  if (
-    yield* fs
-      .exists(join(oldDir, JOURNAL))
-      .pipe(Effect.orElseSucceed(() => true))
-  ) {
+  const left = yield* fs.readDirectory(oldDir).pipe(
+    Effect.map((names) =>
+      names.some((name) => name === JOURNAL || name.startsWith(CLAIMED)),
+    ),
+    Effect.orElseSucceed(() => true),
+  );
+  if (left) {
     return yield* new DataDirMoveError({
       reason:
         "An earlier move of the data folder isn't finished or undone yet. " +
@@ -303,11 +308,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // Gone already is gone.
   const removeIfThere = (file: string) =>
     fs.remove(file, { force: true }).pipe(Effect.mapError(callFailureOf));
+  const journalFile = join(oldDir, JOURNAL);
   const journalHere = Effect.suspend(() =>
-    writeJournal(oldDir, journal).pipe(Effect.mapError(callFailureOf)),
+    writeJournal(journalFile, journal).pipe(Effect.mapError(callFailureOf)),
   );
   const marked: Array<string> = [];
   let pointerStaged = false;
+  let retired = false;
   let journaled = false;
   let renamed = false;
   yield* Effect.gen(function* () {
@@ -329,12 +336,24 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       pointerStaged = true;
     }
 
-    // The journal, then the store refusing every write but the move's:
-    // from here a start that finds the journal with the pointer unmoved
-    // undoes the move, one that finds it at the new place finishes it.
+    // The store refusing every write but the move's, then every mutation
+    // already under way waited out, then the journal: from here a start
+    // that finds the journal with the pointer unmoved undoes the move, one
+    // that finds it at the new place finishes it.
+    yield* retireStore.pipe(Effect.mapError(callFailureOf));
+    retired = true;
+    if (
+      !(yield* awaitMutations("30 seconds").pipe(
+        Effect.orElseSucceed(() => false),
+      ))
+    ) {
+      return yield* new DataDirMoveError({
+        reason:
+          "Another change to the worktrees is still running (in the app or a terminal). Try again when it finishes.",
+      });
+    }
     yield* journalHere;
     journaled = true;
-    yield* retireStore.pipe(Effect.mapError(callFailureOf));
 
     // The listing's own writes (an idle worktree shelved) are the move's.
     const entries = yield* asMoveOwner(plan);
@@ -417,8 +436,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       : fs.rename(pointerTmp, pointerFile).pipe(Effect.mapError(callFailureOf));
     if (legacyPointerFile !== null) yield* removeIfThere(legacyPointerFile);
     // The store this process holds is the old place's: the first one to
-    // open it at the new place lets it write and removes the journal.
-    yield* finishMove(journal, newDir, { revive: false });
+    // open it at the new place removes the old tree, the journal, and lets
+    // it write.
+    yield* finishMove(journal, newDir, {
+      settle: false,
+      file: join(newDir, JOURNAL),
+    });
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
@@ -427,7 +450,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         if (pointerStaged && !renamed) {
           yield* Effect.ignore(removeIfThere(pointerTmp));
         }
-        if (journaled && !renamed) yield* undoMove(journal, oldDir);
+        if (journaled && !renamed) {
+          yield* undoMove(journal, oldDir, journalFile);
+        } else if (retired && !journaled) {
+          yield* Effect.ignore(reviveStore);
+        }
       }),
     ),
     Effect.ensuring(

@@ -975,10 +975,10 @@ it("an adopt whose removal leaves the original listed without a HEAD keeps the r
   assert.deepEqual(result, { failed: true, held: true });
 });
 
-// Sol's round 5: a commit made in a detached original after it was
-// listed is held by no ref the replacement has, so the adopt is taken
-// back rather than remove the only checkout that holds it.
-it("an adopt whose original moved on after it was listed is taken back, the commit kept", async () => {
+// Sol's rounds 5 and 6: a commit made in a detached original after it
+// was listed is held by no ref the replacement has, so both checkouts
+// stay (each holding its commits) and the adopt is refused.
+it("an adopt whose original moved on after it was listed keeps both checkouts, the commit kept", async () => {
   const outside = join(box.home, "outside", "otter");
   const result = await box.engine(
     Effect.gen(function* () {
@@ -1016,6 +1016,6 @@ it("an adopt whose original moved on after it was listed is taken back, the comm
   assert.deepEqual(result, {
     reason: "adopt-moved",
     late: "late",
-    checkouts: 2,
+    checkouts: 3,
   });
 });

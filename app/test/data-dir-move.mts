@@ -50,6 +50,7 @@ import { resumeDataDirMove } from "@shigomori/engine/dataDirMove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
+  CLAIMED,
   JOURNAL,
   rescueStrandedMove,
   reviveStore,
@@ -115,6 +116,24 @@ const acrossVolumes = (
         ? Effect.never
         : real.rename(from, to),
 });
+
+// A journal a case left in the data dir cleared, and the store writing
+// again, as a settled move leaves them.
+const clearJournal = async () => {
+  for (const name of readdirSync(engineDataDir)) {
+    if (name === JOURNAL || name.startsWith(CLAIMED)) {
+      rmSync(join(engineDataDir, name), { force: true });
+    }
+  }
+  await runHost(reviveStore);
+};
+
+// A journal still in the data dir, as the move left it or as a settle
+// took it for itself.
+const journalLeft = () =>
+  readdirSync(engineDataDir).some(
+    (name) => name === JOURNAL || name.startsWith(CLAIMED),
+  );
 
 const titleOf = (worktreeId: string) =>
   runHost(Ops.describeWorktree(projectId, worktreeId)).then(
@@ -190,11 +209,7 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
     "the title back under the worktree's own id",
   );
   assert.equal(existsSync(partial), false, "the partial copy removed");
-  assert.equal(
-    readdirSync(engineDataDir).includes("data-dir-move.json"),
-    false,
-    "the journal removed",
-  );
+  assert.equal(journalLeft(), false, "the journal removed");
   assert.equal(existsSync(pointerFile), false, "no pointer committed");
   await Effect.runPromise(Fiber.interrupt(crashed));
 });
@@ -263,10 +278,7 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox", "nothing re-keyed back");
   assert.equal(existsSync(old), false, "the old tree removed");
-  assert.equal(
-    readdirSync(engineDataDir).includes("data-dir-move.json"),
-    false,
-  );
+  assert.equal(journalLeft(), false);
 });
 
 it("a finished move whose worktree links couldn't be repaired keeps its journal for the next start", async () => {
@@ -291,12 +303,8 @@ it("a finished move whose worktree links couldn't be repaired keeps its journal 
     }),
   );
   await runHost(resumeDataDirMove(engineDataDir));
-  assert.equal(
-    existsSync(journal),
-    true,
-    "the journal went with a repair owed",
-  );
-  rmSync(journal);
+  assert.equal(journalLeft(), true, "the journal went with a repair owed");
+  await clearJournal();
 });
 
 it("a kept journal of a copied move never deletes a folder made at the old place since", async () => {
@@ -326,7 +334,7 @@ it("a kept journal of a copied move never deletes a folder made at the old place
     readFileSync(join(old, "new.txt"), "utf8"),
     "made after the move\n",
   );
-  rmSync(journal);
+  await clearJournal();
   rmSync(old, { recursive: true });
 });
 
@@ -348,15 +356,11 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
   chmodSync(stuck, 0o555);
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(join(old, JOURNAL)), true, "the old tree still ours");
-  assert.equal(
-    existsSync(join(engineDataDir, JOURNAL)),
-    true,
-    "the journal kept with the old tree owed",
-  );
+  assert.equal(journalLeft(), true, "the journal kept with the old tree owed");
   chmodSync(stuck, 0o755);
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(old), false, "the old tree removed");
-  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+  assert.equal(journalLeft(), false);
 });
 
 // Sol's round 4: an old tree whose journal can't be read can't be told
@@ -376,11 +380,11 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
   writeFileSync(join(engineDataDir, JOURNAL), journal);
   chmodSync(join(old, JOURNAL), 0o000);
   await runHost(resumeDataDirMove(engineDataDir));
-  assert.equal(existsSync(join(engineDataDir, JOURNAL)), true);
+  assert.equal(journalLeft(), true);
   chmodSync(join(old, JOURNAL), 0o644);
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(old), false);
-  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+  assert.equal(journalLeft(), false);
 });
 
 // Sol's round 4: an undo reverses by each entry's mark. A `planned` entry
@@ -410,7 +414,7 @@ it("an undo reverses a planned entry its re-key reached, and never a returned on
   journalAt("planned");
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox", "a planned re-key reversed");
-  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+  assert.equal(journalLeft(), false);
 
   await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
   journalAt("returned");
@@ -428,7 +432,7 @@ it("keeps a move journal it can't read, which may be all that says what a move l
   writeFileSync(journal, "not a journal");
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(readFileSync(journal, "utf8"), "not a journal");
-  rmSync(journal);
+  await clearJournal();
 });
 
 it("a move that failed after the folder was let go never leaves the app running without it", () => {
@@ -826,7 +830,7 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
     }),
   );
   assert.equal(await tryMove("settled"), "stop before the folder moves");
-  assert.equal(existsSync(journal), false);
+  assert.equal(journalLeft(), false);
 });
 
 // The owner's (a): from the journal's first write until it is gone the
@@ -855,7 +859,7 @@ it("refuses another process's writes while a move's journal is out, and takes th
   assert.equal(failed, "stop before the folder moves");
   assert.match(during, /sm-data-folder-moved/);
   assert.equal(writeTheStore(), "written");
-  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+  assert.equal(journalLeft(), false);
 });
 
 it.each([

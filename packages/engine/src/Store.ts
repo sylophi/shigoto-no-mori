@@ -22,6 +22,7 @@ import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
 import { mirrorHistory } from "./migrations/mirrorHistory.ts";
 import { mirrorInvites } from "./migrations/mirrorInvites.ts";
 import { moving } from "./migrations/moving.ts";
+import { moveGuard } from "./migrations/moveGuard.ts";
 import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
@@ -104,6 +105,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
   "12_v2_import": v2Import,
   "13_moving": moving,
+  "14_move_guard": moveGuard,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files

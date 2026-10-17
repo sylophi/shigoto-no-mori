@@ -3,6 +3,8 @@
 // onto a checkout of the same commit somewhere else.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
+import { guarded } from "./moveGuard.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -303,7 +305,9 @@ const make = Effect.gen(function* () {
     return { commit, changedFiles: changed.length };
   });
 
-  return Dirty.of({ capture, apply });
+  // A capture and its restore move refs a data-folder move carries.
+  const mutation = guarded(yield* SqlClient.SqlClient);
+  return Dirty.of({ capture: mutation(capture), apply: mutation(apply) });
 });
 
 export const layer = Layer.effect(Dirty, make);
