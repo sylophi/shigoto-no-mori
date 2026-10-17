@@ -26,12 +26,9 @@ import {
 import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
 import { parseNumstat } from "@shigomori/engine/gitParse";
 import * as Git from "@shigomori/engine/Git";
-import { GhActionError, ghStream, runGh } from "./actions";
+import { GhActionError, ghReady, ghStream, runGh } from "./actions";
 import { GithubCli } from "./GithubCli";
-import {
-  evictProjectPullRequests,
-  listProjectPullRequests,
-} from "./pullRequests";
+import * as PullRequestMaps from "./PullRequestMaps";
 
 // git as the engine runs it, strictly and leniently.
 const run = (cwd: string, args: readonly string[]) =>
@@ -81,7 +78,7 @@ const orderedRemotes = (cwd: string) =>
 // branch it has out and the project's primary ref.
 interface DraftSource {
   cwd: string;
-  projectPath: string;
+  project: PullRequestMaps.ProjectRef;
   branch: string;
   primaryRef: string | undefined;
 }
@@ -110,7 +107,7 @@ export const getPullRequestDraft = Effect.fn("NewPullRequest.draft")(function* (
 // no step above it, so neither counts.
 const stackBase = Effect.fnUntraced(function* (opts: DraftSource) {
   const { cwd, primaryRef } = opts;
-  const prs = yield* listProjectPullRequests(opts.projectPath);
+  const prs = yield* (yield* PullRequestMaps.PullRequestMaps).get(opts.project);
   const heads = [...prs].flatMap(([head, pr]) =>
     head !== opts.branch && pr.state === "OPEN" && isFromThisRepository(pr)
       ? [head]
@@ -293,11 +290,8 @@ export const comparePullRequest = Effect.fn("NewPullRequest.compare")(
 // behind the same readiness gate as the other actions.
 export const getPullRequestOptions = Effect.fn("NewPullRequest.options")(
   function* (cwd: string) {
-    const cli = yield* GithubCli;
-    if ((yield* cli.unavailableReason) !== null) {
-      return yield* new GhActionError({ reason: "GitHub CLI isn't ready" });
-    }
-    return yield* cli.pullRequestOptions(cwd).pipe(
+    yield* ghReady;
+    return yield* (yield* GithubCli).pullRequestOptions(cwd).pipe(
       Effect.mapError(
         (cause) =>
           new GhActionError({
@@ -567,7 +561,7 @@ const CREATE_TIMEOUT_MS = 300_000;
 export const createPullRequest = Effect.fn("NewPullRequest.create")(
   function* (opts: {
     readonly cwd: string;
-    readonly projectPath: string;
+    readonly project: PullRequestMaps.ProjectRef;
     readonly base: string;
     readonly title: string;
     readonly body: string;
@@ -580,7 +574,8 @@ export const createPullRequest = Effect.fn("NewPullRequest.create")(
       readonly name: string;
     }[];
   }) {
-    const { cwd, projectPath } = opts;
+    const { cwd, project } = opts;
+    const maps = yield* PullRequestMaps.PullRequestMaps;
     const staged = opts.attachments.map(({ id, name }) => ({
       id,
       name,
@@ -604,7 +599,7 @@ export const createPullRequest = Effect.fn("NewPullRequest.create")(
     }
     const body = pointAtStaged(opts.body, staged);
 
-    yield* pushForPullRequest(cwd, projectPath);
+    yield* pushForPullRequest(cwd, project.path);
 
     const args = [
       "pr",
@@ -681,7 +676,7 @@ export const createPullRequest = Effect.fn("NewPullRequest.create")(
             return yield* err;
           }),
       }),
-      Effect.ensuring(Effect.sync(() => evictProjectPullRequests(projectPath))),
+      Effect.ensuring(maps.moved(project)),
     );
   },
 );

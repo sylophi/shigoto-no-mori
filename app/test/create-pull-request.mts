@@ -266,7 +266,7 @@ it("a stacked branch's base is the nearest open PR's head below it", async () =>
   const draft = (branch: string) =>
     getPullRequestDraft({
       cwd: repo,
-      projectPath: repo,
+      project: { id: repo, path: repo },
       branch,
       primaryRef: "origin/main",
     });
@@ -302,7 +302,7 @@ it("the repo's PR template", async () => {
     (
       await getPullRequestDraft({
         cwd: repo,
-        projectPath: repo,
+        project: { id: repo, path: repo },
         branch: TOP,
         primaryRef: "origin/main",
       })
@@ -494,7 +494,7 @@ it("a branch is pushed, then gh opens the PR", async () => {
 
   const created = await createPullRequest({
     cwd: repo,
-    projectPath: repo,
+    project: { id: repo, path: repo },
     base: "mid",
     title: "-v: a dashed title",
     body: "line one\nline two",
@@ -527,7 +527,7 @@ it("a branch is pushed, then gh opens the PR", async () => {
   commit({ "d.txt": "d\n" }, "more");
   await createPullRequest({
     cwd: repo,
-    projectPath: repo,
+    project: { id: repo, path: repo },
     base: "main",
     title: "Ready",
     body: "",
@@ -561,7 +561,7 @@ it("a branch is pushed, then gh opens the PR", async () => {
   const mainBefore = remoteHead("main");
   await createPullRequest({
     cwd: repo,
-    projectPath: repo,
+    project: { id: repo, path: repo },
     base: "main",
     title: "From main",
     body: "",
@@ -600,7 +600,7 @@ it("attachments go to gh by their staged paths, then are removed", async () => {
   const create = () =>
     createPullRequest({
       cwd: repo,
-      projectPath: repo,
+      project: { id: repo, path: repo },
       base: "main",
       title: "With files",
       body,

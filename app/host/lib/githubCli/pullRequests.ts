@@ -1,12 +1,12 @@
 import { checkBucket } from "@shigomori/contracts/pullRequestChecks";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import {
   isBranchsOwn,
   isFromThisRepository,
-  matchesMapEntry,
   type MergeMethod,
   MergeMethodSchema,
   type PullRequest,
@@ -20,14 +20,12 @@ import {
   PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
-  toSlimPullRequest,
 } from "@shigomori/contracts/schemas";
 import { gh } from "./exec";
 import {
   checkedOutPullRequest,
   checkedOutPullRequests,
 } from "./pullRequestCheckout";
-import { GithubCli } from "./GithubCli";
 
 const GhPrListItemSchema = Schema.Struct({
   number: PullRequestSchema.fields.number,
@@ -46,15 +44,8 @@ const decodeGhPrList = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(GhPrListItemSchema)),
 );
 
-const PR_CACHE_TTL_MS = 5 * 60_000;
 const PR_LIST_LIMIT = 200;
-const prCache = new Map<
-  string,
-  { value: Map<string, PullRequest>; expires: number }
->();
 
-// Runs `gh pr list ...` with the standard JSON projection. Returns the
-// parsed rows on success or null on any failure (gh exit, JSON, schema).
 const runGhPrList = (cwd: string) =>
   gh(
     [
@@ -94,115 +85,36 @@ function checkedOutMark(pr: {
   return isFromThisRepository(pr) ? {} : { checkedOutFrom: true };
 }
 
-// Indexed by head branch name. The cache is repopulated by the background
-// sweep in BackgroundFetch.ts. This read path just serves whatever's there.
-// Toggle + readiness checks gate the cache too, so flipping the
-// integration off takes effect immediately.
-export const listProjectPullRequests = Effect.fn("PullRequests.list")(
-  function* (cwd: string) {
-    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) {
-      return new Map<string, PullRequest>();
-    }
-    const cached = prCache.get(cwd);
-    if (cached && cached.expires > (yield* Clock.currentTimeMillis)) {
-      return cached.value;
-    }
-    return yield* refreshProjectPullRequests(cwd);
-  },
-);
-
-// Bypass the cache and repopulate. Used by the background sweep.
-export const refreshProjectPullRequests = Effect.fn("PullRequests.refresh")(
-  function* (cwd: string) {
-    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) {
-      return cacheAndReturn(cwd, new Map());
-    }
-    const [rows, checkedOut] = yield* Effect.all(
-      [runGhPrList(cwd), checkedOutPullRequests(cwd)],
-      { concurrency: 2 },
-    );
-    if (rows === null) {
-      // Transient gh / network failure. Preserve the previous map so the
-      // sidebar dots don't blink out on a single bad sweep. Fall through
-      // to caching empty only when we've never had a value.
-      const previous = prCache.get(cwd)?.value;
-      return previous ?? cacheAndReturn(cwd, new Map());
-    }
-    // gh returns PRs newest-first; first hit per branch wins so we
-    // surface the freshest PR when a branch has been reused, of those
-    // isKept.
-    const map = new Map<string, PullRequest>();
-    for (const item of rows) {
-      if (map.has(item.headRefName)) continue;
-      if (!isBranchsOwn(item, checkedOut.get(item.headRefName))) continue;
-      map.set(item.headRefName, toPullRequest(item));
-    }
-    return cacheAndReturn(cwd, map);
-  },
-);
-
-export function readCachedProjectPullRequests(
+// The project's PRs by head branch, or null when gh failed (the
+// network, its output). gh lists newest first, so a reused branch
+// keeps its newest own PR.
+export const readProjectPullRequests = Effect.fnUntraced(function* (
   cwd: string,
-): Map<string, PullRequest> | null {
-  return prCache.get(cwd)?.value ?? null;
-}
-
-// What a page's own read of one branch's PR learned, written into the
-// project's map (the sweep's) so its view moves as soon as the page
-// does: true when the map changed.
-export function noteBranchPullRequest(
-  cwd: string,
-  branch: string,
-  pr: PullRequestDetail | null,
-): boolean {
-  const cached = prCache.get(cwd);
-  if (!cached || matchesMapEntry(pr, cached.value.get(branch))) return false;
-  const value = new Map(cached.value);
-  if (pr === null) value.delete(branch);
-  else value.set(branch, toSlimPullRequest(pr));
-  prCache.set(cwd, { value, expires: cached.expires });
-  return true;
-}
-
-// A PR's title as `sm describe` just set it, written into the project's
-// map so its view shows it before the next sweep: true when it did.
-export function retitleBranchPullRequest(
-  cwd: string,
-  branch: string,
-  title: string,
-): boolean {
-  const cached = prCache.get(cwd);
-  const pr = cached?.value.get(branch);
-  if (!cached || !pr || pr.title === title) return false;
-  const value = new Map(cached.value).set(branch, { ...pr, title });
-  prCache.set(cwd, { value, expires: cached.expires });
-  return true;
-}
+) {
+  const [rows, checkedOut] = yield* Effect.all(
+    [runGhPrList(cwd), checkedOutPullRequests(cwd)],
+    { concurrency: 2 },
+  );
+  if (rows === null) return null;
+  const map = new Map<string, PullRequest>();
+  for (const item of rows) {
+    if (map.has(item.headRefName)) continue;
+    if (!isBranchsOwn(item, checkedOut.get(item.headRefName))) continue;
+    map.set(item.headRefName, toPullRequest(item));
+  }
+  return map;
+});
 
 export function pullRequestMapsEqual(
-  a: Map<string, PullRequest> | null,
-  b: Map<string, PullRequest>,
+  a: ReadonlyMap<string, PullRequest>,
+  b: ReadonlyMap<string, PullRequest>,
 ): boolean {
-  if (!a || a.size !== b.size) return false;
+  if (a.size !== b.size) return false;
   for (const [branch, pa] of a) {
     const pb = b.get(branch);
     if (!pb || !pullRequestsEqual(pa, pb)) return false;
   }
   return true;
-}
-
-// Eviction hook for action paths (merge / setDraft) that change state
-// the cached map reflects (isDraft, MERGED status, etc).
-export function evictProjectPullRequests(cwd: string): void {
-  prCache.delete(cwd);
-}
-
-function cacheAndReturn(
-  cwd: string,
-  value: Map<string, PullRequest>,
-): Map<string, PullRequest> {
-  prCache.set(cwd, { value, expires: Date.now() + PR_CACHE_TTL_MS });
-  return value;
 }
 
 // Each rollup item is either a CheckRun or a StatusContext. We keep the
@@ -294,32 +206,31 @@ function autoMergeMethod(
   return isMergeMethod(method) ? method : null;
 }
 
-// Single-branch lookup for the currently open worktree page. Uncached,
-// since invalidations from focus / refs-changed must actually hit gh.
-// The --head filter is server-side so this stays cheap regardless of
-// repo PR count. Returns the rich detail shape (checks + mergeable
-// state) since the only consumer is the worktree detail page. The slim
-// PullRequest projection is used by the sidebar list path. Throws on
-// transient gh / network / parse failure so callers can distinguish
-// "no PR" (null) from "we don't know", and asks gh whether or not the
-// repo is ready (the caller checks), so its null is GitHub's answer.
-export const getWorktreePullRequest = Effect.fn("PullRequests.forBranch")(
-  function* (cwd: string, branch: string) {
-    const [detail, extras] = yield* Effect.all(
-      [runGhPrListDetail(cwd, branch), fetchGraphqlExtras(cwd, branch)],
-      { concurrency: 2 },
-    );
-    if (!detail) return null;
-    const match = extras?.find((pr) => pr.number === detail.number);
-    if (!match) return detail;
-    return {
-      ...detail,
-      body: detail.body && withSignedImages(detail.body, match.bodyHTML),
-      bodySource: detail.body,
-      reviews: toReviews(match),
-    } satisfies PullRequestDetail;
-  },
-);
+// One branch's PR with its checks and merge state, for the worktree
+// page, read through gh's server-side --head filter so it stays cheap in
+// a repo of many PRs. Null is GitHub's "no PR": a gh, network or output
+// failure fails, and the caller has checked the repo is ready. `sign`
+// points the body's images at the rendered body's URLs
+// (withSignedImages).
+export const readBranchPullRequest = Effect.fnUntraced(function* (
+  cwd: string,
+  branch: string,
+  sign: (body: string, bodyHTML: string) => Effect.Effect<string>,
+) {
+  const [detail, extras] = yield* Effect.all(
+    [runGhPrListDetail(cwd, branch), fetchGraphqlExtras(cwd, branch)],
+    { concurrency: 2 },
+  );
+  if (!detail) return null;
+  const match = extras?.find((pr) => pr.number === detail.number);
+  if (!match) return detail;
+  return {
+    ...detail,
+    body: detail.body && (yield* sign(detail.body, match.bodyHTML)),
+    bodySource: detail.body,
+    reviews: toReviews(match),
+  } satisfies PullRequestDetail;
+});
 
 // The reviews come from GraphQL, beside the gh pr list call, for two
 // fields gh pr list doesn't offer: latestOpinionatedReviews, which keeps
@@ -476,10 +387,23 @@ function toReviews(pr: GqlExtrasPullRequest): PullRequestReviews {
 // the attachment's id in it, and an
 // image in the markdown (![](…) or src=…) takes its attachment's. A link
 // stays as written, for the browser it opens in. A signed URL is reused
-// while it has a minute left, so a refetch leaves the body as it was and
-// its images don't load again.
+// for a few minutes, so a refetch leaves the body as it was and its
+// images don't load again, but never within a minute of the expiry its
+// token names.
 const SIGNED_URL_REUSE_MS = 4 * 60_000;
-const signedUrls = new Map<string, { url: string; until: number }>();
+const SIGNED_URL_MARGIN_MS = 60_000;
+// By attachment (host/id): the URL, until when on the monotonic clock it
+// is reused, and its token's expiry on the wall clock, null when it
+// names none (an Enterprise Server's media host signs with an opaque
+// token).
+export type SignedUrls = Map<
+  string,
+  {
+    readonly url: string;
+    readonly until: number;
+    readonly expires: number | null;
+  }
+>;
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const ATTACHMENT_PATH = `/(?:user-attachments/assets|[\\w.-]+/[\\w.-]+/assets/\\d+)/(${UUID})`;
 // The attachment's authority, with an Enterprise Server's port if its
@@ -492,11 +416,37 @@ const RENDERED_IMAGE = /<img\b[^>]*?\bsrc="(https:\/\/[^"]+)"/g;
 const ID = new RegExp(UUID, "i");
 const IS_ATTACHMENT = new RegExp(`^${ATTACHMENT_PATH}$`, "i");
 
-// Exported for the pull-request-images proof.
-export function withSignedImages(body: string, bodyHTML: string): string {
-  const now = Date.now();
+const decodeTokenClaims = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ exp: Schema.Finite })),
+);
+
+// The wall-clock expiry a URL's `jwt` names (its `exp` claim, in
+// seconds), or null.
+function tokenExpiry(url: URL): number | null {
+  const payload = url.searchParams.get("jwt")?.split(".")[1];
+  if (payload === undefined) return null;
+  const json = Base64Url.decodeString(payload);
+  if (Result.isFailure(json)) return null;
+  return Option.match(decodeTokenClaims(json.success), {
+    onNone: () => null,
+    onSome: ({ exp }) => exp * 1000,
+  });
+}
+
+export function withSignedImages(
+  body: string,
+  bodyHTML: string,
+  signedUrls: SignedUrls,
+  now: { readonly elapsed: number; readonly wall: number },
+): string {
   for (const [key, signed] of signedUrls) {
-    if (signed.until <= now) signedUrls.delete(key);
+    if (
+      signed.until <= now.elapsed ||
+      (signed.expires !== null &&
+        signed.expires - SIGNED_URL_MARGIN_MS <= now.wall)
+    ) {
+      signedUrls.delete(key);
+    }
   }
   const hostOf = new Map<string, string>();
   for (const [, , host = "", id = ""] of body.matchAll(ATTACHED_IMAGE)) {
@@ -521,7 +471,11 @@ export function withSignedImages(body: string, bodyHTML: string): string {
           url.hostname.endsWith(".githubusercontent.com");
     const key = `${host}/${id}`;
     if (loadable && !signedUrls.has(key)) {
-      signedUrls.set(key, { url: rendered, until: now + SIGNED_URL_REUSE_MS });
+      signedUrls.set(key, {
+        url: rendered,
+        until: now.elapsed + SIGNED_URL_REUSE_MS,
+        expires: tokenExpiry(url),
+      });
     }
   }
   return body.replace(
@@ -534,11 +488,8 @@ export function withSignedImages(body: string, bodyHTML: string): string {
   );
 }
 
-// Server-side filtering + minimal fields keeps this cheap even on
-// huge-PR repos. Returns null when there's no PR for the branch;
-// throws on gh / JSON / schema failure so the renderer can
-// distinguish "no PR" from "couldn't load." Ten, so a newer fork's PR
-// can't hide the branch's own (isKept).
+// Ten, so a newer fork's PR of the same name can't hide the branch's
+// own (isBranchsOwn).
 const runGhPrListDetail = Effect.fnUntraced(function* (
   cwd: string,
   branch: string,

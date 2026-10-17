@@ -80,6 +80,8 @@ it("an Enterprise attachment the pull request body signs is one the device then 
   const body = withSignedImages(
     `![shot](https://ghe.example.com:8443/user-attachments/assets/${id})`,
     `<p><img src="${media}"></p>`,
+    new Map(),
+    { elapsed: 0, wall: 0 },
   );
   assert.equal(body, `![shot](${media})`);
   assert.equal(isRemoteImageUrl(new URL(media), remotes), true);

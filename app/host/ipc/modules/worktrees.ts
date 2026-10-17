@@ -1,4 +1,3 @@
-import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Duration from "effect/Duration";
@@ -8,7 +7,6 @@ import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Schedule from "effect/Schedule";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -27,7 +25,7 @@ import {
 } from "@host/lib/projects";
 import type * as Scripts from "@host/lib/Scripts";
 import * as HostWorktrees from "@host/lib/Worktrees";
-import { retitleBranchPullRequest } from "@host/lib/githubCli/pullRequests";
+import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
 import type { Terminals } from "@host/lib/terminals/Terminals";
@@ -280,18 +278,11 @@ export const worktreesHandlers = {
           ...(description === undefined ? {} : { description }),
         },
       );
-      if (
-        editedPullRequest &&
-        retitleBranchPullRequest(
-          project.path,
+      if (editedPullRequest) {
+        yield* (yield* PullRequestMaps.PullRequestMaps).retitled(
+          project,
           worktree.branch,
           editedPullRequest.title,
-        )
-      ) {
-        yield* HostPushes.push(
-          githubCliContract,
-          "projectPullRequestsRefreshed",
-          { projectId },
         );
       }
       return worktree;
@@ -577,7 +568,7 @@ export const worktreesHandlers = {
   | Scripts.Scripts
   | HostWorktrees.Worktrees
   | Terminals
-  | GithubCli
+  | PullRequestMaps.PullRequestMaps
   | PeerReach
   | HostPushes.HostPushes
   | ScriptChanges
