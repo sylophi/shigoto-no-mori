@@ -37,8 +37,8 @@ item works like this. Remove this section when `release/v3` merges into
    own PR, or a line in `V3.md`.
    A workflow that changes state is proved by a failure injected
    between each pair of its external steps and by a recovery that
-   itself fails, and its cleanup after a refusal and after a kill,
-   not only after success.
+   itself fails, and its cleanup is proved after a refusal and after
+   a kill, not only after success.
    Run the targeted checks (lefthook on commit, `pnpm test <name>` for
    the proofs touched) and leave the repo-wide suite to CI. A UI
    change comes with before and after shots from the lab
