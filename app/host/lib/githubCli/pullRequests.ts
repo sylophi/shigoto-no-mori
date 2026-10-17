@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
+  isBranchsOwn,
   isFromThisRepository,
   matchesMapEntry,
   type MergeMethod,
@@ -85,16 +86,6 @@ function toPullRequest(item: GhPrListItem): PullRequest {
   };
 }
 
-// What the lookups by branch keep: a PR from this repository, or the
-// fork's PR the branch it's filed under was checked out from
-// (checkedOutPullRequest).
-function isKept(
-  pr: { number: number; isCrossRepository: boolean },
-  checkedOut: number | null | undefined,
-): boolean {
-  return isFromThisRepository(pr) || pr.number === checkedOut;
-}
-
 // Kept fork PRs are always checked-out ones, marked so the renderer
 // keeps them too (isBranchsPullRequest).
 function checkedOutMark(pr: {
@@ -143,7 +134,7 @@ export const refreshProjectPullRequests = Effect.fn("PullRequests.refresh")(
     const map = new Map<string, PullRequest>();
     for (const item of rows) {
       if (map.has(item.headRefName)) continue;
-      if (!isKept(item, checkedOut.get(item.headRefName))) continue;
+      if (!isBranchsOwn(item, checkedOut.get(item.headRefName))) continue;
       map.set(item.headRefName, toPullRequest(item));
     }
     return cacheAndReturn(cwd, map);
@@ -576,7 +567,7 @@ const runGhPrListDetail = Effect.fnUntraced(function* (
   const validated = yield* decodeGhPrDetails(stdout).pipe(
     Effect.mapError((cause) => new PullRequestShapeError({ branch, cause })),
   );
-  const first = validated.find((pr) => isKept(pr, checkedOut));
+  const first = validated.find((pr) => isBranchsOwn(pr, checkedOut));
   if (!first) return null;
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",

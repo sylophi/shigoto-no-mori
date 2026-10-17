@@ -561,6 +561,13 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
   }
 }
 
+// What a failed cleanup says, the error's and the document's alike.
+export const cleanupFailureWords = (failure: {
+  readonly phase: string;
+  readonly exitCode: number | null;
+}) =>
+  `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}; worktree not removed`;
+
 // A cleanup script that failed during a removal, which left the worktree
 // in place. The run id ties the failure to the script's output.
 export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
@@ -572,11 +579,7 @@ export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
   },
 ) {
   override get message(): string {
-    const detail =
-      this.exitCode === null
-        ? "failed to run"
-        : `exited with code ${this.exitCode}`;
-    return `${this.phase} ${detail}; worktree not removed`;
+    return cleanupFailureWords(this);
   }
 }
 

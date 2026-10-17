@@ -421,42 +421,28 @@ export const deleteStack = Effect.fnUntraced(function* (
     { projectId: project.id, worktreeId: input.worktreeId },
   ).pipe(Effect.ensuring(Effect.sync(scripts.end)));
   const removed = removedIdsOf(doc);
-  if (doc["ok"] === true) {
+  if (doc.ok === true) {
     return { ok: true, removed } satisfies DeleteStackResult;
   }
-  if (doc["cleanupError"] !== undefined) {
+  if (doc.cleanupError !== undefined) {
     return {
       ok: false,
       removed,
-      cleanupError: decodeCleanupError(doc["cleanupError"]),
+      cleanupError: decodeCleanupError(doc.cleanupError),
     } satisfies DeleteStackResult;
   }
   return yield* new EngineCallError({
-    reason:
-      typeof doc["error"] === "string"
-        ? doc["error"]
-        : "removing the stack failed",
+    reason: doc.error ?? "removing the stack failed",
     cause: doc,
   });
 });
-
-const RemovedIdSchema = Schema.Struct({ id: Schema.String });
-const decodeLandDocRemovals = Schema.decodeUnknownSync(
-  Schema.Struct({
-    removed: Schema.optional(RemovedIdSchema),
-    stack: Schema.optional(
-      Schema.Struct({ removed: Schema.Array(RemovedIdSchema) }),
-    ),
-  }),
-);
 
 // The worktree ids a stack removal's document says went, the lower
 // layers first and the worktree it ran from last, the order they were
 // removed in.
 function removedIdsOf(doc: Landing.Document): string[] {
-  const parsed = decodeLandDocRemovals(doc);
-  const ids = (parsed.stack?.removed ?? []).map((entry) => entry.id);
-  if (parsed.removed) ids.push(parsed.removed.id);
+  const ids = (doc.stack?.removed ?? []).map((entry) => entry.id);
+  if (doc.removed) ids.push(doc.removed.id);
   return ids;
 }
 
@@ -538,8 +524,7 @@ const isMergeOutcome = Schema.is(MergeOutcomeSchema);
 // The document spells the outcome the way MergeOutcomeSchema does. A
 // document without one (a stack merge's) landed.
 function mergeOutcomeOf(doc: Landing.Document): MergeOutcome {
-  const outcome = doc["outcome"];
-  return isMergeOutcome(outcome) ? outcome : "merged";
+  return isMergeOutcome(doc.outcome) ? doc.outcome : "merged";
 }
 
 export const setShelved = Effect.fnUntraced(function* (

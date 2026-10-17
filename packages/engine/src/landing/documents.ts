@@ -10,8 +10,20 @@ import type { MergeMethod, PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 
-// A document `sm --json` prints.
-export type Document = Readonly<Record<string, unknown>>;
+// A document `sm --json` prints for a landing verb: the fields the
+// terminal and the host read by name, typed, beside the rest Go printed.
+export type Document = Readonly<Record<string, unknown>> & {
+  readonly ok?: boolean;
+  readonly error?: string;
+  readonly cleanupError?: ReturnType<typeof Worktrees.cleanupErrorOf>;
+  readonly removed?: Worktrees.Removed;
+  readonly worktree?: Worktrees.WorktreeRow;
+  readonly deletedBranch?: string | null;
+  readonly outcome?: Outcome;
+  readonly merged?: Readonly<Record<string, unknown>>;
+  // A stack's land or removal: the layers it removed, before its own.
+  readonly stack?: { readonly removed: ReadonlyArray<Worktrees.Removed> };
+};
 
 // What landing won't do, the reason in its message. `numbers` and
 // `names` are the PRs, branches and paths the message names, in order.

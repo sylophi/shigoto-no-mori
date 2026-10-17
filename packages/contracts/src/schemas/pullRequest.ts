@@ -59,6 +59,16 @@ export function isFromThisRepository(
   return pr.isCrossRepository !== true;
 }
 
+// A pull request found by its branch's name is the branch's own when it
+// is from this repository, or the fork's the branch was checked out from
+// (`checkedOut`, the number its merge ref names).
+export function isBranchsOwn(
+  pr: { readonly number: number; readonly isCrossRepository?: boolean },
+  checkedOut: number | null | undefined,
+): boolean {
+  return isFromThisRepository(pr) || pr.number === checkedOut;
+}
+
 export function isBranchsPullRequest(
   pr: Pick<PullRequest, "isCrossRepository" | "checkedOutFrom">,
 ): boolean {
