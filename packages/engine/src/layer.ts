@@ -84,12 +84,13 @@ const services = (options: EngineOptions) =>
         GitHub.layer,
         Lifecycle.layer,
         CarryOver.layer,
-        CloneCheckout.layer,
         Updater.layer(options.flavor).pipe(
           Layer.provide(FetchHttpClient.layer),
         ),
       ),
     ),
+    // Below Registry, which forgets a removed project's clone records.
+    Layer.provideMerge(CloneCheckout.layer),
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(Darwin.layer(options.macfs)),
     Layer.provideMerge(
@@ -132,9 +133,9 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
         GitHub.layer,
         Lifecycle.layer,
         CarryOver.layer,
-        CloneCheckout.layer,
       ),
     ),
+    Layer.provideMerge(CloneCheckout.layer),
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(
       Layer.mergeAll(

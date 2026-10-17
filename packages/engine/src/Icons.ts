@@ -28,7 +28,7 @@ export class Icons extends Context.Service<
   Icons,
   {
     // The project's icon, none when it has none. A cached answer stands
-    // while the file is unchanged. `rescanMisses` looks again for a
+    // while its file is there. `rescanMisses` looks again for a
     // project remembered as icon-less, to notice an icon added since.
     readonly of: (
       projectPath: string,
@@ -41,6 +41,9 @@ export class Icons extends Context.Service<
     ) => Effect.Effect<
       Option.Option<{ readonly mime: string; readonly base64: string }>
     >;
+    // Drops what is remembered for a project's path, in its caller's
+    // transaction when it has one.
+    readonly forget: (projectPath: string) => Effect.Effect<void>;
   }
 >()("sm/engine/Icons") {}
 
@@ -205,7 +208,11 @@ const make = Effect.gen(function* () {
     }));
   });
 
-  return Icons.of({ of, bytes });
+  const forget = Effect.fn("Icons.forget")(function* (projectPath: string) {
+    yield* sql`DELETE FROM icon_cache WHERE project_path = ${projectPath}`;
+  }, Effect.orDie);
+
+  return Icons.of({ of, bytes, forget });
 });
 
 export const layer = Layer.effect(Icons, make);
