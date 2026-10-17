@@ -1,4 +1,5 @@
 // Landing's cleanup: the landed worktrees and branches going, past the removal guards, and the primary checkout catching up.
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -213,30 +214,37 @@ export const makeCleanup = ({
                 ),
               ),
             );
-            const freed =
-              Exit.isSuccess(checkedOut) ||
-              (yield* git
-                .run(worktree.path, [
-                  "symbolic-ref",
-                  "--quiet",
-                  "--short",
-                  "HEAD",
-                ])
-                .pipe(
-                  Effect.map((out) => out.trim() === target.primaryBranch),
-                  Effect.orElseSucceed(() => false),
-                ));
+            // Read whatever the checkout said: a hook can move HEAD on,
+            // and a tag can share the branch's short name.
+            const freed = yield* git
+              .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
+              .pipe(
+                Effect.map(
+                  (out) => out.trim() === `refs/heads/${target.primaryBranch}`,
+                ),
+                Effect.orElseSucceed(() => false),
+              );
             const deletes =
               freed && deleteBranch && worktree.branch !== target.primaryBranch;
-            if (deletes) {
-              yield* git.deleteBranch({
-                repo: project.path,
-                name: worktree.branch,
-                force: true,
-              });
-            }
+            const removed = deletes
+              ? yield* Effect.exit(
+                  git.deleteBranch({
+                    repo: project.path,
+                    name: worktree.branch,
+                    force: true,
+                  }),
+                )
+              : Exit.void;
+            // Both failures are said, the checkout's first.
             if (Exit.isFailure(checkedOut)) {
-              return yield* Effect.failCause(checkedOut.cause);
+              return yield* Effect.failCause(
+                Exit.isFailure(removed)
+                  ? Cause.combine(checkedOut.cause, removed.cause)
+                  : checkedOut.cause,
+              );
+            }
+            if (Exit.isFailure(removed)) {
+              return yield* Effect.failCause(removed.cause);
             }
             return deletes;
           }),

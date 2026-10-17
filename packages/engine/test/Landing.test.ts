@@ -592,6 +592,52 @@ esac`,
       "the merged branch left behind",
     );
   });
+
+  // What decides the delete is where HEAD ends up, read in full: a hook
+  // that moves it on keeps the branch, and a tag of the primary's name
+  // doesn't hide that HEAD is on the primary.
+  it.each([
+    ["a hook that detaches HEAD and succeeds keeps the branch", "detach", true],
+    [
+      "a failing hook beside a tag of the primary's name still deletes it",
+      "tag",
+      false,
+    ],
+  ])("done: %s", async (_name, kind, kept) => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    execFileSync("git", ["clone", "-q", upstream, repo]);
+    const primary = box.git(repo, "branch", "--show-current").trim();
+    if (kind === "tag") box.git(repo, "tag", primary);
+    box.git(repo, "checkout", "-q", "-b", "fox");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "fox");
+    const head = box.git(repo, "rev-parse", "HEAD").trim();
+    mergedGh(`echo '[{"number":5,"headRefOid":"${head}"}]'`);
+    writeFileSync(
+      join(repo, ".git", "hooks", "post-checkout"),
+      kind === "detach"
+        ? '#!/bin/sh\ngit update-ref --no-deref HEAD "$(git rev-parse HEAD)"\n'
+        : "#!/bin/sh\nexit 1\n",
+      { mode: 0o755 },
+    );
+    await box.engine(
+      Effect.gen(function* () {
+        yield* (yield* Registry.Registry).register({
+          name: "repo",
+          path: repo,
+        });
+        const worktrees = yield* Worktrees.Worktrees;
+        const located = yield* worktrees.resolve(
+          yield* worktrees.here(repo),
+          {},
+        );
+        yield* Effect.exit(
+          (yield* Landing.Landing).done(located, { force: false }),
+        );
+      }),
+    );
+    assert.equal(box.git(repo, "branch", "--list", "fox").trim() !== "", kept);
+  });
 });
 
 // A gh that never answers (a proxy's auth prompt, an SSO page it can't
