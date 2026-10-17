@@ -47,8 +47,9 @@ const hookPlaceOf = (output: string) => {
 
 // The login shell as the engine's shell integration needs it: which
 // shell it is and where its config lives. A probe that answered is kept
-// for the app's life, one that didn't is asked again; until one answers,
-// the shell's config is looked for where it goes by default.
+// an hour (a profile edit moves it), one that didn't is asked again;
+// until one answers, the shell's config is looked for where it goes by
+// default.
 export class HookShell extends Context.Service<
   HookShell,
   { readonly read: Effect.Effect<ShellIntegration.HookShell> }
@@ -74,7 +75,7 @@ export const layer = Layer.effect(
             Effect.fromOption(hookPlaceOf(output)),
           ),
         ),
-      { capacity: 1, timeToLive: answersFor(Duration.infinity) },
+      { capacity: 1, timeToLive: answersFor(Duration.hours(1)) },
     );
     return HookShell.of({
       read: Effect.gen(function* () {
