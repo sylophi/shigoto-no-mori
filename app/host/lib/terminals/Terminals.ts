@@ -13,6 +13,7 @@
 // the shell's output back rather than pile it up here, and the PTY is
 // paused while the backlog is large. History is a ring of the latest
 // chunks (./history.ts), which an attach replays first.
+import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import {
   UnknownProjectError,
   UnknownTerminalError,
@@ -253,6 +254,7 @@ const make = <R>(options: {
     const layerScope = yield* Effect.scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
+    const lifecycle = yield* Lifecycle.Lifecycle;
     const saved = yield* SavedTerminals.SavedTerminals;
     const home = yield* Config.String("HOME").pipe(
       Effect.orElseSucceed(() => "/"),
@@ -457,6 +459,7 @@ const make = <R>(options: {
             spawner,
           ),
           Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Lifecycle.Lifecycle, lifecycle),
         );
         // A restored history is a chunk of its own, numbered past any
         // chunk the terminal sent before the restart (more may have gone

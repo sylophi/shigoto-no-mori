@@ -31,6 +31,7 @@ import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
+import * as CliShell from "@host/lib/cli/shell";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as Views from "@host/lib/Views";
 import * as Ports from "@host/lib/Ports";
@@ -231,9 +232,11 @@ const dataDirHolders = Layer.effect(
 );
 
 // What the host answers from caches: other tools' (gh and
-// port-pool), and its reads across a project's checkouts.
+// port-pool), the login shell's config place, and its reads across a
+// project's checkouts.
 const cachedAnswers = Layer.mergeAll(
   GithubCli.layer,
+  CliShell.layer,
   Ports.layer,
   Worktrees.layer,
 );

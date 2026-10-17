@@ -449,12 +449,3 @@ export const working = (
       return Effect.succeed(found as ReadonlyArray<Working>);
     }),
   );
-
-// The resolved path of a binary on PATH, or null. The packaged app's
-// PATH is the login shell's (shared/shellEnv.ts), so anything
-// installed for the user's terminal is found here too.
-export const resolveOnPath = (name: string) =>
-  exec("which", [name]).pipe(
-    Effect.map(({ stdout }) => stdout.trim() || null),
-    Effect.orElseSucceed(() => null),
-  );

@@ -7,7 +7,7 @@ import {
   uninstallCliEverything,
 } from "@host/lib/cli/install";
 import {
-  hookPathEnv,
+  HookShell,
   installShellIntegration,
   shellIntegrationStatus,
   uninstallShellIntegration,
@@ -25,11 +25,11 @@ import * as Effect from "effect/Effect";
 // the doctor must inspect the data dir the app runs on, not the one a
 // shell would find.
 const doctorInput = Effect.gen(function* () {
-  const { ZDOTDIR } = yield* Effect.promise(hookPathEnv);
+  const { zdotdir } = yield* (yield* HookShell).read;
   return {
     version: (yield* HostFacts.HostFacts).appVersion,
     executable: yield* requireCliBinary,
-    ...(ZDOTDIR === undefined ? {} : { zdotdir: ZDOTDIR }),
+    ...(zdotdir === undefined ? {} : { zdotdir }),
   };
 });
 

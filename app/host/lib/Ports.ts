@@ -9,6 +9,7 @@
 // The integration is on for a directory when the global toggle is, the
 // binary is on PATH, and the config file parses as JSON with a
 // schemaVersion field. Richer validation is left to port-pool itself.
+import { findExecutable } from "@shigomori/engine/executables";
 import {
   DEVICE_SETTINGS_DEFAULTS,
   type WorktreePort,
@@ -22,7 +23,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Paths from "@shigomori/engine/Paths";
 import { envSetting } from "@shared/config";
 import {
@@ -35,7 +35,6 @@ import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreePath } from "./projects";
 import { answersFor } from "./util/cacheTtl";
-import * as Processes from "@shigomori/engine/processes";
 
 interface Worktree {
   readonly projectId: string;
@@ -108,16 +107,16 @@ function normalizeDir(dir: string): string {
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   // The engine the reads below go through. A failed one is a defect:
   // the list has no failure of its own.
   const engine = yield* Effect.context<Engine.Services>();
   const read = <A, E>(effect: Effect.Effect<A, E, Engine.Services>) =>
     effect.pipe(Effect.provide(engine), Effect.orDie);
 
-  const installed = yield* Processes.resolveOnPath("port-pool").pipe(
-    Effect.map((resolved) => resolved !== null),
-    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+  const installed = yield* findExecutable("port-pool").pipe(
+    Effect.map(Option.isSome),
+    Effect.provideService(FileSystem.FileSystem, fs),
+    Effect.provideService(Path.Path, path),
     Effect.cachedWithTTL(INSTALLED_TTL),
   );
 
