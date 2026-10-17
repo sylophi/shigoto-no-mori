@@ -101,7 +101,7 @@ it("the window asks again after a failed read, and keeps an answer for an hour, 
     } as unknown as HostApi;
     // The app's retries, and kept while no page reads it, so only
     // staleness decides a re-read.
-    const client = createAppQueryClient();
+    const client = createAppQueryClient(() => undefined);
     client.setDefaultOptions({
       queries: { ...client.getDefaultOptions().queries, gcTime: Infinity },
     });
