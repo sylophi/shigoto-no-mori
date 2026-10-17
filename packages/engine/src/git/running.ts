@@ -46,9 +46,9 @@ const STALL_LIMIT = [
 
 // The writes that take index.lock before they change anything, so one
 // refused because another git holds it changed nothing and is asked
-// again: the lock is held for moments, by a `git diff` that writes back
-// the index it refreshed (the app's own views read with one) or another
-// program's git. A command of several steps (a stash, a merge, a
+// again: the lock is held for moments, by a `git status` or a `git diff`
+// that writes back the index it refreshed (the app's own views read
+// with both) or another program's git. A command of several steps (a stash, a merge, a
 // rebase, a pull) can be refused after its first, and isn't.
 const WAITS_FOR_INDEX = new Set([
   "add",
@@ -118,9 +118,7 @@ export const makeRunning = Effect.gen(function* () {
                   cwd,
                   // LC_ALL=C pins git's messages to English, so what the
                   // engine matches on and relays reads the same everywhere.
-                  // GIT_OPTIONAL_LOCKS=0 keeps `git status` from taking
-                  // index.lock to write back the index it refreshed.
-                  env: { ...options.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0" },
+                  env: { ...options.env, LC_ALL: "C" },
                   extendEnv: true,
                   // In a process group of its own (the spawner's default), so
                   // closing the scope ends git with its hooks and its ssh.
