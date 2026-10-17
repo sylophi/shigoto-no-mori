@@ -110,7 +110,7 @@ export const sharedSettingsCopy = createSharedSettingsCopy(
   {
     deviceId: () => deviceId,
     // The write has landed, so a listener's failure must not read as
-    // the write's (onGlobalConfigChange's rule).
+    // the write's.
     announce: (doc) => {
       for (const listener of changeListeners) {
         try {
