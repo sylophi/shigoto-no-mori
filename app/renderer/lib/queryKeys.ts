@@ -439,7 +439,9 @@ export function invalidateDeviceSession(
   queryClient: QueryClient,
   deviceId: string,
 ): void {
-  refreshQueries(queryClient, {
+  // Not refreshQueries: it runs once per landing, and a read out then
+  // is one failing toward its retry's backoff, so it is restarted.
+  void queryClient.invalidateQueries({
     predicate: (query) => hostKeyDeviceId(query.queryKey) === deviceId,
   });
 }

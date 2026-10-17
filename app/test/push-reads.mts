@@ -16,6 +16,7 @@ import { it } from "vitest";
 import { watchHost, type WatchedHostApi } from "@/lib/hostWatch";
 import { queryKeysFor } from "@/lib/queryKeys";
 import { throughCancel } from "@/lib/queryClientOptions";
+import { fetchAgain, refreshQueries } from "@/lib/askAgain";
 
 const DEVICE = "device-1";
 const keys = queryKeysFor(DEVICE);
@@ -61,12 +62,18 @@ function shownQuery(client: QueryClient, queryKey: readonly unknown[]) {
   return { counts, unsubscribe };
 }
 
-async function burst(send: () => void) {
+// 25 pushes about 5 ms apart, then time for the reads to settle. Answers
+// the most reads it may cost, each read 100 ms: the first, and one after
+// each read a push came during, however long the burst took here.
+async function burst(send: () => void): Promise<number> {
+  const started = performance.now();
   for (let push = 0; push < 25; push++) {
     send();
     await sleep(5);
   }
+  const lasted = performance.now() - started;
   await sleep(400);
+  return Math.ceil(lasted / 100) + 1;
 }
 
 it("a burst of refsRefreshed pushes reads an open page's pull request a bounded number of times and cancels none", async () => {
@@ -76,12 +83,12 @@ it("a burst of refsRefreshed pushes reads an open page's pull request a bounded 
   const page = shownQuery(client, keys.worktreePullRequest("p1", "feature"));
   await sleep(150);
   const before = page.counts.reads;
-  await burst(() => host.push("refsRefreshed", { projectId: "p1" }));
+  const most = await burst(() =>
+    host.push("refsRefreshed", { projectId: "p1" }),
+  );
   assert.equal(page.counts.cancelled, 0, "a read cancelled by the next push");
-  // 25 pushes over about 150 ms, each read 100 ms: the first, and one
-  // after each read a push came during.
   const reads = page.counts.reads - before;
-  assert.ok(reads >= 2 && reads <= 3, `read ${reads} times`);
+  assert.ok(reads >= 2 && reads <= most, `read ${reads} times of ${most}`);
   page.unsubscribe();
   stop();
   client.clear();
@@ -95,10 +102,12 @@ it("a burst of projectChanged pushes reads that project's rows a bounded number 
   const other = shownQuery(client, keys.branches("p2"));
   await sleep(150);
   const before = { rows: rows.counts.reads, other: other.counts.reads };
-  await burst(() => host.push("projectChanged", { projectId: "p1" }));
+  const most = await burst(() =>
+    host.push("projectChanged", { projectId: "p1" }),
+  );
   assert.equal(rows.counts.cancelled, 0, "a read cancelled by the next push");
   const reads = rows.counts.reads - before.rows;
-  assert.ok(reads >= 2 && reads <= 3, `read ${reads} times`);
+  assert.ok(reads >= 2 && reads <= most, `read ${reads} times of ${most}`);
   assert.equal(other.counts.reads, before.other, "another project was read");
   rows.unsubscribe();
   other.unsubscribe();
@@ -131,6 +140,60 @@ it("a read a push asks for while one is out follows it, and a query no page show
     "left fresh for the next page",
   );
   stop();
+  client.clear();
+});
+
+it("a page that leaves during a joined read leaves its query stale, not read again and not fresh", async () => {
+  const client = new QueryClient();
+  const host = fakeHost();
+  const stop = watchHost(client, DEVICE, host.api);
+  const page = shownQuery(client, keys.shigomoriConfig("p1"));
+  host.push("projectChanged", { projectId: "p1" });
+  await sleep(20);
+  page.unsubscribe();
+  await sleep(300);
+  assert.equal(page.counts.reads, 1, "read again with no page");
+  const query = client.getQueryCache().find({
+    queryKey: keys.shigomoriConfig("p1"),
+    exact: true,
+  });
+  assert.equal(
+    query?.state.isInvalidated,
+    true,
+    "left fresh for the next page",
+  );
+  stop();
+  client.clear();
+});
+
+it("a read a mutation cancels for its optimistic write is not followed by a read before the mutation lands", async () => {
+  const client = new QueryClient();
+  const host = fakeHost();
+  const stop = watchHost(client, DEVICE, host.api);
+  const queryKey = keys.worktreePullRequest("p1", "feature");
+  const page = shownQuery(client, queryKey);
+  host.push("refsRefreshed", { projectId: "p1" });
+  await sleep(20);
+  await client.cancelQueries({ queryKey });
+  await sleep(300);
+  assert.equal(page.counts.reads, 1, "read again under the optimistic write");
+  page.unsubscribe();
+  stop();
+  client.clear();
+});
+
+it("an ask that must reach a query no page reads (the device list) is kept when a page's refresh started the read and the page leaves", async () => {
+  const client = new QueryClient();
+  const queryKey = ["account", "devices"];
+  const page = shownQuery(client, queryKey);
+  await sleep(150);
+  refreshQueries(client, { queryKey });
+  const query = client.getQueryCache().find({ queryKey, exact: true });
+  assert.ok(query);
+  fetchAgain(query, false);
+  page.unsubscribe();
+  await sleep(400);
+  assert.equal(page.counts.reads, 3, "the store's ask was dropped");
   client.clear();
 });
 
