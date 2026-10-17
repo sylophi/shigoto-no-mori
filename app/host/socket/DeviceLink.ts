@@ -379,8 +379,9 @@ const serve =
               lock
                 .guard(call)
                 .pipe(
-                  Effect.catchTag(["DataDirMoving", "DataDirMoved"], (error) =>
-                    Effect.fail(callFailureOf(error)),
+                  Effect.catchTag(
+                    ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
+                    (error) => Effect.fail(callFailureOf(error)),
                   ),
                 ),
             )

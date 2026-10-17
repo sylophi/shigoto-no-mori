@@ -5,6 +5,7 @@
 // points; a move, and the recovery of one, holds it alone. SQLite's
 // locks are the kernel's, so a hold goes with its process, however that
 // ends, and nothing reads a pid to tell.
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -16,6 +17,7 @@ import * as Predicate from "effect/Predicate";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as SqlError from "effect/sql/SqlError";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Paths from "./Paths.ts";
@@ -23,8 +25,46 @@ import type { OpenDatabase } from "./Store.ts";
 
 const LOCK = "data-dir.lock";
 
+// A lock held elsewhere asked for again every 50 ms up to `within`.
+const askedFor = (within: Duration.Input) => ({
+  while: (error: unknown) =>
+    error instanceof SqlError.SqlError &&
+    Predicate.isTagged(error.reason, "LockTimeoutError"),
+  schedule: Schedule.spaced("50 millis"),
+  times: Math.ceil(Duration.toMillis(Duration.fromInputUnsafe(within)) / 50),
+});
+
+// What SQLite said under a failure: node's driver carries `errcode`
+// and `errstr`, Bun's `code` and its message. Broken is a file that
+// isn't a database, or one SQLite reads as corrupt.
+const nativeOf = (error: unknown) => {
+  const cause =
+    error instanceof SqlError.SqlError &&
+    Predicate.hasProperty(error.reason, "cause")
+      ? error.reason.cause
+      : error;
+  const errcode =
+    Predicate.hasProperty(cause, "errcode") && typeof cause.errcode === "number"
+      ? cause.errcode & 0xff
+      : undefined;
+  const code = Predicate.hasProperty(cause, "code") ? cause.code : undefined;
+  return {
+    broken:
+      errcode === 26 ||
+      errcode === 11 ||
+      code === "SQLITE_NOTADB" ||
+      code === "SQLITE_CORRUPT",
+    words:
+      Predicate.hasProperty(cause, "errstr") && typeof cause.errstr === "string"
+        ? cause.errstr
+        : cause instanceof Error
+          ? cause.message
+          : String(error),
+  };
+};
+
 // A change refused while a move, or the recovery of one, is under way.
-export class DataDirMoving extends Schema.TaggedError<DataDirMoving>()(
+class DataDirMoving extends Schema.TaggedError<DataDirMoving>()(
   "DataDirMoving",
   {},
 ) {
@@ -54,15 +94,18 @@ export class ChangesRunning extends Schema.TaggedError<ChangesRunning>()(
   }
 }
 
-// A move refused because the lock can't be made.
+// A change or a move refused because the lock can't be held.
 export class DataDirLockUnavailable extends Schema.TaggedError<DataDirLockUnavailable>()(
   "DataDirLockUnavailable",
   { file: Schema.String, reason: Schema.String },
 ) {
   override get message(): string {
-    return `The data folder can't be moved: its lock at ${this.file} can't be made (${this.reason}).`;
+    return `The data folder's lock at ${this.file} can't be held (${this.reason}).`;
   }
 }
+
+// What refuses a change the hold.
+export type TakeRefused = DataDirMoving | DataDirMoved | DataDirLockUnavailable;
 
 // Whether the running change already holds the lock, so a change
 // nested in it joins even while a move of this process's waits.
@@ -74,16 +117,12 @@ export class DataDirLock extends Context.Service<
   DataDirLock,
   {
     // The hold `guard` takes, kept until the scope it is taken in closes.
-    readonly held: Effect.Effect<
-      void,
-      DataDirMoving | DataDirMoved,
-      Scope.Scope
-    >;
+    readonly held: Effect.Effect<void, TakeRefused, Scope.Scope>;
     // `effect` run while no move can start, in a process whose data dir
     // is still where it is found.
     readonly guard: <A, E, R>(
       effect: Effect.Effect<A, E, R>,
-    ) => Effect.Effect<A, E | DataDirMoving | DataDirMoved, R>;
+    ) => Effect.Effect<A, E | TakeRefused, R>;
     // `effect` run as the one change under way, once those under way
     // have ended, waiting for them up to `within`.
     readonly alone: <A, E, R>(
@@ -109,46 +148,95 @@ export const layer = (open: OpenDatabase) =>
       // every 50 ms up to `within`, not waited for in SQLite, whose wait
       // under node:sqlite stops the whole process, so a change of this
       // process's own could never end while its move waits.
-      const hold = (within: Duration.Input, write: boolean) =>
+      const connect = Effect.gen(function* () {
+        yield* fs.makeDirectory(dir, { recursive: true });
+        const sql = yield* open(file, { disableWAL: true, busyTimeout: 0 });
+        yield* sql`PRAGMA locking_mode = EXCLUSIVE`;
+        return sql;
+      }).pipe(Effect.provideService(Reactivity.Reactivity, reactivity));
+
+      // Shared: a read, which a move holding the lock refuses with
+      // nothing held.
+      const holdShared = Effect.gen(function* () {
+        const sql = yield* connect;
+        yield* sql`SELECT count(*) FROM sqlite_schema`.pipe(
+          Effect.retry(askedFor(Duration.seconds(2))),
+        );
+      });
+
+      // Alone: the write reserved first, an attempt refused it dropping
+      // its connection, so two takers never hold each other off with the
+      // reads their attempts took; the one reserved waits at its commit
+      // for the reads under way, and refuses new ones meanwhile.
+      const holdAlone = (within: Duration.Input) =>
         Effect.gen(function* () {
-          yield* fs.makeDirectory(dir, { recursive: true });
-          const sql = yield* open(file, { disableWAL: true, busyTimeout: 0 });
-          yield* sql`PRAGMA locking_mode = EXCLUSIVE`;
-          const take = write
-            ? Effect.andThen(
-                sql`CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)`,
-                sql`INSERT OR REPLACE INTO held (id) VALUES (1)`,
-              )
-            : sql`SELECT count(*) FROM sqlite_schema`;
-          yield* take.pipe(
-            Effect.retry({
-              while: (error) =>
-                Predicate.isTagged(error.reason, "LockTimeoutError"),
-              schedule: Schedule.spaced("50 millis"),
-              times: Math.ceil(
-                Duration.toMillis(Duration.fromInputUnsafe(within)) / 50,
+          const outer = yield* Effect.scope;
+          // One wait for both steps.
+          const until =
+            (yield* Clock.currentTimeMillis) +
+            Duration.toMillis(Duration.fromInputUnsafe(within));
+          const reserve = Effect.gen(function* () {
+            // A child of the hold's scope, so an interrupt at any point
+            // still closes its connection with the hold.
+            const scope = yield* Scope.fork(outer);
+            const exit = yield* Effect.exit(
+              Scope.provide(
+                Effect.tap(connect, (sql) => sql`BEGIN IMMEDIATE`),
+                scope,
               ),
-            }),
+            );
+            if (Exit.isFailure(exit)) {
+              yield* Scope.close(scope, exit);
+              return yield* exit;
+            }
+            return exit.value;
+          });
+          const sql = yield* reserve.pipe(Effect.retry(askedFor(within)));
+          yield* sql`CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)`;
+          yield* sql`INSERT OR REPLACE INTO held (id) VALUES (1)`;
+          const left = Math.max(0, until - (yield* Clock.currentTimeMillis));
+          yield* sql`COMMIT`.pipe(
+            Effect.retry(askedFor(Duration.millis(left))),
           );
-        }).pipe(Effect.provideService(Reactivity.Reactivity, reactivity));
+        });
+
+      // Whether this user can write the lock, or the folder it goes in.
+      const lockWritable = Effect.gen(function* () {
+        const there = (at: string) =>
+          fs.exists(at).pipe(Effect.orElseSucceed(() => false));
+        const at = (yield* there(file))
+          ? file
+          : (yield* there(dir))
+            ? dir
+            : path.dirname(dir);
+        return yield* fs.access(at, { writable: true }).pipe(Effect.isSuccess);
+      });
 
       const takeShared = Effect.gen(function* () {
-        const taken = yield* hold(Duration.seconds(2), false).pipe(
+        const taken = yield* holdShared.pipe(
           Effect.as("held" as const),
           Effect.catchReason("SqlError", "LockTimeoutError", () =>
             Effect.succeed("busy" as const),
           ),
-          // A lock that can't be made at all, in a folder this user
-          // can't write, makes every move refuse too, so the change
-          // runs.
           Effect.catch((error) =>
-            Effect.as(
-              Effect.logWarning(
+            Effect.gen(function* () {
+              // A lock this user can't write, or one that isn't a lock
+              // database at all, makes every move refuse too, so the
+              // change runs. Any other failure is this process's alone,
+              // and a move elsewhere may hold the lock.
+              const native = nativeOf(error);
+              if (!native.broken && (yield* lockWritable)) {
+                return yield* new DataDirLockUnavailable({
+                  file,
+                  reason: native.words,
+                });
+              }
+              yield* Effect.logWarning(
                 `[data] the data-folder lock at ${file} can't be held`,
                 error,
-              ),
-              "unavailable" as const,
-            ),
+              );
+              return "unavailable" as const;
+            }),
           ),
         );
         if (taken === "busy") return yield* new DataDirMoving();
@@ -181,6 +269,7 @@ export const layer = (open: OpenDatabase) =>
       let takes = 0;
       let taking = false;
       let refused = 0;
+      let refusal: Exit.Exit<void, TakeRefused> = Exit.void;
       const held = Effect.acquireRelease(
         Effect.suspend(() => {
           const queuedFor = taking ? takes : takes + 1;
@@ -189,7 +278,7 @@ export const layer = (open: OpenDatabase) =>
               const nested = yield* Holding;
               if (moving > 0 && !nested) return yield* new DataDirMoving();
               if (holders === 0) {
-                if (refused >= queuedFor) return yield* new DataDirMoving();
+                if (refused >= queuedFor) return yield* refusal;
                 takes += 1;
                 taking = true;
                 const scope = yield* Scope.make();
@@ -200,6 +289,7 @@ export const layer = (open: OpenDatabase) =>
                 if (Exit.isFailure(exit)) {
                   yield* Scope.close(scope, exit);
                   refused = takes;
+                  refusal = exit;
                   return yield* exit;
                 }
                 opened = scope;
@@ -235,19 +325,25 @@ export const layer = (open: OpenDatabase) =>
         moving += 1;
         return yield* Effect.scoped(
           Effect.andThen(
-            hold(within, true).pipe(
+            holdAlone(within).pipe(
               Effect.catchReason("SqlError", "LockTimeoutError", () =>
                 Effect.fail(new ChangesRunning()),
               ),
               Effect.catchTag(
                 "SqlError",
                 (error) =>
-                  new DataDirLockUnavailable({ file, reason: error.message }),
+                  new DataDirLockUnavailable({
+                    file,
+                    reason: nativeOf(error).words,
+                  }),
               ),
               Effect.catchTag(
                 "PlatformError",
                 (error) =>
-                  new DataDirLockUnavailable({ file, reason: error.message }),
+                  new DataDirLockUnavailable({
+                    file,
+                    reason: nativeOf(error).words,
+                  }),
               ),
             ),
             effect,

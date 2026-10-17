@@ -2518,4 +2518,26 @@ describe("a data-folder move under way", () => {
     const after = await runAt(alpha, "rm", "fox");
     assert.equal(after.code, 0, after.stderr);
   });
+
+  // A lock file that isn't a lock database refuses every move, and lets
+  // a change run, under Bun's SQLite as under node's.
+  it("runs a change on disk when the lock file isn't a database", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const lockFile = join(
+      box.home,
+      ".config",
+      flavorNames("dev").configDir,
+      "data-dir.lock",
+    );
+    mkdirSync(dirname(lockFile), { recursive: true });
+    writeFileSync(lockFile, "x".repeat(4096));
+    const made = await runAt(alpha, "--json", "worktrees", "create", "fox");
+    assert.equal(made.code, 0, made.stderr);
+    const removed = await runAt(alpha, "rm", "fox");
+    assert.equal(removed.code, 0, removed.stderr);
+  });
 });

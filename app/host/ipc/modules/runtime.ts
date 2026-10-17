@@ -18,6 +18,7 @@ import { busyRemoteRefusal } from "@shared/busy";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as Shell from "@host/lib/Shell";
+import * as Moves from "@host/lib/sync/Moves";
 import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
@@ -98,6 +99,7 @@ export const runtimeHandlers = {
       yield* moveDataDir(parentDir, {
         place: yield* sessionPlace,
         killAllScripts: killAllScripts(),
+        movesUnderWay: (yield* Moves.Moves).underWay,
         beforeMove: Effect.suspend(() => {
           watchersStopped = true;
           return holders.release;
