@@ -119,8 +119,8 @@ export { TUNNEL_PROBE_DEADLINE_FRESH_MS };
 
 // How long an unconfigured answer stands before the Worker is asked
 // again: a deployment setting, which a redeploy changes, so one request
-// per interval. A relative timer, so a sleep spends none of it; the wake
-// that ends one asks at once (`recheck`).
+// per interval. Whatever a sleep does to the timer, the wake that ends
+// it asks at once (`recheck`).
 export const UNCONFIGURED_RETRY_MS = 5 * 60_000;
 
 // One probe attempt's own fetch bound, so a black-holed edge cannot
@@ -549,7 +549,7 @@ const make = (options: Options) =>
         // advertise a dead child.
         const previous = (yield* SubscriptionRef.get(status)).state;
         yield* setStatus({ state: "starting", hostname: null });
-        yield* remember({ denied: false });
+        yield* remember({ denied: false, unconfigured: false });
         const binaryPath = yield* withSpawner(options.resolveBinary);
         if (binaryPath === null) {
           // Logged on the way into no-binary, not on every reconcile.
@@ -568,23 +568,32 @@ const make = (options: Options) =>
             ? cached
             : null;
         if (provision === null) {
+          // Once the Worker answered unconfigured, the runner waits to
+          // ask again rather than fail: off the restart ladder, and a
+          // wake ends the wait early, so a wait and not a Schedule. A
+          // transient failure of a later ask (a wake on a network still
+          // coming back) is waited out the same way.
+          const waiting = yield* Ref.make(false);
+          const waits = (error: TunnelProvisionError) =>
+            Ref.get(waiting).pipe(
+              Effect.map(
+                (seen) =>
+                  error.cause instanceof HubTunnelUnconfiguredError ||
+                  (seen &&
+                    !(error.cause instanceof TunnelProvisionDeniedError)),
+              ),
+            );
           const provisioned = yield* options.provision(port).pipe(
-            // Not a failure, so off the restart ladder: asked again
-            // once the wait ends.
             Effect.tapError((error) =>
-              error.cause instanceof HubTunnelUnconfiguredError
-                ? remember({ unconfigured: true }).pipe(
-                    Effect.andThen(
-                      setStatus({ state: "unconfigured", hostname: null }),
-                    ),
-                    Effect.andThen(untilAskedAgain),
-                  )
-                : Effect.void,
+              Effect.gen(function* () {
+                if (!(yield* waits(error))) return;
+                yield* Ref.set(waiting, true);
+                yield* remember({ unconfigured: true });
+                yield* setStatus({ state: "unconfigured", hostname: null });
+                yield* untilAskedAgain;
+              }),
             ),
-            Effect.retry({
-              while: (error) =>
-                error.cause instanceof HubTunnelUnconfiguredError,
-            }),
+            Effect.retry({ while: waits }),
             Effect.result,
           );
           yield* remember({ unconfigured: false });

@@ -2652,6 +2652,65 @@ it("cloudflared runner: no-binary is a typed terminal state, and an unconfigured
   await unconfigured.reconcile({ port: 40100 });
   assert.equal(unconfiguredCalls, 6);
   assert.equal(unconfigured.status().state, "unconfigured");
+  // A stop in the wait forgets the answer: a wake after it asks
+  // nothing, and the next start asks at once.
+  await unconfigured.reconcile(null);
+  await unconfigured.recheck();
+  assert.equal(unconfiguredCalls, 6, "a wake after a stop asked");
+  await unconfigured.reconcile({ port: 40100 });
+  assert.equal(unconfiguredCalls, 7, "a start after a stop did not ask");
+  // A clock step is no wake: the wall clock moved past the interval
+  // with no elapsed time asks nothing.
+  unconfigured.stepWall(UNCONFIGURED_RETRY_MS * 2);
+  await unconfigured.advance(0);
+  assert.equal(unconfiguredCalls, 7, "a wall-clock step asked");
+});
+
+it("cloudflared runner: a transient failure while an unconfigured answer is waited out is waited out too, and a cached provision that comes up again leaves same-port reconciles alone", async () => {
+  // The Worker's answers in order, then provisions.
+  const answers: Array<"unconfigured" | "offline"> = [
+    "unconfigured",
+    "offline",
+  ];
+  let asks = 0;
+  const runner = await tunnelHarness({
+    provision: async (port) => {
+      asks += 1;
+      const answer = answers.shift();
+      if (answer === "unconfigured") throw new HubTunnelUnconfiguredError();
+      if (answer === "offline") throw new Error("getaddrinfo ENOTFOUND");
+      return { hostname: `h${port}.example.test`, connectorToken: "t" };
+    },
+  });
+  await runner.reconcile({ port: 40100 });
+  assert.equal(runner.status().state, "unconfigured");
+  // A wake on a network still coming back: the ask fails, and the
+  // runner keeps waiting rather than stepping onto its error ladder.
+  await runner.recheck();
+  assert.equal(asks, 2);
+  assert.equal(runner.status().state, "unconfigured");
+  await runner.recheck();
+  assert.equal(asks, 3);
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(runner.status().state, "up");
+  assert.equal(runner.spawned.length, 1);
+  // The Worker loses its env, the listener moves, and moves back: the
+  // first port's provision is reused and comes up, and a reconcile of
+  // that port after it leaves the child alone.
+  answers.push("unconfigured");
+  await runner.reconcile({ port: 40200 });
+  assert.equal(runner.status().state, "unconfigured");
+  await runner.reconcile({ port: 40100 });
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(runner.status().state, "up");
+  const spawned = runner.spawned.length;
+  await runner.reconcile({ port: 40100 });
+  assert.equal(
+    runner.spawned.length,
+    spawned,
+    "a same-port reconcile restarted it",
+  );
+  assert.equal(runner.status().state, "up");
 });
 
 it("cloudflared runner: the readiness probe gates advertising (a failed attempt retries on the probe ladder), a post-ready crash restarts from the cached provision on the capped backoff, a port change re-provisions, a stop kills the child cleanly, and the token never reaches a status object", async () => {
