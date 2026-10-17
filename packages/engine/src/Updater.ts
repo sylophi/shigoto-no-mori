@@ -20,6 +20,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Option from "effect/Option";
+import type { StagedManifest } from "@shigomori/contracts/schemas/runtime";
 import { type Flavor } from "./flavor.ts";
 import { makeFiles } from "./updater/files.ts";
 import { makeFeeds } from "./updater/feeds.ts";
@@ -100,6 +102,11 @@ export class Updater extends Context.Service<
       UpToDate | Updated,
       UpdatesUnavailable | StageError | InstallError | HandoffFailed
     >;
+    // The staged update a build at `version` can restart into: newer
+    // than it, its bundle there. The app offers it before any check.
+    readonly staged: (
+      version: string,
+    ) => Effect.Effect<Option.Option<StagedManifest>>;
     // --finish-install: the detached installer the app spawns as it quits
     // to restart. Waits for the app's pid to exit, swaps the staged
     // bundle in and relaunches the app. Headless, so every outcome goes
@@ -107,6 +114,9 @@ export class Updater extends Context.Service<
     readonly finishInstall: (input: {
       readonly running: Running;
       readonly appPid: number;
+      // A test build's update stand-ins, which the relaunched app gets.
+      readonly feedUrl?: string;
+      readonly releasesUrl?: string;
     }) => Effect.Effect<
       void,
       | UpdatesUnavailable
@@ -127,7 +137,6 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const swap = yield* makeSwap({ files, signatures, staging });
   const restart = yield* makeRestart({ files });
   const methods = yield* makeMethods({
-    flavor,
     files,
     feeds,
     signatures,
@@ -136,7 +145,13 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     restart,
   });
   const { check, stage, update, finishInstall } = methods;
-  return Updater.of({ check, stage, update, finishInstall });
+  return Updater.of({
+    check,
+    stage,
+    update,
+    staged: staging.installable,
+    finishInstall,
+  });
 });
 
 export const layer = (flavor: Flavor) => Layer.effect(Updater, make(flavor));

@@ -24,8 +24,10 @@ import {
   type UpdateInput,
   discard,
   feedRequest,
+  bundleVersionArgs,
+  isAsideName,
+  isIncomingName,
   isNewer,
-  newerThan,
   report,
   within,
 } from "./documents.ts";
@@ -92,6 +94,17 @@ export const makeStaging = ({
         : Option.none<StagedManifest>();
     });
 
+    // The staged update a build at `version` can install: one newer than
+    // it. An older or the same one is what an install by hand or a crash
+    // between the swap and its cleanup left, which the swap would refuse.
+    const installable = Effect.fn("Updater.staged")(function* (
+      version: string,
+    ) {
+      return Option.filter(yield* readManifest, (staged) =>
+        isNewer(staged.version, version),
+      );
+    });
+
     const clearStaged = removeAll(stagedDir);
 
     // What a crashed or superseded run leaves behind. An aside bundle
@@ -109,10 +122,7 @@ export const makeStaging = ({
         .readDirectory(dir)
         .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
       for (const name of names) {
-        if (
-          name.startsWith(`${base}.old-`) ||
-          name.startsWith(`.${base}.new-`)
-        ) {
+        if (isAsideName(base, name) || isIncomingName(base, name)) {
           yield* removeAll(path.join(dir, name));
         }
       }
@@ -226,14 +236,7 @@ export const makeStaging = ({
       Effect.map(
         run(
           "plutil",
-          [
-            "-extract",
-            "CFBundleShortVersionString",
-            "raw",
-            "-o",
-            "-",
-            path.join(bundle, "Contents", "Info.plist"),
-          ],
+          bundleVersionArgs(path.join(bundle, "Contents", "Info.plist")),
           "stdout",
         ),
         (read) => (read.ok ? read.output.trim() : ""),
@@ -282,9 +285,7 @@ export const makeStaging = ({
           yield* clearStaged;
           return Option.none<StagedManifest>();
         }
-        return Option.filter(yield* readManifest, (manifest) =>
-          newerThan(running, manifest.version),
-        );
+        return yield* installable(running.version);
       }
       const existing = yield* readManifest;
       if (
@@ -359,7 +360,14 @@ export const makeStaging = ({
       return Option.some(manifest);
     }, Effect.scoped);
 
-    return { lock, readManifest, clearStaged, bundleVersion, stageUpdate };
+    return {
+      lock,
+      readManifest,
+      installable,
+      clearStaged,
+      bundleVersion,
+      stageUpdate,
+    };
   });
 
 export type StagingArea = Effect.Success<ReturnType<typeof makeStaging>>;

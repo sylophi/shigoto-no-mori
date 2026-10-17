@@ -3,7 +3,6 @@ import type { UpdateRequest } from "@shigomori/contracts/schemas/runtime";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { type Flavor, flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
 import { pidAlive } from "../processes.ts";
 import {
@@ -32,7 +31,6 @@ import type { SwapArea } from "./swap.ts";
 import type { RestartArea } from "./restart.ts";
 
 export const makeMethods = ({
-  flavor,
   files,
   feeds,
   signatures,
@@ -40,7 +38,6 @@ export const makeMethods = ({
   swap,
   restart,
 }: {
-  readonly flavor: Flavor;
   readonly files: FilesArea;
   readonly feeds: FeedsArea;
   readonly signatures: SignaturesArea;
@@ -50,13 +47,11 @@ export const makeMethods = ({
 }) =>
   Effect.gen(function* () {
     const paths = yield* Paths.Paths;
-    // Which releases this build is offered, none for dev.
-    const offered = flavorNames(flavor).updates;
 
     const requestPath = files.at.request;
 
     const { run, writeShared, appRunning, runningApp, installedBundle } = files;
-    const { queryFeed } = feeds;
+    const { offered, queryFeed } = feeds;
     const { anchorOf } = signatures;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
@@ -65,11 +60,24 @@ export const makeMethods = ({
 
     // open hands the app launchd's environment, not ours, so a data dir
     // the environment chose (a test run's) is passed on, or the app
-    // would come back on the default one.
-    const relaunchArgs = (bundle: string) =>
-      paths.dataDirSource === "env"
-        ? ["--env", `SHIGOMORI_DATA_DIR=${paths.dataDir}`, bundle]
-        : [bundle];
+    // would come back on the default one; and a test build's update
+    // stand-ins, as the app's own relaunch passes them, or it would come
+    // back checking the real feeds.
+    const relaunchArgs = (
+      bundle: string,
+      endpoints: { readonly feedUrl?: string; readonly releasesUrl?: string },
+    ) => [
+      ...(paths.dataDirSource === "env"
+        ? ["--env", `SHIGOMORI_DATA_DIR=${paths.dataDir}`]
+        : []),
+      ...(endpoints.feedUrl
+        ? ["--env", `SHIGOMORI_UPDATE_FEED_URL=${endpoints.feedUrl}`]
+        : []),
+      ...(endpoints.releasesUrl
+        ? ["--env", `SHIGOMORI_UPDATE_RELEASES_URL=${endpoints.releasesUrl}`]
+        : []),
+      bundle,
+    ];
 
     const available =
       offered === null ? Effect.fail(new UpdatesUnavailable()) : Effect.void;
@@ -175,6 +183,8 @@ export const makeMethods = ({
     const finishInstall = Effect.fn("Updater.finishInstall")(function* (input: {
       readonly running: Running;
       readonly appPid: number;
+      readonly feedUrl?: string;
+      readonly releasesUrl?: string;
     }) {
       yield* available;
       if (input.appPid <= 0) return yield* new InvalidAppPid();
@@ -205,13 +215,13 @@ export const makeMethods = ({
         // than leaving it closed. A failed swap has restored it.
         Effect.tapError((error) =>
           failed(error, " (relaunching the current app)").pipe(
-            Effect.andThen(run("open", relaunchArgs(bundle))),
+            Effect.andThen(run("open", relaunchArgs(bundle, input))),
           ),
         ),
       );
       // By path, in front: the user asked for the restart. A bundle id could
       // still resolve to the aside bundle just deleted.
-      const relaunched = yield* run("open", relaunchArgs(bundle));
+      const relaunched = yield* run("open", relaunchArgs(bundle, input));
       if (!relaunched.ok) {
         const error = new RelaunchFailed({
           version: installed.version,

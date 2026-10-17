@@ -17,7 +17,8 @@ import { elapsedMillis } from "../elapsed.ts";
 import { errnoText } from "../platformErrors.ts";
 import { parse, SemVer } from "semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
-import { APP_REPO, formatKitchen } from "../updateFeed.ts";
+import { APP_REPO } from "../flavor.ts";
+import { formatKitchen, RELEASE_LIST_URL } from "../updateFeed.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // What failed underneath, with what failed under an HTTP request too.
@@ -472,19 +473,34 @@ export const upToDate = (running: Running): UpToDate => ({
   version: running.version,
 });
 
-// Whether `version` is a version newer than `than`.
+// What the swap leaves beside an app bundle named `base`, by the pid of
+// the run that made it: the new bundle on its way in, hidden, and the
+// installed one set aside, which a crash between the swap's two renames
+// leaves as the only copy of the app.
+export const incomingName = (base: string, pid: number) =>
+  `.${base}.new-${pid}`;
+export const asideName = (base: string, pid: number) => `${base}.old-${pid}`;
+export const isIncomingName = (base: string, name: string) =>
+  name.startsWith(`.${base}.new-`);
+export const isAsideName = (base: string, name: string) =>
+  name.startsWith(`${base}.old-`);
+
+// The read of a bundle's version (CFBundleShortVersionString) from its
+// Info.plist, the swap's and the doctor's alike.
+export const bundleVersionArgs = (infoPlist: string) => [
+  "-extract",
+  "CFBundleShortVersionString",
+  "raw",
+  "-o",
+  "-",
+  infoPlist,
+];
+
+// Two unparseable versions are never newer.
 export const isNewer = (version: string, than: string) => {
   const a = parse(version);
   const b = parse(than);
   return a !== null && b !== null && a.compare(b) > 0;
-};
-
-export const newerThan = (running: Running, version: string) => {
-  const current = parse(running.version);
-  const candidate = parse(version);
-  return (
-    current !== null && candidate !== null && candidate.compare(current) > 0
-  );
 };
 
 export const feedRequest = (url: string, running: Running) =>
@@ -541,7 +557,7 @@ export const updateServerUrl = (input: UpdateInput) =>
 export const releaseListUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.releasesUrl ?? "")
-    : `https://api.github.com/repos/${APP_REPO}/releases?per_page=100`;
+    : RELEASE_LIST_URL;
 
 export const feedFailed =
   (source: FeedFailed["source"]) =>

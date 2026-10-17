@@ -31,6 +31,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -876,6 +877,81 @@ describe("the release list", () => {
     );
     assert.equal(doc.version, "2.0.0-beta.5");
     assert.equal(seen.length, 0);
+  });
+});
+
+describe("the kept release list", () => {
+  it("answers for nothing once fetched later than now, the clock stepped back", async () => {
+    const box = newBox("2.0.0-beta.2");
+    mkdirSync(box.updates, { recursive: true });
+    const ahead = new Date(Date.now() + 24 * 3_600_000);
+    writeFileSync(
+      join(box.updates, "release-list.json"),
+      JSON.stringify({
+        url: LIST,
+        fetchedAt: ahead.toISOString(),
+        retryAt: ahead.toISOString(),
+        body: [listed("v2.0.0-beta.5")],
+      }),
+    );
+    const { client, seen } = network((url) =>
+      url.hostname === "api.github.com"
+        ? json([listed("v2.0.0-beta.6")])
+        : undefined,
+    );
+    const doc = await using({ box, http: client }, (u) =>
+      u.check({ running: running(box, "2.0.0-beta.2") }),
+    );
+    assert.equal(doc.version, "2.0.0-beta.6");
+    assert.equal(seen.length, 1);
+  });
+});
+
+describe("the kept release list after a rollback", () => {
+  it("waits out a rate limit it meets, though its copy was fetched later than now", async () => {
+    const box = newBox("2.0.0-beta.2");
+    mkdirSync(box.updates, { recursive: true });
+    const ahead = new Date(Date.now() + 24 * 3_600_000);
+    writeFileSync(
+      join(box.updates, "release-list.json"),
+      JSON.stringify({
+        url: LIST,
+        fetchedAt: ahead.toISOString(),
+        retryAt: "0001-01-01T00:00:00Z",
+        body: [listed("v2.0.0-beta.5")],
+      }),
+    );
+    const { client, seen } = network((url) =>
+      url.hostname === "api.github.com"
+        ? new Response(null, {
+            status: 429,
+            headers: { "retry-after": "1800" },
+          })
+        : undefined,
+    );
+    await using({ box, http: client }, (u) =>
+      Effect.gen(function* () {
+        yield* u.check({ running: running(box, "2.0.0-beta.2") });
+        yield* TestClock.adjust("1 minute");
+        yield* u.check({ running: running(box, "2.0.0-beta.2") });
+      }),
+    );
+    assert.equal(seen.length, 1);
+  });
+});
+
+describe("what is staged", () => {
+  it("is offered only when newer than the running build", async () => {
+    const box = newBox("1.5.0");
+    seedStaged(box, "1.2.0");
+    const offered = await using(
+      { box, http: network(() => undefined).client },
+      (u) => Effect.all([u.staged("1.5.0"), u.staged("1.0.0")]),
+    );
+    assert.deepEqual(
+      offered.map((one) => Option.map(one, ({ version }) => version)),
+      [Option.none(), Option.some("1.2.0")],
+    );
   });
 });
 

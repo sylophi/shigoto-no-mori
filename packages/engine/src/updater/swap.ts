@@ -11,6 +11,8 @@ import {
   NothingStaged,
   SignatureRejected,
   SwapFailed,
+  asideName,
+  incomingName,
   isNewer,
   polling,
 } from "./documents.ts";
@@ -60,7 +62,7 @@ export const makeSwap = ({
     ) {
       const dir = path.dirname(target);
       const base = path.basename(target);
-      const incoming = path.join(dir, `.${base}.new-${pid}`);
+      const incoming = path.join(dir, incomingName(base, pid));
       yield* removeAll(incoming);
       const moved = yield* fs.rename(staged, incoming).pipe(Effect.result);
       if (Result.isFailure(moved)) {
@@ -98,7 +100,7 @@ export const makeSwap = ({
         ),
         Effect.tapError(() => removeAll(incoming)),
       );
-      const aside = path.join(dir, `${base}.old-${pid}`);
+      const aside = path.join(dir, asideName(base, pid));
       yield* removeAll(aside);
       // One exchange where the volume can make it: the new bundle and the
       // installed one trade places in one step, so no moment, a crash's
