@@ -542,6 +542,49 @@ esac`,
     );
     assert.equal(await foxSurvives(located), true);
   });
+
+  // The checkout runs the user's hooks, so an interrupt reaches it: a
+  // hook that never ends doesn't hold a done that was asked to stop.
+  it("done stops when interrupted in a checkout hook that never ends", async () => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    execFileSync("git", ["clone", "-q", upstream, repo]);
+    box.git(repo, "checkout", "-q", "-b", "fox");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "fox");
+    const head = box.git(repo, "rev-parse", "HEAD").trim();
+    mergedGh(`echo '[{"number":5,"headRefOid":"${head}"}]'`);
+    const started = join(box.home, "hook-started");
+    const finished = join(box.home, "hook-finished");
+    writeFileSync(
+      join(repo, ".git", "hooks", "post-checkout"),
+      `#!/bin/sh\ntouch '${started}'\nsleep 30\ntouch '${finished}'\n`,
+      { mode: 0o755 },
+    );
+    await box.engine(
+      Effect.gen(function* () {
+        yield* (yield* Registry.Registry).register({
+          name: "repo",
+          path: repo,
+        });
+        const worktrees = yield* Worktrees.Worktrees;
+        const located = yield* worktrees.resolve(
+          yield* worktrees.here(repo),
+          {},
+        );
+        const landing = yield* Landing.Landing;
+        const fiber = yield* Effect.forkChild(
+          landing.done(located, { force: false }),
+        );
+        while (!existsSync(started)) yield* Effect.sleep("20 millis");
+        yield* Fiber.interrupt(fiber);
+      }),
+    );
+    assert.equal(
+      existsSync(finished),
+      false,
+      "the interrupt waited on the hook",
+    );
+  });
 });
 
 // A gh that never answers (a proxy's auth prompt, an SSO page it can't

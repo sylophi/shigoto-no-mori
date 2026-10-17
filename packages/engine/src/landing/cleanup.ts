@@ -6,7 +6,6 @@ import { errorDocument } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { PullRequestSummary } from "../GitHub.ts";
-import * as Config from "../Config.ts";
 import * as Paths from "../Paths.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
@@ -68,20 +67,18 @@ export const makeCleanup = ({
         return Option.some(logged.split("\n").filter((line) => line !== ""));
       });
 
-    const config = yield* Config.Config;
-    // Whether removing `worktree` under `options` deletes its branch, as
-    // the removal decides (the primary land's done deletes unless kept):
-    // what the commits guard is for.
+    // Whether the commits guard has a branch to keep: one a forced land
+    // skips it for, a primary land's done deletes unless kept, and any
+    // other's removal decides (Worktrees.deletesBranch).
     const deletesBranch = (
       worktree: Worktrees.WorktreeIdentity,
       options: RemoveOptions,
     ) =>
-      Effect.gen(function* () {
-        if (options.force || options.keepBranch) return false;
-        if (worktree.isPrimary) return true;
-        if (worktree.isExternal) return false;
-        return yield* config.device("deleteBranchOnRemove");
-      });
+      options.force
+        ? Effect.succeed(false)
+        : worktree.isPrimary
+          ? Effect.succeed(!options.keepBranch)
+          : worktrees.deletesBranch(worktree, options.keepBranch);
 
     // Refuses the delete of `branch` when PR #`number`'s head, `head`,
     // lacks any of its commits, or can't be read to tell.
@@ -197,20 +194,32 @@ export const makeCleanup = ({
       deleteBranch: boolean,
     ) =>
       Effect.gen(function* () {
-        yield* git.checkoutBranch(
-          worktree.path,
-          target.primaryRef,
-          target.remotes,
+        // The checkout stays interruptible, since it runs the user's
+        // hooks; once it is done the delete follows uninterrupted, since an
+        // interrupt between them would leave the branch for good (a done
+        // again from the primary branch finds nothing to delete).
+        const deleted = yield* Effect.uninterruptibleMask((restore) =>
+          restore(
+            git.checkoutBranch(
+              worktree.path,
+              target.primaryRef,
+              target.remotes,
+            ),
+          ).pipe(
+            Effect.andThen(
+              !deleteBranch || worktree.branch === target.primaryBranch
+                ? Effect.succeed(false)
+                : Effect.as(
+                    git.deleteBranch({
+                      repo: project.path,
+                      name: worktree.branch,
+                      force: true,
+                    }),
+                    true,
+                  ),
+            ),
+          ),
         );
-        let deleted = false;
-        if (deleteBranch && worktree.branch !== target.primaryBranch) {
-          yield* git.deleteBranch({
-            repo: project.path,
-            name: worktree.branch,
-            force: true,
-          });
-          deleted = true;
-        }
         if (target.remote === "") return { deleted };
         const pulled = yield* ffPull(
           worktree.path,

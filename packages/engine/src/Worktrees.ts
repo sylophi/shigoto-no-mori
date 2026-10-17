@@ -66,6 +66,7 @@ export {
   UnknownWorktree,
   WorktreeRefused,
   cleanupErrorOf,
+  cleanupFailureWords,
   isPrimaryKeyword,
   isShelfable,
   projectsHint,
@@ -262,6 +263,12 @@ export class Worktrees extends Context.Service<
       | OrphanedWorktree
       | Git.GitError
     >;
+    // Whether removing `worktree` deletes its branch: never an external
+    // or a detached one's, or one kept, else as the device's setting says.
+    readonly deletesBranch: (
+      worktree: WorktreeIdentity,
+      keepBranch: boolean,
+    ) => Effect.Effect<boolean>;
     // The guards every removal shares: never the primary checkout, and no
     // uncommitted or unreadable worktree unless forced.
     readonly checkRemovable: (
@@ -406,6 +413,7 @@ const make = Effect.gen(function* () {
     rekey,
     forgetKept: kept.forgetRows,
     relocateProject,
+    deletesBranch: removing.deletesBranch,
     checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
       located: Located,
       force: boolean,

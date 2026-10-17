@@ -126,7 +126,7 @@ export const makeVerbs = ({
         // A stack a merge queue took (or one layer of it) is still open:
         // the app reads a document with no outcome as merged.
         return queued
-          ? { ok: true, method, outcome: "queued" }
+          ? { ok: true, method, outcome: "queued" as const }
           : { ok: true, method };
       });
 
@@ -329,7 +329,11 @@ export const makeVerbs = ({
           }
           // The merge can wait minutes on GitHub, time enough for new work
           // in any of the worktrees, so the guards run again, on the heads
-          // the PRs merged with.
+          // the PRs merged with, this worktree's own removal guard first,
+          // as a single land's.
+          if (!worktree.isPrimary) {
+            yield* worktrees.checkRemovable(located, options.force);
+          }
           if (guarded) {
             yield* guardCommits(
               project.path,

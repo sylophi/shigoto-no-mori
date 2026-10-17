@@ -163,10 +163,19 @@ const make = Effect.gen(function* () {
       ...refs,
     ]);
     const { size } = yield* fs.stat(path.resolve(repo, out)).pipe(Effect.orDie);
+    // What the bundle holds: git leaves out a ref a have already has.
+    const heads = new Set(
+      (yield* git.run(repo, ["bundle", "list-heads", "--end-of-options", out]))
+        .split("\n")
+        .map((line) => line.slice(line.indexOf(" ") + 1)),
+    );
     return {
       path: out,
       bytes: Number(size),
-      refs: yield* tips(repo, refs),
+      refs: yield* tips(
+        repo,
+        refs.filter((ref) => heads.has(ref)),
+      ),
       skippedHaves: skipped.length === 0 ? null : skipped,
     };
   });

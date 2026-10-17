@@ -183,6 +183,24 @@ export const makeRemoving = ({
         Effect.andThen(requireClean(worktree, force, "remove", "")),
       );
 
+    // Whether removing `worktree` deletes its branch: never an external
+    // worktree's, a detached one's (it has none), or one kept, else as the
+    // device's setting says.
+    const deletesBranch = Effect.fn("Worktrees.deletesBranch")(function* (
+      worktree: WorktreeIdentity,
+      keepBranch: boolean,
+    ) {
+      if (
+        keepBranch ||
+        worktree.isExternal ||
+        worktree.detached ||
+        worktree.branch === UNKNOWN_BRANCH
+      ) {
+        return false;
+      }
+      return yield* config.device("deleteBranchOnRemove");
+    });
+
     const remove = Effect.fn("Worktrees.remove")(function* (
       located: Located,
       options: {
@@ -200,7 +218,7 @@ export const makeRemoving = ({
       yield* options.preflighted
         ? notPrimary(worktree)
         : removable(worktree, options.force);
-      const deleteBranchOnRemove = yield* config.device("deleteBranchOnRemove");
+      const deletingBranch = yield* deletesBranch(worktree, options.keepBranch);
       // Never for an external worktree: no provision ever ran.
       let cleanupRan = false;
       if (!worktree.isExternal && !options.skipCleanup) {
@@ -307,12 +325,7 @@ export const makeRemoving = ({
       if (!worktree.isExternal) {
         yield* pruneEmptyParents(worktree.path, project.path);
       }
-      if (
-        !options.keepBranch &&
-        deleteBranchOnRemove !== false &&
-        !worktree.isExternal &&
-        worktree.branch !== UNKNOWN_BRANCH
-      ) {
+      if (deletingBranch) {
         // The branch may be shared, or the primary's: a failure is fine.
         yield* git
           .run(project.path, ["branch", "-D", "--", worktree.branch])
@@ -333,6 +346,7 @@ export const makeRemoving = ({
       removeCheckout,
       pruneEmptyParents,
       removable,
+      deletesBranch,
       remove,
     };
   });
