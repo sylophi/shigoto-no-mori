@@ -315,10 +315,12 @@ export class Git extends Context.Service<
       readonly commit: string;
       readonly expected?: string | undefined;
     }) => Effect.Effect<void, GitError>;
-    // A missing ref is fine.
+    // A missing ref is fine. With `expected`, only while it holds that
+    // commit.
     readonly deleteRef: (
       repo: string,
       ref: string,
+      expected?: string,
     ) => Effect.Effect<void, GitError>;
     // Tips of every local branch, deduped, at most 256 (a thin
     // bundle's haves).
@@ -971,8 +973,14 @@ const make = Effect.gen(function* () {
         ...(input.expected === undefined ? [] : [input.expected]),
       ]);
     }),
-    deleteRef: Effect.fn("Git.deleteRef")(function* (repo, ref) {
-      yield* run(repo, ["update-ref", "-d", "--end-of-options", ref]);
+    deleteRef: Effect.fn("Git.deleteRef")(function* (repo, ref, expected) {
+      yield* run(repo, [
+        "update-ref",
+        "-d",
+        "--end-of-options",
+        ref,
+        ...(expected === undefined ? [] : [expected]),
+      ]);
     }),
     localBranchTips: Effect.fn("Git.localBranchTips")(function* (repo) {
       const tips = splitLines(

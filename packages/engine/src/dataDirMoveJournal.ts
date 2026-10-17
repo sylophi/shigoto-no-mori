@@ -30,6 +30,10 @@ export const Journal = Schema.Struct({
       projectId: Schema.String,
       oldPath: Schema.String,
       newPath: Schema.String,
+      // The commit of the worktree's dirty capture before the re-key,
+      // null for none: an undo carries back that one alone. A journal
+      // from before it was written has none, and carries none back.
+      capture: Schema.optional(Schema.NullOr(Schema.String)),
     }),
   ),
 });

@@ -649,7 +649,7 @@ export const makeMoving = ({
       project: RegisteredProject,
       from: string,
       toPath: string,
-      options: { readonly back?: boolean } = {},
+      options: { readonly only?: string | null } = {},
     ) {
       const to = worktreeIdFromPath(cleanPath(toPath));
       if (to !== from) yield* kept.rekey(project, from, to, options);

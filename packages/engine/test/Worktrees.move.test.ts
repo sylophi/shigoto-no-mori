@@ -328,7 +328,7 @@ it("never writes a capture over one kept under the id it re-keys to, either way"
       const forward = yield* Effect.flip(
         worktrees.rekey(project, from, toPath),
       );
-      yield* worktrees.rekey(project, to, fromPath, { back: true });
+      yield* worktrees.rekey(project, to, fromPath, { only: own });
       const tip = (id: string) =>
         box.git(repo, "rev-parse", `refs/shigomori/dirty/${id}`).trim();
       return {
@@ -339,4 +339,38 @@ it("never writes a capture over one kept under the id it re-keys to, either way"
     }),
   )) as { occupied: boolean; own: boolean; stale: boolean };
   assert.deepEqual(result, { occupied: true, own: true, stale: true });
+});
+
+// An undo's re-key back carries the capture its re-key found and no
+// other: one kept under the new id from before stays there, though the
+// old id holds none.
+it("carries back only the capture the re-key found, none when it found none", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const fromPath = join(box.home, "here", "fox");
+      const toPath = join(box.home, "elsewhere", "fox");
+      const from = worktreeIdFromPath(fromPath);
+      const to = worktreeIdFromPath(toPath);
+      const stale = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, stale);
+      yield* worktrees.rekey(project, from, toPath);
+      yield* worktrees.rekey(project, to, fromPath, { only: null });
+      const has = (id: string) =>
+        box
+          .git(
+            repo,
+            "for-each-ref",
+            "--format=%(objectname)",
+            `refs/shigomori/dirty/${id}`,
+          )
+          .trim();
+      return { from: has(from), to: has(to) };
+    }),
+  )) as { from: string; to: string };
+  const stale = box.git(repo, "rev-parse", "HEAD").trim();
+  assert.deepEqual(result, { from: "", to: stale });
 });

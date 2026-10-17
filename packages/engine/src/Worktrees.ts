@@ -352,13 +352,14 @@ export class Worktrees extends Context.Service<
     >;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
-    // `back` undoes an earlier re-key, where a capture already kept at
-    // `toPath`'s id is the one that never left.
+    // `only` names the dirty capture to carry by its commit (null: none),
+    // as an undo knows what its re-key found: anything else under `from`
+    // stays, and one kept at `toPath`'s id is left beside it.
     readonly rekey: (
       project: RegisteredProject,
       from: string,
       toPath: string,
-      options?: { readonly back?: boolean },
+      options?: { readonly only?: string | null },
     ) => Effect.Effect<string, CaptureNotCarried>;
     // Points a project whose repo was moved or renamed by hand at where
     // it is now (an absolute path, any folder inside it will do), keeping

@@ -26,10 +26,12 @@
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -50,6 +52,7 @@ import {
   resumeLayer,
 } from "../host/lib/dataDirMove.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
   JOURNAL,
   rescueStrandedMove,
@@ -323,6 +326,35 @@ it("a kept journal of a copied move never deletes a folder made at the old place
   rmSync(old, { recursive: true });
 });
 
+it("a copied move whose old tree couldn't be removed keeps its journal, and the next start removes it", async () => {
+  const old = join(elsewhere, "old-data-stuck");
+  const stuck = join(old, "stuck");
+  mkdirSync(stuck, { recursive: true });
+  writeFileSync(join(stuck, "file"), "");
+  const journal = JSON.stringify({
+    from: old,
+    to: engineDataDir,
+    partial: `${engineDataDir}.partial-stuck`,
+    pid: 4_194_304,
+    startedAt: 0,
+    moved: [],
+  });
+  writeFileSync(join(old, JOURNAL), journal);
+  writeFileSync(join(engineDataDir, JOURNAL), journal);
+  chmodSync(stuck, 0o555);
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(existsSync(join(old, JOURNAL)), true, "the old tree still ours");
+  assert.equal(
+    existsSync(join(engineDataDir, JOURNAL)),
+    true,
+    "the journal kept with the old tree owed",
+  );
+  chmodSync(stuck, 0o755);
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(existsSync(old), false, "the old tree removed");
+  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+});
+
 it("keeps a move journal it can't read, which may be all that says what a move left", async () => {
   const journal = join(engineDataDir, JOURNAL);
   writeFileSync(journal, "not a journal");
@@ -586,6 +618,67 @@ it.each([
     );
     assert.equal(moved, "stop before the folder moves");
     assert.equal(await titleOf(identity.id), "Fox", "undone");
+  },
+);
+
+const ref = (id: string) => `refs/shigomori/dirty/${id}`;
+
+// A move undone before its folder moved carries back the dirty capture
+// its re-key carried, and no other: with none of the worktree's own, one
+// kept under its new id from before stays there.
+it.each([
+  ["none of its own, one kept under the new id", false],
+  ["its own", true],
+])(
+  "an undone move carries back the capture its re-key found: %s",
+  async (_name, own) => {
+    const repo = join(elsewhere, "repo");
+    const identity = (
+      await runHost(Ops.listWorktreeIdentities({ projectId }))
+    ).find((row) => row.path === fox);
+    assert.ok(identity !== undefined);
+    const parent = join(elsewhere, `captures-${String(own)}`);
+    mkdirSync(parent);
+    const newId = worktreeIdFromPath(
+      join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+    );
+    const head = git(repo, "rev-parse", "HEAD").trim();
+    git(repo, "update-ref", ref(own ? identity.id : newId), head);
+    const failed = await runHost(
+      moveDataDir(parent, {
+        place: {
+          dataDir: engineDataDir,
+          pointerFile: join(
+            elsewhere,
+            `config-captures-${String(own)}`,
+            "data-dir",
+          ),
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        // The re-key is done by now: an own capture is under the new id.
+        beforeMove: Effect.gen(function* () {
+          const tip = git(
+            repo,
+            "for-each-ref",
+            "--format=%(objectname)",
+            ref(newId),
+          ).trim();
+          assert.equal(tip, head);
+          return yield* Effect.fail("stop before the folder moves");
+        }),
+        killAllScripts: Effect.void,
+      }).pipe(Effect.flip),
+    );
+    assert.equal(failed, "stop before the folder moves");
+    const tip = (id: string) =>
+      git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
+    assert.deepEqual(
+      { own: tip(identity.id), kept: tip(newId) },
+      own ? { own: head, kept: "" } : { own: "", kept: head },
+    );
+    git(repo, "update-ref", "-d", ref(own ? identity.id : newId));
   },
 );
 
