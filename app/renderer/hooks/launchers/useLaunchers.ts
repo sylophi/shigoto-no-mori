@@ -26,6 +26,8 @@ interface LauncherForProjectResult {
   readonly hiddenCount: number;
 }
 
+const LAUNCHER_ROW_STALE_MS = 5 * 60_000;
+
 export function useLauncherForProject(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<LauncherForProjectResult>({
@@ -35,11 +37,11 @@ export function useLauncherForProject(projectId: string | null) {
         ? ({ signal }) =>
             api.run(api.launchers.forProject({ projectId }), { signal })
         : skipToken,
-    // Lock the order for the lifetime of the route mount. The page picks
-    // up a fresh list when the user navigates in, but never reshuffles
-    // under them on window focus or reconnect.
-    staleTime: Number.POSITIVE_INFINITY,
-    refetchOnMount: "always",
+    // The order holds while the user works (a palette opened over the
+    // row reads the same list), and on window focus or reconnect; a visit
+    // after a few minutes reads it again, a tool installed meanwhile
+    // included.
+    staleTime: LAUNCHER_ROW_STALE_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     meta: { errorTitle: "Couldn't load launchers" },

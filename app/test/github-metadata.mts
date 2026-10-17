@@ -2,7 +2,8 @@
 // kept as "none": the host fails the merge-settings read when gh's call
 // fails, rather than answering null (the UI's "every method allowed"),
 // and asks gh again next time; the window asks again after a failure,
-// and keeps an answer for the host's hour, not the session.
+// keeps an answer for the host's hour, not the session, and a "gh not
+// ready" null for half a minute.
 //
 // Drives the real host code against a fake gh on PATH whose GraphQL
 // call fails until a marker file exists, as a network that comes back.
@@ -82,7 +83,7 @@ it("the host fails a merge-settings read gh could not make, and asks gh again ne
   });
 });
 
-it("the window asks again after a failed read, and keeps an answer for an hour, not the session", async () => {
+it("the window asks again after a failed read, keeps a not-ready null half a minute and an answer an hour, not the session", async () => {
   vi.useFakeTimers();
   try {
     let asks = 0;
@@ -118,17 +119,27 @@ it("the window asks again after a failed read, and keeps an answer for an hour, 
     assert.equal(asks, 2, "a failed read was not asked again");
     assert.equal(client.getQueryData(options.queryKey), null);
     first();
-    // Within the hour, a page opening keeps the answer.
-    const second = observe();
+    // A null (gh not ready) is asked again once its half minute is up,
+    // and a page opening within it keeps it.
+    const soon = observe();
     await vi.advanceTimersByTimeAsync(0);
     assert.equal(asks, 2);
-    second();
-    // Past it, the next page asks again.
+    soon();
     answer = { merge: true, squash: true, rebase: true, autoMerge: false };
+    await vi.advanceTimersByTimeAsync(31_000);
+    const signedIn = observe();
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(asks, 3, "a not-ready null was kept past its half minute");
+    signedIn();
+    // An answer stands for the hour, and past it the next page asks.
+    const second = observe();
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(asks, 3);
+    second();
     await vi.advanceTimersByTimeAsync(60 * 60_000);
     const third = observe();
     await vi.advanceTimersByTimeAsync(0);
-    assert.equal(asks, 3, "an answer was kept past the hour");
+    assert.equal(asks, 4, "an answer was kept past the hour");
     third();
     client.clear();
   } finally {

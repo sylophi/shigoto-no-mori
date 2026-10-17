@@ -82,6 +82,8 @@ export const githubCliContract = defineContract(
     PullRequestCheckoutRefSchema,
     { remote: true, gated: true, grant: "changeCode" },
   ),
+  // Null when gh is not ready or the repo is not on GitHub; a failed
+  // read rejects.
   invoke(
     "repoMergeConfig",
     ProjectScopedPayloadSchema,

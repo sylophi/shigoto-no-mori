@@ -10,7 +10,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 const NONE: readonly string[] = [];
-// As long as the host trusts a repo's remotes (GithubCli's REPO_TTL).
+// A remote added or changed shows within minutes.
 const CLONE_URL_STALE_MS = 5 * 60_000;
 
 export function useProjectImageHosts(projectId: string): readonly string[] {
