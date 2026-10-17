@@ -26,7 +26,7 @@ import { errnoText, isNotFound } from "../platformErrors.ts";
 import { INCOMING_PREFIX } from "../Bundle.ts";
 import * as Registry from "../Registry.ts";
 import type { ListedProject, RegisteredProject } from "../Registry.ts";
-import { isStagingName, worktreeIdFromPath } from "../worktreeLayout.ts";
+import { isStagingName } from "../worktreeLayout.ts";
 import * as Worktrees from "../Worktrees.ts";
 import { scriptOf, type WorktreeIdentity } from "../Worktrees.ts";
 import * as WtFolder from "../WtFolder.ts";
@@ -248,40 +248,6 @@ export const makeProjectChecks = ({
         };
       });
 
-    // `git worktree repair` on the new paths, then what is kept by id
-    // carried from each old path's id to the new one. git repairs each
-    // path on its own and fails if any failed, so the ones it did re-link
-    // are re-keyed whatever it answers.
-    const relink = (
-      project: RegisteredProject,
-      moved: ReadonlyMap<string, string>,
-    ) =>
-      Effect.gen(function* () {
-        const worktrees = yield* Worktrees.Worktrees;
-        const repaired = yield* git
-          .run(project.path, ["worktree", "repair", "--", ...moved.values()])
-          .pipe(Effect.result);
-        const now = Option.getOrElse(
-          yield* worktrees.identities(project).pipe(Effect.option),
-          () => [],
-        );
-        for (const [oldPath, newPath] of moved) {
-          const resolved = yield* realPath(newPath);
-          const found = now.find(
-            (id) =>
-              id.path === newPath ||
-              (Option.isSome(resolved) && id.path === resolved.value),
-          );
-          if (found === undefined) continue;
-          yield* worktrees.rekey(
-            project,
-            worktreeIdFromPath(oldPath),
-            found.path,
-          );
-        }
-        if (Result.isFailure(repaired)) return yield* repaired.failure;
-      });
-
     // `git worktree prune`, checked again when it runs: a moved worktree
     // still waiting to be re-linked would be severed by it. What sm keeps
     // per worktree goes with each pruned one, as with `sm rm`, all but a
@@ -339,7 +305,9 @@ export const makeProjectChecks = ({
                 label: `re-linked ${n} moved worktree${plural(n)} for ${project.name}`,
                 destructive: false,
                 writesStore: true,
-                apply: relink(project, drift.moved),
+                apply: Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+                  worktrees.relink(project, drift.moved),
+                ),
               },
             ),
           );

@@ -326,6 +326,12 @@ export class Worktrees extends Context.Service<
       project: RegisteredProject,
       worktreeId: string,
     ) => Effect.Effect<void>;
+    // Worktrees moved by hand (old path to new) re-linked by git, what
+    // each kept carried to its id there, and a failed repair said after.
+    readonly relink: (
+      project: RegisteredProject,
+      moved: ReadonlyMap<string, string>,
+    ) => Effect.Effect<void, Git.GitError>;
     // Where each managed worktree would go under `proposed` layout
     // settings, and whether it is there already, by the folder's identity.
     readonly relocationPlan: (
@@ -391,7 +397,7 @@ const make = Effect.gen(function* () {
   const { removable, remove } = removing;
   const { move, carryMoved, rename, rekey, resume, interrupted } = moving;
   const { adopt, setup } = adopting;
-  const { relocateProject, relocationPlan } = relocating;
+  const { relocateProject, relocationPlan, relink } = relocating;
 
   return Worktrees.of({
     identities,
@@ -430,6 +436,7 @@ const make = Effect.gen(function* () {
     relocateProject,
     deletesBranch: removing.deletesBranch,
     relocationPlan,
+    relink,
     checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
       located: Located,
       force: boolean,

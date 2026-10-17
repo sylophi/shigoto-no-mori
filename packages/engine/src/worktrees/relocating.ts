@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Git from "../Git.ts";
 import type { WorktreeEntry } from "../gitParse.ts";
@@ -98,18 +99,18 @@ export const makeRelocating = ({
         return moved;
       });
 
-    // `git worktree repair` for the moved ones, and the ids what each kept
-    // moves between, from its old id to the one git lists it under now.
-    // git repairs each path on its own, so the ones it did re-link count
-    // whatever it answers.
+    // `git worktree repair` for the moved ones (old path to new), and the
+    // ids what each kept moves between, from its old id to the one git
+    // lists it under now. git repairs each path on its own, so the ones
+    // it did re-link count whatever it answers, and `repaired` says it.
     const rekeysOf = (
       project: RegisteredProject,
       moved: ReadonlyMap<string, string>,
     ) =>
       Effect.gen(function* () {
-        yield* git
+        const repaired = yield* git
           .run(project.path, ["worktree", "repair", "--", ...moved.values()])
-          .pipe(Effect.ignore);
+          .pipe(Effect.result);
         const found = yield* identities(project).pipe(
           Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
         );
@@ -126,8 +127,19 @@ export const makeRelocating = ({
           const from = worktreeIdFromPath(oldPath);
           if (from !== now.id) rekeys.push([from, now.id]);
         }
-        return rekeys;
+        return { rekeys, repaired };
       });
+
+    // Worktrees moved by hand re-linked, what each kept carried to its id
+    // there, and git's repair failure said after.
+    const relink = Effect.fn("Worktrees.relink")(function* (
+      project: RegisteredProject,
+      moved: ReadonlyMap<string, string>,
+    ) {
+      const { rekeys, repaired } = yield* rekeysOf(project, moved);
+      for (const [from, to] of rekeys) yield* kept.rekey(project, from, to);
+      if (Result.isFailure(repaired)) return yield* repaired.failure;
+    });
 
     // The managed bases are named after the repo's folder, so a rename
     // would leave the managed worktrees reading as external. Each moves to
@@ -192,7 +204,7 @@ export const makeRelocating = ({
         if (listed.includes(to)) return yield* refuse("terrier-lists-new", to);
         const moved = yield* movedAlong(to, project.path);
         moved.set(project.path, to);
-        const rekeys = yield* rekeysOf(
+        const { rekeys } = yield* rekeysOf(
           { id: project.id, name: path.basename(to), path: to },
           moved,
         );
@@ -265,5 +277,5 @@ export const makeRelocating = ({
       );
     });
 
-    return { relocateProject, relocationPlan };
+    return { relocateProject, relocationPlan, relink };
   });
