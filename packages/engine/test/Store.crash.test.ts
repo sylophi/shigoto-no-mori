@@ -114,35 +114,37 @@ const contents = (dir: string) =>
 // The fixture's open of the store in a process of its own, which kills
 // itself just before its `killAt`th event, a statement or a file removal
 // (fixtures/killAt.ts; none: let it finish). Answers whether it finished,
-// and how many events a finished run made.
+// the signal that ended it, and how many events a finished run made.
 const openIn = (dir: string, killAt?: number) =>
-  new Promise<{ readonly finished: boolean; readonly events: number }>(
-    (resolve) => {
-      const child = spawn(
-        process.execPath,
-        [join(import.meta.dirname, "fixtures", "openStore.ts")],
-        {
-          env: {
-            ...process.env,
-            SHIGOMORI_DATA_DIR: dir,
-            SHIGOMORI_COUNT_EVENTS: "1",
-            ...(killAt === undefined
-              ? {}
-              : { SHIGOMORI_KILL_AT: String(killAt) }),
-          },
-          stdio: ["ignore", "pipe", "ignore"],
+  new Promise<{
+    readonly finished: boolean;
+    readonly signal: NodeJS.Signals | null;
+    readonly events: number;
+  }>((resolve) => {
+    const child = spawn(
+      process.execPath,
+      [join(import.meta.dirname, "fixtures", "openStore.ts")],
+      {
+        env: {
+          ...process.env,
+          SHIGOMORI_DATA_DIR: dir,
+          SHIGOMORI_COUNT_EVENTS: "1",
+          ...(killAt === undefined
+            ? {}
+            : { SHIGOMORI_KILL_AT: String(killAt) }),
         },
-      );
-      let said = "";
-      child.stdout.on("data", (chunk: Buffer) => {
-        said += chunk.toString();
-      });
-      child.once("close", (code) => {
-        const events = /^events (\d+)$/m.exec(said)?.[1];
-        resolve({ finished: code === 0, events: Number(events ?? 0) });
-      });
-    },
-  );
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+    let said = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      said += chunk.toString();
+    });
+    child.once("close", (code, signal) => {
+      const events = /^events (\d+)$/m.exec(said)?.[1];
+      resolve({ finished: code === 0, signal, events: Number(events ?? 0) });
+    });
+  });
 
 const copy = (name: string) => {
   const dir = join(root, name);
@@ -164,10 +166,9 @@ it("an import killed anywhere in its run is whole after the next open", async ()
   const steps = 40;
   for (let step = 0; step < steps; step++) {
     const dir = copy(`cut-${step}`);
-    // Spread over the whole run, the first event to the last.
-    const killAt = 1 + Math.floor((step * events) / steps);
+    const killAt = 1 + Math.round((step * (events - 1)) / (steps - 1));
     const cut = await openIn(dir, killAt);
-    assert.equal(cut.finished, false, `not killed at event ${killAt}`);
+    assert.equal(cut.signal, "SIGKILL", `not killed at event ${killAt}`);
     const after = await contents(dir);
     assert.deepEqual(after.held, reference.held, `killed at event ${killAt}`);
     const left = V2_FILES.filter((file) => existsSync(join(dir, file)));
