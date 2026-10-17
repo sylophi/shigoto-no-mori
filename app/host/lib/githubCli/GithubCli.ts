@@ -58,14 +58,19 @@ export class GithubCli extends Context.Service<
     // The gate for read paths: gh ready, and the repo on a GitHub
     // remote. Mutations check the reason so their errors stay specific.
     readonly readyForRepo: (cwd: string) => Effect.Effect<boolean>;
-    // Null when gh can't say.
+    // Null when gh is not ready or the repo is not on GitHub. A gh call
+    // that fails (the network, an expired token) fails rather than reads
+    // as null, so the renderer asks again instead of keeping "every
+    // method allowed".
     readonly mergeConfig: (
       cwd: string,
-    ) => Effect.Effect<RepoMergeConfig | null>;
+    ) => Effect.Effect<
+      RepoMergeConfig | null,
+      Processes.CommandError | Schema.SchemaError
+    >;
     // The repo's one-line About, null for none, no GitHub remote or the
     // integration off. gh missing or signed out fails rather than reads
-    // as null, so the renderer, which keeps the answer for the launch,
-    // asks again instead of keeping a blank.
+    // as null, so the renderer asks again instead of keeping a blank.
     readonly description: (
       cwd: string,
     ) => Effect.Effect<
@@ -94,6 +99,8 @@ const KNOWN_HOSTS_TTL = Duration.hours(1);
 const REPO_TTL = Duration.minutes(5);
 // Merge-button settings barely change within a session.
 const MERGE_CONFIG_TTL = Duration.hours(1);
+// An About is rarely edited, and one that is can wait this long.
+const DESCRIPTION_TTL = Duration.hours(1);
 // A repo's people and labels change rarely, and the create pull request
 // dialog reopens often.
 const PULL_REQUEST_OPTIONS_TTL = Duration.minutes(5);
@@ -282,8 +289,7 @@ const make = Effect.gen(function* () {
     { capacity: Infinity, timeToLive: answersFor(PULL_REQUEST_OPTIONS_TTL) },
   );
 
-  // Read once per launch and keyed by the repo (host/owner/repo), so
-  // clones of one repo share it: an About is rarely edited, and one that is can wait.
+  // Keyed by the repo (host/owner/repo), so clones of one repo share it.
   const descriptions = yield* Cache.makeWith(
     (slug: string) =>
       gh(
@@ -298,7 +304,7 @@ const make = Effect.gen(function* () {
         Effect.map(({ stdout }) => stdout.trim() || null),
         withGh,
       ),
-    { capacity: Infinity, timeToLive: answersFor(Duration.infinity) },
+    { capacity: Infinity, timeToLive: answersFor(DESCRIPTION_TTL) },
   );
 
   const unavailableReason = Effect.gen(function* () {
@@ -344,9 +350,7 @@ const make = Effect.gen(function* () {
     readyForRepo,
     mergeConfig: Effect.fn("GithubCli.mergeConfig")(function* (cwd) {
       if (!(yield* readyForRepo(cwd))) return null;
-      return yield* Cache.get(mergeConfigs, cwd).pipe(
-        Effect.orElseSucceed(() => null),
-      );
+      return yield* Cache.get(mergeConfigs, cwd);
     }),
     // The repo the app takes the project for (its GitHub links open
     // it), not gh's base repo, which for a fork is the parent.
