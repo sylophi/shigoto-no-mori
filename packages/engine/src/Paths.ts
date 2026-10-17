@@ -1,4 +1,5 @@
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -79,6 +80,9 @@ export class Paths extends Context.Service<
     // The pointer file read while finding the data dir, none when there
     // was none or SHIGOMORI_DATA_DIR made it moot.
     readonly pointer: Option.Option<PointerFile>;
+    // Where the data dir is found now, which a move committed since this
+    // process found it makes another place than `dataDir`.
+    readonly current: Effect.Effect<string>;
     readonly holdsState: (dir: string) => Effect.Effect<StateProbe>;
   }
 >()("sm/engine/Paths") {}
@@ -197,24 +201,33 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     return { dataDir: current, source: "default" as const, pointer };
   });
 
-  // A move a crash cut before its pointer moved: committed, and the data
-  // dir found again where the move left it, before any process can make
-  // a fresh store at the folder that left.
-  let resolved = yield* resolve;
-  if (
-    resolved.source !== "env" &&
-    !(yield* fs.exists(resolved.dataDir).pipe(Effect.orElseSucceed(() => true)))
-  ) {
+  // The environment as this process found it, which a later read sees
+  // too.
+  const provider = yield* ConfigProvider.ConfigProvider;
+
+  // Where the data dir is found, with a move a crash cut before its
+  // pointer moved committed first, and the data dir found again where the
+  // move left it, before any process can make a fresh store at the folder
+  // that left.
+  const locate = Effect.gen(function* () {
+    const found = yield* resolve;
+    if (
+      found.source === "env" ||
+      (yield* fs.exists(found.dataDir).pipe(Effect.orElseSucceed(() => true)))
+    ) {
+      return found;
+    }
     yield* rescueStrandedMove({
-      named: resolved.dataDir,
+      named: found.dataDir,
       pointerFile,
       legacyPointerFile,
       defaultDataDir,
     });
     // Found again either way: another process may have made the same
     // rescue first.
-    resolved = yield* resolve;
-  }
+    return yield* resolve;
+  });
+  const resolved = yield* locate;
 
   return Paths.of({
     home,
@@ -230,6 +243,15 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     legacyPointerFile,
     defaultDataDir,
     pointer: resolved.pointer,
+    // Its one failure, a retired variable, would have stopped the start.
+    // A rescue that can't commit leaves the folder that left, which is
+    // gone.
+    current: Effect.map(locate, ({ dataDir }) => dataDir).pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, provider),
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.orElseSucceed(() => resolved.dataDir),
+    ),
     holdsState,
   });
 });

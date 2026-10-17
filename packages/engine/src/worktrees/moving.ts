@@ -466,7 +466,8 @@ export const makeMoving = ({
               )
               .pipe(Effect.orDie);
           }
-          captured = yield* kept.rekeyCapture(project, from, moved.id);
+          captured =
+            (yield* kept.rekeyCapture(project, from, moved.id)) === "followed";
           yield* carryLease(fromPath, moved);
         }
         return { row: yield* row({ project, worktree: moved }), captured };
@@ -648,9 +649,13 @@ export const makeMoving = ({
       project: RegisteredProject,
       from: string,
       toPath: string,
+      options: {
+        readonly expect?: string | null;
+        readonly back?: boolean;
+      } = {},
     ) {
       const to = worktreeIdFromPath(cleanPath(toPath));
-      if (to !== from) yield* kept.rekey(project, from, to);
+      if (to !== from) yield* kept.rekey(project, from, to, options);
       return to;
     });
     return { move, carryMoved, rename, rekey, resume, interrupted };

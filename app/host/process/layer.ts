@@ -45,7 +45,6 @@ import * as GitWatcher from "@host/lib/GitWatcher";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
-import { resumeLayer } from "@host/lib/dataDirMove";
 import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
@@ -298,11 +297,6 @@ const scriptsAndFoundation = (options: {
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.layer),
-    // A data-folder move a crash cut short, finished or undone before
-    // anything reads a worktree by its id.
-    Layer.provideMerge(
-      logged("the data folder's unfinished move", resumeLayer),
-    ),
     Layer.provideMerge(foundation(options.engine, options.migration)),
   );
 

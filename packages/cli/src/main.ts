@@ -55,7 +55,7 @@ import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
 import { guideCommand } from "./commands/guide.ts";
 import { status } from "./commands/status.ts";
-import { doctor, engine } from "./engine.ts";
+import { changingWithFix, doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
 import { goArgs } from "./argv.ts";
@@ -161,7 +161,7 @@ const sm = Command.make("sm").pipe(
     loaded(unmirror),
     loaded(mirrors),
     loaded(devices),
-    doctorCommand.pipe(Command.provide(doctor(flavor))),
+    doctorCommand.pipe(changingWithFix, Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
     nuke.pipe(Command.provide(Paths.layer(flavor))),
     guideCommand.pipe(Command.provide(services)),

@@ -9,8 +9,6 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { pidAlive, stillRunning } from "./processes.ts";
 import { MOVED } from "./storeErrors.ts";
 
 export const JOURNAL = "data-dir-move.json";
@@ -19,22 +17,50 @@ export const Journal = Schema.Struct({
   to: Schema.String,
   // The sibling a copy to another volume fills, null for a rename.
   partial: Schema.NullOr(Schema.String),
-  // The process making the move, and when it started (absent when ps
-  // couldn't say): while it runs, the store it retired keeps refusing
-  // writes. A journal from before either was written has neither, and
-  // its mover counts as running.
-  pid: Schema.optional(Schema.Finite),
-  startedAt: Schema.optional(Schema.Finite),
   moved: Schema.Array(
     Schema.Struct({
       projectId: Schema.String,
       oldPath: Schema.String,
       newPath: Schema.String,
+      // The commit of the worktree's dirty capture before the re-key,
+      // null for none: an undo carries back that one alone. A journal
+      // from before it was written has none, and carries none back.
+      capture: Schema.optional(Schema.NullOr(Schema.String)),
+      // How far the entry got (V3.md, Commit points): absent is
+      // `planned`, as an older journal's entries read.
+      state: Schema.optional(
+        Schema.Literals(["planned", "rekeyed", "returned"]),
+      ),
     }),
   ),
 });
 export type Journal = typeof Journal.Type;
 export const JournalJson = Schema.fromJsonString(Journal);
+
+// The journal written whole to `file`: beside itself, flushed to disk,
+// renamed in and the rename flushed, so neither a crash nor a lost
+// power leaves a journal half written or a step it records undone.
+export const writeJournal = (file: string, journal: Journal) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dir = path.dirname(file);
+    const staged = `${file}.tmp`;
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* fs.open(staged, { flag: "w", mode: 0o600 });
+        yield* handle.writeAll(
+          new TextEncoder().encode(Schema.encodeSync(JournalJson)(journal)),
+        );
+        yield* handle.sync;
+      }),
+    );
+    yield* fs.rename(staged, file);
+    // A folder's own flush, where the platform takes one.
+    yield* Effect.scoped(
+      Effect.flatMap(fs.open(dir, { flag: "r" }), (handle) => handle.sync),
+    ).pipe(Effect.ignore);
+  });
 
 // A rename whose folder landed but whose pointer never moved: the
 // pointer (or its absence) still names `named`, the folder that left,
@@ -162,9 +188,8 @@ const tablesOf = (sql: SqlClient.SqlClient) =>
     (rows) => rows.map(({ name }) => name),
   );
 
-// The store a copy across volumes leaves behind made to refuse every
-// write, before the move lets go of its lock: a write that waited on it
-// fails rather than landing where the move is about to retire.
+// The store made to refuse every write but its owner's (V3.md, Commit
+// points).
 export const retireStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   for (const table of yield* tablesOf(sql)) {
@@ -177,9 +202,15 @@ export const retireStore = Effect.gen(function* () {
   }
 });
 
-// The store a move left let write again, for a move undone: in the
-// process that undoes it, and as the store opens beside the journal of a
-// move whose process is gone (Store.ts).
+// Whether the store refuses writes, as a move left it.
+export const retired = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const triggers = yield* sql<{ name: string }>`SELECT name FROM sqlite_master
+    WHERE type = 'trigger' AND substr(name, 1, 6) = 'moved_' LIMIT 1`;
+  return triggers.length > 0;
+});
+
+// The store a move left let write again.
 export const reviveStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const triggers = yield* sql<{ name: string }>`SELECT name FROM sqlite_master
@@ -188,29 +219,3 @@ export const reviveStore = Effect.gen(function* () {
     yield* sql.unsafe(`DROP TRIGGER IF EXISTS "${name}"`);
   }
 });
-
-// The journal in `dir` of a move whose process is gone: a store opening
-// beside it is one a crash left retired. A live mover's, or none, is not.
-export const strandedJournal = (dir: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const journal = yield* fs.readFileString(path.join(dir, JOURNAL)).pipe(
-      Effect.map(Schema.decodeUnknownOption(JournalJson)),
-      Effect.orElseSucceed(() => Option.none<Journal>()),
-    );
-    if (Option.isNone(journal)) return false;
-    const spawner = yield* Effect.serviceOption(
-      ChildProcessSpawner.ChildProcessSpawner,
-    );
-    const { pid, startedAt } = journal.value;
-    if (pid === undefined) return false;
-    return !(yield* Option.isSome(spawner) && startedAt !== undefined
-      ? stillRunning(pid, startedAt).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner.value,
-          ),
-        )
-      : pidAlive(pid));
-  });

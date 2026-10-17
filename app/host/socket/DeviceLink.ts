@@ -28,6 +28,7 @@
 // connection and in-flight caps, a failed-auth lockout, and hard
 // termination on every rejection and shutdown.
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
+import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
@@ -54,6 +55,7 @@ import {
 } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
+import { GRANTS } from "@shigomori/contracts/grants";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
@@ -347,6 +349,10 @@ export type LateServices = Effect.Effect<
   CallFailure
 >;
 
+// The calls that change code (a peer needs the grant for them), which
+// run only while no data-folder move can start (`DataDirLock`).
+const changesCode: ReadonlySet<string> = new Set(GRANTS.changeCode.calls);
+
 // A contract call: the registered handler, run with the graph's
 // services, interrupted when the peer cancels it or its link drops, its
 // failure crossing as the contract error it is, or as RemoteCallError
@@ -361,12 +367,25 @@ const serve =
     Effect.gen(function* () {
       const peer = yield* LinkPeer;
       const context = yield* services;
-      return yield* fn(payload, {
+      const call = fn(payload, {
         connection: peer.closed,
         callerDeviceId: peer.deviceId,
         channels: peer.channels,
         notifier: (module, key) => (push) => peer.notify(module, key, push),
-      }).pipe(Effect.provideContext(context));
+      });
+      return yield* (
+        changesCode.has(channel)
+          ? Effect.flatMap(DataDirLock, (lock) =>
+              lock
+                .guard(call)
+                .pipe(
+                  Effect.catchTag(["DataDirMoving", "DataDirMoved"], (error) =>
+                    Effect.fail(callFailureOf(error)),
+                  ),
+                ),
+            )
+          : call
+      ).pipe(Effect.provideContext(context));
     }).pipe(Effect.annotateSpans({ channel }));
 
 // A frame's messages, or null for one this end can't read. The parser
