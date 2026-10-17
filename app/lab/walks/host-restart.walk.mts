@@ -102,6 +102,11 @@ it("a host that stops answering is started again by the watchdog, and a page it 
   const texts = await shown();
   expect(texts).toContain("Reconnecting to the app's background process…");
   expect(texts.filter((text) => /wrong|device/i.test(text))).toEqual([]);
+  // The band says why for a moment, then goes. A band still up as the
+  // next case starts would read as that case's.
+  await lab.page
+    .getByText(/stopped responding for 30 seconds/)
+    .waitFor({ state: "detached", timeout: 30_000 });
 });
 
 // Stops each process for `ms`, then lets it run again.
@@ -143,11 +148,18 @@ it("the whole app stopped past every limit, as a sleep stops it, carries on, and
   await lab.page.getByRole("button", { name: /^Commit all \d+ files/ }).click();
   // Past the host's old 120 s cut of a silent link, and the watchdog's.
   await stopped(all, 130_000);
-  await expect
-    .poll(() => lab.git(repo, "log", "-1", "--format=%s").trim(), {
-      timeout: 30_000,
-    })
-    .toBe("Commit across a stop");
+  try {
+    await expect
+      .poll(() => lab.git(repo, "log", "-1", "--format=%s").trim(), {
+        timeout: 30_000,
+      })
+      .toBe("Commit across a stop");
+  } catch (error) {
+    // What the window said instead, for a run that fails in CI.
+    throw new Error(`no commit; shown: ${JSON.stringify(await shown())}`, {
+      cause: error,
+    });
+  }
   appendFileSync(join(repo, "after-stop.txt"), "new\n");
   await lab.page
     .locator("aside")
