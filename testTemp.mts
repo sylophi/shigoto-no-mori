@@ -13,6 +13,8 @@
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
+  chmodSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -126,11 +128,32 @@ function alive(pid: number): boolean {
 }
 
 // Never throws: two runs may sweep the same folder at once, and a
-// process the run left may still be writing into it.
+// process the run left may still be writing into it. A folder a test
+// left without write permission can't be emptied, so a removal that
+// fails opens every folder up and tries once more.
 function remove(path: string): void {
   try {
     rmSync(path, { recursive: true, force: true });
-  } catch {}
+  } catch {
+    openUp(path);
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+function openUp(dir: string): void {
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    return;
+  }
+  for (const name of entries(dir)) {
+    const child = join(dir, name);
+    try {
+      if (lstatSync(child).isDirectory()) openUp(child);
+    } catch {}
+  }
 }
 
 function removeIfEmpty(dir: string): void {

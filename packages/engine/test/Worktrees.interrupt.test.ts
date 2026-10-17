@@ -919,8 +919,10 @@ it("an adopt whose removal fails after git let go keeps the replacement, the det
           { force: false },
           { report: () => Effect.void, color: false },
         )
-        .pipe(Effect.result);
-      chmodSync(stuck, 0o755);
+        .pipe(
+          Effect.result,
+          Effect.ensuring(Effect.sync(() => chmodSync(stuck, 0o755))),
+        );
       const heads = (yield* worktrees.identities(project)).map((listed) =>
         box.git(listed.path, "rev-parse", "HEAD").trim(),
       );
@@ -960,8 +962,10 @@ it("an adopt whose removal leaves the original listed without a HEAD keeps the r
           { force: false },
           { report: () => Effect.void, color: false },
         )
-        .pipe(Effect.result);
-      chmodSync(logs, 0o755);
+        .pipe(
+          Effect.result,
+          Effect.ensuring(Effect.sync(() => chmodSync(logs, 0o755))),
+        );
       const heads = (yield* worktrees.identities(project)).flatMap((listed) => {
         try {
           return [box.git(listed.path, "rev-parse", "HEAD").trim()];
