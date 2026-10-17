@@ -37,10 +37,16 @@ declare module "@tanstack/react-query" {
 // A read outside React (fetchQuery, ensureQueryData) of a query a page
 // may be fetching too. Each query hands its call React Query's signal,
 // so when the last page reading it goes, the fetch is cancelled and its
-// call with it; a caller that joined that fetch asks again.
-export function throughCancel<A>(read: () => Promise<A>): Promise<A> {
+// call with it; a caller that joined that fetch asks again, up to
+// `rejoins` times, after which the cancellation is its answer.
+export function throughCancel<A>(
+  read: () => Promise<A>,
+  rejoins = 3,
+): Promise<A> {
   return read().catch((error: unknown) =>
-    isCancelledError(error) ? throughCancel(read) : Promise.reject(error),
+    isCancelledError(error) && rejoins > 0
+      ? throughCancel(read, rejoins - 1)
+      : Promise.reject(error),
   );
 }
 

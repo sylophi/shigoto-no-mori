@@ -5,6 +5,7 @@ import {
   useQueryClient,
   skipToken,
 } from "@tanstack/react-query";
+import { refreshQueries } from "@/lib/askAgain";
 import type { BranchList } from "@shigomori/contracts/schemas";
 import type * as Effect from "effect/Effect";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
@@ -35,12 +36,8 @@ export function invalidateBranchState(
   keys: QueryKeyRegistry,
   projectId: string,
 ) {
-  void queryClient.invalidateQueries({
-    queryKey: keys.branches(projectId),
-  });
-  void queryClient.invalidateQueries({
-    queryKey: keys.defaultBranch(projectId),
-  });
+  refreshQueries(queryClient, { queryKey: keys.branches(projectId) });
+  refreshQueries(queryClient, { queryKey: keys.defaultBranch(projectId) });
 }
 
 // The Manage Branches mutations (and the worktree branch ops in

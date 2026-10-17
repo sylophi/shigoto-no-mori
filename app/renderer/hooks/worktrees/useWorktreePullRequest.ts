@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { refreshQueries } from "@/lib/askAgain";
 import {
   useQuery,
   useQueryClient,
@@ -37,7 +38,7 @@ export function invalidateWorktreePullRequests(
   keys: QueryKeyRegistry,
   projectId: string,
 ) {
-  void qc.invalidateQueries({
+  refreshQueries(qc, {
     queryKey: keys.pullRequestsForProject(projectId),
     predicate: isWorktreePullRequestKey,
   });
@@ -110,10 +111,10 @@ export function useWorktreePullRequest(
     if (queryClient.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
       return;
     if (!matchesMapEntry(shown, entry)) {
-      void queryClient.invalidateQueries(
-        { queryKey: keys.worktreePullRequest(projectId, branch), exact: true },
-        { cancelRefetch: false },
-      );
+      refreshQueries(queryClient, {
+        queryKey: keys.worktreePullRequest(projectId, branch),
+        exact: true,
+      });
     }
   }, [entry, queryClient, keys, projectId, branch]);
   return page;

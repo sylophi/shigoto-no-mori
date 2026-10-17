@@ -11,6 +11,7 @@
 // enter the cache without colliding and scope stays decidable from the
 // tuple alone. Client-scoped keys belong to this app instance alone
 // (clientConfig, account, portForwards) and never get either.
+import { refreshQueries } from "@/lib/askAgain";
 import type { QueryClient } from "@tanstack/react-query";
 
 const PR_BRANCH_SCOPE = "branch";
@@ -379,7 +380,7 @@ export function invalidateHostDevice(
   queryClient: QueryClient,
   deviceId: string,
 ): void {
-  void queryClient.invalidateQueries({
+  refreshQueries(queryClient, {
     predicate: (query) => {
       const keyDeviceId = hostKeyDeviceId(query.queryKey);
       if (keyDeviceId !== undefined && keyDeviceId !== deviceId) return false;
@@ -414,7 +415,7 @@ export function invalidateHostProject(
   deviceId: string,
   projectId: string,
 ): void {
-  void queryClient.invalidateQueries({
+  refreshQueries(queryClient, {
     predicate: (query) => {
       if (hostKeyDeviceId(query.queryKey) !== deviceId) return false;
       if (hostKeyProjectId(query.queryKey) !== projectId) return false;
@@ -438,7 +439,7 @@ export function invalidateDeviceSession(
   queryClient: QueryClient,
   deviceId: string,
 ): void {
-  void queryClient.invalidateQueries({
+  refreshQueries(queryClient, {
     predicate: (query) => hostKeyDeviceId(query.queryKey) === deviceId,
   });
 }

@@ -1,0 +1,148 @@
+// Durable proof that a burst of pushes is a bounded number of reads and
+// cancels none: each read a page shows goes one at a time, joined by
+// whatever asks while it is out and followed by one more read
+// (lib/askAgain.ts), as the device list's re-reads do since #947. And
+// that a read outside React joins a cancelled fetch a bounded number of
+// times.
+//
+// Run: pnpm test push-reads.
+import assert from "node:assert/strict";
+import {
+  CancelledError,
+  QueryClient,
+  QueryObserver,
+} from "@tanstack/react-query";
+import { it } from "vitest";
+import { watchHost, type WatchedHostApi } from "@/lib/hostWatch";
+import { queryKeysFor } from "@/lib/queryKeys";
+import { throughCancel } from "@/lib/queryClientOptions";
+
+const DEVICE = "device-1";
+const keys = queryKeysFor(DEVICE);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A host's pushes, delivered by hand: the handlers watchHost listens
+// with, by the push's channel name.
+function fakeHost() {
+  const handlers = new Map<string, (value: unknown) => void>();
+  // oxlint-disable-next-line shigomori/no-double-cast -- a stand-in whose pushes are their channel names, which is all watchHost hands back to listen
+  const api = {
+    pushes: (_module: unknown, key: string) => key,
+    listen: (stream: unknown, onValue: (value: unknown) => void) => {
+      handlers.set(stream as string, onValue);
+      return () => handlers.delete(stream as string);
+    },
+  } as unknown as WatchedHostApi;
+  const push = (key: string, value: unknown) => {
+    const handler = handlers.get(key);
+    assert.ok(handler, `nothing listens for ${key}`);
+    handler(value);
+  };
+  return { api, push };
+}
+
+// A query a page shows, each read 100 ms, counting its reads and the
+// reads cancelled under it.
+function shownQuery(client: QueryClient, queryKey: readonly unknown[]) {
+  const counts = { reads: 0, cancelled: 0 };
+  const observer = new QueryObserver(client, {
+    queryKey,
+    queryFn: async ({ signal }) => {
+      counts.reads += 1;
+      signal.addEventListener("abort", () => {
+        counts.cancelled += 1;
+      });
+      await sleep(100);
+      return counts.reads;
+    },
+    retry: false,
+  });
+  const unsubscribe = observer.subscribe(() => {});
+  return { counts, unsubscribe };
+}
+
+async function burst(send: () => void) {
+  for (let push = 0; push < 25; push++) {
+    send();
+    await sleep(5);
+  }
+  await sleep(400);
+}
+
+it("a burst of refsRefreshed pushes reads an open page's pull request a bounded number of times and cancels none", async () => {
+  const client = new QueryClient();
+  const host = fakeHost();
+  const stop = watchHost(client, DEVICE, host.api);
+  const page = shownQuery(client, keys.worktreePullRequest("p1", "feature"));
+  await sleep(150);
+  const before = page.counts.reads;
+  await burst(() => host.push("refsRefreshed", { projectId: "p1" }));
+  assert.equal(page.counts.cancelled, 0, "a read cancelled by the next push");
+  // 25 pushes over about 150 ms, each read 100 ms: the first, and one
+  // after each read a push came during.
+  const reads = page.counts.reads - before;
+  assert.ok(reads >= 2 && reads <= 3, `read ${reads} times`);
+  page.unsubscribe();
+  stop();
+  client.clear();
+});
+
+it("a burst of projectChanged pushes reads that project's rows a bounded number of times, cancels none, and leaves another project's alone", async () => {
+  const client = new QueryClient();
+  const host = fakeHost();
+  const stop = watchHost(client, DEVICE, host.api);
+  const rows = shownQuery(client, keys.branches("p1"));
+  const other = shownQuery(client, keys.branches("p2"));
+  await sleep(150);
+  const before = { rows: rows.counts.reads, other: other.counts.reads };
+  await burst(() => host.push("projectChanged", { projectId: "p1" }));
+  assert.equal(rows.counts.cancelled, 0, "a read cancelled by the next push");
+  const reads = rows.counts.reads - before.rows;
+  assert.ok(reads >= 2 && reads <= 3, `read ${reads} times`);
+  assert.equal(other.counts.reads, before.other, "another project was read");
+  rows.unsubscribe();
+  other.unsubscribe();
+  stop();
+  client.clear();
+});
+
+it("a read a push asks for while one is out follows it, and a query no page shows goes stale without a read", async () => {
+  const client = new QueryClient();
+  const host = fakeHost();
+  const stop = watchHost(client, DEVICE, host.api);
+  const page = shownQuery(client, keys.defaultBranch("p1"));
+  // The page's own first read is out as the push comes: it may predate
+  // what moved, so one more follows it.
+  host.push("refsRefreshed", { projectId: "p1" });
+  await sleep(400);
+  assert.equal(page.counts.reads, 2, "the read out, then one after it");
+  assert.equal(page.counts.cancelled, 0);
+  page.unsubscribe();
+  const hidden = client.getQueryCache().find({
+    queryKey: keys.defaultBranch("p1"),
+    exact: true,
+  });
+  host.push("refsRefreshed", { projectId: "p1" });
+  await sleep(200);
+  assert.equal(page.counts.reads, 2, "a query no page shows was read");
+  assert.equal(
+    hidden?.state.isInvalidated,
+    true,
+    "left fresh for the next page",
+  );
+  stop();
+  client.clear();
+});
+
+it("a read outside React joins a cancelled fetch at most three more times", async () => {
+  let asked = 0;
+  await assert.rejects(
+    () =>
+      throughCancel(async () => {
+        asked += 1;
+        throw new CancelledError();
+      }),
+    (error) => error instanceof CancelledError,
+  );
+  assert.equal(asked, 4);
+});
