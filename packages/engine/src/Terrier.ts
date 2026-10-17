@@ -236,8 +236,7 @@ const make = Effect.gen(function* () {
   const listed = yield* Effect.cachedWithTTL(read, "10 seconds");
   return Terrier.of({
     listing: Effect.gen(function* () {
-      const enabled = yield* config.get({ kind: "device" }, "terrier");
-      if (enabled.value !== true) {
+      if (!(yield* config.device("terrier"))) {
         return { paths: [], trouble: Option.none() };
       }
       return yield* listed;

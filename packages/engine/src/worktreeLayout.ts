@@ -1,6 +1,7 @@
 // Where a project's worktrees live, as path math: the managed root
 // under the data dir, the in-project folder, a custom base, and the
 // project's own external drive.
+import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 import { createHash } from "node:crypto";
 import { basename, join, normalize } from "node:path";
 import { externalVolumeRoot } from "@shigomori/contracts/git/worktreeLayout";
@@ -122,7 +123,7 @@ export function worktreeBase(
   place: DataDirPlace,
 ): string {
   const managedRoot = join(place.dataDir, WT, basename(projectPath));
-  switch (settings.worktreeLayout ?? "managed-root") {
+  switch (settings.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout) {
     case "in-project":
       return join(projectPath, ".shigomori", WT);
     case "custom": {

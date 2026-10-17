@@ -247,6 +247,14 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
             }),
         ),
       );
+      // A save made while the editor was open (the app's, another
+      // command's) isn't written away by a document read before it.
+      const now = (yield* config.read(settings.scope)) ?? {};
+      if (JSON.stringify(now) !== JSON.stringify(stored)) {
+        return yield* new EditFailed({
+          problem: `The settings changed while you edited them, so nothing changed.${kept}`,
+        });
+      }
       yield* config.write(settings.scope, payload).pipe(
         Effect.mapError(
           (error) =>

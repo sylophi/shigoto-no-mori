@@ -5,7 +5,10 @@ import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useHasLocalHost } from "@/lib/localHost";
-import type { Worktree } from "@shigomori/contracts/schemas";
+import {
+  DEVICE_SETTINGS_DEFAULTS,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import {
   pinnedEntries,
   type SortableEntry,
@@ -57,7 +60,8 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   // as "on by default". Defaulting to on there flashes the row in and back
   // out for anyone who switched it off.
   const enabled = hasLocalHost
-    ? config !== undefined && (config.launchScripts ?? true)
+    ? config !== undefined &&
+      (config.launchScripts ?? DEVICE_SETTINGS_DEFAULTS.launchScripts)
     : true;
   if (!enabled || !pkg) {
     return { candidates: [], loading: enabled && isPending, pinned: false };

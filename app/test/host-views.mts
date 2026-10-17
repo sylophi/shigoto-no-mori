@@ -342,7 +342,7 @@ it("settings: a device setting written through the engine", async () => {
   await watch(globalConfigViews.watch(undefined), ({ first, next, tick }) =>
     Effect.gen(function* () {
       assert.equal(first.hiddenLaunchers, undefined);
-      yield* Ops.writeGlobalConfig({ hiddenLaunchers: ["app:zed"] });
+      yield* Ops.patchGlobalConfig({ hiddenLaunchers: ["app:zed"] });
       yield* tick();
       assert.deepEqual((yield* next).hiddenLaunchers, ["app:zed"]);
     }),

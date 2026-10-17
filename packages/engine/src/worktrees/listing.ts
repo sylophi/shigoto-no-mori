@@ -80,11 +80,7 @@ export const makeListing = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const deviceFlag = (key: string) =>
-    config.get({ kind: "device" }, key).pipe(
-      Effect.map((setting) => setting.value === true),
-      Effect.orElseSucceed(() => false),
-    );
+  const deviceFlag = config.device;
 
   // The project's settings and its default branch, which count only
   // once it is configured (it has one).
@@ -152,10 +148,7 @@ export const makeListing = Effect.gen(function* () {
         registry.marked("shelved"),
         registry.marked("autoPull"),
         registry.agentSessions,
-        config.get({ kind: "device" }, "autoShelveDays").pipe(
-          Effect.map((setting) => idleShelfAfter(setting.value)),
-          Effect.orElseSucceed(() => 0),
-        ),
+        Effect.map(config.device("autoShelveDays"), idleShelfAfter),
       ],
       { concurrency: 4 },
     );

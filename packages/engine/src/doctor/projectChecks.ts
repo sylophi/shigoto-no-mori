@@ -1,4 +1,6 @@
 // The doctor's project checks: each project's repo, worktrees, scripts, launchers and ports.
+import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
+import * as Predicate from "effect/Predicate";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -624,7 +626,14 @@ export const makeProjectChecks = ({
           ];
         }
         // The integration is opt-out: absent means on.
-        if (settings?.["useWorktreeInclude"] === false) return [];
+        const include = settings?.["useWorktreeInclude"];
+        if (
+          !(Predicate.isBoolean(include)
+            ? include
+            : PROJECT_CONFIG_DEFAULTS.useWorktreeInclude)
+        ) {
+          return [];
+        }
         const resolved = yield* git
           .listUntrackedMatching(project.path, file)
           .pipe(

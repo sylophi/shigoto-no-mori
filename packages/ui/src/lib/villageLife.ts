@@ -12,16 +12,17 @@
 // villager extras on every worktree named after a character, whichever
 // device it lives on, with the villager data this device holds
 // (host/lib/VillagerData.ts). Off when unset.
-import type {
-  ClientConfig,
-  GlobalConfig,
+import {
+  type ClientConfig,
+  DEVICE_SETTINGS_DEFAULTS,
+  type GlobalConfig,
 } from "@shigomori/contracts/schemas/config";
 import type { VillagerDataStatus } from "@shigomori/contracts/schemas/villagers";
 
 export function doubutsuNamesEnabled(
   config: Pick<GlobalConfig, "doubutsuNames">,
 ): boolean {
-  return config.doubutsuNames ?? false;
+  return config.doubutsuNames ?? DEVICE_SETTINGS_DEFAULTS.doubutsuNames;
 }
 
 type VillageConfig = Pick<ClientConfig, "villageLife">;

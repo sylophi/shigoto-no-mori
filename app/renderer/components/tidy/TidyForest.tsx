@@ -1,6 +1,9 @@
 import { type ReactNode, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Worktree } from "@shigomori/contracts/schemas";
+import {
+  DEVICE_SETTINGS_DEFAULTS,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import type { RowStatus } from "@shigomori/ui/primitives/row-status.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import {
@@ -156,7 +159,9 @@ function TidyBody() {
   const safeIds = new Set(candidates.map((entry) => entry.worktree.id));
   const selected = picked ?? safeIds;
   const summary = summarize(entries, selected);
-  const deleteBranches = globalConfig?.deleteBranchOnRemove ?? true;
+  const deleteBranches =
+    globalConfig?.deleteBranchOnRemove ??
+    DEVICE_SETTINGS_DEFAULTS.deleteBranchOnRemove;
   const loading =
     projectsLoading ||
     (entries.length === 0 && worktreeQueries.some((query) => query.isPending));

@@ -80,10 +80,7 @@ export const makeCleanup = ({
         if (options.force || options.keepBranch) return false;
         if (worktree.isPrimary) return true;
         if (worktree.isExternal) return false;
-        const policy = yield* config
-          .get({ kind: "device" }, "deleteBranchOnRemove")
-          .pipe(Effect.orDie);
-        return policy.value !== false;
+        return yield* config.device("deleteBranchOnRemove");
       });
 
     // Refuses the delete of `branch` when PR #`number`'s head, `head`,

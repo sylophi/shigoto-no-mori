@@ -117,3 +117,80 @@ it("hides .shigomori from the primary's git status on the in-project layout", as
     /^\/\.shigomori$/m,
   );
 });
+
+// The app's save is a patch in one transaction: a setting the terminal
+// wrote meanwhile, which the form didn't touch, stays.
+it("patches the device's settings it is given and keeps the rest, a default or a null removing its key", async () => {
+  type Doc = Record<string, unknown> | null;
+  const stored = (await box.engine(
+    Effect.gen(function* () {
+      const c = yield* config;
+      const base = yield* c.read({ kind: "device" });
+      yield* c.set({ kind: "device" }, "portPool", "true");
+      yield* c.patch({ terrier: true, editor: "zed", githubCli: true });
+      const first = yield* c.read({ kind: "device" });
+      yield* c.patch({
+        terrier: false,
+        editor: null,
+        launchScripts: undefined,
+      });
+      return { base, first, after: yield* c.read({ kind: "device" }) };
+    }),
+  )) as { readonly base: Doc; readonly first: Doc; readonly after: Doc };
+  assert.deepEqual(stored.first, {
+    ...stored.base,
+    portPool: true,
+    terrier: true,
+    editor: "zed",
+  });
+  assert.deepEqual(stored.after, { ...stored.base, portPool: true });
+});
+
+it("refuses a patch whose value isn't the setting's, writing nothing", async () => {
+  const exit = (await box.engine(
+    Effect.gen(function* () {
+      const c = yield* config;
+      const base = yield* c.read({ kind: "device" });
+      const refused = yield* Effect.flip(
+        c.patch({
+          terrier: true,
+          launchers: [{ id: "", label: "x", command: "y" }],
+        }),
+      );
+      return { base, refused, stored: yield* c.read({ kind: "device" }) };
+    }),
+  )) as {
+    readonly base: unknown;
+    readonly refused: unknown;
+    readonly stored: unknown;
+  };
+  assert.ok(exit.refused instanceof Config.InvalidConfigDocument);
+  assert.deepEqual(exit.stored, exit.base);
+});
+
+// A setting read as it applies, by a key the compiler checks: unset or
+// holding something it can't be, its default.
+it("reads a device setting as it applies, its default when unset or unreadable", async () => {
+  const read = await box.engine(
+    Effect.gen(function* () {
+      const c = yield* config;
+      const unset = yield* c.device("deleteBranchOnRemove");
+      yield* c.change({ kind: "device" }, () => ({
+        deleteBranchOnRemove: "yes",
+        portPool: true,
+      }));
+      return {
+        unset,
+        unreadable: yield* c.device("deleteBranchOnRemove"),
+        set: yield* c.device("portPool"),
+        editor: yield* c.device("editor"),
+      };
+    }),
+  );
+  assert.deepEqual(read, {
+    unset: true,
+    unreadable: true,
+    set: true,
+    editor: null,
+  });
+});
