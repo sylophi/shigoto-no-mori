@@ -178,7 +178,7 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 // loose ref (a ref is written by a rename into place, so a new stamp),
 // and which stopped-operation markers exist. Two equal readings mean
 // nothing the allowlist above cares about moved between them.
-export const gitStateOf = (gitDir: string) =>
+const gitStateOf = (gitDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
