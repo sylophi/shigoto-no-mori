@@ -40,7 +40,7 @@ import {
 import { SidebarTakeoverSlotView } from "../views/sidebar/SidebarTakeoverView.tsx";
 import {
   SidebarFooterView,
-  SidebarGuideButtonView,
+  SidebarGuideMenuView,
   SidebarNavActionsView,
   SidebarViewToggleView,
 } from "../views/sidebar/SidebarFooterView.tsx";
@@ -537,9 +537,9 @@ export function SceneSidebar({
             actions={
               <>
                 {hasLocalHost && (
-                  <SidebarGuideButtonView
-                    label="Show me around with Claude Code"
-                    onClick={noop}
+                  <SidebarGuideMenuView
+                    harnesses={["claude", "codex"]}
+                    onPick={noop}
                   />
                 )}
                 <SidebarNavActionsView

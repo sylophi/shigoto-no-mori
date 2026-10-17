@@ -12,7 +12,10 @@ import {
   CreateTargetItemView,
 } from "../views/sidebar/inbox/NewWorktreeButtonView.tsx";
 import { ProjectDragPreviewView } from "../views/sidebar/ProjectDragPreviewView.tsx";
-import { SidebarFooterView } from "../views/sidebar/SidebarFooterView.tsx";
+import {
+  SidebarFooterView,
+  SidebarGuideMenuItemsView,
+} from "../views/sidebar/SidebarFooterView.tsx";
 import { SidebarHeaderView } from "../views/sidebar/SidebarHeaderView.tsx";
 import {
   SidebarTakeoverSlotView,
@@ -91,6 +94,14 @@ export function SidebarPartsScene() {
             </DropdownMenuItem>
           </StaticMenu>
           <WorktreeSortMenuView sort="recent" onPick={noop} />
+        </Part>
+        <Part label="Guide menu">
+          <StaticMenu>
+            <SidebarGuideMenuItemsView
+              harnesses={["claude", "codex"]}
+              onPick={noop}
+            />
+          </StaticMenu>
         </Part>
         <Part label="Worktree menu">
           <StaticMenu>

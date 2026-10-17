@@ -1,11 +1,9 @@
 // The guide's how-tos (V3.md, "The guide"): twenty questions a new user
 // asks, each run headless through Claude Code and Codex against a dev
 // app on this machine, on a session the app launched the way its Help
-// menu's item does, the agent started with the question. A tour passes
-// when the window shows the guide pointing at the control that answers
-// the question. Before them, the agent started on the app's own opening
-// should say what it can do and ask, touching nothing in the window.
-// README.md has what it reports.
+// menu's item does, the question typed as the person would. A tour
+// passes when the window shows the guide pointing at the control that
+// answers the question. README.md has what it reports.
 import { execFileSync, spawn } from "node:child_process";
 import {
   closeSync,
@@ -19,7 +17,8 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
-import { GUIDE_OPENING, guideCommand } from "@shigomori/engine/agentGuide";
+import { guideCommand } from "@shigomori/engine/agentGuide";
+import { shellQuote } from "@shigomori/engine/Lifecycle";
 import type { Page } from "playwright-core";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";
@@ -103,7 +102,6 @@ const { values: flags } = parseArgs({
     harness: { type: "string", multiple: true },
     only: { type: "string" },
     tag: { type: "string", default: basename(repoDir) },
-    openings: { type: "string", default: "3" },
   },
 });
 const harnesses = (flags.harness ?? ["claude", "codex"]) as Harness[];
@@ -282,26 +280,26 @@ function quitTerminal(): void {
   }
 }
 
-// The launch line the app types, run headless on `prompt`: the same
-// server and tools, with each harness's flags for a run with no one at
-// it.
-function headless(harness: Harness, session: string, prompt: string): string {
+// The launch line the app types, run headless on `question`: the same
+// role, server and tools, with each harness's flags for a run with no
+// one at it.
+function headless(harness: Harness, session: string, question: string): string {
   const line = guideCommand({
     harness,
     sm: smd,
     dataDir: app.dataDir,
     session,
-    prompt,
   });
+  const asked = `${line} -- ${shellQuote(question)}`;
   return harness === "claude"
-    ? line.replace(/^claude /, "claude -p --output-format json ")
-    : line.replace(/^codex /, "codex exec --json --skip-git-repo-check ");
+    ? asked.replace(/^claude /, "claude -p --output-format json ")
+    : asked.replace(/^codex /, "codex exec --json --skip-git-repo-check ");
 }
 
 // The harness run headless on a session, in the guide folder: its end,
 // and what it answered.
-function run(harness: Harness, session: string, prompt: string) {
-  const child = spawn("/bin/sh", ["-c", headless(harness, session, prompt)], {
+function run(harness: Harness, session: string, question: string) {
+  const child = spawn("/bin/sh", ["-c", headless(harness, session, question)], {
     cwd: guideFolder,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -314,39 +312,6 @@ function run(harness: Harness, session: string, prompt: string) {
   const output = () =>
     harness === "claude" ? claudeOutput(stdout) : codexOutput(stdout);
   return { ended, output };
-}
-
-// The agent started on the app's opening: what it did in the window
-// (reading it aside), and whether it asked the user.
-type Opening = {
-  harness: Harness;
-  ms: number;
-  acted: string[];
-  asked: boolean;
-  answer: string;
-};
-
-// Reading the window, and the server's end as the agent stops.
-const UNTOUCHED = new Set(["look", "screenshot", "end"]);
-
-async function opening(page: Page, harness: Harness): Promise<Opening> {
-  await fresh(page);
-  const session = await launch(page, harness);
-  const started = Date.now();
-  const { ended, output } = run(harness, session, GUIDE_OPENING);
-  await Promise.race([ended, sleep(TOUR_LIMIT_MS)]);
-  kill(session, "SIGTERM");
-  await ended;
-  const { answer } = output();
-  return {
-    harness,
-    ms: Date.now() - started,
-    acted: driveStarts(started)
-      .map(({ action }) => action)
-      .filter((action) => !UNTOUCHED.has(action)),
-    asked: answer.includes("?"),
-    answer,
-  };
 }
 
 type Tour = {
@@ -520,12 +485,11 @@ function median(values: readonly number[]): number | null {
 }
 
 const tours: Tour[] = [];
-const openings: Opening[] = [];
 const trips: Record<string, unknown> = {};
 const save = () =>
   writeFileSync(
     join(out, "tours.json"),
-    JSON.stringify({ openings, trips, tours }, null, 2),
+    JSON.stringify({ trips, tours }, null, 2),
   );
 try {
   await app.launch(false);
@@ -535,14 +499,6 @@ try {
     60_000,
   );
   for (const harness of harnesses) {
-    for (let i = 0; i < Number(flags.openings); i++) {
-      const done = await opening(page, harness);
-      openings.push(done);
-      console.log(
-        `${done.asked && done.acted.length === 0 ? "pass" : "FAIL"} ${harness} opening ${(done.ms / 1000).toFixed(1)}s, acted [${done.acted.join(" ")}]: ${done.answer.replace(/\s+/g, " ").slice(0, 200)}`,
-      );
-      save();
-    }
     await fresh(page);
     trips[harness] = await roundTrips(await launch(page, harness));
     for (const howTo of howTos) {
@@ -575,7 +531,6 @@ for (const harness of harnesses) {
   console.log(
     [
       `${harness}: ${mine.filter((done) => done.passed).length} of ${mine.length} passed`,
-      `opening: ${openings.filter((done) => done.harness === harness && done.asked && done.acted.length === 0).length} of ${openings.filter((done) => done.harness === harness).length} asked first and touched nothing, in ${median(openings.filter((done) => done.harness === harness).map((done) => done.ms))} ms (median)`,
       `first action ${of((done) => done.firstAction)} ms, first point ${of((done) => done.firstPoint)} ms, a tour ${of((done) => done.ms)} ms`,
       `tokens ${of((done) => done.tokens?.total)} (output ${of((done) => done.tokens?.output)})`,
       `round trips ${JSON.stringify(trips[harness])}`,

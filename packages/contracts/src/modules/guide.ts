@@ -16,9 +16,11 @@ export const GUIDE_HARNESS_LABELS: Record<GuideHarness, string> = {
   codex: "Codex",
 };
 
-// The Help menu's item for a harness.
-export const showAroundLabel = (harness: GuideHarness): string =>
-  `Show me around with ${GUIDE_HARNESS_LABELS[harness]}`;
+// What the guide is for, as the sidebar's question mark and its menu
+// say it, and the Help menu's item for a harness.
+export const GUIDE_QUESTION = "Ask a question about the app";
+export const askAboutTheApp = (harness: GuideHarness): string =>
+  `Ask ${GUIDE_HARNESS_LABELS[harness]} about the app`;
 
 const GuideRefSchema = Schema.Int.check(Schema.isGreaterThan(0));
 
