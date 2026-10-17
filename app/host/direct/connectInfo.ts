@@ -84,7 +84,7 @@ export function makeConnectInfo(
   const told = new Map<string, string>();
   const answered = (callerDeviceId: string, info: DirectConnectInfo) => {
     const offered = info.available
-      ? `offered ${info.candidates.map((candidate) => candidate.kind).join(", ")}`
+      ? `offered ${[...new Set(info.candidates.map((candidate) => candidate.kind))].join(", ")}`
       : "offered nothing to dial";
     if (told.get(callerDeviceId) !== offered) {
       told.set(callerDeviceId, offered);

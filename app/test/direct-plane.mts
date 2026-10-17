@@ -1865,7 +1865,7 @@ it("connectInfo logs what an asker was offered when it changes, not at every ask
   const connectInfo = makeConnectInfo({
     listenerPort: () => port,
     mintTickets: (_peer, kinds) => kinds.map((_kind, i) => `smpt_log_${i}`),
-    candidateAddresses: () => ["127.0.0.1"],
+    candidateAddresses: () => ["127.0.0.1", "fd00::1"],
     tunnelUrl: () => tunnel,
     acceptsCommands: () => false,
     sharesData: () => true,
