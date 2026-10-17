@@ -110,9 +110,14 @@ export function DiffPage({
   details,
   renderSidebar,
   sidebarActions,
+  retryMedia,
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: Pick<UseQueryResult<string>, "data" | "isLoading" | "error">;
+  // Asks for the patch again, for a media side it names only in short
+  // (a pull request's, its commits not fetched here), and whether that
+  // ask is out.
+  retryMedia?: { readonly retry: () => void; readonly retrying: boolean };
   onBack: () => void;
   // The worktree the back button returns to, named as its page is.
   worktree: Worktree;
@@ -320,7 +325,9 @@ export function DiffPage({
           state={
             isLoading || changes?.loading
               ? "loading"
-              : error
+              : // A pull request's patch asked again for its media keeps
+                // showing when that ask fails; any other page says so.
+                error && (patch === undefined || retryMedia === undefined)
                 ? "error"
                 : allFiles.length === 0
                   ? "empty"
@@ -359,6 +366,7 @@ export function DiffPage({
                       projectId={worktree.projectId}
                       worktreeId={worktree.id}
                       fileDiff={fileDiff}
+                      retry={retryMedia}
                     />
                   )
                 }

@@ -85,8 +85,9 @@ export function ghStream(
 // fetched, since only git's patch names blob ids in full and a media
 // file's sides are read back by them (readBlob); `gh pr diff`
 // abbreviates them. `gh pr diff` is the fallback when they can't be
-// fetched or diffed here. Fails rather than rendering an empty diff, so the renderer
-// shows the error inline.
+// fetched or diffed here, whose media sides the page shows as not here,
+// with a retry that asks again, fetching again. Fails rather than
+// rendering an empty diff, so the renderer shows the error inline.
 export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
   function* (opts: { cwd: string; number: number }) {
     const { cwd, number } = opts;

@@ -27,11 +27,18 @@ export const ReadWorktreeFilePayloadSchema = Schema.Struct({
 // carries `--full-index`), and the path it had, which picks the media
 // type and holds a blob git never stored. Only a full id, so a read
 // names the exact blob a patch showed.
+const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
 export const ReadBlobPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
-  oid: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)),
+  oid: Schema.String.check(Schema.isPattern(FULL_OBJECT_ID)),
   path: RepoRelPathSchema,
 });
+
+// Whether a patch names a blob in full, which only git's own patch does
+// (`gh pr diff` abbreviates), so its side can be read.
+export const isFullObjectId = (oid: string): boolean =>
+  FULL_OBJECT_ID.test(oid);
 
 // What the files page, or a side of a diff, can show for a path. Text
 // travels, and so does media the renderer's Chromium can draw. Any other binary or oversized
