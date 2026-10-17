@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { basename, dirname, join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -184,6 +185,43 @@ it("waits out a change of its own process, and lets a change nested in one finis
     }),
   )) as { moved: boolean; nested: boolean; quick: boolean };
   assert.deepEqual(result, { moved: true, nested: true, quick: true });
+});
+
+// Two processes asking for the lock alone while a change holds it (two
+// starts settling what a crash left) both get it, one after the other,
+// rather than hold each other off until both give up.
+it("lets two processes asking for the lock alone both have it in turn", async () => {
+  const home = mkdtempSync(join(tmpdir(), "engine-lock-"));
+  try {
+    const lockFile = join(
+      home,
+      ".config",
+      flavorNames("dev").configDir,
+      "data-dir.lock",
+    );
+    mkdirSync(dirname(lockFile), { recursive: true });
+    const ask = () =>
+      new Promise<number | null>((resolve) => {
+        const child = spawn(
+          process.execPath,
+          [join(import.meta.dirname, "fixtures", "aloneChild.ts"), home],
+          { stdio: "inherit" },
+        );
+        child.once("exit", (code) => resolve(code));
+      });
+    // One taken alone before, as any start's settle leaves the file.
+    assert.equal(await ask(), 0);
+    const change = new DatabaseSync(lockFile);
+    change.exec("PRAGMA locking_mode = EXCLUSIVE");
+    change.prepare("SELECT count(*) FROM sqlite_schema").get();
+    const both = Promise.all([ask(), ask()]);
+    // Long enough for both to have asked while it holds.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    change.close();
+    assert.deepEqual(await both, [0, 0]);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 // The lock is the kernel's: a process killed while it holds it holds

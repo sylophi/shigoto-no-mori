@@ -25,6 +25,7 @@ import {
   dataDirSource,
   defaultDataDir,
 } from "@shared/paths";
+import { transfersUnderWay } from "@host/mirror/registry";
 
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   "MoveRefusedError",
@@ -84,6 +85,12 @@ export const runtimeHandlers = {
       if (moveInFlight) {
         return yield* new MoveRefusedError({
           reason: "The data folder is already being moved.",
+        });
+      }
+      if (transfersUnderWay()) {
+        return yield* new MoveRefusedError({
+          reason:
+            "A worktree is still being brought here. Try again when it finishes.",
         });
       }
       if (unattended) {

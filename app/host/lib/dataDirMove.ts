@@ -502,6 +502,14 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {
+        // A rename that failed may still have moved the folder (a network
+        // volume's lost answer): the folder gone counts as landed.
+        if (
+          !renamed &&
+          !(yield* fs.exists(oldDir).pipe(Effect.orElseSucceed(() => true)))
+        ) {
+          renamed = true;
+        }
         // Once the folder landed, the staged pointer is how a start finds
         // it (Paths' rescue).
         if (pointerStaged && !renamed) {

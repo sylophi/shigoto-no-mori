@@ -55,7 +55,14 @@ import {
   rescueStrandedMove,
   reviveStore,
 } from "@shigomori/engine/dataDirMoveJournal";
-import { afterFailedMove } from "../host/ipc/modules/runtime.ts";
+import {
+  afterFailedMove,
+  runtimeHandlers,
+} from "../host/ipc/modules/runtime.ts";
+import { DataDirHolders } from "../host/lib/DataDirHolders.ts";
+import * as Shell from "../host/lib/Shell.ts";
+import { beginTransfer, endTransfer } from "../host/mirror/registry.ts";
+import type { HandlerContext } from "../shared/ipc/transport.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -955,4 +962,28 @@ it("refuses a change of the host's while a move holds the lock", async () => {
     move.close();
   }
   assert.equal(await titleOf(identity.id), "Fox");
+});
+
+// A worktree being brought here still has files landing in it after
+// its landing, which a move's copy would miss: the move is refused.
+it("refuses a move while a worktree is being brought here", async () => {
+  const token = beginTransfer();
+  try {
+    const refused = await runHost(
+      runtimeHandlers
+        .moveDataDir({ parentDir: elsewhere }, {} as HandlerContext)
+        .pipe(
+          // Neither is reached before the refusal.
+          Effect.provideService(Shell.Shell, {} as Shell.Shell["Service"]),
+          Effect.provideService(
+            DataDirHolders,
+            {} as DataDirHolders["Service"],
+          ),
+          Effect.flip,
+        ),
+    );
+    assert.match(String(refused), /being brought here/);
+  } finally {
+    endTransfer(token);
+  }
 });

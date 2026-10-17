@@ -171,6 +171,10 @@ export function endTransfer(token: string): void {
   liveTransfers.delete(token);
 }
 
+// Whether a transfer is under way: its files may still be landing in a
+// worktree here, which a data-folder move's copy would miss.
+export const transfersUnderWay = () => liveTransfers.size > 0;
+
 export function isOrphanedTransfer(raw: MirrorSessionRaw): boolean {
   const token = transferTokenOf(raw.labels);
   return token !== null && !liveTransfers.has(token);
