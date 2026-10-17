@@ -14,6 +14,7 @@ import {
   parseReleaseDate,
   parseRfc3339,
   pickRelease,
+  RATE_LIMIT_WAIT_MAX,
   rateLimitReset,
   ReleaseList,
   ReleaseListCache,
@@ -181,13 +182,18 @@ export const makeFeeds = ({
       const failed = feedFailed("release-list");
       const cached = Option.getOrUndefined(yield* readReleaseListCache(url));
       const now = yield* Clock.currentTimeMillis;
-      // A copy fetched "later" than now is from before the clock stepped
-      // back, and answers for nothing.
-      if (
+      // Each instant on its own: a fetch "later" than now, or a backoff
+      // further out than any limit is waited, is from before the clock
+      // stepped back, and answers for nothing.
+      const fresh =
         cached !== undefined &&
         cached.fetchedAt <= now &&
-        (now < cached.fetchedAt + RELEASE_LIST_MAX_AGE || now < cached.retryAt)
-      ) {
+        now < cached.fetchedAt + RELEASE_LIST_MAX_AGE;
+      const backingOff =
+        cached !== undefined &&
+        now < cached.retryAt &&
+        cached.retryAt <= now + RATE_LIMIT_WAIT_MAX;
+      if (cached !== undefined && (fresh || backingOff)) {
         return { releases: yield* releasesOf(cached.body), confirmed: false };
       }
       const request = feedRequest(url, running).pipe(

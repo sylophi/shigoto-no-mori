@@ -239,7 +239,8 @@ export const formatKitchen = (ms: number) => {
 export const isRateLimited = (status: number, remaining: string | undefined) =>
   status === 429 || (status === 403 && remaining === "0");
 
-const HOUR = 3_600_000;
+// The longest the rate limit is waited out (rateLimitReset).
+export const RATE_LIMIT_WAIT_MAX = 3_600_000;
 
 const seconds = (text: string | undefined) =>
   text !== undefined && /^\d+$/.test(text) ? Number(text) : undefined;
@@ -251,7 +252,7 @@ export const rateLimitReset = (
   headers: { readonly reset?: string; readonly retryAfter?: string },
   now: number,
 ) => {
-  const limit = now + HOUR;
+  const limit = now + RATE_LIMIT_WAIT_MAX;
   const reset = seconds(headers.reset);
   if (reset !== undefined) {
     const at = reset * 1000;

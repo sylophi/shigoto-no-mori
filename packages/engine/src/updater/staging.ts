@@ -97,10 +97,13 @@ export const makeStaging = ({
     // The staged update a build at `version` can install: one newer than
     // it. An older or the same one is what an install by hand or a crash
     // between the swap and its cleanup left, which the swap would refuse.
-    const installable = (version: string) =>
-      Effect.map(readManifest, (manifest) =>
-        Option.filter(manifest, (staged) => isNewer(staged.version, version)),
+    const installable = Effect.fn("Updater.staged")(function* (
+      version: string,
+    ) {
+      return Option.filter(yield* readManifest, (staged) =>
+        isNewer(staged.version, version),
       );
+    });
 
     const clearStaged = removeAll(stagedDir);
 
