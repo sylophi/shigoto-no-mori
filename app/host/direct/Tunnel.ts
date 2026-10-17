@@ -117,6 +117,12 @@ export const TUNNEL_PROBE_SLOW_MS = 60_000;
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
 export { TUNNEL_PROBE_DEADLINE_FRESH_MS };
 
+// How long an unconfigured answer stands before the Worker is asked
+// again: a deployment setting, which a redeploy changes, so one request
+// per interval. A relative timer, so a sleep spends none of it; the wake
+// that ends one asks at once (`recheck`).
+export const UNCONFIGURED_RETRY_MS = 5 * 60_000;
+
 // One probe attempt's own fetch bound, so a black-holed edge cannot
 // wedge the probe chain.
 const PROBE_ATTEMPT_TIMEOUT_MS = 5_000;
@@ -205,7 +211,8 @@ export const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
 // runner and the status surface cannot drift. off: not wanted
 // (listener down, opted out, signed out). no-binary: wanted, but no
 // usable cloudflared. unconfigured: the Worker has no tunnel env
-// (typed answer, cached for the process lifetime). starting:
+// (typed answer, asked again on UNCONFIGURED_RETRY_MS and at a wake).
+// starting:
 // provisioning, spawning, or probing readiness. up: the child is
 // probed-routable and the tunnel is advertised. error: the last
 // attempt failed, with either a backoff restart scheduled or (for a
@@ -268,13 +275,12 @@ export class Tunnel extends Context.Service<
     // (re)provisions and (re)starts the child. Serialized, so an
     // overlapping stop and start cannot interleave. Reconciling the SAME
     // port over a runner that is doing anything at all about it (child
-    // up, retry scheduled, the cached unconfigured verdict) is a no-op,
-    // so an unrelated config write can neither storm the Worker nor
-    // reset a failing runner's backoff. Two states do re-enter:
-    // no-binary (a config write may have just named a usable
-    // cloudflaredPath) and a provision-denied park (the reconcile
-    // trigger IS its recovery path: a re-sign-in or a Worker redeploy
-    // arrives here).
+    // up, retry scheduled) is a no-op, so an unrelated config write can
+    // neither storm the Worker nor reset a failing runner's backoff.
+    // Three states do re-enter: no-binary (a config write may have just
+    // named a usable cloudflaredPath), and a provision-denied or
+    // unconfigured answer (a re-sign-in or a Worker redeploy arrives
+    // here).
     readonly reconcile: (
       wanted: { readonly port: number } | null,
     ) => Effect.Effect<void>;
@@ -293,6 +299,7 @@ export class Tunnel extends Context.Service<
     // tunnel is at its start, so a network still coming back costs
     // nothing, and past that deadline its child (a stopped one, a
     // connector that never reconnected) is killed and started again.
+    // A runner waiting out an unconfigured answer asks the Worker again.
     readonly recheck: Effect.Effect<void>;
   }
 >()("sm/host/Tunnel") {}
@@ -368,9 +375,8 @@ interface Memory {
     readonly dnsCreated: boolean;
     readonly ready: boolean;
   } | null;
-  // The Worker answering "no tunnel env" is a deployment fact, kept for
-  // the process lifetime: reconciles cannot change it, so they must not
-  // keep paying the provision round trip to re-learn it.
+  // The Worker answered "no tunnel env", and the runner waits to ask
+  // again (UNCONFIGURED_RETRY_MS).
   readonly unconfigured: boolean;
   // A provision was DENIED (4xx: revoked credential, older Worker
   // deploy). Nothing retries it. The next reconcile trigger re-enters
@@ -462,7 +468,8 @@ const make = (options: Options) =>
     // down signal, and a wake (`recheck`) the one time a live child is
     // asked again, since a sleep is what leaves a connector that is
     // running but routes nothing.
-    // Set while a child is up, for `recheck`.
+    // Set while a child is up, or the runner waits out an unconfigured
+    // answer, for `recheck`.
     const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());
 
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
@@ -522,6 +529,16 @@ const make = (options: Options) =>
     // Nothing to do until the next reconcile, which interrupts it.
     const park = Effect.never;
 
+    // UNCONFIGURED_RETRY_MS, or a wake's recheck, whichever comes first.
+    const untilAskedAgain = Effect.gen(function* () {
+      const asked = yield* Queue.sliding<void>(1);
+      yield* Ref.set(rechecks, Option.some(asked));
+      yield* Effect.raceFirst(
+        Effect.sleep(UNCONFIGURED_RETRY_MS),
+        Queue.take(asked),
+      );
+    }).pipe(Effect.ensuring(Ref.set(rechecks, Option.none())));
+
     // One start attempt for `port`, from the binary to the child's
     // end. Answers how long the child ran, which the restart ladder
     // reads: 0 for an attempt that never had a healthy child.
@@ -533,10 +550,6 @@ const make = (options: Options) =>
         const previous = (yield* SubscriptionRef.get(status)).state;
         yield* setStatus({ state: "starting", hostname: null });
         yield* remember({ denied: false });
-        if ((yield* Ref.get(memory)).unconfigured) {
-          yield* setStatus({ state: "unconfigured", hostname: null });
-          return yield* park;
-        }
         const binaryPath = yield* withSpawner(options.resolveBinary);
         if (binaryPath === null) {
           // Logged on the way into no-binary, not on every reconcile.
@@ -555,16 +568,28 @@ const make = (options: Options) =>
             ? cached
             : null;
         if (provision === null) {
-          const provisioned = yield* Effect.result(options.provision(port));
+          const provisioned = yield* options.provision(port).pipe(
+            // Not a failure, so off the restart ladder: asked again
+            // once the wait ends.
+            Effect.tapError((error) =>
+              error.cause instanceof HubTunnelUnconfiguredError
+                ? remember({ unconfigured: true }).pipe(
+                    Effect.andThen(
+                      setStatus({ state: "unconfigured", hostname: null }),
+                    ),
+                    Effect.andThen(untilAskedAgain),
+                  )
+                : Effect.void,
+            ),
+            Effect.retry({
+              while: (error) =>
+                error.cause instanceof HubTunnelUnconfiguredError,
+            }),
+            Effect.result,
+          );
+          yield* remember({ unconfigured: false });
           if (Result.isFailure(provisioned)) {
             const error = provisioned.failure.cause;
-            if (error instanceof HubTunnelUnconfiguredError) {
-              // A deployment fact, not a failure: cached so no later
-              // reconcile retries it either.
-              yield* remember({ unconfigured: true });
-              yield* setStatus({ state: "unconfigured", hostname: null });
-              return yield* park;
-            }
             yield* setStatus({ state: "error", hostname: null });
             if (error instanceof TunnelProvisionDeniedError) {
               // Refused outright (a revoked credential's 401, an older
@@ -702,10 +727,7 @@ const make = (options: Options) =>
       // Not advertised from the moment the stop begins.
       yield* setStatus({ state: "off", hostname: null });
       yield* FiberHandle.clear(supervisor);
-      yield* Ref.update(memory, (current) => ({
-        ...stopped,
-        unconfigured: current.unconfigured,
-      }));
+      yield* Ref.set(memory, stopped);
       yield* setStatus({ state: "off", hostname: null });
     });
     yield* Effect.addFinalizer(() => stopNow);
@@ -718,20 +740,21 @@ const make = (options: Options) =>
             const current = yield* SubscriptionRef.get(status);
             const known = yield* Ref.get(memory);
             // No-op whenever the port is unchanged and the runner is not
-            // "off": a live child, a scheduled retry and the cached
-            // unconfigured verdict are all already the right response to
-            // this port, so an unrelated config write leaves a failing
-            // runner's ladder where it is. Two states do re-enter:
-            // "no-binary" (a config write may have just named a usable
-            // cloudflaredPath, and re-resolving is a probe with no Worker
-            // round trip and no ladder to disturb) and a provision-denied
-            // park, whose ONLY recovery path is the next reconcile
-            // trigger.
+            // "off": a live child and a scheduled retry are already the
+            // right response to this port, so an unrelated config write
+            // leaves a failing runner's ladder where it is. Three states
+            // do re-enter: "no-binary" (a config write may have just
+            // named a usable cloudflaredPath, and re-resolving is a probe
+            // with no Worker round trip and no ladder to disturb), a
+            // provision-denied park, whose ONLY recovery path is the next
+            // reconcile trigger, and an unconfigured answer, which a
+            // redeploy may have changed.
             if (
               wanted.port === known.wantedPort &&
               current.state !== "off" &&
               current.state !== "no-binary" &&
-              !known.denied
+              !known.denied &&
+              !known.unconfigured
             ) {
               return;
             }

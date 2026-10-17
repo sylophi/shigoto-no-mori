@@ -113,8 +113,8 @@
 //     transition redials it fresh.
 //   - the cloudflared deciders (argv/env secret discipline, the
 //     capped ladder through the supervisor's shared lookup) and the
-//     runner's lifecycle (no-binary, unconfigured cached for the
-//     process lifetime, probe-gated advertising with a deadline,
+//     runner's lifecycle (no-binary, unconfigured asked again on an
+//     interval and at a wake, probe-gated advertising with a deadline,
 //     crash restart reusing the cached provision only after a
 //     probe-passed child, re-provision on port change / a never-ready
 //     child, stable reset, reconcile no-op that preserves backoff, a
@@ -203,6 +203,7 @@ import {
   TUNNEL_PROBE_WARN_MS,
   TUNNEL_PROBE_DELAYS_MS,
   TUNNEL_PROBE_DELAYS_REUSED_MS,
+  UNCONFIGURED_RETRY_MS,
   TUNNEL_STABLE_MS,
   type TunnelProvision,
 } from "@host/direct/Tunnel";
@@ -2588,7 +2589,7 @@ it("cloudflared runner: a wake's recheck takes an up tunnel that no longer route
   assert.equal(tunnel.status().state, "up");
 });
 
-it("cloudflared runner: no-binary and unconfigured are typed terminal states, and the unconfigured verdict is cached for the process lifetime", async () => {
+it("cloudflared runner: no-binary is a typed terminal state, and an unconfigured Worker is asked again on an interval, at a wake and on a reconcile, so a redeploy brings the tunnel up", async () => {
   // Missing binary: reported, and provisioning never even runs.
   let binaryPath: string | null = null;
   let provisions = 0;
@@ -2611,34 +2612,45 @@ it("cloudflared runner: no-binary and unconfigured are typed terminal states, an
   assert.equal(noBinary.status().state, "starting");
   assert.equal(provisions, 1);
   await noBinary.reconcile(null);
-  // Worker unconfigured: the typed error parks the runner without
-  // a retry, so time passing changes nothing.
+  // Worker unconfigured: a deployment setting, which a redeploy changes,
+  // so the runner asks again on its interval, at once after a wake, and
+  // on a reconcile, and starts the tunnel once the Worker provisions.
+  let configured = false;
   let unconfiguredCalls = 0;
   const unconfigured = await tunnelHarness({
     provision: async () => {
       unconfiguredCalls += 1;
-      throw new HubTunnelUnconfiguredError();
+      if (!configured) throw new HubTunnelUnconfiguredError();
+      return { hostname: "h.example.test", connectorToken: "t" };
     },
   });
   await unconfigured.reconcile({ port: 40100 });
   assert.equal(unconfigured.status().state, "unconfigured");
-  await unconfigured.advance(10 * 60_000);
-  assert.equal(
-    unconfiguredCalls,
-    1,
-    "an unconfigured worker was retried on a timer",
-  );
-  assert.equal(unconfigured.spawned.length, 0, "spawned while unconfigured");
+  assert.equal(unconfiguredCalls, 1);
+  await unconfigured.advance(UNCONFIGURED_RETRY_MS - 1_000);
+  assert.equal(unconfiguredCalls, 1, "asked again before its interval");
+  await unconfigured.advance(1_000);
+  assert.equal(unconfiguredCalls, 2, "not asked again on its interval");
   assert.equal(unconfigured.status().state, "unconfigured");
-  // A deployment fact does not change with the port: even a
-  // port-changing reconcile skips the provision round trip for the
-  // rest of the process lifetime.
-  await unconfigured.reconcile({ port: 40200 });
-  assert.equal(
-    unconfiguredCalls,
-    1,
-    "the unconfigured verdict was not cached across reconciles",
-  );
+  // A wake asks at once, without waiting out the interval.
+  await unconfigured.recheck();
+  assert.equal(unconfiguredCalls, 3, "a wake did not ask again");
+  // A same-port reconcile (a re-sign-in, a config write) asks too.
+  await unconfigured.reconcile({ port: 40100 });
+  assert.equal(unconfiguredCalls, 4, "a reconcile did not ask again");
+  assert.equal(unconfigured.spawned.length, 0, "spawned while unconfigured");
+  // The hub redeployed with its tunnel env: the next ask starts it.
+  configured = true;
+  await unconfigured.recheck();
+  assert.equal(unconfiguredCalls, 5);
+  assert.equal(unconfigured.spawned.length, 1);
+  await unconfigured.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(unconfigured.status().state, "up");
+  // Once up, a stop and a start ask the Worker again like any start.
+  await unconfigured.reconcile(null);
+  configured = false;
+  await unconfigured.reconcile({ port: 40100 });
+  assert.equal(unconfiguredCalls, 6);
   assert.equal(unconfigured.status().state, "unconfigured");
 });
 
