@@ -30,14 +30,24 @@
 // broad externalChange sweep: a commit in one repo says nothing about
 // another project's rows. The app's own git operations ping like any
 // other tool's, so every view of the project follows them too.
+//
+// The events are a fast hint, not the record: a platform watch can drop
+// one, or end. So every BACKSTOP the watcher reconciles anyway (as the
+// store's changes do, engine StoreChanges): it starts again any watch
+// that ended, signals a project whose git state moved since it last
+// looked (gitStateOf, read with no git), and a project whose working
+// tree's watch had ended, whose edits meanwhile went unseen.
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
@@ -45,6 +55,7 @@ import { watchPath } from "@host/lib/watchPath";
 
 const DEBOUNCE_MS = 300;
 const EDIT_WINDOW = "1 second";
+const BACKSTOP = Duration.seconds(10);
 
 // Git-dir relative paths whose change means the project's git state
 // moved. Paths arrive with the platform separator and are normalized
@@ -162,6 +173,64 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
     return trees;
   });
 
+// What a project's git directory says about the state its rows show,
+// read with no git: HEAD and each worktree's HEAD, packed-refs, every
+// loose ref (a ref is written by a rename into place, so a new stamp),
+// and which stopped-operation markers exist. Two equal readings mean
+// nothing the allowlist above cares about moved between them.
+export const gitStateOf = (gitDir: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const stamp = (relative: string) =>
+      fs.stat(path.join(gitDir, relative)).pipe(
+        Effect.map(
+          (info) =>
+            `${relative}@${Option.match(info.mtime, {
+              onNone: () => 0,
+              onSome: (date) => date.getTime(),
+            })}:${info.size}`,
+        ),
+        Effect.orElseSucceed(() => `${relative}@-`),
+      );
+    const read = (relative: string) =>
+      fs
+        .readFileString(path.join(gitDir, relative))
+        .pipe(Effect.orElseSucceed(() => ""));
+    const listed = (relative: string, recursive: boolean) =>
+      fs
+        .readDirectory(path.join(gitDir, relative), { recursive })
+        .pipe(Effect.orElseSucceed((): string[] => []));
+    const worktrees = (yield* listed("worktrees", false)).toSorted();
+    const dirs = ["", ...worktrees.map((name) => `worktrees/${name}/`)];
+    const parts = [yield* stamp("packed-refs")];
+    for (const dir of dirs) {
+      parts.push(
+        dir,
+        yield* read(`${dir}HEAD`),
+        yield* read(`${dir}ORIG_HEAD`),
+      );
+      for (const marker of OPERATION_MARKERS) {
+        parts.push(yield* stamp(`${dir}${marker}`));
+      }
+    }
+    for (const ref of (yield* listed("refs", true)).toSorted()) {
+      parts.push(yield* stamp(path.join("refs", ref)));
+    }
+    return parts.join("\n");
+  });
+
+const OPERATION_MARKERS = [
+  "MERGE_HEAD",
+  "CHERRY_PICK_HEAD",
+  "REVERT_HEAD",
+  "SQUASH_MSG",
+  "BISECT_LOG",
+  "sequencer",
+  "rebase-merge",
+  "rebase-apply",
+];
+
 const treeKey = (projectId: string, tree: string) => `${projectId}\0${tree}`;
 
 export type GitWatcherDeps = {
@@ -171,6 +240,12 @@ export type GitWatcherDeps = {
   // The projects to follow. Defaults to the registry. The git-watcher
   // check injects its own list against a sandbox repository.
   projects?: () => Project[];
+  // Test seams: how a path is watched, and how often the watcher
+  // reconciles regardless. Real callers take the defaults.
+  watch?: (
+    path: string,
+  ) => Stream.Stream<FileSystem.WatchEvent, PlatformError.PlatformError>;
+  backstop?: Duration.Input;
 };
 
 export class GitWatcher extends Context.Service<
@@ -178,10 +253,11 @@ export class GitWatcher extends Context.Service<
   {
     // Bring the watched set in line with the registry: one watch per
     // project whose git directory resolves, dropped when the project
-    // leaves the registry or its git directory moves. Runs at boot and on
-    // every store change, the terminal's or the app's own
-    // (host/process/layer.ts), which together cover every way a project is
-    // added, removed or relocated.
+    // leaves the registry or its git directory moves, and a change no
+    // event said signalled. Runs at boot, on every store change, the
+    // terminal's or the app's own (host/process/layer.ts), which together
+    // cover every way a project is added, removed or relocated, and every
+    // BACKSTOP.
     readonly reconcile: Effect.Effect<void>;
   }
 >()("sm/host/GitWatcher") {}
@@ -203,6 +279,15 @@ const make = (deps: GitWatcherDeps) =>
       { readonly gitDir: string; readonly projectPath: string }
     >();
     const serial = yield* Semaphore.make(1);
+    const watchOf = (path: string) =>
+      deps.watch?.(path) ?? watchPath(fs, path, { recursive: true });
+    // Each watched project's git state as last seen, and the projects
+    // whose watch has heard a change not yet signalled (its debounce
+    // running), which the backstop leaves to it.
+    const states = new Map<string, string>();
+    const hearing = new Set<string>();
+    const stateOf = (gitDir: string) =>
+      gitStateOf(gitDir).pipe(Effect.provide(platform));
 
     // One working tree's edits: a burst's first change opens a window,
     // and the window's end is one signal, so a tree that never goes
@@ -210,7 +295,7 @@ const make = (deps: GitWatcherDeps) =>
     // window. A tree that goes away drops its watch, which the next read
     // of the project's trees starts again if the tree is back.
     const watchTree = (projectId: string, tree: string) =>
-      watchPath(fs, tree, { recursive: true }).pipe(
+      watchOf(tree).pipe(
         Stream.filter((event) => isWorkingTreeChange(event.path)),
         Stream.groupedWithin(Number.POSITIVE_INFINITY, EDIT_WINDOW),
         Stream.runForEach(() =>
@@ -235,10 +320,13 @@ const make = (deps: GitWatcherDeps) =>
             yield* FiberMap.remove(treeWatches, treeKey(projectId, tree));
           }
         }
+        let ended = false;
         for (const tree of wanted) {
           if (yield* FiberMap.has(treeWatches, treeKey(projectId, tree))) {
             continue;
           }
+          // Held, but its watch ended: edits since went unseen.
+          if (held.has(tree)) ended = true;
           yield* FiberMap.run(
             treeWatches,
             treeKey(projectId, tree),
@@ -246,6 +334,7 @@ const make = (deps: GitWatcherDeps) =>
           );
         }
         trees.set(projectId, wanted);
+        if (ended) deps.onFilesChanged(projectId);
       });
 
     const dropTrees = (projectId: string) =>
@@ -262,11 +351,16 @@ const make = (deps: GitWatcherDeps) =>
       projectId: string,
       entry: { readonly gitDir: string; readonly projectPath: string },
     ) =>
-      watchPath(fs, entry.gitDir, { recursive: true }).pipe(
+      watchOf(entry.gitDir).pipe(
         Stream.filter((event) => isRelevantGitPath(event.path)),
+        Stream.tap(() => Effect.sync(() => hearing.add(projectId))),
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() =>
-          Effect.sync(() => deps.onChange(projectId)).pipe(
+          Effect.gen(function* () {
+            states.set(projectId, yield* stateOf(entry.gitDir));
+            hearing.delete(projectId);
+            deps.onChange(projectId);
+          }).pipe(
             Effect.andThen(
               followTrees(projectId, entry.projectPath, entry.gitDir).pipe(
                 serial.withPermits(1),
@@ -281,6 +375,7 @@ const make = (deps: GitWatcherDeps) =>
         // Only its own entry: a reconcile may have replaced it already.
         Effect.ensuring(
           Effect.sync(() => {
+            hearing.delete(projectId);
             if (gitDirs.get(projectId) === entry) gitDirs.delete(projectId);
           }),
         ),
@@ -307,8 +402,12 @@ const make = (deps: GitWatcherDeps) =>
       for (const [projectId, { gitDir }] of gitDirs) {
         if (wanted.get(projectId)?.gitDir !== gitDir) {
           gitDirs.delete(projectId);
+          states.delete(projectId);
           yield* FiberMap.remove(watches, projectId);
         }
+      }
+      for (const projectId of states.keys()) {
+        if (!wanted.has(projectId)) states.delete(projectId);
       }
       for (const projectId of trees.keys()) {
         if (!wanted.has(projectId)) yield* dropTrees(projectId);
@@ -316,13 +415,24 @@ const make = (deps: GitWatcherDeps) =>
       for (const [projectId, entry] of wanted) {
         // A worktree moved by `sm` writes the store, which reconciles.
         yield* followTrees(projectId, entry.projectPath, entry.gitDir);
-        if (gitDirs.has(projectId)) continue;
-        gitDirs.set(projectId, entry);
-        yield* FiberMap.run(watches, projectId, watch(projectId, entry));
+        if (!gitDirs.has(projectId)) {
+          gitDirs.set(projectId, entry);
+          yield* FiberMap.run(watches, projectId, watch(projectId, entry));
+        }
+        // What moved that no event said: a watch that dropped an event,
+        // or ended and was started again just above.
+        if (hearing.has(projectId)) continue;
+        const state = yield* stateOf(entry.gitDir);
+        const last = states.get(projectId);
+        states.set(projectId, state);
+        if (last !== undefined && last !== state) deps.onChange(projectId);
       }
     }).pipe(serial.withPermits(1), Effect.withSpan("GitWatcher.reconcile"));
 
     yield* reconcile;
+    yield* Effect.forkScoped(
+      reconcile.pipe(Effect.repeat(Schedule.spaced(deps.backstop ?? BACKSTOP))),
+    );
     return GitWatcher.of({ reconcile });
   });
 
