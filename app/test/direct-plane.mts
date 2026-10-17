@@ -113,8 +113,8 @@
 //     transition redials it fresh.
 //   - the cloudflared deciders (argv/env secret discipline, the
 //     capped ladder through the supervisor's shared lookup) and the
-//     runner's lifecycle (no-binary, unconfigured cached for the
-//     process lifetime, probe-gated advertising with a deadline,
+//     runner's lifecycle (no-binary, unconfigured asked again on an
+//     interval and at a wake, probe-gated advertising with a deadline,
 //     crash restart reusing the cached provision only after a
 //     probe-passed child, re-provision on port change / a never-ready
 //     child, stable reset, reconcile no-op that preserves backoff, a
@@ -203,6 +203,7 @@ import {
   TUNNEL_PROBE_WARN_MS,
   TUNNEL_PROBE_DELAYS_MS,
   TUNNEL_PROBE_DELAYS_REUSED_MS,
+  UNCONFIGURED_RETRY_MS,
   TUNNEL_STABLE_MS,
   type TunnelProvision,
 } from "@host/direct/Tunnel";
@@ -2588,7 +2589,7 @@ it("cloudflared runner: a wake's recheck takes an up tunnel that no longer route
   assert.equal(tunnel.status().state, "up");
 });
 
-it("cloudflared runner: no-binary and unconfigured are typed terminal states, and the unconfigured verdict is cached for the process lifetime", async () => {
+it("cloudflared runner: no-binary is a typed terminal state, and an unconfigured Worker is asked again on an interval, at a wake and on a reconcile, so a redeploy brings the tunnel up", async () => {
   // Missing binary: reported, and provisioning never even runs.
   let binaryPath: string | null = null;
   let provisions = 0;
@@ -2611,35 +2612,127 @@ it("cloudflared runner: no-binary and unconfigured are typed terminal states, an
   assert.equal(noBinary.status().state, "starting");
   assert.equal(provisions, 1);
   await noBinary.reconcile(null);
-  // Worker unconfigured: the typed error parks the runner without
-  // a retry, so time passing changes nothing.
+  // Worker unconfigured: a deployment setting, which a redeploy changes,
+  // so the runner asks again on its interval, at once after a wake, and
+  // on a reconcile, and starts the tunnel once the Worker provisions.
+  let configured = false;
   let unconfiguredCalls = 0;
   const unconfigured = await tunnelHarness({
     provision: async () => {
       unconfiguredCalls += 1;
-      throw new HubTunnelUnconfiguredError();
+      if (!configured) throw new HubTunnelUnconfiguredError();
+      return { hostname: "h.example.test", connectorToken: "t" };
     },
   });
   await unconfigured.reconcile({ port: 40100 });
   assert.equal(unconfigured.status().state, "unconfigured");
-  await unconfigured.advance(10 * 60_000);
-  assert.equal(
-    unconfiguredCalls,
-    1,
-    "an unconfigured worker was retried on a timer",
-  );
+  assert.equal(unconfiguredCalls, 1);
+  await unconfigured.advance(UNCONFIGURED_RETRY_MS - 1_000);
+  assert.equal(unconfiguredCalls, 1, "asked again before its interval");
+  await unconfigured.advance(1_000);
+  assert.equal(unconfiguredCalls, 2, "not asked again on its interval");
+  assert.equal(unconfigured.status().state, "unconfigured");
+  // A wake asks at once, without waiting out the interval.
+  await unconfigured.recheck();
+  assert.equal(unconfiguredCalls, 3, "a wake did not ask again");
+  // A same-port reconcile (a re-sign-in, a config write) asks too.
+  await unconfigured.reconcile({ port: 40100 });
+  assert.equal(unconfiguredCalls, 4, "a reconcile did not ask again");
   assert.equal(unconfigured.spawned.length, 0, "spawned while unconfigured");
+  // The hub redeployed with its tunnel env: the next ask starts it.
+  configured = true;
+  await unconfigured.recheck();
+  assert.equal(unconfiguredCalls, 5);
+  assert.equal(unconfigured.spawned.length, 1);
+  await unconfigured.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(unconfigured.status().state, "up");
+  // Once up, a stop and a start ask the Worker again like any start.
+  await unconfigured.reconcile(null);
+  configured = false;
+  await unconfigured.reconcile({ port: 40100 });
+  assert.equal(unconfiguredCalls, 6);
   assert.equal(unconfigured.status().state, "unconfigured");
-  // A deployment fact does not change with the port: even a
-  // port-changing reconcile skips the provision round trip for the
-  // rest of the process lifetime.
-  await unconfigured.reconcile({ port: 40200 });
+  // A stop in the wait forgets the answer: a wake after it asks
+  // nothing, and the next start asks at once.
+  await unconfigured.reconcile(null);
+  await unconfigured.recheck();
+  assert.equal(unconfiguredCalls, 6, "a wake after a stop asked");
+  await unconfigured.reconcile({ port: 40100 });
+  assert.equal(unconfiguredCalls, 7, "a start after a stop did not ask");
+  // A clock step is no wake: the wall clock moved past the interval
+  // with no elapsed time asks nothing.
+  unconfigured.stepWall(UNCONFIGURED_RETRY_MS * 2);
+  await unconfigured.advance(0);
+  assert.equal(unconfiguredCalls, 7, "a wall-clock step asked");
+});
+
+it("cloudflared runner: a transient failure while an unconfigured answer is waited out is waited out too, and a cached provision that comes up again leaves same-port reconciles alone", async () => {
+  // The Worker's answers in order, then provisions.
+  const answers: Array<"unconfigured" | "offline"> = [
+    "unconfigured",
+    "offline",
+  ];
+  let asks = 0;
+  const runner = await tunnelHarness({
+    provision: async (port) => {
+      asks += 1;
+      const answer = answers.shift();
+      if (answer === "unconfigured") throw new HubTunnelUnconfiguredError();
+      if (answer === "offline") throw new Error("getaddrinfo ENOTFOUND");
+      return { hostname: `h${port}.example.test`, connectorToken: "t" };
+    },
+  });
+  await runner.reconcile({ port: 40100 });
+  assert.equal(runner.status().state, "unconfigured");
+  // A wake on a network still coming back: the ask fails, and the
+  // runner keeps waiting rather than stepping onto its error ladder,
+  // saying the tunnel is down rather than the hub unconfigured.
+  await runner.recheck();
+  assert.equal(asks, 2);
+  assert.equal(runner.status().state, "error");
+  await runner.advance(TUNNEL_BACKOFF_LADDER_MS[0] * 4);
+  assert.equal(asks, 2, "the failed ask went onto the restart ladder");
+  await runner.recheck();
+  assert.equal(asks, 3);
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(runner.status().state, "up");
+  assert.equal(runner.spawned.length, 1);
+  // The Worker loses its env, the listener moves, and moves back: the
+  // first port's provision is reused and comes up, and a reconcile of
+  // that port after it leaves the child alone.
+  answers.push("unconfigured");
+  await runner.reconcile({ port: 40200 });
+  assert.equal(runner.status().state, "unconfigured");
+  await runner.reconcile({ port: 40100 });
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(runner.status().state, "up");
+  const spawned = runner.spawned.length;
+  await runner.reconcile({ port: 40100 });
   assert.equal(
-    unconfiguredCalls,
-    1,
-    "the unconfigured verdict was not cached across reconciles",
+    runner.spawned.length,
+    spawned,
+    "a same-port reconcile restarted it",
   );
-  assert.equal(unconfigured.status().state, "unconfigured");
+  assert.equal(runner.status().state, "up");
+});
+
+it("cloudflared runner: a denial after an unconfigured answer parks as a denial, not a wait", async () => {
+  let asks = 0;
+  const runner = await tunnelHarness({
+    provision: async () => {
+      asks += 1;
+      if (asks === 1) throw new HubTunnelUnconfiguredError();
+      throw new TunnelProvisionDeniedError("HTTP 401");
+    },
+  });
+  await runner.reconcile({ port: 40100 });
+  assert.equal(runner.status().state, "unconfigured");
+  await runner.recheck();
+  assert.equal(asks, 2);
+  assert.equal(runner.status().state, "error");
+  await runner.recheck();
+  await runner.advance(UNCONFIGURED_RETRY_MS * 2);
+  assert.equal(asks, 2, "a denial was asked again on a timer or a wake");
 });
 
 it("cloudflared runner: the readiness probe gates advertising (a failed attempt retries on the probe ladder), a post-ready crash restarts from the cached provision on the capped backoff, a port change re-provisions, a stop kills the child cleanly, and the token never reaches a status object", async () => {
