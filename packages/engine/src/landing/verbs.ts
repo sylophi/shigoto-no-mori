@@ -34,6 +34,9 @@ export type StackRemoval = {
   readonly plan: Effect.Success<ReturnType<CleanupArea["planStackCleanup"]>>;
   readonly target: Worktrees.PrimaryTarget;
   readonly options: RemoveOptions;
+  readonly headOf: (
+    number: number,
+  ) => Effect.Effect<string, GitHub.GitHubCliError | GitHub.GitHubOutputError>;
 };
 
 export const makeVerbs = ({
@@ -66,6 +69,7 @@ export const makeVerbs = ({
       describeAfterDone,
       landCleanup,
       primaryTargetOf,
+      guardOthers,
       planStackCleanup,
       execStackCleanup,
     } = cleanup;
@@ -432,6 +436,30 @@ export const makeVerbs = ({
       );
     });
 
+    // The commits check of the branch a stack's removal runs from (the
+    // others' is planStackCleanup's): the PR heads the checks compare
+    // with are read once, for the plan, and kept for the removal's
+    // checks again.
+    const guardOwnCommits = (
+      located: Worktrees.Located,
+      pr: PullRequestSummary,
+      options: RemoveOptions,
+      remote: string,
+      headOf: (number: number) => ReturnType<typeof github.headOf>,
+    ) =>
+      Effect.gen(function* () {
+        if (yield* deletesBranch(located.worktree, options)) {
+          yield* guardCommits(
+            located.project.path,
+            located.worktree.branch,
+            pr.number,
+            yield* headOf(pr.number),
+            remote,
+            "rm",
+          );
+        }
+      });
+
     const planRemoveStack = Effect.fn("Landing.planRemoveStack")(function* (
       located: Worktrees.Located,
       options: RemoveOptions,
@@ -455,22 +483,34 @@ export const makeVerbs = ({
         false,
       );
       const chain = yield* stackChain(project, pr.number, lookups, "rm");
-      if (yield* deletesBranch(located.worktree, options)) {
-        yield* guardCommits(
-          project.path,
-          branch,
-          pr.number,
-          yield* github.headOf(project.path, pr.number),
-          lookups.target.remote,
-          "rm",
-        );
-      }
+      const heads = new Map<number, string>();
+      const headOf = (number: number) =>
+        Effect.suspend(() => {
+          const known = heads.get(number);
+          return known === undefined
+            ? github
+                .headOf(project.path, number)
+                .pipe(
+                  Effect.tap((head) =>
+                    Effect.sync(() => heads.set(number, head)),
+                  ),
+                )
+            : Effect.succeed(known);
+        });
+      yield* guardOwnCommits(
+        located,
+        pr,
+        options,
+        lookups.target.remote,
+        headOf,
+      );
       const plan = yield* planStackCleanup(
         located,
         chain,
         [],
         options,
         lookups.target.remote,
+        headOf,
       );
       return {
         worktrees: [...plan.others, located.worktree],
@@ -480,6 +520,7 @@ export const makeVerbs = ({
         plan,
         target: lookups.target,
         options,
+        headOf,
       } satisfies StackRemoval;
     });
 
@@ -487,14 +528,35 @@ export const makeVerbs = ({
       removal: StackRemoval,
       reporter: Reporter,
     ) {
+      // Checked again before anything is torn down, inside the caller's
+      // hold on the worktrees: what a script it stopped since the plan
+      // wrote as it went is refused here, where the removals below skip
+      // the dirty check.
+      const { located, chain, plan, target, options } = removal;
+      yield* worktrees.checkRemovable(located, options.force);
+      yield* guardOwnCommits(
+        located,
+        removal.pr,
+        options,
+        target.remote,
+        removal.headOf,
+      );
+      yield* guardOthers(
+        located,
+        chain,
+        plan.others,
+        options,
+        target.remote,
+        removal.headOf,
+      );
       return yield* execStackCleanup(
-        removal.located,
+        located,
         removal.pr,
         removal.pr.state === "MERGED",
-        removal.chain,
-        removal.plan,
-        removal.target,
-        removal.options,
+        chain,
+        plan,
+        target,
+        options,
         {},
         reporter,
       );

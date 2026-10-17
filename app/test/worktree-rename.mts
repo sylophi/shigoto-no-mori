@@ -136,3 +136,44 @@ it("a call by an id from before a move lands on the moved worktree and describes
   assert.equal(relocated.path, destination);
   assert.ok(!existsSync(renamed.path));
 });
+
+it("relocating the primary is the engine's refusal, whatever runs there", async () => {
+  const project = join(sandbox, "primary");
+  await git(sandbox, ["init", "-q", "-b", "main", project]);
+  await commitFile(project, "a.txt", "a\n", "seed");
+  const projectId = await fixture.projectIdOf(project);
+  const primary = (await listWorktrees(projectId)).find((w) => w.isPrimary);
+  assert.ok(primary, "the primary is listed");
+  await runHost(
+    Effect.flatMap(Scripts, (scripts) =>
+      scripts.start({
+        command: 'node -e "setTimeout(() => {}, 30000)"',
+        slot: { kind: "package", name: "sleep" },
+        worktree: {
+          id: primary.id,
+          name: primary.name,
+          branch: "main",
+          path: project,
+        },
+        project: { id: projectId, path: project, name: "primary" },
+        notify: () => {},
+      }),
+    ),
+  );
+  try {
+    await assert.rejects(
+      runHost(
+        worktreesHandlers.relocate({
+          projectId,
+          worktreeId: primary.id,
+          destinationPath: join(sandbox, "elsewhere"),
+        }),
+      ),
+      /The primary checkout can't be moved/,
+    );
+  } finally {
+    await runHost(
+      Effect.flatMap(Scripts, (scripts) => scripts.stopWorktree(primary.id)),
+    );
+  }
+});

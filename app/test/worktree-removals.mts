@@ -6,6 +6,12 @@
 //   - a stack's removal takes exactly the worktrees the engine's plan
 //     named, each announced as going and then gone, and each one's
 //     scripts stopped before its teardown ran, under the tombstone,
+//   - a worktree its script dirtied as it stopped is refused, after the
+//     stop and before any teardown,
+//   - a refusal at the plan announces nothing and leaves no marks; a
+//     removal cut short by an interrupt, or failing partway, announces
+//     each planned worktree removed or kept as it is, and clears the
+//     marks,
 //   - a project whose worktrees can't be read for a moment keeps its
 //     terminals through the sweep a delete ends with, while the deleted
 //     worktree's terminal closes, and the delete's mirror follow-up and
@@ -22,6 +28,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
@@ -33,7 +40,7 @@ import * as Scripts from "../host/lib/Scripts.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
-import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
+import { engineDataDir, hostContext, runHost } from "./lib/hostRuntime.mts";
 import { onHostPush, standInMirror } from "./lib/hostStandIns.mts";
 import { inertMirrorImpl } from "./lib/mirrorFakes.mts";
 import {
@@ -104,13 +111,18 @@ const create = async (
     )
   ).worktree;
 
-// A script that records its pid and sleeps, the way a dev server holds
-// its worktree.
-const runIn = (project: Project, worktree: Worktree, pidFile: string) =>
+// A script that records its pid and runs until stopped, the way a dev
+// server holds its worktree, running `onStop` in it as it goes.
+const runIn = (
+  project: Project,
+  worktree: Worktree,
+  pidFile: string,
+  onStop = "",
+) =>
   runHost(
     Effect.flatMap(Scripts.Scripts, (scripts) =>
       scripts.start({
-        command: `echo $$ > '${pidFile}'; exec sleep 30`,
+        command: `trap '${onStop} exit 0' TERM; echo $$ > '${pidFile}'; while :; do sleep 0.1; done`,
         slot: { kind: "package", name: "serve" },
         worktree: {
           id: worktree.id,
@@ -142,9 +154,46 @@ const pr = (number: number, head: string, base: string, state: string) =>
     isCrossRepository: false,
   });
 
-it("a stack's removal takes the worktrees its plan named, each stopped under the tombstone", async () => {
-  const { repo, project } = await repoAt("stack");
-  // bear (#4) merged into main, fox (#5) merged into bear.
+// gh answers from the files the stack below writes: a branch's PRs, the
+// project's list, a PR's head.
+let answers: string;
+beforeAll(() => {
+  answers = join(root, "gh");
+  mkdirSync(answers);
+  installFakeGh(
+    root,
+    `#!/bin/sh
+d='${answers}'
+case "$*" in
+  "--version"*|"auth "*) echo ok;;
+  "pr list --state all --head "*) cat "$d/head-$(echo "$*" | sed 's/.*--head \\([^ ]*\\).*/\\1/')";;
+  "pr list --state all --limit 200 "*) cat "$d/list";;
+  "pr view "*" --json headRefOid") cat "$d/view-$3";;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac
+`,
+    track,
+  );
+});
+
+const marks = async () =>
+  (await runHost(Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy)))
+    .inflightDeletes;
+
+// A stack in a project of its own: bear (#4) merged into main and fox
+// (#5) into bear, each worktree running a script that `onStop` runs in
+// as it is stopped, and a teardown that notes in `teardowns` whether
+// that script still ran, then runs `teardown` (`$n` its worktree's
+// name).
+const stackOf = async (
+  name: string,
+  options: {
+    readonly foxState?: string;
+    readonly onStop?: { readonly bear?: string };
+    readonly teardown?: string;
+  } = {},
+) => {
+  const { project } = await repoAt(name);
   const bear = await create(project, {
     worktreeName: "bear",
     branchName: "bear",
@@ -156,63 +205,144 @@ it("a stack's removal takes the worktrees its plan named, each stopped under the
     base: "bear",
   });
   git(fox.path, "commit", "-q", "--allow-empty", "-m", "fox");
-  // The engine's reads are its own (`--json number,title,...`), the
-  // host's PR map's another (`--json number,url,...`), which still
-  // has bear open.
-  const both = `[${pr(4, "bear", "main", "MERGED")},${pr(5, "fox", "bear", "MERGED")}]`;
-  installFakeGh(
-    root,
-    `#!/bin/sh
-case "$*" in
-  "--version"*|"auth "*) echo ok;;
-  "pr list --state all --head fox "*) echo '[${pr(5, "fox", "bear", "MERGED")}]';;
-  "pr list --state all --head bear "*) echo '[${pr(4, "bear", "main", "MERGED")}]';;
-  "pr list --state all --limit 200 --json number,title"*) echo '${both}';;
-  "pr list --state all --limit 200 --json number,url"*) echo '[${pr(4, "bear", "main", "OPEN")},${pr(5, "fox", "bear", "MERGED")}]';;
-  *) echo "unexpected gh $*" >&2; exit 1;;
-esac
-`,
-    track,
+  const foxPr = pr(5, "fox", "bear", options.foxState ?? "MERGED");
+  writeFileSync(join(answers, "head-fox"), `[${foxPr}]`);
+  writeFileSync(
+    join(answers, "head-bear"),
+    `[${pr(4, "bear", "main", "MERGED")}]`,
   );
-  // Each teardown says whether its worktree's script still ran.
-  const verdicts = join(root, "teardowns");
+  writeFileSync(
+    join(answers, "list"),
+    `[${pr(4, "bear", "main", "MERGED")},${foxPr}]`,
+  );
+  for (const [number, worktree] of [
+    [4, bear],
+    [5, fox],
+  ] as const) {
+    writeFileSync(
+      join(answers, `view-${number}`),
+      JSON.stringify({
+        headRefOid: git(worktree.path, "rev-parse", "HEAD").trim(),
+      }),
+    );
+  }
+  const run = join(root, `${name}-run`);
+  mkdirSync(run);
+  const teardowns = join(run, "teardowns");
   await runHost(
     Ops.writeProjectConfig(project.id, {
       defaultBranch: "main",
       scripts: {
-        teardown: `n=$(basename "$PWD"); if kill -0 "$(cat '${root}'/$n.pid)" 2>/dev/null; then echo "$n running"; else echo "$n stopped"; fi >> '${verdicts}'`,
+        teardown: `n=$(basename "$PWD"); if kill -0 "$(cat '${run}'/$n.pid)" 2>/dev/null; then echo "$n running"; else echo "$n stopped"; fi >> '${teardowns}'; ${options.teardown ?? "true"}`,
       },
     }),
   );
-  for (const worktree of [bear, fox]) {
-    await runIn(project, worktree, join(root, `${worktree.name}.pid`));
-  }
+  await runIn(project, bear, join(run, "bear.pid"), options.onStop?.bear);
+  await runIn(project, fox, join(run, "fox.pid"));
   await waitFor(
-    () =>
-      existsSync(join(root, "bear.pid")) && existsSync(join(root, "fox.pid")),
+    () => existsSync(join(run, "bear.pid")) && existsSync(join(run, "fox.pid")),
     "both scripts to start",
   );
-  announced.length = 0;
-  const result = await runHost(
+  const listed = async () =>
+    (await runHost(Ops.listWorktrees(project.id))).map((w) => w.id);
+  const ran = () =>
+    existsSync(teardowns)
+      ? readFileSync(teardowns, "utf8").split("\n").filter(Boolean)
+      : [];
+  const removeStack = () =>
     worktreesHandlers.deleteStack(
-      { projectId: project.id, worktreeId: fox.id, force: true },
+      { projectId: project.id, worktreeId: fox.id },
       here,
-    ),
-  );
+    );
+  announced.length = 0;
+  return { project, bear, fox, run, listed, ran, removeStack };
+};
+
+it("a stack's removal takes the worktrees its plan named, each stopped under the tombstone", async () => {
+  const { bear, fox, listed, ran, removeStack } = await stackOf("taken");
+  const result = await runHost(removeStack());
   assert.deepEqual(result, { ok: true, removed: [bear.id, fox.id] });
-  assert.deepEqual(readFileSync(verdicts, "utf8").split("\n").filter(Boolean), [
-    "bear stopped",
-    "fox stopped",
-  ]);
+  assert.deepEqual(ran(), ["bear stopped", "fox stopped"]);
   assert.deepEqual(announced, [
     `${bear.id} removing`,
     `${fox.id} removing`,
     `${bear.id} removed`,
     `${fox.id} removed`,
   ]);
-  const left = (await runHost(Ops.listWorktrees(project.id))).map((w) => w.id);
+  const left = await listed();
   assert.ok(!left.includes(bear.id) && !left.includes(fox.id), String(left));
-  assert.ok(existsSync(repo));
+  assert.equal(await marks(), 0);
+});
+
+it("a worktree its stopping script dirtied is refused before any teardown runs", async () => {
+  const { bear, fox, listed, ran, removeStack } = await stackOf("dirtied", {
+    onStop: { bear: "touch left-behind.txt;" },
+  });
+  await assert.rejects(runHost(removeStack()), /bear/);
+  assert.ok(existsSync(join(bear.path, "left-behind.txt")));
+  assert.deepEqual(ran(), [], "no teardown ran");
+  assert.deepEqual(announced, [
+    `${bear.id} removing`,
+    `${fox.id} removing`,
+    `${bear.id} kept`,
+    `${fox.id} kept`,
+  ]);
+  const left = await listed();
+  assert.ok(left.includes(bear.id) && left.includes(fox.id), String(left));
+  assert.equal(await marks(), 0);
+});
+
+it("a refusal at the plan announces nothing, marks nothing and stops nothing", async () => {
+  const { bear, run, listed, removeStack } = await stackOf("unplanned", {
+    foxState: "OPEN",
+  });
+  await assert.rejects(runHost(removeStack()), /still open/);
+  assert.deepEqual(announced, []);
+  assert.equal(await marks(), 0);
+  const pid = Number(readFileSync(join(run, "bear.pid"), "utf8"));
+  assert.doesNotThrow(() => process.kill(pid, 0), "bear's script still runs");
+  assert.ok((await listed()).includes(bear.id));
+});
+
+it("a removal that fails partway announces what went and what stayed", async () => {
+  const { bear, fox, listed, ran, removeStack } = await stackOf("partial", {
+    teardown: `[ "$n" != fox ]`,
+  });
+  const result = await runHost(removeStack());
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.removed, [bear.id]);
+  assert.deepEqual(ran(), ["bear stopped", "fox stopped"]);
+  assert.deepEqual(announced, [
+    `${bear.id} removing`,
+    `${fox.id} removing`,
+    `${bear.id} removed`,
+    `${fox.id} kept`,
+  ]);
+  const left = await listed();
+  assert.ok(!left.includes(bear.id) && left.includes(fox.id), String(left));
+  assert.equal(await marks(), 0);
+});
+
+it("an interrupt after the marks announces every planned worktree kept and clears the marks", async () => {
+  const { bear, fox, run, listed, ran, removeStack } = await stackOf("cut", {
+    // Held until let go, which an interrupt that waited for it would.
+    teardown: `while [ ! -f '${join(root, "cut-run", "go")}' ]; do sleep 0.05; done`,
+  });
+  const fiber = Effect.runForkWith(await hostContext())(removeStack());
+  await waitFor(() => ran().length === 1, "bear's teardown to start");
+  const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
+  setTimeout(() => writeFileSync(join(run, "go"), ""), 500);
+  await interrupted;
+  assert.deepEqual(ran(), ["bear stopped"]);
+  assert.deepEqual(announced, [
+    `${bear.id} removing`,
+    `${fox.id} removing`,
+    `${bear.id} kept`,
+    `${fox.id} kept`,
+  ]);
+  const left = await listed();
+  assert.ok(left.includes(bear.id) && left.includes(fox.id), String(left));
+  assert.equal(await marks(), 0);
 });
 
 // A terminal of the worktree's, and the ones open.

@@ -674,7 +674,8 @@ function hostHandlersFor(
       return { ok: true };
     },
     // The stack cleanup takes the merged layers' worktrees the way the
-    // host does: those of the stack's merged PRs, this device's rows.
+    // page reads them: those of the stack's merged PRs, this device's
+    // rows. With none, it refuses as the engine does.
     "worktrees:deleteStack": ({ projectId, worktreeId }) => {
       const rows = forest.worktrees[projectId] ?? [];
       const cleanup = stackCleanupForWorktree(
@@ -683,8 +684,9 @@ function hostHandlersFor(
         worktreeId,
       );
       if (!cleanup) {
+        const branch = rows.find((w) => w.id === worktreeId)?.branch ?? "";
         throw new Error(
-          "No merged layer of this stack has a worktree to remove.",
+          `No pull request found for branch ${branch}, so no stack to clean up`,
         );
       }
       const removed = cleanup.worktrees.map((w) => w.id);

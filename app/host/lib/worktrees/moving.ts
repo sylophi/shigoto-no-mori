@@ -54,13 +54,15 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
           input.projectId,
           input.worktreeId,
         );
-        yield* refuseRunningWork(worktree, verb);
+        // The engine refuses to move the primary checkout, whatever runs
+        // in it, so that is what it hears.
+        if (!worktree.isPrimary) yield* refuseRunningWork(worktree, verb);
         return yield* scripts.withDeleteInflight(
           worktree.id,
           "This worktree is already being removed or moved.",
           commit(project, worktree.id),
-          // The engine answers a move to where the worktree already is
-          // with its row, under the same id.
+          // A move to where the worktree already is, spelled the same,
+          // keeps its id and has no mirrors to carry.
           (moved) =>
             moved.id === worktree.id
               ? Effect.void
