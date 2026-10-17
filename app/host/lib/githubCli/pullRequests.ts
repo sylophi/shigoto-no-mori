@@ -392,15 +392,22 @@ function toReviews(pr: GqlExtrasPullRequest): PullRequestReviews {
 // token names.
 const SIGNED_URL_REUSE_MS = 4 * 60_000;
 const SIGNED_URL_MARGIN_MS = 60_000;
-// By attachment (host/id): the URL, until when on the monotonic clock it
-// is reused, and its token's expiry on the wall clock, null when it
-// names none (an Enterprise Server's media host signs with an opaque
-// token).
+
+// An observation's time on both clocks, and its age by whichever reads
+// older, so neither a sleep nor a step of the wall clock either way
+// keeps it past its age.
+export type Stamp = { readonly elapsed: number; readonly wall: number };
+export const ageOf = (at: Stamp, now: Stamp): number =>
+  Math.max(now.elapsed - at.elapsed, now.wall - at.wall);
+
+// By attachment (host/id): the URL, when it was signed, and its token's
+// expiry on the wall clock, null when it names none (an Enterprise
+// Server's media host signs with an opaque token).
 export type SignedUrls = Map<
   string,
   {
     readonly url: string;
-    readonly until: number;
+    readonly at: Stamp;
     readonly expires: number | null;
   }
 >;
@@ -437,11 +444,11 @@ export function withSignedImages(
   body: string,
   bodyHTML: string,
   signedUrls: SignedUrls,
-  now: { readonly elapsed: number; readonly wall: number },
+  now: Stamp,
 ): string {
   for (const [key, signed] of signedUrls) {
     if (
-      signed.until <= now.elapsed ||
+      ageOf(signed.at, now) >= SIGNED_URL_REUSE_MS ||
       (signed.expires !== null &&
         signed.expires - SIGNED_URL_MARGIN_MS <= now.wall)
     ) {
@@ -473,7 +480,7 @@ export function withSignedImages(
     if (loadable && !signedUrls.has(key)) {
       signedUrls.set(key, {
         url: rendered,
-        until: now.elapsed + SIGNED_URL_REUSE_MS,
+        at: now,
         expires: tokenExpiry(url),
       });
     }

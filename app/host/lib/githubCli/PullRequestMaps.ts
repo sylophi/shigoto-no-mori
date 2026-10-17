@@ -21,10 +21,12 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as HostPushes from "../HostPushes";
 import * as GithubCli from "./GithubCli";
 import {
+  ageOf,
   pullRequestMapsEqual,
   readBranchPullRequest,
   readProjectPullRequests,
   type SignedUrls,
+  type Stamp,
   withSignedImages,
 } from "./pullRequests";
 
@@ -39,8 +41,8 @@ export class PullRequestMaps extends Context.Service<
     // The last map read while it is fresh, else one read now. Empty
     // while gh can't be asked about the project.
     readonly get: (project: ProjectRef) => Effect.Effect<PullRequestMap>;
-    // A map read now: the sweep's, and a stack cleanup's. A failed read
-    // answers the last map and leaves it to be read again.
+    // A map read now, the sweep's. A failed read answers the last map
+    // and leaves it to be read again.
     readonly refresh: (project: ProjectRef) => Effect.Effect<PullRequestMap>;
     // A page's read of its branch's PR, which moves the map where it is
     // newer. Null when the branch has none or gh can't be asked.
@@ -60,10 +62,9 @@ export class PullRequestMaps extends Context.Service<
   }
 >()("sm/host/PullRequestMaps") {}
 
-// Monotonic, so a step of the wall clock neither keeps a map past this
-// age nor drops one early. A Mac's sleep doesn't age it; the sweep reads
-// the map again after a wake (BackgroundFetch's windows age by either
-// clock).
+// Aged by whichever clock reads older: a sleep (which a Mac's monotonic
+// clock skips) or a forward step of the wall clock reads the map again,
+// and a backward step keeps none past its monotonic age.
 const MAP_TTL_MS = 5 * 60_000;
 
 const make = Effect.gen(function* () {
@@ -72,54 +73,77 @@ const make = Effect.gen(function* () {
   const gh = yield* Effect.context<
     Git.Git | GitHub.GitHub | ChildProcessSpawner.ChildProcessSpawner
   >();
+  // By project: the last good map and when it was read, null once a
+  // change on GitHub made it stale.
   const maps = new Map<
     string,
-    { readonly value: PullRequestMap; readonly readAt: number }
+    { readonly value: PullRequestMap; readonly readAt: Stamp | null }
   >();
+  // By project, bumped by every change that isn't a whole read (a
+  // mutation, a page's note): a read that started before one is older
+  // than what it would overwrite, and is dropped.
+  const generations = new Map<string, number>();
+  // The projects whose view the not-ready gate last answered empty, so
+  // the next good read announces even when it equals the stored map.
+  const gated = new Set<string>();
   const signedUrls: SignedUrls = new Map();
   const none: PullRequestMap = new Map();
+
+  const now = Effect.gen(function* () {
+    return {
+      elapsed: yield* elapsedMillis,
+      wall: yield* Clock.currentTimeMillis,
+    } satisfies Stamp;
+  });
+  const generation = (project: ProjectRef) => generations.get(project.id) ?? 0;
+  const bump = (project: ProjectRef) =>
+    generations.set(project.id, generation(project) + 1);
 
   const announce = (project: ProjectRef) =>
     HostPushes.push(githubCliContract, "projectPullRequestsRefreshed", {
       projectId: project.id,
     }).pipe(Effect.provideService(HostPushes.HostPushes, pushes));
 
-  const write = (project: ProjectRef, value: PullRequestMap, readAt: number) =>
+  const write = (
+    project: ProjectRef,
+    value: PullRequestMap,
+    readAt: Stamp | null,
+  ) =>
     Effect.suspend(() => {
       const last = maps.get(project.id);
       maps.set(project.id, { value, readAt });
-      return last && pullRequestMapsEqual(last.value, value)
+      const shown = !gated.delete(project.id) && last !== undefined;
+      return shown && pullRequestMapsEqual(last.value, value)
         ? Effect.void
         : announce(project);
     });
 
   const read = Effect.fnUntraced(function* (project: ProjectRef) {
-    const readAt = yield* elapsedMillis;
+    const readAt = yield* now;
+    const started = generation(project);
     const value = yield* readProjectPullRequests(project.path).pipe(
       Effect.provide(gh),
     );
-    if (value === null) return maps.get(project.id)?.value ?? none;
+    const last = maps.get(project.id)?.value ?? none;
+    if (value === null || generation(project) !== started) return last;
     yield* write(project, value, readAt);
     return value;
   });
 
-  const ready = (project: ProjectRef) =>
-    Effect.map(cli.unavailableFor(project.path), (reason) => reason === null);
+  const ready = Effect.fnUntraced(function* (project: ProjectRef) {
+    if ((yield* cli.unavailableFor(project.path)) === null) return true;
+    gated.add(project.id);
+    return false;
+  });
 
   const signer = (body: string, bodyHTML: string) =>
-    Effect.gen(function* () {
-      const now = {
-        elapsed: yield* elapsedMillis,
-        wall: yield* Clock.currentTimeMillis,
-      };
-      return withSignedImages(body, bodyHTML, signedUrls, now);
-    });
+    Effect.map(now, (at) => withSignedImages(body, bodyHTML, signedUrls, at));
 
   return PullRequestMaps.of({
     get: Effect.fn("PullRequestMaps.get")(function* (project: ProjectRef) {
       if (!(yield* ready(project))) return none;
       const last = maps.get(project.id);
-      if (last && (yield* elapsedMillis) - last.readAt < MAP_TTL_MS) {
+      if (last?.readAt && ageOf(last.readAt, yield* now) < MAP_TTL_MS) {
         return last.value;
       }
       return yield* read(project);
@@ -133,16 +157,22 @@ const make = Effect.gen(function* () {
     branchPullRequest: Effect.fn("PullRequestMaps.branchPullRequest")(
       function* (project: ProjectRef, branch: string) {
         if (!(yield* ready(project))) return null;
+        const started = generation(project);
         const pr = yield* readBranchPullRequest(
           project.path,
           branch,
           signer,
         ).pipe(Effect.provide(gh));
         const last = maps.get(project.id);
-        if (last && !matchesMapEntry(pr, last.value.get(branch))) {
+        if (
+          last &&
+          generation(project) === started &&
+          !matchesMapEntry(pr, last.value.get(branch))
+        ) {
           const value = new Map(last.value);
           if (pr === null) value.delete(branch);
           else value.set(branch, toSlimPullRequest(pr));
+          bump(project);
           yield* write(project, value, last.readAt);
         }
         return pr;
@@ -156,14 +186,14 @@ const make = Effect.gen(function* () {
       const last = maps.get(project.id);
       const pr = last?.value.get(branch);
       if (!last || !pr || pr.title === title) return;
+      bump(project);
       const value = new Map(last.value).set(branch, { ...pr, title });
       yield* write(project, value, last.readAt);
     }),
     moved: Effect.fn("PullRequestMaps.moved")(function* (project: ProjectRef) {
+      bump(project);
       const last = maps.get(project.id);
-      if (last) {
-        maps.set(project.id, { value: last.value, readAt: -Infinity });
-      }
+      if (last) maps.set(project.id, { value: last.value, readAt: null });
       yield* announce(project);
     }),
   });

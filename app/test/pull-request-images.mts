@@ -196,18 +196,16 @@ it("an attached image on github.com takes its signed URL, and keeps it", async (
     "a refetch keeps the signed URLs",
   );
 
-  // The wall clock stepped back an hour holds no URL longer, nor does
-  // one stepped forward drop it.
+  // The wall clock stepped back an hour holds no URL longer: four
+  // minutes on the monotonic clock, the next read takes the newly
+  // signed one.
   clocks.sleep(-HOUR);
   await clock.advance(2 * 60_000);
-  clocks.sleep(2 * HOUR);
   assert.equal(
     (await getWorktreePullRequest(repo, "pics"))?.body,
     signedBody("first"),
-    "kept across steps of the wall clock",
+    "two minutes on, the wall clock back an hour: kept",
   );
-
-  // Four minutes on, the next read takes the newly signed one.
   await clock.advance(2 * 60_000);
   writeFileSync(answer, rendered("third"));
   assert.equal(
@@ -215,6 +213,42 @@ it("an attached image on github.com takes its signed URL, and keeps it", async (
     signedBody("third"),
     "a URL four minutes old is signed anew",
   );
+});
+
+it("a URL with an opaque token is signed anew after a sleep, a stopped process or the wall clock stepped forward", async () => {
+  const id = "77777777-7777-4777-8777-777777777777";
+  const opaque = (n: number) =>
+    `https://private-user-images.githubusercontent.com/1/2-${id}.png?token=t${n}`;
+  const { list, graphql: answer } = answers("github.com");
+  writeFileSync(
+    list,
+    JSON.stringify([
+      pullRequest(
+        "https://github.com/o/r/pull/3",
+        "pics",
+        `![shot](${attachment(id)})`,
+      ),
+    ]),
+  );
+  const repo = repoOn("opaque", "https://github.com/o/r.git");
+  let n = 0;
+  const read = async () => {
+    n += 1;
+    writeFileSync(answer, graphql(`<img src="${opaque(n)}">`));
+    return (await getWorktreePullRequest(repo, "pics"))?.body;
+  };
+  assert.equal(await read(), `![shot](${opaque(1)})`);
+  let shown = opaque(1);
+  for (const [what, move] of [
+    ["a sleep", () => clocks.sleep(4 * 60_000)],
+    ["a stopped process", () => clocks.stop(4 * 60_000)],
+    ["the wall clock two hours on", () => clocks.sleep(2 * HOUR)],
+  ] as const) {
+    assert.equal(await read(), `![shot](${shown})`, `${what}: kept before`);
+    move();
+    assert.equal(await read(), `![shot](${opaque(n)})`, `${what}: signed anew`);
+    shown = opaque(n);
+  }
 });
 
 const tokenPart = (value: object) =>
