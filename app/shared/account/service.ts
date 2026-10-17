@@ -7,7 +7,8 @@
 // A call rejects with the hub's refusal as its contract error
 // (HubDeviceRevokedError, HubUnknownDeviceError, ...), or with an
 // HttpClientError when the hub could not be reached or answered
-// something the API does not name (a 429, a bare 5xx).
+// something the API does not name (a bare 5xx), or with
+// HubRateLimitedError for the rate limiter's 429.
 //
 // Auth-tier discipline lives here. enroll is the only call that carries
 // the short-lived Clerk session token proving the sign-in. listDevices,
@@ -39,7 +40,10 @@ import {
   type TunnelProvisionResponse,
 } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import {
+  errorMessageOf,
+  HubRateLimitedError,
+} from "@shigomori/contracts/errors";
 
 // The hub could not be reached at all: offline, a DNS or TLS failure,
 // or a browser hiding a failed response behind CORS.
@@ -62,27 +66,26 @@ export class TunnelProvisionDeniedError extends Error {
   }
 }
 
-// The hub's rate limiter turned a read away: a 429, which the API names
-// no error for, so it read "Decode error". A later ask is answered (the
-// device list's query asks three more times, a second, two and four
-// apart).
-export class HubRateLimitedError extends Error {
-  constructor() {
-    super("the hub is rate-limiting this device; retrying");
-    this.name = "HubRateLimitedError";
+// A 429 as the one error every call fails with, its Retry-After kept,
+// in place of the "Decode error" the client reads it as.
+function rateLimitedOf(error: unknown): HubRateLimitedError | undefined {
+  if (
+    !HttpClientError.isHttpClientError(error) ||
+    !("response" in error.reason) ||
+    error.reason.response.status !== 429
+  ) {
+    return undefined;
   }
+  const seconds = Number(error.reason.response.headers["retry-after"]);
+  return new HubRateLimitedError({
+    retryAfterSeconds:
+      Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined,
+  });
 }
 
-function isRateLimited(error: unknown): boolean {
-  return (
-    HttpClientError.isHttpClientError(error) &&
-    "response" in error.reason &&
-    error.reason.response.status === 429
-  );
-}
-
-// A status the API names no error for, from a client error that is not
-// the rate limiter's: the same request will be refused again.
+// A status the API names no error for, from a client error (the rate
+// limiter's 429 is HubRateLimitedError by now): the same request will be
+// refused again.
 function isRefusedStatus(error: unknown): boolean {
   if (
     !HttpClientError.isHttpClientError(error) ||
@@ -91,7 +94,7 @@ function isRefusedStatus(error: unknown): boolean {
     return false;
   }
   const status = error.reason.response.status;
-  return status >= 400 && status < 500 && status !== 429;
+  return status >= 400 && status < 500;
 }
 
 type AccountServiceDeps = {
@@ -181,7 +184,9 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         Effect.provideService(HttpClient.TracerPropagationEnabled, false),
       ),
       { signal },
-    );
+    ).catch((error: unknown) => {
+      throw rateLimitedOf(error) ?? error;
+    });
 
   return {
     async enroll(sessionToken, fields) {
@@ -195,11 +200,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async listDevices(credential) {
-      const listed = await call(credential, (client) =>
-        client.listDevices(),
-      ).catch((error: unknown) => {
-        throw isRateLimited(error) ? new HubRateLimitedError() : error;
-      });
+      const listed = await call(credential, (client) => client.listDevices());
       const { devices } = Schema.decodeSync(DeviceListResponseSchema)(listed);
       return [...devices];
     },
@@ -236,7 +237,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       } catch (error) {
         // The one 4xx a retry does change is the Worker's rate limiter,
         // so it stays retryable with the 5xx and network failures.
-        if (error instanceof HubTunnelUnconfiguredError) throw error;
+        if (
+          error instanceof HubTunnelUnconfiguredError ||
+          error instanceof HubRateLimitedError
+        ) {
+          throw error;
+        }
         if (isHubRefusal(error) || isRefusedStatus(error)) {
           throw new TunnelProvisionDeniedError(errorMessageOf(error));
         }
