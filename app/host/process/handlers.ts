@@ -100,7 +100,6 @@ import {
   onSharedSettingsChange,
   sharedSettingsCopy,
 } from "@host/lib/sharedSettings/store";
-import { onGlobalConfigChange } from "@host/lib/config/global";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
@@ -140,7 +139,6 @@ import {
   broadcastAll,
   clearDirectTickets,
   refreshHubConnection,
-  refreshDirectHost,
   registerContract,
   registerLoopbackContract,
   registerViews,
@@ -712,15 +710,6 @@ const stopPortForwardsTo = (keep: (deviceId: string) => boolean): void =>
   );
 
 export function registerHostHandlers(): void {
-  // Reconcile the listener on every config change, whatever the path:
-  // the write handler and a terminal write the store's changes show both
-  // end in globalConfigChanged (host/lib/config/global.ts), which calls
-  // this one subscriber, so the directConnections opt-out applies
-  // without a restart. The refresh never rejects, so fire and forget is
-  // safe. The start's pass is the account's first report (applyAccount).
-  onGlobalConfigChange(() => {
-    void refreshDirectHost();
-  });
   // This device's copy of the shared settings moved (a pick here, or a
   // peer's entries merged in): every window re-reads it off the push,
   // and every peer's window folds it into its own copy.

@@ -10,6 +10,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
+import * as Terrier from "@shigomori/engine/Terrier";
 import * as HostPushes from "@host/lib/HostPushes";
 import type { HostServices } from "./services";
 import * as Graph from "./graph";
@@ -446,8 +449,9 @@ export function probeRemoteConnections(): void {
 const listenerPortPath = () => join(hostFacts().userDataPath, "direct-port");
 
 // Reconciles the listener with the account and the device's config: run
-// from refreshHubConnection's tail and on every global-config change,
-// so the directConnections opt-out applies without a restart. The
+// from refreshHubConnection's tail and on every device settings change
+// (followDeviceSettings), so the directConnections opt-out applies
+// without a restart. The
 // config read runs inside the binding's serialized lifecycle. Dual-stack
 // ("::") because connectInfo advertises IPv6 candidates too, on the
 // port it listened on last (listenerPort.ts), read back from status.
@@ -505,3 +509,23 @@ export async function refreshDirectHost(): Promise<void> {
     ),
   ).catch(() => undefined);
 }
+
+// What follows the device's settings wherever they are written, the
+// Settings form or `sm config` in a terminal: `reconcile` (the listener
+// and its tunnel, refreshDirectHost), and terrier's readiness, re-probed
+// in case its toggle flipped. The start's pass is the account's first
+// report (handlers.ts applyAccount).
+export const followDeviceSettings = (reconcile: Effect.Effect<void>) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const written = yield* (yield* StoreChanges.StoreChanges).subscribe;
+      const terrier = yield* Terrier.Terrier;
+      yield* written.pipe(
+        Stream.filter((tables) => tables.has("device_config")),
+        Stream.runForEach(() =>
+          terrier.invalidate.pipe(Effect.andThen(reconcile)),
+        ),
+        Effect.forkScoped,
+      );
+    }),
+  );

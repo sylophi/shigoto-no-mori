@@ -2,9 +2,6 @@ import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig"
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
-import { globalConfigChanged } from "@host/lib/config/global";
-import * as Terrier from "@shigomori/engine/Terrier";
-import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 
@@ -25,18 +22,9 @@ export const globalConfigHandlers = {
   read: () => Ops.readGlobalConfig(),
   // The patch schema is strict, so only the settings the form manages
   // arrive.
-  writeDeviceSettings: ({ patch }) =>
-    Effect.gen(function* () {
-      yield* Ops.patchGlobalConfig(patch);
-      // The config-change subscribers hear it here, at once: the direct
-      // listener reconciles with the just-written document.
-      globalConfigChanged();
-      // The terrier toggle may have flipped: re-probe its readiness on
-      // the next ask.
-      yield* Effect.flatMap(Terrier.Terrier, (it) => it.invalidate);
-    }),
+  writeDeviceSettings: ({ patch }) => Ops.patchGlobalConfig(patch),
 } satisfies EffectHandlers<
   typeof globalConfigContract,
   unknown,
-  Terrier.Terrier | Engine.Services
+  Engine.Services
 >;
