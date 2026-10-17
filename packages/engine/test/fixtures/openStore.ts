@@ -1,12 +1,15 @@
 // Opens the store of the data dir SHIGOMORI_DATA_DIR names and prints
 // its project count, for the proof that processes can open one store
-// at once.
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/sql/SqlClient";
-import * as Paths from "../../src/Paths.ts";
-import { nodeStore } from "../lib/nodeStore.ts";
+// at once, and as events the crash proof kills it at (killAt.ts).
+import { countEvents } from "./killAt.ts";
+
+countEvents();
+const NodeServices = await import("@effect/platform-node/NodeServices");
+const Effect = await import("effect/Effect");
+const Layer = await import("effect/Layer");
+const SqlClient = await import("effect/sql/SqlClient");
+const Paths = await import("../../src/Paths.ts");
+const { nodeStore } = await import("../lib/nodeStore.ts");
 
 Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
