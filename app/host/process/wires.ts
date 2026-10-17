@@ -4,6 +4,7 @@
 // (host/socket/Loopback.ts) for this machine's windows, its shell and
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
+import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -201,7 +202,7 @@ export const loopbackLayer = () =>
         registrar: loopbackRegistrar,
         deviceId: () => deviceId,
         appVersion: hostFacts().appVersion,
-        file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
+        file: () => join(dataDir(), LOOPBACK_FILE),
         // The window's own page dials it, from the renderer scheme.
         allowedOrigin: hostFacts().rendererOrigin,
         services: Graph.services,

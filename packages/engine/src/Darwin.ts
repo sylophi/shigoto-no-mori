@@ -22,7 +22,6 @@ export class DarwinHelperError extends Schema.TaggedError<DarwinHelperError>()(
       "exchange",
       "flags",
       "xattrs",
-      "privateSize",
       "fsType",
       "lstat",
     ]),
@@ -54,13 +53,6 @@ const Flags = Schema.Struct({
 const Xattrs = Schema.Struct({
   path: Schema.String,
   names: Schema.Array(Schema.String),
-});
-
-// `bytes` is null where the volume cannot say (HFS+, a network mount),
-// and the caller counts the allocated size instead.
-const PrivateSize = Schema.Struct({
-  path: Schema.String,
-  bytes: Schema.NullOr(Schema.Int),
 });
 
 // lstat(2), times to the nanosecond: what git's index records of a file,
@@ -133,10 +125,6 @@ export class Darwin extends Context.Service<
     readonly xattrs: (
       input: Target & { readonly strip?: boolean | undefined },
     ) => Stream.Stream<Entry<typeof Xattrs.Type>, DarwinHelperError>;
-    // The bytes no clone shares, i.e. what deleting the file would free.
-    readonly privateSize: (
-      input: Target,
-    ) => Stream.Stream<Entry<typeof PrivateSize.Type>, DarwinHelperError>;
     // lstat(2) of each entry, a symlink's own. `private` adds each
     // regular file's private size, where the volume can tell. A walk
     // steps over the `skip` folders (relative to the root) whole.
@@ -263,8 +251,6 @@ const make = (binary: string) =>
           paths,
           lineOf(Xattrs),
         ),
-      privateSize: ({ root, paths }) =>
-        run("privateSize", ["privsize"], [root], paths, lineOf(PrivateSize)),
       lstat: ({ root, paths, private: withPrivate, skip = [] }) =>
         run(
           "lstat",

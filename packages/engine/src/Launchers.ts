@@ -96,7 +96,7 @@ export class Launchers extends Context.Service<
 const GITHUB_REMOTE =
   /^(?:git@|ssh:\/\/git@|https:\/\/)([^:/]*github[^:/]*)[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/;
 
-export const isGithubRemote = (remoteUrl: string) =>
+const isGithubRemote = (remoteUrl: string) =>
   GITHUB_REMOTE.test(remoteUrl.trim());
 
 // The repo's page on GitHub, for a remote that is a GitHub repo.
@@ -155,7 +155,6 @@ export const decodedLaunchers = (
   };
 };
 
-// The same, as rows.
 const launchersOf = (
   doc: Readonly<Record<string, unknown>> | null,
 ): {

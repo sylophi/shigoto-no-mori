@@ -13,8 +13,6 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
     const { run, runBytes } = running;
     const fs = yield* FileSystem.FileSystem;
     const pathOf = yield* Path.Path;
-    // --- diffs ---
-
     const fileDiff = Effect.fn("Git.fileDiff")(function* (input: {
       readonly worktree: string;
       readonly paths: readonly string[];
@@ -153,5 +151,3 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
 
     return { fileDiff, readBlob, isWorkingTreeBlob };
   });
-
-export type DiffsArea = Effect.Success<ReturnType<typeof makeDiffs>>;

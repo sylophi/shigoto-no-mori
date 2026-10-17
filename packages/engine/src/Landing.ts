@@ -27,14 +27,8 @@ import {
   type RemoveStackError,
   type Reporter,
 } from "./landing/documents.ts";
-export {
-  LandingRefused,
-  MergeLostTrack,
-  MergeNeedsAttention,
-  MergePollInterval,
-  MergeUnverified,
-} from "./landing/documents.ts";
-export type { Document, MergeOutcome, Reporter } from "./landing/documents.ts";
+export { LandingRefused, MergePollInterval } from "./landing/documents.ts";
+export type { Document, Reporter } from "./landing/documents.ts";
 
 export class Landing extends Context.Service<
   Landing,

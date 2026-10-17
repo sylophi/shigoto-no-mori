@@ -68,7 +68,7 @@ const textOf = (error: unknown): string => {
   return parts.join(" ");
 };
 
-export const categoryOf = (error: unknown): Category => {
+const categoryOf = (error: unknown): Category => {
   if (
     Predicate.hasProperty(error, "reason") &&
     Predicate.isTagged(error.reason, "LockTimeoutError")

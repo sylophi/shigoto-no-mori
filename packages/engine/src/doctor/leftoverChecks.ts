@@ -17,8 +17,6 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const { home, flavor } = paths;
     const names = flavorNames(flavor);
     const { capture, readText } = reads;
-    // --- what a crash left running ---
-
     // The app records its cloudflared child's pid and kills a leftover one
     // at its next launch. Until then a tunnel whose app crashed keeps this
     // Mac reachable.

@@ -150,5 +150,3 @@ export const makeAdopting = ({
     });
     return { adopt, setup };
   });
-
-export type AdoptingArea = Effect.Success<ReturnType<typeof makeAdopting>>;

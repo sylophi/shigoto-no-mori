@@ -29,8 +29,6 @@ export const makeRemote = ({
   Effect.gen(function* () {
     const { run, runLenient } = running;
     const { listRemotes } = worktreeVerbs;
-    // --- the remote ---
-
     // Overlapping callers share the one in flight, and nothing is kept
     // after it.
     const fetches = yield* Cache.make({
@@ -218,5 +216,3 @@ export const makeRemote = ({
       publish,
     };
   });
-
-export type RemoteArea = Effect.Success<ReturnType<typeof makeRemote>>;

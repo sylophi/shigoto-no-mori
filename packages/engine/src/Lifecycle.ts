@@ -29,8 +29,7 @@ export type LifecycleEvent =
   | { readonly event: "phase"; readonly phase: Phase }
   | ({ readonly event: "script" } & ScriptEvent);
 
-// Where a report of the run's events goes.
-export type Report = (event: LifecycleEvent) => Effect.Effect<void>;
+type Report = (event: LifecycleEvent) => Effect.Effect<void>;
 
 // A script that didn't finish cleanly: its step and exit code, null
 // when it never ran or died to a signal.

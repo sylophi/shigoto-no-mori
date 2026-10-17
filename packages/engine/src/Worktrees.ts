@@ -67,7 +67,6 @@ export {
   WorktreeRefused,
   cleanupErrorOf,
   cleanupFailureWords,
-  isPrimaryKeyword,
   isShelfable,
   projectsHint,
   scriptOf,

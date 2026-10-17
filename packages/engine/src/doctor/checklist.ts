@@ -58,8 +58,6 @@ export const makeChecklist = ({
     } = dataDirChecks;
     const { checkOrphanTunnel, checkOrphanScripts } = leftoverChecks;
     const { checkProjects } = projectChecks;
-    // --- the run ---
-
     const checkEnvironment = (input: RunInput) =>
       Effect.gen(function* () {
         return [

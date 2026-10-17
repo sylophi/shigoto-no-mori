@@ -158,9 +158,7 @@ export class GuideHarnessMissing extends Schema.TaggedError<GuideHarnessMissing>
 
 // Where the agent a guide opens reads the app's source: a release's tag,
 // cloned from GitHub, or a dev build's own checkout.
-export type GuideSource =
-  | { readonly tag: string }
-  | { readonly checkout: string };
+type GuideSource = { readonly tag: string } | { readonly checkout: string };
 
 // A guide to open: the harness, the session it drives the window on,
 // and the source it reads.

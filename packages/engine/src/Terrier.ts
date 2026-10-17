@@ -21,7 +21,7 @@ import { terrierProjectId } from "./terrierId.ts";
 
 // Why the setting is on and no terrier projects are listed: the words
 // a warning and doctor use.
-export type TerrierTrouble = {
+type TerrierTrouble = {
   readonly summary: string;
   readonly advice: string;
 };

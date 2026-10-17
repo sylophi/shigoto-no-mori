@@ -55,8 +55,6 @@ export const makeVerbs = ({
       planStackCleanup,
       execStackCleanup,
     } = cleanup;
-    // --- the verbs ---
-
     const branchOf = (
       located: Worktrees.Located,
       verb: LandingRefused["verb"],
@@ -552,5 +550,3 @@ export const makeVerbs = ({
 
     return { pullRequest, merge, land, removeStack, done };
   });
-
-export type VerbsArea = Effect.Success<ReturnType<typeof makeVerbs>>;

@@ -60,5 +60,3 @@ export const makeFinishing = Effect.gen(function* () {
 
   return { finish };
 });
-
-export type FinishingArea = Effect.Success<typeof makeFinishing>;

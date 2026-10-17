@@ -21,8 +21,6 @@ export const makeHistory = ({
 }) =>
   Effect.sync(() => {
     const { run, runLenient, succeeds } = running;
-    // --- history ---
-
     const aheadBehind = Effect.fn("Git.aheadBehind")(function* (
       worktree: string,
       ref: string,
@@ -300,5 +298,3 @@ export const makeHistory = ({
       readCommitMessage,
     };
   });
-
-export type HistoryArea = Effect.Success<ReturnType<typeof makeHistory>>;

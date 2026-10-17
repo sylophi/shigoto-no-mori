@@ -5,11 +5,9 @@
 // it died before renaming it in. Cleared by the shell as it forks the
 // next host (main/hostProcess.ts). Asynchronous, so a data dir whose
 // volume is stuck holds this and not the shell.
+import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-
-// The engine's Control.ts and the host's Loopback.ts read this name.
-const LOOPBACK_FILE = "loopback.json";
 
 export async function clearLoopbackOf(
   dataDir: string,
