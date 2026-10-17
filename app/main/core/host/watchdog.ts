@@ -5,10 +5,11 @@
 // killed, which forks it again like any exit. A quit or an update asks
 // whether the host is busy and gives it a moment; a host that cannot
 // say has nothing to lose to the quit.
-import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import { answerWithin } from "@shared/remote/liveness";
 
 // What a host says when asked whether it is busy, or none when it
 // could not say in time (or at all).
@@ -16,10 +17,9 @@ export const busyWithin = <A, E>(
   busy: Effect.Effect<A, E>,
   deadline: Duration.Input,
 ): Effect.Effect<Option.Option<A>> =>
-  busy.pipe(Effect.timeoutOption(deadline), Effect.orElseSucceed(Option.none));
-
-// How late a round's limit may come before the round proves nothing.
-const LATE_MS = 5_000;
+  answerWithin(busy, Duration.toMillis(deadline)).pipe(
+    Effect.map(Option.flatMap(Exit.getSuccess)),
+  );
 
 // Asks `probe` every `every` while `watching` holds, and calls `silent`
 // once a probe goes `limit` without an answer. A probe that fails is an
@@ -27,9 +27,10 @@ const LATE_MS = 5_000;
 // next probe sees). A round that starts or ends with the machine asleep,
 // or sees it go to sleep or wake (`sleeps` counts both), proves
 // nothing, since the clock runs on while the host cannot answer, and
-// the next round asks again. So does one whose limit came late, by the
-// monotonic clock: this process was not running (the whole app stopped,
-// or its loop held), and the host's answer may be waiting unread.
+// the next round asks again. One whose limit came late asks again
+// (`answerWithin`): this process was not running (the whole app
+// stopped, or its loop held), and the host's answer may be waiting
+// unread.
 export const watchHost = (options: {
   readonly probe: Effect.Effect<unknown, unknown>;
   readonly every: Duration.Input;
@@ -45,21 +46,16 @@ export const watchHost = (options: {
       if (!options.watching()) return;
       const slept = options.sleeps();
       const startedAsleep = options.asleep();
-      const askedAt = yield* Clock.monotonicTimeNanos;
-      const answered = yield* options.probe.pipe(
-        Effect.ignore,
-        Effect.timeoutOption(options.limit),
-      );
-      const tookMs = Number(
-        ((yield* Clock.monotonicTimeNanos) - askedAt) / 1_000_000n,
+      const answered = yield* answerWithin(
+        options.probe,
+        Duration.toMillis(options.limit),
       );
       if (!options.watching()) return;
       if (
         Option.isNone(answered) &&
         !startedAsleep &&
         !options.asleep() &&
-        options.sleeps() === slept &&
-        tookMs <= Duration.toMillis(options.limit) + LATE_MS
+        options.sleeps() === slept
       ) {
         return options.silent();
       }
