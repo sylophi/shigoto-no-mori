@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import { type AgentSession, agentSession } from "./agentSessions.ts";
+import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
 import * as Terrier from "./Terrier.ts";
@@ -129,6 +130,14 @@ export class Registry extends Context.Service<
     ) => Effect.Effect<void>;
     // Clears what is kept under an id that is going away.
     readonly forgetWorktree: (worktreeId: string) => Effect.Effect<void>;
+    // The ids each kind of what forgetWorktree clears is kept under.
+    readonly keptIds: Effect.Effect<{
+      readonly shelved: ReadonlySet<string>;
+      readonly autoPull: ReadonlySet<string>;
+      readonly agentSessions: ReadonlySet<string>;
+      readonly snapshots: ReadonlySet<string>;
+      readonly unshelved: ReadonlySet<string>;
+    }>;
     // Carries the marks, the unshelve time and the agent sessions of a
     // moved checkout to its new id. The shelf
     // snapshot stays behind: a move can give every file a fresh mtime.
@@ -183,6 +192,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const identity = yield* Identity.Identity;
   const icons = yield* Icons.Icons;
+  const cloneCheckout = yield* CloneCheckout.CloneCheckout;
   const terrier = yield* Terrier.Terrier;
   const usage = yield* Usage.Usage;
   const crypto = yield* Crypto.Crypto;
@@ -256,10 +266,9 @@ const make = Effect.gen(function* () {
           // re-add: its place in the order, its primary's marks, its icon.
           yield* sql`DELETE FROM project_order WHERE path = ${project.path}`;
           const primary = worktreeIdFromPath(project.path);
-          yield* sql`DELETE FROM worktree_marks WHERE worktree_id = ${primary}`;
-          yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${primary}`;
-          yield* sql`DELETE FROM agent_sessions WHERE worktree_id = ${primary}`;
-          yield* sql`DELETE FROM icon_cache WHERE project_path = ${project.path}`;
+          yield* forgetWorktree(primary);
+          yield* cloneCheckout.forget(primary);
+          yield* icons.forget(project.path);
           return { id: project.id, name: project.name, path: project.path };
         }),
       )
@@ -508,6 +517,18 @@ const make = Effect.gen(function* () {
     yield* sql`DELETE FROM agent_sessions WHERE worktree_id = ${worktreeId}`;
   }, Effect.orDie);
 
+  const idsIn = (rows: ReadonlyArray<{ readonly worktree_id: string }>) =>
+    new Set(rows.map(({ worktree_id }) => worktree_id));
+  const keptIds = Effect.all({
+    shelved: marked("shelved"),
+    autoPull: marked("autoPull"),
+    agentSessions: Effect.map(agentSessions, (bound) => new Set(bound.keys())),
+    snapshots: sql<{ worktree_id: string }>`
+      SELECT worktree_id FROM shelf_snapshots`.pipe(Effect.map(idsIn)),
+    unshelved: sql<{ worktree_id: string }>`
+      SELECT worktree_id FROM unshelved_at`.pipe(Effect.map(idsIn)),
+  }).pipe(Effect.orDie, Effect.withSpan("Registry.keptIds"));
+
   const moveWorktree = Effect.fn("Registry.moveWorktree")(function* (
     from: string,
     to: string,
@@ -570,7 +591,7 @@ const make = Effect.gen(function* () {
             yield* sql`UPDATE project_order SET path = ${path}
               WHERE path = ${project.path}`;
           }
-          yield* sql`DELETE FROM icon_cache WHERE project_path = ${project.path}`;
+          yield* icons.forget(project.path);
           return { id: projectId, name, path };
         }),
       )
@@ -592,6 +613,7 @@ const make = Effect.gen(function* () {
     bindAgentSession,
     updateAgentSessions,
     forgetWorktree,
+    keptIds,
     moveWorktree,
     deviceId,
   });

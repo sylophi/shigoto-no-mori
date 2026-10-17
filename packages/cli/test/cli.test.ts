@@ -1447,6 +1447,9 @@ describe("projects relocate", () => {
       stillThere.stderr,
       `smd: ${alpha} is still there. Relocate is for a repo that was moved or renamed by hand.\n`,
     );
+    // What is kept under the primary's id follows it to the new one.
+    const titled = await runAt(alpha, "worktrees", "describe", "-t", "Main");
+    assert.equal(titled.code, 0, titled.stderr);
     const moved = join(box.home, "gamma");
     renameSync(alpha, moved);
     const relocated = await runAt(
@@ -1474,6 +1477,8 @@ describe("projects relocate", () => {
     assert.equal(doc.ok, true);
     assert.equal(doc.project.id, "A");
     assert.equal(doc.project.path, moved);
+    const title = await runAt(moved, "--json", "worktrees", "describe");
+    assert.equal((title.doc as { title: string }).title, "Main");
   });
 });
 

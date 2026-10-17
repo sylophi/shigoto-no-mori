@@ -171,8 +171,17 @@ describe("the listing's idle shelf", () => {
             : config.set(device, "autoShelveDays", days),
         ),
       );
-    const snapshotted = () =>
-      engine(Effect.flatMap(worktrees, (service) => service.snapshotted));
+    // The ids the shelf holds a snapshot for.
+    const snapshotted = async () =>
+      (
+        (await engine(
+          Effect.flatMap(Effect.service(Registry.Registry), (r) => r.keptIds),
+        )) as Registry.Registry["Service"]["keptIds"] extends Effect.Effect<
+          infer A
+        >
+          ? A
+          : never
+      ).snapshots;
     return { repo, worktree, listed, setShelved, setDays, snapshotted };
   }
 

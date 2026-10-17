@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Git from "../Git.ts";
 import type { WorktreeEntry } from "../gitParse.ts";
 import * as Layout from "../Layout.ts";
@@ -28,6 +29,7 @@ export const makeRelocating = ({
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
+    const sql = yield* SqlClient.SqlClient;
     const layout = yield* Layout.Layout;
     const registry = yield* Registry.Registry;
     const terrier = yield* Terrier.Terrier;
@@ -81,10 +83,11 @@ export const makeRelocating = ({
         return moved;
       });
 
-    // `git worktree repair` for the moved ones, and what each kept under
-    // its old id re-keyed. git repairs each path on its own, so the ones it
-    // did re-link are re-keyed whatever it answers.
-    const relinkMoved = (
+    // `git worktree repair` for the moved ones, and the ids what each kept
+    // moves between, from its old id to the one git lists it under now.
+    // git repairs each path on its own, so the ones it did re-link count
+    // whatever it answers.
+    const rekeysOf = (
       project: RegisteredProject,
       moved: ReadonlyMap<string, string>,
     ) =>
@@ -95,6 +98,7 @@ export const makeRelocating = ({
         const found = yield* identities(project).pipe(
           Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
         );
+        const rekeys: Array<readonly [from: string, to: string]> = [];
         for (const [oldPath, newPath] of moved) {
           const resolved = yield* fs
             .realPath(newPath)
@@ -105,8 +109,9 @@ export const makeRelocating = ({
           );
           if (now === undefined) continue;
           const from = worktreeIdFromPath(oldPath);
-          if (from !== now.id) yield* kept.rekey(project, from, now.id);
+          if (from !== now.id) rekeys.push([from, now.id]);
         }
+        return rekeys;
       });
 
     // The managed bases are named after the repo's folder, so a rename
@@ -170,15 +175,34 @@ export const makeRelocating = ({
           return yield* refuse("terrier-lists-old", project.path);
         }
         if (listed.includes(to)) return yield* refuse("terrier-lists-new", to);
-        const relocated = yield* registry.relocate(
-          project.id,
-          to,
-          path.basename(to),
-        );
-        // Best effort from here: the entry already points at the new path.
         const moved = yield* movedAlong(to, project.path);
         moved.set(project.path, to);
-        yield* relinkMoved(relocated, moved);
+        const rekeys = yield* rekeysOf(
+          { id: project.id, name: path.basename(to), path: to },
+          moved,
+        );
+        // The new path and what is kept under the moved ids commit
+        // together, so a crash leaves the project where it was, or where it
+        // went with all it kept.
+        const relocated = yield* sql
+          .withTransaction(
+            Effect.gen(function* () {
+              const entry = yield* registry.relocate(
+                project.id,
+                to,
+                path.basename(to),
+              );
+              for (const [from, now] of rekeys) {
+                yield* kept.rekeyRows(entry, from, now);
+              }
+              return entry;
+            }),
+          )
+          .pipe(Effect.catchTags({ SqlError: Effect.die }));
+        // Best effort from here: the entry already points at the new path.
+        for (const [from, now] of rekeys) {
+          yield* kept.rekeyCapture(relocated, from, now);
+        }
         yield* rehomeManaged(relocated, project.path);
       }
       const rows = yield* registry.rows();

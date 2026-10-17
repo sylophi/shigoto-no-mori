@@ -9,7 +9,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import { WORKTREE_INCLUDE } from "../CarryOver.ts";
-import * as CloneCheckout from "../CloneCheckout.ts";
 import * as Config from "../Config.ts";
 import { projectSettingsOf } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
@@ -26,7 +25,6 @@ import * as Paths from "../Paths.ts";
 import { errnoText, isNotFound } from "../platformErrors.ts";
 import * as Registry from "../Registry.ts";
 import type { ListedProject, RegisteredProject } from "../Registry.ts";
-import * as WorktreeData from "../WorktreeData.ts";
 import { worktreeIdFromPath } from "../worktreeLayout.ts";
 import * as Worktrees from "../Worktrees.ts";
 import { scriptOf, type WorktreeIdentity } from "../Worktrees.ts";
@@ -296,9 +294,6 @@ export const makeProjectChecks = ({
       Effect.gen(function* () {
         const worktrees = yield* Worktrees.Worktrees;
         const layout = yield* Layout.Layout;
-        const registry = yield* Registry.Registry;
-        const data = yield* WorktreeData.WorktreeData;
-        const cloneCheckout = yield* CloneCheckout.CloneCheckout;
         const drift = yield* findDrift(
           project,
           yield* worktrees.identities(project),
@@ -309,9 +304,7 @@ export const makeProjectChecks = ({
         }
         yield* git.pruneWorktrees(project.path);
         for (const { id } of drift.missing) {
-          yield* registry.forgetWorktree(id);
-          yield* data.forget(project.id, id);
-          yield* cloneCheckout.forget(id);
+          yield* worktrees.forgetKept(project, id);
         }
       });
 
