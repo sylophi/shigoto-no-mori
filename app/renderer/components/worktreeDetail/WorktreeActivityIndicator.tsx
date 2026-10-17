@@ -1,4 +1,5 @@
 import { only } from "@shigomori/contracts/util/only";
+import { refreshQueries } from "@/lib/askAgain";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
@@ -29,16 +30,10 @@ export function WorktreeActivityIndicator({
         .catch(() => undefined);
     }
     if (!worktree.detached) {
-      void queryClient.invalidateQueries(
-        {
-          queryKey: keys.worktreePullRequest(
-            worktree.projectId,
-            worktree.branch,
-          ),
-          exact: true,
-        },
-        { cancelRefetch: false },
-      );
+      refreshQueries(queryClient, {
+        queryKey: keys.worktreePullRequest(worktree.projectId, worktree.branch),
+        exact: true,
+      });
     }
   };
   return (

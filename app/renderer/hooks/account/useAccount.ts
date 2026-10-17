@@ -3,6 +3,7 @@
 // rename mutations. All client-scoped, so the queries key off the plain
 // "account" prefix (no host sentinel, see queryKeys.ts) and the changed
 // broadcast invalidates the whole prefix at once.
+import { refreshQueries } from "@/lib/askAgain";
 import { useEffect } from "react";
 import {
   queryOptions,
@@ -101,7 +102,7 @@ export function useWatchAccountChanges(): void {
   useEffect(
     () =>
       api.listen(api.pushes(accountContract, "changed"), () => {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.account() });
+        refreshQueries(queryClient, { queryKey: queryKeys.account() });
       }),
     [queryClient, api],
   );
