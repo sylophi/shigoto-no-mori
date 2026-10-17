@@ -67,6 +67,7 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 
 scrubProcessGitEnv();
 const { track, teardown } = makeTracker();
@@ -340,6 +341,7 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
   writeFileSync(join(old, JOURNAL), journal);
   writeFileSync(join(engineDataDir, JOURNAL), journal);
   chmodSync(stuck, 0o555);
+  trackTest(() => chmodSync(stuck, 0o755));
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(join(old, JOURNAL)), true, "the old tree still ours");
   assert.equal(journalLeft(), true, "the journal kept with the old tree owed");

@@ -2,7 +2,8 @@
 // (../../testTemp.mts), on a root of its own. Asserts:
 //   - a run's TMPDIR is its folder, and the folder goes as it exits,
 //     the parent with it when no other run is left,
-//   - a run's folder left by a SIGKILL is swept by the next run,
+//   - a run's folder left by a SIGKILL is swept by the next run, read
+//     only folders in it included,
 //   - a live run's folder is not, until its process is gone,
 //   - nor is a killed run's that a live process joined,
 //   - a process joining a run that was swept takes a run of its own.
@@ -26,13 +27,19 @@ const owner = pathToFileURL(join(repoRoot, "testTemp.mts")).href;
 const ENDS = {
   exit: "",
   kill: 'process.kill(process.pid, "SIGKILL");',
+  lockedKill: `
+mkdirSync(join(tmpdir(), "locked", "sealed"), { recursive: true });
+writeFileSync(join(tmpdir(), "locked", "sealed", "file"), "");
+chmodSync(join(tmpdir(), "locked", "sealed"), 0o000);
+chmodSync(join(tmpdir(), "locked"), 0o555);
+process.kill(process.pid, "SIGKILL");`,
   hold: "setInterval(() => {}, 1000);",
 };
 
 // A run of its own on `root`, not inside this proof's run.
 function launch(root: string, end: keyof typeof ENDS, joining?: string) {
   const script = `
-import { writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ownTestTemp } from ${JSON.stringify(owner)};
@@ -51,7 +58,11 @@ ${ENDS[end]}
   ] as const;
 }
 
-function runTo(root: string, end: "exit" | "kill", joining?: string) {
+function runTo(
+  root: string,
+  end: Exclude<keyof typeof ENDS, "hold">,
+  joining?: string,
+) {
   const { stdout } = spawnSync(...launch(root, end, joining));
   const [run = "", tmp = ""] = stdout.trim().split("\n");
   assert.notEqual(run, "", "the run printed no folder");
@@ -85,6 +96,15 @@ it("a killed run's folder is swept by the next run", () => {
   assert.equal(existsSync(join(killed.run, "left")), true);
   runTo(root, "exit");
   assert.equal(existsSync(killed.run), false);
+});
+
+it("a killed run's folder is swept with the read-only folders it left", () => {
+  const root = tempDir("sm-test-temp-", trackTest);
+  const killed = runTo(root, "lockedKill");
+  assert.equal(existsSync(join(killed.run, "locked")), true);
+  runTo(root, "exit");
+  assert.equal(existsSync(killed.run), false);
+  assert.equal(existsSync(root), false);
 });
 
 it("a live run's folder is kept until its process is gone", async () => {
