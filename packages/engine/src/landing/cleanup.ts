@@ -1,5 +1,6 @@
 // Landing's cleanup: the landed worktrees and branches going, past the removal guards, and the primary checkout catching up.
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { errorDocument } from "../errorDocument.ts";
@@ -195,30 +196,50 @@ export const makeCleanup = ({
     ) =>
       Effect.gen(function* () {
         // The checkout stays interruptible, since it runs the user's
-        // hooks; once it is done the delete follows uninterrupted, since an
-        // interrupt between them would leave the branch for good (a done
-        // again from the primary branch finds nothing to delete).
+        // hooks; the delete follows uninterrupted, since a done again from
+        // the primary branch finds nothing to delete. git moves HEAD before
+        // post-checkout runs, and the hook's failure is the checkout's, so
+        // a checkout that failed or was cut short in its hook may have
+        // freed the branch all the same: whenever HEAD is on the primary
+        // branch the delete runs, and the checkout's failure follows.
         const deleted = yield* Effect.uninterruptibleMask((restore) =>
-          restore(
-            git.checkoutBranch(
-              worktree.path,
-              target.primaryRef,
-              target.remotes,
-            ),
-          ).pipe(
-            Effect.andThen(
-              !deleteBranch || worktree.branch === target.primaryBranch
-                ? Effect.succeed(false)
-                : Effect.as(
-                    git.deleteBranch({
-                      repo: project.path,
-                      name: worktree.branch,
-                      force: true,
-                    }),
-                    true,
-                  ),
-            ),
-          ),
+          Effect.gen(function* () {
+            const checkedOut = yield* Effect.exit(
+              restore(
+                git.checkoutBranch(
+                  worktree.path,
+                  target.primaryRef,
+                  target.remotes,
+                ),
+              ),
+            );
+            const freed =
+              Exit.isSuccess(checkedOut) ||
+              (yield* git
+                .run(worktree.path, [
+                  "symbolic-ref",
+                  "--quiet",
+                  "--short",
+                  "HEAD",
+                ])
+                .pipe(
+                  Effect.map((out) => out.trim() === target.primaryBranch),
+                  Effect.orElseSucceed(() => false),
+                ));
+            const deletes =
+              freed && deleteBranch && worktree.branch !== target.primaryBranch;
+            if (deletes) {
+              yield* git.deleteBranch({
+                repo: project.path,
+                name: worktree.branch,
+                force: true,
+              });
+            }
+            if (Exit.isFailure(checkedOut)) {
+              return yield* Effect.failCause(checkedOut.cause);
+            }
+            return deletes;
+          }),
         );
         if (target.remote === "") return { deleted };
         const pulled = yield* ffPull(

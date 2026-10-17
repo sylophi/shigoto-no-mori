@@ -545,7 +545,7 @@ esac`,
 
   // The checkout runs the user's hooks, so an interrupt reaches it: a
   // hook that never ends doesn't hold a done that was asked to stop.
-  it("done stops when interrupted in a checkout hook that never ends", async () => {
+  it("done stops when interrupted in a checkout hook that never ends, and still deletes the branch it freed", async () => {
     const upstream = box.repo("upstream", { "README.md": "hi\n" });
     const repo = join(box.home, "repo");
     execFileSync("git", ["clone", "-q", upstream, repo]);
@@ -583,6 +583,13 @@ esac`,
       existsSync(finished),
       false,
       "the interrupt waited on the hook",
+    );
+    // git moved HEAD before the hook ran, so the branch went all the same:
+    // a done again from the primary branch would find nothing to delete.
+    assert.equal(
+      box.git(repo, "branch", "--list", "fox").trim(),
+      "",
+      "the merged branch left behind",
     );
   });
 });
