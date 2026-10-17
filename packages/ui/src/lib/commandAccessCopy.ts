@@ -1,25 +1,24 @@
 // The one sentence every surface uses for a peer that will not run
 // commands from here: the switch lives on the other machine's account
-// page, so the sentence always points there. Nine surfaces say it
-// (notes, footers, forwards, the device picker, the registry row), so
-// it is written once. `deviceLabel` is how the caller names the
-// machine in its own sentence: "Thinkpad", "it", "this device".
-export function peerReadOnlyNote(deviceLabel = "that device"): string {
+// page, so the sentence names that machine and the switch by its label.
+// `deviceLabel` is how the caller names the machine in its own
+// sentence: "Thinkpad", "it", "this device".
+export function peerReadOnlyNote(deviceLabel: string): string {
   return `Read-only until ${allowsControl(deviceLabel)}.`;
 }
 
 // The same sentence where "read-only" would be no news: a peer's files
 // are only browsed, and a script's output only followed, on its grant.
-export function peerFilesHiddenNote(deviceLabel = "that device"): string {
+export function peerFilesHiddenNote(deviceLabel: string): string {
   return `Files stay hidden until ${allowsControl(deviceLabel)}.`;
 }
 
-export function peerOutputHiddenNote(deviceLabel = "that device"): string {
+export function peerOutputHiddenNote(deviceLabel: string): string {
   return `Output stays hidden until ${allowsControl(deviceLabel)}.`;
 }
 
 function allowsControl(deviceLabel: string): string {
-  return `${deviceLabel} allows control from other devices on its account page`;
+  return `${deviceLabel} turns on “Allow control from other devices” on its account page`;
 }
 
 // Whether THIS device may command a device: the other machine's own

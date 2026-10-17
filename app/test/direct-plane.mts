@@ -1711,6 +1711,73 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
   );
 });
 
+// Sockets that fail as the platform would, each with the errno its
+// kind dies of here: no route on the LAN, no name for the tunnel.
+function failingSocket(url: string) {
+  const ws = new WsClient("ws://127.0.0.1:1");
+  const emit = ws.emit.bind(ws);
+  ws.emit = (event: string | symbol, ...args: unknown[]) =>
+    event === "error"
+      ? emit(
+          event,
+          Object.assign(new Error("failed"), {
+            code: url.startsWith("wss:") ? "ENOTFOUND" : "EHOSTUNREACH",
+          }),
+        )
+      : emit(event, ...args);
+  return ws;
+}
+
+it("the no-route hint names the LAN addresses it tried and, beside it, why the tunnel failed: machines on different networks fail their LAN addresses the same way, and there the tunnel is the path", async () => {
+  const lan = {
+    kind: "lan",
+    url: "ws://192.168.1.20:42017",
+    ticket: "smpt_x",
+  } as const;
+  const tunnel = {
+    kind: "tunnel",
+    url: "wss://sm-x.sm.example.test",
+    ticket: "smpt_x",
+  } as const;
+  const failureOf = async (
+    candidates: Extract<DirectConnectInfo, { available: true }>["candidates"],
+  ) => {
+    const dialer = createDirectDialer({
+      askConnectInfo: async () => ({
+        available: true,
+        acceptsCommands: true,
+        sharesData: true,
+        candidates,
+      }),
+      localDeviceId: DIALER,
+      localAppVersion: "1.0.0",
+      localKey: () => testDeviceKey(DIALER).pair,
+      peerKey: (deviceId) => testDeviceKey(deviceId).pair.publicKey,
+      openSocket: failingSocket,
+      deadlineMs: 4000,
+    });
+    const error = await dialer.connectDirect(LISTENER).then(
+      () => assert.fail("the dial landed"),
+      (failure: unknown) => failure,
+    );
+    assert.ok(error instanceof RemoteConnectError);
+    return error.message;
+  };
+  const both = await failureOf([lan, tunnel]);
+  assert.match(
+    both,
+    /No route to ws:\/\/192\.168\.1\.20:42017: if both machines share a network, macOS may be denying this app Local Network access/,
+  );
+  assert.match(
+    both,
+    /If they don't, the tunnel was the path, and it failed: .*ENOTFOUND/,
+  );
+  const lanOnly = await failureOf([lan]);
+  assert.match(lanOnly, /The peer offered no tunnel endpoint/);
+  assert.match(lanOnly, /No route to ws:\/\/192\.168\.1\.20:42017: /);
+  assert.doesNotMatch(lanOnly, /the tunnel was the path/);
+});
+
 it("pushes: a host broadcast reaches a direct-connected client through the shared peerPush path, tagged with the peer's deviceId", async () => {
   const listener = await startDirectListener(trackTest);
   const pushes: HubPeerPush[] = [];

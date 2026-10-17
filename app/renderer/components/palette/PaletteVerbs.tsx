@@ -7,6 +7,7 @@ import {
   Plus,
   SquarePen,
 } from "lucide-react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
@@ -251,6 +252,7 @@ function SyncVerbs({
   const { worktree } = entry;
   const mutations = useSyncMoveMutations();
   const { canCommand } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   // The pill's safe move, when it can run now (lib/syncState).
   const { move } = worktreeSyncView(worktree);
   if (!move || move.disabledReason) return null;
@@ -264,7 +266,7 @@ function SyncVerbs({
           label: move.label,
           icon: iconOf(move.Icon),
           disabled: !canCommand,
-          tip: canCommand ? undefined : peerReadOnlyNote(),
+          tip: canCommand ? undefined : peerReadOnlyNote(deviceLabel),
           run: () => {
             mutations[move.key].mutate({
               projectId: worktree.projectId,

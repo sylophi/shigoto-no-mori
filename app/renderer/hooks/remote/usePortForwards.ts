@@ -11,6 +11,7 @@
 // forward outlives the peer going to sleep, and stopping one is a purely
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   errorMessageOf,
@@ -85,9 +86,10 @@ function usePortForwardList<T = PortForwardList>(
 export function describeForwardError(
   error: unknown,
   ports: { remotePort: number; localPort?: number },
+  deviceLabel: string,
 ): string {
   if (isCommandRefusedError(error)) {
-    return peerReadOnlyNote();
+    return peerReadOnlyNote(deviceLabel);
   }
   const message = errorMessageOf(error);
   if (message.includes("EADDRINUSE")) {
@@ -97,7 +99,7 @@ export function describeForwardError(
     return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
   }
   if (isChannelRefusedError(error) && error.reason === "too-many-conns") {
-    return "That device already has as many forwarded connections open as it allows.";
+    return `${deviceLabel} already has as many forwarded connections open as it allows.`;
   }
   return message;
 }
@@ -115,6 +117,7 @@ export function usePortForwardStop() {
 
 export function usePortForwards(deviceId: string) {
   const api = useApi();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   const { data } = usePortForwardList();
   const start = useMutation({
     mutationFn: (input: { remotePort: number; localPort?: number }) =>
@@ -125,7 +128,7 @@ export function usePortForwards(deviceId: string) {
       if (!isCommandRefusedError(err)) {
         notifyError(
           "Couldn't forward the port",
-          describeForwardError(err, input),
+          describeForwardError(err, input, deviceLabel),
         );
       }
     },
@@ -190,6 +193,7 @@ export function usePortForwardControl(
   worktree: PortForwardWorktree,
 ) {
   const api = useApi();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   const { data } = usePortForwardList();
   const forward = data?.forwards.find(
     (entry) => entry.deviceId === deviceId && entry.remotePort === remotePort,
@@ -221,12 +225,16 @@ export function usePortForwardControl(
     error:
       failed === null
         ? null
-        : describeForwardError(failed, {
-            remotePort,
-            localPort: apply.variables?.on
-              ? apply.variables.localPort
-              : undefined,
-          }),
+        : describeForwardError(
+            failed,
+            {
+              remotePort,
+              localPort: apply.variables?.on
+                ? apply.variables.localPort
+                : undefined,
+            },
+            deviceLabel,
+          ),
     clearError: apply.reset,
   };
 }

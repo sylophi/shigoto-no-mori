@@ -26,7 +26,7 @@ vi.mock("@/lib/toast", () => ({
 
 it("a read the host's restart cut asks again quietly, and gets its answer", async () => {
   toasts.length = 0;
-  const client = createAppQueryClient();
+  const client = createAppQueryClient(() => undefined);
   let asks = 0;
   const value = await client.fetchQuery({
     queryKey: ["cut"],
@@ -45,7 +45,7 @@ it("a read the host's restart cut asks again quietly, and gets its answer", asyn
 
 it("a read that failed on the drop toasts nothing", async () => {
   toasts.length = 0;
-  const client = createAppQueryClient();
+  const client = createAppQueryClient(() => undefined);
   for (const error of [
     new RemoteDisconnectedError(true),
     new NoDirectConnectionError({
@@ -68,7 +68,7 @@ it("a read that failed on the drop toasts nothing", async () => {
 
 it("an action the drop cut says so once, in words that name the app's process", async () => {
   toasts.length = 0;
-  const client = createAppQueryClient();
+  const client = createAppQueryClient(() => undefined);
   const commit = () =>
     client
       .getMutationCache()

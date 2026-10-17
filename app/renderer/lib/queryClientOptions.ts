@@ -52,7 +52,10 @@ export function gatedHostReadMeta(remote: boolean, errorTitle: string) {
   return remote ? { silentError: true } : { errorTitle };
 }
 
-export function createAppQueryClient(): QueryClient {
+// `deviceLabelOf` names a peer by its id for the refusal toast.
+export function createAppQueryClient(
+  deviceLabelOf: (deviceId: string) => string | undefined,
+): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -113,7 +116,11 @@ export function createAppQueryClient(): QueryClient {
         // do so to show an inline retry/force prompt that doesn't apply to
         // a refusal, so silence would leave the click looking like a no-op.
         if (isCommandRefusedError(err)) {
-          notifyError(peerReadOnlyNote("that machine"), err);
+          const label =
+            err.deviceId === undefined
+              ? undefined
+              : deviceLabelOf(err.deviceId);
+          notifyError(peerReadOnlyNote(label ?? "the other device"), err);
           return;
         }
         if (mutation.meta?.silentError) return;

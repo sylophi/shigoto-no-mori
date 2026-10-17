@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useSearch } from "@tanstack/react-router";
 import { changesState } from "@/lib/changesState";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -103,6 +104,7 @@ function WorktreeChanges({
   setAmending: (on: boolean) => void;
 }) {
   const { canCommand } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   const { projectId, id: worktreeId } = worktree;
   const { data: files, error: statusError } = useWorktreeChanges(
     projectId,
@@ -343,7 +345,7 @@ function WorktreeChanges({
           />
         )
       }
-      readOnlyNote={canCommand ? null : peerReadOnlyNote()}
+      readOnlyNote={canCommand ? null : peerReadOnlyNote(deviceLabel)}
     />
   );
 

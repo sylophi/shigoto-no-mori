@@ -54,6 +54,7 @@ import {
 } from "./lib/remote/remoteDeviceSync";
 import { startVillagerMoves } from "./lib/villagers/moves";
 import { startAgentWatch } from "./lib/agentWatch";
+import { remoteDeviceById } from "./lib/remote/devices";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { openExternalUrl, revealInFolder } from "./lib/openExternal";
 import { documentFocused } from "./lib/focus";
@@ -92,7 +93,9 @@ export function startApp({
 }): AppClient {
   // The shared config (defaults, global error toasts, the meta
   // opt-outs) lives in lib/queryClientOptions.ts.
-  const queryClient = createAppQueryClient();
+  const queryClient = createAppQueryClient(
+    (deviceId) => remoteDeviceById(registry, deviceId)?.label,
+  );
   // The page's atoms, over its client's links, for as long as the
   // page lives.
   const registry = AtomRegistry.make({
