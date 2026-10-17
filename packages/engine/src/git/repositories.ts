@@ -135,7 +135,3 @@ export const makeRepositories = ({
 
     return { checkDestination, clone, createRepository };
   });
-
-export type RepositoriesArea = Effect.Success<
-  ReturnType<typeof makeRepositories>
->;

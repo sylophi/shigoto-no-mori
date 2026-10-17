@@ -44,13 +44,16 @@ item works like this. Remove this section when `release/v3` merges into
    change comes with before and after shots from the lab
    (`app/lab/README.md`), in both themes.
 4. **Close it out.** Tick the item's box in `V3.md` in the same PR,
-   and add a line under its step if something was left open. Finalize
-   (`/finalize`). Every review started is read before landing, and
-   one of them reviews the final change, not an earlier commit. Ask
-   before landing unless the brief says the PR may merge itself when
-   green. Report to the orchestration thread with
-   the PR link, what was left out and why, and what the next item
-   should know.
+   and add a line under its step if something was left open. Each
+   record gets its own anchor, a line no other open PR adds after,
+   since records sharing one re-conflict at every landing; a rebase's
+   `V3.md` diff is checked for lines duplicating `release/v3`, which
+   keeping both sides re-adds. Finalize (`/finalize`). Every review
+   started is read before landing, and one of them reviews the final
+   change, not an earlier commit. Ask before landing unless the brief
+   says the PR may merge itself when green. Report to the
+   orchestration thread with the PR link, what was left out and why,
+   and what the next item should know.
 
 ## Which model for what, while the branch lives
 

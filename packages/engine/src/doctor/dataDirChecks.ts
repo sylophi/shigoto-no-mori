@@ -148,8 +148,6 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       readText,
       listDir,
     } = reads;
-    // --- the data dir ---
-
     const sourceText = (() => {
       switch (paths.dataDirSource) {
         case "env":

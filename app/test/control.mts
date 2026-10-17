@@ -56,6 +56,7 @@
 // holding two projects (source and target, one repo identity), as in
 // test/sync-transfer.mts: what separates them is the direct wire.
 // Run: pnpm test control.
+import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import { HubDeviceRevokedError } from "@shigomori/contracts/hubApi";
 import { callOf } from "@shigomori/contracts/contract";
 import assert from "node:assert/strict";
@@ -175,7 +176,7 @@ import {
 const fixture = cliSandbox("sm-control-check-");
 const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
 const { addWorktree, projectIdOf } = fixture;
-const loopbackFile = join(dataDir, Loopback.LOOPBACK_FILE);
+const loopbackFile = join(dataDir, LOOPBACK_FILE);
 
 // The REAL loopback on `file`, serving the control contract's `handlers`
 // and `transfers`, built on `run`'s engine: this device's, or a second
@@ -1328,7 +1329,7 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     (input: I, ctx: HandlerContext) =>
       Effect.provide(run(input, ctx), otherContext);
   const otherControl = await startLoopback({
-    file: join(otherDataDir, Loopback.LOOPBACK_FILE),
+    file: join(otherDataDir, LOOPBACK_FILE),
     handlers: {
       devices: asOther(controlHandlers.devices),
       peerWorktrees: asOther(controlHandlers.peerWorktrees),

@@ -119,7 +119,7 @@ export class WorktreesNotMoved extends Schema.TaggedError<WorktreesNotMoved>()(
   }
 }
 
-export type RepairError =
+type RepairError =
   | WorktreesNotMoved
   | LeaseRefused
   | CommandTimedOut
@@ -258,10 +258,7 @@ export const StagedManifest = Schema.fromJsonString(
   Schema.Struct({ version: Schema.optional(Schema.String) }),
 );
 
-export const textAt = (
-  doc: Readonly<Record<string, unknown>> | null,
-  key: string,
-) => {
+const textAt = (doc: Readonly<Record<string, unknown>> | null, key: string) => {
   const value = doc?.[key];
   return typeof value === "string" ? value : "";
 };

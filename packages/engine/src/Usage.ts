@@ -16,7 +16,7 @@ export type UseStat = {
   readonly recentCount: number;
 };
 
-export const USE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const USE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 export class Usage extends Context.Service<
   Usage,

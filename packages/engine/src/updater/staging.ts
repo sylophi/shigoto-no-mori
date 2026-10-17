@@ -59,8 +59,6 @@ export const makeStaging = ({
     const { removeAll, run, readShared, writeShared } = files;
     const { send, queryFeed } = feeds;
     const { verify } = signatures;
-    // --- staging ---
-
     // The stager's pidfile for the rest of the run, its folder's failure
     // in Go's words.
     const lock = acquireStagingLock(lockPath).pipe(

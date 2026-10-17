@@ -11,8 +11,6 @@ export const makeWorktreeVerbs = ({
 }) =>
   Effect.sync(() => {
     const { run, succeeds } = running;
-    // --- worktrees ---
-
     const listWorktrees = Effect.fn("Git.listWorktrees")(function* (
       repo: string,
     ) {

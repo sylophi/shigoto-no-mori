@@ -45,7 +45,7 @@ import * as Registry from "./Registry.ts";
 
 // Nothing answers at the address loopback.json names, or what answers
 // isn't the app.
-export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
+class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   "AppNotRunning",
   { flavor: Schema.String.check(Schema.makeFilter(isFlavor)) },
 ) {
@@ -63,7 +63,7 @@ export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
 }
 
 // The app is there, at its cap of connections.
-export class AppBusy extends Schema.TaggedError<AppBusy>()("AppBusy", {
+class AppBusy extends Schema.TaggedError<AppBusy>()("AppBusy", {
   binary: Schema.String,
 }) {
   override get message(): string {
@@ -76,7 +76,7 @@ export class AppBusy extends Schema.TaggedError<AppBusy>()("AppBusy", {
 }
 
 // The connection went away after the call was sent.
-export class ConnectionLost extends Schema.TaggedError<ConnectionLost>()(
+class ConnectionLost extends Schema.TaggedError<ConnectionLost>()(
   "ConnectionLost",
   {},
 ) {
@@ -86,7 +86,7 @@ export class ConnectionLost extends Schema.TaggedError<ConnectionLost>()(
 }
 
 // The app turned the call down, in its own words and with its code.
-export class ControlRefused extends Schema.TaggedError<ControlRefused>()(
+class ControlRefused extends Schema.TaggedError<ControlRefused>()(
   "ControlRefused",
   {
     channel: Schema.String,

@@ -39,8 +39,6 @@ export const makeGitIndex = ({
     const { run, runChunked, onIndex } = running;
     const { verifyRev, refTip, isAncestor, headAt, resolveCommit } = refs;
     const { status } = workingTree;
-    // --- the index ---
-
     // `reset --soft`: HEAD moves and nothing else does, so the commits
     // between come back as staged changes. Only along HEAD's own line:
     // back to an ancestor for an undo, or forward to a descendant for

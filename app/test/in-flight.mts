@@ -32,6 +32,7 @@
 //
 // covers: app/shared/remote/rpcTransport.ts
 // covers: app/host/socket/DeviceLink.ts
+import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -174,7 +175,7 @@ exit 1
         registrar,
         deviceId: () => "this-device",
         appVersion: "9.9.9",
-        file: () => join(dataDir, Loopback.LOOPBACK_FILE),
+        file: () => join(dataDir, LOOPBACK_FILE),
         services: Effect.succeed(host),
       }).pipe(
         Layer.provide(

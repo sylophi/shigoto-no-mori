@@ -383,7 +383,7 @@ export type UpdateInput = {
 // The documents `sm update --json` prints, field for field: the stage
 // results the app reads (UpdateStageResultSchema) and the two documents
 // only the terminal prints.
-export type StageResult = typeof UpdateStageResultSchema.Type;
+type StageResult = typeof UpdateStageResultSchema.Type;
 
 export type UpToDate = { readonly ok: true } & Extract<
   StageResult,
@@ -411,10 +411,7 @@ export type Updated = {
 
 export type QueryError = BadUpdateUrl | FeedFailed | RateLimited;
 
-export type LockError =
-  | UpdateInProgress
-  | StagingLockUnavailable
-  | StagingFailed;
+type LockError = UpdateInProgress | StagingLockUnavailable | StagingFailed;
 
 export type StageError =
   | NotInBundle
@@ -444,7 +441,7 @@ export const RELEASE_LIST_BODY_LIMIT = 4 << 20;
 // with every other tool on the network.
 export const RELEASE_LIST_MAX_AGE = 15 * 60_000;
 
-export const POLL = Duration.millis(200);
+const POLL = Duration.millis(200);
 // How long the installer waits for a quitting app to exit, and for a
 // stager to let go of the lock.
 export const APP_QUIT_TIMEOUT = Duration.minutes(2);
@@ -593,7 +590,7 @@ export const bodyText = (
 // What a bundle's signature names: its Team ID ("" for an ad hoc
 // signature) and its identifier, which tells one flavor's app from
 // another's under the same team.
-export type Signer = { readonly team: string; readonly identifier: string };
+type Signer = { readonly team: string; readonly identifier: string };
 
 // The installed app, and its signer, read once for a stage.
 export type Anchor = {

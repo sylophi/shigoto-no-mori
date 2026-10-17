@@ -34,13 +34,6 @@ export const WAITING_MOVE: WorktreeMoveStep = {
   stuck: [],
 };
 
-// Whether every step this start owes has ended, done or stuck.
-export const finished = (migration: MigrationProgress) =>
-  migration.planned &&
-  [migration.import, migration.worktrees].every(
-    (step) => step === null || step.state === "done" || step.state === "stuck",
-  );
-
 export const make = Effect.gen(function* () {
   const ref = yield* SubscriptionRef.make<MigrationProgress>({
     planned: false,

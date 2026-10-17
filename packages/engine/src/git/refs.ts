@@ -7,7 +7,6 @@ import type { RunningArea } from "./running.ts";
 export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
   Effect.sync(() => {
     const { run, succeeds } = running;
-    // --- refs and objects ---
     // Every caller-supplied revision goes after --end-of-options, so none
     // can be read as a flag.
 

@@ -108,10 +108,12 @@ it("clones keeping the mtime, and a clone frees nothing", async () => {
     statSync(join(from, "a/f.txt")).mtimeMs,
   );
 
-  const sizes = await collect((d) =>
-    d.privateSize({ root: to, paths: ["a/f.txt"] }),
+  // A clone shares every block, so deleting it frees nothing.
+  const [stat] = await collect((d) =>
+    d.lstat({ root: to, paths: ["a/f.txt"], private: true }),
   );
-  assert.deepEqual(sizes, [{ path: "a/f.txt", bytes: 0 }]);
+  assert.ok(stat && !Darwin.isFailed(stat));
+  assert.equal(stat.privateBytes, 0);
 });
 
 it("reports each entry's lstat to the nanosecond", async () => {

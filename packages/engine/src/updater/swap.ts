@@ -36,8 +36,6 @@ export const makeSwap = ({
     const { removeAll, run } = files;
     const { signerOf, verify } = signatures;
     const { lock, readManifest, clearStaged, bundleVersion } = staging;
-    // --- the swap ---
-
     // Replaces `target` with `staged`, in an order that leaves every crash
     // point recoverable:
     //  1. Move (or, across volumes, copy) the staged bundle next to the
@@ -78,10 +76,10 @@ export const makeSwap = ({
         }
         yield* removeAll(staged);
       }
-      // The installed app's Team ID read afresh, as the app may have changed
-      // since staging.
-      // And never older than the app it replaces, which another install
-      // may have moved past the staged release meanwhile.
+      // Verified against the installed app's Team ID read afresh, as the
+      // app may have changed since staging, and never older than the app
+      // it replaces, which another install may have moved past the
+      // staged release meanwhile.
       yield* verify(
         { bundle: target, signer: signerOf(target) },
         incoming,

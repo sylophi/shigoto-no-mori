@@ -22,8 +22,6 @@ export const makeWorkingTree = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { run } = running;
-    // --- the working tree ---
-
     const status = Effect.fn("Git.status")(function* (
       worktree: string,
       untracked?: "normal" | "all",

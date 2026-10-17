@@ -30,9 +30,6 @@ import {
   make as makeLink,
 } from "./DeviceLink";
 
-// The engine's Control.ts reads this name and shape.
-export const LOOPBACK_FILE = "loopback.json";
-
 class LoopbackBindError extends Schema.TaggedError<LoopbackBindError>()(
   "LoopbackBindError",
   { reason: Schema.String },
