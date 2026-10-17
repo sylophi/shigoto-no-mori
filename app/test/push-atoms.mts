@@ -519,6 +519,45 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
   registry.dispose();
 });
 
+it("remote devices: an account change during the list's first read, which no page reads, waits for it and reads once more", async () => {
+  const { registry, queryClient } = page();
+  // Each push the sync listens to, by its key, to deliver by hand.
+  const handlers = new Map<string, (value: unknown) => void>();
+  let asked = 0;
+  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
+    status: () => Effect.never,
+    listDevices: () =>
+      Effect.sync(() => {
+        asked += 1;
+      }).pipe(Effect.andThen(Effect.sleep("100 millis")), Effect.as([studio])),
+  };
+  const ghostly = status({ onlineDeviceIds: [PEER, "ghost"] });
+  const hubCalls: Pick<RendererApi["hub"], "status"> = {
+    status: () => Effect.succeed(ghostly),
+  };
+  // oxlint-disable-next-line shigomori/no-double-cast -- a push stands for its key here, which listen keeps its handler under
+  const api = {
+    ...runtime,
+    pushes: (_module: unknown, key: string) => key,
+    listen: (key: string, onValue: (value: unknown) => void) => {
+      handlers.set(key, onValue);
+      return () => {};
+    },
+    deviceId: LOCAL,
+    account,
+    hub: hubCalls,
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  // The boot's pass starts the first read; an account change (an
+  // enroll, a rename) lands during it.
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  await waitFor(() => asked === 1, "the first read");
+  handlers.get("changed")?.({ accountId: "account" });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(asked, 2, `the first read, then one after it: ${asked}`);
+  registry.dispose();
+});
+
 it("remote devices: a peer that stops taking commands is refused before the device list's fetch lands", async () => {
   const { registry, queryClient, hubPush } = page();
   let latest = status();

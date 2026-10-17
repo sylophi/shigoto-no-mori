@@ -206,15 +206,16 @@ function askListAgain(): void {
     readAgain = true;
     return;
   }
-  const out =
-    boundClient().getQueryState(queryKeys.accountDevices())?.fetchStatus ===
-    "fetching";
-  if (out) readAgain = true;
-  listRead = boundClient()
-    .refetchQueries(
-      { queryKey: queryKeys.accountDevices() },
-      { cancelRefetch: false },
-    )
+  // The query itself, not refetchQueries, which passes over a query no
+  // page reads that has never landed, a read of it out or not.
+  const query = boundClient()
+    .getQueryCache()
+    .find({ queryKey: queryKeys.accountDevices(), exact: true });
+  if (query === undefined) return;
+  if (query.state.fetchStatus === "fetching") readAgain = true;
+  listRead = query
+    .fetch(undefined, { cancelRefetch: false })
+    .catch(() => undefined)
     .finally(() => {
       listRead = null;
       if (!readAgain) return;
