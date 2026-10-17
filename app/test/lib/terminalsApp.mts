@@ -9,6 +9,7 @@ import type {
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import * as Migration from "@shigomori/engine/Migration";
+import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as Paths from "@shigomori/engine/Paths";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import * as Store from "@shigomori/engine/Store";
@@ -33,6 +34,7 @@ const withStore =
       Layer.provide(Store.layer((filename) => SqliteClient.make({ filename }))),
       Layer.provide(Migration.layer),
       Layer.provide(Paths.layer("prod")),
+      Layer.provide(Lifecycle.layer),
       Layer.provideMerge(NodeServices.layer),
       Layer.provide(
         ConfigProvider.layer(

@@ -15,13 +15,13 @@ import { app } from "electron";
 import type { NukeReport } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
+  dataDir,
   dataDirPointerPath,
+  dataDirSource,
   legacyDataDirPointerPath,
-} from "@shared/packaging/cliDist.mts";
-import { dataDir, dataDirSource } from "@shared/paths";
+} from "@shared/paths";
 import { writeNukeMarker } from "../core/nuke/finish";
 import { signOutForNuke } from "../ipc/modules/account";
-import { flavor } from "../flavor";
 import { setsLoginItem } from "./liveness";
 
 // What goes at the next start besides userData: the data dir, the logs,
@@ -32,7 +32,7 @@ function pathsToDelete(): string[] {
   const pointers =
     dataDirSource() === "env"
       ? []
-      : [dataDirPointerPath(flavor), legacyDataDirPointerPath(flavor)];
+      : [dataDirPointerPath(), legacyDataDirPointerPath()];
   return [
     dataDir(),
     app.getPath("logs"),

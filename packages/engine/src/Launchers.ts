@@ -1,10 +1,11 @@
 import { WEB_GITHUB_ID } from "@shigomori/contracts/schemas/launchers";
-import * as Config from "effect/Config";
+import { findExecutable } from "./executables.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as EngineConfig from "./Config.ts";
@@ -199,27 +200,15 @@ const make = Effect.gen(function* () {
   const exists = (file: string) =>
     fs.exists(file).pipe(Effect.orElseSucceed(() => false));
 
-  // Whether `name` is an executable file in a PATH directory.
-  // Read on each ask, since the host outlives a tool's install.
+  // Whether `name` is on PATH. Read on each ask, since the host
+  // outlives a tool's install.
   const onPath = (name: string) =>
-    Effect.gen(function* () {
-      const searchPath = yield* Config.String("PATH").pipe(
-        Config.withDefault(""),
-        Effect.orElseSucceed(() => ""),
-        Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
-      );
-      for (const dir of searchPath.split(":")) {
-        if (dir === "") continue;
-        const executable = yield* fs.stat(path.join(dir, name)).pipe(
-          Effect.map(
-            (info) => info.type === "File" && (info.mode & 0o111) !== 0,
-          ),
-          Effect.orElseSucceed(() => false),
-        );
-        if (executable) return true;
-      }
-      return false;
-    });
+    findExecutable(name).pipe(
+      Effect.map(Option.isSome),
+      Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
 
   const available = (app: CatalogApp) =>
     Effect.gen(function* () {

@@ -24,7 +24,11 @@ import {
   scriptErrorLine,
   type ScriptRunSlot,
 } from "@shigomori/contracts/schemas";
-import { SCRIPT_ENV_KEYS } from "@shigomori/contracts/scriptEnv";
+import {
+  type ScriptEnvInput,
+  scriptEnvOf,
+  UNATTENDED_ENV,
+} from "@shigomori/contracts/scriptEnv";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { ScriptChanges } from "./ScriptChanges";
@@ -175,36 +179,7 @@ interface ScriptWorktree {
 
 // The SHIGOMORI_* values startScript can't derive from the worktree
 // and project it is given (the engine's ScriptContext).
-export interface ScriptEnvValues {
-  // Branch checked out in the primary worktree; "" when there is none.
-  projectBranch: string;
-  // "" when the default branch can't be resolved (no remote, empty repo).
-  defaultBranch: string;
-  // What `sm describe` set, "" when unset.
-  title: string;
-  description: string;
-}
-
-// The SHIGOMORI_* values that say which worktree a process runs in,
-// for a script and a worktree's terminal alike.
-export function worktreeEnv(
-  worktree: ScriptWorktree,
-  project: Pick<Project, "path" | "name">,
-  values: ScriptEnvValues,
-): Record<string, string> {
-  return {
-    [SCRIPT_ENV_KEYS.WORKTREE_PATH]: worktree.path,
-    [SCRIPT_ENV_KEYS.WORKTREE_NAME]: worktree.name,
-    [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: worktree.branch,
-    [SCRIPT_ENV_KEYS.WORKTREE_ID]: worktree.id,
-    [SCRIPT_ENV_KEYS.WORKTREE_TITLE]: values.title,
-    [SCRIPT_ENV_KEYS.WORKTREE_DESCRIPTION]: values.description,
-    [SCRIPT_ENV_KEYS.PROJECT_PATH]: project.path,
-    [SCRIPT_ENV_KEYS.PROJECT_NAME]: project.name,
-    [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: values.projectBranch,
-    [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: values.defaultBranch,
-  };
-}
+export type ScriptEnvValues = Omit<ScriptEnvInput, "worktree" | "project">;
 
 interface RunArgs {
   command: string;
@@ -687,23 +662,17 @@ export const startScript = Effect.fn("Scripts.start")(function* (
   // (unless the command is `sm run`, which sets them itself),
   // and deliberately adds no data dir pin: a script's whole process
   // tree inherits this, so naming a data dir here would follow the user's
-  // command into anything it starts (see initDataDir). TERM and
-  // COLORTERM advertise what xterm in the renderer renders. FORCE_COLOR
-  // is for the tools a runner (turbo, concurrently, a `| tee`) drives
-  // through pipes, which can't see the PTY and would go monochrome.
-  // Pagers are off: stdout being a TTY would otherwise make git, gh and
-  // friends wait in `less`, and a lifecycle script runs unattended.
+  // command into anything it starts (see initDataDir). COLORTERM
+  // advertises what xterm in the renderer renders.
   const env = {
     ...process.env,
-    TERM: "xterm-256color",
+    ...UNATTENDED_ENV,
     COLORTERM: "truecolor",
-    FORCE_COLOR: "1",
-    PAGER: "cat",
-    GIT_PAGER: "cat",
-    ...(args.scriptEnv && {
-      [SCRIPT_ENV_KEYS.SCRIPT_NAME]: runScriptName(args.slot),
-      ...worktreeEnv(args.worktree, args.project, args.scriptEnv),
-    }),
+    ...(args.scriptEnv &&
+      scriptEnvOf(
+        { worktree: args.worktree, project: args.project, ...args.scriptEnv },
+        runScriptName(args.slot),
+      )),
   };
 
   // Fails when no process could be started. The caller's IPC rejection

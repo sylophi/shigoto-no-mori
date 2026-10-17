@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { expandHome as expandHomeIn } from "./expandHome.ts";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { rescueStrandedMove } from "./dataDirMoveJournal.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
@@ -66,6 +67,15 @@ export class Paths extends Context.Service<
     readonly store: string;
     // XDG_CONFIG_HOME, else ~/.config.
     readonly configHome: string;
+    // Where the pointer file goes, which redirects the data dir away from
+    // the flavor's default: one line holding an absolute path, outside
+    // the data dir (nothing inside it can say where it is). The pre-2.0
+    // name is read only when that one is absent, and never written.
+    readonly pointerFile: string;
+    readonly legacyPointerFile: string | null;
+    // The flavor's data dir under the home directory, which needs no
+    // pointer.
+    readonly defaultDataDir: string;
     // The pointer file read while finding the data dir, none when there
     // was none or SHIGOMORI_DATA_DIR made it moot.
     readonly pointer: Option.Option<PointerFile>;
@@ -86,14 +96,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const names = flavorNames(flavor);
   // Unset reads as the working directory, as it did for the Go sm.
   const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
-  // A `~/` path, joined to the home directory and cleaned as Go's
-  // filepath.Join cleans it. Any other path as it is.
-  const expandHome = (target: string) => {
-    if (target === "~") return home;
-    if (!target.startsWith("~/")) return target;
-    const joined = path.join(home, target.slice(2));
-    return joined.length > 1 ? joined.replace(/\/+$/, "") : joined;
-  };
+  const expandHome = (target: string) => expandHomeIn(home, target);
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents
@@ -112,13 +115,18 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const configHome = Option.getOrElse(yield* env("XDG_CONFIG_HOME"), () =>
     path.join(home, ".config"),
   );
+  const pointerFile = path.join(configHome, names.configDir, names.pointer);
+  const legacyPointerFile =
+    names.legacyPointer === null
+      ? null
+      : path.join(configHome, names.configDir, names.legacyPointer);
+  const defaultDataDir = path.join(home, names.dataDir);
 
   // The pointer file, and why its target is refused when it is. The
   // pre-2.0 file name is read only when the current one is absent.
   const readPointer = Effect.gen(function* () {
-    for (const name of [names.pointer, names.legacyPointer]) {
-      if (name === null) continue;
-      const file = path.join(configHome, names.configDir, name);
+    for (const file of [pointerFile, legacyPointerFile]) {
+      if (file === null) continue;
       const raw = yield* fs.readFileString(file).pipe(Effect.option);
       if (Option.isNone(raw)) continue;
       const target = expandHome(raw.value.trim());
@@ -171,7 +179,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
         pointer,
       };
     }
-    const current = path.join(home, names.dataDir);
+    const current = defaultDataDir;
     const legacy =
       names.legacyDataDir === null
         ? null
@@ -199,12 +207,9 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   ) {
     yield* rescueStrandedMove({
       named: resolved.dataDir,
-      pointerFile: path.join(configHome, names.configDir, names.pointer),
-      legacyPointerFile:
-        names.legacyPointer === null
-          ? null
-          : path.join(configHome, names.configDir, names.legacyPointer),
-      defaultDataDir: path.join(home, names.dataDir),
+      pointerFile,
+      legacyPointerFile,
+      defaultDataDir,
     });
     // Found again either way: another process may have made the same
     // rescue first.
@@ -221,6 +226,9 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     binaryName: names.binaryName,
     store: path.join(resolved.dataDir, "store.db"),
     configHome,
+    pointerFile,
+    legacyPointerFile,
+    defaultDataDir,
     pointer: resolved.pointer,
     holdsState,
   });

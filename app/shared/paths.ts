@@ -16,15 +16,12 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { DataDirSource } from "@shigomori/engine/Paths";
+import { expandHome as expandHomeIn } from "@shigomori/engine/expandHome";
 import * as Paths from "@shigomori/engine/Paths";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import {
-  dataDirPointerPath as pointerPathFor,
-  legacyDataDirPointerPath as legacyPointerPathFor,
-} from "@shared/packaging/cliDist.mts";
 
 export type { DataDirSource };
 
@@ -32,11 +29,16 @@ type Found = {
   readonly dataDir: string;
   readonly source: DataDirSource;
   readonly dataDirName: string;
+  readonly defaultDataDir: string;
   // The pointer file that redirected this launch, null when none did.
   readonly pointer: string | null;
-  // Null under initDataDirAt (the proofs), where there is no pointer to
-  // write and no canonical name to rename to.
-  readonly flavor: Flavor | null;
+  // Where a move of the data folder writes the pointer, and the pre-2.0
+  // one it clears: null under initDataDirAt (the proofs), where there is
+  // no pointer to write and no canonical name to rename to.
+  readonly pointerFiles: {
+    readonly pointer: string;
+    readonly legacy: string | null;
+  } | null;
 };
 
 let found: Found | null = null;
@@ -57,11 +59,15 @@ export async function initDataDir(flavor: Flavor): Promise<void> {
     dataDir: paths.dataDir,
     source: paths.dataDirSource,
     dataDirName: paths.dataDirName,
+    defaultDataDir: paths.defaultDataDir,
     pointer: Option.match(paths.pointer, {
       onNone: () => null,
       onSome: (pointer) => pointer.file,
     }),
-    flavor,
+    pointerFiles: {
+      pointer: paths.pointerFile,
+      legacy: paths.legacyPointerFile,
+    },
   };
 }
 
@@ -75,8 +81,9 @@ export function initDataDirAt(
     dataDir: dir,
     source,
     dataDirName: ".sm",
+    defaultDataDir: join(homedir(), ".sm"),
     pointer: null,
-    flavor: null,
+    pointerFiles: null,
   };
 }
 
@@ -106,37 +113,33 @@ export function canonicalDataDirName(): string {
 
 // The flavor's default location, which needs no pointer file.
 export function defaultDataDir(): string {
-  return join(homedir(), canonicalDataDirName());
+  return current().defaultDataDir;
 }
 
 // Where a move of the data folder writes the pointer, and the legacy
 // one it clears. Refused when the data dir was overridden, since a
 // pointer would then be ignored.
-function movableFlavor(): Flavor {
-  const { flavor, source } = current();
-  if (flavor === null || source === "env") {
+function pointerFiles(): NonNullable<Found["pointerFiles"]> {
+  const { pointerFiles: files, source } = current();
+  if (files === null || source === "env") {
     throw new Error(
       "The data folder can't be moved in this session: the data dir " +
         "was overridden (SHIGOMORI_DATA_DIR) or set without a flavor.",
     );
   }
-  return flavor;
+  return files;
 }
 
 export function dataDirPointerPath(): string {
-  return pointerPathFor(movableFlavor());
+  return pointerFiles().pointer;
 }
 
 export function legacyDataDirPointerPath(): string | null {
-  return legacyPointerPathFor(movableFlavor());
+  return pointerFiles().legacy;
 }
 
 export function expandHome(path: string): string {
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) {
-    return join(homedir(), path.slice(2));
-  }
-  return path;
+  return expandHomeIn(homedir(), path);
 }
 
 export function toAbsolute(path: string): string {

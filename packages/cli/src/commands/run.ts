@@ -8,7 +8,7 @@
 //
 // The script gets the terminal to itself (handOver.ts).
 import * as Scripts from "@shigomori/engine/Scripts";
-import { scriptEnv } from "@shigomori/engine/Lifecycle";
+import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { projectsHint } from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
@@ -107,7 +107,7 @@ export const runCommand = Command.make(
       // not retarget the run.
       yield* handOver("exec", command.program, command.args, {
         cwd: worktree.path,
-        env: { ...withoutCdFile(), ...scriptEnv(context, command.script) },
+        env: { ...withoutCdFile(), ...scriptEnvOf(context, command.script) },
       });
     }),
 ).pipe(Command.withDescription("List or run the worktree's scripts"));

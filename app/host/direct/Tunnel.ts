@@ -14,6 +14,7 @@
 // port changes and when the layer does.
 //
 // This file must stay Electron free (pnpm test host-boundary).
+import { findExecutable } from "@shigomori/engine/executables";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -24,6 +25,7 @@ import * as Duration from "effect/Duration";
 import * as Cause from "effect/Cause";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
@@ -189,7 +191,7 @@ export const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
   ): Effect.fn.Return<
     string | null,
     never,
-    ChildProcessSpawner.ChildProcessSpawner
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
   > {
     const configured = configuredPath?.trim() ?? "";
     if (configured !== "") {
@@ -198,7 +200,7 @@ export const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
     if (bundledPath !== null && (yield* runsAsCloudflared(bundledPath))) {
       return bundledPath;
     }
-    return yield* Processes.resolveOnPath("cloudflared");
+    return Option.getOrNull(yield* findExecutable("cloudflared"));
   },
 );
 
@@ -247,7 +249,7 @@ export interface Options {
   readonly resolveBinary: Effect.Effect<
     string | null,
     never,
-    ChildProcessSpawner.ChildProcessSpawner
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
   >;
   // The hub Worker's provision call for the given listener port.
   readonly provision: (
@@ -442,6 +444,7 @@ const make = (options: Options) =>
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
     const probeOnce = options.probe ?? probeTunnelEdge;
+    const platformPath = yield* Path.Path;
     const withSpawner = Effect.provideService(
       ChildProcessSpawner.ChildProcessSpawner,
       spawner,
@@ -554,7 +557,10 @@ const make = (options: Options) =>
         const previous = (yield* SubscriptionRef.get(status)).state;
         yield* setStatus({ state: "starting", hostname: null });
         yield* remember({ denied: false, unconfigured: false });
-        const binaryPath = yield* withSpawner(options.resolveBinary);
+        const binaryPath = yield* withSpawner(options.resolveBinary).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, platformPath),
+        );
         if (binaryPath === null) {
           // Logged on the way into no-binary, not on every reconcile.
           if (previous !== "no-binary") {

@@ -5,9 +5,11 @@
 // unattended-run settings, and every step is reported as the document
 // `sm --json` prints for it, so the terminal and the host relay the same
 // events.
-import type {
-  LifecycleSlot,
-  ScriptEvent,
+import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
+import {
+  lifecycleScriptName,
+  type LifecycleSlot,
+  type ScriptEvent,
 } from "@shigomori/contracts/schemas/scripts";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -18,7 +20,6 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { CD_FILE_ENV } from "./shellHook.ts";
 
 // Where a lifecycle step stands, as `sm --json` reports it.
 export type Phase = "carryOver" | "setup" | "portPoolProvision" | "idle";
@@ -80,48 +81,16 @@ export class Lifecycle extends Context.Service<
       readonly code: number | null;
       readonly runId: string;
     }>;
-    // The user's login shell and the arguments that run a command line
-    // in it, as scripts and custom launchers are run.
+    // The user's login shell, and what makes it one (`-l`; none for
+    // /bin/sh, when no shell is named). A command line runs in it with
+    // `-c` after; without one it is a terminal's. The app's scripts and
+    // terminals start in it too.
     readonly loginShell: Effect.Effect<{
       readonly shell: string;
       readonly args: ReadonlyArray<string>;
     }>;
   }
 >()("sm/engine/Lifecycle") {}
-
-// What a script is told about where it runs, over the ambient
-// environment. A stale variable from a parent run is replaced, so a
-// script that runs sm can't leak it, and the wrapper's directive file is
-// dropped, so a script that runs `sm cd` can't retarget it. exec refuses
-// an environment holding a NUL, and the description is free text.
-export const scriptEnv = (context: ScriptContext, name: string) => {
-  const contract = {
-    SHIGOMORI_SCRIPT_NAME: name,
-    SHIGOMORI_WORKTREE_PATH: context.worktree.path,
-    SHIGOMORI_WORKTREE_NAME: context.worktree.name,
-    SHIGOMORI_WORKTREE_BRANCH: context.worktree.branch,
-    SHIGOMORI_WORKTREE_ID: context.worktree.id,
-    SHIGOMORI_WORKTREE_TITLE: context.title,
-    SHIGOMORI_WORKTREE_DESCRIPTION: context.description,
-    SHIGOMORI_PROJECT_PATH: context.project.path,
-    SHIGOMORI_PROJECT_NAME: context.project.name,
-    SHIGOMORI_PROJECT_BRANCH: context.projectBranch,
-    SHIGOMORI_DEFAULT_BRANCH: context.defaultBranch,
-  };
-  return {
-    [CD_FILE_ENV]: undefined,
-    ...Object.fromEntries(
-      Object.entries(contract).map(([key, value]) => [
-        key,
-        value.replaceAll("\0", ""),
-      ]),
-    ),
-  };
-};
-
-// The name a slot's script goes by in SHIGOMORI_SCRIPT_NAME.
-const scriptName = (slot: LifecycleSlot) =>
-  slot.kind === "portPool" ? `port-pool-${slot.phase}` : slot.kind;
 
 // A single-quoted shell word.
 export const shellQuote = (text: string) =>
@@ -156,8 +125,8 @@ const make = Effect.gen(function* () {
       );
       const found = shell !== "" ? shell : yield* accountShell;
       return found === ""
-        ? { shell: "/bin/sh", args: ["-c"] }
-        : { shell: found, args: ["-l", "-c"] };
+        ? { shell: "/bin/sh", args: [] }
+        : { shell: found, args: ["-l"] };
     }),
   );
 
@@ -182,7 +151,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const handle = yield* spawner
           .spawn(
-            ChildProcess.make(shell, [...args, input.command], {
+            ChildProcess.make(shell, [...args, "-c", input.command], {
               cwd: context.worktree.path,
               // In this process's group, as a terminal runs it: Ctrl-C
               // reaches the whole tree, and what the script leaves running
@@ -190,14 +159,9 @@ const make = Effect.gen(function* () {
               detached: false,
               extendEnv: true,
               env: {
-                ...scriptEnv(context, scriptName(slot)),
-                // Output goes to a pipe, so tools are told it's a color
-                // terminal, and nobody is there to page.
-                FORCE_COLOR: "1",
-                TERM: "xterm-256color",
+                ...scriptEnvOf(context, lifecycleScriptName(slot)),
+                ...UNATTENDED_ENV,
                 COLUMNS: "120",
-                PAGER: "cat",
-                GIT_PAGER: "cat",
                 ...(input.color ? { COLORTERM: "truecolor" } : {}),
               },
               stdin: "ignore",

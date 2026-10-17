@@ -89,7 +89,7 @@ const EXIT_GRACE_MS = 250;
 
 // The user's login shell, from the user database first: $SHELL is
 // whatever the launcher had.
-export function loginShell(launchEnv: NodeJS.ProcessEnv): string | null {
+function loginShell(launchEnv: NodeJS.ProcessEnv): string | null {
   let shell: string | null = null;
   try {
     shell = userInfo().shell;
