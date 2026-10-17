@@ -55,6 +55,8 @@ export class Scripts extends Context.Service<
     readonly list: () => ReadonlyArray<RunningScript>;
     // The worktrees with a live PTY run.
     readonly worktrees: () => ReadonlyArray<RunningScriptWorktree>;
+    // How many PTY runs are live in the worktree.
+    readonly runningIn: (worktreeId: string) => number;
     // Books the lifecycle scripts one engine run reports, so the console
     // shows them and its Stop reaches them.
     readonly lifecycleRuns: (

@@ -362,36 +362,18 @@ export const makeCleanup = ({
         ),
       );
 
-    // A stack cleanup: the layers landed once the merge is through (merged
-    // before, or in the set this merge lands), and the worktrees on them
-    // besides this one, each past the removal guards. The primary checkout
-    // and a detached one stay.
-    const planStackCleanup = (
+    // The removal guards of the worktrees a stack cleanup takes besides
+    // the one it runs from: each clean (unless forced), and each branch it
+    // deletes held whole by its PR's head (`headOf`).
+    const guardOthers = <E>(
       located: Worktrees.Located,
       chain: ReadonlyArray<PullRequestSummary>,
-      set: ReadonlyArray<PullRequestSummary>,
+      others: ReadonlyArray<Worktrees.WorktreeIdentity>,
       options: RemoveOptions,
       remote: string,
+      headOf: (number: number) => Effect.Effect<string, E>,
     ) =>
       Effect.gen(function* () {
-        const landing = new Set(
-          chain
-            .slice(0, -1)
-            .filter(
-              (layer) =>
-                layer.state === "MERGED" ||
-                set.some((pr) => pr.number === layer.number),
-            )
-            .map((layer) => layer.headRefName),
-        );
-        const listed = yield* worktrees.identities(located.project);
-        const others = listed.filter(
-          (other) =>
-            landing.has(other.branch) &&
-            other.id !== located.worktree.id &&
-            !other.detached &&
-            !other.isPrimary,
-        );
         for (const other of others) {
           const guarded = yield* worktrees
             .checkRemovable(
@@ -413,12 +395,51 @@ export const makeCleanup = ({
               located.project.path,
               other.branch,
               layer.number,
-              yield* github.headOf(located.project.path, layer.number),
+              yield* headOf(layer.number),
               remote,
               "land",
             );
           }
         }
+      });
+
+    // A stack cleanup: the layers landed once the merge is through (merged
+    // before, or in the set this merge lands), and the worktrees on them
+    // besides this one, each past the removal guards. The primary checkout
+    // and a detached one stay.
+    const planStackCleanup = (
+      located: Worktrees.Located,
+      chain: ReadonlyArray<PullRequestSummary>,
+      set: ReadonlyArray<PullRequestSummary>,
+      options: RemoveOptions,
+      remote: string,
+      headOf: (
+        number: number,
+      ) => Effect.Effect<
+        string,
+        GitHub.GitHubCliError | GitHub.GitHubOutputError
+      > = (number) => github.headOf(located.project.path, number),
+    ) =>
+      Effect.gen(function* () {
+        const landing = new Set(
+          chain
+            .slice(0, -1)
+            .filter(
+              (layer) =>
+                layer.state === "MERGED" ||
+                set.some((pr) => pr.number === layer.number),
+            )
+            .map((layer) => layer.headRefName),
+        );
+        const listed = yield* worktrees.identities(located.project);
+        const others = listed.filter(
+          (other) =>
+            landing.has(other.branch) &&
+            other.id !== located.worktree.id &&
+            !other.detached &&
+            !other.isPrimary,
+        );
+        yield* guardOthers(located, chain, others, options, remote, headOf);
         // The primary checkout is never removed. It stays where `done`
         // can land it back on the trunk.
         const primary = located.worktree.isPrimary
@@ -500,6 +521,7 @@ export const makeCleanup = ({
       describeAfterDone,
       landCleanup,
       primaryTargetOf,
+      guardOthers,
       planStackCleanup,
       execStackCleanup,
     };

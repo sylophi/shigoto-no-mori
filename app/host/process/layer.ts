@@ -31,7 +31,7 @@ import * as Ports from "@host/lib/Ports";
 import * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
 import * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import * as Terminals from "@host/lib/terminals/Terminals";
-import { terminalStart } from "@host/ipc/scriptRun";
+import { terminalStart, terminalWorktrees } from "@host/ipc/scriptRun";
 import * as Villagers from "@host/lib/VillagerData";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
@@ -210,13 +210,11 @@ const dataDirHolders = Layer.effect(
 );
 
 // What the host answers from caches: other tools' (gh and
-// port-pool), the login shell's config place, and its reads across a
-// project's checkouts.
+// port-pool) and the login shell's config place.
 const cachedAnswers = Layer.mergeAll(
   GithubCli.layer,
   CliShell.layer,
   Ports.layer,
-  Worktrees.layer,
 );
 
 // The bottom of the graph, closed last.
@@ -261,6 +259,9 @@ const scriptsAndFoundation = (options: {
   // Every file-sync child, the daemon and the serve children a peer's
   // streams opened.
   FileSyncRunner.layer.pipe(
+    // The worktree moves and removals, around the scripts and terminals
+    // they stop and refuse for, and the carry-over reads.
+    Layer.provideMerge(Worktrees.layer),
     // What the user started through a script must not outlive the app,
     // orphaned to launchd: its close stops every run.
     Layer.provideMerge(
@@ -272,7 +273,12 @@ const scriptsAndFoundation = (options: {
     Layer.provideMerge(OrphanSweep.layer),
     // Every terminal, each saved for the next start as it closes with
     // the quit.
-    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
+    Layer.provideMerge(
+      Terminals.layer({
+        start: terminalStart,
+        worktrees: terminalWorktrees,
+      }),
+    ),
     // The scripts' changed push, which outlives the quit's kills.
     Layer.provideMerge(scriptsChangedLayer),
     // Every script start and end, which the push above reads.

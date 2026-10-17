@@ -44,6 +44,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
 
@@ -229,7 +230,13 @@ export class Terminals extends Context.Service<
       terminalId: string,
       size: Size,
     ) => Effect.Effect<void, UnknownTerminalError>;
-    // Closes the terminals whose worktree, or its project, is gone.
+    // How many open terminals are the worktree's, or in its folder.
+    readonly openIn: (worktree: {
+      readonly id: string;
+      readonly path: string;
+    }) => number;
+    // Closes the terminals whose worktree, or its project, is gone. A
+    // project whose worktrees can't be read keeps its terminals.
     readonly closeMissing: Effect.Effect<void>;
     // Closes every terminal, none saved for the next start (a nuke).
     readonly closeEvery: Effect.Effect<void>;
@@ -239,18 +246,43 @@ export class Terminals extends Context.Service<
   }
 >()("sm/host/Terminals") {}
 
-const make = <R>(options: {
+const make = <R, E>(options: {
   // The folder and environment a terminal starts with: a worktree's
   // scripts', or the app's own for the device's.
   readonly start: (
     owner: TerminalOwner,
   ) => Effect.Effect<Start, UnknownProjectError | UnknownWorktreeError, R>;
+  // The worktrees a project has now, where their terminals may stay.
+  readonly worktrees: (
+    projectId: string,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly id: string; readonly path: string }>,
+    UnknownProjectError | E,
+    R
+  >;
 }) =>
   Effect.gen(function* () {
     // What the start reads, as the layer finds it.
     const startContext = yield* Effect.context<R>();
     const startOf = (owner: TerminalOwner) =>
       options.start(owner).pipe(Effect.provide(startContext));
+    // The folder of each of the project's worktrees, none for a project
+    // that is gone, or null when that can't be told: git lists at least
+    // the primary checkout of a project it can read, so an empty
+    // listing is a read that went missing too.
+    const presentIn = (projectId: string) =>
+      options.worktrees(projectId).pipe(
+        Effect.map((worktrees) =>
+          worktrees.length === 0
+            ? null
+            : new Map(worktrees.map((w) => [w.id, w.path])),
+        ),
+        Effect.catchTag("UnknownProjectError", () =>
+          Effect.succeed(new Map<string, string>()),
+        ),
+        Effect.catchCause(() => Effect.succeed(null)),
+        Effect.provide(startContext),
+      );
     const layerScope = yield* Effect.scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
@@ -698,26 +730,43 @@ const make = <R>(options: {
           .map((line) => line.trim().split(/\s+/).map(Number))
           .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
       }).pipe(Effect.withSpan("Terminals.busy")),
+      openIn: (worktree) =>
+        [...sessions.values()].filter(({ terminal: { owner, cwd } }) =>
+          owner.kind === "worktree"
+            ? owner.worktreeId === worktree.id
+            : isSameOrInside(cwd, worktree.path),
+        ).length,
       closeMissing: Effect.gen(function* () {
-        const missing: string[] = [];
-        for (const session of sessions.values()) {
+        const owned = [...sessions.values()].flatMap((session) => {
           const owner = ownedBy(session);
-          if (owner === undefined) continue;
-          const start = yield* Effect.option(startOf(owner));
-          if (
-            Option.isNone(start) ||
-            (start.value.cwd !== undefined && !(yield* exists(start.value.cwd)))
-          ) {
-            missing.push(session.terminal.terminalId);
+          return owner === undefined ? [] : [{ session, owner }];
+        });
+        const projects = new Set(owned.map(({ owner }) => owner.projectId));
+        const present = new Map(
+          yield* Effect.forEach(
+            projects,
+            (projectId) =>
+              Effect.map(
+                presentIn(projectId),
+                (folders) => [projectId, folders] as const,
+              ),
+            { concurrency: "unbounded" },
+          ),
+        );
+        const missing = new Set<string>();
+        for (const { session, owner } of owned) {
+          const folders = present.get(owner.projectId);
+          if (folders === null || folders === undefined) continue;
+          const path = folders.get(owner.worktreeId);
+          if (path === undefined || !(yield* exists(path))) {
+            missing.add(session.terminal.terminalId);
           }
         }
-        yield* closeAll((session) =>
-          missing.includes(session.terminal.terminalId),
-        );
-      }),
+        yield* closeAll((session) => missing.has(session.terminal.terminalId));
+      }).pipe(Effect.withSpan("Terminals.closeMissing")),
       closeEvery: closeAll(() => true),
     });
   });
 
-export const layer = <R>(options: Parameters<typeof make<R>>[0]) =>
+export const layer = <R, E>(options: Parameters<typeof make<R, E>>[0]) =>
   Layer.effect(Terminals, make(options));

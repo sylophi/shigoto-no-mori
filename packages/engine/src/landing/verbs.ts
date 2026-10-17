@@ -22,6 +22,23 @@ import type { PullRequestsArea } from "./pullRequests.ts";
 import type { StacksArea } from "./stacks.ts";
 import type { CleanupArea } from "./cleanup.ts";
 
+// A stack's removal, resolved and past its guards, which removeStack
+// carries out as it stands.
+export type StackRemoval = {
+  // What goes, in the order it goes: the other landed layers'
+  // worktrees, then this one.
+  readonly worktrees: ReadonlyArray<Worktrees.WorktreeIdentity>;
+  readonly located: Worktrees.Located;
+  readonly pr: PullRequestSummary;
+  readonly chain: ReadonlyArray<PullRequestSummary>;
+  readonly plan: Effect.Success<ReturnType<CleanupArea["planStackCleanup"]>>;
+  readonly target: Worktrees.PrimaryTarget;
+  readonly options: RemoveOptions;
+  readonly headOf: (
+    number: number,
+  ) => Effect.Effect<string, GitHub.GitHubCliError | GitHub.GitHubOutputError>;
+};
+
 export const makeVerbs = ({
   pullRequests,
   stacks,
@@ -52,6 +69,7 @@ export const makeVerbs = ({
       describeAfterDone,
       landCleanup,
       primaryTargetOf,
+      guardOthers,
       planStackCleanup,
       execStackCleanup,
     } = cleanup;
@@ -418,10 +436,33 @@ export const makeVerbs = ({
       );
     });
 
-    const removeStack = Effect.fn("Landing.removeStack")(function* (
+    // The commits check of the branch a stack's removal runs from (the
+    // others' is planStackCleanup's): the PR heads the checks compare
+    // with are read once, for the plan, and kept for the removal's
+    // checks again.
+    const guardOwnCommits = (
+      located: Worktrees.Located,
+      pr: PullRequestSummary,
+      options: RemoveOptions,
+      remote: string,
+      headOf: (number: number) => ReturnType<typeof github.headOf>,
+    ) =>
+      Effect.gen(function* () {
+        if (yield* deletesBranch(located.worktree, options)) {
+          yield* guardCommits(
+            located.project.path,
+            located.worktree.branch,
+            pr.number,
+            yield* headOf(pr.number),
+            remote,
+            "rm",
+          );
+        }
+      });
+
+    const planRemoveStack = Effect.fn("Landing.planRemoveStack")(function* (
       located: Worktrees.Located,
       options: RemoveOptions,
-      reporter: Reporter,
     ) {
       const { project } = located;
       const branch = yield* branchOf(located, "rm");
@@ -442,30 +483,79 @@ export const makeVerbs = ({
         false,
       );
       const chain = yield* stackChain(project, pr.number, lookups, "rm");
-      if (yield* deletesBranch(located.worktree, options)) {
-        yield* guardCommits(
-          project.path,
-          branch,
-          pr.number,
-          yield* github.headOf(project.path, pr.number),
-          lookups.target.remote,
-          "rm",
-        );
-      }
+      const heads = new Map<number, string>();
+      const headOf = (number: number) =>
+        Effect.suspend(() => {
+          const known = heads.get(number);
+          return known === undefined
+            ? github
+                .headOf(project.path, number)
+                .pipe(
+                  Effect.tap((head) =>
+                    Effect.sync(() => heads.set(number, head)),
+                  ),
+                )
+            : Effect.succeed(known);
+        });
+      yield* guardOwnCommits(
+        located,
+        pr,
+        options,
+        lookups.target.remote,
+        headOf,
+      );
       const plan = yield* planStackCleanup(
         located,
         chain,
         [],
         options,
         lookups.target.remote,
+        headOf,
+      );
+      return {
+        worktrees: [...plan.others, located.worktree],
+        located,
+        pr,
+        chain,
+        plan,
+        target: lookups.target,
+        options,
+        headOf,
+      } satisfies StackRemoval;
+    });
+
+    const removeStack = Effect.fn("Landing.removeStack")(function* (
+      removal: StackRemoval,
+      reporter: Reporter,
+    ) {
+      // Checked again before anything is torn down, inside the caller's
+      // hold on the worktrees: what a script it stopped since the plan
+      // wrote as it went is refused here, where the removals below skip
+      // the dirty check.
+      const { located, chain, plan, target, options } = removal;
+      yield* worktrees.checkRemovable(located, options.force);
+      yield* guardOwnCommits(
+        located,
+        removal.pr,
+        options,
+        target.remote,
+        removal.headOf,
+      );
+      yield* guardOthers(
+        located,
+        chain,
+        plan.others,
+        options,
+        target.remote,
+        removal.headOf,
       );
       return yield* execStackCleanup(
         located,
-        pr,
-        pr.state === "MERGED",
+        removal.pr,
+        removal.pr.state === "MERGED",
         chain,
         plan,
-        lookups.target,
+        target,
         options,
         {},
         reporter,
@@ -548,5 +638,5 @@ export const makeVerbs = ({
       );
     });
 
-    return { pullRequest, merge, land, removeStack, done };
+    return { pullRequest, merge, land, planRemoveStack, removeStack, done };
   });

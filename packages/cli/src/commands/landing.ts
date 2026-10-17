@@ -381,9 +381,9 @@ export const removeStack = (
   },
 ) =>
   Effect.gen(function* () {
-    const doc = yield* (yield* Landing.Landing).removeStack(
-      located,
-      options,
+    const landing = yield* Landing.Landing;
+    const doc = yield* landing.removeStack(
+      yield* landing.planRemoveStack(located, options),
       yield* landingReporter,
     );
     yield* reportCleanup(doc, located);

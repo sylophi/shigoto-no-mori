@@ -42,7 +42,7 @@ import {
   type ProgressFrame,
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
-import { notifierFor } from "@host/ipc/modules/worktrees";
+import { worktreeNotifiers } from "@host/ipc/scriptRun";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
 import { landInvitedMirror } from "@host/mirror/invites";
@@ -443,7 +443,7 @@ const landWhole = (
     // usual. They are mirrored into the move's progress because the
     // caller cannot subscribe by an id that does not exist yet.
     progress({ step: "create" });
-    const notify = notifierFor(ctx);
+    const notify = worktreeNotifiers(ctx);
     // The create runs whole even under a cancel: an interrupt tells it
     // through `cancelled`, its setup script dies with it, and a create
     // cut short still answers with its worktree (engineOps.ts,

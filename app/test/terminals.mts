@@ -167,6 +167,9 @@ let root: string;
 let dataDir: string;
 // The worktrees the proof's start callback still knows.
 const worktrees = new Map<string, string>();
+// The projects whose reads fail, as a host read git refused does: the
+// start dies (the host's terminalStart does) and the listing fails.
+const unreadable = new Set<string>();
 
 beforeAll(() => {
   root = realpathSync(tempDir("sm-terminals-", track));
@@ -180,15 +183,26 @@ const start = (owner: TerminalOwner) => {
       env: { ...process.env, PS1: "$ ", TERM: "xterm-256color" },
     });
   }
+  if (unreadable.has(owner.projectId)) return Effect.die("unreadable");
   const cwd = worktrees.get(owner.worktreeId);
   return cwd === undefined
     ? Effect.fail(new UnknownWorktreeError({ worktreeId: owner.worktreeId }))
     : Effect.succeed<Terminals.Start>({ cwd, env: process.env });
 };
 
+// Every project's worktrees: its primary checkout, as git always
+// lists, and the ones the start callback knows.
+const present = (projectId: string) =>
+  unreadable.has(projectId)
+    ? Effect.fail("unreadable")
+    : Effect.succeed([
+        { id: "primary", path: root },
+        ...[...worktrees].map(([id, path]) => ({ id, path })),
+      ]);
+
 // The service over a store in the proof's data dir, or another.
 const launch = (data = dataDir) =>
-  launchTerminals({ home: root, dataDir: data, start });
+  launchTerminals({ home: root, dataDir: data, start, worktrees: present });
 
 type App = ReturnType<typeof launch>;
 
@@ -545,6 +559,43 @@ describe("the service", () => {
       await app.runPromise(Fiber.join(attached.fiber));
       assert.deepEqual(attached.events.at(-1), { kind: "exit", code: null });
     } finally {
+      await app.dispose();
+    }
+  });
+
+  it("a project whose worktrees can't be read keeps its terminals, and the sweep goes on", async () => {
+    const kept = join(root, "wt-kept");
+    const gone = join(root, "wt-gone");
+    mkdirSync(kept);
+    mkdirSync(gone);
+    worktrees.set("K", kept);
+    worktrees.set("G", gone);
+    const app = launch();
+    try {
+      // The unreadable project's first, so a sweep that died on it would
+      // never reach the other.
+      const unread = await withTerminals(app, (terminals) =>
+        terminals.open({
+          owner: { kind: "worktree", projectId: "Q", worktreeId: "K" },
+        }),
+      );
+      const closing = await withTerminals(app, (terminals) =>
+        terminals.open({
+          owner: { kind: "worktree", projectId: "P", worktreeId: "G" },
+        }),
+      );
+      const stays = attach(app, unread.terminalId);
+      const goes = attach(app, closing.terminalId);
+      unreadable.add("Q");
+      worktrees.delete("G");
+      rmSync(gone, { recursive: true });
+      await withTerminals(app, (terminals) => terminals.closeMissing);
+      await app.runPromise(Fiber.join(goes.fiber));
+      assert.deepEqual(goes.events.at(-1), { kind: "exit", code: null });
+      assert.equal(stays.events.at(-1)?.kind === "exit", false);
+    } finally {
+      unreadable.clear();
+      worktrees.delete("K");
       await app.dispose();
     }
   });
