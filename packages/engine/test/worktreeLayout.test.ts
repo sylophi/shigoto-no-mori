@@ -176,3 +176,25 @@ describe("layout properties", () => {
       },
     ));
 });
+
+// A custom base is a path as written: the root stays the root, never an
+// empty and relative base, and a `..` names the folder it reaches.
+const customAt = (customWorktreePath: string) => ({
+  worktreeLayout: "custom",
+  customWorktreePath,
+  managedOnProjectDrive: false,
+});
+
+it("keeps a custom base of the root, and cleans one through ..", () => {
+  assert.equal(worktreeBase("/r/repo", customAt("/"), place("/d")), "/");
+  assert.equal(
+    worktreeBase("/r/repo", customAt("/a/../b/"), place("/d")),
+    "/b",
+  );
+  assert.ok(
+    managedBases("/r/repo", customAt("/a/../b"), place("/d")).includes("/b"),
+  );
+  assert.ok(
+    isManagedPath("/fox", managedBases("/r/repo", customAt("/"), place("/d"))),
+  );
+});

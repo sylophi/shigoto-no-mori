@@ -12,7 +12,11 @@ import * as Paths from "../Paths.ts";
 import * as Terrier from "../Terrier.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
-import { isManagedPath, worktreeIdFromPath } from "../worktreeLayout.ts";
+import {
+  cleanPath,
+  isManagedPath,
+  worktreeIdFromPath,
+} from "../worktreeLayout.ts";
 import { RelocateRefused, type WorktreeIdentity } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { KeptArea } from "./kept.ts";
@@ -223,7 +227,45 @@ export const makeRelocating = ({
       return found;
     });
 
-    return { relocateProject };
+    // Where each of the project's managed worktrees would go under
+    // `proposed` layout settings, and whether it is there already: the
+    // same folder, however its path is spelled (a linked data dir or
+    // custom base), counts.
+    const relocationPlan = Effect.fn("Worktrees.relocationPlan")(function* (
+      project: RegisteredProject,
+      proposed: {
+        readonly worktreeLayout?: string | undefined;
+        readonly customWorktreePath?: string | undefined;
+      },
+    ) {
+      const [base, bases, found] = yield* Effect.all(
+        [
+          layout.baseFor(project, proposed),
+          layout.managedBases(project),
+          identities(project),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return yield* Effect.forEach(
+        found.filter(
+          (worktree) =>
+            !worktree.isPrimary && isManagedPath(worktree.path, bases),
+        ),
+        (worktree) =>
+          Effect.gen(function* () {
+            const destination = cleanPath(path.join(base, worktree.name));
+            const inPlace =
+              destination === worktree.path ||
+              (yield* fs.realPath(destination).pipe(
+                Effect.map((real) => real === worktree.path),
+                Effect.orElseSucceed(() => false),
+              ));
+            return { worktreeId: worktree.id, destination, inPlace };
+          }),
+      );
+    });
+
+    return { relocateProject, relocationPlan };
   });
 
 export type RelocatingArea = Effect.Success<ReturnType<typeof makeRelocating>>;

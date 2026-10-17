@@ -1686,5 +1686,50 @@
         "more": false
       }
     ]
+  },
+  "RelocationPlanPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "layout": "custom",
+        "customPath": "/Users/alex/trees"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "layout": "managed-root",
+        "customPath": null
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "layout": "elsewhere",
+        "customPath": null
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "layout": "custom"
+      }
+    ]
+  },
+  "RelocationPlanSchema": {
+    "accepts": [
+      [],
+      [
+        {
+          "worktreeId": "e0f76c6cc80a",
+          "destination": "/Users/alex/trees/happy-hummingbird",
+          "inPlace": false
+        }
+      ]
+    ],
+    "rejects": [
+      [
+        {
+          "worktreeId": "e0f76c6cc80a",
+          "destination": "/Users/alex/trees/happy-hummingbird"
+        }
+      ]
+    ]
   }
 }

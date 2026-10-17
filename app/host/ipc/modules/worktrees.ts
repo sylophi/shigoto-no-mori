@@ -1,4 +1,5 @@
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -313,6 +314,18 @@ export const worktreesHandlers = {
     Effect.flatMap(findProject(projectId), (project) =>
       Ops.adoptWorktree(project, worktreeId, force !== false, notifierFor(ctx)),
     ),
+
+  relocationPlan: ({ projectId, layout, customPath }) =>
+    Effect.gen(function* () {
+      const { id, name, path } = yield* findProject(projectId);
+      return yield* (yield* EngineWorktrees.Worktrees).relocationPlan(
+        { id, name, path },
+        {
+          worktreeLayout: layout,
+          customWorktreePath: customPath ?? undefined,
+        },
+      );
+    }),
 
   // `sm worktrees move` moves the checkout and carries what is keyed by
   // its path-derived id to the new id. What lives in this process stays

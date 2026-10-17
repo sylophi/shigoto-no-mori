@@ -3691,6 +3691,25 @@
       "autoPull": false
     }
   },
+  "worktrees:relocationPlan": {
+    "payload": {
+      "projectId": "😀",
+      "layout": "in-project",
+      "customPath": ""
+    },
+    "success": [
+      {
+        "worktreeId": "kh",
+        "destination": "`n",
+        "inPlace": true
+      },
+      {
+        "worktreeId": "",
+        "destination": "\udc00",
+        "inPlace": false
+      }
+    ]
+  },
   "worktrees:removal": {
     "payload": {
       "projectId": "\\z",

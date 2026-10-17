@@ -327,6 +327,22 @@ export class Worktrees extends Context.Service<
       project: RegisteredProject,
       worktreeId: string,
     ) => Effect.Effect<void>;
+    // Where each managed worktree would go under `proposed` layout
+    // settings, and whether it is there already, by the folder's identity.
+    readonly relocationPlan: (
+      project: RegisteredProject,
+      proposed: {
+        readonly worktreeLayout?: string | undefined;
+        readonly customWorktreePath?: string | undefined;
+      },
+    ) => Effect.Effect<
+      ReadonlyArray<{
+        readonly worktreeId: string;
+        readonly destination: string;
+        readonly inPlace: boolean;
+      }>,
+      Git.GitError
+    >;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
     readonly rekey: (
@@ -376,7 +392,7 @@ const make = Effect.gen(function* () {
   const { removable, remove } = removing;
   const { move, carryMoved, rename, rekey, resume, interrupted } = moving;
   const { adopt, setup } = adopting;
-  const { relocateProject } = relocating;
+  const { relocateProject, relocationPlan } = relocating;
 
   return Worktrees.of({
     identities,
@@ -414,6 +430,7 @@ const make = Effect.gen(function* () {
     forgetKept: kept.forgetRows,
     relocateProject,
     deletesBranch: removing.deletesBranch,
+    relocationPlan,
     checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
       located: Located,
       force: boolean,

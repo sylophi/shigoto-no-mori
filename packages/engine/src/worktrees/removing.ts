@@ -162,10 +162,24 @@ export const makeRemoving = ({
     const pruneEmptyParents = (worktreePath: string, projectPath: string) =>
       Effect.gen(function* () {
         const parent = path.dirname(worktreePath);
-        const levels = ownedLevels(parent, projectPath, {
+        const place = {
           dataDir: paths.dataDir,
           dataDirName: paths.dataDirName,
-        });
+        };
+        // git spells the worktree's path with links resolved, and the
+        // managed folder is named for the project as written, so each base
+        // is compared both as written and resolved.
+        const real = (at: string) =>
+          fs.realPath(at).pipe(Effect.orElseSucceed(() => at));
+        const projects = [projectPath, yield* real(projectPath)];
+        const dataDirs = [place.dataDir, yield* real(place.dataDir)];
+        const levels = Math.max(
+          ...projects.flatMap((project) =>
+            dataDirs.map((dataDir) =>
+              ownedLevels(parent, project, { ...place, dataDir }),
+            ),
+          ),
+        );
         // rmdir, which takes only an empty folder: something written there
         // since keeps it.
         let dir = parent;

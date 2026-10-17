@@ -15,6 +15,14 @@ export class Layout extends Context.Service<
   {
     // Where the project's new worktrees go.
     readonly worktreeBase: (project: ProjectPlace) => Effect.Effect<string>;
+    // Where they would go under `proposed` layout settings.
+    readonly baseFor: (
+      project: ProjectPlace,
+      proposed: {
+        readonly worktreeLayout?: string | undefined;
+        readonly customWorktreePath?: string | undefined;
+      },
+    ) => Effect.Effect<string>;
     // Every base whose direct children are the project's managed
     // worktrees, whatever its layout is now, each also as git spells it
     // (its symlinks resolved).
@@ -28,7 +36,13 @@ const make = Effect.gen(function* () {
   const config = yield* Config.Config;
   const fs = yield* FileSystem.FileSystem;
   const { dataDir, dataDirName } = yield* Paths.Paths;
-  const place = { dataDir, dataDirName };
+  const place = {
+    dataDir,
+    dataDirName,
+    realDataDir: yield* fs
+      .realPath(dataDir)
+      .pipe(Effect.orElseSucceed(() => dataDir)),
+  };
 
   // The project's layout settings, which count only once the project is
   // configured (it has a default branch).
@@ -49,10 +63,13 @@ const make = Effect.gen(function* () {
     };
   });
 
-  const worktreeBase = Effect.fn("Layout.worktreeBase")(function* (
+  const baseFor = Effect.fn("Layout.baseFor")(function* (
     project: ProjectPlace,
+    settings: {
+      readonly worktreeLayout?: string | undefined;
+      readonly customWorktreePath?: string | undefined;
+    },
   ) {
-    const settings = yield* projectSettings(project);
     // The device's drive setting matters only for a managed root a
     // project's own drive could hold.
     const onDrive =
@@ -66,6 +83,12 @@ const make = Effect.gen(function* () {
       { ...settings, managedOnProjectDrive: onDrive },
       place,
     );
+  });
+
+  const worktreeBase = Effect.fn("Layout.worktreeBase")(function* (
+    project: ProjectPlace,
+  ) {
+    return yield* baseFor(project, yield* projectSettings(project));
   });
 
   const managedBases = Effect.fn("Layout.managedBases")(function* (
@@ -82,7 +105,7 @@ const make = Effect.gen(function* () {
     return [...new Set([...bases, ...real])];
   });
 
-  return Layout.of({ worktreeBase, managedBases });
+  return Layout.of({ worktreeBase, baseFor, managedBases });
 });
 
 export const layer = Layer.effect(Layout, make);

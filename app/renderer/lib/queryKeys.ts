@@ -264,6 +264,12 @@ function buildQueryKeys(deviceId: string) {
       host("carryOver", "stats", projectId, paths),
     worktreeIncludeStatus: (projectId: string | null) =>
       host("worktreeIncludeStatus", projectId),
+    relocationPlan: (
+      projectId: string,
+      layout: string,
+      customPath: string | null,
+      onProjectDrive: boolean,
+    ) => host("relocationPlan", projectId, layout, customPath, onProjectDrive),
 
     // Host-scoped: the payload (RuntimeInfoSchema) is
     // a set of per-host facts served by the host-scoped runtime contract.
